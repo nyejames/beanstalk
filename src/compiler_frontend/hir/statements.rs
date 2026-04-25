@@ -4,10 +4,10 @@
 //! WHY: statements are where assignment, calls, side-effect expressions, and runtime fragment pushes
 //! become explicit before borrow validation and backend lowering.
 
+use crate::compiler_frontend::external_packages::CallTarget;
 use crate::compiler_frontend::hir::expressions::HirExpression;
 use crate::compiler_frontend::hir::ids::{HirNodeId, LocalId};
 use crate::compiler_frontend::hir::places::HirPlace;
-use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 #[derive(Debug, Clone)]

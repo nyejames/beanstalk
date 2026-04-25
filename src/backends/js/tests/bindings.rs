@@ -239,7 +239,7 @@ fn alias_local_read_emits_bs_read() {
     let log_alias = statement(
         3,
         HirStatementKind::Call {
-            target: CallTarget::HostFunction(io_path),
+            target: CallTarget::ExternalFunction(io_path),
             args: vec![expression(
                 3,
                 HirExpressionKind::Load(HirPlace::Local(LocalId(1))),
@@ -519,7 +519,7 @@ fn computed_place_read_composes_with_bs_read() {
     let log_field = statement(
         1,
         HirStatementKind::Call {
-            target: CallTarget::HostFunction(io_path),
+            target: CallTarget::ExternalFunction(io_path),
             args: vec![expression(
                 1,
                 HirExpressionKind::Load(HirPlace::Field {

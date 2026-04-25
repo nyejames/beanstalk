@@ -8,6 +8,7 @@ use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
 use crate::compiler_frontend::ast::Ast;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
+use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::parse_file_headers::Headers;
 use crate::compiler_frontend::hir::module::HirModule;
 use crate::compiler_frontend::module_dependencies::SortedHeaders;
@@ -34,6 +35,7 @@ pub(super) struct FrontendModuleBuildContext<'a> {
     pub(super) build_profile: FrontendBuildProfile,
     pub(super) project_path_resolver: Option<ProjectPathResolver>,
     pub(super) style_directives: &'a StyleDirectiveRegistry,
+    pub(super) external_packages: &'a ExternalPackageRegistry,
 }
 
 impl FrontendModuleBuildContext<'_> {
@@ -48,6 +50,7 @@ impl FrontendModuleBuildContext<'_> {
             self.config,
             string_table,
             self.style_directives.to_owned(),
+            self.external_packages.clone(),
             self.project_path_resolver.clone(),
             NewlineMode::NormalizeToLf,
         );

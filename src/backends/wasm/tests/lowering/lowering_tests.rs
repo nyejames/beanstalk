@@ -13,6 +13,7 @@ use crate::backends::wasm::tests::lowering::test_support::{
     string_expression, unit_expression,
 };
 use crate::compiler_frontend::analysis::borrow_checker::BorrowDropSiteKind;
+use crate::compiler_frontend::external_packages::CallTarget;
 use crate::compiler_frontend::hir::blocks::HirBlock;
 use crate::compiler_frontend::hir::expressions::{HirExpressionKind, ValueKind};
 use crate::compiler_frontend::hir::functions::{HirFunction, HirFunctionOrigin};
@@ -22,7 +23,6 @@ use crate::compiler_frontend::hir::operators::HirBinOp;
 use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::statements::HirStatementKind;
 use crate::compiler_frontend::hir::terminators::HirTerminator;
-use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use rustc_hash::FxHashMap;
@@ -936,7 +936,7 @@ fn resolves_supported_host_call_to_correct_import() {
             statement(
                 2,
                 HirStatementKind::Call {
-                    target: CallTarget::HostFunction(io_path),
+                    target: CallTarget::ExternalFunction(io_path),
                     args: vec![load_local(710, LocalId(0), types.string, RegionId(0))],
                     result: None,
                 },
@@ -1004,7 +1004,7 @@ fn rejects_unsupported_host_call_with_diagnostic() {
         statements: vec![statement(
             1,
             HirStatementKind::Call {
-                target: CallTarget::HostFunction(unknown_path),
+                target: CallTarget::ExternalFunction(unknown_path),
                 args: vec![],
                 result: None,
             },
@@ -1066,7 +1066,7 @@ fn deduplicates_host_imports_across_multiple_calls() {
             statement(
                 2,
                 HirStatementKind::Call {
-                    target: CallTarget::HostFunction(io_path_a),
+                    target: CallTarget::ExternalFunction(io_path_a),
                     args: vec![load_local(910, LocalId(0), types.string, RegionId(0))],
                     result: None,
                 },
@@ -1083,7 +1083,7 @@ fn deduplicates_host_imports_across_multiple_calls() {
             statement(
                 4,
                 HirStatementKind::Call {
-                    target: CallTarget::HostFunction(io_path_b),
+                    target: CallTarget::ExternalFunction(io_path_b),
                     args: vec![load_local(920, LocalId(1), types.string, RegionId(0))],
                     result: None,
                 },

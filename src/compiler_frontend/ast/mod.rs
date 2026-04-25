@@ -97,9 +97,9 @@ use crate::compiler_frontend::ast::templates::top_level_templates::AstConstTopLe
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
+use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::module_symbols::ModuleSymbols;
 use crate::compiler_frontend::headers::parse_file_headers::{Header, TopLevelConstFragment};
-use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
@@ -135,7 +135,7 @@ pub struct Ast {
 /// WHAT: groups the long-lived frontend services and per-build settings used across all AST passes.
 /// WHY: `Ast::new` should describe its high-level inputs without a long parameter list.
 pub struct AstBuildContext<'a> {
-    pub host_registry: &'a HostRegistry,
+    pub external_package_registry: &'a ExternalPackageRegistry,
     pub style_directives: &'a StyleDirectiveRegistry,
     pub string_table: &'a mut StringTable,
     pub entry_dir: InternedPath,
@@ -160,7 +160,7 @@ impl Ast {
         context: AstBuildContext<'_>,
     ) -> Result<Ast, CompilerMessages> {
         let AstBuildContext {
-            host_registry,
+            external_package_registry,
             style_directives,
             string_table,
             entry_dir,
@@ -170,7 +170,7 @@ impl Ast {
         } = context;
 
         let mut state = AstBuildState::new(
-            host_registry,
+            external_package_registry,
             style_directives,
             build_profile,
             &project_path_resolver,

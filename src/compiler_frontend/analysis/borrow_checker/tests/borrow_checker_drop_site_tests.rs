@@ -12,8 +12,8 @@ use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::test_support::{
-    assignment_target, build_ast, default_host_registry, entry_and_start, function_node,
-    make_test_variable, node, run_borrow_checker, symbol, test_location,
+    assignment_target, build_ast, default_external_package_registry, entry_and_start,
+    function_node, make_test_variable, node, run_borrow_checker, symbol, test_location,
 };
 use crate::compiler_frontend::value_mode::ValueMode;
 
@@ -30,7 +30,7 @@ fn lower_hir(
 fn emits_advisory_return_drop_sites() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_and_start(&mut string_table);
-    let host_registry = default_host_registry(&mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
 
     let value = symbol("value", &mut string_table);
     let start_fn = function_node(
@@ -50,7 +50,7 @@ fn emits_advisory_return_drop_sites() {
     );
 
     let hir = lower_hir(build_ast(vec![start_fn], entry_path), &mut string_table);
-    let report = run_borrow_checker(&hir, &host_registry, &string_table)
+    let report = run_borrow_checker(&hir, &external_package_registry, &string_table)
         .expect("borrow checking should succeed");
 
     let has_return_site = report
@@ -78,7 +78,7 @@ fn emits_advisory_return_drop_sites() {
 fn emits_advisory_break_and_region_exit_drop_sites() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_and_start(&mut string_table);
-    let host_registry = default_host_registry(&mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
 
     let x = symbol("x", &mut string_table);
     let start_fn = function_node(
@@ -131,7 +131,7 @@ fn emits_advisory_break_and_region_exit_drop_sites() {
     );
 
     let hir = lower_hir(build_ast(vec![start_fn], entry_path), &mut string_table);
-    let report = run_borrow_checker(&hir, &host_registry, &string_table)
+    let report = run_borrow_checker(&hir, &external_package_registry, &string_table)
         .expect("borrow checking should succeed");
 
     let has_break_site = report

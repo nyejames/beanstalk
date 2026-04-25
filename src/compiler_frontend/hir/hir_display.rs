@@ -7,6 +7,8 @@
 //! It will also enable printing out Hir structures for easy debugging also.
 
 #[cfg(any(test, feature = "show_hir"))]
+use crate::compiler_frontend::external_packages::CallTarget;
+#[cfg(any(test, feature = "show_hir"))]
 use crate::compiler_frontend::hir::blocks::{HirBlock, HirLocal};
 #[cfg(any(test, feature = "show_hir"))]
 use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, ValueKind};
@@ -35,8 +37,6 @@ use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
 use crate::compiler_frontend::hir::structs::{HirField, HirStruct};
 #[cfg(any(test, feature = "show_hir"))]
 use crate::compiler_frontend::hir::terminators::HirTerminator;
-#[cfg(any(test, feature = "show_hir"))]
-use crate::compiler_frontend::host_functions::CallTarget;
 #[cfg(any(test, feature = "show_hir"))]
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 #[cfg(any(test, feature = "show_hir"))]
@@ -558,7 +558,7 @@ impl<'a> HirDisplayContext<'a> {
     fn render_call_target(&self, target: &CallTarget) -> String {
         match target {
             CallTarget::UserFunction(function_id) => self.function_label(*function_id),
-            CallTarget::HostFunction(path) => path
+            CallTarget::ExternalFunction(path) => path
                 .name_str(self.string_table)
                 .map(str::to_owned)
                 .unwrap_or_else(|| path.to_string(self.string_table)),

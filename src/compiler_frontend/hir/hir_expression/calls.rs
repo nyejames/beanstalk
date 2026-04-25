@@ -12,6 +12,11 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, ResultC
 use crate::compiler_frontend::builtins::{BuiltinMethodKind, CollectionBuiltinOp};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::external_packages::CallTarget;
+use crate::compiler_frontend::external_packages::{
+    COLLECTION_GET_HOST_NAME, COLLECTION_LENGTH_HOST_NAME, COLLECTION_PUSH_HOST_NAME,
+    COLLECTION_REMOVE_HOST_NAME, ERROR_BUBBLE_HOST_NAME,
+};
 use crate::compiler_frontend::hir::expressions::{HirExpressionKind, ValueKind};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeId};
@@ -19,11 +24,6 @@ use crate::compiler_frontend::hir::ids::{BlockId, LocalId};
 use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
 use crate::compiler_frontend::hir::terminators::HirTerminator;
-use crate::compiler_frontend::host_functions::CallTarget;
-use crate::compiler_frontend::host_functions::{
-    COLLECTION_GET_HOST_NAME, COLLECTION_LENGTH_HOST_NAME, COLLECTION_PUSH_HOST_NAME,
-    COLLECTION_REMOVE_HOST_NAME, ERROR_BUBBLE_HOST_NAME,
-};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::value_mode::ValueMode;
@@ -170,7 +170,7 @@ impl<'a> HirBuilder<'a> {
                 full_args.push(Self::shared_call_argument(receiver.get_expr()?, location));
                 full_args.extend(args.iter().cloned());
                 self.lower_call_expression(
-                    CallTarget::HostFunction(method_path.to_owned()),
+                    CallTarget::ExternalFunction(method_path.to_owned()),
                     &full_args,
                     result_types,
                     location,
@@ -217,7 +217,7 @@ impl<'a> HirBuilder<'a> {
                 let host_path = InternedPath::from_single_str(host_name, self.string_table);
 
                 self.lower_call_expression(
-                    CallTarget::HostFunction(host_path),
+                    CallTarget::ExternalFunction(host_path),
                     &full_args,
                     result_types,
                     location,
@@ -253,7 +253,7 @@ impl<'a> HirBuilder<'a> {
         );
 
         self.lower_call_expression(
-            CallTarget::HostFunction(method_path.to_owned()),
+            CallTarget::ExternalFunction(method_path.to_owned()),
             &full_args,
             result_types,
             location,
@@ -381,7 +381,7 @@ impl<'a> HirBuilder<'a> {
                         }
                     })
             }
-            CallTarget::HostFunction(_) => None,
+            CallTarget::ExternalFunction(_) => None,
         };
 
         if result_carrying_user_call.is_some() {
@@ -493,7 +493,7 @@ impl<'a> HirBuilder<'a> {
                     }
                 }
             }
-            CallTarget::HostFunction(_) => {
+            CallTarget::ExternalFunction(_) => {
                 return_hir_transformation_error!(
                     "Result-handled call targeted a host function",
                     self.hir_error_location(location)

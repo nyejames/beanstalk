@@ -9,10 +9,10 @@ use crate::build_system::create_project_modules::extract_source_code;
 use crate::compiler_frontend::compiler_errors::{
     CompilerError, CompilerMessages, ErrorMetaDataKey, ErrorType,
 };
+use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::parse_file_headers::{
     Header, HeaderParseOptions, parse_headers,
 };
-use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -68,13 +68,13 @@ pub(super) fn parse_config_file(
         string_table,
     ));
 
-    let host_registry = HostRegistry::new();
+    let external_package_registry = ExternalPackageRegistry::new();
     let mut warnings = Vec::new();
 
     // Duplicate-key parse failures need to be reclassified as config errors for Stage 0 callers.
     let parsed_headers = match parse_headers(
         vec![token_stream],
-        &host_registry,
+        &external_package_registry,
         &mut warnings,
         config_path,
         HeaderParseOptions::default(),

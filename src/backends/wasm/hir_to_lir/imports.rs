@@ -6,8 +6,8 @@ use crate::backends::wasm::lir::linkage::{WasmImport, WasmImportKind};
 use crate::backends::wasm::lir::types::{WasmAbiType, WasmImportId, WasmLirSignature};
 use crate::backends::wasm::runtime::imports::WasmHostFunction;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
+use crate::compiler_frontend::external_packages::CallTarget;
 use crate::compiler_frontend::hir::statements::HirStatementKind;
-use crate::compiler_frontend::host_functions::CallTarget;
 
 pub(crate) fn register_required_host_imports(
     context: &mut WasmLirLoweringContext<'_>,
@@ -17,7 +17,7 @@ pub(crate) fn register_required_host_imports(
     for block in &context.hir_module.blocks {
         for statement in &block.statements {
             if let HirStatementKind::Call {
-                target: CallTarget::HostFunction(path),
+                target: CallTarget::ExternalFunction(path),
                 ..
             } = &statement.kind
             {
@@ -37,7 +37,7 @@ pub(crate) fn resolve_host_call_import(
     // WHAT: resolve a host call target to its pre-registered import id.
     // WHY: each distinct host function maps to exactly one import; unsupported targets
     // must fail with a structured diagnostic instead of silently mapping to the wrong import.
-    let CallTarget::HostFunction(path) = target else {
+    let CallTarget::ExternalFunction(path) = target else {
         return Err(lir_transformation_error(
             "Wasm lowering expected a HostFunction call target in resolve_host_call_import",
         ));

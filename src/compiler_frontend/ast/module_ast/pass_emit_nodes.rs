@@ -111,7 +111,7 @@ impl<'a> AstBuildState<'a> {
                         ContextKind::Function,
                         header.tokens.src_path.to_owned(),
                         Rc::clone(&top_level_declarations),
-                        self.host_registry.clone(),
+                        self.external_package_registry.clone(),
                         resolved_signature.signature.return_data_types(),
                     )
                     .with_style_directives(self.style_directives)
@@ -177,7 +177,7 @@ impl<'a> AstBuildState<'a> {
                         ContextKind::Module,
                         header.tokens.src_path.to_owned(),
                         Rc::clone(&top_level_declarations),
-                        self.host_registry.clone(),
+                        self.external_package_registry.clone(),
                         vec![],
                     )
                     .with_style_directives(self.style_directives)
@@ -270,7 +270,7 @@ impl<'a> AstBuildState<'a> {
                         ContextKind::Constant,
                         template_tokens.src_path.to_owned(),
                         Rc::clone(&top_level_declarations),
-                        self.host_registry.clone(),
+                        self.external_package_registry.clone(),
                         vec![],
                     )
                     .with_style_directives(self.style_directives)

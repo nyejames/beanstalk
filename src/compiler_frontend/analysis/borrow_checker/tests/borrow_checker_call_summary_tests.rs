@@ -13,15 +13,15 @@ use crate::compiler_frontend::ast::statements::functions::{
 };
 use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::datatypes::DataType;
-use crate::compiler_frontend::host_functions::test_support::{
-    TestHostAbiType as HostAbiType, TestHostAccessKind as HostAccessKind,
-    TestHostReturnAlias as HostReturnAlias,
+use crate::compiler_frontend::external_packages::test_support::{
+    TestExternalAbiType as ExternalAbiType, TestExternalAccessKind as ExternalAccessKind,
+    TestExternalReturnAlias as ExternalReturnAlias,
 };
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::test_support::{
-    assignment_target, build_ast, default_host_registry, entry_and_start, fresh_returns,
-    function_node, lower_hir, make_test_variable, node, param, reference_expr,
-    register_host_function, run_borrow_checker, symbol, test_location,
+    assignment_target, build_ast, default_external_package_registry, entry_and_start,
+    fresh_returns, function_node, lower_hir, make_test_variable, node, param, reference_expr,
+    register_external_function, run_borrow_checker, symbol, test_location,
 };
 use crate::compiler_frontend::value_mode::ValueMode;
 
@@ -29,7 +29,7 @@ use crate::compiler_frontend::value_mode::ValueMode;
 fn user_function_returning_param_aliases_caller_root() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_and_start(&mut string_table);
-    let host_registry = default_host_registry(&mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
 
     let alias_fn = symbol("alias_fn", &mut string_table);
     let p = symbol("p", &mut string_table);
@@ -93,7 +93,7 @@ fn user_function_returning_param_aliases_caller_root() {
         build_ast(vec![callee, caller], entry_path),
         &mut string_table,
     );
-    let error = run_borrow_checker(&hir, &host_registry, &string_table)
+    let error = run_borrow_checker(&hir, &external_package_registry, &string_table)
         .expect_err("callee return alias should keep caller root aliased");
     assert_eq!(error.error_type, ErrorType::BorrowChecker);
     assert!(error.msg.contains("may alias"));
@@ -103,7 +103,7 @@ fn user_function_returning_param_aliases_caller_root() {
 fn fresh_user_return_does_not_alias_caller_roots() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_and_start(&mut string_table);
-    let host_registry = default_host_registry(&mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
 
     let fresh_fn = symbol("fresh_fn", &mut string_table);
     let p = symbol("p", &mut string_table);
@@ -168,7 +168,7 @@ fn fresh_user_return_does_not_alias_caller_roots() {
         build_ast(vec![callee, caller], entry_path),
         &mut string_table,
     );
-    run_borrow_checker(&hir, &host_registry, &string_table)
+    run_borrow_checker(&hir, &external_package_registry, &string_table)
         .expect("fresh callee returns should not alias caller roots");
 }
 
@@ -176,7 +176,7 @@ fn fresh_user_return_does_not_alias_caller_roots() {
 fn default_user_returning_param_is_fresh_by_default() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_and_start(&mut string_table);
-    let host_registry = default_host_registry(&mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
 
     let unknown_fn = symbol("unknown_fn", &mut string_table);
     let p = symbol("p", &mut string_table);
@@ -247,7 +247,7 @@ fn default_user_returning_param_is_fresh_by_default() {
         build_ast(vec![callee, caller], entry_path),
         &mut string_table,
     );
-    run_borrow_checker(&hir, &host_registry, &string_table)
+    run_borrow_checker(&hir, &external_package_registry, &string_table)
         .expect("default user returns should be fresh unless explicitly declared as aliasing");
 }
 
@@ -255,7 +255,7 @@ fn default_user_returning_param_is_fresh_by_default() {
 fn mutable_user_argument_is_accepted_without_false_shared_conflict() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_and_start(&mut string_table);
-    let host_registry = default_host_registry(&mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
 
     let mut_sink = symbol("mut_sink", &mut string_table);
     let p = symbol("p", &mut string_table);
@@ -306,7 +306,7 @@ fn mutable_user_argument_is_accepted_without_false_shared_conflict() {
         build_ast(vec![callee, caller], entry_path),
         &mut string_table,
     );
-    run_borrow_checker(&hir, &host_registry, &string_table)
+    run_borrow_checker(&hir, &external_package_registry, &string_table)
         .expect("single mutable argument call should be accepted");
 }
 
@@ -314,7 +314,7 @@ fn mutable_user_argument_is_accepted_without_false_shared_conflict() {
 fn mutable_user_call_with_fresh_mutable_arg_does_not_alias_existing_place_argument() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_and_start(&mut string_table);
-    let host_registry = default_host_registry(&mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
 
     let mut2 = symbol("mut2", &mut string_table);
     let a = symbol("a", &mut string_table);
@@ -377,7 +377,7 @@ fn mutable_user_call_with_fresh_mutable_arg_does_not_alias_existing_place_argume
         build_ast(vec![callee, caller], entry_path),
         &mut string_table,
     );
-    run_borrow_checker(&hir, &host_registry, &string_table).expect(
+    run_borrow_checker(&hir, &external_package_registry, &string_table).expect(
         "fresh mutable call args should be treated as independent locals, not aliases of other args",
     );
 }
@@ -386,13 +386,13 @@ fn mutable_user_call_with_fresh_mutable_arg_does_not_alias_existing_place_argume
 fn host_mutable_parameter_requires_mutable_access() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_and_start(&mut string_table);
-    let mut host_registry = default_host_registry(&mut string_table);
-    register_host_function(
-        &mut host_registry,
+    let mut external_package_registry = default_external_package_registry(&mut string_table);
+    register_external_function(
+        &mut external_package_registry,
         "host_mut",
-        vec![HostAccessKind::Mutable],
-        HostReturnAlias::Fresh,
-        HostAbiType::Void,
+        vec![ExternalAccessKind::Mutable],
+        ExternalReturnAlias::Fresh,
+        ExternalAbiType::Void,
     );
 
     let host_fn = symbol("host_mut", &mut string_table);
@@ -430,7 +430,7 @@ fn host_mutable_parameter_requires_mutable_access() {
     );
 
     let hir = lower_hir(build_ast(vec![start], entry_path), &mut string_table);
-    let error = run_borrow_checker(&hir, &host_registry, &string_table)
+    let error = run_borrow_checker(&hir, &external_package_registry, &string_table)
         .expect_err("mutable host parameter should enforce mutable access");
     assert_eq!(error.error_type, ErrorType::BorrowChecker);
     assert!(error.msg.contains("mutably access"));
@@ -440,13 +440,13 @@ fn host_mutable_parameter_requires_mutable_access() {
 fn host_mutable_parameter_accepts_mutable_local_argument() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_and_start(&mut string_table);
-    let mut host_registry = default_host_registry(&mut string_table);
-    register_host_function(
-        &mut host_registry,
+    let mut external_package_registry = default_external_package_registry(&mut string_table);
+    register_external_function(
+        &mut external_package_registry,
         "host_mut_ok",
-        vec![HostAccessKind::Mutable],
-        HostReturnAlias::Fresh,
-        HostAbiType::Void,
+        vec![ExternalAccessKind::Mutable],
+        ExternalReturnAlias::Fresh,
+        ExternalAbiType::Void,
     );
 
     let host_fn = symbol("host_mut_ok", &mut string_table);
@@ -484,7 +484,7 @@ fn host_mutable_parameter_accepts_mutable_local_argument() {
     );
 
     let hir = lower_hir(build_ast(vec![start], entry_path), &mut string_table);
-    run_borrow_checker(&hir, &host_registry, &string_table)
+    run_borrow_checker(&hir, &external_package_registry, &string_table)
         .expect("mutable host parameter should accept mutable local argument");
 }
 
@@ -492,13 +492,13 @@ fn host_mutable_parameter_accepts_mutable_local_argument() {
 fn host_shared_parameter_is_shared_only() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_and_start(&mut string_table);
-    let mut host_registry = default_host_registry(&mut string_table);
-    register_host_function(
-        &mut host_registry,
+    let mut external_package_registry = default_external_package_registry(&mut string_table);
+    register_external_function(
+        &mut external_package_registry,
         "host_shared",
-        vec![HostAccessKind::Shared],
-        HostReturnAlias::Fresh,
-        HostAbiType::Void,
+        vec![ExternalAccessKind::Shared],
+        ExternalReturnAlias::Fresh,
+        ExternalAbiType::Void,
     );
 
     let host_fn = symbol("host_shared", &mut string_table);
@@ -536,7 +536,7 @@ fn host_shared_parameter_is_shared_only() {
     );
 
     let hir = lower_hir(build_ast(vec![start], entry_path), &mut string_table);
-    run_borrow_checker(&hir, &host_registry, &string_table)
+    run_borrow_checker(&hir, &external_package_registry, &string_table)
         .expect("shared host parameter should not force mutable access");
 }
 
@@ -544,7 +544,7 @@ fn host_shared_parameter_is_shared_only() {
 fn two_mutable_args_to_same_root_are_rejected() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_and_start(&mut string_table);
-    let host_registry = default_host_registry(&mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
 
     let mut2 = symbol("mut2", &mut string_table);
     let a = symbol("a", &mut string_table);
@@ -606,7 +606,7 @@ fn two_mutable_args_to_same_root_are_rejected() {
         build_ast(vec![callee, caller], entry_path),
         &mut string_table,
     );
-    let error = run_borrow_checker(&hir, &host_registry, &string_table)
+    let error = run_borrow_checker(&hir, &external_package_registry, &string_table)
         .expect_err("two mutable args to the same root should fail");
     assert_eq!(error.error_type, ErrorType::BorrowChecker);
 }
@@ -615,7 +615,7 @@ fn two_mutable_args_to_same_root_are_rejected() {
 fn shared_then_mutable_args_to_same_root_are_rejected() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_and_start(&mut string_table);
-    let host_registry = default_host_registry(&mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
 
     let read_then_mut = symbol("read_then_mut", &mut string_table);
     let read = symbol("read", &mut string_table);
@@ -677,7 +677,7 @@ fn shared_then_mutable_args_to_same_root_are_rejected() {
         build_ast(vec![callee, caller], entry_path),
         &mut string_table,
     );
-    let error = run_borrow_checker(&hir, &host_registry, &string_table)
+    let error = run_borrow_checker(&hir, &external_package_registry, &string_table)
         .expect_err("shared then mutable access to same root in a call must fail");
     assert_eq!(error.error_type, ErrorType::BorrowChecker);
     assert!(error.msg.contains("overlapping"));
@@ -687,13 +687,13 @@ fn shared_then_mutable_args_to_same_root_are_rejected() {
 fn unresolved_or_mismatched_host_signature_errors() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_and_start(&mut string_table);
-    let mut host_registry = default_host_registry(&mut string_table);
-    register_host_function(
-        &mut host_registry,
+    let mut external_package_registry = default_external_package_registry(&mut string_table);
+    register_external_function(
+        &mut external_package_registry,
         "one_arg",
-        vec![HostAccessKind::Shared],
-        HostReturnAlias::Fresh,
-        HostAbiType::Void,
+        vec![ExternalAccessKind::Shared],
+        ExternalReturnAlias::Fresh,
+        ExternalAbiType::Void,
     );
 
     let missing_host = symbol("missing_host", &mut string_table);
@@ -740,7 +740,7 @@ fn unresolved_or_mismatched_host_signature_errors() {
         &mut string_table,
     );
 
-    let error = run_borrow_checker(&hir, &host_registry, &string_table)
+    let error = run_borrow_checker(&hir, &external_package_registry, &string_table)
         .expect_err("missing host or mismatched signature should fail");
     assert_eq!(error.error_type, ErrorType::BorrowChecker);
     assert!(
@@ -752,7 +752,7 @@ fn unresolved_or_mismatched_host_signature_errors() {
 fn mutable_user_parameter_rejects_immutable_argument_reused_after_call() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_and_start(&mut string_table);
-    let host_registry = default_host_registry(&mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
 
     let mut_user = symbol("mut_user", &mut string_table);
     let p = symbol("p", &mut string_table);
@@ -811,7 +811,7 @@ fn mutable_user_parameter_rejects_immutable_argument_reused_after_call() {
         build_ast(vec![callee, caller], entry_path),
         &mut string_table,
     );
-    let error = run_borrow_checker(&hir, &host_registry, &string_table)
+    let error = run_borrow_checker(&hir, &external_package_registry, &string_table)
         .expect_err("immutable argument passed to mutable user param and reused must fail");
     assert_eq!(error.error_type, ErrorType::BorrowChecker);
     assert!(error.msg.contains("immutable local"));
@@ -821,13 +821,13 @@ fn mutable_user_parameter_rejects_immutable_argument_reused_after_call() {
 fn out_of_range_return_alias_metadata_is_reported_at_call_site() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_and_start(&mut string_table);
-    let mut host_registry = default_host_registry(&mut string_table);
-    register_host_function(
-        &mut host_registry,
+    let mut external_package_registry = default_external_package_registry(&mut string_table);
+    register_external_function(
+        &mut external_package_registry,
         "bad_alias_host",
-        vec![HostAccessKind::Shared],
-        HostReturnAlias::AliasArgs(vec![1]),
-        HostAbiType::I32,
+        vec![ExternalAccessKind::Shared],
+        ExternalReturnAlias::AliasArgs(vec![1]),
+        ExternalAbiType::I32,
     );
 
     let bad_alias_host = symbol("bad_alias_host", &mut string_table);
@@ -866,7 +866,7 @@ fn out_of_range_return_alias_metadata_is_reported_at_call_site() {
 
     let hir = lower_hir(build_ast(vec![start], entry_path), &mut string_table);
 
-    let error = run_borrow_checker(&hir, &host_registry, &string_table)
+    let error = run_borrow_checker(&hir, &external_package_registry, &string_table)
         .expect_err("out-of-range return alias metadata should fail at call site");
     assert_eq!(error.error_type, ErrorType::BorrowChecker);
     assert!(error.msg.contains("out-of-range return-alias index"));
@@ -876,7 +876,7 @@ fn out_of_range_return_alias_metadata_is_reported_at_call_site() {
 fn same_line_mutable_call_then_reuse_uses_order_keys() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_and_start(&mut string_table);
-    let host_registry = default_host_registry(&mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
 
     let mut_user = symbol("mut_user", &mut string_table);
     let p = symbol("p", &mut string_table);
@@ -938,7 +938,7 @@ fn same_line_mutable_call_then_reuse_uses_order_keys() {
         build_ast(vec![callee, caller], entry_path),
         &mut string_table,
     );
-    run_borrow_checker(&hir, &host_registry, &string_table).expect(
+    run_borrow_checker(&hir, &external_package_registry, &string_table).expect(
         "same-line mutable call + later reuse should borrow (not move) when ordered by statement",
     );
 }
@@ -947,7 +947,7 @@ fn same_line_mutable_call_then_reuse_uses_order_keys() {
 fn short_circuit_rhs_mutable_call_with_later_merge_use_borrows_instead_of_moving() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_and_start(&mut string_table);
-    let host_registry = default_host_registry(&mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
 
     let rhs_name = symbol("rhs_short", &mut string_table);
     let calls = symbol("calls", &mut string_table);
@@ -1092,6 +1092,6 @@ fn short_circuit_rhs_mutable_call_with_later_merge_use_borrows_instead_of_moving
         build_ast(vec![rhs_function, start_function], entry_path),
         &mut string_table,
     );
-    run_borrow_checker(&hir, &host_registry, &string_table)
+    run_borrow_checker(&hir, &external_package_registry, &string_table)
         .expect("rhs-only mutable short-circuit call with later merge use should stay borrowed");
 }

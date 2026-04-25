@@ -256,7 +256,10 @@ pub(super) fn parse_identifier_or_call(
     // ------------------------------------
     // HOST FUNCTION CALL INSIDE EXPRESSION
     // ------------------------------------
-    if let Some(host_func_def) = context.host_registry.get_function(string_table.resolve(id)) {
+    if let Some(host_func_def) = context
+        .external_package_registry
+        .get_function(string_table.resolve(id))
+    {
         if context.kind.is_constant_context() {
             return_rule_error!(
                 format!(

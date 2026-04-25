@@ -16,6 +16,7 @@ use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
 use crate::compiler_frontend::basic_utility_functions::check_if_valid_path;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
+use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::hir::module::HirModule;
 use crate::compiler_frontend::style_directives::{StyleDirectiveRegistry, StyleDirectiveSpec};
 use crate::compiler_frontend::symbols::string_interning::{StringIdRemap, StringTable};
@@ -99,6 +100,14 @@ pub trait BackendBuilder {
     /// overridden by project builders. This hook supplies only project-owned additions for
     /// tokenization/template parsing.
     fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec>;
+
+    /// Builder-provided external platform packages.
+    ///
+    /// WHAT: registers typed virtual packages such as `@std/io`, `@web/canvas`, and `@web/dom`
+    /// that the frontend resolves during import binding and type checking.
+    /// WHY: backends own the runtime surface, so they must declare the typed imports the
+    /// compiler frontend is allowed to see.
+    fn external_packages(&self) -> ExternalPackageRegistry;
 }
 
 /// Build-system entrypoint that owns the selected backend implementation.
@@ -242,8 +251,14 @@ pub fn build_project(
         mut string_table,
     } = bootstrap_project_build(project_builder, valid_path)?;
 
-    let modules =
-        compile_project_frontend(&mut config, flags, &style_directives, &mut string_table)?;
+    let external_packages = project_builder.backend.external_packages();
+    let modules = compile_project_frontend(
+        &mut config,
+        flags,
+        &style_directives,
+        &external_packages,
+        &mut string_table,
+    )?;
     let mut warnings = collect_frontend_warnings(&modules);
 
     // --------------------------------------------

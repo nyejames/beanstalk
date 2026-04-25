@@ -81,7 +81,7 @@ pub(super) fn parse_headers_in_file(
 
                 // Unique non-host registry symbol
                 if context
-                    .host_function_registry
+                    .external_package_registry
                     .get_function(context.string_table.resolve(name_id))
                     .is_none()
                 {
@@ -128,7 +128,7 @@ pub(super) fn parse_headers_in_file(
                     } else {
                         let source_file = token_stream.src_path.to_owned();
                         let mut build_context = HeaderBuildContext {
-                            host_function_registry: context.host_function_registry,
+                            external_package_registry: context.external_package_registry,
                             style_directives: context.style_directives,
                             warnings: context.warnings,
                             project_path_resolver: context.project_path_resolver.clone(),
@@ -235,7 +235,7 @@ pub(super) fn parse_headers_in_file(
                     }
                     let source_file = token_stream.src_path.to_owned();
                     let mut build_context = HeaderBuildContext {
-                        host_function_registry: context.host_function_registry,
+                        external_package_registry: context.external_package_registry,
                         style_directives: context.style_directives,
                         warnings: context.warnings,
                         project_path_resolver: context.project_path_resolver.clone(),

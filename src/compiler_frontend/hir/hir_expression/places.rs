@@ -10,13 +10,13 @@ use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::builtins::CollectionBuiltinOp;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::external_packages::CallTarget;
 use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, ValueKind};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeId};
 use crate::compiler_frontend::hir::ids::{FieldId, FunctionId, LocalId, StructId};
 use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
-use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringId;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
@@ -74,7 +74,7 @@ impl<'a> HirBuilder<'a> {
                 result_types,
                 location,
             } => self.lower_call_expression(
-                CallTarget::HostFunction(host_function_id.to_owned()),
+                CallTarget::ExternalFunction(host_function_id.to_owned()),
                 args,
                 result_types,
                 location,
@@ -235,7 +235,7 @@ impl<'a> HirBuilder<'a> {
                 location,
             } => {
                 let lowered = self.lower_call_expression(
-                    CallTarget::HostFunction(host_function_id.to_owned()),
+                    CallTarget::ExternalFunction(host_function_id.to_owned()),
                     args,
                     result_types,
                     location,

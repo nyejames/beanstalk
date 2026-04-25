@@ -9,20 +9,20 @@ use crate::compiler_frontend::ast::statements::functions::FunctionReturn;
 
 #[test]
 fn return_slots_preserve_alias_metadata() {
-    let host_function = HostFunctionDef {
+    let host_function = ExternalFunctionDef {
         name: "concat_like",
         parameters: vec![
-            HostParameter {
-                language_type: DataType::StringSlice,
-                access_kind: HostAccessKind::Shared,
+            ExternalParameter {
+                language_type: ExternalAbiType::Utf8Str,
+                access_kind: ExternalAccessKind::Shared,
             },
-            HostParameter {
-                language_type: DataType::StringSlice,
-                access_kind: HostAccessKind::Shared,
+            ExternalParameter {
+                language_type: ExternalAbiType::Utf8Str,
+                access_kind: ExternalAccessKind::Shared,
             },
         ],
-        return_type: HostAbiType::Utf8Str,
-        return_alias: HostReturnAlias::AliasArgs(vec![1]),
+        return_type: ExternalAbiType::Utf8Str,
+        return_alias: ExternalReturnAlias::AliasArgs(vec![1]),
     };
 
     let returns = host_function.return_slots();
@@ -38,12 +38,21 @@ fn return_slots_preserve_alias_metadata() {
 
 #[test]
 fn register_function_rejects_duplicates() {
-    let mut registry = HostRegistry::new();
-    let result = registry.register_function(HostFunctionDef {
-        name: IO_FUNC_NAME,
+    let mut registry = ExternalPackageRegistry::new();
+    registry
+        .register_function(ExternalFunctionDef {
+            name: "test_func",
+            parameters: Vec::new(),
+            return_type: ExternalAbiType::Void,
+            return_alias: ExternalReturnAlias::Fresh,
+        })
+        .unwrap();
+
+    let result = registry.register_function(ExternalFunctionDef {
+        name: "test_func",
         parameters: Vec::new(),
-        return_type: HostAbiType::Void,
-        return_alias: HostReturnAlias::Fresh,
+        return_type: ExternalAbiType::Void,
+        return_alias: ExternalReturnAlias::Fresh,
     });
 
     assert!(result.is_err());

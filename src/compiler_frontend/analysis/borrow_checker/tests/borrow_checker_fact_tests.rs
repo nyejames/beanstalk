@@ -16,7 +16,7 @@ use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
 use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::test_support::{
-    build_ast, default_host_registry, entry_and_start, function_node, lower_hir,
+    build_ast, default_external_package_registry, entry_and_start, function_node, lower_hir,
     make_test_variable, node, reference_expr, run_borrow_checker, symbol, test_location,
 };
 use crate::compiler_frontend::value_mode::ValueMode;
@@ -27,7 +27,7 @@ use std::collections::VecDeque;
 fn statement_terminator_and_value_facts_are_populated() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_and_start(&mut string_table);
-    let host_registry = default_host_registry(&mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
 
     let x = symbol("x", &mut string_table);
     let y = symbol("y", &mut string_table);
@@ -92,7 +92,7 @@ fn statement_terminator_and_value_facts_are_populated() {
     );
 
     let hir = lower_hir(build_ast(vec![start_fn], entry_path), &mut string_table);
-    let report = run_borrow_checker(&hir, &host_registry, &string_table)
+    let report = run_borrow_checker(&hir, &external_package_registry, &string_table)
         .expect("borrow checking should succeed");
 
     let start = &hir.functions[hir.start_function.0 as usize];
@@ -146,7 +146,7 @@ fn statement_terminator_and_value_facts_are_populated() {
 fn drop_statement_produces_statement_fact() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_and_start(&mut string_table);
-    let host_registry = default_host_registry(&mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
 
     let value = symbol("value", &mut string_table);
     let start_fn = function_node(
@@ -188,7 +188,7 @@ fn drop_statement_produces_statement_fact() {
         location: test_location(2),
     });
 
-    let report = run_borrow_checker(&hir, &host_registry, &string_table)
+    let report = run_borrow_checker(&hir, &external_package_registry, &string_table)
         .expect("borrow checking should succeed");
 
     let fact = report
@@ -203,7 +203,7 @@ fn drop_statement_produces_statement_fact() {
 fn statement_entry_state_reflects_last_use_reborrow_window() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_and_start(&mut string_table);
-    let host_registry = default_host_registry(&mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
 
     let data = symbol("data", &mut string_table);
     let first_ref = symbol("first_ref", &mut string_table);
@@ -260,7 +260,7 @@ fn statement_entry_state_reflects_last_use_reborrow_window() {
     );
 
     let hir = lower_hir(build_ast(vec![start_fn], entry_path), &mut string_table);
-    let report = run_borrow_checker(&hir, &host_registry, &string_table)
+    let report = run_borrow_checker(&hir, &external_package_registry, &string_table)
         .expect("reborrow after last-use should pass");
 
     let second_statement_id = find_statement_id_for_line(&hir, 4)

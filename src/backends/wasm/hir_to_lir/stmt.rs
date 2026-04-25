@@ -6,11 +6,11 @@ use crate::backends::wasm::hir_to_lir::expr::lower_expression;
 use crate::backends::wasm::hir_to_lir::imports::resolve_host_call_import;
 use crate::backends::wasm::lir::instructions::{WasmCalleeRef, WasmLirStmt};
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
+use crate::compiler_frontend::external_packages::CallTarget;
 use crate::compiler_frontend::hir::expressions::HirExpression;
 use crate::compiler_frontend::hir::ids::LocalId;
 use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
-use crate::compiler_frontend::host_functions::CallTarget;
 
 pub(crate) fn lower_statement(
     context: &mut WasmFunctionLoweringContext<'_, '_>,
@@ -49,7 +49,7 @@ pub(crate) fn lower_statement(
                         })?;
                     WasmCalleeRef::Function(function_id)
                 }
-                CallTarget::HostFunction(_) => {
+                CallTarget::ExternalFunction(_) => {
                     // Host calls lower to deterministic import ids.
                     let import_id = resolve_host_call_import(context.module_context, target)?;
                     WasmCalleeRef::Import(import_id)

@@ -17,6 +17,7 @@ use crate::backends::rust_interpreter::exec_ir::{
 };
 use crate::backends::rust_interpreter::request::InterpreterExecutionPolicy;
 use crate::backends::rust_interpreter::runtime::RuntimeEngine;
+use crate::compiler_frontend::external_packages::CallTarget;
 use crate::compiler_frontend::hir::blocks::HirBlock;
 use crate::compiler_frontend::hir::expressions::{HirExpressionKind, ValueKind};
 use crate::compiler_frontend::hir::functions::{HirFunction, HirFunctionOrigin};
@@ -26,7 +27,6 @@ use crate::compiler_frontend::hir::patterns::{HirMatchArm, HirPattern};
 use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::statements::HirStatementKind;
 use crate::compiler_frontend::hir::terminators::HirTerminator;
-use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 

@@ -44,7 +44,7 @@ pub(crate) mod token_scan;
 pub(crate) mod type_coercion;
 pub(crate) mod value_mode;
 
-pub(crate) mod host_functions;
+pub(crate) mod external_packages;
 
 pub(crate) mod hir;
 

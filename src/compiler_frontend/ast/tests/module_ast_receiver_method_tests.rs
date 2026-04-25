@@ -12,7 +12,7 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::type_resolution::validate_no_recursive_runtime_structs;
 use crate::compiler_frontend::datatypes::{BuiltinScalarReceiver, DataType, ReceiverKey};
-use crate::compiler_frontend::host_functions::HostRegistry;
+use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
@@ -51,7 +51,7 @@ fn context_for_source_file(
         ContextKind::Function,
         InternedPath::new(),
         Rc::new(TopLevelDeclarationIndex::new(vec![])),
-        HostRegistry::new(),
+        ExternalPackageRegistry::new(),
         vec![],
     )
     .with_source_file_scope(source_file)

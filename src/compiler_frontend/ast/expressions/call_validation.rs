@@ -13,7 +13,7 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::ast::place_access::{ast_node_is_mutable_place, ast_node_is_place};
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
 use crate::compiler_frontend::datatypes::DataType;
-use crate::compiler_frontend::host_functions::{HostAccessKind, HostFunctionDef};
+use crate::compiler_frontend::external_packages::{ExternalAccessKind, ExternalFunctionDef};
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::type_coercion::compatibility::is_type_compatible;
 use crate::compiler_frontend::type_coercion::diagnostics::{
@@ -167,17 +167,20 @@ pub(crate) fn expectations_from_user_parameters(
 }
 
 pub(crate) fn expectations_from_host_function(
-    function: &HostFunctionDef,
+    function: &ExternalFunctionDef,
 ) -> Vec<ParameterExpectation> {
     function
         .parameters
         .iter()
         .map(|parameter| ParameterExpectation {
             name: None,
-            data_type: parameter.language_type.clone(),
+            data_type: parameter
+                .language_type
+                .to_datatype()
+                .unwrap_or(DataType::Inferred),
             access_mode: match parameter.access_kind {
-                HostAccessKind::Shared => ExpectedAccessMode::Shared,
-                HostAccessKind::Mutable => ExpectedAccessMode::Mutable,
+                ExternalAccessKind::Shared => ExpectedAccessMode::Shared,
+                ExternalAccessKind::Mutable => ExpectedAccessMode::Mutable,
             },
             default_value: None,
         })

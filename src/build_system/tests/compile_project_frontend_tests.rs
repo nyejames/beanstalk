@@ -1,4 +1,5 @@
 use super::compile_project_frontend;
+use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_tests::test_support::temp_dir;
@@ -18,7 +19,13 @@ fn single_file_compiles_minimal_bst() {
     let style_directives = StyleDirectiveRegistry::built_ins();
     let mut string_table = StringTable::new();
 
-    let result = compile_project_frontend(&mut config, &[], &style_directives, &mut string_table);
+    let result = compile_project_frontend(
+        &mut config,
+        &[],
+        &style_directives,
+        &ExternalPackageRegistry::new(),
+        &mut string_table,
+    );
 
     assert!(result.is_ok(), "expected Ok for minimal .bst file");
     assert_eq!(
@@ -41,7 +48,13 @@ fn single_file_rejects_wrong_extension() {
     let style_directives = StyleDirectiveRegistry::built_ins();
     let mut string_table = StringTable::new();
 
-    let result = compile_project_frontend(&mut config, &[], &style_directives, &mut string_table);
+    let result = compile_project_frontend(
+        &mut config,
+        &[],
+        &style_directives,
+        &ExternalPackageRegistry::new(),
+        &mut string_table,
+    );
 
     assert!(result.is_err(), "expected Err for wrong extension");
     let messages = result.err().expect("checked above");
@@ -65,7 +78,13 @@ fn single_file_rejects_missing_file() {
     let style_directives = StyleDirectiveRegistry::built_ins();
     let mut string_table = StringTable::new();
 
-    let result = compile_project_frontend(&mut config, &[], &style_directives, &mut string_table);
+    let result = compile_project_frontend(
+        &mut config,
+        &[],
+        &style_directives,
+        &ExternalPackageRegistry::new(),
+        &mut string_table,
+    );
 
     assert!(result.is_err(), "expected Err for missing file");
     assert!(
@@ -89,7 +108,13 @@ fn directory_project_compiles_single_entry_module() {
     let style_directives = StyleDirectiveRegistry::built_ins();
     let mut string_table = StringTable::new();
 
-    let result = compile_project_frontend(&mut config, &[], &style_directives, &mut string_table);
+    let result = compile_project_frontend(
+        &mut config,
+        &[],
+        &style_directives,
+        &ExternalPackageRegistry::new(),
+        &mut string_table,
+    );
 
     assert!(
         result.is_ok(),
@@ -116,7 +141,13 @@ fn directory_project_discovers_multiple_entry_modules() {
     let style_directives = StyleDirectiveRegistry::built_ins();
     let mut string_table = StringTable::new();
 
-    let result = compile_project_frontend(&mut config, &[], &style_directives, &mut string_table);
+    let result = compile_project_frontend(
+        &mut config,
+        &[],
+        &style_directives,
+        &ExternalPackageRegistry::new(),
+        &mut string_table,
+    );
 
     assert!(
         result.is_ok(),
@@ -153,7 +184,13 @@ fn directory_project_rejects_missing_entry_root() {
     );
     assert!(parse_result.is_ok(), "config parse should succeed");
 
-    let result = compile_project_frontend(&mut config, &[], &style_directives, &mut string_table);
+    let result = compile_project_frontend(
+        &mut config,
+        &[],
+        &style_directives,
+        &ExternalPackageRegistry::new(),
+        &mut string_table,
+    );
 
     assert!(result.is_err(), "expected Err for missing entry root");
     assert!(

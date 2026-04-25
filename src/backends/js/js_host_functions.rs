@@ -2,7 +2,7 @@
 //!
 //! This keeps backend-specific JS host bindings isolated from general HIR emission logic.
 
-use crate::compiler_frontend::host_functions::{
+use crate::compiler_frontend::external_packages::{
     COLLECTION_GET_HOST_NAME, COLLECTION_LENGTH_HOST_NAME, COLLECTION_PUSH_HOST_NAME,
     COLLECTION_REMOVE_HOST_NAME, ERROR_BUBBLE_HOST_NAME, ERROR_PUSH_TRACE_HOST_NAME,
     ERROR_WITH_LOCATION_HOST_NAME, IO_FUNC_NAME,

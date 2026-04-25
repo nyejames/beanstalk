@@ -15,9 +15,9 @@ use crate::compiler_frontend::analysis::borrow_checker::types::{
     ValueBorrowFact,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::hir::blocks::HirBlock;
 use crate::compiler_frontend::hir::ids::{BlockId, FunctionId, HirNodeId, HirValueId};
-use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use rustc_hash::FxHashMap;
 
@@ -28,7 +28,7 @@ pub(super) struct BorrowTransferContext<'a> {
     // WHAT: shared lookup/diagnostic tables for one function transfer pass.
     // WHY: avoids repeated module scans while statements/terminators are analyzed.
     pub string_table: &'a StringTable,
-    pub host_registry: &'a HostRegistry,
+    pub external_package_registry: &'a ExternalPackageRegistry,
     pub function_param_mutability: &'a FxHashMap<FunctionId, Vec<bool>>,
     pub function_return_alias: &'a FxHashMap<FunctionId, FunctionReturnAliasSummary>,
     pub diagnostics: BorrowDiagnostics<'a>,

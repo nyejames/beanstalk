@@ -17,12 +17,12 @@ use crate::compiler_frontend::analysis::borrow_checker::types::{
     FunctionReturnAliasSummary, LocalMode,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::hir::functions::HirFunction;
 use crate::compiler_frontend::hir::hir_side_table::HirLocation;
 use crate::compiler_frontend::hir::ids::{BlockId, FunctionId, LocalId, RegionId};
 use crate::compiler_frontend::hir::module::HirModule;
 use crate::compiler_frontend::hir::terminators::HirTerminator;
-use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::return_borrow_checker_error;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -30,7 +30,7 @@ use std::collections::VecDeque;
 
 pub(super) struct BorrowChecker<'a> {
     pub(super) module: &'a HirModule,
-    pub(super) host_registry: &'a HostRegistry,
+    pub(super) external_package_registry: &'a ExternalPackageRegistry,
     pub(super) string_table: &'a StringTable,
     pub(super) diagnostics: BorrowDiagnostics<'a>,
     // Fast ID lookups used throughout analysis.
@@ -44,7 +44,7 @@ pub(super) struct BorrowChecker<'a> {
 impl<'a> BorrowChecker<'a> {
     pub(super) fn new(
         module: &'a HirModule,
-        host_registry: &'a HostRegistry,
+        external_package_registry: &'a ExternalPackageRegistry,
         string_table: &'a StringTable,
     ) -> Self {
         let block_index_by_id = module
@@ -62,7 +62,7 @@ impl<'a> BorrowChecker<'a> {
 
         Self {
             module,
-            host_registry,
+            external_package_registry,
             string_table,
             diagnostics: BorrowDiagnostics::new(module, string_table),
             block_index_by_id,
@@ -119,7 +119,7 @@ impl<'a> BorrowChecker<'a> {
 
         let transfer_context = BorrowTransferContext {
             string_table: self.string_table,
-            host_registry: self.host_registry,
+            external_package_registry: self.external_package_registry,
             function_param_mutability: &self.function_param_mutability,
             function_return_alias: &self.function_return_alias,
             diagnostics: BorrowDiagnostics::new(self.module, self.string_table),

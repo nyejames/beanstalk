@@ -4,8 +4,8 @@
 
 use crate::compiler_frontend::analysis::borrow_checker::types::FunctionReturnAliasSummary;
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
-use crate::compiler_frontend::host_functions::{
-    CallTarget, HostAccessKind, HostFunctionDef, HostReturnAlias,
+use crate::compiler_frontend::external_packages::{
+    CallTarget, ExternalAccessKind, ExternalFunctionDef, ExternalReturnAlias,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::return_borrow_checker_error;
@@ -111,7 +111,7 @@ pub(super) fn resolve_call_semantics(
             })
         }
 
-        CallTarget::HostFunction(path) => {
+        CallTarget::ExternalFunction(path) => {
             let host_def = resolve_host_definition(context, path, location.clone())?;
             if host_def.parameters.len() != arg_len {
                 return_borrow_checker_error!(
@@ -133,14 +133,14 @@ pub(super) fn resolve_call_semantics(
                 .parameters
                 .iter()
                 .map(|param| match param.access_kind {
-                    HostAccessKind::Shared => ArgEffect::SharedBorrow,
-                    HostAccessKind::Mutable => ArgEffect::MutableBorrow,
+                    ExternalAccessKind::Shared => ArgEffect::SharedBorrow,
+                    ExternalAccessKind::Mutable => ArgEffect::MutableBorrow,
                 })
                 .collect::<Vec<_>>();
 
             let return_alias = match host_def.return_alias {
-                HostReturnAlias::Fresh => CallResultAlias::Fresh,
-                HostReturnAlias::AliasArgs(ref indices) => {
+                ExternalReturnAlias::Fresh => CallResultAlias::Fresh,
+                ExternalReturnAlias::AliasArgs(ref indices) => {
                     validate_alias_indices(
                         indices,
                         arg_len,
@@ -163,12 +163,12 @@ fn resolve_host_definition<'a>(
     context: &'a BorrowTransferContext<'_>,
     path: &InternedPath,
     location: SourceLocation,
-) -> Result<&'a HostFunctionDef, CompilerError> {
+) -> Result<&'a ExternalFunctionDef, CompilerError> {
     // Host metadata is keyed by the canonical host call name emitted into HIR.
     // Borrow checking should not silently reinterpret a missing symbol through a
     // second fallback path because that can hide registry drift.
     let full = path.to_string(context.string_table);
-    if let Some(definition) = context.host_registry.get_function(&full) {
+    if let Some(definition) = context.external_package_registry.get_function(&full) {
         return Ok(definition);
     }
 

@@ -22,7 +22,7 @@ use crate::compiler_frontend::ast::statements::result_handling::{
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::DataType;
-use crate::compiler_frontend::host_functions::HostFunctionDef;
+use crate::compiler_frontend::external_packages::ExternalFunctionDef;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
@@ -44,7 +44,7 @@ pub fn parse_function_call(
     // Host calls share the same argument parser, but they reject named targets until
     // host metadata carries stable public parameter names.
     if let Some(host_func) = &context
-        .host_registry
+        .external_package_registry
         .get_function(id.name_str(string_table).unwrap_or(""))
     {
         return parse_host_function_call(token_stream, host_func, context, string_table);
@@ -378,7 +378,7 @@ fn resolve_user_function_call_arguments(
 /// Parses a host-function call using the shared argument resolver plus host-only validation.
 pub fn parse_host_function_call(
     token_stream: &mut FileTokens,
-    host_func: &HostFunctionDef,
+    host_func: &ExternalFunctionDef,
     context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> Result<AstNode, CompilerError> {
@@ -427,12 +427,12 @@ pub fn parse_host_function_call(
 
 /// Validates host-specific semantic rules that sit on top of shared call validation.
 fn validate_host_specific_call_rules(
-    function: &HostFunctionDef,
+    function: &ExternalFunctionDef,
     args: &[CallArgument],
     location: SourceLocation,
     string_table: &StringTable,
 ) -> Result<(), CompilerError> {
-    if function.name == crate::compiler_frontend::host_functions::IO_FUNC_NAME {
+    if function.name == crate::compiler_frontend::external_packages::IO_FUNC_NAME {
         for (i, argument) in args.iter().enumerate() {
             if argument.value.data_type.is_result() {
                 return_type_error!(

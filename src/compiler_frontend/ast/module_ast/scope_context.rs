@@ -15,7 +15,7 @@
 //!
 //! `ScopeContext` receives cloned/copied state from `AstBuildState` (e.g.
 //! `Rc<TopLevelDeclarationIndex>` for top-level symbols, `Rc<ReceiverMethodCatalog>` for method
-//! lookup, `HostRegistry` clone) so body parsing is self-contained without referencing the mutable
+//! lookup, `ExternalPackageRegistry` clone) so body parsing is self-contained without referencing the mutable
 //! build state directly.
 
 use crate::compiler_frontend::FrontendBuildProfile;
@@ -25,7 +25,7 @@ use crate::compiler_frontend::ast::templates::template_folding::TemplateFoldCont
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::{DataType, ReceiverKey};
-use crate::compiler_frontend::host_functions::HostRegistry;
+use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
@@ -146,7 +146,7 @@ pub struct ScopeContext {
     pub expected_error_type: Option<DataType>,
 
     // --- External registries ---
-    pub host_registry: HostRegistry,
+    pub external_package_registry: ExternalPackageRegistry,
     pub style_directives: StyleDirectiveRegistry,
     pub build_profile: FrontendBuildProfile,
 
@@ -212,7 +212,7 @@ impl ScopeContext {
         kind: ContextKind,
         scope: InternedPath,
         top_level_declarations: Rc<TopLevelDeclarationIndex>,
-        host_registry: HostRegistry,
+        external_package_registry: ExternalPackageRegistry,
         expected_result_types: Vec<DataType>,
     ) -> ScopeContext {
         ScopeContext {
@@ -224,7 +224,7 @@ impl ScopeContext {
             visible_declaration_ids: None,
             expected_result_types,
             expected_error_type: None,
-            host_registry,
+            external_package_registry,
             style_directives: StyleDirectiveRegistry::built_ins(),
             loop_depth: 0,
             build_profile: FrontendBuildProfile::Dev,
@@ -262,7 +262,7 @@ impl ScopeContext {
             visible_declaration_ids: self.visible_declaration_ids.clone(),
             expected_result_types: self.expected_result_types.clone(),
             expected_error_type: self.expected_error_type.clone(),
-            host_registry: self.host_registry.clone(),
+            external_package_registry: self.external_package_registry.clone(),
             style_directives: self.style_directives.clone(),
             loop_depth,
             build_profile: self.build_profile,
@@ -309,7 +309,7 @@ impl ScopeContext {
             visible_declaration_ids: self.visible_declaration_ids.clone(),
             expected_result_types,
             expected_error_type: self.expected_error_type.clone(),
-            host_registry: self.host_registry.clone(),
+            external_package_registry: self.external_package_registry.clone(),
             style_directives: self.style_directives.clone(),
             loop_depth: self.loop_depth,
             build_profile: self.build_profile,
@@ -342,7 +342,7 @@ impl ScopeContext {
             visible_declaration_ids: self.visible_declaration_ids.clone(),
             expected_result_types: vec![],
             expected_error_type: self.expected_error_type.clone(),
-            host_registry: self.host_registry.clone(),
+            external_package_registry: self.external_package_registry.clone(),
             style_directives: self.style_directives.clone(),
             loop_depth: self.loop_depth,
             build_profile: self.build_profile,
@@ -371,7 +371,7 @@ impl ScopeContext {
             visible_declaration_ids: parent.visible_declaration_ids.clone(),
             expected_result_types: Vec::new(),
             expected_error_type: parent.expected_error_type.clone(),
-            host_registry: parent.host_registry.clone(),
+            external_package_registry: parent.external_package_registry.clone(),
             style_directives: parent.style_directives.clone(),
             loop_depth: parent.loop_depth,
             build_profile: parent.build_profile,

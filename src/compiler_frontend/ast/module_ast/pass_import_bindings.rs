@@ -25,7 +25,7 @@ impl<'a> AstBuildState<'a> {
             &self.module_symbols.importable_symbol_exported,
             &self.module_symbols.declared_paths_by_file,
             &self.module_symbols.declared_names_by_file,
-            self.host_registry,
+            self.external_package_registry,
             string_table,
         )
         .map_err(|error| self.error_messages(error, string_table))?;

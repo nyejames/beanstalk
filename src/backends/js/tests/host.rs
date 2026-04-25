@@ -32,7 +32,7 @@ fn host_io_reads_the_underlying_value_before_logging() {
     let call_statement = statement(
         2,
         HirStatementKind::Call {
-            target: CallTarget::HostFunction(io_path),
+            target: CallTarget::ExternalFunction(io_path),
             args: vec![expression(
                 2,
                 HirExpressionKind::Load(HirPlace::Local(LocalId(0))),

@@ -4,7 +4,7 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationIndex};
 use crate::compiler_frontend::datatypes::DataType;
-use crate::compiler_frontend::host_functions::HostRegistry;
+use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{CharPosition, SourceLocation};
@@ -129,7 +129,7 @@ fn constant_context_template_head_with_constant_references_folds_to_string_slice
             ContextKind::Constant,
             scope.to_owned(),
             Rc::new(TopLevelDeclarationIndex::new(declarations.clone())),
-            HostRegistry::default(),
+            ExternalPackageRegistry::default(),
             vec![],
         ),
         &scope,

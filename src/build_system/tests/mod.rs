@@ -126,6 +126,12 @@ impl BackendBuilder for WarningBuilder {
         Ok(())
     }
 
+    fn external_packages(
+        &self,
+    ) -> crate::compiler_frontend::external_packages::ExternalPackageRegistry {
+        crate::compiler_frontend::external_packages::ExternalPackageRegistry::new()
+    }
+
     fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec> {
         Vec::new()
     }
@@ -163,6 +169,12 @@ impl BackendBuilder for ValidationTrackingBuilder {
         Ok(())
     }
 
+    fn external_packages(
+        &self,
+    ) -> crate::compiler_frontend::external_packages::ExternalPackageRegistry {
+        crate::compiler_frontend::external_packages::ExternalPackageRegistry::new()
+    }
+
     fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec> {
         Vec::new()
     }
@@ -191,6 +203,12 @@ impl BackendBuilder for FailingValidationBuilder {
             SourceLocation::default(),
             ErrorType::Config,
         ))
+    }
+
+    fn external_packages(
+        &self,
+    ) -> crate::compiler_frontend::external_packages::ExternalPackageRegistry {
+        crate::compiler_frontend::external_packages::ExternalPackageRegistry::new()
     }
 
     fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec> {
@@ -225,6 +243,12 @@ impl BackendBuilder for NoDirectiveBuilder {
         _string_table: &mut StringTable,
     ) -> Result<(), CompilerError> {
         Ok(())
+    }
+
+    fn external_packages(
+        &self,
+    ) -> crate::compiler_frontend::external_packages::ExternalPackageRegistry {
+        crate::compiler_frontend::external_packages::ExternalPackageRegistry::new()
     }
 
     fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec> {
@@ -271,6 +295,12 @@ impl BackendBuilder for MultiModuleDiagnosticBuilder {
         _string_table: &mut StringTable,
     ) -> Result<(), CompilerError> {
         Ok(())
+    }
+
+    fn external_packages(
+        &self,
+    ) -> crate::compiler_frontend::external_packages::ExternalPackageRegistry {
+        crate::compiler_frontend::external_packages::ExternalPackageRegistry::new()
     }
 
     fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec> {

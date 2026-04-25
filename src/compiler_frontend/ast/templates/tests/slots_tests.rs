@@ -5,7 +5,7 @@ use crate::compiler_frontend::ast::templates::template::{
 };
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationIndex};
-use crate::compiler_frontend::host_functions::HostRegistry;
+use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
@@ -48,7 +48,7 @@ fn test_constant_context(scope: InternedPath) -> ScopeContext {
         ContextKind::Constant,
         scope.clone(),
         Rc::new(TopLevelDeclarationIndex::new(vec![])),
-        HostRegistry::default(),
+        ExternalPackageRegistry::default(),
         vec![],
     )
     .with_project_path_resolver(Some(resolver))

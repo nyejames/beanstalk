@@ -11,8 +11,8 @@ use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant;
 use crate::compiler_frontend::declaration_syntax::declaration_shell::DeclarationSyntax;
+use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::module_symbols::ModuleSymbols;
-use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
@@ -155,7 +155,7 @@ pub struct FileImport {
 
 // Shared file-level state that stays live while one source file is being split into headers.
 pub(super) struct HeaderParseContext<'a> {
-    pub host_function_registry: &'a HostRegistry,
+    pub external_package_registry: &'a ExternalPackageRegistry,
     pub style_directives: &'a StyleDirectiveRegistry,
     pub warnings: &'a mut Vec<CompilerWarning>,
     pub is_entry_file: bool,
@@ -171,7 +171,7 @@ pub(super) struct HeaderParseContext<'a> {
 
 // Shared per-header builder inputs that stay stable while one declaration is classified.
 pub(super) struct HeaderBuildContext<'a> {
-    pub host_function_registry: &'a HostRegistry,
+    pub external_package_registry: &'a ExternalPackageRegistry,
     pub style_directives: &'a StyleDirectiveRegistry,
     pub warnings: &'a mut Vec<CompilerWarning>,
     pub project_path_resolver: Option<ProjectPathResolver>,

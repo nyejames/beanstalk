@@ -31,8 +31,8 @@ use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarati
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_errors::ErrorMetaDataKey;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
+use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::parse_file_headers::{FileImport, Header, HeaderKind};
-use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
@@ -63,7 +63,7 @@ pub(crate) fn resolve_file_import_bindings(
     importable_symbol_exported: &FxHashMap<InternedPath, bool>,
     declared_paths_by_file: &FxHashMap<InternedPath, FxHashSet<InternedPath>>,
     declared_names_by_file: &FxHashMap<InternedPath, FxHashSet<StringId>>,
-    host_registry: &HostRegistry,
+    external_package_registry: &ExternalPackageRegistry,
     string_table: &mut StringTable,
 ) -> Result<FxHashMap<InternedPath, FileImportBindings>, CompilerError> {
     let mut bindings_by_file = FxHashMap::default();
@@ -139,7 +139,7 @@ pub(crate) fn resolve_file_import_bindings(
                         ));
                     };
 
-                    if host_registry
+                    if external_package_registry
                         .get_function(string_table.resolve(symbol_name))
                         .is_some()
                     {
@@ -177,6 +177,47 @@ pub(crate) fn resolve_file_import_bindings(
                     ));
                 }
                 ImportPathResolution::Missing => {
+                    // Try to resolve as a virtual package import before failing.
+                    match resolve_virtual_package_import(
+                        &import.header_path,
+                        external_package_registry,
+                        string_table,
+                    ) {
+                        VirtualPackageMatch::Found(_package_path, symbol_name) => {
+                            if bound_names.contains(&symbol_name)
+                                && !bindings.visible_symbol_paths.contains(&import.header_path)
+                            {
+                                return Err(CompilerError::new_rule_error(
+                                    format!(
+                                        "Import name collision: '{}' is already declared in this file.",
+                                        string_table.resolve(symbol_name)
+                                    ),
+                                    import.location,
+                                ));
+                            }
+
+                            bindings
+                                .visible_symbol_paths
+                                .insert(import.header_path.to_owned());
+                            bound_names.insert(symbol_name);
+                            continue;
+                        }
+                        VirtualPackageMatch::PackageFoundSymbolMissing(package_path) => {
+                            let symbol_name = import
+                                .header_path
+                                .name_str(string_table)
+                                .unwrap_or("<unknown>");
+                            return Err(CompilerError::new_rule_error(
+                                format!(
+                                    "Cannot import '{}' from package '{}': symbol not found in package.",
+                                    symbol_name, package_path
+                                ),
+                                import.location,
+                            ));
+                        }
+                        VirtualPackageMatch::NoMatch => {}
+                    }
+
                     return Err(CompilerError::new_rule_error(
                         format!(
                             "Missing import target '{}'. Could not resolve this dependency in the current module.",
@@ -200,7 +241,7 @@ pub(crate) fn resolve_file_import_bindings(
 pub(crate) struct ConstantHeaderParseContext<'a> {
     pub top_level_declarations: Rc<TopLevelDeclarationIndex>,
     pub visible_declaration_ids: &'a FxHashSet<InternedPath>,
-    pub host_registry: &'a HostRegistry,
+    pub external_package_registry: &'a ExternalPackageRegistry,
     pub style_directives: &'a StyleDirectiveRegistry,
     pub project_path_resolver: Option<ProjectPathResolver>,
     pub path_format_config: PathStringFormatConfig,
@@ -218,7 +259,7 @@ pub(crate) fn parse_constant_header_declaration(
     let ConstantHeaderParseContext {
         top_level_declarations,
         visible_declaration_ids,
-        host_registry,
+        external_package_registry,
         style_directives,
         project_path_resolver,
         path_format_config,
@@ -246,7 +287,7 @@ pub(crate) fn parse_constant_header_declaration(
         ContextKind::ConstantHeader,
         header.tokens.src_path.to_owned(),
         top_level_declarations,
-        host_registry.clone(),
+        external_package_registry.clone(),
         vec![],
     )
     .with_style_directives(style_directives)
@@ -433,6 +474,70 @@ fn resolve_import_target_path(
             .unwrap_or(ImportPathResolution::Missing),
         _ => ImportPathResolution::Ambiguous,
     }
+}
+
+enum VirtualPackageMatch {
+    Found(String, StringId),
+    PackageFoundSymbolMissing(String),
+    NoMatch,
+}
+
+/// Attempts to resolve an import path as a virtual package symbol.
+///
+/// WHAT: checks whether the import path matches `package/path/symbol` where `package/path`
+/// is a known virtual package in the builder-provided registry.
+/// WHY: virtual package imports share the same `@`-prefixed path syntax as file imports,
+/// so they are distinguished at resolution time rather than tokenization time.
+fn resolve_virtual_package_import(
+    requested_path: &InternedPath,
+    registry: &ExternalPackageRegistry,
+    string_table: &StringTable,
+) -> VirtualPackageMatch {
+    let components = requested_path.as_components();
+    if components.is_empty() {
+        return VirtualPackageMatch::NoMatch;
+    }
+
+    // Build candidate package paths by joining progressively more components.
+    // For @std/io/io we try "@std/io/io", "@std/io", "@std".
+    for package_len in (1..=components.len()).rev() {
+        let package_components = &components[..package_len];
+        let package_path = format!(
+            "@{}",
+            package_components
+                .iter()
+                .map(|&id| string_table.resolve(id))
+                .collect::<Vec<_>>()
+                .join("/")
+        );
+
+        if !registry.has_package(&package_path) {
+            continue;
+        }
+
+        // The remaining components are the symbol path within the package.
+        // For now, we only support a single symbol name after the package path.
+        let symbol_components = &components[package_len..];
+        if symbol_components.len() != 1 {
+            // Multi-component symbol paths within packages are not supported yet.
+            return VirtualPackageMatch::PackageFoundSymbolMissing(package_path);
+        }
+
+        let symbol_name = symbol_components[0];
+        let symbol_name_str = string_table.resolve(symbol_name);
+        if registry
+            .resolve_package_symbol(&package_path, symbol_name_str)
+            .is_some()
+        {
+            return VirtualPackageMatch::Found(package_path, symbol_name);
+        }
+
+        // Package exists but symbol doesn't — stop searching shorter prefixes
+        // so we report the missing symbol accurately.
+        return VirtualPackageMatch::PackageFoundSymbolMissing(package_path);
+    }
+
+    VirtualPackageMatch::NoMatch
 }
 
 fn exact_path_matches_candidate(

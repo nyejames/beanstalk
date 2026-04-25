@@ -7,6 +7,9 @@ use crate::backends::js::JsEmitter;
 use crate::backends::js::js_host_functions::resolve_host_function_path;
 use crate::compiler_frontend::analysis::borrow_checker::LocalMode;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
+use crate::compiler_frontend::external_packages::{
+    COLLECTION_LENGTH_HOST_NAME, COLLECTION_PUSH_HOST_NAME, COLLECTION_REMOVE_HOST_NAME, CallTarget,
+};
 use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind};
 use crate::compiler_frontend::hir::functions::HirFunction;
 use crate::compiler_frontend::hir::ids::{BlockId, LocalId};
@@ -14,9 +17,6 @@ use crate::compiler_frontend::hir::patterns::{HirMatchArm, HirPattern, HirRelati
 use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
 use crate::compiler_frontend::hir::terminators::HirTerminator;
-use crate::compiler_frontend::host_functions::{
-    COLLECTION_LENGTH_HOST_NAME, COLLECTION_PUSH_HOST_NAME, COLLECTION_REMOVE_HOST_NAME, CallTarget,
-};
 
 impl<'hir> JsEmitter<'hir> {
     pub(crate) fn emit_block_statements(
@@ -44,7 +44,7 @@ impl<'hir> JsEmitter<'hir> {
                 result,
             } => {
                 let target_name = self.lower_call_target(target)?;
-                let args = if matches!(target, CallTarget::HostFunction(_)) {
+                let args = if matches!(target, CallTarget::ExternalFunction(_)) {
                     args.iter()
                         .map(|arg| self.lower_host_call_argument(arg))
                         .collect::<Result<Vec<_>, _>>()?
@@ -116,7 +116,7 @@ impl<'hir> JsEmitter<'hir> {
             CallTarget::UserFunction(function_id) => {
                 Ok(self.function_name(*function_id)?.to_owned())
             }
-            CallTarget::HostFunction(path) => {
+            CallTarget::ExternalFunction(path) => {
                 let Some(host_target) = resolve_host_function_path(path, self.string_table) else {
                     return Err(CompilerError::compiler_error(format!(
                         "JavaScript backend: unknown host function '{}'",

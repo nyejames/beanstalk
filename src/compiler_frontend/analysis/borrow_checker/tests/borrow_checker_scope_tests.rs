@@ -14,8 +14,9 @@ use crate::compiler_frontend::hir::ids::{HirNodeId, HirValueId};
 use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::test_support::{
-    assignment_target, build_ast, default_host_registry, entry_and_start, function_node, lower_hir,
-    make_test_variable, node, reference_expr, run_borrow_checker, symbol, test_location,
+    assignment_target, build_ast, default_external_package_registry, entry_and_start,
+    function_node, lower_hir, make_test_variable, node, reference_expr, run_borrow_checker, symbol,
+    test_location,
 };
 use crate::compiler_frontend::value_mode::ValueMode;
 
@@ -23,7 +24,7 @@ use crate::compiler_frontend::value_mode::ValueMode;
 fn if_branch_local_alias_does_not_escape_merge() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_and_start(&mut string_table);
-    let host_registry = default_host_registry(&mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
 
     let x = symbol("x", &mut string_table);
     let y = symbol("y", &mut string_table);
@@ -68,7 +69,7 @@ fn if_branch_local_alias_does_not_escape_merge() {
     );
 
     let hir = lower_hir(build_ast(vec![start_fn], entry_path), &mut string_table);
-    run_borrow_checker(&hir, &host_registry, &string_table)
+    run_borrow_checker(&hir, &external_package_registry, &string_table)
         .expect("branch-local alias should not be visible after merge");
 }
 
@@ -76,7 +77,7 @@ fn if_branch_local_alias_does_not_escape_merge() {
 fn match_arm_local_alias_does_not_escape_merge() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_and_start(&mut string_table);
-    let host_registry = default_host_registry(&mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
 
     let x = symbol("x", &mut string_table);
     let y = symbol("y", &mut string_table);
@@ -131,7 +132,7 @@ fn match_arm_local_alias_does_not_escape_merge() {
     );
 
     let hir = lower_hir(build_ast(vec![start_fn], entry_path), &mut string_table);
-    run_borrow_checker(&hir, &host_registry, &string_table)
+    run_borrow_checker(&hir, &external_package_registry, &string_table)
         .expect("match-arm local alias should not be visible after merge");
 }
 
@@ -139,7 +140,7 @@ fn match_arm_local_alias_does_not_escape_merge() {
 fn while_body_local_alias_does_not_escape_exit() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_and_start(&mut string_table);
-    let host_registry = default_host_registry(&mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
 
     let x = symbol("x", &mut string_table);
     let y = symbol("y", &mut string_table);
@@ -183,7 +184,7 @@ fn while_body_local_alias_does_not_escape_exit() {
     );
 
     let hir = lower_hir(build_ast(vec![start_fn], entry_path), &mut string_table);
-    run_borrow_checker(&hir, &host_registry, &string_table)
+    run_borrow_checker(&hir, &external_package_registry, &string_table)
         .expect("while-body local alias should not be visible in exit block");
 }
 
@@ -191,7 +192,7 @@ fn while_body_local_alias_does_not_escape_exit() {
 fn dead_local_access_reports_borrow_error() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_and_start(&mut string_table);
-    let host_registry = default_host_registry(&mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
 
     let x = symbol("x", &mut string_table);
     let y = symbol("y", &mut string_table);
@@ -289,7 +290,7 @@ fn dead_local_access_reports_borrow_error() {
         &synthetic_statement.location,
     );
 
-    let error = run_borrow_checker(&hir, &host_registry, &string_table)
+    let error = run_borrow_checker(&hir, &external_package_registry, &string_table)
         .expect_err("dead local access should fail");
     assert_eq!(error.error_type, ErrorType::BorrowChecker);
     assert!(

@@ -13,7 +13,7 @@ use crate::compiler_frontend::builtins::error_type::{
     resolve_builtin_stack_frame_type,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::host_functions::{
+use crate::compiler_frontend::external_packages::{
     ERROR_BUBBLE_HOST_NAME, ERROR_PUSH_TRACE_HOST_NAME, ERROR_WITH_LOCATION_HOST_NAME,
 };
 use crate::compiler_frontend::interned_path::InternedPath;

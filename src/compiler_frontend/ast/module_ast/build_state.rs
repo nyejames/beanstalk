@@ -26,9 +26,9 @@ use crate::compiler_frontend::ast::templates::top_level_templates::{
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
+use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::module_symbols::ModuleSymbols;
 use crate::compiler_frontend::headers::parse_file_headers::TopLevelConstFragment;
-use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
@@ -51,7 +51,7 @@ pub(in crate::compiler_frontend::ast) struct AstBuildState<'a> {
     pub(in crate::compiler_frontend::ast) module_symbols: ModuleSymbols,
 
     // Immutable configuration shared across passes.
-    pub(in crate::compiler_frontend::ast) host_registry: &'a HostRegistry,
+    pub(in crate::compiler_frontend::ast) external_package_registry: &'a ExternalPackageRegistry,
     pub(in crate::compiler_frontend::ast) style_directives: &'a StyleDirectiveRegistry,
     pub(in crate::compiler_frontend::ast) build_profile: FrontendBuildProfile,
     pub(in crate::compiler_frontend::ast) project_path_resolver: &'a Option<ProjectPathResolver>,
@@ -84,7 +84,7 @@ pub(in crate::compiler_frontend::ast) struct AstBuildState<'a> {
 
 impl<'a> AstBuildState<'a> {
     pub(in crate::compiler_frontend::ast) fn new(
-        host_registry: &'a HostRegistry,
+        external_package_registry: &'a ExternalPackageRegistry,
         style_directives: &'a StyleDirectiveRegistry,
         build_profile: FrontendBuildProfile,
         project_path_resolver: &'a Option<ProjectPathResolver>,
@@ -102,7 +102,7 @@ impl<'a> AstBuildState<'a> {
 
         Self {
             module_symbols,
-            host_registry,
+            external_package_registry,
             style_directives,
             build_profile,
             project_path_resolver,

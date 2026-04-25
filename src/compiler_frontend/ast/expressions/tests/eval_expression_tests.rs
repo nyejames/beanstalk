@@ -12,7 +12,7 @@ use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationIndex};
 use crate::compiler_frontend::compiler_errors::{ErrorMetaDataKey, ErrorType};
 use crate::compiler_frontend::datatypes::DataType;
-use crate::compiler_frontend::host_functions::HostRegistry;
+use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::{
@@ -115,7 +115,7 @@ fn ordinary_expression_rejects_path_string_concatenation() {
         ContextKind::Template,
         source_scope.clone(),
         Rc::new(TopLevelDeclarationIndex::new(vec![])),
-        HostRegistry::new(),
+        ExternalPackageRegistry::new(),
         vec![],
     )
     .with_source_file_scope(source_scope.clone())

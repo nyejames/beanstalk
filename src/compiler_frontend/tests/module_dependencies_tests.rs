@@ -6,10 +6,10 @@
 //!      here breaks cross-file visibility and constant deferral.
 
 use super::*;
+use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::parse_file_headers::{
     HeaderKind, HeaderParseOptions, Headers, parse_headers,
 };
-use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
 use crate::compiler_frontend::tokenizer::newline_handling::NewlineMode;
@@ -37,11 +37,11 @@ fn parse_module_headers(files: &[(&str, &str)], entry_path: &str) -> (Headers, S
         tokenized_files.push(tokens);
     }
 
-    let host_registry = HostRegistry::new();
+    let external_package_registry = ExternalPackageRegistry::new();
     let mut warnings = Vec::new();
     let headers = parse_headers(
         tokenized_files,
-        &host_registry,
+        &external_package_registry,
         &mut warnings,
         &PathBuf::from(entry_path),
         HeaderParseOptions::default(),

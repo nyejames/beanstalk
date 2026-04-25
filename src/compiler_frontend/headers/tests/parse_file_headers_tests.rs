@@ -10,7 +10,7 @@ use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnChannel, ReturnSlot,
 };
 use crate::compiler_frontend::datatypes::DataType;
-use crate::compiler_frontend::host_functions::HostRegistry;
+use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -35,12 +35,12 @@ fn parse_single_file_headers(source: &str) -> Headers {
     )
     .expect("tokenization should succeed");
 
-    let host_registry = HostRegistry::new();
+    let external_package_registry = ExternalPackageRegistry::new();
     let mut warnings = Vec::new();
 
     parse_headers(
         vec![file_tokens],
-        &host_registry,
+        &external_package_registry,
         &mut warnings,
         &file_path,
         HeaderParseOptions::default(),
@@ -70,12 +70,12 @@ fn parse_single_file_headers_with_warnings(
     )
     .expect("tokenization should succeed");
 
-    let host_registry = HostRegistry::new();
+    let external_package_registry = ExternalPackageRegistry::new();
     let mut warnings = Vec::new();
 
     let headers = parse_headers(
         vec![file_tokens],
-        &host_registry,
+        &external_package_registry,
         &mut warnings,
         &file_path,
         HeaderParseOptions::default(),
@@ -102,12 +102,12 @@ fn parse_single_file_headers_with_table(source: &str) -> (Headers, StringTable) 
     )
     .expect("tokenization should succeed");
 
-    let host_registry = HostRegistry::new();
+    let external_package_registry = ExternalPackageRegistry::new();
     let mut warnings = Vec::new();
 
     let headers = parse_headers(
         vec![file_tokens],
-        &host_registry,
+        &external_package_registry,
         &mut warnings,
         &file_path,
         HeaderParseOptions::default(),
@@ -139,12 +139,12 @@ fn parse_single_file_headers_with_entry(
     )
     .expect("tokenization should succeed");
 
-    let host_registry = HostRegistry::new();
+    let external_package_registry = ExternalPackageRegistry::new();
     let mut warnings = Vec::new();
 
     parse_headers(
         vec![file_tokens],
-        &host_registry,
+        &external_package_registry,
         &mut warnings,
         &entry_file_path,
         HeaderParseOptions::default(),

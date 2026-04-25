@@ -83,7 +83,7 @@ pub(super) fn create_header(
                 ContextKind::ConstantHeader,
                 full_name.to_owned(),
                 Rc::clone(&context.visible_constant_placeholders),
-                context.host_function_registry.to_owned(),
+                context.external_package_registry.to_owned(),
                 vec![],
             )
             .with_project_path_resolver(context.project_path_resolver.clone())
@@ -169,7 +169,7 @@ pub(super) fn create_header(
                     ContextKind::ConstantHeader,
                     full_name.to_owned(),
                     Rc::clone(&context.visible_constant_placeholders),
-                    context.host_function_registry.to_owned(),
+                    context.external_package_registry.to_owned(),
                     vec![],
                 )
                 .with_style_directives(context.style_directives)

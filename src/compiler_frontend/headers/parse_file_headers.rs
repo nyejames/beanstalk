@@ -10,13 +10,13 @@ use crate::compiler_frontend::builtins::error_type::{
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
+use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::file_parser::parse_headers_in_file;
 use crate::compiler_frontend::headers::module_symbols::{ModuleSymbols, register_declared_symbol};
 use crate::compiler_frontend::headers::types::HeaderParseContext;
 pub use crate::compiler_frontend::headers::types::{
     FileImport, Header, HeaderKind, HeaderParseOptions, Headers, TopLevelConstFragment,
 };
-use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::symbols::identifier_policy::ensure_not_keyword_shadow_identifier;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::FileTokens;
@@ -25,7 +25,7 @@ use std::path::Path;
 
 pub fn parse_headers(
     tokenized_files: Vec<FileTokens>,
-    host_registry: &HostRegistry,
+    external_package_registry: &ExternalPackageRegistry,
     warnings: &mut Vec<CompilerWarning>,
     entry_file_path: &Path,
     options: HeaderParseOptions,
@@ -52,7 +52,7 @@ pub fn parse_headers(
         };
 
         let mut parse_context = HeaderParseContext {
-            host_function_registry: host_registry,
+            external_package_registry,
             style_directives: &style_directives,
             warnings,
             is_entry_file,

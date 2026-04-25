@@ -17,6 +17,7 @@ use crate::compiler_frontend::builtins::{BuiltinMethodKind, CollectionBuiltinOp}
 use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant;
+use crate::compiler_frontend::external_packages::CallTarget;
 use crate::compiler_frontend::hir::blocks::{HirBlock, HirLocal};
 use crate::compiler_frontend::hir::expressions::{HirExpressionKind, ValueKind};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
@@ -29,7 +30,6 @@ use crate::compiler_frontend::hir::operators::{HirBinOp, HirUnaryOp};
 use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::statements::HirStatementKind;
 use crate::compiler_frontend::hir::terminators::HirTerminator;
-use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -994,7 +994,7 @@ fn lowers_builtin_error_with_location_and_push_trace_methods_to_host_calls() {
     assert_eq!(lowered_with_location.prelude.len(), 1);
     match &lowered_with_location.prelude[0].kind {
         HirStatementKind::Call { target, args, .. } => {
-            assert_eq!(target, &CallTarget::HostFunction(with_location_path));
+            assert_eq!(target, &CallTarget::ExternalFunction(with_location_path));
             assert_eq!(args.len(), 2);
         }
         other => panic!("expected host call for with_location builtin, got {other:?}"),
@@ -1039,7 +1039,7 @@ fn lowers_builtin_error_with_location_and_push_trace_methods_to_host_calls() {
     assert_eq!(lowered_push_trace.prelude.len(), 1);
     match &lowered_push_trace.prelude[0].kind {
         HirStatementKind::Call { target, args, .. } => {
-            assert_eq!(target, &CallTarget::HostFunction(push_trace_path));
+            assert_eq!(target, &CallTarget::ExternalFunction(push_trace_path));
             assert_eq!(args.len(), 2);
         }
         other => panic!("expected host call for push_trace builtin, got {other:?}"),
@@ -1096,7 +1096,7 @@ fn lowers_builtin_error_bubble_with_compiler_supplied_context_args() {
 
     match &lowered.prelude[0].kind {
         HirStatementKind::Call { target, args, .. } => {
-            assert_eq!(target, &CallTarget::HostFunction(bubble_path));
+            assert_eq!(target, &CallTarget::ExternalFunction(bubble_path));
             assert_eq!(
                 args.len(),
                 5,
@@ -1141,7 +1141,7 @@ fn lowers_host_call_expression_with_host_target() {
         HirStatementKind::Call { target, .. } => target,
         _ => panic!("expected call statement for host call"),
     };
-    assert_eq!(target, &CallTarget::HostFunction(io));
+    assert_eq!(target, &CallTarget::ExternalFunction(io));
 }
 
 #[test]
@@ -1786,7 +1786,7 @@ fn lowers_collection_builtin_host_calls_from_explicit_ast_nodes() {
         assert_eq!(lowered.prelude.len(), 1);
         match &lowered.prelude[0].kind {
             HirStatementKind::Call { target, args, .. } => {
-                assert_eq!(target, &CallTarget::HostFunction(expected_path.clone()));
+                assert_eq!(target, &CallTarget::ExternalFunction(expected_path.clone()));
                 assert!(
                     !args.is_empty(),
                     "collection host calls should include receiver as first argument"

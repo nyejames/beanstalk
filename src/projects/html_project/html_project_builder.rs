@@ -6,6 +6,7 @@ use crate::build_system::build::{BackendBuilder, CleanupPolicy, Module, OutputFi
 use crate::build_system::utils::file_error_messages;
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages, ErrorType};
+use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::style_directives::StyleDirectiveSpec;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::projects::html_project::compile_input::HtmlModuleCompileInput;
@@ -38,6 +39,10 @@ impl HtmlProjectBuilder {
 }
 
 impl BackendBuilder for HtmlProjectBuilder {
+    fn external_packages(&self) -> ExternalPackageRegistry {
+        ExternalPackageRegistry::new()
+    }
+
     fn build_backend(
         &self,
         modules: Vec<Module>,

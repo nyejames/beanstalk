@@ -13,8 +13,9 @@ use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::test_support::{
-    assignment_target, build_ast, default_host_registry, entry_and_start, function_node, lower_hir,
-    make_test_variable, node, reference_expr, run_borrow_checker, symbol, test_location,
+    assignment_target, build_ast, default_external_package_registry, entry_and_start,
+    function_node, lower_hir, make_test_variable, node, reference_expr, run_borrow_checker, symbol,
+    test_location,
 };
 use crate::compiler_frontend::tokenizer::newline_handling::NewlineMode;
 use crate::compiler_frontend::value_mode::ValueMode;
@@ -73,6 +74,7 @@ fn frontend_check_borrows_propagates_failures() {
         &config,
         string_table,
         StyleDirectiveRegistry::built_ins(),
+        crate::compiler_frontend::external_packages::ExternalPackageRegistry::new(),
         None,
         NewlineMode::NormalizeToLf,
     );
@@ -92,7 +94,7 @@ fn frontend_check_borrows_propagates_failures() {
 fn successful_borrow_report_can_be_stored_on_module() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_and_start(&mut string_table);
-    let host_registry = default_host_registry(&mut string_table);
+    let external_package_registry = default_external_package_registry(&mut string_table);
 
     let counter = symbol("counter", &mut string_table);
 
@@ -126,7 +128,7 @@ fn successful_borrow_report_can_be_stored_on_module() {
     );
 
     let hir = lower_hir(build_ast(vec![start_fn], entry_path), &mut string_table);
-    let borrow_analysis = run_borrow_checker(&hir, &host_registry, &string_table)
+    let borrow_analysis = run_borrow_checker(&hir, &external_package_registry, &string_table)
         .expect("borrow checking should pass");
 
     let module = Module {

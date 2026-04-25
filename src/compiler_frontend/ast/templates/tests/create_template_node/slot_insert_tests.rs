@@ -3,7 +3,7 @@ use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationIndex};
-use crate::compiler_frontend::host_functions::HostRegistry;
+use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{CharPosition, SourceLocation};
@@ -422,7 +422,7 @@ fn fills_nested_slots_for_runtime_wrappers() {
         Rc::new(TopLevelDeclarationIndex::new(vec![
             value_declaration.to_owned(),
         ])),
-        HostRegistry::default(),
+        ExternalPackageRegistry::default(),
         vec![],
     );
     let mut wrapper_tokens = template_tokens_from_source(
@@ -447,7 +447,7 @@ fn fills_nested_slots_for_runtime_wrappers() {
         ContextKind::Template,
         scope,
         Rc::new(TopLevelDeclarationIndex::new(declarations)),
-        HostRegistry::default(),
+        ExternalPackageRegistry::default(),
         vec![],
     );
     let mut token_stream = template_tokens_from_source(

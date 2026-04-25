@@ -157,7 +157,7 @@ impl<'a> AstBuildState<'a> {
                         ConstantHeaderParseContext {
                             top_level_declarations: Rc::clone(&declarations_snapshot),
                             visible_declaration_ids: visible_symbol_paths,
-                            host_registry: self.host_registry,
+                            external_package_registry: self.external_package_registry,
                             style_directives: self.style_directives,
                             project_path_resolver: self.project_path_resolver.clone(),
                             path_format_config: self.path_format_config.clone(),

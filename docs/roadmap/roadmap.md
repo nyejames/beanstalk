@@ -8,48 +8,79 @@ Use the language surface integration matrix as a reference for what is currently
 
 ---
 
-# Next Plans
-
----
-
-# Notes / TODOS
+# Plans / Notes / TODOS
 
 ## Typed imported platform packages
 
-Generalise the current host function registry into a backend-neutral typed external package system.
+Generalise the current hardcoded host function registry into a backend-neutral typed external package system.
 
-Project builders will be able to provide virtual packages such as `@std/io`, `@web/canvas`, `@web/dom`, or Rust-backed host APIs. These packages expose typed functions, opaque external types, receiver methods, access/mutability metadata, return/error metadata, and backend lowering keys.
+Project builders provide virtual packages such as `@std/io`, `@web/canvas`, `@web/dom`, or Rust-backed host APIs. These packages expose typed functions, opaque external types, receiver methods, access/mutability metadata, return/error metadata, and backend lowering keys. This becomes the general mechanism for all builder-specific callable imports. Style directives remain separate because they affect template parsing and formatting rather than runtime semantics.
 
-This becomes the general mechanism for all builder-specific callable imports. Style directives remain separate because they affect template parsing and formatting rather than runtime semantics.
+The selected project builder must provide required default packages such as `@std/io`. The compiler prelude-imports selected required symbols such as `io()`, preserving the current ergonomics while removing hardcoded host-call special cases.
 
-The selected project builder must provide required default packages such as `@std/io`. The compiler can prelude-import selected required symbols such as `io()` and `IO`, preserving the current ergonomics while removing hardcoded host-call special cases.
+### Design overview
 
-Initial implementation steps:
+1. **Rename/generalise `HostRegistry` into `ExternalPackageRegistry`**  
+   `ExternalPackageRegistry` holds builder-provided packages keyed by path (e.g. `"@std/io"`). Each package contains `ExternalFunctionDef`, `ExternalTypeDef`, and `ExternalMethodDef` entries. `ExternalAbiType` is expanded to a Wasm-first set (`Void`, `Bool`, `I32`, `I64`, `F32`, `F64`, `StringSlice`, `StringOwned`, `Handle`).
 
-1. Rename/generalise the existing host function registry into an external package registry.
-2. Move `io()` and `IO` into a required `@std/io` package supplied by every backend builder.
-3. Allow virtual package imports from builder-provided package paths.
-4. Add opaque external types that can be passed and returned but not directly constructed or field-accessed.
-5. Allow external packages to define receiver methods with shared/mutable access metadata.
-6. Lower external calls through stable external function IDs in HIR rather than stringly host names.
-7. Define a Wasm-first ABI model using primitive values, UTF-8 pointer/length strings, and opaque integer handles.
-8. Use `@web/canvas` as the first substantial platform package to validate the system across JS output now and Wasm host imports later.
+2. **Required `@std/io` package**  
+   Every `BackendBuilder` implements `external_packages()` and supplies `@std/io` containing the `io()` function. The compiler automatically makes `io` visible in every module without explicit imports.
 
-## Review built in "Error" type and reserved keywords
-Should this be build-system provided (like IO) rather than a compiler built in? So Error is reserved in a similar way to io and IO, and must always be provided by the build system, but the specific shape beyond the core parameters must be defined by the build system.
+3. **Virtual package imports**  
+   `import @web/canvas { Canvas, Canvas2d }` resolves against the builder registry instead of the filesystem. Virtual imports do not create source-file dependency edges.
+
+4. **Opaque external types**  
+   Sealed nominal types (e.g. `Canvas`, `FileHandle`) can be passed, returned, and used as receivers, but cannot be constructed with struct literals, field-accessed, or pattern-matched.
+
+5. **External receiver methods**  
+   Platform packages define methods on external types with `Shared` or `Mutable` receiver access. Mutable receivers require `~receiver.method(...)`.
+
+6. **Stable external function IDs in HIR**  
+   `CallTarget::ExternalFunction(ExternalFunctionId)` replaces stringly `HostFunction` paths. Backends map the same ID to their own lowering key (JS runtime name, Wasm import, Rust host binding).
+
+7. **Wasm-first ABI lowering**  
+   Primitives lower directly. Strings use UTF-8 pointer+length. Opaque objects use `i32` handles. JS output remains compatible with this shape.
+
+8. **`@web/canvas` validation package**  
+   The first substantial platform package, exercising opaque handles, mutable receivers, floats, loops, and JS runtime glue.
+
+### Implementation phases
+
+- **Phase 1** — Rename registry and types (`HostRegistry` → `ExternalPackageRegistry`, etc.). Thread through all compiler stages. *(Completed)*
+- **Phase 2** — Add `BackendBuilder::external_packages()`. Move `io()` into the default `@std/io` package. Preserve prelude visibility. *(Completed)*
+- **Phase 3** — Support `@package/path` import syntax. Resolve virtual imports against the builder registry. *(Completed)*
+- **Phase 4** — Add `ExternalTypeDef`, `ExternalTypeId`, and `DataType::External`. Reject construction/field-access.
+- **Phase 5** — Add `ExternalMethodDef`. Resolve external receiver methods in AST. Enforce mutability.
+- **Phase 6** — Replace `CallTarget::HostFunction(InternedPath)` with `CallTarget::ExternalFunction(ExternalFunctionId)`. Flatten metadata for backend lookup.
+- **Phase 7** — Expand `ExternalAbiType` to full Wasm set. Define ABI lowering tables in JS and Wasm backends.
+- **Phase 8** — Implement `@web/canvas` in the HTML builder. Write integration tests.
+
+### Non-goals
+
+- User-authored binding files (`.bst` bindings)
+- `extern js` / `extern wasm` / `extern rust` syntax
+- Merging style directives with platform packages
+- Compatibility shims for the old host registry
+
+### Acceptance criteria
+
+- `io()` works via `@std/io` without hardcoded frontend special cases.
+- Virtual package imports resolve and type-check.
+- Opaque external types cannot be constructed or field-accessed.
+- External receiver methods work with shared and mutable receivers.
+- HIR uses stable `ExternalFunctionId` instead of stringly host names.
+- JS and Wasm backends map the same IDs differently.
+- `@web/canvas` integration tests pass.
+- `just validate` passes after every phase.
 
 ---
 
-# Deferred until after Alpha
-These are intentionally not Alpha blockers unless they become necessary for one of the supported slices.
-
-This is a collection of notes and findings for future roadmaps once the roadmap above is complete.
-
 - builtin `Error` enrichment beyond what is already required for the current compiler/runtime surface
 - full tagged unions
-- full pattern-matching design
-- full interfaces implementation
-- richer numeric redesign work not required by Alpha
+- full pattern-matching design (capture patterns)
+- full traits implementation
+- Closures
+- Hash Maps
 - Compile time arbitary precision aritmetic + Decimals Type support
 - Core Math library
 - Optimised template folding

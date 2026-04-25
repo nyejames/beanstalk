@@ -9,10 +9,10 @@ use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::external_packages::CallTarget;
 use crate::compiler_frontend::headers::parse_file_headers::{HeaderKind, Headers};
 use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::statements::HirStatementKind;
-use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::style_directives::{
@@ -95,6 +95,7 @@ impl FrontendProject {
             &Config::new(canonical_project_root),
             string_table,
             style_directives,
+            crate::compiler_frontend::external_packages::ExternalPackageRegistry::new(),
             Some(resolver),
             NewlineMode::NormalizeToLf,
         );
@@ -412,7 +413,7 @@ fn compiles_collection_builtins_and_error_propagation_through_borrow_check() {
             .flat_map(|block| block.statements.iter())
             .any(|statement| match &statement.kind {
                 HirStatementKind::Call {
-                    target: CallTarget::HostFunction(path),
+                    target: CallTarget::ExternalFunction(path),
                     ..
                 } => {
                     path.name_str(&project.frontend.string_table) == Some("__bs_collection_get")
@@ -824,5 +825,52 @@ fn html_style_directive_available_during_header_parsing() {
         matches!(head.value.kind, ExpressionKind::StringSlice(_)),
         "head should fold to a string slice when $html directive is available, got {:?}",
         head.value.kind
+    );
+}
+
+#[test]
+fn compiles_virtual_package_import_of_std_io() {
+    let mut project = FrontendProject::new(
+        &[("src/#page.bst", "import @std/io/io\nio(\"hello\")\n")],
+        "src/#page.bst",
+        StyleDirectiveRegistry::built_ins(),
+    );
+
+    let _ast = project.ast();
+    let hir = project.hir();
+
+    // The import should resolve without error and the HIR should contain an external call.
+    assert!(
+        hir.blocks.iter().any(|b| b.statements.iter().any(|s| {
+            matches!(&s.kind, crate::compiler_frontend::hir::statements::HirStatementKind::Call { target: crate::compiler_frontend::external_packages::CallTarget::ExternalFunction(_), .. })
+        })),
+        "HIR should contain an external function call after importing io from @std/io"
+    );
+}
+
+#[test]
+fn rejects_virtual_package_import_of_missing_symbol() {
+    let mut project = FrontendProject::new(
+        &[("src/#page.bst", "import @std/io/missing\n")],
+        "src/#page.bst",
+        StyleDirectiveRegistry::built_ins(),
+    );
+
+    let sorted = project.sorted_headers();
+    let Err(messages) =
+        project
+            .frontend
+            .headers_to_ast(sorted, &project.entry_file, FrontendBuildProfile::Dev)
+    else {
+        panic!("import of missing virtual package symbol should fail during AST construction");
+    };
+
+    assert!(
+        messages
+            .errors
+            .iter()
+            .any(|e| e.msg.contains("symbol not found in package")),
+        "Expected error about missing symbol in @std/io, got: {:?}",
+        messages.errors.iter().map(|e| &e.msg).collect::<Vec<_>>()
     );
 }

@@ -10,12 +10,12 @@ use crate::compiler_frontend::analysis::borrow_checker::{
 use crate::compiler_frontend::ast::{Ast, AstBuildContext};
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
+use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::parse_file_headers::{
     HeaderParseOptions, Headers, parse_headers,
 };
 use crate::compiler_frontend::hir::hir_builder::lower_module;
 use crate::compiler_frontend::hir::module::HirModule;
-use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::module_dependencies::{SortedHeaders, resolve_module_dependencies};
 use crate::compiler_frontend::paths::path_format::{OutputPathStyle, PathStringFormatConfig};
@@ -30,7 +30,7 @@ use crate::projects::settings::Config;
 use std::path::{Path, PathBuf};
 
 pub struct CompilerFrontend {
-    pub(crate) host_function_registry: HostRegistry,
+    pub(crate) external_package_registry: ExternalPackageRegistry,
     pub(crate) style_directives: StyleDirectiveRegistry,
     pub(crate) string_table: StringTable,
     pub(crate) project_path_resolver: Option<ProjectPathResolver>,
@@ -44,11 +44,10 @@ impl CompilerFrontend {
         project_config: &Config,
         string_table: StringTable,
         style_directives: StyleDirectiveRegistry,
+        external_package_registry: ExternalPackageRegistry,
         project_path_resolver: Option<ProjectPathResolver>,
         newline_mode: NewlineMode,
     ) -> Self {
-        let host_function_registry = HostRegistry::new();
-
         let origin = project_config
             .settings
             .get("origin")
@@ -60,7 +59,7 @@ impl CompilerFrontend {
         };
 
         Self {
-            host_function_registry,
+            external_package_registry,
             style_directives,
             string_table,
             project_path_resolver,
@@ -129,7 +128,7 @@ impl CompilerFrontend {
 
         parse_headers(
             files,
-            &self.host_function_registry,
+            &self.external_package_registry,
             warnings,
             entry_file_path,
             HeaderParseOptions {
@@ -178,7 +177,7 @@ impl CompilerFrontend {
             top_level_const_fragments,
             module_symbols,
             AstBuildContext {
-                host_registry: &self.host_function_registry,
+                external_package_registry: &self.external_package_registry,
                 style_directives: &self.style_directives,
                 string_table: &mut self.string_table,
                 entry_dir: interned_entry_dir,
@@ -205,7 +204,11 @@ impl CompilerFrontend {
         &self,
         hir_module: &HirModule,
     ) -> Result<BorrowCheckReport, CompilerMessages> {
-        match run_borrow_checker(hir_module, &self.host_function_registry, &self.string_table) {
+        match run_borrow_checker(
+            hir_module,
+            &self.external_package_registry,
+            &self.string_table,
+        ) {
             Ok(report) => Ok(report),
             Err(error) => Err(CompilerMessages::from_error_ref(error, &self.string_table)),
         }

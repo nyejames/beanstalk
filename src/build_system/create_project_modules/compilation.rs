@@ -6,6 +6,7 @@
 use crate::build_system::build::{CompiledModuleResult, Module};
 use crate::compiler_frontend::FrontendBuildProfile;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
+use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -24,6 +25,7 @@ pub(crate) fn compile_single_file_frontend(
     config: &Config,
     build_profile: FrontendBuildProfile,
     style_directives: &StyleDirectiveRegistry,
+    external_packages: &ExternalPackageRegistry,
     extension: &OsStr,
     string_table: &mut StringTable,
 ) -> Result<Vec<Module>, CompilerMessages> {
@@ -75,6 +77,7 @@ pub(crate) fn compile_single_file_frontend(
         build_profile,
         project_path_resolver: Some(project_path_resolver),
         style_directives,
+        external_packages,
     }
     .compile_module(&input_files, &entry_path, local_table)?;
 
@@ -89,6 +92,7 @@ pub(crate) fn compile_directory_frontend(
     config: &Config,
     build_profile: FrontendBuildProfile,
     style_directives: &StyleDirectiveRegistry,
+    external_packages: &ExternalPackageRegistry,
     string_table: &mut StringTable,
 ) -> Result<Vec<Module>, CompilerMessages> {
     let project_path_resolver =
@@ -115,6 +119,7 @@ pub(crate) fn compile_directory_frontend(
                     build_profile,
                     project_path_resolver: Some(project_path_resolver.clone()),
                     style_directives,
+                    external_packages,
                 }
                 .compile_module(
                     &discovered.input_files,

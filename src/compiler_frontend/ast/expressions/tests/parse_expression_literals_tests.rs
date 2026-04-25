@@ -9,7 +9,7 @@ use super::*;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationIndex};
 use crate::compiler_frontend::compiler_errors::{ErrorMetaDataKey, ErrorType};
 use crate::compiler_frontend::datatypes::DataType;
-use crate::compiler_frontend::host_functions::HostRegistry;
+use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
@@ -24,7 +24,7 @@ fn parse_literal_expression_rejects_int_negation_overflow() {
         ContextKind::Expression,
         scope.clone(),
         Rc::new(TopLevelDeclarationIndex::new(vec![])),
-        HostRegistry::new(),
+        ExternalPackageRegistry::new(),
         vec![],
     );
 

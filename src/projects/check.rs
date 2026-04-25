@@ -82,15 +82,21 @@ fn execute_check(path: &str) -> CheckOutcome {
         }
     };
 
-    let messages =
-        match compile_project_frontend(&mut config, &[], &style_directives, &mut string_table) {
-            Ok(modules) => CompilerMessages {
-                errors: Vec::new(),
-                warnings: collect_frontend_warnings(&modules),
-                string_table,
-            },
-            Err(messages) => messages,
-        };
+    let external_packages = project_builder.backend.external_packages();
+    let messages = match compile_project_frontend(
+        &mut config,
+        &[],
+        &style_directives,
+        &external_packages,
+        &mut string_table,
+    ) {
+        Ok(modules) => CompilerMessages {
+            errors: Vec::new(),
+            warnings: collect_frontend_warnings(&modules),
+            string_table,
+        },
+        Err(messages) => messages,
+    };
 
     CheckOutcome {
         messages,

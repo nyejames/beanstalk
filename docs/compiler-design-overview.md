@@ -66,6 +66,14 @@ Frontend style directives:
 - Build systems can provide additional project-specific directives via `frontend_style_directives`
 - Tokenizer and template parsing use the same merged registry and reject unknown directives strictly
 
+External platform packages:
+- Project builders declare typed virtual packages (`@std/io`, `@web/canvas`, etc.) via `BackendBuilder::external_packages()`
+- The frontend resolves imports from these packages during header parsing and AST construction
+- Each package exposes functions, opaque types, and receiver methods with ABI metadata
+- The compiler prelude auto-imports required symbols such as `io()` from `@std/io`
+- Style directives and external packages are separate surfaces: directives affect tokenization/templates, packages affect runtime semantics
+- Backends map stable `ExternalFunctionId` values to their own lowering keys (JS runtime names, Wasm imports, Rust host bindings)
+
 Project builders do **not**:
 - Parse files
 - Discover modules

@@ -34,6 +34,12 @@ impl BackendBuilder for NoopBuilder {
         Ok(())
     }
 
+    fn external_packages(
+        &self,
+    ) -> crate::compiler_frontend::external_packages::ExternalPackageRegistry {
+        crate::compiler_frontend::external_packages::ExternalPackageRegistry::new()
+    }
+
     fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec> {
         Vec::new()
     }
@@ -58,6 +64,12 @@ impl BackendBuilder for ConflictingDirectiveBuilder {
         _string_table: &mut StringTable,
     ) -> Result<(), CompilerError> {
         Ok(())
+    }
+
+    fn external_packages(
+        &self,
+    ) -> crate::compiler_frontend::external_packages::ExternalPackageRegistry {
+        crate::compiler_frontend::external_packages::ExternalPackageRegistry::new()
     }
 
     fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec> {

@@ -16,10 +16,10 @@ use crate::compiler_frontend::ast::statements::functions::{
 use crate::compiler_frontend::ast::{Ast, AstBuildContext};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
+use crate::compiler_frontend::external_packages::test_support::register_test_external_function;
 use crate::compiler_frontend::headers::parse_file_headers::{HeaderParseOptions, parse_headers};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
-use crate::compiler_frontend::host_functions::HostRegistry;
-use crate::compiler_frontend::host_functions::test_support::register_test_host_function;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::module_dependencies::resolve_module_dependencies;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
@@ -59,7 +59,7 @@ pub(crate) fn test_source_location(line: i32) -> SourceLocation {
 fn parse_single_file_ast_result(source: &str) -> Result<(Ast, StringTable), CompilerError> {
     let mut string_table = StringTable::new();
     let style_directives = StyleDirectiveRegistry::built_ins();
-    let host_registry = HostRegistry::new();
+    let external_package_registry = ExternalPackageRegistry::new();
     let file_path = InternedPath::from_single_str("#page.bst", &mut string_table);
     let file_tokens = tokenize(
         source,
@@ -74,7 +74,7 @@ fn parse_single_file_ast_result(source: &str) -> Result<(Ast, StringTable), Comp
     let mut warnings = Vec::new();
     let headers = parse_headers(
         vec![file_tokens],
-        &host_registry,
+        &external_package_registry,
         &mut warnings,
         &std::path::PathBuf::from("#page.bst"),
         HeaderParseOptions {
@@ -96,7 +96,7 @@ fn parse_single_file_ast_result(source: &str) -> Result<(Ast, StringTable), Comp
         sorted.top_level_const_fragments,
         sorted.module_symbols,
         AstBuildContext {
-            host_registry: &host_registry,
+            external_package_registry: &external_package_registry,
             style_directives: &style_directives,
             string_table: &mut string_table,
             entry_dir: entry_path,
@@ -287,29 +287,38 @@ pub(crate) fn lower_hir(
         .expect("HIR lowering should succeed")
 }
 
-pub(crate) fn default_host_registry(_string_table: &mut StringTable) -> HostRegistry {
-    HostRegistry::new()
+pub(crate) fn default_external_package_registry(
+    _string_table: &mut StringTable,
+) -> ExternalPackageRegistry {
+    ExternalPackageRegistry::new()
 }
 
-pub(crate) fn register_host_function(
-    registry: &mut HostRegistry,
+pub(crate) fn register_external_function(
+    registry: &mut ExternalPackageRegistry,
     name: &'static str,
-    param_access: Vec<crate::compiler_frontend::host_functions::test_support::TestHostAccessKind>,
-    return_alias: crate::compiler_frontend::host_functions::test_support::TestHostReturnAlias,
-    return_type: crate::compiler_frontend::host_functions::test_support::TestHostAbiType,
+    param_access: Vec<
+        crate::compiler_frontend::external_packages::test_support::TestExternalAccessKind,
+    >,
+    return_alias: crate::compiler_frontend::external_packages::test_support::TestExternalReturnAlias,
+    return_type: crate::compiler_frontend::external_packages::test_support::TestExternalAbiType,
 ) {
     let parameters = param_access
         .into_iter()
-        .map(|access_kind| (DataType::Int, access_kind))
+        .map(|access_kind| {
+            (
+                crate::compiler_frontend::external_packages::ExternalAbiType::I32,
+                access_kind,
+            )
+        })
         .collect::<Vec<_>>();
-    register_test_host_function(registry, name, parameters, return_alias, return_type)
-        .expect("host function registration should succeed");
+    register_test_external_function(registry, name, parameters, return_alias, return_type)
+        .expect("external function registration should succeed");
 }
 
 pub(crate) fn run_borrow_checker(
     module: &crate::compiler_frontend::hir::module::HirModule,
-    host_registry: &HostRegistry,
+    external_package_registry: &ExternalPackageRegistry,
     string_table: &StringTable,
 ) -> Result<BorrowCheckReport, CompilerError> {
-    check_borrows(module, host_registry, string_table)
+    check_borrows(module, external_package_registry, string_table)
 }

@@ -8,6 +8,7 @@ use crate::compiler_frontend::ast::expressions::expression::{
 };
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
 use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::external_packages::CallTarget;
 use crate::compiler_frontend::hir::blocks::{HirBlock, HirLocal};
 use crate::compiler_frontend::hir::expressions::{
     HirBuiltinCastKind, HirExpression, HirExpressionKind, OptionVariant, ResultVariant, ValueKind,
@@ -18,7 +19,6 @@ use crate::compiler_frontend::hir::hir_side_table::HirLocalOriginKind;
 use crate::compiler_frontend::hir::ids::{LocalId, RegionId};
 use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
-use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::format_compile_time_paths;
 use crate::hir_log;
@@ -212,7 +212,7 @@ impl<'a> HirBuilder<'a> {
                 .lower_handled_result_expression(value, handling, &expr.location, &expr.data_type),
 
             ExpressionKind::HostFunctionCall(host_id, args) => self.lower_call_expression(
-                CallTarget::HostFunction(host_id.to_owned()),
+                CallTarget::ExternalFunction(host_id.to_owned()),
                 args,
                 &self.extract_return_types_from_datatype(&expr.data_type),
                 &expr.location,

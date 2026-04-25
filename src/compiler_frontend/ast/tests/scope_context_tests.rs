@@ -7,7 +7,7 @@
 
 use super::scope_context::{ContextKind, ScopeContext, TopLevelDeclarationIndex};
 use crate::compiler_frontend::datatypes::DataType;
-use crate::compiler_frontend::host_functions::HostRegistry;
+use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use std::rc::Rc;
@@ -30,7 +30,7 @@ fn scope_context_new_leaves_no_visibility_gate() {
         ContextKind::Function,
         scope,
         Rc::new(TopLevelDeclarationIndex::new(vec![])),
-        HostRegistry::new(),
+        ExternalPackageRegistry::new(),
         vec![],
     );
     assert!(
@@ -57,7 +57,7 @@ fn add_var_extends_visibility_gate_when_gate_is_set() {
         ContextKind::Function,
         scope,
         Rc::new(TopLevelDeclarationIndex::new(vec![])),
-        HostRegistry::new(),
+        ExternalPackageRegistry::new(),
         vec![],
     );
 
@@ -102,7 +102,7 @@ fn new_template_parsing_context_preserves_constant_kind() {
         ContextKind::Constant,
         scope,
         Rc::new(TopLevelDeclarationIndex::new(vec![])),
-        HostRegistry::new(),
+        ExternalPackageRegistry::new(),
         vec![],
     );
     let tpl = ctx.new_template_parsing_context();
@@ -121,7 +121,7 @@ fn new_template_parsing_context_converts_function_kind_to_template() {
         ContextKind::Function,
         scope,
         Rc::new(TopLevelDeclarationIndex::new(vec![])),
-        HostRegistry::new(),
+        ExternalPackageRegistry::new(),
         vec![],
     );
     let tpl = ctx.new_template_parsing_context();
@@ -140,7 +140,7 @@ fn new_template_parsing_context_propagates_expected_error_type() {
         ContextKind::Function,
         scope,
         Rc::new(TopLevelDeclarationIndex::new(vec![])),
-        HostRegistry::new(),
+        ExternalPackageRegistry::new(),
         vec![],
     );
     ctx.expected_error_type = Some(DataType::StringSlice);
@@ -165,7 +165,7 @@ fn new_child_control_flow_increments_loop_depth_for_loop_kind() {
         ContextKind::Function,
         scope,
         Rc::new(TopLevelDeclarationIndex::new(vec![])),
-        HostRegistry::new(),
+        ExternalPackageRegistry::new(),
         vec![],
     );
     assert_eq!(ctx.loop_depth, 0);
@@ -197,7 +197,7 @@ fn new_constant_inherits_parent_visibility_gate() {
         ContextKind::Function,
         scope.to_owned(),
         Rc::new(TopLevelDeclarationIndex::new(vec![])),
-        HostRegistry::new(),
+        ExternalPackageRegistry::new(),
         vec![],
     );
 

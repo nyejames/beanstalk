@@ -17,6 +17,7 @@ use crate::compiler_frontend::ast::templates::template::{TemplateConstValueKind,
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::external_packages::CallTarget;
 use crate::compiler_frontend::hir::blocks::{HirBlock, HirLocal};
 use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, ValueKind};
 use crate::compiler_frontend::hir::functions::HirFunction;
@@ -26,7 +27,6 @@ use crate::compiler_frontend::hir::hir_side_table::HirLocalOriginKind;
 use crate::compiler_frontend::hir::ids::{FunctionId, LocalId, RegionId};
 use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::terminators::HirTerminator;
-use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::return_hir_transformation_error;

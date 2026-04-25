@@ -2,11 +2,11 @@ use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::Operator;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::external_packages::CallTarget;
 use crate::compiler_frontend::hir::expressions::{HirExpressionKind, ValueKind};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_datatypes::HirTypeKind;
 use crate::compiler_frontend::hir::operators::HirUnaryOp;
-use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::return_hir_transformation_error;
 
@@ -166,7 +166,7 @@ impl<'a> HirBuilder<'a> {
                 result_types,
                 location,
             } => self.lower_call_expression(
-                CallTarget::HostFunction(host_function_id.to_owned()),
+                CallTarget::ExternalFunction(host_function_id.to_owned()),
                 args,
                 result_types,
                 location,
