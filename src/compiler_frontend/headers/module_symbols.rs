@@ -108,15 +108,10 @@ impl ModuleSymbols {
         sorted_headers: &[Header],
         string_table: &mut StringTable,
     ) {
+        self.declarations.clear();
+
         for header in sorted_headers {
-            if let Some(stub) = declaration_stub_from_header(header, string_table)
-                && matches!(
-                    stub.kind,
-                    DeclarationStubKind::Function
-                        | DeclarationStubKind::Choice
-                        | DeclarationStubKind::StartFunction
-                )
-            {
+            if let Some(stub) = declaration_stub_from_header(header, string_table) {
                 self.declarations.push(stub.declaration);
             }
         }
