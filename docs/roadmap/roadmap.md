@@ -10,37 +10,6 @@ Use the language surface integration matrix as a reference for what is currently
 
 # Next Plans
 
-## Phase 1: File splitting tidy up **COMPLETE**
-- Split parse_file_headers.rs.
-- Split hir_nodes.rs.
-- Add top-level module docs to datatypes.rs.
-- Rename ResolvedConstFragment.html to content or rendered_text.
-
-## Phase 2 — Declaration pipeline cleanup **COMPLETE**
-Full Plan: `docs/roadmap/plans/dependency-sorting-cleanup.md`
-- Remove declaration_stubs_by_path.
-- Make dependency sorting produce the only sorted declaration list.
-- Remove AST fallback stub append.
-- Keep ModuleSymbols as symbol/import/export/source metadata only.
-- Re-run full integration suite.
-
-## Phase 3 — Type/access separation **COMPLETE**
-Full Plan: `docs/roadmap/plans/type-access-separation.md`
-- Introduce BindingAccess or similar.
-- Stop storing Ownership inside collection/struct DataType.
-- Move mutable/access state to declarations, locals, call arguments, HIR locals, and borrow facts.
-- Keep compatibility checks type-only.
-- Add tests proving mutability/access does not affect semantic type identity.
-
-## Phase 4 - gating deffered systems
-(this will be skipped for now)
-
-## Phase 5 — Test pruning and consolidation
-Full Plan: `docs/roadmap/plans/test-consolidation.md`
-Keep integration tests as the main correctness layer.
-Remove shallow unit tests that duplicate stable integration cases.
-Keep unit tests for parser edge cases, diagnostic precision, HIR invariants, borrow facts, and test harness behavior.
-
 ---
 
 # Notes / TODOS

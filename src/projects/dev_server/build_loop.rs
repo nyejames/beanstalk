@@ -203,21 +203,27 @@ pub fn run_builds_until_stable(
     let mut build_count = 0usize;
     let latest_watch_scope = loop {
         let build_start_revision = watch_session.current_revision();
+
+        let timer = std::time::Instant::now();
         let report = run_single_build_cycle(state, executor, entry_file, flags);
+        let build_duration = timer.elapsed();
+
         build_count += 1;
         let report_watch_scope = report.watch_scope.clone();
 
         if report.build_ok {
             say!(
-                Green "Dev build #",
-                Green report.version,
-                Green " finished successfully. Reload broadcast to ",
-                Green report.clients_notified,
-                Green " clients."
+                "Dev build ",
+                Blue "#", report.version,
+                Reset " done in ",
+                Green build_duration.as_millis(), " ms ",
+                Reset "- Broadcast to ",
+                Blue report.clients_notified,
+                Reset " clients."
             );
         } else {
             say!(
-                Yellow "Dev build #",
+                "Dev build #",
                 Yellow report.version,
                 Yellow " failed. Reload broadcast to ",
                 Yellow report.clients_notified,
