@@ -35,11 +35,9 @@ Only as things really solidify will that code get reviewed for performance and n
 `cargo clippy`, `cargo test` and `cargo run tests` must be fully green before making a new commit (or run `just validate`).
 
 ## Agents
-If using agents to help with contributing to this project, it is important that the .md files inside /docs are provided for context as a minimum. 
+Minimising redundant code and reading and validating EVERYTHING an agent produces is really important for maintaining a manageable and clean codebase. 
 
-Minimising redundant code and reading and validating EVERYTHING an agent produces is really important for maintaining a manageable codebase. 
-
-You usually have to end up removing or refactoring agent-generated code to reduce LOC and complexity, ask it to add more helpful, descriptive comments or tell it to keep tests separated from the rest of the code.
+You usually have to end up removing or refactoring agent-generated code to reduce LOC and complexity, ask it to add more helpful, descriptive comments.
 
 **Tests**
 
