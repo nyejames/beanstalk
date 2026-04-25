@@ -94,6 +94,10 @@ impl<'a> AstBuildState<'a> {
         // Extract the fields that AstBuildState mutates during passes so the module_symbols
         // package can be stored whole for its read-only symbol-DB fields.
         let mut declarations = std::mem::take(&mut module_symbols.declarations);
+
+        #[cfg(debug_assertions)]
+        let declaration_count_before_stub_backfill = declarations.len();
+
         for stub in module_symbols.declaration_stubs_by_path.values() {
             if declarations
                 .iter()
@@ -103,6 +107,14 @@ impl<'a> AstBuildState<'a> {
             }
             declarations.push(stub.declaration.to_owned());
         }
+
+        #[cfg(debug_assertions)]
+        debug_assert_eq!(
+            declarations.len(),
+            declaration_count_before_stub_backfill,
+            "dependency sorting should now build a complete declaration placeholder list; \
+             declaration_stubs_by_path should not backfill AST declarations"
+        );
         let builtin_struct_ast_nodes = std::mem::take(&mut module_symbols.builtin_struct_ast_nodes);
         let resolved_struct_fields_by_path =
             std::mem::take(&mut module_symbols.resolved_struct_fields_by_path);
