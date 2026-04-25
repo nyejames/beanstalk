@@ -296,13 +296,16 @@ pub(super) fn dispatch_expression_token(
                 return Ok(ExpressionTokenStep::Continue);
             }
 
-            while let Some(next) = token_stream.peek_next_token() {
-                if next.continues_expression() {
-                    token_stream.skip_newlines();
-                    continue;
-                }
-                break;
+            // Look ahead past newlines to find the next meaningful token.
+            // If that token continues the expression, skip newlines and keep parsing.
+            let saved_index = token_stream.index;
+            token_stream.skip_newlines();
+            if token_stream.index < token_stream.length
+                && token_stream.current_token_kind().continues_expression()
+            {
+                return Ok(ExpressionTokenStep::Continue);
             }
+            token_stream.index = saved_index;
 
             ast_log!("Breaking out of expression with newline");
             Ok(ExpressionTokenStep::Break)

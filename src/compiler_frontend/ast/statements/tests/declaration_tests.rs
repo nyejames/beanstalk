@@ -138,3 +138,49 @@ fn declaration_int_context_reports_targeted_guidance_for_regular_division() {
         )
     );
 }
+
+#[test]
+fn rejects_multiline_regular_division_with_operator_on_next_line() {
+    let error = parse_single_file_ast_error("result Int = 5\n / 2\n");
+
+    assert_eq!(error.error_type, ErrorType::Type);
+    assert!(
+        error
+            .msg
+            .contains("Declaration 'result' has incompatible initializer type"),
+        "{}",
+        error.msg
+    );
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::PrimarySuggestion)
+            .map(String::as_str),
+        Some(
+            "Regular division returns 'Float'. Use '//' for integer division. Use 'Int(...)' for an explicit conversion."
+        )
+    );
+}
+
+#[test]
+fn rejects_multiline_regular_division_with_operator_at_end_of_line() {
+    let error = parse_single_file_ast_error("result Int = 5 /\n 2\n");
+
+    assert_eq!(error.error_type, ErrorType::Type);
+    assert!(
+        error
+            .msg
+            .contains("Declaration 'result' has incompatible initializer type"),
+        "{}",
+        error.msg
+    );
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::PrimarySuggestion)
+            .map(String::as_str),
+        Some(
+            "Regular division returns 'Float'. Use '//' for integer division. Use 'Int(...)' for an explicit conversion."
+        )
+    );
+}

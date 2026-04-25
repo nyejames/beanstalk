@@ -1,8 +1,14 @@
 -- Should not compile
-bad Int =  6 / 2
+bad Int =  6
 
-/ 
+// 
 
 5
 
-[bad]
+func |a Int, b Int| -> Int:
+    return a + b
+;
+
+good Int = func(10, 20)
+
+[good]

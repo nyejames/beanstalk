@@ -402,6 +402,39 @@ fn integer_division_rejects_float_int_operands() {
 }
 
 #[test]
+fn multiline_expression_with_operator_on_next_line_resolves_correctly() {
+    let value = first_start_declaration_expression("value = 1\n + 2\n + 3\n");
+    assert_eq!(value.data_type, DataType::Int);
+    assert!(
+        matches!(value.kind, ExpressionKind::Int(6)),
+        "expected folded Int(6), got {:?}",
+        value.kind
+    );
+}
+
+#[test]
+fn multiline_expression_with_operator_at_end_of_line_resolves_correctly() {
+    let value = first_start_declaration_expression("value = 1 +\n 2 +\n 3\n");
+    assert_eq!(value.data_type, DataType::Int);
+    assert!(
+        matches!(value.kind, ExpressionKind::Int(6)),
+        "expected folded Int(6), got {:?}",
+        value.kind
+    );
+}
+
+#[test]
+fn multiline_comparison_expression_resolves_to_bool() {
+    let value = first_start_declaration_expression("value = 1\n is\n 1\n");
+    assert_eq!(value.data_type, DataType::Bool);
+    assert!(
+        matches!(value.kind, ExpressionKind::Bool(true)),
+        "expected folded Bool(true), got {:?}",
+        value.kind
+    );
+}
+
+#[test]
 fn mixed_int_float_comparison_resolves_to_bool() {
     let value = first_start_declaration_expression("value = 1 <= 2.5\n");
     assert_eq!(value.data_type, DataType::Bool);

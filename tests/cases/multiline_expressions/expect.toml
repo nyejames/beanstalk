@@ -1,0 +1,9 @@
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+error_type = "Type"
+message_contains = [
+  "Declaration 'bad' has incompatible initializer type",
+  "Expected 'Int', but found 'Float'",
+  "Offending value: 1.2",
+]

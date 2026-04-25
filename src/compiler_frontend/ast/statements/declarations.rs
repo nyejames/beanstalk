@@ -32,7 +32,7 @@ use crate::compiler_frontend::type_coercion::diagnostics::{
 };
 use crate::compiler_frontend::type_coercion::numeric::coerce_expression_to_declared_type;
 use crate::compiler_frontend::type_coercion::parse_context::parse_expectation_for_target_type;
-use crate::{ast_log, return_rule_error, return_type_error};
+use crate::{ast_log, return_rule_error, return_syntax_error, return_type_error};
 
 pub fn create_reference(
     token_stream: &mut FileTokens,
@@ -264,6 +264,25 @@ pub fn resolve_declaration_syntax(
             coerce_expression_to_declared_type(expr, &declared_type)
         }
     };
+
+    // Defensive: ensure the initializer parser consumed all tokens.
+    // If tokens remain, the parser stopped early (e.g. a newline broke the
+    // expression before it was complete). This prevents silent truncation.
+    initializer_stream.skip_newlines();
+    if initializer_stream.current_token_kind() != &TokenKind::Eof {
+        return_syntax_error!(
+            format!(
+                "Unexpected token '{:?}' in declaration initializer for '{}'.",
+                initializer_stream.current_token_kind(),
+                full_name.name_str(string_table).unwrap_or("<value>")
+            ),
+            initializer_stream.current_location(),
+            {
+                CompilationStage => "Variable Declaration",
+                PrimarySuggestion => "Remove the extra token or complete the expression before it",
+            }
+        );
+    }
 
     // WHAT: the binding marker (`~=` / `=`) is the single source of truth for whether the
     // stored declaration is a mutable place.

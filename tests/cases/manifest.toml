@@ -1279,6 +1279,11 @@ path = "multi_file_module"
 tags = ["integration","language","imports"]
 
 [[case]]
+id = "multiline_expressions"
+path = "multiline_expressions"
+tags = ["integration","language","diagnostics","regression"]
+
+[[case]]
 id = "multiple_print_statements"
 path = "multiple_print_statements"
 tags = ["integration","language"]
