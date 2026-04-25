@@ -17,7 +17,7 @@ use crate::compiler_frontend::ast::type_resolution::{
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_errors::ErrorMetaDataKey;
 use crate::compiler_frontend::datatypes::{DataType, Ownership};
-use crate::compiler_frontend::headers::module_symbols::{DeclarationStub, DeclarationStubKind};
+
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -116,6 +116,12 @@ impl<'a> AstBuildState<'a> {
         let mut total_deferred_headers = 0usize;
         let mut total_snapshot_rebuilds = 0usize;
 
+        let constant_header_paths = sorted_headers
+            .iter()
+            .filter(|header| matches!(header.kind, HeaderKind::Constant { .. }))
+            .map(|header| header.tokens.src_path.to_owned())
+            .collect::<FxHashSet<_>>();
+
         let resolution_result = (|| -> Result<(), CompilerMessages> {
             let mut pending_headers = sorted_headers
                 .iter()
@@ -183,7 +189,7 @@ impl<'a> AstBuildState<'a> {
                             if is_deferrable_constant_resolution_error(
                                 &error,
                                 visible_symbol_paths,
-                                &self.module_symbols.declaration_stubs_by_path,
+                                &constant_header_paths,
                                 string_table,
                             ) =>
                         {
@@ -235,7 +241,7 @@ impl<'a> AstBuildState<'a> {
 fn is_deferrable_constant_resolution_error(
     error: &crate::compiler_frontend::compiler_errors::CompilerError,
     visible_symbol_paths: &FxHashSet<InternedPath>,
-    declaration_stubs_by_path: &FxHashMap<InternedPath, DeclarationStub>,
+    constant_header_paths: &FxHashSet<InternedPath>,
     string_table: &mut StringTable,
 ) -> bool {
     let Some(variable_name) = error.metadata.get(&ErrorMetaDataKey::VariableName) else {
@@ -247,6 +253,5 @@ fn is_deferrable_constant_resolution_error(
     visible_symbol_paths
         .iter()
         .filter(|path| path.name() == Some(variable_id))
-        .filter_map(|path| declaration_stubs_by_path.get(path))
-        .any(|stub| matches!(stub.kind, DeclarationStubKind::Constant))
+        .any(|path| constant_header_paths.contains(path))
 }
