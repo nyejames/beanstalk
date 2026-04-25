@@ -8,9 +8,9 @@
 
 # 🌱
 
-<p>⚠️ This compiler is in Alpha, not all major features are implemented yet ⚠️</p> 
+<p>⚠️ This compiler is in Alpha ⚠️</p> 
 
-<p><a href="https://nyejames.github.io/beanstalk/">The documentation site for Beanstalk</a> was created using the <a href="https://github.com/nyejames/beanstalk/blob/main/docs/">Language Itself</a>. </p>
+<p><a href="https://nyejames.github.io/beanstalk/">The documentation site</a> was created using the <a href="https://github.com/nyejames/beanstalk/blob/main/docs/src">Beanstalk</a>. </p>
 
 <p>The language is under rapid active development and evolving constantly. See <a href="https://github.com/nyejames/beanstalk/blob/main/CONTRIBUTING.md">CONTRIBUTING</a> if you're inspired to help out</p>
 </div>
@@ -24,7 +24,7 @@
 </div>
 <p>Beanstalk is designed to be an opinionated and refreshing take on modern app building.</p>
 
-<p>This project is focused on the long term and designed to be versatile and future proof. A carefully designed, high-level language for the future.</p>
+<p>This project is focused on the long term and carefully designed to be versatile and future proof.</p>
 
 <p>The main build system is web based, but the compiler can have any number of pluggable backends through its builder interface. This opens up a future where Beanstalk can be ran or embedded anywhere.</p>
 
@@ -85,13 +85,13 @@ post = create_post("Boring Title", date, [$markdown:
 </div>
 
 - String templates powerful enough to become a tiny compile time HTML/markup engine. Perfect for UI generation and complex string formatting. Even comes with built-in markdown parsing.
-- Readability-first syntax. Modern, concise and consistent.
+- Readability-first syntax. Modern, concise, consistent and procedural.
 - Modular and fast for snappy tooling and fast development builds
 - Integrated build system and tooling for web projects and beyond
 - Simple, static and strong type system with a borrow checker for writing confident, safe and correct code
 - A memory model that can allow for future static optimizations. The GC can be  completly elided in ideal cases.
 - Backend agnostic. Could be used as the baseline for a whole web framework, a Wasm module builder or eventually an embedded UI engine for Rust. Designed to be extendable to any target in the future.
-- Keep compiler dependencies as few as possible
+- Few compiler dependencies
 
 <div align="center">
 
@@ -147,10 +147,6 @@ Beanstalk not being saturated in LLM training data may provide a the long term a
 
 Here is the current <a href="https://github.com/nyejames/beanstalk/blob/main/docs/roadmap/roadmap.md">Roadmap to the first alpha release</a>.
 
-The language is nearly at the first alpha stage, but already has a broad set of tooling, build system work and backend scaffolding already done. The upcoming alpha will be about taking an already powerful set of tools and language and making it stable and usable.
-
-The syntax and some constructs (e.g. closures, async) are not implemented at all yet and will evolve in their design during the alpha stage. Not everything is completely set in stone so some things can be figured out based on how the language feels to use in real projects.
-
-The first Alpha target is the JS / HTML pipeline for docs-style static sites and small web projects. Wasm remains the long-term backend direction after Alpha.
+The compiler is in alpha, but already has a broad set of tooling, build system work and backend scaffolding already done.
 
 <br>
