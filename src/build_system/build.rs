@@ -35,8 +35,8 @@ const FILE_MIN_UNIQUE_SYMBOLS_CAPACITY: usize = 32;
 pub struct ResolvedConstFragment {
     /// Number of runtime fragments preceding this const fragment in source order.
     pub runtime_insertion_index: usize,
-    /// The rendered HTML/text content of this const fragment.
-    pub html: String,
+    /// The rendered text content of this const fragment.
+    pub rendered_text: String,
 }
 
 /// Frontend output for one module root ready for backend lowering.
@@ -64,7 +64,7 @@ impl Module {
             warning.remap_string_ids(remap);
         }
         // BorrowCheckReport contains only HIR IDs (no StringIds).
-        // ResolvedConstFragment.html is already a String.
+        // ResolvedConstFragment.rendered_text is already a String.
         // entry_point is a PathBuf.
     }
 }

@@ -91,7 +91,7 @@ pub(crate) fn render_entry_fragments(
     // Sort const fragments by runtime_insertion_index to handle them in order.
     let mut sorted_const: Vec<(usize, &str)> = const_fragments
         .iter()
-        .map(|f| (f.runtime_insertion_index, f.html.as_str()))
+        .map(|f| (f.runtime_insertion_index, f.rendered_text.as_str()))
         .collect();
     sorted_const.sort_by_key(|(idx, _)| *idx);
 

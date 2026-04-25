@@ -166,7 +166,7 @@ fn emits_const_fragment_and_calls_start() {
     let mut module = create_test_module(entry_path.clone(), &mut string_table);
     module.const_top_level_fragments = vec![ResolvedConstFragment {
         runtime_insertion_index: 0,
-        html: String::from("<meta charset=\"utf-8\">"),
+        rendered_text: String::from("<meta charset=\"utf-8\">"),
     }];
 
     let project = builder

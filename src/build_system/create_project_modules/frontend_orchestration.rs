@@ -85,7 +85,7 @@ impl FrontendModuleBuildContext<'_> {
                 .iter()
                 .map(|fragment| ResolvedConstFragment {
                     runtime_insertion_index: fragment.runtime_insertion_index,
-                    html: compiler.string_table.resolve(fragment.value).to_owned(),
+                    rendered_text: compiler.string_table.resolve(fragment.value).to_owned(),
                 })
                 .collect::<Vec<_>>();
 

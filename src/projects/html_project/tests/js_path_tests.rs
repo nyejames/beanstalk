@@ -15,7 +15,7 @@ fn render_entry_fragments_static_before_runtime_slot() {
     // WHAT: const fragment at insertion_index=0 must appear before the first runtime slot div.
     let const_fragments = vec![ResolvedConstFragment {
         runtime_insertion_index: 0,
-        html: String::from("<h1>Hello</h1>"),
+        rendered_text: String::from("<h1>Hello</h1>"),
     }];
     let (body_html, slot_ids) = render_entry_fragments(&const_fragments, 1);
 
