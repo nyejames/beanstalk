@@ -117,32 +117,32 @@ jobs:
             *.zip
           if-no-files-found: error
 
-    publish:
-      name: Publish GitHub Release
-      needs: build
-      runs-on: ubuntu-latest
+  publish:
+    name: Publish GitHub Release
+    needs: build
+    runs-on: ubuntu-latest
 
-      permissions:
-        contents: write
+    permissions:
+      contents: write
 
-      steps:
-        - name: Checkout
-          uses: actions/checkout@v4
-          with:
-            fetch-depth: 0
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-        - name: Download packages
-          uses: actions/download-artifact@v4
-          with:
-            path: dist
-            merge-multiple: true
+      - name: Download packages
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
 
-        - name: Publish release
-          env:
-            GH_TOKEN: ${{ github.token }}
-          run: |
-            gh release create "${GITHUB_REF_NAME}" dist/* \
-              --verify-tag \
-              --prerelease \
-              --generate-notes \
-              --title "Beanstalk ${GITHUB_REF_NAME}"
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${GITHUB_REF_NAME}" dist/* \
+            --verify-tag \
+            --prerelease \
+            --generate-notes \
+            --title "Beanstalk ${GITHUB_REF_NAME}"
