@@ -10,8 +10,7 @@ Use the language surface integration matrix as a reference for what is currently
 
 # Next Plans
 
-## Phase 1: File splitting tidy up
-Full Plan: `docs/roadmap/plans/organising.md`
+## Phase 1: File splitting tidy up **COMPLETE**
 - Split parse_file_headers.rs.
 - Split hir_nodes.rs.
 - Add top-level module docs to datatypes.rs.
