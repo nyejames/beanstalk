@@ -30,6 +30,30 @@ fn lower_relational_pattern_op(op: RelationalPatternOp) -> HirRelationalPatternO
 }
 
 impl<'a> HirBuilder<'a> {
+    pub(super) fn lower_scoped_block_statement(
+        &mut self,
+        body: &[AstNode],
+        location: &SourceLocation,
+    ) -> Result<(), CompilerError> {
+        let entry_block = self.current_block_id_or_error(location)?;
+        let parent_region = self.current_region_or_error(location)?;
+        let body_region = self.create_child_region(parent_region);
+        let body_block = self.create_block(body_region, location, "scoped-block")?;
+
+        self.emit_jump_to(entry_block, body_block, location, "block.enter")?;
+        self.set_current_block(body_block, location)?;
+        self.lower_statement_sequence(body)?;
+
+        let body_tail_block = self.current_block_id_or_error(location)?;
+        if self.block_has_explicit_terminator(body_tail_block, location)? {
+            return self.set_current_block(body_tail_block, location);
+        }
+
+        let after_block = self.create_block(parent_region, location, "scoped-block-after")?;
+        self.emit_jump_to(body_tail_block, after_block, location, "block.exit")?;
+        self.set_current_block(after_block, location)
+    }
+
     pub(super) fn lower_if_statement(
         &mut self,
         condition: &Expression,

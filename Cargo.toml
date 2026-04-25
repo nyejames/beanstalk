@@ -8,6 +8,8 @@ show_eval = []
 show_hir = []
 show_codegen = []
 show_borrow_checker = []
+checked_blocks = []
+async_blocks = []
 
 [package]
 name = "beanstalk"

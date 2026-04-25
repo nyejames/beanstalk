@@ -105,7 +105,7 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
 
         [data:
             [: Deferred features]
-            [: Traits, choice payload/tagged/default/constructor paths, capture/tagged match patterns, removed collection syntax, and labeled scopes have canonical structured-diagnostic fixtures.]
+            [: Traits, choice payload/tagged/default/constructor paths, capture/tagged match patterns, removed collection syntax, and reserved future block forms have canonical structured-diagnostic fixtures.]
         ]
 
         [data:

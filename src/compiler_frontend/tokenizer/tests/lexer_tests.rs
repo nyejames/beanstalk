@@ -240,6 +240,31 @@ fn tokenizes_reserved_trait_keywords_as_reserved_tokens() {
 }
 
 #[test]
+fn tokenizes_statement_block_keywords_as_reserved_tokens() {
+    let (file_tokens, _string_table) = tokenize_source("block checked async\n");
+
+    assert!(
+        matches!(file_tokens.tokens[1].kind, TokenKind::Block),
+        "expected 'block' to lex as a statement block token"
+    );
+    assert!(
+        matches!(file_tokens.tokens[2].kind, TokenKind::Checked),
+        "expected 'checked' to lex as a reserved checked block token"
+    );
+    assert!(
+        matches!(file_tokens.tokens[3].kind, TokenKind::Async),
+        "expected 'async' to lex as a reserved async block token"
+    );
+    assert!(
+        !file_tokens
+            .tokens
+            .iter()
+            .any(|token| matches!(token.kind, TokenKind::Symbol(_))),
+        "statement block keywords should not remain user symbols"
+    );
+}
+
+#[test]
 fn tokenizes_standalone_underscore_as_wildcard_but_prefixed_names_as_symbols() {
     let (file_tokens, string_table) = tokenize_source("_ _true __value\n");
 

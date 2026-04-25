@@ -56,11 +56,12 @@ fn reports_wildcard_match_arms_as_deferred_rule_errors() {
 }
 
 #[test]
-fn reports_labeled_scopes_as_deferred_rule_errors() {
+fn rejects_bare_labeled_blocks_with_declaration_guidance() {
     let error = parse_single_file_ast_error("label:\n    io(\"x\")\n;\n");
 
-    assert_eq!(error.error_type, ErrorType::Rule);
-    assert!(error.msg.contains("Labeled scopes are deferred for Alpha."));
+    assert_eq!(error.error_type, ErrorType::Syntax);
+    assert!(error.msg.contains("Unexpected ':' after declaration name"));
+    assert!(error.msg.contains("bare labeled blocks"));
     assert_eq!(
         error
             .metadata
@@ -73,7 +74,7 @@ fn reports_labeled_scopes_as_deferred_rule_errors() {
             .metadata
             .get(&ErrorMetaDataKey::PrimarySuggestion)
             .map(String::as_str),
-        Some("Remove the label and use supported control flow syntax.")
+        Some("Use `block:` for a scoped block, or write declarations as `name Type = value`.")
     );
     assert!(error.location.start_pos.char_column > 0);
 }

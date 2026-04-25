@@ -1039,8 +1039,53 @@ path = "js_structured_if_no_dispatcher"
 tags = ["integration","control-flow"]
 
 [[case]]
+id = "block_scoped_success"
+path = "block_scoped_success"
+tags = ["integration","control-flow"]
+
+[[case]]
+id = "block_outer_assignment"
+path = "block_outer_assignment"
+tags = ["integration","control-flow"]
+
+[[case]]
+id = "block_local_does_not_escape"
+path = "block_local_does_not_escape"
+tags = ["integration","diagnostics","control-flow"]
+
+[[case]]
 id = "labeled_scope_rejected"
 path = "labeled_scope_rejected"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "typescript_style_declaration_rejected"
+path = "typescript_style_declaration_rejected"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "checked_block_reserved"
+path = "checked_block_reserved"
+tags = ["integration","diagnostics","control-flow"]
+
+[[case]]
+id = "async_block_reserved"
+path = "async_block_reserved"
+tags = ["integration","diagnostics","control-flow"]
+
+[[case]]
+id = "block_keyword_declaration_rejected"
+path = "block_keyword_declaration_rejected"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "checked_keyword_declaration_rejected"
+path = "checked_keyword_declaration_rejected"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "async_keyword_declaration_rejected"
+path = "async_keyword_declaration_rejected"
 tags = ["integration","diagnostics"]
 
 [[case]]

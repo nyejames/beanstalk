@@ -19,7 +19,6 @@
 
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
-use crate::compiler_frontend::deferred_feature_diagnostics::deferred_feature_rule_error;
 use crate::compiler_frontend::reserved_trait_syntax::{
     reserved_trait_keyword_error, reserved_trait_keyword_or_dispatch_mismatch,
 };
@@ -113,12 +112,14 @@ fn parse_required_type(
             DataType::NamedType(type_name)
         }
         TokenKind::Colon if matches!(context, TypeAnnotationContext::DeclarationTarget) => {
-            return Err(deferred_feature_rule_error(
-                "Labeled scopes are deferred for Alpha.",
+            return_syntax_error!(
+                "Unexpected ':' after declaration name. Beanstalk does not support bare labeled blocks or `name: Type` declarations. Use `block:` for a scoped block, or write declarations as `name Type = value`.",
                 token_stream.current_location(),
-                "Variable Declaration",
-                "Remove the label and use supported control flow syntax.",
-            ));
+                {
+                    CompilationStage => "Variable Declaration",
+                    PrimarySuggestion => "Use `block:` for a scoped block, or write declarations as `name Type = value`.",
+                }
+            );
         }
         other
             if matches!(context, TypeAnnotationContext::DeclarationTarget)

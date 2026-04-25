@@ -73,6 +73,7 @@ pub(crate) mod statements {
     pub(crate) mod match_patterns;
     pub(crate) mod multi_bind;
     pub(crate) mod result_handling;
+    pub(crate) mod scoped_blocks;
 }
 
 mod field_access;

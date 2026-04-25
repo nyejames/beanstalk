@@ -1,5 +1,5 @@
 [backends.html]
 mode = "failure"
 warnings = "forbid"
-error_type = "Rule"
-message_contains = ["Labeled scopes are deferred for Alpha"]
+error_type = "Syntax"
+message_contains = ["Unexpected ':' after declaration name", "bare labeled blocks", "block:"]

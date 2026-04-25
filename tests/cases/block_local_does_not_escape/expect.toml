@@ -1,0 +1,5 @@
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+error_type = "Syntax"
+message_contains = ["Cannot declare new variables inside of a template head", "local_value"]

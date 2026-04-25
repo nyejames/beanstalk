@@ -1,0 +1,3 @@
+checked:
+    value = 1
+;

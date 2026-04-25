@@ -11,11 +11,15 @@ use crate::compiler_frontend::ast::statements::body_return::parse_return_stateme
 use crate::compiler_frontend::ast::statements::body_symbol::parse_symbol_statement;
 use crate::compiler_frontend::ast::statements::branching::create_branch;
 use crate::compiler_frontend::ast::statements::loops::create_loop;
+use crate::compiler_frontend::ast::statements::scoped_blocks::{
+    parse_scoped_block_statement, reserved_block_keyword_as_name_error,
+};
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorMetaDataKey};
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::Ownership;
+use crate::compiler_frontend::deferred_feature_diagnostics::deferred_feature_rule_error;
 use crate::compiler_frontend::reserved_trait_syntax::{
     reserved_trait_keyword_error, reserved_trait_keyword_or_dispatch_mismatch,
 };
@@ -191,6 +195,75 @@ fn unexpected_function_body_token_error(
     }
 }
 
+struct FutureBlockDiagnostic<'a> {
+    keyword: &'a str,
+    feature_name: &'a str,
+    enabled_message: &'a str,
+    enabled_suggestion: &'a str,
+    disabled_suggestion: &'a str,
+}
+
+fn future_block_error(
+    token_stream: &FileTokens,
+    diagnostic: FutureBlockDiagnostic<'_>,
+    feature_enabled: bool,
+) -> CompilerError {
+    let location = token_stream.current_location();
+    if matches!(
+        token_stream.peek_next_token(),
+        Some(token) if token.is_assignment_operator()
+    ) {
+        return reserved_block_keyword_as_name_error(diagnostic.keyword, location);
+    }
+
+    if feature_enabled {
+        return deferred_feature_rule_error(
+            diagnostic.enabled_message,
+            location,
+            "AST Construction",
+            diagnostic.enabled_suggestion,
+        );
+    }
+
+    deferred_feature_rule_error(
+        format!(
+            "`{}:` blocks are reserved behind the `{}` feature and are not implemented yet.",
+            diagnostic.keyword, diagnostic.feature_name
+        ),
+        location,
+        "AST Construction",
+        diagnostic.disabled_suggestion,
+    )
+}
+
+fn checked_block_error(token_stream: &FileTokens) -> CompilerError {
+    future_block_error(
+        token_stream,
+        FutureBlockDiagnostic {
+            keyword: "checked",
+            feature_name: "checked_blocks",
+            enabled_message: "`checked:` blocks are reserved for future advanced validation, but are not implemented yet.",
+            enabled_suggestion: "Use `block:` for a normal scoped block until checked blocks are implemented.",
+            disabled_suggestion: "Enable the `checked_blocks` feature only for diagnostics, or use `block:` for a normal scoped block.",
+        },
+        cfg!(feature = "checked_blocks"),
+    )
+}
+
+fn async_block_error(token_stream: &FileTokens) -> CompilerError {
+    future_block_error(
+        token_stream,
+        FutureBlockDiagnostic {
+            keyword: "async",
+            feature_name: "async_blocks",
+            enabled_message: "`async:` blocks are reserved for future async lowering, but are not implemented yet.",
+            enabled_suggestion: "Remove the async block until async lowering is implemented.",
+            disabled_suggestion: "Enable the `async_blocks` feature only for diagnostics, or remove the async block.",
+        },
+        cfg!(feature = "async_blocks"),
+    )
+}
+
 pub(crate) fn parse_function_body_statements(
     token_stream: &mut FileTokens,
     mut context: ScopeContext,
@@ -217,6 +290,21 @@ pub(crate) fn parse_function_body_statements(
                 warnings,
                 string_table,
             )?,
+
+            TokenKind::Block => ast.push(parse_scoped_block_statement(
+                token_stream,
+                &context,
+                warnings,
+                string_table,
+            )?),
+
+            TokenKind::Checked => {
+                return Err(checked_block_error(token_stream));
+            }
+
+            TokenKind::Async => {
+                return Err(async_block_error(token_stream));
+            }
 
             TokenKind::Loop => {
                 token_stream.advance();

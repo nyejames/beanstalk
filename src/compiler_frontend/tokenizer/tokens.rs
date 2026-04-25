@@ -444,6 +444,9 @@ pub enum TokenKind {
     If,
     Else,
     Return,
+    Block,
+    Checked,
+    Async,
 
     // Loops
     Loop,

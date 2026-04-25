@@ -90,6 +90,10 @@ pub enum NodeKind {
         Option<Vec<AstNode>>, // for the wildcard/else case
     ),
 
+    ScopedBlock {
+        body: Vec<AstNode>,
+    },
+
     RangeLoop {
         bindings: LoopBindings,
         range: RangeLoopSpec,

@@ -105,6 +105,7 @@ fn normalize_ast_node_templates(
         // Control flow nodes
         NodeKind::If(_, _, _)
         | NodeKind::Match(_, _, _)
+        | NodeKind::ScopedBlock { .. }
         | NodeKind::RangeLoop { .. }
         | NodeKind::CollectionLoop { .. }
         | NodeKind::WhileLoop(_, _) => normalize_control_flow_templates(
@@ -309,6 +310,19 @@ fn normalize_control_flow_templates(
                         string_table,
                     )?;
                 }
+            }
+            Ok(())
+        }
+
+        NodeKind::ScopedBlock { body } => {
+            for statement in body {
+                normalize_ast_node_templates(
+                    statement,
+                    source_file_scope,
+                    path_format_config,
+                    project_path_resolver,
+                    string_table,
+                )?;
             }
             Ok(())
         }

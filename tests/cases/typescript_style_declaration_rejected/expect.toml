@@ -1,0 +1,5 @@
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+error_type = "Syntax"
+message_contains = ["Unexpected ':' after declaration name", "name: Type", "name Type = value"]

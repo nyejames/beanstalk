@@ -197,6 +197,10 @@ impl<'a> HirBuilder<'a> {
                 self.lower_match_statement(scrutinee, arms, default.as_deref(), &node.location)
             }
 
+            NodeKind::ScopedBlock { body } => {
+                self.lower_scoped_block_statement(body, &node.location)
+            }
+
             NodeKind::RangeLoop {
                 bindings,
                 range,

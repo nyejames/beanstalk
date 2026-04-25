@@ -16,11 +16,6 @@ Use the language surface integration matrix as a reference for what is currently
 - Add top-level module docs to datatypes.rs.
 - Rename ResolvedConstFragment.html to content or rendered_text.
 
-## Reserve Keyword-Gated Statement Blocks
-Full plan: `docs/roadmap/plans/block-syntax.md`
-Reserves the current ideas for block syntax (inlcuding future `checked` and `async` blocks).
-Only implements basic scoped blocks.
-
 ## Phase 2 — Declaration pipeline cleanup
 Full Plan: `docs/roadmap/plans/dependency-sorting-cleanup.md`
 - Remove declaration_stubs_by_path.
