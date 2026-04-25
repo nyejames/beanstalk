@@ -1,3 +1,16 @@
+//! Frontend semantic data types.
+//!
+//! WHAT: `DataType` represents the frontend's current semantic type shapes during header parsing,
+//! AST construction, and compatibility checking.
+//!
+//! WHY: this module is still the bridge between early frontend syntax and later HIR `TypeId`
+//! lowering. Some variants currently carry ownership/access information because the pre-alpha
+//! frontend has not yet fully separated semantic type identity from binding/access state.
+//!
+//! Phase note:
+//! - Phase 1 only documents this boundary.
+//! - A later refactor should separate pure type identity from mutability/access/ownership facts.
+
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant;
