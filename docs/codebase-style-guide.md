@@ -52,7 +52,7 @@ Use variables directly in format! strings whenever possible:
 - Use `.clone()` when a general copy is genuinely required and clearer
 
 ### API Breakage
-- Beanstalk is prealpha. Backward compatibility is not a priority
+- Beanstalk is pre-release. Backward compatibility is not a priority
 - When APIs change, thread the new shape through the compiler and remove the old one
 - Do not add compatibility wrappers, forwarding shims, parallel structs, or defaulted legacy entry points just to preserve an older interface
 - Prefer one current API shape, not transitional layers

@@ -14,6 +14,27 @@ Use the language surface integration matrix as a reference for what is currently
 
 # Notes / TODOS
 
+## Typed imported platform packages
+
+Generalise the current host function registry into a backend-neutral typed external package system.
+
+Project builders will be able to provide virtual packages such as `@std/io`, `@web/canvas`, `@web/dom`, or Rust-backed host APIs. These packages expose typed functions, opaque external types, receiver methods, access/mutability metadata, return/error metadata, and backend lowering keys.
+
+This becomes the general mechanism for all builder-specific callable imports. Style directives remain separate because they affect template parsing and formatting rather than runtime semantics.
+
+The selected project builder must provide required default packages such as `@std/io`. The compiler can prelude-import selected required symbols such as `io()` and `IO`, preserving the current ergonomics while removing hardcoded host-call special cases.
+
+Initial implementation steps:
+
+1. Rename/generalise the existing host function registry into an external package registry.
+2. Move `io()` and `IO` into a required `@std/io` package supplied by every backend builder.
+3. Allow virtual package imports from builder-provided package paths.
+4. Add opaque external types that can be passed and returned but not directly constructed or field-accessed.
+5. Allow external packages to define receiver methods with shared/mutable access metadata.
+6. Lower external calls through stable external function IDs in HIR rather than stringly host names.
+7. Define a Wasm-first ABI model using primitive values, UTF-8 pointer/length strings, and opaque integer handles.
+8. Use `@web/canvas` as the first substantial platform package to validate the system across JS output now and Wasm host imports later.
+
 ## Review built in "Error" type and reserved keywords
 Should this be build-system provided (like IO) rather than a compiler built in? So Error is reserved in a similar way to io and IO, and must always be provided by the build system, but the specific shape beyond the core parameters must be defined by the build system.
 

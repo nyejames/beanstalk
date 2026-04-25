@@ -19,8 +19,8 @@ import @styles/docs {navbar, title, section, palette, codeblock, theme_head}
     You can find the source code for this website on @https://github.com/nyejames/beanstalk/tree/main/docs (Github).
 
     ## Documentation
-    These pages document the Alpha-supported language surface.
-    See the @./progress (alpha implementation matrix) for the current implementation and coverage status.
+    These pages document the current language surface.
+    See the @./progress (implementation matrix) for the current implementation and coverage status.
 
     ### Introduction
     - @./basics (Basics)

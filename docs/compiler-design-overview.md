@@ -232,10 +232,8 @@ Generic expression evaluation determines the natural type of an expression and s
 - `//` is a separate operator-owned integer-division rule: it requires `Int // Int` and returns `Int`
 - Int -> Float is supported in explicit declaration / return contexts only
 - function arguments and match patterns still require exact compatibility
-- Match arm patterns are validated in AST. Supported Alpha patterns are literals, choice variants, and relational ordered-scalar patterns.
 - Match arm guards (`case <pattern> if <expr> =>`) are validated in AST and must type-check as `Bool`.
 - Match exhaustiveness is enforced in AST: non-choice matches require `else =>`; choice matches may omit `else =>` only when all variants are covered and no arm is guarded.
-- Relational patterns do not prove exhaustiveness in Alpha.
 - Templates and template wrappers are accepted where string slices are expected because they lower to the same HIR/string representation
 - builtin casts like Float(x) / Int(x) remain explicit frontend-owned syntax
 

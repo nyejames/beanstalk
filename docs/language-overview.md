@@ -443,7 +443,7 @@ if value is:
 - Arms are delimited by the next `case`, `else`, or the final match-closing `;`
 - Per-arm semicolons are invalid in match blocks
 - Guard expressions (`if <bool_expr>`) must be `Bool`
-- For non-choice scrutinees, `else =>` is required in Alpha
+- For non-choice scrutinees, `else =>` is required
 - For choice scrutinees:
   - `else =>` always satisfies exhaustiveness
   - Without `else =>`, every variant must be covered
@@ -455,7 +455,7 @@ Arm syntax:
 - `case <pattern> if <bool_expr> => <body>`
 - `else => <body>`
 
-Supported Alpha patterns:
+Currently supported patterns:
 
 - Literal patterns: `case 1 =>`, `case "ok" =>`, `case true =>`
 - Choice variant patterns: `case Ready =>` or `case Status::Ready =>`
@@ -465,7 +465,6 @@ The catch-all default is expressed only through `else =>`. There is no `case _ =
 
 Relational patterns are supported for ordered scalar scrutinees such as `Int`, `Float`, and `Char`.
 The pattern value must be a literal of the same compatible type.
-Relational patterns do not prove exhaustiveness in Alpha, so non-choice matches still need `else =>`.
 
 ```beanstalk
 value ~= 12
