@@ -209,7 +209,6 @@ fn build_module_symbols(
     module_symbols
         .builtin_struct_ast_nodes
         .extend(builtin_manifest.ast_struct_nodes);
-    module_symbols.seed_declaration_stubs(headers, string_table);
 
     Ok(module_symbols)
 }

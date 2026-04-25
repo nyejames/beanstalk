@@ -60,8 +60,9 @@ pub(in crate::compiler_frontend::ast) struct AstBuildState<'a> {
     // Mutable output state.
     pub(in crate::compiler_frontend::ast) ast: Vec<AstNode>,
     pub(in crate::compiler_frontend::ast) warnings: Vec<CompilerWarning>,
-    // Starts as manifest declaration stubs; grows with resolved constants and struct types
-    // in passes 3–4. Separate from manifest because it is mutated during AST construction.
+    // Starts as dependency-sorted top-level declaration placeholders produced by
+    // resolve_module_dependencies; grows with resolved constants and struct types
+    // during AST type resolution.
     pub(in crate::compiler_frontend::ast) declarations: Vec<Declaration>,
     pub(in crate::compiler_frontend::ast) module_constants: Vec<Declaration>,
     pub(in crate::compiler_frontend::ast) const_templates_by_path:
@@ -93,28 +94,7 @@ impl<'a> AstBuildState<'a> {
     ) -> Self {
         // Extract the fields that AstBuildState mutates during passes so the module_symbols
         // package can be stored whole for its read-only symbol-DB fields.
-        let mut declarations = std::mem::take(&mut module_symbols.declarations);
-
-        #[cfg(debug_assertions)]
-        let declaration_count_before_stub_backfill = declarations.len();
-
-        for stub in module_symbols.declaration_stubs_by_path.values() {
-            if declarations
-                .iter()
-                .any(|declaration| declaration.id == stub.path)
-            {
-                continue;
-            }
-            declarations.push(stub.declaration.to_owned());
-        }
-
-        #[cfg(debug_assertions)]
-        debug_assert_eq!(
-            declarations.len(),
-            declaration_count_before_stub_backfill,
-            "dependency sorting should now build a complete declaration placeholder list; \
-             declaration_stubs_by_path should not backfill AST declarations"
-        );
+        let declarations = std::mem::take(&mut module_symbols.declarations);
         let builtin_struct_ast_nodes = std::mem::take(&mut module_symbols.builtin_struct_ast_nodes);
         let resolved_struct_fields_by_path =
             std::mem::take(&mut module_symbols.resolved_struct_fields_by_path);
