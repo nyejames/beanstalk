@@ -24,7 +24,7 @@ Full Plan: `docs/roadmap/plans/dependency-sorting-cleanup.md`
 - Keep ModuleSymbols as symbol/import/export/source metadata only.
 - Re-run full integration suite.
 
-## Phase 3 — Type/access separation
+## Phase 3 — Type/access separation **COMPLETE**
 Full Plan: `docs/roadmap/plans/type-access-separation.md`
 - Introduce BindingAccess or similar.
 - Stop storing Ownership inside collection/struct DataType.
