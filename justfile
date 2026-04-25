@@ -11,3 +11,8 @@ validate:
 ship:
     cargo fmt
     just validate
+
+release version:
+    just validate
+    git tag -a v{{version}} -m "Beanstalk v{{version}}"
+    git push origin v{{version}}
