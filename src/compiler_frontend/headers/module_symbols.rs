@@ -120,10 +120,7 @@ impl ModuleSymbols {
     }
 }
 
-fn declaration_from_header(
-    header: &Header,
-    string_table: &mut StringTable,
-) -> Option<Declaration> {
+fn declaration_from_header(header: &Header, string_table: &mut StringTable) -> Option<Declaration> {
     match &header.kind {
         HeaderKind::Function { signature } => Some(Declaration {
             id: header.tokens.src_path.to_owned(),
