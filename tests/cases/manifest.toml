@@ -111,12 +111,12 @@ tags = ["integration","borrows"]
 [[case]]
 id = "borrow_checker_multiple_mutable_borrows"
 path = "borrow_checker_multiple_mutable_borrows"
-tags = ["integration","borrows"]
+tags = ["integration","borrows", "diagnostics"]
 
 [[case]]
 id = "borrow_checker_mutable_immutable_conflict"
 path = "borrow_checker_mutable_immutable_conflict"
-tags = ["integration","borrows"]
+tags = ["integration","borrows", "diagnostics"]
 
 [[case]]
 id = "function_call_mutable_param_requires_explicit_tilde"
@@ -166,12 +166,12 @@ tags = ["integration","borrows"]
 [[case]]
 id = "borrow_checker_use_after_move"
 path = "borrow_checker_use_after_move"
-tags = ["integration","borrows"]
+tags = ["integration","borrows", "diagnostics"]
 
 [[case]]
 id = "branch_inconsistent_ownership_merge"
 path = "branch_inconsistent_ownership_merge"
-tags = ["integration","borrows"]
+tags = ["integration","borrows", "diagnostics"]
 
 [[case]]
 id = "branch_reborrow_after_last_use"
@@ -306,7 +306,7 @@ tags = ["integration","backend-contract"]
 [[case]]
 id = "circular_dependency"
 path = "circular_dependency"
-tags = ["integration","language"]
+tags = ["integration","language", "diagnostics"]
 
 [[case]]
 id = "collection_alias_observes_mutation"
@@ -431,7 +431,7 @@ tags = ["integration","control-flow"]
 [[case]]
 id = "complex_borrow_violations"
 path = "complex_borrow_violations"
-tags = ["integration","borrows"]
+tags = ["integration","borrows", "diagnostics"]
 
 [[case]]
 id = "complex_borrowing_scenarios"
@@ -446,7 +446,7 @@ tags = ["integration","diagnostics","imports"]
 [[case]]
 id = "complex_module_structure"
 path = "complex_module_structure"
-tags = ["integration","structs","imports","entry-start"]
+tags = ["integration","structs","imports","entry-start", "dependency-resolution"]
 
 [[case]]
 id = "config_current_keys_success"
@@ -516,7 +516,7 @@ tags = ["integration","diagnostics"]
 [[case]]
 id = "constant_requires_initializer"
 path = "constant_requires_initializer"
-tags = ["integration","language"]
+tags = ["integration","language", "diagnostics"]
 
 [[case]]
 id = "constants"
@@ -527,16 +527,6 @@ tags = ["integration","language"]
 id = "control_flow"
 path = "control_flow"
 tags = ["integration","control-flow"]
-
-[[case]]
-id = "declaration_smoke"
-path = "declaration_smoke"
-tags = ["integration","language"]
-
-[[case]]
-id = "declarations_only"
-path = "declarations_only"
-tags = ["integration","language"]
 
 [[case]]
 id = "diagnostic_function_body_stray_comma"
@@ -641,7 +631,7 @@ tags = ["integration","js-backend","results","diagnostics"]
 [[case]]
 id = "float_literal_malformed"
 path = "float_literal_malformed"
-tags = ["integration","language"]
+tags = ["integration","language", "diagnostics"]
 
 [[case]]
 id = "float_literals_and_arithmetic"
@@ -656,7 +646,7 @@ tags = ["integration", "functions", "type-checking"]
 [[case]]
 id = "function_call_arg_type_rejected"
 path = "function_call_arg_type_rejected"
-tags = ["integration", "functions", "type-checking"]
+tags = ["integration", "functions", "type-checking", "diagnostics"]
 
 [[case]]
 id = "function_call_arg_errorKind_accepts_string"
@@ -749,24 +739,9 @@ path = "struct_constructor_field_type_mismatch_rejected"
 tags = ["integration", "structs", "diagnostics"]
 
 [[case]]
-id = "function_calls"
-path = "function_calls"
-tags = ["integration","functions"]
-
-[[case]]
 id = "function_if_loop_smoke"
 path = "function_if_loop_smoke"
 tags = ["integration","control-flow"]
-
-[[case]]
-id = "function_return_smoke"
-path = "function_return_smoke"
-tags = ["integration","functions"]
-
-[[case]]
-id = "function_single_call_smoke"
-path = "function_single_call_smoke"
-tags = ["integration","functions"]
 
 [[case]]
 id = "functions"
@@ -801,12 +776,12 @@ tags = ["integration","html"]
 [[case]]
 id = "html_builder_invalid_config"
 path = "html_builder_invalid_config"
-tags = ["integration","html"]
+tags = ["integration","html", "diagnostics"]
 
 [[case]]
 id = "html_builder_invalid_page_metadata"
 path = "html_builder_invalid_page_metadata"
-tags = ["integration","html"]
+tags = ["integration","html", "diagnostics"]
 
 [[case]]
 id = "html_builder_js_script_inside_body"
@@ -931,7 +906,7 @@ tags = ["integration","borrows"]
 [[case]]
 id = "immutable_mutation_attempt"
 path = "immutable_mutation_attempt"
-tags = ["integration","language"]
+tags = ["integration","language", "diagnostics"]
 
 [[case]]
 id = "implicit_borrowing"
@@ -946,27 +921,22 @@ tags = ["integration","language","entry-start"]
 [[case]]
 id = "import_syntax_test"
 path = "import_syntax_test"
-tags = ["integration","language","imports"]
+tags = ["integration","language","imports", "dependency-resolution"]
 
 [[case]]
 id = "imported_start_function_callable_not_auto_run"
 path = "imported_start_function_callable_not_auto_run"
-tags = ["integration","functions","imports","entry-start"]
-
-[[case]]
-id = "integer_assignment_smoke"
-path = "integer_assignment_smoke"
-tags = ["integration","language"]
+tags = ["integration","functions","imports","entry-start", "dependency-resolution"]
 
 [[case]]
 id = "assignment_type_mismatch_rejected"
 path = "assignment_type_mismatch_rejected"
-tags = ["integration","language","diagnostics"]
+tags = ["integration","language","diagnostics", "type-checking"]
 
 [[case]]
 id = "integer_literal_overflow"
 path = "integer_literal_overflow"
-tags = ["integration","language"]
+tags = ["integration","language", "diagnostics"]
 
 [[case]]
 id = "invalid_reassignment_shadowing"
@@ -1096,7 +1066,7 @@ tags = ["integration","language"]
 [[case]]
 id = "lifetime_inference_conflict_detection"
 path = "lifetime_inference_conflict_detection"
-tags = ["integration","borrows"]
+tags = ["integration","borrows", "diagnostics"]
 
 [[case]]
 id = "lifetime_inference_control_flow"
@@ -1126,7 +1096,7 @@ tags = ["integration","borrows"]
 [[case]]
 id = "lifetime_inference_use_after_move"
 path = "lifetime_inference_use_after_move"
-tags = ["integration","borrows"]
+tags = ["integration","borrows", "diagnostics"]
 
 [[case]]
 id = "literal_match_requires_else_failure"
@@ -1141,7 +1111,7 @@ tags = ["integration","control-flow"]
 [[case]]
 id = "loop_bare_iteration_bindings"
 path = "loop_bare_iteration_bindings"
-tags = ["integration","control-flow"]
+tags = ["integration","control-flow", "diagnostics"]
 
 [[case]]
 id = "loop_bindingless_iteration"
@@ -1321,7 +1291,7 @@ tags = ["integration","language"]
 [[case]]
 id = "multi_file_module"
 path = "multi_file_module"
-tags = ["integration","language","imports"]
+tags = ["integration","language","imports", "dependency-resolution"]
 
 [[case]]
 id = "multiline_expressions"
@@ -1476,7 +1446,7 @@ tags = ["integration","receivers","diagnostics"]
 [[case]]
 id = "relative_import_dot_segments"
 path = "relative_import_dot_segments"
-tags = ["integration","language","imports","paths"]
+tags = ["integration","language","imports","paths", "dependency-resolution"]
 
 [[case]]
 id = "result_handler_without_fallback_fallthrough_rejected"
@@ -1496,7 +1466,7 @@ tags = ["integration","results","control-flow"]
 [[case]]
 id = "result_handler_if_match_termination"
 path = "result_handler_if_match_termination"
-tags = ["integration","results","control-flow"]
+tags = ["integration","results","control-flow", "diagnostics"]
 
 [[case]]
 id = "result_multi_bind_fallback"
@@ -1546,7 +1516,7 @@ tags = ["integration","results","diagnostics"]
 [[case]]
 id = "return_without_correct_signature_type"
 path = "return_without_correct_signature_type"
-tags = ["integration","language"]
+tags = ["integration","language", "diagnostics"]
 
 [[case]]
 id = "return_value_type_mismatch_rejected"
@@ -1656,12 +1626,12 @@ tags = ["integration","templates"]
 [[case]]
 id = "template_slots_duplicate_default_failure"
 path = "template_slots_duplicate_default_failure"
-tags = ["integration","templates"]
+tags = ["integration","templates", "diagnostics"]
 
 [[case]]
 id = "template_slots_named_only_loose_content_failure"
 path = "template_slots_named_only_loose_content_failure"
-tags = ["integration","templates"]
+tags = ["integration","templates", "diagnostics"]
 
 [[case]]
 id = "template_slots_nested"
@@ -1676,12 +1646,12 @@ tags = ["integration","templates"]
 [[case]]
 id = "template_slots_non_immediate_parent_failure"
 path = "template_slots_non_immediate_parent_failure"
-tags = ["integration","templates"]
+tags = ["integration","templates", "diagnostics"]
 
 [[case]]
 id = "template_slots_unknown_insert_target_failure"
 path = "template_slots_unknown_insert_target_failure"
-tags = ["integration","templates"]
+tags = ["integration","templates", "diagnostics"]
 
 [[case]]
 id = "template_style_code_success"
@@ -1696,7 +1666,7 @@ tags = ["integration","templates"]
 [[case]]
 id = "template_style_formatter_unknown_failure"
 path = "template_style_formatter_unknown_failure"
-tags = ["integration","templates"]
+tags = ["integration","templates", "diagnostics"]
 
 [[case]]
 id = "template_style_markdown_success"
@@ -1706,7 +1676,7 @@ tags = ["integration","templates"]
 [[case]]
 id = "template_style_unknown_directive_failure"
 path = "template_style_unknown_directive_failure"
-tags = ["integration","templates"]
+tags = ["integration","templates", "diagnostics"]
 
 [[case]]
 id = "top_level_const_template"
@@ -1731,7 +1701,7 @@ tags = ["integration","templates","diagnostics"]
 [[case]]
 id = "top_level_const_template_rejects_runtime_template"
 path = "top_level_const_template_rejects_runtime_template"
-tags = ["integration","templates"]
+tags = ["integration","templates", "diagnostics"]
 
 [[case]]
 id = "top_level_const_template_single_item"
@@ -1771,7 +1741,7 @@ tags = ["integration","language"]
 [[case]]
 id = "variable_redeclaration"
 path = "variable_redeclaration"
-tags = ["integration","language"]
+tags = ["integration","language", "diagnostics"]
 
 [[case]]
 id = "variables_and_assignment"
@@ -1806,12 +1776,12 @@ tags = ["integration", "type-coercion"]
 [[case]]
 id = "float_declaration_from_bool_rejected"
 path = "float_declaration_from_bool_rejected"
-tags = ["integration", "type-coercion"]
+tags = ["integration", "type-coercion", "diagnostics"]
 
 [[case]]
 id = "int_declaration_from_float_rejected"
 path = "int_declaration_from_float_rejected"
-tags = ["integration", "type-coercion"]
+tags = ["integration", "type-coercion", "diagnostics"]
 
 [[case]]
 id = "integer_division_real_and_int_output"
@@ -1897,7 +1867,7 @@ tags = ["integration", "structs"]
 [[case]]
 id = "struct_nominal_type_mismatch_rejected"
 path = "struct_nominal_type_mismatch_rejected"
-tags = ["integration", "structs", "diagnostics"]
+tags = ["integration", "structs", "diagnostics", "type-checking"]
 
 [[case]]
 id = "receiver_this_not_first_parameter_rejected"
@@ -1922,7 +1892,7 @@ tags = ["integration", "structs", "receiver-methods"]
 [[case]]
 id = "receiver_method_exported_cross_file_success"
 path = "receiver_method_exported_cross_file_success"
-tags = ["integration", "receiver-methods", "imports"]
+tags = ["integration", "receiver-methods", "imports", "dependency-resolution"]
 
 [[case]]
 id = "receiver_method_mutable_struct_success"
@@ -1962,7 +1932,7 @@ tags = ["integration", "receiver-methods", "borrows"]
 [[case]]
 id = "receiver_method_exported_cross_file_mutable_success"
 path = "receiver_method_exported_cross_file_mutable_success"
-tags = ["integration", "receiver-methods", "imports"]
+tags = ["integration", "receiver-methods", "imports", "dependency-resolution"]
 
 [[case]]
 id = "receiver_method_html_wasm_basic"

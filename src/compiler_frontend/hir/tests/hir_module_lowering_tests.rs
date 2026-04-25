@@ -1,7 +1,9 @@
-//! HIR statement lowering regression tests.
+//! HIR module-level lowering regression tests.
 //!
-//! WHAT: checks how statement-level AST nodes become HIR blocks, statements, and terminators.
-//! WHY: statement lowering owns most CFG construction and benefits from targeted regression coverage.
+//! WHAT: checks how top-level declarations, doc fragments, and templates lower into HIR module
+//!       structure.
+//! WHY: module lowering defines the global HIR shape that backends traverse; regressions here
+//!      affect code generation and symbol emission.
 
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};

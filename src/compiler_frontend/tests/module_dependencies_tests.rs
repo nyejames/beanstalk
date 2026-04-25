@@ -1,3 +1,10 @@
+//! Dependency sorting regression tests.
+//!
+//! WHAT: validates topological ordering, cycle detection, deterministic order, and start-function
+//!       exclusion from the import dependency graph.
+//! WHY: dependency sorting is the single producer of sorted declaration placeholders; any drift
+//!      here breaks cross-file visibility and constant deferral.
+
 use super::*;
 use crate::compiler_frontend::headers::parse_file_headers::{
     HeaderKind, HeaderParseOptions, Headers, parse_headers,

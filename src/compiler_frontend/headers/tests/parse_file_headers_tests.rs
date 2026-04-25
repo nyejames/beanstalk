@@ -1,3 +1,10 @@
+//! Header parsing regression tests.
+//!
+//! WHAT: validates top-level declaration classification, signature extraction, dependency edge
+//!       generation, import normalization, and header-level diagnostics.
+//! WHY: headers are the first compiler stage after tokenization; incorrect classification or
+//!      dependency edges break everything downstream.
+
 use super::*;
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnChannel, ReturnSlot,

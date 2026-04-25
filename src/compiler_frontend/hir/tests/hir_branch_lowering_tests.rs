@@ -1,7 +1,9 @@
-//! HIR statement lowering regression tests.
+//! HIR branch (`if`/`else`) lowering regression tests.
 //!
-//! WHAT: checks how statement-level AST nodes become HIR blocks, statements, and terminators.
-//! WHY: statement lowering owns most CFG construction and benefits from targeted regression coverage.
+//! WHAT: checks how conditional branches lower into HIR blocks with `If` terminators and merge
+//!       continuation blocks.
+//! WHY: branch lowering constructs the core CFG diamond shape; errors here corrupt control flow
+//!      and variable liveness across arms.
 
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, Operator};

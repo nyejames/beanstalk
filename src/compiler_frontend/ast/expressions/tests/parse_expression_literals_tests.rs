@@ -1,3 +1,10 @@
+//! Literal expression parsing regression tests.
+//!
+//! WHAT: validates parsing of int, float, string, char, bool, and template literals plus
+//!       malformed-literal diagnostics.
+//! WHY: literals are the simplest expressions but span many token kinds; targeted coverage
+//!      prevents silent changes to literal type inference.
+
 use super::*;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationIndex};
 use crate::compiler_frontend::compiler_errors::{ErrorMetaDataKey, ErrorType};

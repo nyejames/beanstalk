@@ -1,0 +1,8 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = [
+    "Starting main",
+    "Hello, World!",
+    "Main complete",
+]

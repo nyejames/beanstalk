@@ -1,7 +1,9 @@
-//! HIR statement lowering regression tests.
+//! HIR loop lowering regression tests.
 //!
-//! WHAT: checks how statement-level AST nodes become HIR blocks, statements, and terminators.
-//! WHY: statement lowering owns most CFG construction and benefits from targeted regression coverage.
+//! WHAT: checks how `loop` statements lower into HIR blocks with back-edges, break/continue
+//!       terminators, and optional range/collection iteration setup.
+//! WHY: loop lowering is the most complex CFG construction in the frontend; targeted tests
+//!      catch break-target and induction-variable regressions early.
 
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::Expression;

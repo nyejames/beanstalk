@@ -1,3 +1,10 @@
+//! Expression evaluation and runtime-RPN parsing regression tests.
+//!
+//! WHAT: validates operator precedence, runtime expression node construction, and template
+//!       expression parsing.
+//! WHY: expression parsing is dense and easy to break during refactors; targeted tests catch
+//!      shape drift before it reaches HIR lowering.
+
 use super::*;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::Operator;

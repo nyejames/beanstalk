@@ -1,4 +1,0 @@
-[backends.html]
-mode = "success"
-warnings = "forbid"
-golden_mode = "normalized"

@@ -1,3 +1,10 @@
+//! Function call argument parsing regression tests.
+//!
+//! WHAT: validates positional and named argument parsing, call-access mode classification, and
+//!       argument validation against signatures.
+//! WHY: call parsing spans syntax, dispatch, and access-mode intent; focused tests prevent
+//!      subtle regressions in how arguments are bound and passed.
+
 use crate::compiler_frontend::ast::expressions::call_argument::CallAccessMode;
 use crate::compiler_frontend::ast::expressions::function_calls::parse_call_arguments;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationIndex};

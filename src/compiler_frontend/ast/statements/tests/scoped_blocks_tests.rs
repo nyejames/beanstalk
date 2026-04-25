@@ -1,3 +1,10 @@
+//! Scoped-block parsing regression tests.
+//!
+//! WHAT: validates `block:` statement parsing, local shadowing rules, and block-boundary
+//!       diagnostics.
+//! WHY: blocks create explicit lexical regions; parser drift here affects borrow scope and
+//!      local lifetime analysis.
+
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::tests::test_support::{

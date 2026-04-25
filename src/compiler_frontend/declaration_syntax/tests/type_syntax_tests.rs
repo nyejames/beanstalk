@@ -1,3 +1,9 @@
+//! Type-syntax parsing and resolution regression tests.
+//!
+//! WHAT: validates type annotation parsing and named-type resolution in composite types.
+//! WHY: type syntax is the source of truth for frontend type identity; parser drift here
+//!      affects every downstream type check.
+
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::declaration_syntax::type_syntax::{
     TypeAnnotationContext, parse_type_annotation, resolve_named_types_in_data_type,

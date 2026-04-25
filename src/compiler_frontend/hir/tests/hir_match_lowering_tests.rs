@@ -1,7 +1,9 @@
-//! HIR statement lowering regression tests.
+//! HIR match lowering regression tests.
 //!
-//! WHAT: checks how statement-level AST nodes become HIR blocks, statements, and terminators.
-//! WHY: statement lowering owns most CFG construction and benefits from targeted regression coverage.
+//! WHAT: checks how `match` expressions lower into HIR switch blocks with pattern arms, guards,
+//!       and exhaustiveness checks.
+//! WHY: match lowering generates complex multi-way branching; regressions here produce wrong
+//!      control flow or missing pattern coverage silently.
 
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::Expression;

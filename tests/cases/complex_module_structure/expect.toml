@@ -1,0 +1,12 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = [
+    "Starting complex module test",
+    "Calculator module initialized",
+    "Initializing calculator",
+    "Computing: 10 + 5 = 15",
+    "Calculation complete",
+    "Saved and loaded value: 42",
+    "Complex module test complete",
+]

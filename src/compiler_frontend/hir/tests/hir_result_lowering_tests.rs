@@ -1,7 +1,9 @@
-//! HIR statement lowering regression tests.
+//! HIR result-handling lowering regression tests.
 //!
-//! WHAT: checks how statement-level AST nodes become HIR blocks, statements, and terminators.
-//! WHY: statement lowering owns most CFG construction and benefits from targeted regression coverage.
+//! WHAT: checks how result propagation, multi-bind fallbacks, and error handlers lower into HIR
+//!       control-flow and local bindings.
+//! WHY: result handling spans expression and statement boundaries; targeted tests prevent
+//!      regressions in error-path routing and fallback binding.
 
 use crate::compiler_frontend::ast::ast_nodes::{MultiBindTarget, MultiBindTargetKind, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ResultCallHandling};

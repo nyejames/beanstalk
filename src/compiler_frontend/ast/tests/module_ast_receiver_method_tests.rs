@@ -1,3 +1,10 @@
+//! Receiver method catalog and dispatch regression tests.
+//!
+//! WHAT: validates how receiver methods are indexed, resolved, and dispatched across struct
+//!       and scalar types.
+//! WHY: receiver methods bridge user-defined behavior to builtin types; catalog drift breaks
+//!      both call resolution and backend lowering.
+
 use super::scope_context::{ContextKind, ScopeContext, TopLevelDeclarationIndex};
 use super::*;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;

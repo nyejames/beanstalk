@@ -1,7 +1,9 @@
-//! HIR statement lowering regression tests.
+//! HIR local declaration lowering regression tests.
 //!
-//! WHAT: checks how statement-level AST nodes become HIR blocks, statements, and terminators.
-//! WHY: statement lowering owns most CFG construction and benefits from targeted regression coverage.
+//! WHAT: checks how variable declarations become HIR locals, including mutability, type lowering,
+//!       and source-location mapping.
+//! WHY: local metadata is the input to borrow analysis; drift here affects every ownership
+//!      and lifetime check downstream.
 
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, CallArgument};

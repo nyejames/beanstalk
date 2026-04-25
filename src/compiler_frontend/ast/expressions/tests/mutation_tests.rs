@@ -1,3 +1,10 @@
+//! Mutation expression parsing and validation regression tests.
+//!
+//! WHAT: validates mutable assignment, field mutation, collection mutation, and place-expression
+//!       requirements.
+//! WHY: mutation rules are tightly coupled to borrow checking; parser-level tests ensure the
+//!      frontend produces the right AST shapes for later analysis.
+
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::compiler_errors::{ErrorMetaDataKey, ErrorType};
 use crate::compiler_frontend::datatypes::DataType;
