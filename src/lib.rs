@@ -1,6 +1,5 @@
-// While many parts of the compiler are in heavy development,
-// there are lots of placeholders and code that will possibly be used, but isn't atm.
-// #![allow(dead_code, unused_macros, unused_variables)]
+// Targeted #[allow(...)] attributes are used where needed, each with a justification
+// comment. Avoid blanket crate-level allowances.
 
 mod compiler_tests {
     #[cfg(test)]

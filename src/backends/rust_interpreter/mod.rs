@@ -1,4 +1,5 @@
-#![allow(dead_code)] // While this backend is unused - remove once wired in
+#![allow(dead_code)]
+// Deferred post-Alpha scaffolding: entire backend is unimplemented. Remove once CTFE / interpreter is wired in.
 
 //! Rust interpreter backend entry points.
 //!

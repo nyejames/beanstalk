@@ -103,21 +103,25 @@ pub struct HirConstField {
 
 #[derive(Debug, Clone)]
 pub enum HirConstValue {
-    #[allow(dead_code)] // Planned: integer constant payloads during extended const lowering.
+    #[allow(dead_code)]
+    // Stored during lowering; scalar payloads are not inspected in Alpha validation.
     Int(i64),
-    #[allow(dead_code)] // Planned: float constant payloads during extended const lowering.
+    #[allow(dead_code)]
+    // Stored during lowering; scalar payloads are not inspected in Alpha validation.
     Float(f64),
-    #[allow(dead_code)] // Planned: boolean constant payloads during extended const lowering.
+    #[allow(dead_code)]
+    // Stored during lowering; scalar payloads are not inspected in Alpha validation.
     Bool(bool),
-    #[allow(dead_code)] // Planned: char constant payloads during extended const lowering.
+    #[allow(dead_code)]
+    // Stored during lowering; scalar payloads are not inspected in Alpha validation.
     Char(char),
-    #[allow(dead_code)] // Planned: string constant payloads during extended const lowering.
     String(String),
     Collection(Vec<HirConstValue>),
     Record(Vec<HirConstField>),
     Range(Box<HirConstValue>, Box<HirConstValue>),
     Result {
-        #[allow(dead_code)] // Planned: const-result consumers will branch on the stored variant.
+        #[allow(dead_code)]
+        // Variant is stored during lowering; Alpha validation only checks the value.
         variant: ResultVariant,
         value: Box<HirConstValue>,
     },
@@ -136,18 +140,20 @@ pub struct HirModuleConst {
 // ============================================================
 /// Registry entry for a nominal choice type.
 ///
-/// WHY: the `choices` vec provides a dense `ChoiceId` namespace. Fields are reserved
-/// for future payload-variant support and choice-aware diagnostics.
+/// WHY: the `choices` vec provides a dense `ChoiceId` namespace.
+/// Alpha scope supports unit variants only; payload fields are intentionally omitted.
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct HirChoice {
+    #[allow(dead_code)]
+    // Stored during lowering; existence checked by ChoiceId index in validation.
     pub id: ChoiceId,
+    #[allow(dead_code)] // Stored during lowering; not walked in Alpha validation.
     pub variants: Vec<HirChoiceVariant>,
 }
 
 #[derive(Debug, Clone)]
-#[allow(dead_code)]
 pub struct HirChoiceVariant {
+    #[allow(dead_code)] // Stored during lowering; not read back in Alpha paths.
     pub name: StringId,
 }
 

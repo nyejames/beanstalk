@@ -748,8 +748,9 @@ impl<'a> HirDisplayContext<'a> {
 // Convenience Display Hooks
 // ============================================================================
 
+// Debug display helpers: gated to test builds and the "show_hir" feature.
 #[cfg(any(test, feature = "show_hir"))]
-#[allow(dead_code)] // These are used for debugging, but dead code otherwise
+#[allow(dead_code)]
 impl HirModule {
     pub(crate) fn display_with_table(&self, string_table: &StringTable) -> String {
         HirDisplayContext::new(string_table).render_module(self)
@@ -765,7 +766,7 @@ impl HirModule {
 }
 
 #[cfg(any(test, feature = "show_hir"))]
-#[allow(dead_code)] // These are used for debugging, but dead code otherwise
+#[allow(dead_code)]
 impl HirBlock {
     pub(crate) fn display_with_context(&self, display: &HirDisplayContext<'_>) -> String {
         display.render_block(self)
@@ -773,7 +774,7 @@ impl HirBlock {
 }
 
 #[cfg(any(test, feature = "show_hir"))]
-#[allow(dead_code)] // These are used for debugging, but dead code otherwise
+#[allow(dead_code)]
 impl HirFunction {
     pub(crate) fn display_with_context(&self, display: &HirDisplayContext<'_>) -> String {
         display.render_function(self)
@@ -781,7 +782,7 @@ impl HirFunction {
 }
 
 #[cfg(any(test, feature = "show_hir"))]
-#[allow(dead_code)] // These are used for debugging, but dead code otherwise
+#[allow(dead_code)]
 impl HirStruct {
     pub(crate) fn display_with_context(&self, display: &HirDisplayContext<'_>) -> String {
         display.render_struct(self)
@@ -789,7 +790,7 @@ impl HirStruct {
 }
 
 #[cfg(any(test, feature = "show_hir"))]
-#[allow(dead_code)] // These are used for debugging, but dead code otherwise
+#[allow(dead_code)]
 impl HirStatement {
     pub(crate) fn display_with_context(&self, display: &HirDisplayContext<'_>) -> String {
         display.render_statement(self)
@@ -797,7 +798,7 @@ impl HirStatement {
 }
 
 #[cfg(any(test, feature = "show_hir"))]
-#[allow(dead_code)] // These are used for debugging, but dead code otherwise
+#[allow(dead_code)]
 impl HirTerminator {
     pub(crate) fn display_with_context(&self, display: &HirDisplayContext<'_>) -> String {
         display.render_terminator(self)
@@ -805,7 +806,7 @@ impl HirTerminator {
 }
 
 #[cfg(any(test, feature = "show_hir"))]
-#[allow(dead_code)] // These are used for debugging, but dead code otherwise
+#[allow(dead_code)]
 impl HirExpression {
     pub(crate) fn display_with_context(&self, display: &HirDisplayContext<'_>) -> String {
         display.render_expression(self)
@@ -813,7 +814,7 @@ impl HirExpression {
 }
 
 #[cfg(any(test, feature = "show_hir"))]
-#[allow(dead_code)] // These are used for debugging, but dead code otherwise
+#[allow(dead_code)]
 impl HirPlace {
     pub(crate) fn display_with_context(&self, display: &HirDisplayContext<'_>) -> String {
         display.render_place(self)
@@ -821,7 +822,7 @@ impl HirPlace {
 }
 
 #[cfg(any(test, feature = "show_hir"))]
-#[allow(dead_code)] // These are used for debugging, but dead code otherwise
+#[allow(dead_code)]
 impl HirPattern {
     pub(crate) fn display_with_context(&self, display: &HirDisplayContext<'_>) -> String {
         display.render_pattern(self)
@@ -829,7 +830,7 @@ impl HirPattern {
 }
 
 #[cfg(any(test, feature = "show_hir"))]
-#[allow(dead_code)] // These are used for debugging, but dead code otherwise
+#[allow(dead_code)]
 impl HirMatchArm {
     pub(crate) fn display_with_context(&self, display: &HirDisplayContext<'_>) -> String {
         display.render_match_arm(self)

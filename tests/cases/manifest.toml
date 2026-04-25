@@ -254,8 +254,8 @@ path = "choice_match_unknown_variant_failure"
 tags = ["integration","control-flow","diagnostics"]
 
 [[case]]
-id = "choice_match_wildcard_merge_continuation"
-path = "choice_match_wildcard_merge_continuation"
+id = "choice_match_exhaustive_merge_continuation"
+path = "choice_match_exhaustive_merge_continuation"
 tags = ["integration","control-flow","backend-contract"]
 
 [[case]]
@@ -449,8 +449,8 @@ path = "complex_module_structure"
 tags = ["integration","structs","imports","entry-start"]
 
 [[case]]
-id = "config_backward_compat"
-path = "config_backward_compat"
+id = "config_current_keys_success"
+path = "config_current_keys_success"
 tags = ["integration","config"]
 
 [[case]]
