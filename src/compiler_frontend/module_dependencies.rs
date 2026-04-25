@@ -125,7 +125,8 @@ pub fn resolve_module_dependencies(
     // WHY: start sees all top-level declarations during AST emission, so it must come last.
     sorted.extend(start_headers);
 
-    // Build sorted declarations from the topologically ordered headers and append builtins.
+    // Build the complete sorted declaration placeholder list from the topologically
+    // ordered headers and append builtins.
     // WHY: declarations must be in sorted order so AST passes see dependencies before dependents.
     module_symbols.build_sorted_declarations(&sorted, string_table);
 
