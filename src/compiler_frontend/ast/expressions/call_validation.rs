@@ -153,7 +153,7 @@ pub(crate) fn expectations_from_user_parameters(
         .map(|parameter| ParameterExpectation {
             name: parameter.id.name(),
             data_type: parameter.value.data_type.clone(),
-            access_mode: if parameter.value.ownership.is_mutable() {
+            access_mode: if parameter.value.value_mode.is_mutable() {
                 ExpectedAccessMode::Mutable
             } else {
                 ExpectedAccessMode::Shared
@@ -533,7 +533,7 @@ fn fresh_mutable_rvalue_type_compatible(expected: &DataType, actual: &DataType) 
         // Fresh collection literals are produced as immutable-owned values by default, but
         // mutable call slots own and materialize their own hidden local before the call.
         // Inner element type compatibility still has to hold.
-        (DataType::Collection(expected_inner, _), DataType::Collection(actual_inner, _)) => {
+        (DataType::Collection(expected_inner), DataType::Collection(actual_inner)) => {
             is_type_compatible(expected_inner.as_ref(), actual_inner.as_ref())
         }
         _ => false,
@@ -550,7 +550,7 @@ fn expression_is_place(expression: &Expression) -> bool {
 
 fn expression_is_mutable_place(expression: &Expression) -> bool {
     match &expression.kind {
-        ExpressionKind::Reference(_) => expression.ownership.is_mutable(),
+        ExpressionKind::Reference(_) => expression.value_mode.is_mutable(),
         ExpressionKind::Runtime(nodes) if nodes.len() == 1 => ast_node_is_mutable_place(&nodes[0]),
         _ => false,
     }

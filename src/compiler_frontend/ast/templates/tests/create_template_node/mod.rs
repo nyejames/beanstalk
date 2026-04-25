@@ -6,7 +6,6 @@ use crate::compiler_frontend::ast::templates::template_render_plan::RenderPiece;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationIndex};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::WarningKind;
-use crate::compiler_frontend::datatypes::Ownership;
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
@@ -18,6 +17,7 @@ use crate::compiler_frontend::tokenizer::newline_handling::NewlineMode;
 use crate::compiler_frontend::tokenizer::tokens::{
     CharPosition, FileTokens, SourceLocation, TemplateBodyMode, Token, TokenKind,
 };
+use crate::compiler_frontend::value_mode::ValueMode;
 use crate::projects::html_project::style_directives::html_project_style_directives;
 use std::rc::Rc;
 
@@ -176,7 +176,7 @@ fn runtime_template_context_with_style_directives(
                     char_column: 120, // Arbitrary number
                 },
             },
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         ),
     };
 
@@ -263,15 +263,15 @@ fn docs_style_wrapper_declarations(string_table: &mut StringTable) -> Vec<Declar
     vec![
         Declaration {
             id: wrapper_scope.append(string_table.intern("table")),
-            value: Expression::template(table, Ownership::ImmutableOwned),
+            value: Expression::template(table, ValueMode::ImmutableOwned),
         },
         Declaration {
             id: wrapper_scope.append(string_table.intern("row")),
-            value: Expression::template(row, Ownership::ImmutableOwned),
+            value: Expression::template(row, ValueMode::ImmutableOwned),
         },
         Declaration {
             id: wrapper_scope.append(string_table.intern("header_row")),
-            value: Expression::template(header_row, Ownership::ImmutableOwned),
+            value: Expression::template(header_row, ValueMode::ImmutableOwned),
         },
     ]
 }

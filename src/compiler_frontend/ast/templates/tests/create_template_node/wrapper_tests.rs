@@ -2,9 +2,9 @@ use super::*;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::templates::template::TemplateAtom;
-use crate::compiler_frontend::datatypes::Ownership;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::value_mode::ValueMode;
 
 #[test]
 fn slot_children_wrappers_apply_table_rows_and_cells_without_cross_applying() {
@@ -31,11 +31,11 @@ fn slot_children_wrappers_apply_table_rows_and_cells_without_cross_applying() {
     let declarations = vec![
         Declaration {
             id: wrapper_scope.append(string_table.intern("row")),
-            value: Expression::template(row_wrapper, Ownership::ImmutableOwned),
+            value: Expression::template(row_wrapper, ValueMode::ImmutableOwned),
         },
         Declaration {
             id: wrapper_scope.append(string_table.intern("table")),
-            value: Expression::template(table_wrapper, Ownership::ImmutableOwned),
+            value: Expression::template(table_wrapper, ValueMode::ImmutableOwned),
         },
     ];
 
@@ -82,11 +82,11 @@ fn markdown_parent_keeps_table_rows_and_cells_inside_table() {
     let declarations = vec![
         Declaration {
             id: wrapper_scope.append(string_table.intern("row")),
-            value: Expression::template(row_wrapper, Ownership::ImmutableOwned),
+            value: Expression::template(row_wrapper, ValueMode::ImmutableOwned),
         },
         Declaration {
             id: wrapper_scope.append(string_table.intern("table")),
-            value: Expression::template(table_wrapper, Ownership::ImmutableOwned),
+            value: Expression::template(table_wrapper, ValueMode::ImmutableOwned),
         },
     ];
 
@@ -136,15 +136,15 @@ fn markdown_page_wrapper_keeps_table_rows_and_cells_inside_table() {
     let declarations = vec![
         Declaration {
             id: wrapper_scope.append(string_table.intern("row")),
-            value: Expression::template(row_wrapper, Ownership::ImmutableOwned),
+            value: Expression::template(row_wrapper, ValueMode::ImmutableOwned),
         },
         Declaration {
             id: wrapper_scope.append(string_table.intern("table")),
-            value: Expression::template(table_wrapper, Ownership::ImmutableOwned),
+            value: Expression::template(table_wrapper, ValueMode::ImmutableOwned),
         },
         Declaration {
             id: wrapper_scope.append(string_table.intern("page_wrapper")),
-            value: Expression::template(page_wrapper, Ownership::ImmutableOwned),
+            value: Expression::template(page_wrapper, ValueMode::ImmutableOwned),
         },
     ];
 
@@ -230,7 +230,7 @@ fn children_wrappers_in_slot_composition_do_not_apply_to_grandchildren() {
 
     let declaration = Declaration {
         id: wrapper_scope.append(string_table.intern("cell")),
-        value: Expression::template(cell_wrapper, Ownership::ImmutableOwned),
+        value: Expression::template(cell_wrapper, ValueMode::ImmutableOwned),
     };
 
     let mut token_stream =
@@ -289,11 +289,11 @@ fn nested_inline_templates_inside_table_cells_do_not_become_extra_cells() {
     let declarations = vec![
         Declaration {
             id: wrapper_scope.append(string_table.intern("row")),
-            value: Expression::template(row_wrapper, Ownership::ImmutableOwned),
+            value: Expression::template(row_wrapper, ValueMode::ImmutableOwned),
         },
         Declaration {
             id: wrapper_scope.append(string_table.intern("table")),
-            value: Expression::template(table_wrapper, Ownership::ImmutableOwned),
+            value: Expression::template(table_wrapper, ValueMode::ImmutableOwned),
         },
     ];
 
@@ -458,15 +458,15 @@ fn docs_style_table_and_data_declarations(string_table: &mut StringTable) -> Vec
     vec![
         Declaration {
             id: wrapper_scope.append(string_table.intern("header_row")),
-            value: Expression::template(header_row, Ownership::ImmutableOwned),
+            value: Expression::template(header_row, ValueMode::ImmutableOwned),
         },
         Declaration {
             id: wrapper_scope.append(string_table.intern("table")),
-            value: Expression::template(table, Ownership::ImmutableOwned),
+            value: Expression::template(table, ValueMode::ImmutableOwned),
         },
         Declaration {
             id: wrapper_scope.append(string_table.intern("data")),
-            value: Expression::template(data, Ownership::ImmutableOwned),
+            value: Expression::template(data, ValueMode::ImmutableOwned),
         },
     ]
 }

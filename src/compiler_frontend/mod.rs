@@ -42,6 +42,7 @@ pub(crate) mod interned_path;
 pub(crate) mod syntax_errors;
 pub(crate) mod token_scan;
 pub(crate) mod type_coercion;
+pub(crate) mod value_mode;
 
 pub(crate) mod host_functions;
 

@@ -12,11 +12,12 @@ use crate::ast_log;
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::token_scan::find_expression_end_index;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, Token, TokenKind};
 use crate::compiler_frontend::type_coercion::parse_context::parse_expectation_for_target_type;
+use crate::compiler_frontend::value_mode::ValueMode;
 use crate::{return_syntax_error, return_type_error};
 
 // WHAT: parses a comma-separated expression list against already-known expected result types.
@@ -40,7 +41,7 @@ pub fn create_multiple_expressions(
             token_stream,
             context,
             &mut expr_type,
-            &Ownership::ImmutableOwned,
+            &ValueMode::ImmutableOwned,
             false,
             consume_closing_parenthesis,
             string_table,
@@ -105,7 +106,7 @@ pub fn create_expression(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
     data_type: &mut DataType,
-    ownership: &Ownership,
+    value_mode: &ValueMode,
     consume_closing_parenthesis: bool,
     string_table: &mut StringTable,
 ) -> Result<Expression, CompilerError> {
@@ -113,7 +114,7 @@ pub fn create_expression(
         token_stream,
         context,
         data_type,
-        ownership,
+        value_mode,
         consume_closing_parenthesis,
         true,
         string_table,
@@ -127,7 +128,7 @@ pub(crate) fn create_expression_with_trailing_newline_policy(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
     data_type: &mut DataType,
-    ownership: &Ownership,
+    value_mode: &ValueMode,
     consume_closing_parenthesis: bool,
     skip_trailing_newlines: bool,
     string_table: &mut StringTable,
@@ -136,7 +137,7 @@ pub(crate) fn create_expression_with_trailing_newline_policy(
 
     ast_log!(
         "Parsing ",
-        #ownership,
+        #value_mode,
         data_type.display_with_table(string_table),
         " Expression"
     );
@@ -149,7 +150,7 @@ pub(crate) fn create_expression_with_trailing_newline_policy(
         ast_log!("Parsing expression: ", #token);
         let mut dispatch_state = ExpressionDispatchState {
             data_type,
-            ownership,
+            value_mode,
             consume_closing_parenthesis,
             expression: &mut expression,
             next_number_negative: &mut next_number_negative,
@@ -172,7 +173,7 @@ pub(crate) fn create_expression_with_trailing_newline_policy(
         token_stream.skip_newlines();
     }
 
-    evaluate_expression(context, expression, data_type, ownership, string_table)
+    evaluate_expression(context, expression, data_type, value_mode, string_table)
 }
 
 // WHAT: parses an expression from a bounded token slice without consuming the stop token.
@@ -182,7 +183,7 @@ pub(crate) fn create_expression_until(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
     data_type: &mut DataType,
-    ownership: &Ownership,
+    value_mode: &ValueMode,
     stop_tokens: &[TokenKind],
     string_table: &mut StringTable,
 ) -> Result<Expression, CompilerError> {
@@ -191,7 +192,7 @@ pub(crate) fn create_expression_until(
             token_stream,
             context,
             data_type,
-            ownership,
+            value_mode,
             false,
             string_table,
         );
@@ -269,7 +270,7 @@ pub(crate) fn create_expression_until(
         &mut scoped_stream,
         context,
         data_type,
-        ownership,
+        value_mode,
         false,
         string_table,
     )?;

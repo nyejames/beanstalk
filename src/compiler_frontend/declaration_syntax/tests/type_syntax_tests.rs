@@ -1,4 +1,4 @@
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::declaration_syntax::type_syntax::{
     TypeAnnotationContext, parse_type_annotation, resolve_named_types_in_data_type,
 };
@@ -107,10 +107,9 @@ fn resolves_named_types_recursively_in_composite_types() {
     let mut string_table = StringTable::new();
     let point_name = string_table.intern("Point");
 
-    let unresolved = DataType::Collection(
-        Box::new(DataType::Option(Box::new(DataType::NamedType(point_name)))),
-        Ownership::ImmutableOwned,
-    );
+    let unresolved = DataType::Collection(Box::new(DataType::Option(Box::new(
+        DataType::NamedType(point_name),
+    ))));
 
     let location = SourceLocation::default();
     let resolved = resolve_named_types_in_data_type(
@@ -129,10 +128,7 @@ fn resolves_named_types_recursively_in_composite_types() {
 
     assert_eq!(
         resolved,
-        DataType::Collection(
-            Box::new(DataType::Option(Box::new(DataType::Int))),
-            Ownership::ImmutableOwned,
-        )
+        DataType::Collection(Box::new(DataType::Option(Box::new(DataType::Int))))
     );
 }
 

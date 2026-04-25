@@ -6,12 +6,13 @@
 use super::MemberStepContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::reserved_trait_syntax::{
     reserved_trait_keyword_error, reserved_trait_keyword_or_dispatch_mismatch,
 };
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::compiler_frontend::value_mode::ValueMode;
 use crate::return_rule_error;
 
 fn field_member(receiver_type: &DataType, field_id: StringId) -> Option<Declaration> {
@@ -98,7 +99,7 @@ pub(super) fn parse_field_member_access(
     let node = if scope_context.kind.is_constant_context() && field.value.is_compile_time_constant()
     {
         let mut inlined_expression = field.value;
-        inlined_expression.ownership = Ownership::ImmutableOwned;
+        inlined_expression.value_mode = ValueMode::ImmutableOwned;
         AstNode {
             kind: NodeKind::Rvalue(inlined_expression),
             scope: scope_context.scope.clone(),
@@ -110,7 +111,7 @@ pub(super) fn parse_field_member_access(
                 base: Box::new(receiver_node),
                 field: member_name,
                 data_type: field.value.data_type,
-                ownership: field.value.ownership,
+                value_mode: field.value.value_mode,
             },
             scope: scope_context.scope.to_owned(),
             location: member_location,

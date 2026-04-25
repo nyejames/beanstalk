@@ -23,8 +23,9 @@ use crate::compiler_frontend::ast::expressions::expression::{
     BuiltinCastKind, Expression, ExpressionKind, Operator, ResultCallHandling, ResultVariant,
 };
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::value_mode::ValueMode;
 use crate::{return_rule_error, return_syntax_error};
 
 const CONSTANT_FOLDING_STAGE: &str = "Constant Folding";
@@ -98,7 +99,7 @@ pub fn constant_fold(
                             kind: NodeKind::Rvalue(Expression::bool(
                                 !value,
                                 expression.location.clone(),
-                                expression.ownership.to_owned(),
+                                expression.value_mode.to_owned(),
                             )),
                             location: operand.location.to_owned(),
                             scope: operand.scope.clone(),
@@ -229,7 +230,7 @@ fn fold_builtin_cast(
             folded_value,
             original_expression.data_type.to_owned(),
             original_expression.location.clone(),
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         )),
         Err(error) if constant_context => {
             return_rule_error!(error, original_expression.location.clone())
@@ -342,12 +343,12 @@ fn eval_int_cast(value: &Expression, string_table: &StringTable) -> Result<Expre
         ExpressionKind::Int(int) => Ok(Expression::int(
             *int,
             value.location.clone(),
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         )),
         ExpressionKind::Float(float) => Ok(Expression::int(
             float_to_int_cast_result(*float, &float.to_string())?,
             value.location.clone(),
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         )),
         ExpressionKind::StringSlice(string) => {
             let raw = string_table.resolve(*string);
@@ -360,7 +361,7 @@ fn eval_int_cast(value: &Expression, string_table: &StringTable) -> Result<Expre
                 return Ok(Expression::int(
                     parsed,
                     value.location.clone(),
-                    Ownership::ImmutableOwned,
+                    ValueMode::ImmutableOwned,
                 ));
             }
 
@@ -371,7 +372,7 @@ fn eval_int_cast(value: &Expression, string_table: &StringTable) -> Result<Expre
                 return Ok(Expression::int(
                     float_to_int_cast_result(parsed, &normalized)?,
                     value.location.clone(),
-                    Ownership::ImmutableOwned,
+                    ValueMode::ImmutableOwned,
                 ));
             }
 
@@ -386,12 +387,12 @@ fn eval_float_cast(value: &Expression, string_table: &StringTable) -> Result<Exp
         ExpressionKind::Float(float) => Ok(Expression::float(
             *float,
             value.location.clone(),
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         )),
         ExpressionKind::Int(int) => Ok(Expression::float(
             *int as f64,
             value.location.clone(),
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         )),
         ExpressionKind::StringSlice(string) => {
             let raw = string_table.resolve(*string);
@@ -409,7 +410,7 @@ fn eval_float_cast(value: &Expression, string_table: &StringTable) -> Result<Exp
                 return Ok(Expression::float(
                     parsed,
                     value.location.clone(),
-                    Ownership::ImmutableOwned,
+                    ValueMode::ImmutableOwned,
                 ));
             }
 
@@ -531,12 +532,12 @@ impl Expression {
                     Box::new(Expression::int(
                         *lhs_val,
                         self.location.to_owned(),
-                        Ownership::ImmutableOwned,
+                        ValueMode::ImmutableOwned,
                     )),
                     Box::new(Expression::int(
                         *rhs_val,
                         self.location.to_owned(),
-                        Ownership::ImmutableOwned,
+                        ValueMode::ImmutableOwned,
                     )),
                 ),
 
@@ -652,10 +653,10 @@ impl Expression {
             _ => return Ok(None),
         };
 
-        let ownership = if self.ownership.is_mutable() || rhs.ownership.is_mutable() {
-            Ownership::MutableOwned
+        let value_mode = if self.value_mode.is_mutable() || rhs.value_mode.is_mutable() {
+            ValueMode::MutableOwned
         } else {
-            Ownership::ImmutableOwned
+            ValueMode::ImmutableOwned
         };
         let contains_regular_division = self.contains_regular_division
             || rhs.contains_regular_division
@@ -672,7 +673,7 @@ impl Expression {
         };
 
         Ok(Some(
-            Expression::new(kind, self.location.to_owned(), result_type, ownership)
+            Expression::new(kind, self.location.to_owned(), result_type, value_mode)
                 .with_regular_division_provenance(contains_regular_division),
         ))
     }

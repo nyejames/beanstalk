@@ -7,8 +7,9 @@
 //! the expression in a typed coercion node after the parser returns.
 
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::type_coercion::compatibility::is_numeric_coercible;
+use crate::compiler_frontend::value_mode::ValueMode;
 
 /// Applies a contextual numeric coercion to `expr` if the declared type
 /// requires it and the actual type supports promotion.
@@ -56,7 +57,7 @@ fn apply_numeric_coercion(expr: Expression, target: &DataType) -> Expression {
     // Constant int literals can be converted to float literals directly,
     // avoiding a runtime coercion wrapper for the common case.
     if let ExpressionKind::Int(value) = expr.kind {
-        return Expression::float(value as f64, location, Ownership::ImmutableOwned);
+        return Expression::float(value as f64, location, ValueMode::ImmutableOwned);
     }
 
     Expression::coerced(expr, target.to_owned())

@@ -21,7 +21,7 @@ use crate::compiler_frontend::ast::statements::result_handling::{
 };
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::host_functions::HostFunctionDef;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -29,6 +29,7 @@ use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::type_coercion::diagnostics::{
     expected_found_clause, offending_value_clause,
 };
+use crate::compiler_frontend::value_mode::ValueMode;
 use crate::{ast_log, return_rule_error, return_syntax_error, return_type_error};
 
 pub fn parse_function_call(
@@ -316,7 +317,7 @@ pub fn parse_call_arguments(
             token_stream,
             context,
             &mut DataType::Inferred,
-            &Ownership::ImmutableOwned,
+            &ValueMode::ImmutableOwned,
             false,
             string_table,
         )?;

@@ -24,7 +24,7 @@ use crate::compiler_frontend::ast::templates::template::TemplateConstValueKind;
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -217,16 +217,13 @@ impl<'a> AstBuildState<'a> {
                     // WHAT: entry start() returns Collection(StringSlice, MutableOwned),
                     //       which is the Beanstalk frontend type for Vec<String>.
                     // WHY: compiler-design-overview.md describes the return type as Vec<String>;
-                    //      DataType::Collection(StringSlice, MutableOwned) is the same contract
+                    //      DataType::Collection(StringSlice) is the same contract
                     //      expressed in frontend DataType terms. The HIR builder adds the implicit
                     //      return of the accumulated fragment vec at function end.
                     let start_signature = FunctionSignature {
                         parameters: vec![],
                         returns: vec![ReturnSlot::success(FunctionReturn::Value(
-                            DataType::Collection(
-                                Box::new(DataType::StringSlice),
-                                Ownership::MutableOwned,
-                            ),
+                            DataType::Collection(Box::new(DataType::StringSlice)),
                         ))],
                     };
 

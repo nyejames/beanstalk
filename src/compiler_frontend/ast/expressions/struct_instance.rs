@@ -6,11 +6,11 @@ use crate::compiler_frontend::ast::expressions::call_validation::{
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::function_calls::parse_call_arguments;
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::datatypes::Ownership;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::type_coercion::numeric::coerce_expression_to_declared_type;
+use crate::compiler_frontend::value_mode::ValueMode;
 use crate::{return_compiler_error, return_rule_error};
 
 /// Parse `StructName(...)` and return a finalized struct instance expression.
@@ -32,7 +32,7 @@ pub(crate) fn parse_struct_constructor_expression(
     struct_path: &InternedPath,
     struct_name: StringId,
     fields: &[Declaration],
-    struct_ownership: &Ownership,
+    struct_value_mode: &ValueMode,
     context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> Result<Expression, CompilerError> {
@@ -96,7 +96,7 @@ pub(crate) fn parse_struct_constructor_expression(
             }
             // Const records are data-only exports, so mutable ownership is
             // removed to keep constant semantics explicit in later stages.
-            value.ownership = Ownership::ImmutableOwned;
+            value.value_mode = ValueMode::ImmutableOwned;
         }
 
         struct_fields.push(Declaration {
@@ -106,9 +106,9 @@ pub(crate) fn parse_struct_constructor_expression(
     }
 
     let instance_ownership = if enforce_const_record {
-        Ownership::ImmutableOwned
+        ValueMode::ImmutableOwned
     } else {
-        struct_ownership.get_owned()
+        struct_value_mode.as_owned()
     };
 
     Ok(Expression::struct_instance(

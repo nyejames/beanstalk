@@ -10,10 +10,11 @@ use crate::compiler_frontend::ast::function_body_to_ast;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
+use crate::compiler_frontend::value_mode::ValueMode;
 use crate::return_syntax_error;
 
 use super::fallback::parse_named_handler_fallback;
@@ -128,7 +129,7 @@ pub(super) fn parse_named_result_handler(
         value: Expression::no_value(
             token_stream.current_location(),
             site.error_return_type.to_owned(),
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         ),
     });
 

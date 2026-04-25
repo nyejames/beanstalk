@@ -9,9 +9,9 @@ mod tests {
         RenderPiece, TemplateRenderPlan,
     };
     use crate::compiler_frontend::ast::templates::template_types::Template;
-    use crate::compiler_frontend::datatypes::Ownership;
     use crate::compiler_frontend::symbols::string_interning::StringTable;
     use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
+    use crate::compiler_frontend::value_mode::ValueMode;
     use std::rc::Rc;
 
     fn create_text_segment(
@@ -24,7 +24,7 @@ mod tests {
             Expression::string_slice(
                 interned,
                 SourceLocation::default(),
-                Ownership::ImmutableOwned,
+                ValueMode::ImmutableOwned,
             ),
             origin,
         )
@@ -142,7 +142,7 @@ mod tests {
         let expression = Expression::int(
             42,
             crate::compiler_frontend::tokenizer::tokens::SourceLocation::default(),
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         );
 
         content.add_with_origin(expression.clone(), TemplateSegmentOrigin::Body);

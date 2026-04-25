@@ -8,12 +8,13 @@ use crate::compiler_frontend::ast::ast_nodes::{
 };
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, HirBinOp, HirExpressionKind, HirModule, HirPlace, HirStatementKind, HirTerminator,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::value_mode::ValueMode;
 
 fn test_location(line: i32) -> SourceLocation {
     super::hir_expression_lowering_tests::location(line)
@@ -44,7 +45,7 @@ fn loop_binding(name: &str, data_type: DataType, string_table: &mut StringTable)
             ExpressionKind::NoValue,
             location,
             data_type,
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         ),
     }
 }
@@ -107,17 +108,17 @@ fn range_loop_cfg_blocks(module: &HirModule) -> (BlockId, BlockId, BlockId, Bloc
 fn collection_literal(location: SourceLocation) -> Expression {
     Expression::collection(
         vec![
-            Expression::int(1, location.clone(), Ownership::ImmutableOwned),
-            Expression::int(2, location.clone(), Ownership::ImmutableOwned),
-            Expression::int(3, location.clone(), Ownership::ImmutableOwned),
+            Expression::int(1, location.clone(), ValueMode::ImmutableOwned),
+            Expression::int(2, location.clone(), ValueMode::ImmutableOwned),
+            Expression::int(3, location.clone(), ValueMode::ImmutableOwned),
         ],
         location,
-        Ownership::ImmutableOwned,
+        ValueMode::ImmutableOwned,
     )
 }
 
 fn int_collection_type() -> DataType {
-    DataType::Collection(Box::new(DataType::Int), Ownership::ImmutableOwned)
+    DataType::Collection(Box::new(DataType::Int))
 }
 
 #[test]
@@ -133,8 +134,8 @@ fn lowers_range_loop_with_new_syntax() {
                 index: None,
             },
             range: range_loop_spec(
-                Expression::int(0, location.clone(), Ownership::ImmutableOwned),
-                Expression::int(3, location.clone(), Ownership::ImmutableOwned),
+                Expression::int(0, location.clone(), ValueMode::ImmutableOwned),
+                Expression::int(3, location.clone(), ValueMode::ImmutableOwned),
                 RangeEndKind::Exclusive,
                 None,
             ),
@@ -197,8 +198,8 @@ fn lowers_range_loop_without_user_bindings() {
                 index: None,
             },
             range: range_loop_spec(
-                Expression::int(0, location.clone(), Ownership::ImmutableOwned),
-                Expression::int(3, location.clone(), Ownership::ImmutableOwned),
+                Expression::int(0, location.clone(), ValueMode::ImmutableOwned),
+                Expression::int(3, location.clone(), ValueMode::ImmutableOwned),
                 RangeEndKind::Exclusive,
                 None,
             ),
@@ -246,8 +247,8 @@ fn lowers_range_loop_with_index_binding() {
                 index: Some(loop_binding("index", DataType::Int, &mut string_table)),
             },
             range: range_loop_spec(
-                Expression::int(0, location.clone(), Ownership::ImmutableOwned),
-                Expression::int(4, location.clone(), Ownership::ImmutableOwned),
+                Expression::int(0, location.clone(), ValueMode::ImmutableOwned),
+                Expression::int(4, location.clone(), ValueMode::ImmutableOwned),
                 RangeEndKind::Exclusive,
                 None,
             ),
@@ -323,7 +324,7 @@ fn preserves_runtime_zero_step_guard_for_dynamic_step() {
     let step_decl = node(
         NodeKind::VariableDeclaration(Declaration {
             id: step_symbol.clone(),
-            value: Expression::int(2, location.clone(), Ownership::ImmutableOwned),
+            value: Expression::int(2, location.clone(), ValueMode::ImmutableOwned),
         }),
         location.clone(),
     );
@@ -335,14 +336,14 @@ fn preserves_runtime_zero_step_guard_for_dynamic_step() {
                 index: None,
             },
             range: range_loop_spec(
-                Expression::int(0, location.clone(), Ownership::ImmutableOwned),
-                Expression::int(10, location.clone(), Ownership::ImmutableOwned),
+                Expression::int(0, location.clone(), ValueMode::ImmutableOwned),
+                Expression::int(10, location.clone(), ValueMode::ImmutableOwned),
                 RangeEndKind::Exclusive,
                 Some(Expression::reference(
                     step_symbol,
                     DataType::Int,
                     location.clone(),
-                    Ownership::ImmutableReference,
+                    ValueMode::ImmutableReference,
                 )),
             ),
             body: vec![],
@@ -391,22 +392,22 @@ fn range_loop_nested_if_body_routes_tail_to_step_block() {
                 index: None,
             },
             range: range_loop_spec(
-                Expression::int(0, location.clone(), Ownership::ImmutableOwned),
-                Expression::int(4, location.clone(), Ownership::ImmutableOwned),
+                Expression::int(0, location.clone(), ValueMode::ImmutableOwned),
+                Expression::int(4, location.clone(), ValueMode::ImmutableOwned),
                 RangeEndKind::Exclusive,
                 None,
             ),
             body: vec![
                 node(
                     NodeKind::If(
-                        Expression::bool(true, location.clone(), Ownership::ImmutableOwned),
+                        Expression::bool(true, location.clone(), ValueMode::ImmutableOwned),
                         vec![node(
                             NodeKind::VariableDeclaration(Declaration {
                                 id: branch_value,
                                 value: Expression::int(
                                     1,
                                     location.clone(),
-                                    Ownership::ImmutableOwned,
+                                    ValueMode::ImmutableOwned,
                                 ),
                             }),
                             location.clone(),
@@ -418,7 +419,7 @@ fn range_loop_nested_if_body_routes_tail_to_step_block() {
                 node(
                     NodeKind::VariableDeclaration(Declaration {
                         id: tail_value,
-                        value: Expression::int(2, location.clone(), Ownership::ImmutableOwned),
+                        value: Expression::int(2, location.clone(), ValueMode::ImmutableOwned),
                     }),
                     location.clone(),
                 ),
@@ -631,7 +632,7 @@ fn lowers_collection_loop_with_reference_typed_iterable_expression() {
                 items_symbol,
                 DataType::Reference(Box::new(int_collection_type())),
                 location.clone(),
-                Ownership::ImmutableReference,
+                ValueMode::ImmutableReference,
             ),
             body: vec![],
         },
@@ -803,8 +804,8 @@ fn lowers_range_loop_user_bindings_as_immutable_locals() {
                 index: Some(loop_binding("index", DataType::Int, &mut string_table)),
             },
             range: range_loop_spec(
-                Expression::int(0, location.clone(), Ownership::ImmutableOwned),
-                Expression::int(4, location.clone(), Ownership::ImmutableOwned),
+                Expression::int(0, location.clone(), ValueMode::ImmutableOwned),
+                Expression::int(4, location.clone(), ValueMode::ImmutableOwned),
                 RangeEndKind::Exclusive,
                 None,
             ),
@@ -903,7 +904,7 @@ fn break_targets_exit_block_in_collection_loop() {
             iterable: collection_literal(location.clone()),
             body: vec![node(
                 NodeKind::If(
-                    Expression::bool(true, location.clone(), Ownership::ImmutableOwned),
+                    Expression::bool(true, location.clone(), ValueMode::ImmutableOwned),
                     vec![node(NodeKind::Break, location.clone())],
                     None,
                 ),

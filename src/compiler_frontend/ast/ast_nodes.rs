@@ -15,10 +15,11 @@ use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::statements::match_patterns::MatchArm;
 use crate::compiler_frontend::builtins::{BuiltinMethodKind, CollectionBuiltinOp};
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringId;
 pub(crate) use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
+use crate::compiler_frontend::value_mode::ValueMode;
 use crate::return_compiler_error;
 
 #[derive(Debug, Clone)]
@@ -44,7 +45,7 @@ pub enum MultiBindTargetKind {
 pub struct MultiBindTarget {
     pub id: InternedPath,
     pub data_type: DataType,
-    pub ownership: Ownership,
+    pub value_mode: ValueMode,
     pub kind: MultiBindTargetKind,
     pub location: SourceLocation,
 }
@@ -122,10 +123,10 @@ pub enum NodeKind {
 
     // For simple field access: obj.field
     FieldAccess {
-        base: Box<AstNode>,   // The expression being accessed
-        field: StringId,      // The field name
-        data_type: DataType,  // Resolved type of this field access
-        ownership: Ownership, // Ownership of the resolved field
+        base: Box<AstNode>,    // The expression being accessed
+        field: StringId,       // The field name
+        data_type: DataType,   // Resolved type of this field access
+        value_mode: ValueMode, // ValueMode of the resolved field
     },
 
     // For method calls: obj.method(args)
@@ -247,13 +248,13 @@ impl AstNode {
 
             NodeKind::FieldAccess {
                 data_type,
-                ownership,
+                value_mode,
                 ..
             } => Ok(Expression::runtime(
                 vec![self.to_owned()],
                 data_type.to_owned(),
                 self.location.to_owned(),
-                ownership.to_owned(),
+                value_mode.to_owned(),
             )),
             NodeKind::MethodCall {
                 result_types,
@@ -268,7 +269,7 @@ impl AstNode {
                 vec![self.to_owned()],
                 Expression::call_result_type(result_types.to_owned()),
                 location.to_owned(),
-                Ownership::MutableOwned,
+                ValueMode::MutableOwned,
             )),
             // Compiler tried to get the expression of a node that cannot contain expressions
             _ => {

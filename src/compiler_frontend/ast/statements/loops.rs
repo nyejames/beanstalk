@@ -17,13 +17,14 @@ use crate::compiler_frontend::ast::function_body_to_ast;
 use crate::compiler_frontend::ast::statements::condition_validation::ensure_loop_condition;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::symbols::identifier_policy::{
     IdentifierNamingKind, ensure_not_keyword_shadow_identifier, naming_warning_for_identifier,
 };
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::token_scan::NestingDepth;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
+use crate::compiler_frontend::value_mode::ValueMode;
 use crate::{ast_log, return_syntax_error};
 
 const LOOP_PARSING_STAGE: &str = "Loop Parsing";
@@ -254,7 +255,7 @@ fn parse_non_range_loop_header(
     let full_expression = parse_expression_from_tokens(
         header_tokens,
         context,
-        &Ownership::ImmutableOwned,
+        &ValueMode::ImmutableOwned,
         string_table,
     );
 
@@ -522,7 +523,7 @@ fn parses_as_collection_iterable(
     let Ok(iterable_expression) = parse_expression_from_tokens(
         iterable_tokens,
         context,
-        &Ownership::ImmutableReference,
+        &ValueMode::ImmutableReference,
         string_table,
     ) else {
         return false;
@@ -610,7 +611,7 @@ fn parse_collection_iterable_from_tokens(
     let iterable = parse_expression_from_tokens(
         iterable_tokens,
         context,
-        &Ownership::ImmutableReference,
+        &ValueMode::ImmutableReference,
         string_table,
     )?;
 
@@ -647,7 +648,7 @@ fn parse_range_loop_spec_from_tokens(
             ExpressionKind::Int(0),
             location,
             DataType::Int,
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         )
     } else {
         let mut start_type = DataType::Inferred;
@@ -655,7 +656,7 @@ fn parse_range_loop_spec_from_tokens(
             &mut range_stream,
             context,
             &mut start_type,
-            &Ownership::ImmutableReference,
+            &ValueMode::ImmutableReference,
             &[TokenKind::ExclusiveRange, TokenKind::Eof],
             string_table,
         )?
@@ -712,7 +713,7 @@ fn parse_range_loop_spec_from_tokens(
         &mut range_stream,
         context,
         &mut end_type,
-        &Ownership::ImmutableReference,
+        &ValueMode::ImmutableReference,
         &[TokenKind::By, TokenKind::Eof],
         string_table,
     )?;
@@ -737,7 +738,7 @@ fn parse_range_loop_spec_from_tokens(
             &mut range_stream,
             context,
             &mut step_type,
-            &Ownership::ImmutableReference,
+            &ValueMode::ImmutableReference,
             &[TokenKind::Eof],
             string_table,
         )?)
@@ -939,7 +940,7 @@ fn declare_loop_binding(
             ExpressionKind::NoValue,
             name.location.clone(),
             data_type,
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         ),
     };
 
@@ -950,7 +951,7 @@ fn declare_loop_binding(
 fn parse_expression_from_tokens(
     expression_tokens: &[Token],
     context: &ScopeContext,
-    ownership: &Ownership,
+    value_mode: &ValueMode,
     string_table: &mut StringTable,
 ) -> Result<Expression, CompilerError> {
     let mut scoped_stream = token_stream_with_eof(expression_tokens)?;
@@ -960,7 +961,7 @@ fn parse_expression_from_tokens(
         &mut scoped_stream,
         context,
         &mut inferred_type,
-        ownership,
+        value_mode,
         false,
         string_table,
     )
@@ -989,7 +990,7 @@ fn token_stream_with_eof(tokens: &[Token]) -> Result<FileTokens, CompilerError> 
 
 fn collection_element_type(data_type: &DataType) -> Option<DataType> {
     match data_type {
-        DataType::Collection(inner, _) => Some((**inner).clone()),
+        DataType::Collection(inner) => Some((**inner).clone()),
         DataType::Reference(inner) => collection_element_type(inner),
         _ => None,
     }

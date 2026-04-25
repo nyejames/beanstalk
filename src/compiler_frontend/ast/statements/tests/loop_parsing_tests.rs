@@ -137,7 +137,7 @@ fn parses_collection_loop_with_pipe_item_binding() {
     assert!(matches!(iterable.kind, ExpressionKind::Reference(_)));
     assert!(matches!(
         iterable.data_type,
-        DataType::Collection(_, _) | DataType::Reference(_)
+        DataType::Collection(_) | DataType::Reference(_)
     ));
     assert_eq!(loop_body.len(), 1);
 }

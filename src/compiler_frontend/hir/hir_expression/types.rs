@@ -48,7 +48,7 @@ impl<'a> HirBuilder<'a> {
             DataType::Range => HirTypeKind::Range,
             DataType::None => HirTypeKind::Unit,
 
-            DataType::Collection(inner, _) => HirTypeKind::Collection {
+            DataType::Collection(inner) => HirTypeKind::Collection {
                 element: self.lower_data_type(inner, location)?,
             },
 

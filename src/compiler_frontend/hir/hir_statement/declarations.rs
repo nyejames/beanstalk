@@ -372,7 +372,7 @@ impl<'a> HirBuilder<'a> {
             let local_id = self.allocate_named_local(
                 param.id.to_owned(),
                 param_type,
-                param.value.ownership.is_mutable(),
+                param.value.value_mode.is_mutable(),
                 Some(param_location.clone()),
             )?;
 
@@ -398,7 +398,7 @@ impl<'a> HirBuilder<'a> {
         let local_id = self.allocate_named_local(
             variable.id.to_owned(),
             local_type,
-            variable.value.ownership.is_mutable(),
+            variable.value.value_mode.is_mutable(),
             Some(source_location),
         )?;
 

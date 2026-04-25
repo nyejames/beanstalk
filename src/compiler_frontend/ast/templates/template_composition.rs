@@ -14,8 +14,8 @@ use crate::compiler_frontend::ast::templates::template::{
 use crate::compiler_frontend::ast::templates::template_slots::compose_template_with_slots;
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::datatypes::Ownership;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::value_mode::ValueMode;
 use std::rc::Rc;
 
 // -------------------------
@@ -100,7 +100,7 @@ fn wrap_atom_in_child_template(
                 TemplateAtom::Content(TemplateSegment::new(
                     Expression::template(
                         wrapper.clone_for_composition(),
-                        Ownership::ImmutableOwned,
+                        ValueMode::ImmutableOwned,
                     ),
                     TemplateSegmentOrigin::Body,
                 )),
@@ -112,7 +112,7 @@ fn wrap_atom_in_child_template(
     };
 
     Ok(TemplateAtom::Content(TemplateSegment::new(
-        Expression::template(wrapped_template, Ownership::ImmutableOwned),
+        Expression::template(wrapped_template, ValueMode::ImmutableOwned),
         origin,
     )))
 }
@@ -335,7 +335,7 @@ fn resolve_pending_chain_items(
                 atoms.push(TemplateAtom::Content(TemplateSegment::new(
                     Expression::template(
                         resolved_layer.as_ref().clone_for_composition(),
-                        Ownership::ImmutableOwned,
+                        ValueMode::ImmutableOwned,
                     ),
                     *origin,
                 )));

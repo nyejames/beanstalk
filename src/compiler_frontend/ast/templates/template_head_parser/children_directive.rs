@@ -15,9 +15,10 @@ use crate::compiler_frontend::ast::expressions::parse_expression::create_express
 use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::compiler_frontend::value_mode::ValueMode;
 use crate::return_syntax_error;
 
 /// Parses the `$children(template_or_string)` directive which specifies a
@@ -56,7 +57,7 @@ pub(super) fn parse_children_style_directive(
         token_stream,
         context,
         &mut DataType::Inferred,
-        &Ownership::ImmutableOwned,
+        &ValueMode::ImmutableOwned,
         false,
         string_table,
     )?;
@@ -109,7 +110,7 @@ pub(super) fn parse_children_style_directive(
             wrapper.content.add(Expression::string_slice(
                 value,
                 argument_location,
-                Ownership::ImmutableOwned,
+                ValueMode::ImmutableOwned,
             ));
             wrapper.resync_composition_metadata();
             wrapper

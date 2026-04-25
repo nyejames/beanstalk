@@ -14,13 +14,14 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::style_directives::{
     StyleDirectiveArgumentType, StyleDirectiveArgumentValue, StyleDirectiveEffects,
     StyleDirectiveHandlerSpec,
 };
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
+use crate::compiler_frontend::value_mode::ValueMode;
 use crate::return_syntax_error;
 
 #[derive(Clone)]
@@ -125,7 +126,7 @@ fn parse_optional_handler_style_argument(
         token_stream,
         context,
         &mut inferred,
-        &Ownership::ImmutableOwned,
+        &ValueMode::ImmutableOwned,
         false,
         string_table,
     )?;

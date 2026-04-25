@@ -11,7 +11,7 @@ use crate::compiler_frontend::ast::expressions::parse_expression::{
 };
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::type_coercion::compatibility::is_numeric_coercible;
@@ -20,6 +20,7 @@ use crate::compiler_frontend::type_coercion::diagnostics::{
     should_report_regular_division_int_context,
 };
 use crate::compiler_frontend::type_coercion::numeric::coerce_expression_to_return_type;
+use crate::compiler_frontend::value_mode::ValueMode;
 use crate::{return_rule_error, return_type_error};
 
 fn is_return_terminator(token: &TokenKind) -> bool {
@@ -79,7 +80,7 @@ pub(crate) fn parse_return_statement(
             token_stream,
             context,
             &mut expected_error,
-            &Ownership::ImmutableOwned,
+            &ValueMode::ImmutableOwned,
             false,
             string_table,
         )?;

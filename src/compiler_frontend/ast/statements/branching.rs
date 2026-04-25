@@ -21,10 +21,11 @@ use crate::compiler_frontend::ast::statements::match_patterns::{
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::deferred_feature_diagnostics::deferred_feature_rule_error;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
+use crate::compiler_frontend::value_mode::ValueMode;
 use crate::{ast_log, return_rule_error, return_syntax_error};
 use rustc_hash::FxHashSet;
 
@@ -54,7 +55,7 @@ pub fn create_branch(
         token_stream,
         &context.new_child_control_flow(ContextKind::Condition, string_table),
         &mut condition_type,
-        &Ownership::ImmutableOwned,
+        &ValueMode::ImmutableOwned,
         false,
         string_table,
     )?;
@@ -382,7 +383,7 @@ fn parse_match_guard(
         token_stream,
         &match_context.new_child_control_flow(ContextKind::Condition, string_table),
         &mut guard_type,
-        &Ownership::ImmutableOwned,
+        &ValueMode::ImmutableOwned,
         &[TokenKind::FatArrow],
         string_table,
     )?;

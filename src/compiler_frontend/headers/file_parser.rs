@@ -9,7 +9,7 @@ use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::headers::const_fragments::create_top_level_const_template;
 use crate::compiler_frontend::headers::header_dispatch::create_header;
 use crate::compiler_frontend::headers::imports::normalize_import_dependency_path;
@@ -24,6 +24,7 @@ use crate::compiler_frontend::reserved_trait_syntax::{
 };
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
+use crate::compiler_frontend::value_mode::ValueMode;
 use crate::projects::settings::{
     MINIMUM_LIKELY_DECLARATIONS, TOKEN_TO_DECLARATION_RATIO, TOKEN_TO_HEADER_RATIO,
 };
@@ -470,6 +471,6 @@ fn header_constant_placeholder_declaration(
 ) -> Declaration {
     Declaration {
         id,
-        value: Expression::no_value(location, DataType::Inferred, Ownership::ImmutableOwned),
+        value: Expression::no_value(location, DataType::Inferred, ValueMode::ImmutableOwned),
     }
 }

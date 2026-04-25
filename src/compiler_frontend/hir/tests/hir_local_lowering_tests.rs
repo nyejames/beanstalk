@@ -7,7 +7,7 @@ use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, CallArgument};
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::hir::hir_nodes::{
     HirExpressionKind, HirStatementKind, HirTerminator,
 };
@@ -15,6 +15,7 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::test_support::{
     fresh_returns, function_node, make_test_variable, node, param, test_location,
 };
+use crate::compiler_frontend::value_mode::ValueMode;
 
 use crate::compiler_frontend::hir::hir_builder::{build_ast, lower_ast};
 
@@ -29,7 +30,7 @@ fn allocates_parameter_locals_and_binds_names() {
             x.clone(),
             DataType::Int,
             test_location(3),
-            Ownership::ImmutableReference,
+            ValueMode::ImmutableReference,
         )]),
         test_location(3),
     )];
@@ -75,7 +76,7 @@ fn variable_declaration_emits_local_and_assign_statement() {
         vec![node(
             NodeKind::VariableDeclaration(make_test_variable(
                 x,
-                Expression::int(42, test_location(4), Ownership::ImmutableOwned),
+                Expression::int(42, test_location(4), ValueMode::ImmutableOwned),
             )),
             test_location(4),
         )],
@@ -113,14 +114,14 @@ fn duplicate_local_declarations_in_same_scope_fail() {
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     var_name.clone(),
-                    Expression::int(1, test_location(2), Ownership::ImmutableOwned),
+                    Expression::int(1, test_location(2), ValueMode::ImmutableOwned),
                 )),
                 test_location(2),
             ),
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     var_name.clone(),
-                    Expression::int(2, test_location(3), Ownership::ImmutableOwned),
+                    Expression::int(2, test_location(3), ValueMode::ImmutableOwned),
                 )),
                 test_location(3),
             ),
@@ -153,7 +154,7 @@ fn assignment_lowers_value_prelude_before_assign() {
             NodeKind::Return(vec![Expression::int(
                 1,
                 test_location(1),
-                Ownership::ImmutableOwned,
+                ValueMode::ImmutableOwned,
             )]),
             test_location(1),
         )],
@@ -165,7 +166,7 @@ fn assignment_lowers_value_prelude_before_assign() {
             x.clone(),
             DataType::Int,
             test_location(5),
-            Ownership::MutableReference,
+            ValueMode::MutableReference,
         )),
         test_location(5),
     );
@@ -235,7 +236,7 @@ fn call_statements_emit_without_result_binding() {
             NodeKind::Return(vec![Expression::int(
                 9,
                 test_location(1),
-                Ownership::ImmutableOwned,
+                ValueMode::ImmutableOwned,
             )]),
             test_location(1),
         )],
@@ -262,7 +263,7 @@ fn call_statements_emit_without_result_binding() {
                 NodeKind::HostFunctionCall {
                     name: alloc,
                     args: vec![CallArgument::positional(
-                        Expression::int(1, test_location(3), Ownership::ImmutableOwned),
+                        Expression::int(1, test_location(3), ValueMode::ImmutableOwned),
                         CallAccessMode::Shared,
                         test_location(3),
                     )],
@@ -320,7 +321,7 @@ fn return_lowering_handles_zero_one_and_many_values() {
             NodeKind::Return(vec![Expression::int(
                 8,
                 test_location(2),
-                Ownership::ImmutableOwned,
+                ValueMode::ImmutableOwned,
             )]),
             test_location(2),
         )],
@@ -335,8 +336,8 @@ fn return_lowering_handles_zero_one_and_many_values() {
         },
         vec![node(
             NodeKind::Return(vec![
-                Expression::int(1, test_location(3), Ownership::ImmutableOwned),
-                Expression::bool(true, test_location(3), Ownership::ImmutableOwned),
+                Expression::int(1, test_location(3), ValueMode::ImmutableOwned),
+                Expression::bool(true, test_location(3), ValueMode::ImmutableOwned),
             ]),
             test_location(3),
         )],

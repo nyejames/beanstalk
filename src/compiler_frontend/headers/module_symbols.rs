@@ -26,11 +26,12 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnSlot,
 };
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::declaration_syntax::declaration_shell::DeclarationSyntax;
 use crate::compiler_frontend::headers::parse_file_headers::{FileImport, Header, HeaderKind};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::value_mode::ValueMode;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -128,7 +129,7 @@ fn declaration_from_header(header: &Header, string_table: &mut StringTable) -> O
                 ExpressionKind::NoValue,
                 header.name_location.to_owned(),
                 DataType::Function(Box::new(None), signature.to_owned()),
-                Ownership::ImmutableReference,
+                ValueMode::ImmutableReference,
             ),
         }),
         HeaderKind::Constant { declaration } => Some(constant_declaration_placeholder(
@@ -141,12 +142,8 @@ fn declaration_from_header(header: &Header, string_table: &mut StringTable) -> O
             value: Expression::new(
                 ExpressionKind::NoValue,
                 header.name_location.to_owned(),
-                DataType::runtime_struct(
-                    header.tokens.src_path.to_owned(),
-                    fields.to_owned(),
-                    Ownership::MutableOwned,
-                ),
-                Ownership::ImmutableReference,
+                DataType::runtime_struct(header.tokens.src_path.to_owned(), fields.to_owned()),
+                ValueMode::ImmutableReference,
             ),
         }),
         HeaderKind::Choice { variants } => Some(Declaration {
@@ -158,7 +155,7 @@ fn declaration_from_header(header: &Header, string_table: &mut StringTable) -> O
                     nominal_path: header.tokens.src_path.to_owned(),
                     variants: variants.to_owned(),
                 },
-                Ownership::ImmutableReference,
+                ValueMode::ImmutableReference,
             ),
         }),
         HeaderKind::StartFunction => {
@@ -175,14 +172,11 @@ fn declaration_from_header(header: &Header, string_table: &mut StringTable) -> O
                         FunctionSignature {
                             parameters: vec![],
                             returns: vec![ReturnSlot::success(FunctionReturn::Value(
-                                DataType::Collection(
-                                    Box::new(DataType::StringSlice),
-                                    Ownership::MutableOwned,
-                                ),
+                                DataType::Collection(Box::new(DataType::StringSlice)),
                             ))],
                         },
                     ),
-                    Ownership::ImmutableReference,
+                    ValueMode::ImmutableReference,
                 ),
             })
         }
@@ -195,19 +189,13 @@ fn constant_declaration_placeholder(
     declaration: &DeclarationSyntax,
     location: &crate::compiler_frontend::tokenizer::tokens::SourceLocation,
 ) -> Declaration {
-    let ownership = if declaration.mutable_marker {
-        Ownership::MutableOwned
-    } else {
-        Ownership::ImmutableOwned
-    };
-
     Declaration {
         id: path.to_owned(),
         value: Expression::new(
             ExpressionKind::NoValue,
             location.to_owned(),
-            declaration.to_data_type(&ownership),
-            ownership,
+            declaration.semantic_type(),
+            declaration.value_mode(),
         ),
     }
 }

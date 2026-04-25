@@ -47,11 +47,12 @@ use crate::compiler_frontend::ast::templates::template::TemplateConstValueKind;
 use crate::compiler_frontend::ast::templates::template::{TemplateAtom, TemplateType};
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::value_mode::ValueMode;
 
 impl<'a> AstBuildState<'a> {
     /// Normalizes all templates in the AST for HIR consumption.
@@ -891,7 +892,7 @@ fn normalize_expression_templates_with_context(
     if let Some(folded_template) = folded_template {
         expression.kind = ExpressionKind::StringSlice(folded_template);
         expression.data_type = DataType::StringSlice;
-        expression.ownership = Ownership::ImmutableOwned;
+        expression.value_mode = ValueMode::ImmutableOwned;
     }
 
     Ok(())

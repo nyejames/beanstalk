@@ -10,7 +10,7 @@ use crate::compiler_frontend::ast::statements::match_patterns::{
     MatchArm, MatchPattern, RelationalPatternOp,
 };
 use crate::compiler_frontend::compiler_errors::ErrorType;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant;
 use crate::compiler_frontend::hir::hir_nodes::{
     ChoiceId, HirExpressionKind, HirPattern, HirTerminator, ValueKind,
@@ -20,6 +20,7 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::test_support::{
     fresh_returns, function_node, make_test_variable, node, param, test_location,
 };
+use crate::compiler_frontend::value_mode::ValueMode;
 
 use crate::compiler_frontend::hir::hir_builder::{
     assert_no_placeholder_terminators, build_ast, lower_ast,
@@ -44,20 +45,20 @@ fn non_unit_function_with_terminal_match_default_does_not_report_fallthrough() {
                     x,
                     DataType::Int,
                     test_location(11),
-                    Ownership::ImmutableReference,
+                    ValueMode::ImmutableReference,
                 ),
                 vec![MatchArm {
                     pattern: MatchPattern::Literal(Expression::int(
                         1,
                         test_location(11),
-                        Ownership::ImmutableOwned,
+                        ValueMode::ImmutableOwned,
                     )),
                     guard: None,
                     body: vec![node(
                         NodeKind::Return(vec![Expression::int(
                             1,
                             test_location(11),
-                            Ownership::ImmutableOwned,
+                            ValueMode::ImmutableOwned,
                         )]),
                         test_location(11),
                     )],
@@ -66,7 +67,7 @@ fn non_unit_function_with_terminal_match_default_does_not_report_fallthrough() {
                     NodeKind::Return(vec![Expression::int(
                         2,
                         test_location(12),
-                        Ownership::ImmutableOwned,
+                        ValueMode::ImmutableOwned,
                     )]),
                     test_location(12),
                 )]),
@@ -110,21 +111,21 @@ fn lowers_match_with_literal_arms_and_synthesized_wildcard_default() {
                 x.clone(),
                 DataType::Int,
                 test_location(3),
-                Ownership::ImmutableReference,
+                ValueMode::ImmutableReference,
             ),
             vec![
                 MatchArm {
                     pattern: MatchPattern::Literal(Expression::int(
                         1,
                         test_location(3),
-                        Ownership::ImmutableOwned,
+                        ValueMode::ImmutableOwned,
                     )),
                     guard: None,
                     body: vec![node(
                         NodeKind::Rvalue(Expression::int(
                             9,
                             test_location(3),
-                            Ownership::ImmutableOwned,
+                            ValueMode::ImmutableOwned,
                         )),
                         test_location(3),
                     )],
@@ -133,14 +134,14 @@ fn lowers_match_with_literal_arms_and_synthesized_wildcard_default() {
                     pattern: MatchPattern::Literal(Expression::int(
                         2,
                         test_location(3),
-                        Ownership::ImmutableOwned,
+                        ValueMode::ImmutableOwned,
                     )),
                     guard: None,
                     body: vec![node(
                         NodeKind::Rvalue(Expression::int(
                             8,
                             test_location(3),
-                            Ownership::ImmutableOwned,
+                            ValueMode::ImmutableOwned,
                         )),
                         test_location(3),
                     )],
@@ -190,24 +191,24 @@ fn lowers_match_with_guarded_arm_into_hir_guard_expression() {
                 x.clone(),
                 DataType::Int,
                 test_location(3),
-                Ownership::ImmutableReference,
+                ValueMode::ImmutableReference,
             ),
             vec![MatchArm {
                 pattern: MatchPattern::Literal(Expression::int(
                     1,
                     test_location(3),
-                    Ownership::ImmutableOwned,
+                    ValueMode::ImmutableOwned,
                 )),
                 guard: Some(Expression::bool(
                     true,
                     test_location(3),
-                    Ownership::ImmutableOwned,
+                    ValueMode::ImmutableOwned,
                 )),
                 body: vec![node(
                     NodeKind::Rvalue(Expression::int(
                         9,
                         test_location(3),
-                        Ownership::ImmutableOwned,
+                        ValueMode::ImmutableOwned,
                     )),
                     test_location(3),
                 )],
@@ -216,7 +217,7 @@ fn lowers_match_with_guarded_arm_into_hir_guard_expression() {
                 NodeKind::Rvalue(Expression::int(
                     8,
                     test_location(4),
-                    Ownership::ImmutableOwned,
+                    ValueMode::ImmutableOwned,
                 )),
                 test_location(4),
             )]),
@@ -265,14 +266,14 @@ fn match_guard_rejects_lowering_when_guard_emits_prelude_statements() {
         pattern: MatchPattern::Literal(Expression::int(
             1,
             test_location(3),
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         )),
         guard: Some(Expression::host_function_call(
             io_path,
             vec![Expression::bool(
                 true,
                 test_location(3),
-                Ownership::ImmutableOwned,
+                ValueMode::ImmutableOwned,
             )],
             vec![DataType::None],
             test_location(3),
@@ -292,7 +293,7 @@ fn match_guard_rejects_lowering_when_guard_emits_prelude_statements() {
                     x,
                     DataType::Int,
                     test_location(3),
-                    Ownership::ImmutableReference,
+                    ValueMode::ImmutableReference,
                 ),
                 vec![guarded_arm],
                 Some(vec![]),
@@ -334,14 +335,14 @@ fn match_rejects_non_literal_pattern_expressions() {
                     x.clone(),
                     DataType::Int,
                     test_location(3),
-                    Ownership::ImmutableReference,
+                    ValueMode::ImmutableReference,
                 ),
                 vec![MatchArm {
                     pattern: MatchPattern::Literal(Expression::reference(
                         x,
                         DataType::Int,
                         test_location(3),
-                        Ownership::ImmutableReference,
+                        ValueMode::ImmutableReference,
                     )),
                     guard: None,
                     body: vec![],
@@ -490,7 +491,7 @@ fn side_table_maps_statement_and_terminator_locations() {
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     x,
-                    Expression::int(1, decl_loc.clone(), Ownership::ImmutableOwned),
+                    Expression::int(1, decl_loc.clone(), ValueMode::ImmutableOwned),
                 )),
                 decl_loc.clone(),
             ),
@@ -521,12 +522,12 @@ fn lowers_relational_pattern_to_hir_relational() {
                 x.clone(),
                 DataType::Int,
                 test_location(3),
-                Ownership::ImmutableReference,
+                ValueMode::ImmutableReference,
             ),
             vec![MatchArm {
                 pattern: MatchPattern::Relational {
                     op: RelationalPatternOp::LessThan,
-                    value: Expression::int(10, test_location(3), Ownership::ImmutableOwned),
+                    value: Expression::int(10, test_location(3), ValueMode::ImmutableOwned),
                     location: test_location(3),
                 },
                 guard: None,
@@ -534,7 +535,7 @@ fn lowers_relational_pattern_to_hir_relational() {
                     NodeKind::Rvalue(Expression::int(
                         9,
                         test_location(3),
-                        Ownership::ImmutableOwned,
+                        ValueMode::ImmutableOwned,
                     )),
                     test_location(3),
                 )],
@@ -543,7 +544,7 @@ fn lowers_relational_pattern_to_hir_relational() {
                 NodeKind::Rvalue(Expression::int(
                     8,
                     test_location(4),
-                    Ownership::ImmutableOwned,
+                    ValueMode::ImmutableOwned,
                 )),
                 test_location(4),
             )]),
@@ -605,24 +606,24 @@ fn lowers_guarded_relational_pattern_preserving_guard_separation() {
                 x.clone(),
                 DataType::Int,
                 test_location(3),
-                Ownership::ImmutableReference,
+                ValueMode::ImmutableReference,
             ),
             vec![MatchArm {
                 pattern: MatchPattern::Relational {
                     op: RelationalPatternOp::LessThan,
-                    value: Expression::int(10, test_location(3), Ownership::ImmutableOwned),
+                    value: Expression::int(10, test_location(3), ValueMode::ImmutableOwned),
                     location: test_location(3),
                 },
                 guard: Some(Expression::bool(
                     true,
                     test_location(3),
-                    Ownership::ImmutableOwned,
+                    ValueMode::ImmutableOwned,
                 )),
                 body: vec![node(
                     NodeKind::Rvalue(Expression::int(
                         9,
                         test_location(3),
-                        Ownership::ImmutableOwned,
+                        ValueMode::ImmutableOwned,
                     )),
                     test_location(3),
                 )],
@@ -631,7 +632,7 @@ fn lowers_guarded_relational_pattern_preserving_guard_separation() {
                 NodeKind::Rvalue(Expression::int(
                     8,
                     test_location(4),
-                    Ownership::ImmutableOwned,
+                    ValueMode::ImmutableOwned,
                 )),
                 test_location(4),
             )]),
@@ -707,7 +708,7 @@ fn lowers_choice_match_arms_to_hir_choice_variant_patterns() {
                 status_local.clone(),
                 choice_type.clone(),
                 test_location(3),
-                Ownership::ImmutableOwned,
+                ValueMode::ImmutableOwned,
             ),
             vec![
                 MatchArm {
@@ -722,7 +723,7 @@ fn lowers_choice_match_arms_to_hir_choice_variant_patterns() {
                         NodeKind::Rvalue(Expression::int(
                             1,
                             test_location(4),
-                            Ownership::ImmutableOwned,
+                            ValueMode::ImmutableOwned,
                         )),
                         test_location(4),
                     )],
@@ -739,7 +740,7 @@ fn lowers_choice_match_arms_to_hir_choice_variant_patterns() {
                         NodeKind::Rvalue(Expression::int(
                             2,
                             test_location(5),
-                            Ownership::ImmutableOwned,
+                            ValueMode::ImmutableOwned,
                         )),
                         test_location(5),
                     )],

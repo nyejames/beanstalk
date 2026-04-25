@@ -8,7 +8,7 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, ResultC
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnSlot,
 };
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::hir::hir_nodes::{
     HirExpressionKind, HirStatementKind, HirTerminator,
 };
@@ -16,6 +16,7 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::test_support::{
     fresh_returns, function_node, node, test_location,
 };
+use crate::compiler_frontend::value_mode::ValueMode;
 
 use crate::compiler_frontend::hir::hir_builder::{build_ast, lower_ast};
 
@@ -38,7 +39,7 @@ fn statement_result_propagation_with_unit_success_emits_runtime_propagate_expres
             NodeKind::ReturnError(Expression::string_slice(
                 string_table.intern("boom"),
                 location.clone(),
-                Ownership::ImmutableOwned,
+                ValueMode::ImmutableOwned,
             )),
             location.clone(),
         )],
@@ -117,7 +118,7 @@ fn statement_named_handler_lowering_builds_explicit_result_branching() {
             NodeKind::ReturnError(Expression::string_slice(
                 string_table.intern("boom"),
                 location.clone(),
-                Ownership::ImmutableOwned,
+                ValueMode::ImmutableOwned,
             )),
             location.clone(),
         )],
@@ -141,7 +142,7 @@ fn statement_named_handler_lowering_builds_explicit_result_branching() {
                     fallback: Some(vec![Expression::string_slice(
                         string_table.intern("fallback"),
                         location.clone(),
-                        Ownership::ImmutableOwned,
+                        ValueMode::ImmutableOwned,
                     )]),
                     body: vec![],
                 },
@@ -210,11 +211,11 @@ fn multi_bind_lowering_projects_tuple_slots_from_single_rhs_call() {
         },
         vec![node(
             NodeKind::Return(vec![
-                Expression::int(1, location.clone(), Ownership::ImmutableOwned),
+                Expression::int(1, location.clone(), ValueMode::ImmutableOwned),
                 Expression::string_slice(
                     string_table.intern("value"),
                     location.clone(),
-                    Ownership::ImmutableOwned,
+                    ValueMode::ImmutableOwned,
                 ),
             ]),
             location.clone(),
@@ -237,14 +238,14 @@ fn multi_bind_lowering_projects_tuple_slots_from_single_rhs_call() {
                     MultiBindTarget {
                         id: left_id,
                         data_type: DataType::Int,
-                        ownership: Ownership::ImmutableOwned,
+                        value_mode: ValueMode::ImmutableOwned,
                         kind: MultiBindTargetKind::Declaration,
                         location: location.clone(),
                     },
                     MultiBindTarget {
                         id: right_id,
                         data_type: DataType::StringSlice,
-                        ownership: Ownership::ImmutableOwned,
+                        value_mode: ValueMode::ImmutableOwned,
                         kind: MultiBindTargetKind::Declaration,
                         location: location.clone(),
                     },

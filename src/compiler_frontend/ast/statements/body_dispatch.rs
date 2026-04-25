@@ -18,7 +18,6 @@ use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorMetaDataKey};
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
-use crate::compiler_frontend::datatypes::Ownership;
 use crate::compiler_frontend::deferred_feature_diagnostics::deferred_feature_rule_error;
 use crate::compiler_frontend::reserved_trait_syntax::{
     reserved_trait_keyword_error, reserved_trait_keyword_or_dispatch_mismatch,
@@ -26,6 +25,7 @@ use crate::compiler_frontend::reserved_trait_syntax::{
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::syntax_errors::statement_position::check_statement_common_mistake;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::compiler_frontend::value_mode::ValueMode;
 use crate::projects::settings;
 use crate::{ast_log, return_rule_error, return_syntax_error};
 
@@ -434,7 +434,7 @@ pub(crate) fn parse_function_body_statements(
                 }
 
                 let template = Template::new(token_stream, &context, vec![], string_table)?;
-                let expr = Expression::template(template, Ownership::MutableOwned);
+                let expr = Expression::template(template, ValueMode::MutableOwned);
                 let location = token_stream.current_location();
 
                 ast.push(AstNode {

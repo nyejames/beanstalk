@@ -13,12 +13,12 @@ fn evaluate_operator_concatenates_string_literals() {
     let lhs = Expression::string_slice(
         string_table.intern("bean"),
         Default::default(),
-        Ownership::ImmutableOwned,
+        ValueMode::ImmutableOwned,
     );
     let rhs = Expression::string_slice(
         string_table.intern("stalk"),
         Default::default(),
-        Ownership::ImmutableOwned,
+        ValueMode::ImmutableOwned,
     );
 
     let result = lhs
@@ -36,8 +36,8 @@ fn evaluate_operator_concatenates_string_literals() {
 #[test]
 fn evaluate_operator_promotes_negative_integer_exponent_to_float() {
     let mut string_table = StringTable::new();
-    let lhs = Expression::int(2, Default::default(), Ownership::ImmutableOwned);
-    let rhs = Expression::int(-1, Default::default(), Ownership::ImmutableOwned);
+    let lhs = Expression::int(2, Default::default(), ValueMode::ImmutableOwned);
+    let rhs = Expression::int(-1, Default::default(), ValueMode::ImmutableOwned);
 
     let result = lhs
         .evaluate_operator(&rhs, &Operator::Exponent, &mut string_table)
@@ -54,8 +54,8 @@ fn evaluate_operator_promotes_negative_integer_exponent_to_float() {
 #[test]
 fn evaluate_operator_returns_none_for_mismatched_constant_types() {
     let mut string_table = StringTable::new();
-    let lhs = Expression::int(2, Default::default(), Ownership::ImmutableOwned);
-    let rhs = Expression::bool(true, Default::default(), Ownership::ImmutableOwned);
+    let lhs = Expression::int(2, Default::default(), ValueMode::ImmutableOwned);
+    let rhs = Expression::bool(true, Default::default(), ValueMode::ImmutableOwned);
 
     let result = lhs
         .evaluate_operator(&rhs, &Operator::Add, &mut string_table)
@@ -67,8 +67,8 @@ fn evaluate_operator_returns_none_for_mismatched_constant_types() {
 #[test]
 fn evaluate_operator_divides_ints_to_float() {
     let mut string_table = StringTable::new();
-    let lhs = Expression::int(5, Default::default(), Ownership::ImmutableOwned);
-    let rhs = Expression::int(2, Default::default(), Ownership::ImmutableOwned);
+    let lhs = Expression::int(5, Default::default(), ValueMode::ImmutableOwned);
+    let rhs = Expression::int(2, Default::default(), ValueMode::ImmutableOwned);
 
     let result = lhs
         .evaluate_operator(&rhs, &Operator::Divide, &mut string_table)
@@ -89,8 +89,8 @@ fn evaluate_operator_divides_ints_to_float() {
 #[test]
 fn evaluate_operator_integer_division_truncates_toward_zero() {
     let mut string_table = StringTable::new();
-    let lhs = Expression::int(-5, Default::default(), Ownership::ImmutableOwned);
-    let rhs = Expression::int(2, Default::default(), Ownership::ImmutableOwned);
+    let lhs = Expression::int(-5, Default::default(), ValueMode::ImmutableOwned);
+    let rhs = Expression::int(2, Default::default(), ValueMode::ImmutableOwned);
 
     let result = lhs
         .evaluate_operator(&rhs, &Operator::IntDivide, &mut string_table)
@@ -104,8 +104,8 @@ fn evaluate_operator_integer_division_truncates_toward_zero() {
 #[test]
 fn evaluate_operator_rejects_divide_by_zero_for_both_division_operators() {
     let mut string_table = StringTable::new();
-    let lhs = Expression::int(5, Default::default(), Ownership::ImmutableOwned);
-    let zero = Expression::int(0, Default::default(), Ownership::ImmutableOwned);
+    let lhs = Expression::int(5, Default::default(), ValueMode::ImmutableOwned);
+    let zero = Expression::int(0, Default::default(), ValueMode::ImmutableOwned);
 
     let divide_error = lhs
         .evaluate_operator(&zero, &Operator::Divide, &mut string_table)
@@ -121,8 +121,8 @@ fn evaluate_operator_rejects_divide_by_zero_for_both_division_operators() {
 #[test]
 fn evaluate_operator_rejects_integer_add_overflow() {
     let mut string_table = StringTable::new();
-    let lhs = Expression::int(i64::MAX, Default::default(), Ownership::ImmutableOwned);
-    let rhs = Expression::int(1, Default::default(), Ownership::ImmutableOwned);
+    let lhs = Expression::int(i64::MAX, Default::default(), ValueMode::ImmutableOwned);
+    let rhs = Expression::int(1, Default::default(), ValueMode::ImmutableOwned);
 
     let error = lhs
         .evaluate_operator(&rhs, &Operator::Add, &mut string_table)
@@ -134,8 +134,8 @@ fn evaluate_operator_rejects_integer_add_overflow() {
 #[test]
 fn evaluate_operator_rejects_integer_subtract_overflow() {
     let mut string_table = StringTable::new();
-    let lhs = Expression::int(i64::MIN, Default::default(), Ownership::ImmutableOwned);
-    let rhs = Expression::int(1, Default::default(), Ownership::ImmutableOwned);
+    let lhs = Expression::int(i64::MIN, Default::default(), ValueMode::ImmutableOwned);
+    let rhs = Expression::int(1, Default::default(), ValueMode::ImmutableOwned);
 
     let error = lhs
         .evaluate_operator(&rhs, &Operator::Subtract, &mut string_table)
@@ -147,8 +147,8 @@ fn evaluate_operator_rejects_integer_subtract_overflow() {
 #[test]
 fn evaluate_operator_rejects_integer_multiply_overflow() {
     let mut string_table = StringTable::new();
-    let lhs = Expression::int(i64::MAX, Default::default(), Ownership::ImmutableOwned);
-    let rhs = Expression::int(2, Default::default(), Ownership::ImmutableOwned);
+    let lhs = Expression::int(i64::MAX, Default::default(), ValueMode::ImmutableOwned);
+    let rhs = Expression::int(2, Default::default(), ValueMode::ImmutableOwned);
 
     let error = lhs
         .evaluate_operator(&rhs, &Operator::Multiply, &mut string_table)
@@ -160,8 +160,8 @@ fn evaluate_operator_rejects_integer_multiply_overflow() {
 #[test]
 fn evaluate_operator_rejects_integer_exponent_overflow() {
     let mut string_table = StringTable::new();
-    let lhs = Expression::int(2, Default::default(), Ownership::ImmutableOwned);
-    let rhs = Expression::int(63, Default::default(), Ownership::ImmutableOwned);
+    let lhs = Expression::int(2, Default::default(), ValueMode::ImmutableOwned);
+    let rhs = Expression::int(63, Default::default(), ValueMode::ImmutableOwned);
 
     let error = lhs
         .evaluate_operator(&rhs, &Operator::Exponent, &mut string_table)
@@ -173,8 +173,8 @@ fn evaluate_operator_rejects_integer_exponent_overflow() {
 #[test]
 fn evaluate_operator_rejects_integer_division_overflow() {
     let mut string_table = StringTable::new();
-    let lhs = Expression::int(i64::MIN, Default::default(), Ownership::ImmutableOwned);
-    let rhs = Expression::int(-1, Default::default(), Ownership::ImmutableOwned);
+    let lhs = Expression::int(i64::MIN, Default::default(), ValueMode::ImmutableOwned);
+    let rhs = Expression::int(-1, Default::default(), ValueMode::ImmutableOwned);
 
     let error = lhs
         .evaluate_operator(&rhs, &Operator::IntDivide, &mut string_table)
@@ -186,8 +186,8 @@ fn evaluate_operator_rejects_integer_division_overflow() {
 #[test]
 fn evaluate_operator_rejects_integer_modulus_overflow() {
     let mut string_table = StringTable::new();
-    let lhs = Expression::int(i64::MIN, Default::default(), Ownership::ImmutableOwned);
-    let rhs = Expression::int(-1, Default::default(), Ownership::ImmutableOwned);
+    let lhs = Expression::int(i64::MIN, Default::default(), ValueMode::ImmutableOwned);
+    let rhs = Expression::int(-1, Default::default(), ValueMode::ImmutableOwned);
 
     let error = lhs
         .evaluate_operator(&rhs, &Operator::Modulus, &mut string_table)
@@ -199,8 +199,8 @@ fn evaluate_operator_rejects_integer_modulus_overflow() {
 #[test]
 fn evaluate_operator_rejects_non_finite_float_exponent_result() {
     let mut string_table = StringTable::new();
-    let lhs = Expression::float(1.0e308, Default::default(), Ownership::ImmutableOwned);
-    let rhs = Expression::float(2.0, Default::default(), Ownership::ImmutableOwned);
+    let lhs = Expression::float(1.0e308, Default::default(), ValueMode::ImmutableOwned);
+    let rhs = Expression::float(2.0, Default::default(), ValueMode::ImmutableOwned);
 
     let error = lhs
         .evaluate_operator(&rhs, &Operator::Exponent, &mut string_table)
@@ -216,8 +216,8 @@ fn evaluate_operator_rejects_non_finite_float_exponent_result() {
 #[test]
 fn evaluate_operator_rejects_non_finite_float_multiply_result() {
     let mut string_table = StringTable::new();
-    let lhs = Expression::float(1.0e308, Default::default(), Ownership::ImmutableOwned);
-    let rhs = Expression::float(1.0e308, Default::default(), Ownership::ImmutableOwned);
+    let lhs = Expression::float(1.0e308, Default::default(), ValueMode::ImmutableOwned);
+    let rhs = Expression::float(1.0e308, Default::default(), ValueMode::ImmutableOwned);
 
     let error = lhs
         .evaluate_operator(&rhs, &Operator::Multiply, &mut string_table)
@@ -236,7 +236,7 @@ fn eval_int_cast_rejects_out_of_range_float() {
     let value = Expression::float(
         9_223_372_036_854_775_808.0,
         Default::default(),
-        Ownership::ImmutableOwned,
+        ValueMode::ImmutableOwned,
     );
 
     let error = eval_int_cast(&value, &string_table)
@@ -247,7 +247,7 @@ fn eval_int_cast_rejects_out_of_range_float() {
 #[test]
 fn eval_int_cast_rejects_non_finite_float() {
     let string_table = StringTable::new();
-    let value = Expression::float(f64::INFINITY, Default::default(), Ownership::ImmutableOwned);
+    let value = Expression::float(f64::INFINITY, Default::default(), ValueMode::ImmutableOwned);
 
     let error =
         eval_int_cast(&value, &string_table).expect_err("non-finite float to int cast should fail");
@@ -257,7 +257,7 @@ fn eval_int_cast_rejects_non_finite_float() {
 #[test]
 fn eval_int_cast_rejects_non_integer_float() {
     let string_table = StringTable::new();
-    let value = Expression::float(1.5, Default::default(), Ownership::ImmutableOwned);
+    let value = Expression::float(1.5, Default::default(), ValueMode::ImmutableOwned);
 
     let error = eval_int_cast(&value, &string_table)
         .expect_err("non-integer float to int cast should fail");
@@ -271,7 +271,7 @@ fn eval_float_cast_rejects_non_finite_string_value() {
     let value = Expression::string_slice(
         string_table.get_or_intern(huge),
         Default::default(),
-        Ownership::ImmutableOwned,
+        ValueMode::ImmutableOwned,
     );
 
     let error = eval_float_cast(&value, &string_table)
@@ -302,18 +302,18 @@ fn constant_fold_folds_comparison_then_boolean_chain() {
         rvalue_node(Expression::int(
             1,
             SourceLocation::default(),
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         )),
         rvalue_node(Expression::int(
             2,
             SourceLocation::default(),
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         )),
         operator_node(Operator::LessThan),
         rvalue_node(Expression::bool(
             true,
             SourceLocation::default(),
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         )),
         operator_node(Operator::And),
     ];
@@ -336,7 +336,7 @@ fn constant_fold_keeps_unary_not_when_operand_is_not_bool_literal() {
         rvalue_node(Expression::int(
             1,
             SourceLocation::default(),
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         )),
         operator_node(Operator::Not),
     ];
@@ -362,12 +362,12 @@ fn constant_fold_stays_conservative_with_runtime_operands() {
             flag_name,
             DataType::Bool,
             SourceLocation::default(),
-            Ownership::ImmutableReference,
+            ValueMode::ImmutableReference,
         )),
         rvalue_node(Expression::bool(
             true,
             SourceLocation::default(),
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         )),
         operator_node(Operator::And),
     ];

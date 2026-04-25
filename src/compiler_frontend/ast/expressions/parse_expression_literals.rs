@@ -8,16 +8,17 @@ use super::parse_expression_dispatch::push_expression_node;
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::compiler_frontend::value_mode::ValueMode;
 use crate::return_rule_error;
 
 pub(super) fn parse_literal_expression(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
     expected_type: &DataType,
-    ownership: &Ownership,
+    value_mode: &ValueMode,
     expression: &mut Vec<AstNode>,
     next_number_negative: &mut bool,
     string_table: &mut StringTable,
@@ -30,7 +31,7 @@ pub(super) fn parse_literal_expression(
             }
 
             let location = token_stream.current_location();
-            let float_expr = Expression::float(float, location.to_owned(), ownership.to_owned());
+            let float_expr = Expression::float(float, location.to_owned(), value_mode.to_owned());
             token_stream.advance();
             push_expression_node(
                 token_stream,
@@ -65,7 +66,7 @@ pub(super) fn parse_literal_expression(
             };
 
             let location = token_stream.current_location();
-            let int_expr = Expression::int(int, location.to_owned(), ownership.to_owned());
+            let int_expr = Expression::int(int, location.to_owned(), value_mode.to_owned());
             token_stream.advance();
             push_expression_node(
                 token_stream,
@@ -84,7 +85,7 @@ pub(super) fn parse_literal_expression(
         TokenKind::StringSliceLiteral(string) => {
             let location = token_stream.current_location();
             let string_expr =
-                Expression::string_slice(string, location.to_owned(), ownership.to_owned());
+                Expression::string_slice(string, location.to_owned(), value_mode.to_owned());
             token_stream.advance();
             push_expression_node(
                 token_stream,
@@ -102,7 +103,7 @@ pub(super) fn parse_literal_expression(
 
         TokenKind::BoolLiteral(value) => {
             let location = token_stream.current_location();
-            let bool_expr = Expression::bool(value, location.to_owned(), ownership.to_owned());
+            let bool_expr = Expression::bool(value, location.to_owned(), value_mode.to_owned());
             token_stream.advance();
             push_expression_node(
                 token_stream,
@@ -120,7 +121,7 @@ pub(super) fn parse_literal_expression(
 
         TokenKind::CharLiteral(value) => {
             let location = token_stream.current_location();
-            let char_expr = Expression::char(value, location.to_owned(), ownership.to_owned());
+            let char_expr = Expression::char(value, location.to_owned(), value_mode.to_owned());
             token_stream.advance();
             push_expression_node(
                 token_stream,
@@ -164,7 +165,7 @@ pub(super) fn parse_literal_expression(
             // produces a mutable binding. Other literals (int, float, string)
             // already receive ownership from the same parameter; none must too.
             let mut none_expr = Expression::option_none(inner_type, location.clone());
-            none_expr.ownership = ownership.to_owned();
+            none_expr.value_mode = value_mode.to_owned();
             token_stream.advance();
             push_expression_node(
                 token_stream,

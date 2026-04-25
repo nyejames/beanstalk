@@ -8,16 +8,16 @@ use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::datatypes::Ownership;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::compiler_frontend::value_mode::ValueMode;
 use crate::{ast_log, return_rule_error};
 
 pub(super) fn parse_template_expression(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
     consume_closing_parenthesis: bool,
-    ownership: &Ownership,
+    value_mode: &ValueMode,
     string_table: &mut StringTable,
 ) -> Result<Option<Expression>, CompilerError> {
     let template_context = context.new_template_parsing_context();
@@ -35,7 +35,7 @@ pub(super) fn parse_template_expression(
             {
                 token_stream.advance();
             }
-            Ok(Some(Expression::template(template, ownership.to_owned())))
+            Ok(Some(Expression::template(template, value_mode.to_owned())))
         }
 
         TemplateType::String => {
@@ -46,7 +46,7 @@ pub(super) fn parse_template_expression(
             }
 
             if !template.is_const_renderable_string() || template.has_unresolved_slots() {
-                return Ok(Some(Expression::template(template, ownership.to_owned())));
+                return Ok(Some(Expression::template(template, value_mode.to_owned())));
             }
 
             ast_log!("Template is foldable now. Folding...");
@@ -58,7 +58,7 @@ pub(super) fn parse_template_expression(
             Ok(Some(Expression::string_slice(
                 folded_string,
                 token_stream.current_location(),
-                ownership.get_owned(),
+                value_mode.as_owned(),
             )))
         }
 
@@ -72,7 +72,7 @@ pub(super) fn parse_template_expression(
                 token_stream.advance();
             }
 
-            Ok(Some(Expression::template(template, ownership.to_owned())))
+            Ok(Some(Expression::template(template, value_mode.to_owned())))
         }
 
         TemplateType::SlotDefinition(_) => {

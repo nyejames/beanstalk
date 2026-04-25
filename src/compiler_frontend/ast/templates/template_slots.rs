@@ -6,9 +6,9 @@ use crate::compiler_frontend::ast::templates::template::{
 use crate::compiler_frontend::ast::templates::template_composition::apply_inherited_child_templates_to_content;
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
-use crate::compiler_frontend::datatypes::Ownership;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::compiler_frontend::value_mode::ValueMode;
 use crate::{return_rule_error, return_syntax_error};
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::BTreeSet;
@@ -514,7 +514,7 @@ fn wrap_child_slot_contribution(
     wrapped_template.resync_composition_metadata();
 
     Ok(TemplateAtom::Content(TemplateSegment::new(
-        Expression::template(wrapped_template, Ownership::ImmutableOwned),
+        Expression::template(wrapped_template, ValueMode::ImmutableOwned),
         origin,
     )))
 }

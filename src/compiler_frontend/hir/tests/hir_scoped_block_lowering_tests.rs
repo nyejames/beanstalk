@@ -6,12 +6,12 @@
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
-use crate::compiler_frontend::datatypes::Ownership;
 use crate::compiler_frontend::hir::hir_nodes::{HirLocal, HirModule};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::test_support::{
     function_node, make_test_variable, node, test_location,
 };
+use crate::compiler_frontend::value_mode::ValueMode;
 
 use crate::compiler_frontend::hir::hir_builder::{
     assert_no_placeholder_terminators, build_ast, lower_ast,
@@ -42,7 +42,7 @@ fn scoped_block_lowers_through_child_region_and_rejoins_parent() {
             body: vec![node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     inner,
-                    Expression::int(1, test_location(2), Ownership::ImmutableOwned),
+                    Expression::int(1, test_location(2), ValueMode::ImmutableOwned),
                 )),
                 test_location(2),
             )],
@@ -52,7 +52,7 @@ fn scoped_block_lowers_through_child_region_and_rejoins_parent() {
     let after_declaration = node(
         NodeKind::VariableDeclaration(make_test_variable(
             after,
-            Expression::int(2, test_location(4), Ownership::ImmutableOwned),
+            Expression::int(2, test_location(4), ValueMode::ImmutableOwned),
         )),
         test_location(4),
     );

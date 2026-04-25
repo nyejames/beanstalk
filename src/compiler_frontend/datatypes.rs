@@ -1,15 +1,12 @@
-//! Frontend semantic data types.
+//! Frontend semantic type model.
 //!
-//! WHAT: `DataType` represents the frontend's current semantic type shapes during header parsing,
-//! AST construction, and compatibility checking.
+//! WHAT: defines AST/frontend type identity before HIR type interning.
+//! WHY: AST needs a rich type surface for named types, unresolved placeholders,
+//! templates, choices, constants, and frontend-only wrappers.
 //!
-//! WHY: this module is still the bridge between early frontend syntax and later HIR `TypeId`
-//! lowering. Some variants currently carry ownership/access information because the pre-alpha
-//! frontend has not yet fully separated semantic type identity from binding/access state.
-//!
-//! Phase note:
-//! - Phase 1 only documents this boundary.
-//! - A later refactor should separate pure type identity from mutability/access/ownership facts.
+//! Access/mutability/owned-vs-reference state does not live in `DataType`.
+//! That state belongs to expressions, declarations, call arguments, HIR locals,
+//! and borrow-analysis facts.
 
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
@@ -34,36 +31,6 @@ impl From<CompileTimePathKind> for PathTypeKind {
         match kind {
             CompileTimePathKind::File => PathTypeKind::File,
             CompileTimePathKind::Directory => PathTypeKind::Directory,
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Default)]
-pub enum Ownership {
-    MutableOwned,
-    MutableReference,
-    #[default]
-    ImmutableOwned,
-    ImmutableReference,
-}
-
-impl Ownership {
-    pub fn is_mutable(&self) -> bool {
-        matches!(self, Ownership::MutableOwned | Ownership::MutableReference)
-    }
-    pub fn get_owned(&self) -> Ownership {
-        match self {
-            Ownership::MutableReference => Ownership::MutableOwned,
-            Ownership::ImmutableReference => Ownership::ImmutableOwned,
-            _ => self.to_owned(),
-        }
-    }
-
-    pub fn get_reference(&self) -> Ownership {
-        match self {
-            Ownership::MutableOwned => Ownership::MutableReference,
-            Ownership::ImmutableOwned => Ownership::ImmutableReference,
-            _ => self.to_owned(),
         }
     }
 }
@@ -94,11 +61,10 @@ pub enum DataType {
     NamedType(StringId),
 
     // Container and composite runtime types.
-    Collection(Box<DataType>, Ownership),
+    Collection(Box<DataType>),
     Struct {
         nominal_path: InternedPath,
         fields: Vec<Declaration>,
-        ownership: Ownership,
         const_record: bool,
     },
     Reference(Box<DataType>),
@@ -145,20 +111,15 @@ pub enum DataType {
     False,
 }
 
-// OWNERSHIP NOTE: DataType owns type structure and structural helper methods only.
+// NOTE: DataType owns type structure and structural helper methods only.
 // Compatibility policy (what type is accepted in what position) lives exclusively
 // in `type_coercion::compatibility::is_type_compatible`.
 // Contextual numeric promotion logic lives in `type_coercion::numeric`.
 impl DataType {
-    pub fn runtime_struct(
-        nominal_path: InternedPath,
-        fields: Vec<Declaration>,
-        ownership: Ownership,
-    ) -> Self {
+    pub fn runtime_struct(nominal_path: InternedPath, fields: Vec<Declaration>) -> Self {
         Self::Struct {
             nominal_path,
             fields,
-            ownership,
             const_record: false,
         }
     }
@@ -167,7 +128,6 @@ impl DataType {
         Self::Struct {
             nominal_path,
             fields,
-            ownership: Ownership::ImmutableOwned,
             const_record: true,
         }
     }
@@ -200,13 +160,6 @@ impl DataType {
     pub fn struct_fields(&self) -> Option<&[Declaration]> {
         match self {
             DataType::Struct { fields, .. } => Some(fields.as_slice()),
-            _ => None,
-        }
-    }
-
-    pub fn struct_ownership(&self) -> Option<&Ownership> {
-        match self {
-            DataType::Struct { ownership, .. } => Some(ownership),
             _ => None,
         }
     }
@@ -261,7 +214,7 @@ impl DataType {
             DataType::Float => "Float".to_string(),
             DataType::Int => "Int".to_string(),
             DataType::Decimal => "Decimal".to_string(),
-            DataType::Collection(inner_type, _mutable) => {
+            DataType::Collection(inner_type) => {
                 format!("{} Collection", inner_type.display_with_table(string_table))
             }
             DataType::Parameters(args) => {
@@ -384,7 +337,7 @@ impl PartialEq for DataType {
                     err: err_b,
                 },
             ) => ok_a == ok_b && err_a == err_b,
-            (DataType::Collection(a, oa), DataType::Collection(b, ob)) => a == b && oa == ob,
+            (DataType::Collection(a), DataType::Collection(b)) => a == b,
             (DataType::Path(a), DataType::Path(b)) => a == b,
             (DataType::Template, DataType::Template) => true,
             (DataType::Option(a), DataType::Option(b)) => a == b,
@@ -399,17 +352,15 @@ impl PartialEq for DataType {
             (
                 DataType::Struct {
                     nominal_path: path_a,
-                    ownership: ownership_a,
                     const_record: const_a,
                     ..
                 },
                 DataType::Struct {
                     nominal_path: path_b,
-                    ownership: ownership_b,
                     const_record: const_b,
                     ..
                 },
-            ) => path_a == path_b && ownership_a == ownership_b && const_a == const_b,
+            ) => path_a == path_b && const_a == const_b,
             (DataType::Function(_, signature1), DataType::Function(_, signature2)) => {
                 // If both functions have the same signature.returns types,
                 // then they are equal

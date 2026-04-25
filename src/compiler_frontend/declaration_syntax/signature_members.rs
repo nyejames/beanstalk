@@ -14,7 +14,6 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression_until;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
 use crate::compiler_frontend::declaration_syntax::type_syntax::{
     TypeAnnotationContext, parse_type_annotation,
 };
@@ -28,6 +27,7 @@ use crate::compiler_frontend::symbols::identifier_policy::{
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::syntax_errors::signature_position::check_signature_common_mistake;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::compiler_frontend::value_mode::ValueMode;
 use crate::return_syntax_error;
 
 /// Parses a `| name [~]Type [= default], ... |` member list.
@@ -195,11 +195,11 @@ fn parse_signature_member(
     // Move past the name.
     token_stream.advance();
 
-    let mut ownership = Ownership::ImmutableOwned;
+    let mut value_mode = ValueMode::ImmutableOwned;
 
     if token_stream.current_token_kind() == &TokenKind::Mutable {
         token_stream.advance();
-        ownership = Ownership::MutableOwned;
+        value_mode = ValueMode::MutableOwned;
     };
 
     while token_stream.current_token_kind() == &TokenKind::Newline {
@@ -208,7 +208,7 @@ fn parse_signature_member(
 
     let parsed_type =
         parse_type_annotation(token_stream, TypeAnnotationContext::SignatureParameter)?;
-    let mut data_type = apply_collection_ownership(parsed_type, &ownership);
+    let mut data_type = parsed_type;
 
     match token_stream.current_token_kind() {
         TokenKind::Assign => {
@@ -229,7 +229,7 @@ fn parse_signature_member(
                     ExpressionKind::NoValue,
                     token_stream.current_location(),
                     data_type,
-                    ownership,
+                    value_mode,
                 ),
             });
         }
@@ -290,7 +290,7 @@ fn parse_signature_member(
                 ExpressionKind::Reference(ref_path),
                 ref_location,
                 data_type,
-                ownership,
+                value_mode,
             ),
         });
     }
@@ -302,14 +302,14 @@ fn parse_signature_member(
         token_stream,
         &parameter_context,
         &mut data_type,
-        &ownership,
+        &value_mode,
         &[TokenKind::TypeParameterBracket, TokenKind::Comma],
         string_table,
     )?;
 
     ast_log!(
         "Created new ",
-        #ownership,
+        #value_mode,
         " variable of type: ",
         data_type.display_with_table(string_table)
     );
@@ -318,26 +318,4 @@ fn parse_signature_member(
         id: full_name,
         value: parsed_expr,
     })
-}
-
-pub(crate) fn apply_collection_ownership(data_type: DataType, ownership: &Ownership) -> DataType {
-    match data_type {
-        DataType::Collection(inner, _) => DataType::Collection(
-            Box::new(apply_collection_ownership(*inner, ownership)),
-            ownership.to_owned(),
-        ),
-        DataType::Option(inner) => {
-            DataType::Option(Box::new(apply_collection_ownership(*inner, ownership)))
-        }
-        DataType::Reference(inner) => {
-            DataType::Reference(Box::new(apply_collection_ownership(*inner, ownership)))
-        }
-        DataType::Returns(values) => DataType::Returns(
-            values
-                .into_iter()
-                .map(|value| apply_collection_ownership(value, ownership))
-                .collect(),
-        ),
-        other => other,
-    }
 }

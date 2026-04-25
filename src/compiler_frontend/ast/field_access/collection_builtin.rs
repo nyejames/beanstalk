@@ -52,7 +52,7 @@ pub(super) fn parse_collection_builtin_member(
         scope_context,
     } = context;
 
-    let DataType::Collection(inner_type, _) = receiver_type else {
+    let DataType::Collection(inner_type) = receiver_type else {
         return Ok(None);
     };
 

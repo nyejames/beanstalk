@@ -8,7 +8,7 @@ use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::statements::match_patterns::{MatchArm, MatchPattern};
 use crate::compiler_frontend::compiler_errors::ErrorType;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::hir::hir_nodes::{
     HirExpression, HirExpressionKind, HirNodeId, HirStatement, HirStatementKind, HirValueId,
     ValueKind,
@@ -18,6 +18,7 @@ use crate::compiler_frontend::tests::test_support::{
     assignment_target, build_ast, default_host_registry, entry_and_start, function_node, lower_hir,
     make_test_variable, node, reference_expr, run_borrow_checker, symbol, test_location,
 };
+use crate::compiler_frontend::value_mode::ValueMode;
 
 #[test]
 fn if_branch_local_alias_does_not_escape_merge() {
@@ -38,13 +39,13 @@ fn if_branch_local_alias_does_not_escape_merge() {
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
-                    Expression::int(1, test_location(1), Ownership::MutableOwned),
+                    Expression::int(1, test_location(1), ValueMode::MutableOwned),
                 )),
                 test_location(1),
             ),
             node(
                 NodeKind::If(
-                    Expression::bool(true, test_location(2), Ownership::ImmutableOwned),
+                    Expression::bool(true, test_location(2), ValueMode::ImmutableOwned),
                     vec![node(
                         NodeKind::VariableDeclaration(make_test_variable(
                             y,
@@ -59,7 +60,7 @@ fn if_branch_local_alias_does_not_escape_merge() {
             node(
                 NodeKind::Assignment {
                     target: Box::new(assignment_target(x, DataType::Int, test_location(4))),
-                    value: Expression::int(2, test_location(4), Ownership::ImmutableOwned),
+                    value: Expression::int(2, test_location(4), ValueMode::ImmutableOwned),
                 },
                 test_location(4),
             ),
@@ -85,7 +86,7 @@ fn match_arm_local_alias_does_not_escape_merge() {
         pattern: MatchPattern::Literal(Expression::int(
             1,
             test_location(3),
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         )),
         guard: None,
         body: vec![node(
@@ -107,13 +108,13 @@ fn match_arm_local_alias_does_not_escape_merge() {
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
-                    Expression::int(1, test_location(1), Ownership::MutableOwned),
+                    Expression::int(1, test_location(1), ValueMode::MutableOwned),
                 )),
                 test_location(1),
             ),
             node(
                 NodeKind::Match(
-                    Expression::int(1, test_location(2), Ownership::ImmutableOwned),
+                    Expression::int(1, test_location(2), ValueMode::ImmutableOwned),
                     vec![arm],
                     None,
                 ),
@@ -122,7 +123,7 @@ fn match_arm_local_alias_does_not_escape_merge() {
             node(
                 NodeKind::Assignment {
                     target: Box::new(assignment_target(x, DataType::Int, test_location(5))),
-                    value: Expression::int(2, test_location(5), Ownership::ImmutableOwned),
+                    value: Expression::int(2, test_location(5), ValueMode::ImmutableOwned),
                 },
                 test_location(5),
             ),
@@ -154,13 +155,13 @@ fn while_body_local_alias_does_not_escape_exit() {
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
-                    Expression::int(1, test_location(1), Ownership::MutableOwned),
+                    Expression::int(1, test_location(1), ValueMode::MutableOwned),
                 )),
                 test_location(1),
             ),
             node(
                 NodeKind::WhileLoop(
-                    Expression::bool(false, test_location(2), Ownership::ImmutableOwned),
+                    Expression::bool(false, test_location(2), ValueMode::ImmutableOwned),
                     vec![node(
                         NodeKind::VariableDeclaration(make_test_variable(
                             y,
@@ -174,7 +175,7 @@ fn while_body_local_alias_does_not_escape_exit() {
             node(
                 NodeKind::Assignment {
                     target: Box::new(assignment_target(x, DataType::Int, test_location(4))),
-                    value: Expression::int(2, test_location(4), Ownership::ImmutableOwned),
+                    value: Expression::int(2, test_location(4), ValueMode::ImmutableOwned),
                 },
                 test_location(4),
             ),
@@ -206,13 +207,13 @@ fn dead_local_access_reports_borrow_error() {
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
-                    Expression::int(1, test_location(1), Ownership::MutableOwned),
+                    Expression::int(1, test_location(1), ValueMode::MutableOwned),
                 )),
                 test_location(1),
             ),
             node(
                 NodeKind::If(
-                    Expression::bool(true, test_location(2), Ownership::ImmutableOwned),
+                    Expression::bool(true, test_location(2), ValueMode::ImmutableOwned),
                     vec![node(
                         NodeKind::VariableDeclaration(make_test_variable(
                             y.clone(),
@@ -227,7 +228,7 @@ fn dead_local_access_reports_borrow_error() {
             node(
                 NodeKind::Assignment {
                     target: Box::new(assignment_target(x, DataType::Int, test_location(4))),
-                    value: Expression::int(2, test_location(4), Ownership::ImmutableOwned),
+                    value: Expression::int(2, test_location(4), ValueMode::ImmutableOwned),
                 },
                 test_location(4),
             ),

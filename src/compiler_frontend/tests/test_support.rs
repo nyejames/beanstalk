@@ -15,7 +15,7 @@ use crate::compiler_frontend::ast::statements::functions::{
 };
 use crate::compiler_frontend::ast::{Ast, AstBuildContext};
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::headers::parse_file_headers::{HeaderParseOptions, parse_headers};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::host_functions::HostRegistry;
@@ -29,6 +29,7 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
 use crate::compiler_frontend::tokenizer::newline_handling::NewlineMode;
 use crate::compiler_frontend::tokenizer::tokens::{CharPosition, TokenizeMode};
+use crate::compiler_frontend::value_mode::ValueMode;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 
 pub(crate) fn test_project_path_resolver() -> ProjectPathResolver {
@@ -184,15 +185,15 @@ pub(crate) fn param(
     mutable: bool,
     location: SourceLocation,
 ) -> Declaration {
-    let ownership = if mutable {
-        Ownership::MutableOwned
+    let value_mode = if mutable {
+        ValueMode::MutableOwned
     } else {
-        Ownership::ImmutableOwned
+        ValueMode::ImmutableOwned
     };
 
     Declaration {
         id: name,
-        value: Expression::new(ExpressionKind::NoValue, location, data_type, ownership),
+        value: Expression::new(ExpressionKind::NoValue, location, data_type, value_mode),
     }
 }
 
@@ -241,7 +242,7 @@ pub(crate) fn reference_expr(
     data_type: DataType,
     location: SourceLocation,
 ) -> Expression {
-    Expression::reference(name, data_type, location, Ownership::ImmutableReference)
+    Expression::reference(name, data_type, location, ValueMode::ImmutableReference)
 }
 
 pub(crate) fn assignment_target(
@@ -254,7 +255,7 @@ pub(crate) fn assignment_target(
             name,
             data_type,
             location.clone(),
-            Ownership::MutableReference,
+            ValueMode::MutableReference,
         )),
         location,
     )

@@ -170,7 +170,7 @@ impl TemplateRenderPlan {
             TemplateAtom, TemplateContent, TemplateSegment, TemplateSegmentOrigin,
         };
         use crate::compiler_frontend::datatypes::DataType;
-        use crate::compiler_frontend::datatypes::Ownership;
+        use crate::compiler_frontend::value_mode::ValueMode;
 
         let mut atoms = Vec::new();
 
@@ -181,7 +181,7 @@ impl TemplateRenderPlan {
                         Expression::string_slice(
                             p.text,
                             p.location.clone(),
-                            Ownership::ImmutableOwned,
+                            ValueMode::ImmutableOwned,
                         ),
                         TemplateSegmentOrigin::Head,
                     )));
@@ -191,7 +191,7 @@ impl TemplateRenderPlan {
                         Expression::string_slice(
                             p.text,
                             p.location.clone(),
-                            Ownership::ImmutableOwned,
+                            ValueMode::ImmutableOwned,
                         ),
                         TemplateSegmentOrigin::Body,
                     )));
@@ -201,7 +201,7 @@ impl TemplateRenderPlan {
                         expression: Expression {
                             kind: c.expression.kind.clone(),
                             data_type: DataType::Template,
-                            ownership: Ownership::ImmutableOwned,
+                            value_mode: ValueMode::ImmutableOwned,
                             location: c.expression.location.clone(),
                             contains_regular_division: c.expression.contains_regular_division,
                         },
@@ -228,13 +228,13 @@ impl TemplateRenderPlan {
     /// Extracts all evaluatable expressions from the plan, discarding slots and omissions.
     pub fn flatten_expressions(&self) -> Vec<Expression> {
         use crate::compiler_frontend::ast::expressions::expression::Expression;
-        use crate::compiler_frontend::datatypes::Ownership;
+        use crate::compiler_frontend::value_mode::ValueMode;
 
         self.pieces
             .iter()
             .filter_map(|piece| match piece {
                 RenderPiece::Text(p) | RenderPiece::HeadContent(p) => Some(
-                    Expression::string_slice(p.text, p.location.clone(), Ownership::ImmutableOwned),
+                    Expression::string_slice(p.text, p.location.clone(), ValueMode::ImmutableOwned),
                 ),
                 RenderPiece::ChildTemplate(p) => Some(p.expression.clone()),
                 RenderPiece::DynamicExpression(p) => Some(p.expression.clone()),

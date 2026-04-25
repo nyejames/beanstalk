@@ -47,8 +47,8 @@ fn scope_context_new_leaves_no_visibility_gate() {
 fn add_var_extends_visibility_gate_when_gate_is_set() {
     use crate::compiler_frontend::ast::ast_nodes::Declaration;
     use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
-    use crate::compiler_frontend::datatypes::Ownership;
     use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
+    use crate::compiler_frontend::value_mode::ValueMode;
     use rustc_hash::FxHashSet;
 
     let mut st = StringTable::new();
@@ -71,7 +71,7 @@ fn add_var_extends_visibility_gate_when_gate_is_set() {
             ExpressionKind::NoValue,
             SourceLocation::default(),
             DataType::Int,
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         ),
     };
     ctx.add_var(decl);

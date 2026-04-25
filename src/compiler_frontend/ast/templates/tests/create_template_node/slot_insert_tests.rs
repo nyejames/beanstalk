@@ -3,11 +3,11 @@ use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationIndex};
-use crate::compiler_frontend::datatypes::Ownership;
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{CharPosition, SourceLocation};
+use crate::compiler_frontend::value_mode::ValueMode;
 
 #[test]
 fn fills_single_slot_templates_in_source_order() {
@@ -27,7 +27,7 @@ fn fills_single_slot_templates_in_source_order() {
 
     let declaration = Declaration {
         id: wrapper_scope.append(string_table.intern("single_slot")),
-        value: Expression::template(wrapper, Ownership::ImmutableOwned),
+        value: Expression::template(wrapper, ValueMode::ImmutableOwned),
     };
 
     let mut token_stream = template_tokens_from_source(
@@ -72,7 +72,7 @@ fn fills_multiple_named_slots_with_ordered_inserts() {
 
     let declaration = Declaration {
         id: wrapper_scope.append(string_table.intern("basic_slots")),
-        value: Expression::template(wrapper, Ownership::ImmutableOwned),
+        value: Expression::template(wrapper, ValueMode::ImmutableOwned),
     };
 
     let mut token_stream = template_tokens_from_source(
@@ -121,7 +121,7 @@ fn allows_explicitly_empty_named_slot_insertions() {
 
     let declaration = Declaration {
         id: wrapper_scope.append(string_table.intern("basic_slots")),
-        value: Expression::template(wrapper, Ownership::ImmutableOwned),
+        value: Expression::template(wrapper, ValueMode::ImmutableOwned),
     };
 
     let mut token_stream = template_tokens_from_source(
@@ -158,7 +158,7 @@ fn rejects_loose_content_for_named_only_slots_without_default() {
 
     let declaration = Declaration {
         id: wrapper_scope.append(string_table.intern("named_only_slots")),
-        value: Expression::template(wrapper, Ownership::ImmutableOwned),
+        value: Expression::template(wrapper, ValueMode::ImmutableOwned),
     };
 
     let mut token_stream =
@@ -189,7 +189,7 @@ fn rejects_unknown_named_insert_targets() {
 
     let declaration = Declaration {
         id: wrapper_scope.append(string_table.intern("named_only_slots")),
-        value: Expression::template(wrapper, Ownership::ImmutableOwned),
+        value: Expression::template(wrapper, ValueMode::ImmutableOwned),
     };
 
     let mut token_stream = template_tokens_from_source(
@@ -223,7 +223,7 @@ fn unknown_named_insert_target_points_at_insert_helper_location() {
 
     let declaration = Declaration {
         id: wrapper_scope.append(string_table.intern("named_only_slots")),
-        value: Expression::template(wrapper, Ownership::ImmutableOwned),
+        value: Expression::template(wrapper, ValueMode::ImmutableOwned),
     };
 
     let mut token_stream = template_tokens_from_source(
@@ -257,7 +257,7 @@ fn rejects_duplicate_default_slot_definitions() {
 
     let declaration = Declaration {
         id: wrapper_scope.append(string_table.intern("duplicate_default")),
-        value: Expression::template(wrapper, Ownership::ImmutableOwned),
+        value: Expression::template(wrapper, ValueMode::ImmutableOwned),
     };
 
     let mut token_stream =
@@ -313,15 +313,15 @@ fn rejects_insert_targeting_non_immediate_parent_slot() {
     let declarations = vec![
         Declaration {
             id: scope.append(string_table.intern("outer_wrapper")),
-            value: Expression::template(outer, Ownership::ImmutableOwned),
+            value: Expression::template(outer, ValueMode::ImmutableOwned),
         },
         Declaration {
             id: scope.append(string_table.intern("inner_wrapper")),
-            value: Expression::template(inner, Ownership::ImmutableOwned),
+            value: Expression::template(inner, ValueMode::ImmutableOwned),
         },
         Declaration {
             id: scope.append(string_table.intern("outer_insert")),
-            value: Expression::template(outer_insert, Ownership::ImmutableOwned),
+            value: Expression::template(outer_insert, ValueMode::ImmutableOwned),
         },
     ];
 
@@ -356,7 +356,7 @@ fn fills_nested_slots_in_parent_authored_order() {
 
     let declaration = Declaration {
         id: wrapper_scope.append(string_table.intern("nested_slots")),
-        value: Expression::template(wrapper, Ownership::ImmutableOwned),
+        value: Expression::template(wrapper, ValueMode::ImmutableOwned),
     };
 
     let mut token_stream = template_tokens_from_source(
@@ -412,7 +412,7 @@ fn fills_nested_slots_for_runtime_wrappers() {
                     char_column: 120, // Arbitrary number
                 },
             },
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         ),
     };
 
@@ -440,7 +440,7 @@ fn fills_nested_slots_for_runtime_wrappers() {
 
     let wrapper_declaration = Declaration {
         id: scope.append(string_table.intern("runtime_wrapper")),
-        value: Expression::template(wrapper, Ownership::ImmutableOwned),
+        value: Expression::template(wrapper, ValueMode::ImmutableOwned),
     };
     let declarations = vec![value_declaration, wrapper_declaration];
     let consuming_context = ScopeContext::new(
@@ -522,11 +522,11 @@ fn template_with_slot_and_insert_contributes_upward_after_receiving_content() {
     let declarations = vec![
         Declaration {
             id: scope.append(string_table.intern("page")),
-            value: Expression::template(page, Ownership::ImmutableOwned),
+            value: Expression::template(page, ValueMode::ImmutableOwned),
         },
         Declaration {
             id: scope.append(string_table.intern("blue")),
-            value: Expression::template(style_wrapper, Ownership::ImmutableOwned),
+            value: Expression::template(style_wrapper, ValueMode::ImmutableOwned),
         },
     ];
 
@@ -587,7 +587,7 @@ fn canonical_runtime_card_helpers_compose_without_parent_slot_leakage() {
     .expect("section title should parse");
     let section_title_declaration = Declaration {
         id: scope.append(string_table.intern("section_title")),
-        value: Expression::template(section_title.to_owned(), Ownership::ImmutableOwned),
+        value: Expression::template(section_title.to_owned(), ValueMode::ImmutableOwned),
     };
 
     let mut accent_title_tokens =
@@ -602,7 +602,7 @@ fn canonical_runtime_card_helpers_compose_without_parent_slot_leakage() {
     .expect("accent title helper should parse");
     let accent_title_declaration = Declaration {
         id: scope.append(string_table.intern("accent_title")),
-        value: Expression::template(accent_title.to_owned(), Ownership::ImmutableOwned),
+        value: Expression::template(accent_title.to_owned(), ValueMode::ImmutableOwned),
     };
 
     let mut runtime_grid_head_tokens = template_tokens_from_source(
@@ -640,21 +640,21 @@ fn canonical_runtime_card_helpers_compose_without_parent_slot_leakage() {
     let declarations = vec![
         Declaration {
             id: scope.append(string_table.intern("page")),
-            value: Expression::template(page, Ownership::ImmutableOwned),
+            value: Expression::template(page, ValueMode::ImmutableOwned),
         },
         Declaration {
             id: scope.append(string_table.intern("card")),
-            value: Expression::template(card, Ownership::ImmutableOwned),
+            value: Expression::template(card, ValueMode::ImmutableOwned),
         },
         section_title_declaration,
         accent_title_declaration,
         Declaration {
             id: scope.append(string_table.intern("runtime_grid_head")),
-            value: Expression::template(runtime_grid_head, Ownership::ImmutableOwned),
+            value: Expression::template(runtime_grid_head, ValueMode::ImmutableOwned),
         },
         Declaration {
             id: scope.append(string_table.intern("runtime_grid_foot")),
-            value: Expression::template(runtime_grid_foot, Ownership::ImmutableOwned),
+            value: Expression::template(runtime_grid_foot, ValueMode::ImmutableOwned),
         },
     ];
 

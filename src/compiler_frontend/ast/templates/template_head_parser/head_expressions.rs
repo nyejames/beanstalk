@@ -17,11 +17,11 @@ use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler_frontend::datatypes::DataType;
-use crate::compiler_frontend::datatypes::Ownership;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::rendered_path_usage::resolve_compile_time_paths_for_rendered_output;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation};
+use crate::compiler_frontend::value_mode::ValueMode;
 use crate::{ast_log, return_syntax_error};
 
 fn is_unresolved_constant_placeholder_reference(expr: &Expression, context: &ScopeContext) -> bool {
@@ -108,7 +108,7 @@ pub(super) fn handle_template_value_in_template_head(
     }
 
     template.content.add_with_origin(
-        Expression::template(value.to_owned(), Ownership::ImmutableOwned),
+        Expression::template(value.to_owned(), ValueMode::ImmutableOwned),
         TemplateSegmentOrigin::Head,
     );
 
@@ -221,7 +221,7 @@ pub(super) fn push_template_head_path_expression(
         Expression::string_slice(
             interned,
             token_stream.current_location(),
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         ),
         TemplateSegmentOrigin::Head,
     );

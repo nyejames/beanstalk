@@ -20,7 +20,7 @@ use std::rc::Rc;
 
 fn template_ast_node(template: Template) -> AstNode {
     AstNode {
-        kind: NodeKind::Rvalue(Expression::template(template, Ownership::ImmutableOwned)),
+        kind: NodeKind::Rvalue(Expression::template(template, ValueMode::ImmutableOwned)),
         location: SourceLocation::default(),
         scope: InternedPath::new(),
     }
@@ -61,7 +61,7 @@ fn concat_template_preserves_full_style_state_from_last_template() {
     right.explicit_style.child_templates = vec![Template::create_default(vec![])];
 
     let mut nodes = vec![template_ast_node(left), template_ast_node(right.clone())];
-    let concatenated = concat_template(&mut nodes, Ownership::ImmutableOwned)
+    let concatenated = concat_template(&mut nodes, ValueMode::ImmutableOwned)
         .expect("template concatenation should succeed");
 
     let ExpressionKind::Template(result) = concatenated.kind else {
@@ -135,7 +135,7 @@ fn ordinary_expression_rejects_path_string_concatenation() {
             kind: NodeKind::Rvalue(Expression::string_slice(
                 string_table.get_or_intern(String::from("?v=1")),
                 SourceLocation::default(),
-                Ownership::ImmutableOwned,
+                ValueMode::ImmutableOwned,
             )),
             location: SourceLocation::default(),
             scope: source_scope,
@@ -147,7 +147,7 @@ fn ordinary_expression_rejects_path_string_concatenation() {
         &context,
         nodes,
         &mut current_type,
-        &Ownership::ImmutableOwned,
+        &ValueMode::ImmutableOwned,
         &mut string_table,
     )
     .expect_err("ordinary expressions should stay strict");

@@ -10,9 +10,10 @@ use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::FileTokens;
+use crate::compiler_frontend::value_mode::ValueMode;
 use crate::return_syntax_error;
 
 fn is_expression_statement(expr: &Expression) -> bool {
@@ -44,7 +45,7 @@ pub(crate) fn parse_expression_statement_candidate(
         token_stream,
         context,
         &mut inferred,
-        &Ownership::ImmutableOwned,
+        &ValueMode::ImmutableOwned,
         false,
         string_table,
     )?;
@@ -74,7 +75,7 @@ pub(crate) fn parse_symbol_expression_statement_candidate(
         token_stream,
         context,
         &mut inferred,
-        &Ownership::ImmutableOwned,
+        &ValueMode::ImmutableOwned,
         false,
         string_table,
     )?;

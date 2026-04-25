@@ -6,7 +6,7 @@ use crate::compiler_frontend::ast::statements::functions::{
 };
 use crate::compiler_frontend::ast::templates::template::{CommentDirectiveKind, TemplateType};
 use crate::compiler_frontend::ast::templates::template_types::Template;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
@@ -15,6 +15,7 @@ use crate::compiler_frontend::tests::test_support::{
     parse_single_file_ast, parse_single_file_ast_error,
 };
 use crate::compiler_frontend::tokenizer::tokens::{CharPosition, SourceLocation};
+use crate::compiler_frontend::value_mode::ValueMode;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 
 fn test_location(line: i32) -> SourceLocation {
@@ -61,7 +62,7 @@ fn push_start_runtime_fragment_node(
     AstNode {
         kind: NodeKind::PushStartRuntimeFragment(Expression::template(
             template,
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         )),
         location,
         scope,
@@ -163,7 +164,7 @@ fn collects_and_strips_top_level_doc_comment_templates() {
     doc_template.content.add(Expression::string_slice(
         string_table.intern("doc"),
         doc_location.clone(),
-        Ownership::ImmutableOwned,
+        ValueMode::ImmutableOwned,
     ));
 
     let mut runtime_template = Template::create_default(vec![]);
@@ -172,7 +173,7 @@ fn collects_and_strips_top_level_doc_comment_templates() {
     runtime_template.content.add(Expression::string_slice(
         string_table.intern("runtime"),
         runtime_location.clone(),
-        Ownership::ImmutableOwned,
+        ValueMode::ImmutableOwned,
     ));
 
     let mut ast_nodes = vec![start_function_node(
@@ -221,7 +222,7 @@ fn collects_nested_doc_fragments_in_source_order() {
     parent.content.add(Expression::string_slice(
         string_table.intern("parent"),
         test_location(2),
-        Ownership::ImmutableOwned,
+        ValueMode::ImmutableOwned,
     ));
 
     let mut child = Template::create_default(vec![]);
@@ -230,7 +231,7 @@ fn collects_nested_doc_fragments_in_source_order() {
     child.content.add(Expression::string_slice(
         string_table.intern("child"),
         test_location(3),
-        Ownership::ImmutableOwned,
+        ValueMode::ImmutableOwned,
     ));
 
     let mut grandchild = Template::create_default(vec![]);
@@ -239,7 +240,7 @@ fn collects_nested_doc_fragments_in_source_order() {
     grandchild.content.add(Expression::string_slice(
         string_table.intern("grandchild"),
         test_location(4),
-        Ownership::ImmutableOwned,
+        ValueMode::ImmutableOwned,
     ));
 
     child.doc_children.push(grandchild);

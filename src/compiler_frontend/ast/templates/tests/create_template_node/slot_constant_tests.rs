@@ -3,11 +3,12 @@ use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationIndex};
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{CharPosition, SourceLocation};
+use crate::compiler_frontend::value_mode::ValueMode;
 use std::rc::Rc;
 
 #[test]
@@ -22,7 +23,7 @@ fn slot_wrappers_remain_compile_time_templates_until_filled() {
 
     assert!(matches!(template.kind, TemplateType::String));
     assert!(template.has_unresolved_slots());
-    assert!(Expression::template(template, Ownership::ImmutableOwned).is_compile_time_constant());
+    assert!(Expression::template(template, ValueMode::ImmutableOwned).is_compile_time_constant());
 }
 
 #[test]
@@ -45,7 +46,7 @@ fn folding_nested_wrapper_constant_with_unfilled_named_slots_renders_empty_strin
 
     let declarations = vec![Declaration {
         id: scope.append(string_table.intern("header")),
-        value: Expression::template(wrapper, Ownership::ImmutableOwned),
+        value: Expression::template(wrapper, ValueMode::ImmutableOwned),
     }];
 
     let mut token_stream = template_tokens_from_source("[header]", &mut string_table);
@@ -74,7 +75,7 @@ fn wrapper_templates_with_runtime_references_are_not_compile_time_constants() {
 
     assert!(matches!(template.kind, TemplateType::StringFunction));
     assert!(template.has_unresolved_slots());
-    assert!(!Expression::template(template, Ownership::ImmutableOwned).is_compile_time_constant());
+    assert!(!Expression::template(template, ValueMode::ImmutableOwned).is_compile_time_constant());
 }
 
 #[test]
@@ -99,7 +100,7 @@ fn constant_context_template_head_with_constant_references_folds_to_string_slice
                         char_column: 120, // Arbitrary number
                     },
                 },
-                Ownership::ImmutableOwned,
+                ValueMode::ImmutableOwned,
             ),
         },
         Declaration {
@@ -117,7 +118,7 @@ fn constant_context_template_head_with_constant_references_folds_to_string_slice
                         char_column: 120, // Arbitrary number
                     },
                 },
-                Ownership::ImmutableOwned,
+                ValueMode::ImmutableOwned,
             ),
         },
     ];
@@ -142,7 +143,7 @@ fn constant_context_template_head_with_constant_references_folds_to_string_slice
         &mut token_stream,
         &context,
         &mut expected_type,
-        &Ownership::ImmutableOwned,
+        &ValueMode::ImmutableOwned,
         false,
         &mut string_table,
     )
@@ -166,7 +167,7 @@ fn non_constant_context_template_head_keeps_runtime_template() {
         &mut token_stream,
         &context,
         &mut expected_type,
-        &Ownership::ImmutableOwned,
+        &ValueMode::ImmutableOwned,
         false,
         &mut string_table,
     )

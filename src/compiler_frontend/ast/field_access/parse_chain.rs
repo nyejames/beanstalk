@@ -37,7 +37,7 @@ fn receiver_reference_node(
                     reference_arg.id.to_owned(),
                     placeholder_type,
                     base_location.clone(),
-                    crate::compiler_frontend::datatypes::Ownership::ImmutableOwned,
+                    crate::compiler_frontend::value_mode::ValueMode::ImmutableOwned,
                 )),
                 location: base_location,
                 scope: context.scope.clone(),
@@ -45,8 +45,8 @@ fn receiver_reference_node(
         }
 
         let mut inlined_expression = reference_arg.value.to_owned();
-        inlined_expression.ownership =
-            crate::compiler_frontend::datatypes::Ownership::ImmutableOwned;
+        inlined_expression.value_mode =
+            crate::compiler_frontend::value_mode::ValueMode::ImmutableOwned;
         AstNode {
             kind: NodeKind::Rvalue(inlined_expression),
             location: base_location,
@@ -58,7 +58,7 @@ fn receiver_reference_node(
                 reference_arg.id.to_owned(),
                 reference_arg.value.data_type.to_owned(),
                 base_location.clone(),
-                reference_arg.value.ownership.to_owned(),
+                reference_arg.value.value_mode.to_owned(),
             )),
             scope: context.scope.to_owned(),
             location: base_location,

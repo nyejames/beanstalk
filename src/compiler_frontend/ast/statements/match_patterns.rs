@@ -6,13 +6,14 @@
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant;
 use crate::compiler_frontend::deferred_feature_diagnostics::deferred_feature_rule_error;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
 use crate::compiler_frontend::type_coercion::compatibility::is_type_compatible;
+use crate::compiler_frontend::value_mode::ValueMode;
 use crate::return_rule_error;
 
 #[derive(Debug, Clone)]
@@ -371,31 +372,31 @@ fn parse_literal_pattern(
     let pattern = match token_stream.current_token_kind() {
         TokenKind::IntLiteral(value) => {
             let location = token_stream.current_location();
-            let expression = Expression::int(*value, location, Ownership::ImmutableOwned);
+            let expression = Expression::int(*value, location, ValueMode::ImmutableOwned);
             token_stream.advance();
             expression
         }
         TokenKind::FloatLiteral(value) => {
             let location = token_stream.current_location();
-            let expression = Expression::float(*value, location, Ownership::ImmutableOwned);
+            let expression = Expression::float(*value, location, ValueMode::ImmutableOwned);
             token_stream.advance();
             expression
         }
         TokenKind::BoolLiteral(value) => {
             let location = token_stream.current_location();
-            let expression = Expression::bool(*value, location, Ownership::ImmutableOwned);
+            let expression = Expression::bool(*value, location, ValueMode::ImmutableOwned);
             token_stream.advance();
             expression
         }
         TokenKind::CharLiteral(value) => {
             let location = token_stream.current_location();
-            let expression = Expression::char(*value, location, Ownership::ImmutableOwned);
+            let expression = Expression::char(*value, location, ValueMode::ImmutableOwned);
             token_stream.advance();
             expression
         }
         TokenKind::StringSliceLiteral(value) => {
             let location = token_stream.current_location();
-            let expression = Expression::string_slice(*value, location, Ownership::ImmutableOwned);
+            let expression = Expression::string_slice(*value, location, ValueMode::ImmutableOwned);
             token_stream.advance();
             expression
         }
@@ -405,13 +406,13 @@ fn parse_literal_pattern(
             match token_stream.current_token_kind() {
                 TokenKind::IntLiteral(value) => {
                     let expression =
-                        Expression::int(-(*value), negative_location, Ownership::ImmutableOwned);
+                        Expression::int(-(*value), negative_location, ValueMode::ImmutableOwned);
                     token_stream.advance();
                     expression
                 }
                 TokenKind::FloatLiteral(value) => {
                     let expression =
-                        Expression::float(-(*value), negative_location, Ownership::ImmutableOwned);
+                        Expression::float(-(*value), negative_location, ValueMode::ImmutableOwned);
                     token_stream.advance();
                     expression
                 }

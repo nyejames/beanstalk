@@ -6,7 +6,7 @@
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, Operator};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::hir::hir_nodes::{
     FunctionId, HirExpressionKind, HirModule, HirPlace, HirStatementKind, HirTerminator,
 };
@@ -16,6 +16,7 @@ use crate::compiler_frontend::tests::test_support::{
     fresh_returns, function_node, make_test_variable, node, runtime_function_call_node,
     runtime_operator_node, test_location,
 };
+use crate::compiler_frontend::value_mode::ValueMode;
 
 use crate::compiler_frontend::hir::hir_builder::{
     assert_no_placeholder_terminators, build_ast, lower_ast,
@@ -50,18 +51,18 @@ fn lowers_if_to_then_else_merge_blocks() {
 
     let if_node = node(
         NodeKind::If(
-            Expression::bool(true, test_location(2), Ownership::ImmutableOwned),
+            Expression::bool(true, test_location(2), ValueMode::ImmutableOwned),
             vec![node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     x,
-                    Expression::int(1, test_location(2), Ownership::ImmutableOwned),
+                    Expression::int(1, test_location(2), ValueMode::ImmutableOwned),
                 )),
                 test_location(2),
             )],
             Some(vec![node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     y,
-                    Expression::int(2, test_location(3), Ownership::ImmutableOwned),
+                    Expression::int(2, test_location(3), ValueMode::ImmutableOwned),
                 )),
                 test_location(3),
             )]),
@@ -121,7 +122,7 @@ fn short_circuit_and_keeps_rhs_call_off_always_run_path() {
             NodeKind::Return(vec![Expression::bool(
                 true,
                 location.clone(),
-                Ownership::ImmutableOwned,
+                ValueMode::ImmutableOwned,
             )]),
             location.clone(),
         )],
@@ -134,7 +135,7 @@ fn short_circuit_and_keeps_rhs_call_off_always_run_path() {
                 NodeKind::Rvalue(Expression::bool(
                     false,
                     location.clone(),
-                    Ownership::ImmutableOwned,
+                    ValueMode::ImmutableOwned,
                 )),
                 location.clone(),
             ),
@@ -143,7 +144,7 @@ fn short_circuit_and_keeps_rhs_call_off_always_run_path() {
         ],
         DataType::Bool,
         location.clone(),
-        Ownership::MutableOwned,
+        ValueMode::MutableOwned,
     );
 
     let start_fn = function_node(
@@ -159,7 +160,7 @@ fn short_circuit_and_keeps_rhs_call_off_always_run_path() {
                     NodeKind::Rvalue(Expression::int(
                         1,
                         location.clone(),
-                        Ownership::ImmutableOwned,
+                        ValueMode::ImmutableOwned,
                     )),
                     location.clone(),
                 )],
@@ -287,7 +288,7 @@ fn short_circuit_or_keeps_rhs_call_off_true_short_path() {
             NodeKind::Return(vec![Expression::bool(
                 false,
                 location.clone(),
-                Ownership::ImmutableOwned,
+                ValueMode::ImmutableOwned,
             )]),
             location.clone(),
         )],
@@ -300,7 +301,7 @@ fn short_circuit_or_keeps_rhs_call_off_true_short_path() {
                 NodeKind::Rvalue(Expression::bool(
                     true,
                     location.clone(),
-                    Ownership::ImmutableOwned,
+                    ValueMode::ImmutableOwned,
                 )),
                 location.clone(),
             ),
@@ -309,7 +310,7 @@ fn short_circuit_or_keeps_rhs_call_off_true_short_path() {
         ],
         DataType::Bool,
         location.clone(),
-        Ownership::MutableOwned,
+        ValueMode::MutableOwned,
     );
 
     let start_fn = function_node(
@@ -325,7 +326,7 @@ fn short_circuit_or_keeps_rhs_call_off_true_short_path() {
                     NodeKind::Rvalue(Expression::int(
                         1,
                         location.clone(),
-                        Ownership::ImmutableOwned,
+                        ValueMode::ImmutableOwned,
                     )),
                     location.clone(),
                 )],
@@ -445,7 +446,7 @@ fn if_condition_with_runtime_logical_expression_lowers_to_two_stage_cfg() {
             NodeKind::Return(vec![Expression::bool(
                 true,
                 location.clone(),
-                Ownership::ImmutableOwned,
+                ValueMode::ImmutableOwned,
             )]),
             location.clone(),
         )],
@@ -458,7 +459,7 @@ fn if_condition_with_runtime_logical_expression_lowers_to_two_stage_cfg() {
                 NodeKind::Rvalue(Expression::int(
                     1,
                     location.clone(),
-                    Ownership::ImmutableOwned,
+                    ValueMode::ImmutableOwned,
                 )),
                 location.clone(),
             ),
@@ -466,7 +467,7 @@ fn if_condition_with_runtime_logical_expression_lowers_to_two_stage_cfg() {
                 NodeKind::Rvalue(Expression::int(
                     2,
                     location.clone(),
-                    Ownership::ImmutableOwned,
+                    ValueMode::ImmutableOwned,
                 )),
                 location.clone(),
             ),
@@ -476,7 +477,7 @@ fn if_condition_with_runtime_logical_expression_lowers_to_two_stage_cfg() {
         ],
         DataType::Bool,
         location.clone(),
-        Ownership::MutableOwned,
+        ValueMode::MutableOwned,
     );
 
     let start_fn = function_node(
@@ -492,7 +493,7 @@ fn if_condition_with_runtime_logical_expression_lowers_to_two_stage_cfg() {
                     NodeKind::Rvalue(Expression::int(
                         1,
                         location.clone(),
-                        Ownership::ImmutableOwned,
+                        ValueMode::ImmutableOwned,
                     )),
                     location.clone(),
                 )],
@@ -500,7 +501,7 @@ fn if_condition_with_runtime_logical_expression_lowers_to_two_stage_cfg() {
                     NodeKind::Rvalue(Expression::int(
                         2,
                         location.clone(),
-                        Ownership::ImmutableOwned,
+                        ValueMode::ImmutableOwned,
                     )),
                     location.clone(),
                 )]),
@@ -542,7 +543,7 @@ fn short_circuit_place_rhs_materializes_copy_before_merge_assignment() {
                     lhs_name.clone(),
                     DataType::Bool,
                     location.clone(),
-                    Ownership::ImmutableReference,
+                    ValueMode::ImmutableReference,
                 )),
                 location.clone(),
             ),
@@ -551,7 +552,7 @@ fn short_circuit_place_rhs_materializes_copy_before_merge_assignment() {
                     rhs_name.clone(),
                     DataType::Bool,
                     location.clone(),
-                    Ownership::ImmutableReference,
+                    ValueMode::ImmutableReference,
                 )),
                 location.clone(),
             ),
@@ -559,7 +560,7 @@ fn short_circuit_place_rhs_materializes_copy_before_merge_assignment() {
         ],
         DataType::Bool,
         location.clone(),
-        Ownership::MutableOwned,
+        ValueMode::MutableOwned,
     );
 
     let start_fn = function_node(
@@ -572,14 +573,14 @@ fn short_circuit_place_rhs_materializes_copy_before_merge_assignment() {
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     lhs_name,
-                    Expression::bool(false, location.clone(), Ownership::ImmutableOwned),
+                    Expression::bool(false, location.clone(), ValueMode::ImmutableOwned),
                 )),
                 location.clone(),
             ),
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     rhs_name,
-                    Expression::bool(true, location.clone(), Ownership::MutableOwned),
+                    Expression::bool(true, location.clone(), ValueMode::MutableOwned),
                 )),
                 location.clone(),
             ),
@@ -590,7 +591,7 @@ fn short_circuit_place_rhs_materializes_copy_before_merge_assignment() {
                         NodeKind::Rvalue(Expression::int(
                             1,
                             location.clone(),
-                            Ownership::ImmutableOwned,
+                            ValueMode::ImmutableOwned,
                         )),
                         location.clone(),
                     )],
@@ -659,12 +660,12 @@ fn non_unit_function_with_terminal_if_does_not_report_fallthrough() {
         },
         vec![node(
             NodeKind::If(
-                Expression::bool(true, test_location(8), Ownership::ImmutableOwned),
+                Expression::bool(true, test_location(8), ValueMode::ImmutableOwned),
                 vec![node(
                     NodeKind::Return(vec![Expression::int(
                         1,
                         test_location(8),
-                        Ownership::ImmutableOwned,
+                        ValueMode::ImmutableOwned,
                     )]),
                     test_location(8),
                 )],
@@ -672,7 +673,7 @@ fn non_unit_function_with_terminal_if_does_not_report_fallthrough() {
                     NodeKind::Return(vec![Expression::int(
                         2,
                         test_location(9),
-                        Ownership::ImmutableOwned,
+                        ValueMode::ImmutableOwned,
                     )]),
                     test_location(9),
                 )]),

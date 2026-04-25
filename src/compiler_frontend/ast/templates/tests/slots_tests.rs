@@ -5,7 +5,6 @@ use crate::compiler_frontend::ast::templates::template::{
 };
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationIndex};
-use crate::compiler_frontend::datatypes::Ownership;
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
@@ -15,6 +14,7 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
 use crate::compiler_frontend::tokenizer::newline_handling::NewlineMode;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::compiler_frontend::value_mode::ValueMode;
 use std::rc::Rc;
 
 fn template_tokens_from_source(source: &str, string_table: &mut StringTable) -> FileTokens {
@@ -120,14 +120,14 @@ fn test_positional_composition_basic() {
             TemplateAtom::Content(TemplateSegment::new(
                 Expression::template(
                     template_from_source("[:a]", &mut string_table),
-                    Ownership::ImmutableOwned,
+                    ValueMode::ImmutableOwned,
                 ),
                 TemplateSegmentOrigin::Body,
             )),
             TemplateAtom::Content(TemplateSegment::new(
                 Expression::template(
                     template_from_source("[:b]", &mut string_table),
-                    Ownership::ImmutableOwned,
+                    ValueMode::ImmutableOwned,
                 ),
                 TemplateSegmentOrigin::Body,
             )),
@@ -153,21 +153,21 @@ fn test_positional_composition_with_default_overflow() {
             TemplateAtom::Content(TemplateSegment::new(
                 Expression::template(
                     template_from_source("[:a]", &mut string_table),
-                    Ownership::ImmutableOwned,
+                    ValueMode::ImmutableOwned,
                 ),
                 TemplateSegmentOrigin::Body,
             )),
             TemplateAtom::Content(TemplateSegment::new(
                 Expression::template(
                     template_from_source("[:b]", &mut string_table),
-                    Ownership::ImmutableOwned,
+                    ValueMode::ImmutableOwned,
                 ),
                 TemplateSegmentOrigin::Body,
             )),
             TemplateAtom::Content(TemplateSegment::new(
                 Expression::template(
                     template_from_source("[:c]", &mut string_table),
-                    Ownership::ImmutableOwned,
+                    ValueMode::ImmutableOwned,
                 ),
                 TemplateSegmentOrigin::Body,
             )),
@@ -193,14 +193,14 @@ fn test_positional_composition_overflow_error() {
             TemplateAtom::Content(TemplateSegment::new(
                 Expression::template(
                     template_from_source("[:a]", &mut string_table),
-                    Ownership::ImmutableOwned,
+                    ValueMode::ImmutableOwned,
                 ),
                 TemplateSegmentOrigin::Body,
             )),
             TemplateAtom::Content(TemplateSegment::new(
                 Expression::template(
                     template_from_source("[:b]", &mut string_table),
-                    Ownership::ImmutableOwned,
+                    ValueMode::ImmutableOwned,
                 ),
                 TemplateSegmentOrigin::Body,
             )),
@@ -228,7 +228,7 @@ fn test_positional_composition_repeated_slots() {
         atoms: vec![TemplateAtom::Content(TemplateSegment::new(
             Expression::template(
                 template_from_source("[:a]", &mut string_table),
-                Ownership::ImmutableOwned,
+                ValueMode::ImmutableOwned,
             ),
             TemplateSegmentOrigin::Body,
         ))],
@@ -253,7 +253,7 @@ fn test_positional_composition_mixed_content() {
             TemplateAtom::Content(TemplateSegment::new(
                 Expression::template(
                     template_from_source("[:a]", &mut string_table),
-                    Ownership::ImmutableOwned,
+                    ValueMode::ImmutableOwned,
                 ),
                 TemplateSegmentOrigin::Body,
             )),
@@ -261,14 +261,14 @@ fn test_positional_composition_mixed_content() {
                 Expression::string_slice(
                     string_table.intern(" text "),
                     SourceLocation::default(),
-                    Ownership::ImmutableOwned,
+                    ValueMode::ImmutableOwned,
                 ),
                 TemplateSegmentOrigin::Body,
             )),
             TemplateAtom::Content(TemplateSegment::new(
                 Expression::template(
                     template_from_source("[:b]", &mut string_table),
-                    Ownership::ImmutableOwned,
+                    ValueMode::ImmutableOwned,
                 ),
                 TemplateSegmentOrigin::Body,
             )),

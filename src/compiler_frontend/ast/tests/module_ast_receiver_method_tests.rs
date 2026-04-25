@@ -4,13 +4,12 @@ use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::type_resolution::validate_no_recursive_runtime_structs;
-use crate::compiler_frontend::datatypes::{
-    BuiltinScalarReceiver, DataType, Ownership, ReceiverKey,
-};
+use crate::compiler_frontend::datatypes::{BuiltinScalarReceiver, DataType, ReceiverKey};
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
+use crate::compiler_frontend::value_mode::ValueMode;
 use rustc_hash::FxHashMap;
 use std::rc::Rc;
 
@@ -180,8 +179,8 @@ fn recursive_runtime_struct_cycles_are_rejected() {
             value: Expression::new(
                 ExpressionKind::NoValue,
                 SourceLocation::default(),
-                DataType::runtime_struct(struct_b.to_owned(), vec![], Ownership::MutableOwned),
-                Ownership::ImmutableOwned,
+                DataType::runtime_struct(struct_b.to_owned(), vec![]),
+                ValueMode::ImmutableOwned,
             ),
         }],
     );
@@ -192,8 +191,8 @@ fn recursive_runtime_struct_cycles_are_rejected() {
             value: Expression::new(
                 ExpressionKind::NoValue,
                 SourceLocation::default(),
-                DataType::runtime_struct(struct_a, vec![], Ownership::MutableOwned),
-                Ownership::ImmutableOwned,
+                DataType::runtime_struct(struct_a, vec![]),
+                ValueMode::ImmutableOwned,
             ),
         }],
     );
@@ -218,7 +217,7 @@ fn non_recursive_runtime_structs_are_allowed() {
                 ExpressionKind::NoValue,
                 SourceLocation::default(),
                 DataType::Int,
-                Ownership::ImmutableOwned,
+                ValueMode::ImmutableOwned,
             ),
         }],
     );

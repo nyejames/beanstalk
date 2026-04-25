@@ -8,7 +8,7 @@ use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::{ExpressionKind, ResultCallHandling};
 use crate::compiler_frontend::ast::statements::functions::ReturnSlot;
 use crate::compiler_frontend::compiler_errors::ErrorMetaDataKey;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::tests::test_support::{
     function_body_by_name, function_signature_by_name, parse_single_file_ast,
     parse_single_file_ast_error, start_function_body,
@@ -149,7 +149,6 @@ fn resolves_named_struct_type_in_function_parameters() {
     assert!(matches!(
         signature.parameters[0].value.data_type,
         DataType::Struct {
-            ownership: Ownership::MutableOwned,
             const_record: false,
             ..
         }
@@ -166,7 +165,6 @@ fn resolves_named_struct_type_in_function_returns() {
     assert!(matches!(
         signature.returns[0].value,
         FunctionReturn::Value(DataType::Struct {
-            ownership: Ownership::MutableOwned,
             const_record: false,
             ..
         })

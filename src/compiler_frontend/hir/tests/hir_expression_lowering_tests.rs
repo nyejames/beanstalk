@@ -15,7 +15,7 @@ use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::builtins::error_type::register_builtin_error_types;
 use crate::compiler_frontend::builtins::{BuiltinMethodKind, CollectionBuiltinOp};
 use crate::compiler_frontend::compiler_errors::ErrorType;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant;
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_datatypes::HirTypeKind;
@@ -29,6 +29,7 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{CharPosition, SourceLocation};
+use crate::compiler_frontend::value_mode::ValueMode;
 
 fn setup_builder(string_table: &'_ mut StringTable) -> HirBuilder<'_> {
     let test_function_name = InternedPath::from_single_str("__expr_test_fn", string_table);
@@ -136,7 +137,7 @@ fn runtime_template_expression(location: SourceLocation, content: Vec<Expression
     template.kind =
         crate::compiler_frontend::ast::templates::template::TemplateType::StringFunction;
 
-    Expression::template(template, Ownership::ImmutableOwned)
+    Expression::template(template, ValueMode::ImmutableOwned)
 }
 
 fn builtin_error_related_types(string_table: &mut StringTable) -> (DataType, DataType, DataType) {
@@ -174,7 +175,7 @@ fn compile_time_wrapper_templates_lower_as_runtime_templates_when_they_reach_hir
     template.content.add(Expression::string_slice(
         before,
         location.clone(),
-        Ownership::ImmutableOwned,
+        ValueMode::ImmutableOwned,
     ));
     template
         .content
@@ -183,13 +184,13 @@ fn compile_time_wrapper_templates_lower_as_runtime_templates_when_they_reach_hir
     template.content.add(Expression::string_slice(
         after,
         location,
-        Ownership::ImmutableOwned,
+        ValueMode::ImmutableOwned,
     ));
     template.kind = crate::compiler_frontend::ast::templates::template::TemplateType::String;
     template.resync_runtime_metadata();
 
     let lowered = builder
-        .lower_expression(&Expression::template(template, Ownership::ImmutableOwned))
+        .lower_expression(&Expression::template(template, ValueMode::ImmutableOwned))
         .expect("wrapper-shaped runtime templates should lower in HIR");
 
     assert_eq!(lowered.prelude.len(), 1);
@@ -224,12 +225,12 @@ fn escaped_slot_insert_helpers_fail_when_they_reach_hir_runtime_lowering() {
     helper.content.add(Expression::string_slice(
         text,
         location.clone(),
-        Ownership::ImmutableOwned,
+        ValueMode::ImmutableOwned,
     ));
     helper.resync_runtime_metadata();
 
     let err = builder
-        .lower_expression(&Expression::template(helper, Ownership::ImmutableOwned))
+        .lower_expression(&Expression::template(helper, ValueMode::ImmutableOwned))
         .expect_err("escaped helper templates should be rejected in HIR");
 
     assert_eq!(err.error_type, ErrorType::HirTransformation);
@@ -250,13 +251,13 @@ fn runtime_template_without_render_plan_reports_compiler_bug() {
     template.content.add(Expression::string_slice(
         hello,
         location.clone(),
-        Ownership::ImmutableOwned,
+        ValueMode::ImmutableOwned,
     ));
     template.kind =
         crate::compiler_frontend::ast::templates::template::TemplateType::StringFunction;
 
     let err = builder
-        .lower_expression(&Expression::template(template, Ownership::ImmutableOwned))
+        .lower_expression(&Expression::template(template, ValueMode::ImmutableOwned))
         .expect_err("runtime templates without render plans should fail");
 
     assert_eq!(err.error_type, ErrorType::HirTransformation);
@@ -274,7 +275,7 @@ fn lowers_primitive_literals() {
         .lower_expression(&Expression::int(
             42,
             location.clone(),
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         ))
         .expect("int lowering should succeed");
     assert!(int_lowered.prelude.is_empty());
@@ -285,7 +286,7 @@ fn lowers_primitive_literals() {
         .lower_expression(&Expression::float(
             3.25,
             location.clone(),
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         ))
         .expect("float lowering should succeed");
     assert!(float_lowered.prelude.is_empty());
@@ -299,7 +300,7 @@ fn lowers_primitive_literals() {
         .lower_expression(&Expression::bool(
             true,
             location.clone(),
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         ))
         .expect("bool lowering should succeed");
     assert!(bool_lowered.prelude.is_empty());
@@ -313,7 +314,7 @@ fn lowers_primitive_literals() {
         .lower_expression(&Expression::char(
             'x',
             location.clone(),
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         ))
         .expect("char lowering should succeed");
     assert!(char_lowered.prelude.is_empty());
@@ -323,7 +324,7 @@ fn lowers_primitive_literals() {
         HirExpressionKind::Char('x')
     ));
 
-    let string_expr = Expression::string_slice(text, location.clone(), Ownership::ImmutableOwned);
+    let string_expr = Expression::string_slice(text, location.clone(), ValueMode::ImmutableOwned);
     let string_lowered = builder
         .lower_expression(&string_expr)
         .expect("string literal lowering should succeed");
@@ -354,7 +355,7 @@ fn lowers_reference_to_registered_local() {
         x,
         DataType::Int,
         location.clone(),
-        Ownership::ImmutableReference,
+        ValueMode::ImmutableReference,
     );
     let lowered = builder
         .lower_expression(&expr)
@@ -377,14 +378,14 @@ fn lowers_reference_to_module_constant_when_local_is_missing() {
 
     builder.test_register_module_constant(
         third_const.clone(),
-        Expression::int(3, location.clone(), Ownership::ImmutableOwned),
+        Expression::int(3, location.clone(), ValueMode::ImmutableOwned),
     );
 
     let expr = Expression::reference(
         third_const,
         DataType::Int,
         location.clone(),
-        Ownership::ImmutableReference,
+        ValueMode::ImmutableReference,
     );
     let lowered = builder
         .lower_expression(&expr)
@@ -409,7 +410,7 @@ fn rejects_cyclic_module_constant_dependencies() {
             const_b.clone(),
             DataType::Int,
             location.clone(),
-            Ownership::ImmutableReference,
+            ValueMode::ImmutableReference,
         ),
     );
     builder.test_register_module_constant(
@@ -418,7 +419,7 @@ fn rejects_cyclic_module_constant_dependencies() {
             const_a.clone(),
             DataType::Int,
             location.clone(),
-            Ownership::ImmutableReference,
+            ValueMode::ImmutableReference,
         ),
     );
 
@@ -427,7 +428,7 @@ fn rejects_cyclic_module_constant_dependencies() {
             const_a,
             DataType::Int,
             location.clone(),
-            Ownership::ImmutableReference,
+            ValueMode::ImmutableReference,
         ))
         .expect_err("cyclic module constants should fail during HIR lowering");
 
@@ -463,18 +464,18 @@ fn lowers_runtime_rpn_arithmetic_stack_correctly() {
             x,
             DataType::Int,
             location.clone(),
-            Ownership::ImmutableReference,
+            ValueMode::ImmutableReference,
         )),
         rvalue_node(Expression::int(
             2,
             location.clone(),
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         )),
         rvalue_node(Expression::reference(
             y,
             DataType::Int,
             location.clone(),
-            Ownership::ImmutableReference,
+            ValueMode::ImmutableReference,
         )),
         operator_node(Operator::Multiply, location.clone()),
         operator_node(Operator::Add, location.clone()),
@@ -484,7 +485,7 @@ fn lowers_runtime_rpn_arithmetic_stack_correctly() {
         nodes,
         DataType::Int,
         location.clone(),
-        Ownership::MutableOwned,
+        ValueMode::MutableOwned,
     );
     let lowered = builder
         .lower_expression(&expr)
@@ -513,18 +514,18 @@ fn runtime_division_subexpression_infers_float_type_in_hir() {
         rvalue_node(Expression::int(
             5,
             location.clone(),
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         )),
         rvalue_node(Expression::int(
             2,
             location.clone(),
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         )),
         operator_node(Operator::Divide, location.clone()),
         rvalue_node(Expression::int(
             1,
             location.clone(),
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         )),
         operator_node(Operator::Add, location.clone()),
     ];
@@ -533,7 +534,7 @@ fn runtime_division_subexpression_infers_float_type_in_hir() {
         nodes,
         DataType::Float,
         location.clone(),
-        Ownership::MutableOwned,
+        ValueMode::MutableOwned,
     );
     let lowered = builder
         .lower_expression(&expr)
@@ -564,12 +565,12 @@ fn runtime_integer_division_lowers_to_hir_int_div_with_int_type() {
         rvalue_node(Expression::int(
             5,
             location.clone(),
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         )),
         rvalue_node(Expression::int(
             2,
             location.clone(),
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         )),
         operator_node(Operator::IntDivide, location.clone()),
     ];
@@ -578,7 +579,7 @@ fn runtime_integer_division_lowers_to_hir_int_div_with_int_type() {
         nodes,
         DataType::Int,
         location.clone(),
-        Ownership::MutableOwned,
+        ValueMode::MutableOwned,
     );
     let lowered = builder
         .lower_expression(&expr)
@@ -601,7 +602,7 @@ fn lowers_unary_not_in_runtime_rpn() {
         rvalue_node(Expression::bool(
             true,
             location.clone(),
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         )),
         operator_node(Operator::Not, location.clone()),
     ];
@@ -610,7 +611,7 @@ fn lowers_unary_not_in_runtime_rpn() {
         nodes,
         DataType::Bool,
         location.clone(),
-        Ownership::MutableOwned,
+        ValueMode::MutableOwned,
     );
     let lowered = builder
         .lower_expression(&expr)
@@ -635,12 +636,12 @@ fn lowers_range_operator_in_runtime_rpn() {
         rvalue_node(Expression::int(
             1,
             location.clone(),
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         )),
         rvalue_node(Expression::int(
             9,
             location.clone(),
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         )),
         operator_node(Operator::Range, location.clone()),
     ];
@@ -649,7 +650,7 @@ fn lowers_range_operator_in_runtime_rpn() {
         nodes,
         DataType::Range,
         location.clone(),
-        Ownership::MutableOwned,
+        ValueMode::MutableOwned,
     );
     let lowered = builder
         .lower_expression(&expr)
@@ -674,7 +675,7 @@ fn lowers_function_call_to_call_statement_and_temp_load() {
         vec![Expression::int(
             7,
             location.clone(),
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         )],
         vec![DataType::Int],
         location.clone(),
@@ -716,7 +717,7 @@ fn lowers_fresh_mutable_call_argument_via_hidden_local_with_origin_metadata() {
     builder.test_register_function_name(function_name.clone(), FunctionId(24));
 
     let fresh_argument = CallArgument::positional(
-        Expression::int(7, location.clone(), Ownership::ImmutableOwned),
+        Expression::int(7, location.clone(), ValueMode::ImmutableOwned),
         CallAccessMode::Shared,
         location.clone(),
     )
@@ -794,8 +795,7 @@ fn lowers_receiver_method_call_with_receiver_as_first_argument() {
     builder.test_register_struct_with_fields(StructId(21), receiver_struct.clone(), vec![]);
     builder.test_register_function_name(method_path.clone(), FunctionId(22));
 
-    let receiver_type =
-        DataType::runtime_struct(receiver_struct.clone(), vec![], Ownership::MutableOwned);
+    let receiver_type = DataType::runtime_struct(receiver_struct.clone(), vec![]);
     register_local(
         &mut builder,
         receiver_name.clone(),
@@ -809,7 +809,7 @@ fn lowers_receiver_method_call_with_receiver_as_first_argument() {
             receiver_name,
             receiver_type,
             location.clone(),
-            Ownership::MutableReference,
+            ValueMode::MutableReference,
         )),
         location: location.clone(),
         scope: InternedPath::new(),
@@ -823,7 +823,7 @@ fn lowers_receiver_method_call_with_receiver_as_first_argument() {
                 method: method_name,
                 builtin: None,
                 args: vec![CallArgument::positional(
-                    Expression::int(7, location.clone(), Ownership::ImmutableOwned),
+                    Expression::int(7, location.clone(), ValueMode::ImmutableOwned),
                     CallAccessMode::Shared,
                     location.clone(),
                 )],
@@ -875,7 +875,7 @@ fn lowers_builtin_scalar_receiver_method_call_with_receiver_as_first_argument() 
             receiver_name,
             DataType::Int,
             location.clone(),
-            Ownership::ImmutableReference,
+            ValueMode::ImmutableReference,
         )),
         location: location.clone(),
         scope: InternedPath::new(),
@@ -955,7 +955,7 @@ fn lowers_builtin_error_with_location_and_push_trace_methods_to_host_calls() {
             error_name.to_owned(),
             error_type.to_owned(),
             location.to_owned(),
-            Ownership::ImmutableReference,
+            ValueMode::ImmutableReference,
         )),
         location: location.to_owned(),
         scope: InternedPath::new(),
@@ -971,7 +971,7 @@ fn lowers_builtin_error_with_location_and_push_trace_methods_to_host_calls() {
                     location_name.to_owned(),
                     location_type.to_owned(),
                     location.to_owned(),
-                    Ownership::ImmutableReference,
+                    ValueMode::ImmutableReference,
                 ),
                 CallAccessMode::Shared,
                 location.clone(),
@@ -1000,7 +1000,7 @@ fn lowers_builtin_error_with_location_and_push_trace_methods_to_host_calls() {
             error_name,
             error_type.to_owned(),
             location.to_owned(),
-            Ownership::ImmutableReference,
+            ValueMode::ImmutableReference,
         )),
         location: location.to_owned(),
         scope: InternedPath::new(),
@@ -1016,7 +1016,7 @@ fn lowers_builtin_error_with_location_and_push_trace_methods_to_host_calls() {
                     frame_name,
                     frame_type,
                     location.to_owned(),
-                    Ownership::ImmutableReference,
+                    ValueMode::ImmutableReference,
                 ),
                 CallAccessMode::Shared,
                 location.clone(),
@@ -1068,7 +1068,7 @@ fn lowers_builtin_error_bubble_with_compiler_supplied_context_args() {
                     error_name,
                     error_type.to_owned(),
                     call_location.to_owned(),
-                    Ownership::ImmutableReference,
+                    ValueMode::ImmutableReference,
                 )),
                 location: call_location.to_owned(),
                 scope: InternedPath::new(),
@@ -1122,7 +1122,7 @@ fn lowers_host_call_expression_with_host_target() {
         vec![Expression::string_slice(
             literal_x,
             location.clone(),
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         )],
         vec![DataType::Int],
         location.clone(),
@@ -1202,7 +1202,7 @@ fn malformed_runtime_rpn_reports_hir_transformation_error() {
         vec![operator_node(Operator::Add, location.clone())],
         DataType::Int,
         location,
-        Ownership::MutableOwned,
+        ValueMode::MutableOwned,
     );
 
     let err = builder
@@ -1228,7 +1228,7 @@ fn runtime_template_expression_lowers_to_synthetic_function_call() {
         vec![Expression::string_slice(
             hello,
             location,
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         )],
     );
 
@@ -1266,7 +1266,7 @@ fn runtime_template_generated_function_coerces_non_string_segments() {
 
     let expr = runtime_template_expression(
         location.clone(),
-        vec![Expression::int(5, location, Ownership::ImmutableOwned)],
+        vec![Expression::int(5, location, ValueMode::ImmutableOwned)],
     );
 
     let lowered = builder
@@ -1344,16 +1344,16 @@ fn runtime_template_lowers_nested_templates_in_order() {
         vec![Expression::string_slice(
             b,
             location.clone(),
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         )],
     );
 
     let expr = runtime_template_expression(
         location.clone(),
         vec![
-            Expression::string_slice(a, location.clone(), Ownership::ImmutableOwned),
+            Expression::string_slice(a, location.clone(), ValueMode::ImmutableOwned),
             nested,
-            Expression::string_slice(c, location, Ownership::ImmutableOwned),
+            Expression::string_slice(c, location, ValueMode::ImmutableOwned),
         ],
     );
 
@@ -1423,7 +1423,7 @@ fn local_resolution_uses_full_path_identity_not_leaf_name() {
         local_b,
         DataType::Int,
         location.clone(),
-        Ownership::ImmutableReference,
+        ValueMode::ImmutableReference,
     );
     let err = builder
         .lower_expression(&expr)
@@ -1452,14 +1452,14 @@ fn nominal_struct_identity_uses_field_parent_path() {
 
     let expr_fields = vec![Declaration {
         id: field_path.clone(),
-        value: Expression::int(42, location.clone(), Ownership::ImmutableOwned),
+        value: Expression::int(42, location.clone(), ValueMode::ImmutableOwned),
     }];
 
     let expression = Expression::new(
         ExpressionKind::StructInstance(expr_fields.clone()),
         location.clone(),
-        DataType::runtime_struct(struct_path.clone(), expr_fields, Ownership::MutableOwned),
-        Ownership::MutableOwned,
+        DataType::runtime_struct(struct_path.clone(), expr_fields),
+        ValueMode::MutableOwned,
     );
 
     let lowered = builder
@@ -1505,7 +1505,7 @@ fn temp_locals_are_not_resolvable_as_user_symbols() {
         temp_name,
         DataType::Int,
         location.clone(),
-        Ownership::ImmutableReference,
+        ValueMode::ImmutableReference,
     );
 
     let error = builder
@@ -1550,10 +1550,9 @@ fn field_access_uses_base_struct_identity_not_global_leaf_lookup() {
                 ExpressionKind::NoValue,
                 location.clone(),
                 DataType::Int,
-                Ownership::ImmutableOwned,
+                ValueMode::ImmutableOwned,
             ),
         }],
-        Ownership::MutableOwned,
     );
 
     register_local(
@@ -1569,7 +1568,7 @@ fn field_access_uses_base_struct_identity_not_global_leaf_lookup() {
             local_name,
             local_struct_type,
             location.clone(),
-            Ownership::ImmutableReference,
+            ValueMode::ImmutableReference,
         )),
         location: location.clone(),
         scope: InternedPath::new(),
@@ -1580,7 +1579,7 @@ fn field_access_uses_base_struct_identity_not_global_leaf_lookup() {
             base: Box::new(base_node),
             field: field_leaf,
             data_type: DataType::Int,
-            ownership: Ownership::ImmutableReference,
+            value_mode: ValueMode::ImmutableReference,
         },
         location: location.clone(),
         scope: InternedPath::new(),
@@ -1626,11 +1625,11 @@ fn field_access_from_module_constant_base_materializes_temp_place() {
                 value: Expression::string_slice(
                     center_value,
                     location.clone(),
-                    Ownership::ImmutableOwned,
+                    ValueMode::ImmutableOwned,
                 ),
             }],
             location.clone(),
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
             false,
         ),
     );
@@ -1643,10 +1642,9 @@ fn field_access_from_module_constant_base_materializes_temp_place() {
                 ExpressionKind::NoValue,
                 location.clone(),
                 DataType::Template,
-                Ownership::ImmutableOwned,
+                ValueMode::ImmutableOwned,
             ),
         }],
-        Ownership::ImmutableOwned,
     );
 
     let base_node = AstNode {
@@ -1654,7 +1652,7 @@ fn field_access_from_module_constant_base_materializes_temp_place() {
             format_name,
             format_struct_type,
             location.clone(),
-            Ownership::ImmutableReference,
+            ValueMode::ImmutableReference,
         )),
         location: location.clone(),
         scope: InternedPath::new(),
@@ -1665,7 +1663,7 @@ fn field_access_from_module_constant_base_materializes_temp_place() {
             base: Box::new(base_node),
             field: center_leaf,
             data_type: DataType::Template,
-            ownership: Ownership::ImmutableReference,
+            value_mode: ValueMode::ImmutableReference,
         },
         location: location.clone(),
         scope: InternedPath::new(),
@@ -1703,7 +1701,7 @@ fn lowers_collection_builtin_host_calls_from_explicit_ast_nodes() {
     let length_path = super::symbol("__bs_collection_length", &mut string_table);
     let mut builder = setup_builder(&mut string_table);
 
-    let receiver_type = DataType::Collection(Box::new(DataType::Int), Ownership::MutableOwned);
+    let receiver_type = DataType::Collection(Box::new(DataType::Int));
     register_local(
         &mut builder,
         receiver_name.clone(),
@@ -1717,7 +1715,7 @@ fn lowers_collection_builtin_host_calls_from_explicit_ast_nodes() {
             receiver_name,
             receiver_type,
             location.clone(),
-            Ownership::MutableReference,
+            ValueMode::MutableReference,
         )),
         location: location.clone(),
         scope: InternedPath::new(),
@@ -1727,7 +1725,7 @@ fn lowers_collection_builtin_host_calls_from_explicit_ast_nodes() {
         (
             CollectionBuiltinOp::Get,
             vec![CallArgument::positional(
-                Expression::int(1, location.clone(), Ownership::ImmutableOwned),
+                Expression::int(1, location.clone(), ValueMode::ImmutableOwned),
                 CallAccessMode::Shared,
                 location.clone(),
             )],
@@ -1740,7 +1738,7 @@ fn lowers_collection_builtin_host_calls_from_explicit_ast_nodes() {
         (
             CollectionBuiltinOp::Push,
             vec![CallArgument::positional(
-                Expression::int(4, location.clone(), Ownership::ImmutableOwned),
+                Expression::int(4, location.clone(), ValueMode::ImmutableOwned),
                 CallAccessMode::Shared,
                 location.clone(),
             )],
@@ -1750,7 +1748,7 @@ fn lowers_collection_builtin_host_calls_from_explicit_ast_nodes() {
         (
             CollectionBuiltinOp::Remove,
             vec![CallArgument::positional(
-                Expression::int(0, location.clone(), Ownership::ImmutableOwned),
+                Expression::int(0, location.clone(), ValueMode::ImmutableOwned),
                 CallAccessMode::Shared,
                 location.clone(),
             )],
@@ -1801,7 +1799,7 @@ fn lowers_collection_set_builtin_from_explicit_ast_node_to_index_assignment() {
     let receiver_name = super::symbol("values", &mut string_table);
     let mut builder = setup_builder(&mut string_table);
 
-    let receiver_type = DataType::Collection(Box::new(DataType::Int), Ownership::MutableOwned);
+    let receiver_type = DataType::Collection(Box::new(DataType::Int));
     register_local(
         &mut builder,
         receiver_name.clone(),
@@ -1815,7 +1813,7 @@ fn lowers_collection_set_builtin_from_explicit_ast_node_to_index_assignment() {
             receiver_name,
             receiver_type,
             location.clone(),
-            Ownership::MutableReference,
+            ValueMode::MutableReference,
         )),
         location: location.clone(),
         scope: InternedPath::new(),
@@ -1828,12 +1826,12 @@ fn lowers_collection_set_builtin_from_explicit_ast_node_to_index_assignment() {
                 op: CollectionBuiltinOp::Set,
                 args: vec![
                     CallArgument::positional(
-                        Expression::int(0, location.clone(), Ownership::ImmutableOwned),
+                        Expression::int(0, location.clone(), ValueMode::ImmutableOwned),
                         CallAccessMode::Shared,
                         location.clone(),
                     ),
                     CallArgument::positional(
-                        Expression::int(99, location.clone(), Ownership::ImmutableOwned),
+                        Expression::int(99, location.clone(), ValueMode::ImmutableOwned),
                         CallAccessMode::Shared,
                         location.clone(),
                     ),
@@ -1902,7 +1900,7 @@ fn lowers_choice_variant_expression_to_hir_choice_variant() {
         },
         location.clone(),
         choice_type,
-        Ownership::ImmutableOwned,
+        ValueMode::ImmutableOwned,
     );
 
     let lowered = builder
@@ -1936,6 +1934,50 @@ fn lowers_choice_variant_expression_to_hir_choice_variant() {
             }
         ),
         "expected Choice type with ChoiceId(0), got {:?}",
+        hir_type.kind
+    );
+}
+
+#[test]
+fn collection_lowering_uses_pure_type_identity() {
+    let mut string_table = StringTable::new();
+    let mut builder = setup_builder(&mut string_table);
+    let location = SourceLocation::default();
+
+    let collection_type = DataType::Collection(Box::new(DataType::Int));
+    let type_id = builder
+        .lower_data_type(&collection_type, &location)
+        .unwrap();
+    let hir_type = builder.type_context.get(type_id);
+
+    assert!(
+        matches!(hir_type.kind, HirTypeKind::Collection { .. }),
+        "expected Collection HirTypeKind, got {:?}",
+        hir_type.kind
+    );
+}
+
+#[test]
+fn struct_lowering_uses_nominal_identity_only() {
+    let mut string_table = StringTable::new();
+    let path = InternedPath::from_single_str("User", &mut string_table);
+    let mut builder = setup_builder(&mut string_table);
+    let location = SourceLocation::default();
+
+    builder.test_register_struct_with_fields(StructId(0), path.clone(), vec![]);
+
+    let struct_type = DataType::runtime_struct(path, vec![]);
+    let type_id = builder.lower_data_type(&struct_type, &location).unwrap();
+    let hir_type = builder.type_context.get(type_id);
+
+    assert!(
+        matches!(
+            hir_type.kind,
+            HirTypeKind::Struct {
+                struct_id: StructId(0)
+            }
+        ),
+        "expected Struct HirTypeKind with StructId(0), got {:?}",
         hir_type.kind
     );
 }

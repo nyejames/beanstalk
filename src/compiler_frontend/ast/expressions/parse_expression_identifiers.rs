@@ -14,13 +14,14 @@ use crate::compiler_frontend::ast::statements::declarations::create_reference;
 use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::deferred_feature_diagnostics::deferred_feature_rule_error;
 use crate::compiler_frontend::reserved_trait_syntax::{
     reserved_trait_keyword_error, reserved_trait_keyword_or_dispatch_mismatch,
 };
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
+use crate::compiler_frontend::value_mode::ValueMode;
 use crate::{return_compiler_error, return_rule_error};
 
 pub(super) fn parse_identifier_or_call(
@@ -56,7 +57,6 @@ pub(super) fn parse_identifier_or_call(
         if let DataType::Struct {
             nominal_path,
             fields,
-            ownership: struct_ownership,
             ..
         } = &arg.value.data_type
             && token_stream.peek_next_token() == Some(&TokenKind::OpenParenthesis)
@@ -70,7 +70,7 @@ pub(super) fn parse_identifier_or_call(
                 nominal_path,
                 id,
                 fields,
-                struct_ownership,
+                &arg.value.value_mode,
                 context,
                 string_table,
             )?;
@@ -446,6 +446,6 @@ fn parse_choice_variant_value(
         },
         variant_location,
         choice_declaration.value.data_type.to_owned(),
-        Ownership::ImmutableOwned,
+        ValueMode::ImmutableOwned,
     ))
 }

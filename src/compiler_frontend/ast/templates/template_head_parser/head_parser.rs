@@ -23,13 +23,14 @@ use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::deferred_feature_diagnostics::unsupported_style_directive_syntax_error;
 use crate::compiler_frontend::style_directives::{
     StyleDirectiveKind, StyleDirectiveSpec, TemplateHeadCompatibility, TemplateHeadTag,
 };
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::compiler_frontend::value_mode::ValueMode;
 use crate::projects::settings::BS_VAR_PREFIX;
 use crate::{ast_log, return_syntax_error};
 
@@ -182,7 +183,7 @@ pub fn parse_template_head(
                                 token_stream,
                                 context,
                                 &mut DataType::Inferred,
-                                &arg.value.ownership,
+                                &arg.value.value_mode,
                                 false,
                                 string_table,
                             )?;
@@ -228,7 +229,7 @@ pub fn parse_template_head(
                     token_stream,
                     context,
                     &mut DataType::Inferred,
-                    &Ownership::ImmutableOwned,
+                    &ValueMode::ImmutableOwned,
                     false,
                     string_table,
                 )?;
@@ -274,7 +275,7 @@ pub fn parse_template_head(
                     token_stream,
                     context,
                     &mut DataType::Inferred,
-                    &Ownership::ImmutableOwned,
+                    &ValueMode::ImmutableOwned,
                     true,
                     string_table,
                 )?;

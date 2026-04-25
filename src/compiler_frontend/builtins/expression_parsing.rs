@@ -11,9 +11,10 @@ use crate::compiler_frontend::ast::expressions::parse_expression::create_express
 use crate::compiler_frontend::ast::statements::collections::new_collection;
 use crate::compiler_frontend::builtins::error_type::resolve_builtin_error_type;
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::compiler_frontend::value_mode::ValueMode;
 use crate::return_compiler_error;
 use crate::{return_syntax_error, return_type_error};
 
@@ -24,7 +25,7 @@ use crate::{return_syntax_error, return_type_error};
 pub(crate) fn parse_builtin_cast_expression(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
-    ownership: &Ownership,
+    value_mode: &ValueMode,
     string_table: &mut StringTable,
 ) -> Result<Expression, CompilerError> {
     let cast_location = token_stream.current_location();
@@ -59,7 +60,7 @@ pub(crate) fn parse_builtin_cast_expression(
         token_stream,
         context,
         &mut inferred_type,
-        ownership,
+        value_mode,
         false,
         false,
         string_table,
@@ -126,18 +127,18 @@ pub(crate) fn parse_collection_expression(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
     data_type: &DataType,
-    ownership: &Ownership,
+    value_mode: &ValueMode,
     expression: &mut Vec<AstNode>,
     string_table: &mut StringTable,
 ) -> Result<(), CompilerError> {
     match data_type {
-        DataType::Collection(inner_type, _) => {
+        DataType::Collection(inner_type) => {
             expression.push(AstNode {
                 kind: NodeKind::Rvalue(new_collection(
                     token_stream,
                     inner_type,
                     context,
-                    ownership,
+                    value_mode,
                     string_table,
                 )?),
                 location: token_stream.current_location(),
@@ -152,7 +153,7 @@ pub(crate) fn parse_collection_expression(
                     token_stream,
                     &DataType::Inferred,
                     context,
-                    ownership,
+                    value_mode,
                     string_table,
                 )?),
                 location: token_stream.current_location(),

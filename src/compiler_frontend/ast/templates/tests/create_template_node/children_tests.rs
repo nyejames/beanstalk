@@ -65,7 +65,7 @@ fn children_directive_accepts_const_string_reference() {
                     char_column: 120,
                 },
             },
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         ),
     }];
 

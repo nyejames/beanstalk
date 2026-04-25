@@ -8,13 +8,14 @@ use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::optimizers::constant_folding::{
     constant_fold, fold_compile_time_expression,
 };
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::type_coercion::compatibility::is_type_compatible;
 use crate::compiler_frontend::type_coercion::diagnostics::expected_found_clause;
+use crate::compiler_frontend::value_mode::ValueMode;
 use crate::{eval_log, return_syntax_error, return_type_error};
 
 use super::ordering;
@@ -27,7 +28,7 @@ pub fn evaluate_expression(
     context: &ScopeContext,
     nodes: Vec<AstNode>,
     current_type: &mut DataType,
-    ownership: &Ownership,
+    value_mode: &ValueMode,
     string_table: &mut StringTable,
 ) -> Result<Expression, CompilerError> {
     let (output_queue, location) = ordering::order_expression_nodes(nodes)?;
@@ -61,7 +62,7 @@ pub fn evaluate_expression(
         *current_type = resolved_type.to_owned();
     }
 
-    let ownership = ownership.get_owned();
+    let value_mode = value_mode.as_owned();
     eval_log!("Attempting to Fold: ", Pretty output_queue);
     let stack = constant_fold(&output_queue, string_table)?;
     eval_log!("Stack after folding: ", Pretty stack);
@@ -90,7 +91,7 @@ pub fn evaluate_expression(
         stack,
         resolved_type,
         SourceLocation::new(context.scope.to_owned(), first_node_start, last_node_end),
-        ownership,
+        value_mode,
     ))
 }
 
@@ -128,7 +129,7 @@ fn validate_expression_result_type(
 #[cfg(test)]
 pub fn concat_template(
     simplified_expression: &mut Vec<AstNode>,
-    ownership: Ownership,
+    value_mode: ValueMode,
 ) -> Result<Expression, CompilerError> {
     use crate::compiler_frontend::ast::templates::template_types::Template;
     use crate::return_compiler_error;
@@ -155,5 +156,5 @@ pub fn concat_template(
         }
     }
 
-    Ok(Expression::template(template, ownership))
+    Ok(Expression::template(template, value_mode))
 }

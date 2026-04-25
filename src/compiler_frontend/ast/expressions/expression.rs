@@ -9,11 +9,12 @@ use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, 
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::templates::template::TemplateConstValueKind;
 use crate::compiler_frontend::ast::templates::template_types::Template;
-use crate::compiler_frontend::datatypes::{DataType, Ownership, PathTypeKind, ReceiverKey};
+use crate::compiler_frontend::datatypes::{DataType, PathTypeKind, ReceiverKey};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_resolution::CompileTimePaths;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
+use crate::compiler_frontend::value_mode::ValueMode;
 
 // Expressions represent anything that will turn into a value
 // Their kind will represent what their value is.
@@ -24,7 +25,7 @@ use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 pub struct Expression {
     pub kind: ExpressionKind,
     pub data_type: DataType,
-    pub ownership: Ownership,
+    pub value_mode: ValueMode,
     pub location: SourceLocation,
     /// Tracks whether this value was derived from regular division (`/`).
     ///
@@ -147,13 +148,13 @@ impl Expression {
         kind: ExpressionKind,
         location: SourceLocation,
         data_type: DataType,
-        ownership: Ownership,
+        value_mode: ValueMode,
     ) -> Self {
         Self {
             data_type,
             kind,
             location,
-            ownership,
+            value_mode,
             contains_regular_division: false,
         }
     }
@@ -168,9 +169,9 @@ impl Expression {
         kind: ExpressionKind,
         data_type: DataType,
         location: SourceLocation,
-        ownership: Ownership,
+        value_mode: ValueMode,
     ) -> Self {
-        Self::new(kind, location, data_type, ownership)
+        Self::new(kind, location, data_type, value_mode)
     }
 
     /// Collapse function return signatures into the AST expression type model.
@@ -199,7 +200,7 @@ impl Expression {
             // signature alias metadata is threaded through expression construction.
             // If the return signature is a reference (the name of a parameter passed in),
             // then this is a reference to that parameter.
-            Ownership::MutableOwned,
+            ValueMode::MutableOwned,
         )
     }
 
@@ -217,55 +218,55 @@ impl Expression {
         expressions: Vec<AstNode>,
         data_type: DataType,
         location: SourceLocation,
-        ownership: Ownership,
+        value_mode: ValueMode,
     ) -> Self {
         let contains_regular_division = expressions.iter().any(Self::node_has_regular_division);
         Self::new(
             ExpressionKind::Runtime(expressions),
             location,
             data_type,
-            ownership,
+            value_mode,
         )
         .with_regular_division_provenance(contains_regular_division)
     }
-    pub fn int(value: i64, location: SourceLocation, ownership: Ownership) -> Self {
+    pub fn int(value: i64, location: SourceLocation, value_mode: ValueMode) -> Self {
         Self::scalar_literal(
             ExpressionKind::Int(value),
             DataType::Int,
             location,
-            ownership,
+            value_mode,
         )
     }
-    pub fn float(value: f64, location: SourceLocation, ownership: Ownership) -> Self {
+    pub fn float(value: f64, location: SourceLocation, value_mode: ValueMode) -> Self {
         Self::scalar_literal(
             ExpressionKind::Float(value),
             DataType::Float,
             location,
-            ownership,
+            value_mode,
         )
     }
-    pub fn string_slice(value: StringId, location: SourceLocation, ownership: Ownership) -> Self {
+    pub fn string_slice(value: StringId, location: SourceLocation, value_mode: ValueMode) -> Self {
         Self::scalar_literal(
             ExpressionKind::StringSlice(value),
             DataType::StringSlice,
             location,
-            ownership,
+            value_mode,
         )
     }
-    pub fn bool(value: bool, location: SourceLocation, ownership: Ownership) -> Self {
+    pub fn bool(value: bool, location: SourceLocation, value_mode: ValueMode) -> Self {
         Self::scalar_literal(
             ExpressionKind::Bool(value),
             DataType::Bool,
             location,
-            ownership,
+            value_mode,
         )
     }
-    pub fn char(value: char, location: SourceLocation, ownership: Ownership) -> Self {
+    pub fn char(value: char, location: SourceLocation, value_mode: ValueMode) -> Self {
         Self::scalar_literal(
             ExpressionKind::Char(value),
             DataType::Char,
             location,
-            ownership,
+            value_mode,
         )
     }
 
@@ -281,7 +282,7 @@ impl Expression {
             ExpressionKind::Path(Box::new(compile_time_paths)),
             location,
             DataType::Path(path_type_kind),
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         )
     }
 
@@ -289,13 +290,13 @@ impl Expression {
         id: InternedPath,
         data_type: DataType,
         location: SourceLocation,
-        ownership: Ownership,
+        value_mode: ValueMode,
     ) -> Self {
         Self::new(
             ExpressionKind::Reference(id),
             location,
             data_type,
-            ownership,
+            value_mode,
         )
     }
 
@@ -311,7 +312,7 @@ impl Expression {
             ExpressionKind::Function(signature, body),
             location,
             function_data_type,
-            Ownership::ImmutableReference,
+            ValueMode::ImmutableReference,
         )
     }
 
@@ -404,7 +405,7 @@ impl Expression {
                 ok: Box::new(DataType::Int),
                 err: Box::new(error_type),
             },
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         )
         .with_regular_division_provenance(contains_regular_division)
     }
@@ -425,7 +426,7 @@ impl Expression {
                 ok: Box::new(DataType::Float),
                 err: Box::new(error_type),
             },
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         )
         .with_regular_division_provenance(contains_regular_division)
     }
@@ -439,7 +440,7 @@ impl Expression {
     /// rather than silently mistyping the inner value.
     pub fn coerced(value: Expression, to_type: DataType) -> Self {
         let location = value.location.clone();
-        let ownership = value.ownership.to_owned();
+        let value_mode = value.value_mode.to_owned();
         let contains_regular_division = value.contains_regular_division;
         Self::new(
             ExpressionKind::Coerced {
@@ -448,7 +449,7 @@ impl Expression {
             },
             location,
             to_type,
-            ownership,
+            value_mode,
         )
         .with_regular_division_provenance(contains_regular_division)
     }
@@ -458,7 +459,7 @@ impl Expression {
         value: Expression,
         data_type: DataType,
         location: SourceLocation,
-        ownership: Ownership,
+        value_mode: ValueMode,
     ) -> Self {
         let contains_regular_division = value.contains_regular_division;
         Self::new(
@@ -468,7 +469,7 @@ impl Expression {
             },
             location,
             data_type,
-            ownership,
+            value_mode,
         )
         .with_regular_division_provenance(contains_regular_division)
     }
@@ -491,7 +492,7 @@ impl Expression {
             },
             location,
             result_type,
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         )
         .with_regular_division_provenance(contains_regular_division)
     }
@@ -499,7 +500,7 @@ impl Expression {
     pub fn collection(
         items: Vec<Expression>,
         location: SourceLocation,
-        ownership: Ownership,
+        value_mode: ValueMode,
     ) -> Self {
         let contains_regular_division = items.iter().any(|item| item.contains_regular_division);
         let inner_type = items
@@ -510,8 +511,8 @@ impl Expression {
         Self::new(
             ExpressionKind::Collection(items),
             location,
-            DataType::Collection(Box::new(inner_type), ownership.to_owned()),
-            ownership,
+            DataType::Collection(Box::new(inner_type)),
+            value_mode,
         )
         .with_regular_division_provenance(contains_regular_division)
     }
@@ -519,42 +520,42 @@ impl Expression {
         nominal_path: InternedPath,
         args: Vec<Declaration>,
         location: SourceLocation,
-        ownership: Ownership,
+        value_mode: ValueMode,
         const_record: bool,
     ) -> Self {
         let contains_regular_division = args.iter().any(|arg| arg.value.contains_regular_division);
         let struct_type = if const_record {
             DataType::const_struct_record(nominal_path, args.to_owned())
         } else {
-            DataType::runtime_struct(nominal_path, args.to_owned(), ownership.to_owned())
+            DataType::runtime_struct(nominal_path, args.to_owned())
         };
         Self::new(
             ExpressionKind::StructInstance(args),
             location,
             struct_type,
-            ownership,
+            value_mode,
         )
         .with_regular_division_provenance(contains_regular_division)
     }
     pub fn struct_definition(
         args: Vec<Declaration>,
         location: SourceLocation,
-        ownership: Ownership,
+        value_mode: ValueMode,
     ) -> Self {
         Self::new(
             ExpressionKind::StructDefinition(args),
             location,
             DataType::Inferred,
-            ownership,
+            value_mode,
         )
     }
-    pub fn template(template: Template, ownership: Ownership) -> Self {
+    pub fn template(template: Template, value_mode: ValueMode) -> Self {
         let location = template.location.to_owned();
         Self::new(
             ExpressionKind::Template(Box::new(template)),
             location,
             DataType::Template,
-            ownership,
+            value_mode,
         )
     }
 
@@ -563,7 +564,7 @@ impl Expression {
         lower: Expression,
         upper: Expression,
         location: SourceLocation,
-        ownership: Ownership,
+        value_mode: ValueMode,
     ) -> Self {
         let contains_regular_division =
             lower.contains_regular_division || upper.contains_regular_division;
@@ -571,7 +572,7 @@ impl Expression {
             ExpressionKind::Range(Box::new(lower), Box::new(upper)),
             location,
             DataType::Inferred,
-            ownership,
+            value_mode,
         )
         .with_regular_division_provenance(contains_regular_division)
     }
@@ -580,20 +581,20 @@ impl Expression {
         place: AstNode,
         data_type: DataType,
         location: SourceLocation,
-        ownership: Ownership,
+        value_mode: ValueMode,
     ) -> Self {
         Self::new(
             ExpressionKind::Copy(Box::new(place)),
             location,
             data_type,
-            ownership.get_owned(),
+            value_mode.as_owned(),
         )
     }
 
     /// Internal sentinel used for declarations/signature defaults that do not
     /// provide a value expression in source.
-    pub fn no_value(location: SourceLocation, data_type: DataType, ownership: Ownership) -> Self {
-        Self::new(ExpressionKind::NoValue, location, data_type, ownership)
+    pub fn no_value(location: SourceLocation, data_type: DataType, value_mode: ValueMode) -> Self {
+        Self::new(ExpressionKind::NoValue, location, data_type, value_mode)
     }
 
     /// User-facing `none` literal in an optional context.
@@ -602,7 +603,7 @@ impl Expression {
             ExpressionKind::OptionNone,
             location,
             DataType::Option(Box::new(inner_type)),
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         )
     }
 

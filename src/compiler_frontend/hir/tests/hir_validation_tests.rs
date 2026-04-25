@@ -10,7 +10,7 @@ use crate::compiler_frontend::ast::statements::functions::{
 };
 use crate::compiler_frontend::ast::{AstDocFragment, AstDocFragmentKind};
 use crate::compiler_frontend::compiler_errors::ErrorType;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::hir::hir_builder::validate_module_for_tests;
 use crate::compiler_frontend::hir::hir_nodes::{
     HirExpression, HirExpressionKind, HirMatchArm, HirPattern, HirPlace, HirRegion, HirTerminator,
@@ -19,6 +19,7 @@ use crate::compiler_frontend::hir::hir_nodes::{
 use crate::compiler_frontend::hir::tests::hir_expression_lowering_tests::location;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::value_mode::ValueMode;
 
 fn test_location(line: i32) -> SourceLocation {
     location(line)
@@ -42,15 +43,15 @@ fn param(
     mutable: bool,
     location: SourceLocation,
 ) -> Declaration {
-    let ownership = if mutable {
-        Ownership::MutableOwned
+    let value_mode = if mutable {
+        ValueMode::MutableOwned
     } else {
-        Ownership::ImmutableOwned
+        ValueMode::ImmutableOwned
     };
 
     Declaration {
         id: name,
-        value: Expression::new(ExpressionKind::NoValue, location, data_type, ownership),
+        value: Expression::new(ExpressionKind::NoValue, location, data_type, value_mode),
     }
 }
 
@@ -192,7 +193,7 @@ fn validator_rejects_missing_side_table_mappings() {
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     x,
-                    Expression::int(1, test_location(4), Ownership::ImmutableOwned),
+                    Expression::int(1, test_location(4), ValueMode::ImmutableOwned),
                 )),
                 test_location(4),
             ),
@@ -340,7 +341,7 @@ fn validator_rejects_out_of_range_return_alias_metadata() {
                 p,
                 DataType::Int,
                 test_location(2),
-                Ownership::ImmutableReference,
+                ValueMode::ImmutableReference,
             )]),
             test_location(2),
         )],

@@ -1,11 +1,12 @@
 use super::*;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationIndex};
 use crate::compiler_frontend::compiler_errors::{ErrorMetaDataKey, ErrorType};
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
+use crate::compiler_frontend::value_mode::ValueMode;
 use std::rc::Rc;
 
 #[test]
@@ -32,7 +33,7 @@ fn parse_literal_expression_rejects_int_negation_overflow() {
         &mut token_stream,
         &context,
         &DataType::Inferred,
-        &Ownership::ImmutableOwned,
+        &ValueMode::ImmutableOwned,
         &mut expression,
         &mut next_number_negative,
         &mut string_table,

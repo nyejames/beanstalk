@@ -149,7 +149,7 @@ fn evaluate_compound_assignment_value(
         token_stream,
         context,
         &mut expr_type,
-        &variable_arg.value.ownership,
+        &variable_arg.value.value_mode,
         false,
         string_table,
     )?;
@@ -169,7 +169,7 @@ fn evaluate_compound_assignment_value(
         context,
         vec![target.clone(), rhs_node, operator_node],
         &mut inferred,
-        &variable_arg.value.ownership,
+        &variable_arg.value.value_mode,
         string_table,
     )?;
 
@@ -195,7 +195,7 @@ fn build_mutation_from_target(
     );
     ast_log!(
         "Handling mutation for ",
-        #variable_arg.value.ownership, " ",
+        #variable_arg.value.value_mode, " ",
         Blue variable_arg.id.to_string(string_table)
     );
 
@@ -250,7 +250,7 @@ fn build_mutation_from_target(
                 token_stream,
                 context,
                 &mut expr_type,
-                &variable_arg.value.ownership,
+                &variable_arg.value.value_mode,
                 false,
                 string_table,
             )?;

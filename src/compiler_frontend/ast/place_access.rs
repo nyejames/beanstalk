@@ -27,7 +27,7 @@ pub(crate) fn ast_node_is_place(node: &AstNode) -> bool {
 pub(crate) fn ast_node_is_mutable_place(node: &AstNode) -> bool {
     match &node.kind {
         NodeKind::Rvalue(expr) => {
-            matches!(expr.kind, ExpressionKind::Reference(_)) && expr.ownership.is_mutable()
+            matches!(expr.kind, ExpressionKind::Reference(_)) && expr.value_mode.is_mutable()
         }
         NodeKind::FieldAccess { base, .. } => ast_node_is_mutable_place(base),
         NodeKind::CollectionBuiltinCall {

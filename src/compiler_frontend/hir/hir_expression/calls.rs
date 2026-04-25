@@ -11,7 +11,7 @@ use crate::compiler_frontend::ast::expressions::call_argument::{
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ResultCallHandling};
 use crate::compiler_frontend::builtins::{BuiltinMethodKind, CollectionBuiltinOp};
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeId};
 use crate::compiler_frontend::hir::hir_nodes::{
@@ -25,6 +25,7 @@ use crate::compiler_frontend::host_functions::{
 };
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
+use crate::compiler_frontend::value_mode::ValueMode;
 use crate::return_hir_transformation_error;
 
 use super::LoweredExpression;
@@ -291,13 +292,13 @@ impl<'a> HirBuilder<'a> {
         let function_name_id = self.string_table.get_or_intern(function_name_text);
 
         Ok(vec![
-            Expression::string_slice(file_id, location.to_owned(), Ownership::ImmutableOwned),
-            Expression::int(line, location.to_owned(), Ownership::ImmutableOwned),
-            Expression::int(column, location.to_owned(), Ownership::ImmutableOwned),
+            Expression::string_slice(file_id, location.to_owned(), ValueMode::ImmutableOwned),
+            Expression::int(line, location.to_owned(), ValueMode::ImmutableOwned),
+            Expression::int(column, location.to_owned(), ValueMode::ImmutableOwned),
             Expression::string_slice(
                 function_name_id,
                 location.to_owned(),
-                Ownership::ImmutableOwned,
+                ValueMode::ImmutableOwned,
             ),
         ])
     }

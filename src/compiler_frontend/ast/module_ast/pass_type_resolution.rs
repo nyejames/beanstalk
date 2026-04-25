@@ -16,7 +16,8 @@ use crate::compiler_frontend::ast::type_resolution::{
 };
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_errors::ErrorMetaDataKey;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::value_mode::ValueMode;
 
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -77,12 +78,8 @@ impl<'a> AstBuildState<'a> {
                 value: Expression::new(
                     ExpressionKind::NoValue,
                     header.name_location.to_owned(),
-                    DataType::runtime_struct(
-                        header.tokens.src_path.to_owned(),
-                        fields,
-                        Ownership::MutableOwned,
-                    ),
-                    Ownership::ImmutableReference,
+                    DataType::runtime_struct(header.tokens.src_path.to_owned(), fields),
+                    ValueMode::ImmutableReference,
                 ),
             });
         }

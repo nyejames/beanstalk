@@ -7,7 +7,7 @@
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::hir::hir_nodes::{
     BlockId, HirExpression, HirExpressionKind, HirNodeId, HirPlace, HirStatement, HirStatementKind,
     HirTerminator, HirValueId,
@@ -18,6 +18,7 @@ use crate::compiler_frontend::tests::test_support::{
     build_ast, default_host_registry, entry_and_start, function_node, lower_hir,
     make_test_variable, node, reference_expr, run_borrow_checker, symbol, test_location,
 };
+use crate::compiler_frontend::value_mode::ValueMode;
 use rustc_hash::FxHashSet;
 use std::collections::VecDeque;
 
@@ -40,20 +41,20 @@ fn statement_terminator_and_value_facts_are_populated() {
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
-                    Expression::int(1, test_location(1), Ownership::MutableOwned),
+                    Expression::int(1, test_location(1), ValueMode::MutableOwned),
                 )),
                 test_location(1),
             ),
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     y.clone(),
-                    Expression::int(0, test_location(2), Ownership::ImmutableOwned),
+                    Expression::int(0, test_location(2), ValueMode::ImmutableOwned),
                 )),
                 test_location(2),
             ),
             node(
                 NodeKind::If(
-                    Expression::bool(true, test_location(3), Ownership::ImmutableOwned),
+                    Expression::bool(true, test_location(3), ValueMode::ImmutableOwned),
                     vec![node(
                         NodeKind::Assignment {
                             target: Box::new(node(
@@ -64,7 +65,7 @@ fn statement_terminator_and_value_facts_are_populated() {
                                 )),
                                 test_location(4),
                             )),
-                            value: Expression::int(2, test_location(4), Ownership::ImmutableOwned),
+                            value: Expression::int(2, test_location(4), ValueMode::ImmutableOwned),
                         },
                         test_location(4),
                     )],
@@ -78,7 +79,7 @@ fn statement_terminator_and_value_facts_are_populated() {
                                 )),
                                 test_location(5),
                             )),
-                            value: Expression::int(3, test_location(5), Ownership::ImmutableOwned),
+                            value: Expression::int(3, test_location(5), ValueMode::ImmutableOwned),
                         },
                         test_location(5),
                     )]),
@@ -156,7 +157,7 @@ fn drop_statement_produces_statement_fact() {
         vec![node(
             NodeKind::VariableDeclaration(make_test_variable(
                 value,
-                Expression::int(1, test_location(1), Ownership::MutableOwned),
+                Expression::int(1, test_location(1), ValueMode::MutableOwned),
             )),
             test_location(1),
         )],
@@ -218,7 +219,7 @@ fn statement_entry_state_reflects_last_use_reborrow_window() {
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     data.clone(),
-                    Expression::int(7, test_location(1), Ownership::MutableOwned),
+                    Expression::int(7, test_location(1), ValueMode::MutableOwned),
                 )),
                 test_location(1),
             ),
@@ -229,7 +230,7 @@ fn statement_entry_state_reflects_last_use_reborrow_window() {
                         data.clone(),
                         DataType::Int,
                         test_location(2),
-                        Ownership::MutableReference,
+                        ValueMode::MutableReference,
                     ),
                 )),
                 test_location(2),
@@ -248,7 +249,7 @@ fn statement_entry_state_reflects_last_use_reborrow_window() {
                         data,
                         DataType::Int,
                         test_location(4),
-                        Ownership::MutableReference,
+                        ValueMode::MutableReference,
                     ),
                 )),
                 test_location(4),

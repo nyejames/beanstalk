@@ -1,6 +1,6 @@
 //! Compatibility check tests for `type_coercion::compatibility`.
 
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::type_coercion::compatibility::{
@@ -66,13 +66,24 @@ fn identical_types_are_always_compatible() {
 }
 
 #[test]
-fn struct_nominal_compatibility_ignores_ownership() {
+fn collection_type_identity_is_element_type_only() {
+    let left = DataType::Collection(Box::new(DataType::Int));
+    let right = DataType::Collection(Box::new(DataType::Int));
+
+    assert_eq!(left, right);
+    assert!(is_type_compatible(&left, &right));
+}
+
+#[test]
+fn struct_type_identity_is_nominal_and_const_record_sensitive_only() {
     let mut string_table = StringTable::new();
-    let nominal_path = InternedPath::from_single_str("Inner", &mut string_table);
+    let path = InternedPath::from_single_str("User", &mut string_table);
 
-    let expected =
-        DataType::runtime_struct(nominal_path.to_owned(), vec![], Ownership::ImmutableOwned);
-    let actual = DataType::runtime_struct(nominal_path, vec![], Ownership::MutableOwned);
+    let runtime = DataType::runtime_struct(path.clone(), vec![]);
+    let same_runtime = DataType::runtime_struct(path.clone(), vec![]);
+    let const_record = DataType::const_struct_record(path, vec![]);
 
-    assert!(is_type_compatible(&expected, &actual));
+    assert_eq!(runtime, same_runtime);
+    assert_ne!(runtime, const_record);
+    assert!(is_type_compatible(&runtime, &same_runtime));
 }

@@ -460,7 +460,7 @@ impl<'a> HirBuilder<'a> {
                 MultiBindTargetKind::Declaration => self.allocate_named_local(
                     target.id.to_owned(),
                     target_type,
-                    target.ownership.is_mutable(),
+                    target.value_mode.is_mutable(),
                     Some(target.location.to_owned()),
                 )?,
                 MultiBindTargetKind::Assignment => {

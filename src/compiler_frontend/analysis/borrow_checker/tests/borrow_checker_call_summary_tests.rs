@@ -12,7 +12,7 @@ use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnSlot,
 };
 use crate::compiler_frontend::compiler_errors::ErrorType;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::host_functions::test_support::{
     TestHostAbiType as HostAbiType, TestHostAccessKind as HostAccessKind,
     TestHostReturnAlias as HostReturnAlias,
@@ -23,6 +23,7 @@ use crate::compiler_frontend::tests::test_support::{
     function_node, lower_hir, make_test_variable, node, param, reference_expr,
     register_host_function, run_borrow_checker, symbol, test_location,
 };
+use crate::compiler_frontend::value_mode::ValueMode;
 
 #[test]
 fn user_function_returning_param_aliases_caller_root() {
@@ -61,7 +62,7 @@ fn user_function_returning_param_aliases_caller_root() {
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
-                    Expression::int(1, test_location(10), Ownership::MutableOwned),
+                    Expression::int(1, test_location(10), ValueMode::MutableOwned),
                 )),
                 test_location(10),
             ),
@@ -80,7 +81,7 @@ fn user_function_returning_param_aliases_caller_root() {
             node(
                 NodeKind::Assignment {
                     target: Box::new(assignment_target(x, DataType::Int, test_location(12))),
-                    value: Expression::int(2, test_location(12), Ownership::ImmutableOwned),
+                    value: Expression::int(2, test_location(12), ValueMode::ImmutableOwned),
                 },
                 test_location(12),
             ),
@@ -119,7 +120,7 @@ fn fresh_user_return_does_not_alias_caller_roots() {
             NodeKind::Return(vec![Expression::int(
                 42,
                 test_location(2),
-                Ownership::ImmutableOwned,
+                ValueMode::ImmutableOwned,
             )]),
             test_location(2),
         )],
@@ -136,7 +137,7 @@ fn fresh_user_return_does_not_alias_caller_roots() {
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
-                    Expression::int(1, test_location(10), Ownership::MutableOwned),
+                    Expression::int(1, test_location(10), ValueMode::MutableOwned),
                 )),
                 test_location(10),
             ),
@@ -155,7 +156,7 @@ fn fresh_user_return_does_not_alias_caller_roots() {
             node(
                 NodeKind::Assignment {
                     target: Box::new(assignment_target(x, DataType::Int, test_location(12))),
-                    value: Expression::int(2, test_location(12), Ownership::ImmutableOwned),
+                    value: Expression::int(2, test_location(12), ValueMode::ImmutableOwned),
                 },
                 test_location(12),
             ),
@@ -215,7 +216,7 @@ fn default_user_returning_param_is_fresh_by_default() {
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
-                    Expression::int(1, test_location(10), Ownership::MutableOwned),
+                    Expression::int(1, test_location(10), ValueMode::MutableOwned),
                 )),
                 test_location(10),
             ),
@@ -234,7 +235,7 @@ fn default_user_returning_param_is_fresh_by_default() {
             node(
                 NodeKind::Assignment {
                     target: Box::new(assignment_target(x, DataType::Int, test_location(12))),
-                    value: Expression::int(2, test_location(12), Ownership::ImmutableOwned),
+                    value: Expression::int(2, test_location(12), ValueMode::ImmutableOwned),
                 },
                 test_location(12),
             ),
@@ -280,7 +281,7 @@ fn mutable_user_argument_is_accepted_without_false_shared_conflict() {
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
-                    Expression::int(1, test_location(10), Ownership::MutableOwned),
+                    Expression::int(1, test_location(10), ValueMode::MutableOwned),
                 )),
                 test_location(10),
             ),
@@ -343,7 +344,7 @@ fn mutable_user_call_with_fresh_mutable_arg_does_not_alias_existing_place_argume
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
-                    Expression::int(1, test_location(10), Ownership::MutableOwned),
+                    Expression::int(1, test_location(10), ValueMode::MutableOwned),
                 )),
                 test_location(10),
             ),
@@ -357,7 +358,7 @@ fn mutable_user_call_with_fresh_mutable_arg_does_not_alias_existing_place_argume
                             test_location(11),
                         ),
                         CallArgument::positional(
-                            Expression::int(2, test_location(11), Ownership::ImmutableOwned),
+                            Expression::int(2, test_location(11), ValueMode::ImmutableOwned),
                             CallAccessMode::Shared,
                             test_location(11),
                         )
@@ -407,7 +408,7 @@ fn host_mutable_parameter_requires_mutable_access() {
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
-                    Expression::int(1, test_location(1), Ownership::ImmutableOwned),
+                    Expression::int(1, test_location(1), ValueMode::ImmutableOwned),
                 )),
                 test_location(1),
             ),
@@ -461,7 +462,7 @@ fn host_mutable_parameter_accepts_mutable_local_argument() {
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
-                    Expression::int(1, test_location(1), Ownership::MutableOwned),
+                    Expression::int(1, test_location(1), ValueMode::MutableOwned),
                 )),
                 test_location(1),
             ),
@@ -513,7 +514,7 @@ fn host_shared_parameter_is_shared_only() {
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
-                    Expression::int(1, test_location(1), Ownership::ImmutableOwned),
+                    Expression::int(1, test_location(1), ValueMode::ImmutableOwned),
                 )),
                 test_location(1),
             ),
@@ -573,7 +574,7 @@ fn two_mutable_args_to_same_root_are_rejected() {
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
-                    Expression::int(1, test_location(10), Ownership::MutableOwned),
+                    Expression::int(1, test_location(10), ValueMode::MutableOwned),
                 )),
                 test_location(10),
             ),
@@ -644,7 +645,7 @@ fn shared_then_mutable_args_to_same_root_are_rejected() {
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
-                    Expression::int(1, test_location(10), Ownership::MutableOwned),
+                    Expression::int(1, test_location(10), ValueMode::MutableOwned),
                 )),
                 test_location(10),
             ),
@@ -778,7 +779,7 @@ fn mutable_user_parameter_rejects_immutable_argument_reused_after_call() {
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
-                    Expression::int(1, test_location(10), Ownership::ImmutableOwned),
+                    Expression::int(1, test_location(10), ValueMode::ImmutableOwned),
                 )),
                 test_location(10),
             ),
@@ -842,7 +843,7 @@ fn out_of_range_return_alias_metadata_is_reported_at_call_site() {
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
-                    Expression::int(1, test_location(10), Ownership::MutableOwned),
+                    Expression::int(1, test_location(10), ValueMode::MutableOwned),
                 )),
                 test_location(10),
             ),
@@ -905,7 +906,7 @@ fn same_line_mutable_call_then_reuse_uses_order_keys() {
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
-                    Expression::int(1, test_location(10), Ownership::MutableOwned),
+                    Expression::int(1, test_location(10), ValueMode::MutableOwned),
                 )),
                 test_location(10),
             ),
@@ -981,7 +982,7 @@ fn short_circuit_rhs_mutable_call_with_later_merge_use_borrows_instead_of_moving
                                     param_calls,
                                     DataType::Int,
                                     test_location(2),
-                                    Ownership::MutableOwned,
+                                    ValueMode::MutableOwned,
                                 )),
                                 test_location(2),
                             ),
@@ -989,7 +990,7 @@ fn short_circuit_rhs_mutable_call_with_later_merge_use_borrows_instead_of_moving
                                 NodeKind::Rvalue(Expression::int(
                                     1,
                                     test_location(2),
-                                    Ownership::ImmutableOwned,
+                                    ValueMode::ImmutableOwned,
                                 )),
                                 test_location(2),
                             ),
@@ -997,7 +998,7 @@ fn short_circuit_rhs_mutable_call_with_later_merge_use_borrows_instead_of_moving
                         ],
                         DataType::Int,
                         test_location(2),
-                        Ownership::MutableOwned,
+                        ValueMode::MutableOwned,
                     ),
                 },
                 test_location(2),
@@ -1006,7 +1007,7 @@ fn short_circuit_rhs_mutable_call_with_later_merge_use_borrows_instead_of_moving
                 NodeKind::Return(vec![Expression::bool(
                     true,
                     test_location(3),
-                    Ownership::ImmutableOwned,
+                    ValueMode::ImmutableOwned,
                 )]),
                 test_location(3),
             ),
@@ -1021,7 +1022,7 @@ fn short_circuit_rhs_mutable_call_with_later_merge_use_borrows_instead_of_moving
                     lhs.clone(),
                     DataType::Bool,
                     test_location(11),
-                    Ownership::ImmutableOwned,
+                    ValueMode::ImmutableOwned,
                 )),
                 test_location(11),
             ),
@@ -1032,7 +1033,7 @@ fn short_circuit_rhs_mutable_call_with_later_merge_use_borrows_instead_of_moving
                         calls.clone(),
                         DataType::Int,
                         test_location(11),
-                        Ownership::MutableOwned,
+                        ValueMode::MutableOwned,
                     )],
                     vec![DataType::Bool],
                     test_location(11),
@@ -1043,7 +1044,7 @@ fn short_circuit_rhs_mutable_call_with_later_merge_use_borrows_instead_of_moving
         ],
         DataType::Bool,
         test_location(11),
-        Ownership::ImmutableOwned,
+        ValueMode::ImmutableOwned,
     );
 
     let start_function = function_node(
@@ -1056,14 +1057,14 @@ fn short_circuit_rhs_mutable_call_with_later_merge_use_borrows_instead_of_moving
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     lhs,
-                    Expression::bool(false, test_location(10), Ownership::ImmutableOwned),
+                    Expression::bool(false, test_location(10), ValueMode::ImmutableOwned),
                 )),
                 test_location(10),
             ),
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     calls.clone(),
-                    Expression::int(0, test_location(10), Ownership::MutableOwned),
+                    Expression::int(0, test_location(10), ValueMode::MutableOwned),
                 )),
                 test_location(10),
             ),
@@ -1078,7 +1079,7 @@ fn short_circuit_rhs_mutable_call_with_later_merge_use_borrows_instead_of_moving
                         calls,
                         DataType::Int,
                         test_location(12),
-                        Ownership::ImmutableReference,
+                        ValueMode::ImmutableReference,
                     ),
                 )),
                 test_location(12),

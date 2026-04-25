@@ -6,10 +6,11 @@
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::compiler_errors::{ErrorMetaDataKey, ErrorType};
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::tests::test_support::{
     parse_single_file_ast, parse_single_file_ast_error, start_function_body,
 };
+use crate::compiler_frontend::value_mode::ValueMode;
 
 #[test]
 fn parses_mutable_and_explicitly_typed_declarations() {
@@ -21,7 +22,7 @@ fn parses_mutable_and_explicitly_typed_declarations() {
         panic!("expected mutable declaration");
     };
     assert_eq!(count_decl.value.data_type, DataType::Int);
-    assert_eq!(count_decl.value.ownership, Ownership::MutableOwned);
+    assert_eq!(count_decl.value.value_mode, ValueMode::MutableOwned);
 
     let NodeKind::VariableDeclaration(name_decl) = &body[1].kind else {
         panic!("expected explicit string declaration");
@@ -46,7 +47,6 @@ fn resolves_named_type_annotations_against_prior_structs() {
     assert!(matches!(
         origin_decl.value.data_type,
         DataType::Struct {
-            ownership: Ownership::MutableOwned,
             const_record: false,
             ..
         }

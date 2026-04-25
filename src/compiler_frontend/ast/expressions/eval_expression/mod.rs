@@ -18,7 +18,7 @@ pub(crate) use crate::compiler_frontend::ast::expressions::expression::Expressio
 #[cfg(test)]
 pub(crate) use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 #[cfg(test)]
-pub(crate) use crate::compiler_frontend::datatypes::Ownership;
+pub(crate) use crate::compiler_frontend::value_mode::ValueMode;
 
 #[cfg(test)]
 #[path = "../tests/eval_expression_tests.rs"]

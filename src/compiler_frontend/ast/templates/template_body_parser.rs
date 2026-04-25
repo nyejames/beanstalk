@@ -13,10 +13,10 @@ use crate::compiler_frontend::ast::templates::template::{
 };
 use crate::compiler_frontend::ast::templates::template_types::{Template, TemplateInheritance};
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::datatypes::Ownership;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::token_scan::consume_balanced_template_region;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::compiler_frontend::value_mode::ValueMode;
 use crate::{ast_log, return_syntax_error};
 
 /// Parses the body section of a template, consuming tokens until the closing
@@ -69,7 +69,7 @@ pub(crate) fn parse_template_body(
                 template.content.add(Expression::string_slice(
                     *content,
                     token_stream.current_location(),
-                    Ownership::ImmutableOwned,
+                    ValueMode::ImmutableOwned,
                 ));
             }
 
@@ -78,7 +78,7 @@ pub(crate) fn parse_template_body(
                 template.content.add(Expression::string_slice(
                     newline_id,
                     token_stream.current_location(),
-                    Ownership::ImmutableOwned,
+                    ValueMode::ImmutableOwned,
                 ));
             }
 
@@ -154,7 +154,7 @@ fn parse_nested_template(
                         Expression::string_slice(
                             interned_child,
                             token_stream.current_location(),
-                            Ownership::ImmutableOwned,
+                            ValueMode::ImmutableOwned,
                         ),
                         TemplateSegmentOrigin::Body,
                         nested_template.clone_for_composition(),
@@ -185,7 +185,7 @@ fn parse_nested_template(
         }
     }
 
-    let expr = Expression::template(nested_template, Ownership::ImmutableOwned);
+    let expr = Expression::template(nested_template, ValueMode::ImmutableOwned);
     template.content.add(expr);
     Ok(())
 }
@@ -203,7 +203,7 @@ fn consume_balanced_brackets_as_literal_text(
     template.content.add(Expression::string_slice(
         open_bracket_id,
         token_stream.current_location(),
-        Ownership::ImmutableOwned,
+        ValueMode::ImmutableOwned,
     ));
     token_stream.advance();
 
@@ -215,7 +215,7 @@ fn consume_balanced_brackets_as_literal_text(
                 template.content.add(Expression::string_slice(
                     bracket_id,
                     token.location.clone(),
-                    Ownership::ImmutableOwned,
+                    ValueMode::ImmutableOwned,
                 ));
             }
             TokenKind::TemplateClose => {
@@ -223,14 +223,14 @@ fn consume_balanced_brackets_as_literal_text(
                 template.content.add(Expression::string_slice(
                     bracket_id,
                     token.location.clone(),
-                    Ownership::ImmutableOwned,
+                    ValueMode::ImmutableOwned,
                 ));
             }
             TokenKind::RawStringLiteral(content) | TokenKind::StringSliceLiteral(content) => {
                 template.content.add(Expression::string_slice(
                     *content,
                     token.location.clone(),
-                    Ownership::ImmutableOwned,
+                    ValueMode::ImmutableOwned,
                 ));
             }
             TokenKind::Newline => {
@@ -238,7 +238,7 @@ fn consume_balanced_brackets_as_literal_text(
                 template.content.add(Expression::string_slice(
                     newline_id,
                     token.location.clone(),
-                    Ownership::ImmutableOwned,
+                    ValueMode::ImmutableOwned,
                 ));
             }
             TokenKind::Symbol(id) | TokenKind::StyleDirective(id) => {
@@ -253,7 +253,7 @@ fn consume_balanced_brackets_as_literal_text(
                 template.content.add(Expression::string_slice(
                     literal_id,
                     token.location.clone(),
-                    Ownership::ImmutableOwned,
+                    ValueMode::ImmutableOwned,
                 ));
             }
             TokenKind::StartTemplateBody | TokenKind::Colon => {
@@ -261,7 +261,7 @@ fn consume_balanced_brackets_as_literal_text(
                 template.content.add(Expression::string_slice(
                     colon_id,
                     token.location.clone(),
-                    Ownership::ImmutableOwned,
+                    ValueMode::ImmutableOwned,
                 ));
             }
             TokenKind::Comma => {
@@ -269,7 +269,7 @@ fn consume_balanced_brackets_as_literal_text(
                 template.content.add(Expression::string_slice(
                     comma_id,
                     token.location.clone(),
-                    Ownership::ImmutableOwned,
+                    ValueMode::ImmutableOwned,
                 ));
             }
             TokenKind::OpenParenthesis => {
@@ -277,7 +277,7 @@ fn consume_balanced_brackets_as_literal_text(
                 template.content.add(Expression::string_slice(
                     paren_id,
                     token.location.clone(),
-                    Ownership::ImmutableOwned,
+                    ValueMode::ImmutableOwned,
                 ));
             }
             TokenKind::CloseParenthesis => {
@@ -285,7 +285,7 @@ fn consume_balanced_brackets_as_literal_text(
                 template.content.add(Expression::string_slice(
                     paren_id,
                     token.location.clone(),
-                    Ownership::ImmutableOwned,
+                    ValueMode::ImmutableOwned,
                 ));
             }
             _ => {}

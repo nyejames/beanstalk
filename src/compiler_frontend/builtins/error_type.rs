@@ -9,10 +9,11 @@ use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
+use crate::compiler_frontend::value_mode::ValueMode;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 pub(crate) const ERROR_TYPE_NAME: &str = "Error";
@@ -173,7 +174,6 @@ pub(crate) fn register_builtin_error_types(string_table: &mut StringTable) -> Bu
     let error_location_type = DataType::runtime_struct(
         error_location_path.to_owned(),
         error_location_fields.to_owned(),
-        Ownership::MutableOwned,
     );
 
     let stack_frame_fields = vec![
@@ -189,11 +189,8 @@ pub(crate) fn register_builtin_error_types(string_table: &mut StringTable) -> Bu
         ),
     ];
 
-    let stack_frame_type = DataType::runtime_struct(
-        stack_frame_path.to_owned(),
-        stack_frame_fields.to_owned(),
-        Ownership::MutableOwned,
-    );
+    let stack_frame_type =
+        DataType::runtime_struct(stack_frame_path.to_owned(), stack_frame_fields.to_owned());
 
     let error_fields = vec![
         required_field(
@@ -218,10 +215,7 @@ pub(crate) fn register_builtin_error_types(string_table: &mut StringTable) -> Bu
         ),
         defaulted_optional_field(
             error_path.join_str(ERROR_FIELD_TRACE, string_table),
-            DataType::Collection(
-                Box::new(stack_frame_type.to_owned()),
-                Ownership::ImmutableOwned,
-            ),
+            DataType::Collection(Box::new(stack_frame_type.to_owned())),
             location.clone(),
         ),
     ];
@@ -244,11 +238,7 @@ pub(crate) fn register_builtin_error_types(string_table: &mut StringTable) -> Bu
         ),
         type_declaration(
             error_path.to_owned(),
-            DataType::runtime_struct(
-                error_path.to_owned(),
-                error_fields.to_owned(),
-                Ownership::MutableOwned,
-            ),
+            DataType::runtime_struct(error_path.to_owned(), error_fields.to_owned()),
             location.clone(),
         ),
     ];
@@ -365,7 +355,7 @@ fn type_declaration(
             ExpressionKind::NoValue,
             location,
             data_type,
-            Ownership::ImmutableReference,
+            ValueMode::ImmutableReference,
         ),
     }
 }
@@ -373,7 +363,7 @@ fn type_declaration(
 fn required_field(id: InternedPath, data_type: DataType, location: SourceLocation) -> Declaration {
     Declaration {
         id,
-        value: Expression::no_value(location, data_type, Ownership::ImmutableOwned),
+        value: Expression::no_value(location, data_type, ValueMode::ImmutableOwned),
     }
 }
 
@@ -389,7 +379,7 @@ fn defaulted_optional_field(
             ExpressionKind::OptionNone,
             location,
             optional_type,
-            Ownership::ImmutableOwned,
+            ValueMode::ImmutableOwned,
         ),
     }
 }

@@ -6,10 +6,10 @@
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
-use crate::compiler_frontend::datatypes::Ownership;
 use crate::compiler_frontend::hir::hir_nodes::HirTerminator;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::test_support::{function_node, node, test_location};
+use crate::compiler_frontend::value_mode::ValueMode;
 
 use crate::compiler_frontend::hir::hir_builder::{build_ast, lower_ast};
 
@@ -20,12 +20,12 @@ fn lowers_while_to_header_body_exit_shape() {
 
     let while_node = node(
         NodeKind::WhileLoop(
-            Expression::bool(false, test_location(2), Ownership::ImmutableOwned),
+            Expression::bool(false, test_location(2), ValueMode::ImmutableOwned),
             vec![node(
                 NodeKind::Rvalue(Expression::int(
                     10,
                     test_location(2),
-                    Ownership::ImmutableOwned,
+                    ValueMode::ImmutableOwned,
                 )),
                 test_location(2),
             )],
@@ -76,7 +76,7 @@ fn break_in_while_targets_loop_exit_block() {
 
     let while_node = node(
         NodeKind::WhileLoop(
-            Expression::bool(true, test_location(20), Ownership::ImmutableOwned),
+            Expression::bool(true, test_location(20), ValueMode::ImmutableOwned),
             vec![node(NodeKind::Break, test_location(21))],
         ),
         test_location(20),

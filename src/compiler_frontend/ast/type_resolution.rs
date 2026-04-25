@@ -339,7 +339,7 @@ fn inline_visible_constant_references_impl(
                 &evaluation_context,
                 rewritten_nodes,
                 &mut current_type,
-                &expression.ownership,
+                &expression.value_mode,
                 string_table,
             )
             .unwrap_or_else(|_| expression.to_owned())
@@ -360,7 +360,7 @@ fn inline_visible_constant_references_impl(
             ),
             expression.location.clone(),
             expression.data_type.to_owned(),
-            expression.ownership.to_owned(),
+            expression.value_mode.to_owned(),
         ),
         ExpressionKind::StructInstance(fields) => Expression::new(
             ExpressionKind::StructInstance(
@@ -379,7 +379,7 @@ fn inline_visible_constant_references_impl(
             ),
             expression.location.clone(),
             expression.data_type.to_owned(),
-            expression.ownership.to_owned(),
+            expression.value_mode.to_owned(),
         ),
         ExpressionKind::Range(start, end) => Expression::new(
             ExpressionKind::Range(
@@ -398,7 +398,7 @@ fn inline_visible_constant_references_impl(
             ),
             expression.location.clone(),
             expression.data_type.to_owned(),
-            expression.ownership.to_owned(),
+            expression.value_mode.to_owned(),
         ),
         ExpressionKind::ResultConstruct { variant, value } => Expression::new(
             ExpressionKind::ResultConstruct {
@@ -412,7 +412,7 @@ fn inline_visible_constant_references_impl(
             },
             expression.location.clone(),
             expression.data_type.to_owned(),
-            expression.ownership.to_owned(),
+            expression.value_mode.to_owned(),
         ),
         ExpressionKind::Coerced { value, to_type } => Expression::new(
             ExpressionKind::Coerced {
@@ -426,7 +426,7 @@ fn inline_visible_constant_references_impl(
             },
             expression.location.clone(),
             expression.data_type.to_owned(),
-            expression.ownership.to_owned(),
+            expression.value_mode.to_owned(),
         ),
         _ => expression.to_owned(),
     }
@@ -474,7 +474,7 @@ fn collect_runtime_struct_dependencies(
         } => {
             dependencies.insert(nominal_path.to_owned());
         }
-        DataType::Collection(inner, _) | DataType::Reference(inner) | DataType::Option(inner) => {
+        DataType::Collection(inner) | DataType::Reference(inner) | DataType::Option(inner) => {
             collect_runtime_struct_dependencies(inner, dependencies)
         }
         DataType::Returns(values) => {

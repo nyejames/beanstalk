@@ -1,11 +1,12 @@
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::declaration_syntax::type_syntax::{
     TypeAnnotationContext, parse_type_annotation,
 };
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::token_scan::collect_declaration_initializer_tokens;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
+use crate::compiler_frontend::value_mode::ValueMode;
 use crate::{return_rule_error, return_syntax_error};
 
 // All the component parts of a declaration before it is resolved / parsed.
@@ -29,17 +30,16 @@ pub struct BindingTargetSyntax {
 }
 
 impl DeclarationSyntax {
-    pub fn to_data_type(&self, declaration_ownership: &Ownership) -> DataType {
-        match &self.type_annotation {
-            DataType::Collection(inner, _) => {
-                if matches!(inner.as_ref(), DataType::Inferred) {
-                    DataType::Collection(Box::new(*inner.clone()), Ownership::MutableOwned)
-                } else {
-                    DataType::Collection(Box::new(*inner.clone()), declaration_ownership.clone())
-                }
-            }
-            other => other.clone(),
+    pub fn value_mode(&self) -> ValueMode {
+        if self.mutable_marker {
+            ValueMode::MutableOwned
+        } else {
+            ValueMode::ImmutableOwned
         }
+    }
+
+    pub fn semantic_type(&self) -> DataType {
+        self.type_annotation.clone()
     }
 }
 

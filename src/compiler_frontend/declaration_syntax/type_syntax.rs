@@ -187,10 +187,7 @@ fn parse_collection_type(
 
     token_stream.advance();
 
-    Ok(DataType::Collection(
-        Box::new(inner_type),
-        crate::compiler_frontend::datatypes::Ownership::ImmutableOwned,
-    ))
+    Ok(DataType::Collection(Box::new(inner_type)))
 }
 
 fn parse_optional_type_suffix(
@@ -319,7 +316,7 @@ pub(crate) fn for_each_named_type_in_data_type(
 ) {
     match data_type {
         DataType::NamedType(type_name) => visitor(*type_name),
-        DataType::Collection(inner, _) | DataType::Option(inner) | DataType::Reference(inner) => {
+        DataType::Collection(inner) | DataType::Option(inner) | DataType::Reference(inner) => {
             for_each_named_type_in_data_type(inner, visitor)
         }
         DataType::Returns(values) => {
@@ -358,15 +355,9 @@ pub(crate) fn resolve_named_types_in_data_type(
         DataType::NamedType(type_name) => {
             resolve_named_type(*type_name, location, resolve_by_name, string_table)
         }
-        DataType::Collection(inner, ownership) => Ok(DataType::Collection(
-            Box::new(resolve_named_types_in_data_type(
-                inner,
-                location,
-                resolve_by_name,
-                string_table,
-            )?),
-            ownership.to_owned(),
-        )),
+        DataType::Collection(inner) => Ok(DataType::Collection(Box::new(
+            resolve_named_types_in_data_type(inner, location, resolve_by_name, string_table)?,
+        ))),
         DataType::Option(inner) => Ok(DataType::Option(Box::new(
             resolve_named_types_in_data_type(inner, location, resolve_by_name, string_table)?,
         ))),

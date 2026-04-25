@@ -9,7 +9,7 @@ use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::ErrorType;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::test_support::{
@@ -17,6 +17,7 @@ use crate::compiler_frontend::tests::test_support::{
     make_test_variable, node, reference_expr, run_borrow_checker, symbol, test_location,
 };
 use crate::compiler_frontend::tokenizer::newline_handling::NewlineMode;
+use crate::compiler_frontend::value_mode::ValueMode;
 use crate::projects::settings::Config;
 
 #[test]
@@ -38,7 +39,7 @@ fn frontend_check_borrows_propagates_failures() {
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     x.clone(),
-                    Expression::int(1, test_location(1), Ownership::MutableOwned),
+                    Expression::int(1, test_location(1), ValueMode::MutableOwned),
                 )),
                 test_location(1),
             ),
@@ -49,7 +50,7 @@ fn frontend_check_borrows_propagates_failures() {
                         x.clone(),
                         DataType::Int,
                         test_location(2),
-                        Ownership::MutableReference,
+                        ValueMode::MutableReference,
                     ),
                 )),
                 test_location(2),
@@ -105,7 +106,7 @@ fn successful_borrow_report_can_be_stored_on_module() {
             node(
                 NodeKind::VariableDeclaration(make_test_variable(
                     counter.clone(),
-                    Expression::int(0, test_location(1), Ownership::MutableOwned),
+                    Expression::int(0, test_location(1), ValueMode::MutableOwned),
                 )),
                 test_location(1),
             ),
@@ -116,7 +117,7 @@ fn successful_borrow_report_can_be_stored_on_module() {
                         DataType::Int,
                         test_location(2),
                     )),
-                    value: Expression::int(1, test_location(2), Ownership::ImmutableOwned),
+                    value: Expression::int(1, test_location(2), ValueMode::ImmutableOwned),
                 },
                 test_location(2),
             ),

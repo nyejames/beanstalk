@@ -20,13 +20,14 @@ use crate::compiler_frontend::builtins::expression_parsing::{
     parse_builtin_cast_expression, parse_collection_expression,
 };
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorMetaDataKey};
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::reserved_trait_syntax::{
     reserved_trait_keyword_error, reserved_trait_keyword_or_dispatch_mismatch,
 };
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::syntax_errors::expression_position::check_expression_common_mistake;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
+use crate::compiler_frontend::value_mode::ValueMode;
 use crate::{ast_log, return_syntax_error, return_type_error};
 
 pub(super) enum ExpressionTokenStep {
@@ -38,7 +39,7 @@ pub(super) enum ExpressionTokenStep {
 
 pub(super) struct ExpressionDispatchState<'a> {
     pub(super) data_type: &'a mut DataType,
-    pub(super) ownership: &'a Ownership,
+    pub(super) value_mode: &'a ValueMode,
     pub(super) consume_closing_parenthesis: bool,
     pub(super) expression: &'a mut Vec<AstNode>,
     pub(super) next_number_negative: &'a mut bool,
@@ -236,7 +237,7 @@ pub(super) fn dispatch_expression_token(
                 token_stream,
                 context,
                 state.data_type,
-                state.ownership,
+                state.value_mode,
                 true,
                 string_table,
             )?;
@@ -260,7 +261,7 @@ pub(super) fn dispatch_expression_token(
             let cast_expression = parse_builtin_cast_expression(
                 token_stream,
                 context,
-                state.ownership,
+                state.value_mode,
                 string_table,
             )?;
             let cast_location = cast_expression.location.clone();
@@ -285,7 +286,7 @@ pub(super) fn dispatch_expression_token(
                 token_stream,
                 context,
                 state.data_type,
-                state.ownership,
+                state.value_mode,
                 state.expression,
                 string_table,
             )?;
@@ -346,7 +347,7 @@ pub(super) fn dispatch_expression_token(
                 token_stream,
                 context,
                 state.data_type,
-                state.ownership,
+                state.value_mode,
                 state.expression,
                 state.next_number_negative,
                 string_table,
@@ -359,7 +360,7 @@ pub(super) fn dispatch_expression_token(
                 token_stream,
                 context,
                 state.consume_closing_parenthesis,
-                state.ownership,
+                state.value_mode,
                 string_table,
             )? {
                 return Ok(ExpressionTokenStep::Return(Box::new(template_expression)));
@@ -380,7 +381,7 @@ pub(super) fn dispatch_expression_token(
                     copied_place,
                     copied_type,
                     copy_location.clone(),
-                    state.ownership.to_owned(),
+                    state.value_mode.to_owned(),
                 )),
                 location: copy_location,
                 scope: context.scope.clone(),
@@ -525,7 +526,7 @@ pub(super) fn dispatch_expression_token(
                     context,
                     std::mem::take(state.expression),
                     state.data_type,
-                    state.ownership,
+                    state.value_mode,
                     string_table,
                 )?;
                 Ok(ExpressionTokenStep::Return(Box::new(value)))

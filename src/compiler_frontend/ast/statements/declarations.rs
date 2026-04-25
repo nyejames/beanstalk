@@ -11,7 +11,7 @@ use crate::compiler_frontend::ast::{
 use crate::compiler_frontend::builtins::error_type::is_reserved_builtin_symbol;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::declaration_syntax::declaration_shell::{
     DeclarationSyntax, parse_declaration_syntax,
 };
@@ -158,22 +158,18 @@ pub fn resolve_declaration_syntax(
     context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> Result<Declaration, CompilerError> {
-    let ownership = if declaration_syntax.mutable_marker {
-        if context.kind.is_constant_context() {
-            return_rule_error!(
-                "Constants can't be mutable!",
-                declaration_syntax.location, {
-                    CompilationStage => "Variable Declaration",
-                    PrimarySuggestion => "Remove the '~' symbol from the variable declaration",
-                }
-            )
-        }
-        Ownership::MutableOwned
-    } else {
-        Ownership::ImmutableOwned
-    };
+    let value_mode = declaration_syntax.value_mode();
+    if declaration_syntax.mutable_marker && context.kind.is_constant_context() {
+        return_rule_error!(
+            "Constants can't be mutable!",
+            declaration_syntax.location, {
+                CompilationStage => "Variable Declaration",
+                PrimarySuggestion => "Remove the '~' symbol from the variable declaration",
+            }
+        )
+    }
 
-    let mut data_type = declaration_syntax.to_data_type(&ownership);
+    let mut data_type = declaration_syntax.semantic_type();
 
     let declaration_location = declaration_syntax.location.clone();
     data_type = resolve_named_types_in_data_type(
@@ -206,7 +202,7 @@ pub fn resolve_declaration_syntax(
             Expression::struct_definition(
                 params,
                 initializer_stream.current_location(),
-                ownership.to_owned(),
+                value_mode.to_owned(),
             )
         }
 
@@ -226,7 +222,7 @@ pub fn resolve_declaration_syntax(
                 &mut initializer_stream,
                 context,
                 &mut expr_type,
-                &ownership,
+                &value_mode,
                 false,
                 string_table,
             )?;
@@ -294,11 +290,11 @@ pub fn resolve_declaration_syntax(
     // WHY: rvalue initializers (for example struct literals and collections) inherit ownership
     // from type defaults; preserving that ownership would incorrectly allow writes through
     // immutable bindings and mutable receiver calls.
-    parsed_expr.ownership = ownership.to_owned();
+    parsed_expr.value_mode = value_mode.to_owned();
 
     ast_log!(
         "Created new ",
-        Cyan #ownership,
+        Cyan #value_mode,
         " ",
         data_type.display_with_table(string_table)
     );

@@ -7,12 +7,13 @@ use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::datatypes::Ownership::MutableOwned;
-use crate::compiler_frontend::datatypes::{DataType, Ownership};
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::type_coercion::numeric::coerce_expression_to_declared_type;
 use crate::compiler_frontend::type_coercion::parse_context::parse_expectation_for_target_type;
+use crate::compiler_frontend::value_mode::ValueMode;
+use crate::compiler_frontend::value_mode::ValueMode::MutableOwned;
 use crate::return_syntax_error;
 
 /// Parse a collection literal with homogeneous item expressions.
@@ -20,7 +21,7 @@ pub fn new_collection(
     token_stream: &mut FileTokens,
     collection_type: &DataType,
     context: &ScopeContext,
-    ownership: &Ownership,
+    value_mode: &ValueMode,
     string_table: &mut StringTable,
 ) -> Result<Expression, CompilerError> {
     let mut items: Vec<Expression> = Vec::new();
@@ -93,7 +94,7 @@ pub fn new_collection(
     Ok(Expression::collection(
         items,
         token_stream.current_location(),
-        ownership.to_owned(),
+        value_mode.to_owned(),
     ))
 }
 
