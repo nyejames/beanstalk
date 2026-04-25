@@ -10,9 +10,9 @@ use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, 
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::datatypes::DataType;
-use crate::compiler_frontend::hir::hir_nodes::{
-    HirExpressionKind, HirStatementKind, HirTerminator,
-};
+use crate::compiler_frontend::hir::expressions::HirExpressionKind;
+use crate::compiler_frontend::hir::statements::HirStatementKind;
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::test_support::{
     fresh_returns, function_node, make_test_variable, node, param, test_location,

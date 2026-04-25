@@ -9,7 +9,7 @@ use crate::compiler_frontend::ast::Ast;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::headers::parse_file_headers::Headers;
-use crate::compiler_frontend::hir::hir_nodes::HirModule;
+use crate::compiler_frontend::hir::module::HirModule;
 use crate::compiler_frontend::module_dependencies::SortedHeaders;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;

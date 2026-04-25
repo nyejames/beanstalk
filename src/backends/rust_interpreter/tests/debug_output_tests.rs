@@ -12,9 +12,10 @@ use crate::backends::rust_interpreter::request::{
 };
 use crate::backends::rust_interpreter::result::InterpreterExecutionResult;
 use crate::backends::rust_interpreter::value::Value;
-use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FunctionId, HirBlock, HirFunction, HirFunctionOrigin, HirTerminator, RegionId,
-};
+use crate::compiler_frontend::hir::blocks::HirBlock;
+use crate::compiler_frontend::hir::functions::{HirFunction, HirFunctionOrigin};
+use crate::compiler_frontend::hir::ids::{BlockId, FunctionId, RegionId};
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 

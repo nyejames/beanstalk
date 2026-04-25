@@ -4,7 +4,8 @@
 //! WHY: the backend must stay generic and only lower exports explicitly requested by builders.
 
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::hir::hir_nodes::{FunctionId, HirModule};
+use crate::compiler_frontend::hir::ids::FunctionId;
+use crate::compiler_frontend::hir::module::HirModule;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct HtmlWasmExportPlan {

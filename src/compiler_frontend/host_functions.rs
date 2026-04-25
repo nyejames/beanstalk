@@ -7,7 +7,7 @@ use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, Retur
 #[cfg(test)]
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
-use crate::compiler_frontend::hir::hir_nodes::FunctionId;
+use crate::compiler_frontend::hir::ids::FunctionId;
 use crate::compiler_frontend::interned_path::InternedPath;
 #[cfg(test)]
 use crate::return_compiler_error;

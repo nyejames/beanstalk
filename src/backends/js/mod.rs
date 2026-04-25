@@ -20,7 +20,7 @@ mod tests;
 pub(crate) use emitter::JsEmitter;
 pub use emitter::lower_hir_to_js;
 
-use crate::compiler_frontend::hir::hir_nodes::FunctionId;
+use crate::compiler_frontend::hir::ids::FunctionId;
 use std::collections::HashMap;
 
 /// Configuration for JS lowering.

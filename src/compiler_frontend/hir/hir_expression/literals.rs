@@ -6,8 +6,8 @@
 
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::hir::expressions::{HirExpressionKind, ValueKind};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
-use crate::compiler_frontend::hir::hir_nodes::{HirExpressionKind, ValueKind};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 use super::LoweredExpression;

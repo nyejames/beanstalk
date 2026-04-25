@@ -9,7 +9,9 @@ use crate::backends::rust_interpreter::lowering::materialize::{
     lower_expression_to_temporary, materialize_expression_value,
 };
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
-use crate::compiler_frontend::hir::hir_nodes::{HirBlock, HirPlace, HirStatementKind};
+use crate::compiler_frontend::hir::blocks::HirBlock;
+use crate::compiler_frontend::hir::places::HirPlace;
+use crate::compiler_frontend::hir::statements::HirStatementKind;
 
 pub(crate) fn lower_block_statements(
     context: &mut LoweringContext<'_>,

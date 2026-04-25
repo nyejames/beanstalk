@@ -16,7 +16,8 @@ use crate::backends::rust_interpreter::lowering::operators::{
     map_binary_operator, map_unary_operator,
 };
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
-use crate::compiler_frontend::hir::hir_nodes::{HirExpression, HirExpressionKind, HirPlace};
+use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind};
+use crate::compiler_frontend::hir::places::HirPlace;
 
 pub(crate) fn lower_expression(
     context: &mut LoweringContext<'_>,

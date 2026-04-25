@@ -12,12 +12,13 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, ResultC
 use crate::compiler_frontend::builtins::{BuiltinMethodKind, CollectionBuiltinOp};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::hir::expressions::{HirExpressionKind, ValueKind};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeId};
-use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, HirExpressionKind, HirPlace, HirStatement, HirStatementKind, HirTerminator, LocalId,
-    ValueKind,
-};
+use crate::compiler_frontend::hir::ids::{BlockId, LocalId};
+use crate::compiler_frontend::hir::places::HirPlace;
+use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::host_functions::{
     COLLECTION_GET_HOST_NAME, COLLECTION_LENGTH_HOST_NAME, COLLECTION_PUSH_HOST_NAME,

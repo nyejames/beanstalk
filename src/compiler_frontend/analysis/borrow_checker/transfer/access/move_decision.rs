@@ -6,7 +6,7 @@
 use crate::compiler_frontend::analysis::borrow_checker::state::{
     FunctionLayout, FutureUseKind, RootSet,
 };
-use crate::compiler_frontend::hir::hir_nodes::BlockId;
+use crate::compiler_frontend::hir::ids::BlockId;
 
 // WHAT: Encodes whether a mutable-capable access should remain a borrow or consume ownership.
 // WHY: Transfer paths use this single decision to keep assignment/call move behavior consistent.

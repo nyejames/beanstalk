@@ -1,6 +1,14 @@
 //! Expression lowering tests for JavaScript output.
 
 use super::support::*;
+use crate::compiler_frontend::hir::blocks::HirBlock;
+use crate::compiler_frontend::hir::expressions::{HirExpressionKind, OptionVariant, ValueKind};
+use crate::compiler_frontend::hir::functions::HirFunction;
+use crate::compiler_frontend::hir::ids::{BlockId, FunctionId, LocalId, RegionId};
+use crate::compiler_frontend::hir::operators::HirBinOp;
+use crate::compiler_frontend::hir::places::HirPlace;
+use crate::compiler_frontend::hir::statements::HirStatementKind;
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 
 #[test]
 fn integer_division_binop_emits_zero_checked_truncation_path() {

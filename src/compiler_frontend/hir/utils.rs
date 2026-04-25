@@ -1,4 +1,5 @@
-use crate::compiler_frontend::hir::hir_nodes::{BlockId, HirTerminator};
+use crate::compiler_frontend::hir::ids::BlockId;
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 use rustc_hash::FxHashSet;
 use std::collections::VecDeque;
 

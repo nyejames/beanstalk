@@ -16,12 +16,15 @@ use crate::backends::rust_interpreter::runtime::RuntimeEngine;
 use crate::backends::rust_interpreter::value::Value;
 use crate::compiler_frontend::analysis::borrow_checker::BorrowFacts;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
+use crate::compiler_frontend::hir::blocks::{HirBlock, HirLocal};
+use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, ValueKind};
+use crate::compiler_frontend::hir::functions::{HirFunction, HirFunctionOrigin};
 use crate::compiler_frontend::hir::hir_datatypes::{HirType, HirTypeKind, TypeContext, TypeId};
-use crate::compiler_frontend::hir::hir_nodes::{
-    FunctionId, HirBlock, HirExpression, HirExpressionKind, HirFunction, HirFunctionOrigin,
-    HirLocal, HirModule, HirNodeId, HirPlace, HirRegion, HirStatement, HirStatementKind,
-    HirValueId, LocalId, RegionId, ValueKind,
-};
+use crate::compiler_frontend::hir::ids::{FunctionId, HirNodeId, HirValueId, LocalId, RegionId};
+use crate::compiler_frontend::hir::module::HirModule;
+use crate::compiler_frontend::hir::places::HirPlace;
+use crate::compiler_frontend::hir::regions::HirRegion;
+use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::test_support::test_location;

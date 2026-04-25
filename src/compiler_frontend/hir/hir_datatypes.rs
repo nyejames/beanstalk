@@ -10,7 +10,7 @@
 //
 // ============================================================
 
-use crate::compiler_frontend::hir::hir_nodes::StructId;
+use crate::compiler_frontend::hir::ids::StructId;
 
 /// Stable identifier for a canonical HIR type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -134,7 +134,7 @@ pub enum HirTypeKind {
     /// WHY: unit choices are closed scalar tag sets, not generic unions.
     /// A dedicated kind preserves nominal identity and prepares for payload variants.
     Choice {
-        choice_id: crate::compiler_frontend::hir::hir_nodes::ChoiceId,
+        choice_id: crate::compiler_frontend::hir::ids::ChoiceId,
     },
 }
 

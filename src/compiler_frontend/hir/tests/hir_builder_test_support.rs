@@ -7,12 +7,13 @@ use crate::compiler_frontend::ast::Ast;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, SourceLocation};
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
+use crate::compiler_frontend::hir::blocks::{HirBlock, HirLocal};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
-use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FieldId, FunctionId, HirBlock, HirField, HirLocal, HirModule, HirStruct,
-    HirTerminator, RegionId, StructId,
-};
 use crate::compiler_frontend::hir::hir_side_table::HirLocalOriginKind;
+use crate::compiler_frontend::hir::ids::{BlockId, FieldId, FunctionId, RegionId, StructId};
+use crate::compiler_frontend::hir::module::HirModule;
+use crate::compiler_frontend::hir::structs::{HirField, HirStruct};
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::symbols::string_interning::StringTable;

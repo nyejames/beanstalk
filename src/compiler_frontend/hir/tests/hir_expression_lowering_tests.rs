@@ -17,13 +17,18 @@ use crate::compiler_frontend::builtins::{BuiltinMethodKind, CollectionBuiltinOp}
 use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant;
+use crate::compiler_frontend::hir::blocks::{HirBlock, HirLocal};
+use crate::compiler_frontend::hir::expressions::{HirExpressionKind, ValueKind};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_datatypes::HirTypeKind;
-use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, ChoiceId, FieldId, FunctionId, HirBinOp, HirBlock, HirExpressionKind, HirLocal,
-    HirPlace, HirStatementKind, HirTerminator, HirUnaryOp, LocalId, RegionId, StructId, ValueKind,
-};
 use crate::compiler_frontend::hir::hir_side_table::HirLocalOriginKind;
+use crate::compiler_frontend::hir::ids::{
+    BlockId, ChoiceId, FieldId, FunctionId, LocalId, RegionId, StructId,
+};
+use crate::compiler_frontend::hir::operators::{HirBinOp, HirUnaryOp};
+use crate::compiler_frontend::hir::places::HirPlace;
+use crate::compiler_frontend::hir::statements::HirStatementKind;
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;

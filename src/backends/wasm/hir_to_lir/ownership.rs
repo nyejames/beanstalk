@@ -3,7 +3,7 @@
 use crate::backends::wasm::hir_to_lir::context::WasmFunctionLoweringContext;
 use crate::backends::wasm::lir::instructions::WasmLirStmt;
 use crate::compiler_frontend::analysis::borrow_checker::BorrowDropSiteKind;
-use crate::compiler_frontend::hir::hir_nodes::BlockId;
+use crate::compiler_frontend::hir::ids::BlockId;
 use std::collections::BTreeSet;
 
 pub(crate) fn insert_advisory_drops(

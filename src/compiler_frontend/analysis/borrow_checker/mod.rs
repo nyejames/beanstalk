@@ -19,7 +19,7 @@ pub(crate) type BorrowFacts = BorrowAnalysis;
 
 use crate::compiler_frontend::analysis::borrow_checker::engine::BorrowChecker;
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::hir::hir_nodes::HirModule;
+use crate::compiler_frontend::hir::module::HirModule;
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 

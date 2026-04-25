@@ -1,6 +1,16 @@
 //! Result and error propagation emission tests for JavaScript output.
 
 use super::support::*;
+use crate::compiler_frontend::hir::blocks::HirBlock;
+use crate::compiler_frontend::hir::expressions::{HirExpressionKind, ResultVariant, ValueKind};
+use crate::compiler_frontend::hir::functions::{HirFunction, HirFunctionOrigin};
+use crate::compiler_frontend::hir::hir_datatypes::{HirType, HirTypeKind};
+use crate::compiler_frontend::hir::ids::{BlockId, FunctionId, LocalId, RegionId};
+use crate::compiler_frontend::hir::module::HirModule;
+use crate::compiler_frontend::hir::places::HirPlace;
+use crate::compiler_frontend::hir::regions::HirRegion;
+use crate::compiler_frontend::hir::statements::HirStatementKind;
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 
 // Result/error emission contract tests beyond helper-level [error] [result]
 // ---------------------------------------------------------------------------
@@ -235,18 +245,15 @@ fn result_propagate_emitted_in_nested_function_calls() {
         InternedPath::from_single_str("outer", &mut string_table),
     );
 
-    module.function_origins.insert(
-        FunctionId(0),
-        crate::compiler_frontend::hir::hir_nodes::HirFunctionOrigin::Normal,
-    );
-    module.function_origins.insert(
-        FunctionId(1),
-        crate::compiler_frontend::hir::hir_nodes::HirFunctionOrigin::Normal,
-    );
-    module.function_origins.insert(
-        FunctionId(2),
-        crate::compiler_frontend::hir::hir_nodes::HirFunctionOrigin::Normal,
-    );
+    module
+        .function_origins
+        .insert(FunctionId(0), HirFunctionOrigin::Normal);
+    module
+        .function_origins
+        .insert(FunctionId(1), HirFunctionOrigin::Normal);
+    module
+        .function_origins
+        .insert(FunctionId(2), HirFunctionOrigin::Normal);
 
     let output = lower_hir_to_js(
         &module,

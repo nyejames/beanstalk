@@ -17,10 +17,11 @@ use crate::compiler_frontend::analysis::borrow_checker::types::{
     FunctionReturnAliasSummary, LocalMode,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FunctionId, HirFunction, HirModule, HirTerminator, LocalId, RegionId,
-};
+use crate::compiler_frontend::hir::functions::HirFunction;
 use crate::compiler_frontend::hir::hir_side_table::HirLocation;
+use crate::compiler_frontend::hir::ids::{BlockId, FunctionId, LocalId, RegionId};
+use crate::compiler_frontend::hir::module::HirModule;
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::return_borrow_checker_error;
@@ -437,7 +438,7 @@ impl<'a> BorrowChecker<'a> {
         &self,
         block_id: BlockId,
         function_id: FunctionId,
-    ) -> Result<&crate::compiler_frontend::hir::hir_nodes::HirBlock, CompilerError> {
+    ) -> Result<&crate::compiler_frontend::hir::blocks::HirBlock, CompilerError> {
         let Some(index) = self.block_index_by_id.get(&block_id).copied() else {
             return_borrow_checker_error!(
                 format!(

@@ -11,15 +11,15 @@ pub(super) use crate::backends::js::{JsLoweringConfig, lower_hir_to_js};
 pub(super) use crate::compiler_frontend::analysis::borrow_checker::{
     BorrowCheckReport, BorrowStateSnapshot, LocalBorrowSnapshot, LocalMode,
 };
-pub(super) use crate::compiler_frontend::hir::hir_datatypes::{
-    HirType, HirTypeKind, TypeContext, TypeId,
-};
-pub(super) use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, ChoiceId, FieldId, FunctionId, HirBinOp, HirBlock, HirChoice, HirExpression,
-    HirExpressionKind, HirField, HirFunction, HirLocal, HirMatchArm, HirModule, HirNodeId,
-    HirPattern, HirPlace, HirRegion, HirRelationalPatternOp, HirStatement, HirStatementKind,
-    HirStruct, HirTerminator, LocalId, OptionVariant, RegionId, ResultVariant, StructId, ValueKind,
-};
+use crate::compiler_frontend::hir::blocks::{HirBlock, HirLocal};
+use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, ValueKind};
+use crate::compiler_frontend::hir::functions::HirFunction;
+use crate::compiler_frontend::hir::hir_datatypes::{HirType, HirTypeKind, TypeContext, TypeId};
+use crate::compiler_frontend::hir::ids::{BlockId, ChoiceId, FunctionId, LocalId, RegionId};
+use crate::compiler_frontend::hir::module::{HirChoice, HirModule};
+use crate::compiler_frontend::hir::regions::HirRegion;
+use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 pub(super) use crate::compiler_frontend::host_functions::CallTarget;
 pub(super) use crate::compiler_frontend::interned_path::InternedPath;
 pub(super) use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -94,7 +94,7 @@ pub(super) fn expression(
     value_kind: ValueKind,
 ) -> HirExpression {
     HirExpression {
-        id: crate::compiler_frontend::hir::hir_nodes::HirValueId(id),
+        id: crate::compiler_frontend::hir::ids::HirValueId(id),
         kind,
         ty,
         value_kind,
@@ -149,7 +149,7 @@ pub(super) fn string_expression(
 
 pub(super) fn statement(id: u32, kind: HirStatementKind, line: i32) -> HirStatement {
     HirStatement {
-        id: crate::compiler_frontend::hir::hir_nodes::HirNodeId(id),
+        id: crate::compiler_frontend::hir::ids::HirNodeId(id),
         kind,
         location: loc(line),
     }

@@ -8,8 +8,10 @@ use crate::backends::rust_interpreter::exec_ir::{
     ExecModule, ExecProgram, ExecStorageType,
 };
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
+use crate::compiler_frontend::hir::blocks::HirBlock;
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeClass, TypeId, classify_hir_type};
-use crate::compiler_frontend::hir::hir_nodes::{BlockId, FunctionId, HirBlock, HirModule, LocalId};
+use crate::compiler_frontend::hir::ids::{BlockId, FunctionId, LocalId};
+use crate::compiler_frontend::hir::module::HirModule;
 use rustc_hash::FxHashMap;
 
 pub(crate) struct LoweringContext<'a> {

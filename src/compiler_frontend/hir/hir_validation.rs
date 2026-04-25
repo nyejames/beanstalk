@@ -4,13 +4,19 @@
 //! This pass enforces core invariants so downstream analysis/backends can
 //! rely on a consistent IR contract.
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorType, SourceLocation};
+use crate::compiler_frontend::hir::constants::{HirConstValue, HirDocFragmentKind};
+use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, ValueKind};
+use crate::compiler_frontend::hir::functions::HirFunctionOrigin;
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeId};
-use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FieldId, FunctionId, HirConstValue, HirDocFragmentKind, HirExpression,
-    HirExpressionKind, HirFunctionOrigin, HirMatchArm, HirModule, HirPattern, HirPlace,
-    HirStatement, HirStatementKind, HirTerminator, LocalId, RegionId, StructId, ValueKind,
-};
 use crate::compiler_frontend::hir::hir_side_table::HirLocation;
+use crate::compiler_frontend::hir::ids::{
+    BlockId, FieldId, FunctionId, LocalId, RegionId, StructId,
+};
+use crate::compiler_frontend::hir::module::HirModule;
+use crate::compiler_frontend::hir::patterns::{HirMatchArm, HirPattern};
+use crate::compiler_frontend::hir::places::HirPlace;
+use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::hir::utils::terminator_targets;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::VecDeque;
@@ -837,14 +843,14 @@ impl<'a> HirValidator<'a> {
             }
 
             HirExpressionKind::OptionConstruct { variant, value } => match (variant, value) {
-                (crate::compiler_frontend::hir::hir_nodes::OptionVariant::Some, Some(value)) => {
+                (crate::compiler_frontend::hir::expressions::OptionVariant::Some, Some(value)) => {
                     self.validate_expression(value, anchor)?;
                 }
 
-                (crate::compiler_frontend::hir::hir_nodes::OptionVariant::None, None) => {}
+                (crate::compiler_frontend::hir::expressions::OptionVariant::None, None) => {}
 
-                (crate::compiler_frontend::hir::hir_nodes::OptionVariant::Some, None)
-                | (crate::compiler_frontend::hir::hir_nodes::OptionVariant::None, Some(_)) => {
+                (crate::compiler_frontend::hir::expressions::OptionVariant::Some, None)
+                | (crate::compiler_frontend::hir::expressions::OptionVariant::None, Some(_)) => {
                     return Err(self.error_with_hir(
                         "Invalid OptionConstruct variant/value pairing in HIR expression",
                         anchor,
@@ -1023,7 +1029,7 @@ impl<'a> HirValidator<'a> {
     fn block_by_id(
         &self,
         block_id: BlockId,
-    ) -> Result<&crate::compiler_frontend::hir::hir_nodes::HirBlock, CompilerError> {
+    ) -> Result<&crate::compiler_frontend::hir::blocks::HirBlock, CompilerError> {
         let Some(index) = self.block_index_by_id.get(&block_id).copied() else {
             return Err(self.error_with_hir(
                 format!("Unknown HIR block id {block_id:?}"),

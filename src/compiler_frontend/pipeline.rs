@@ -14,7 +14,7 @@ use crate::compiler_frontend::headers::parse_file_headers::{
     HeaderParseOptions, Headers, parse_headers,
 };
 use crate::compiler_frontend::hir::hir_builder::lower_module;
-use crate::compiler_frontend::hir::hir_nodes::HirModule;
+use crate::compiler_frontend::hir::module::HirModule;
 use crate::compiler_frontend::host_functions::HostRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::module_dependencies::{SortedHeaders, resolve_module_dependencies};

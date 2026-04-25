@@ -9,10 +9,9 @@ use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::statements::match_patterns::{MatchArm, MatchPattern};
 use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::datatypes::DataType;
-use crate::compiler_frontend::hir::hir_nodes::{
-    HirExpression, HirExpressionKind, HirNodeId, HirStatement, HirStatementKind, HirValueId,
-    ValueKind,
-};
+use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, ValueKind};
+use crate::compiler_frontend::hir::ids::{HirNodeId, HirValueId};
+use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::test_support::{
     assignment_target, build_ast, default_host_registry, entry_and_start, function_node, lower_hir,
@@ -241,7 +240,7 @@ fn dead_local_access_reports_borrow_error() {
     let start = &hir.functions[hir.start_function.0 as usize];
     let entry = &hir.blocks[start.entry.0 as usize];
     let (then_block, _) = match &entry.terminator {
-        crate::compiler_frontend::hir::hir_nodes::HirTerminator::If {
+        crate::compiler_frontend::hir::terminators::HirTerminator::If {
             then_block,
             else_block,
             ..
@@ -250,7 +249,7 @@ fn dead_local_access_reports_borrow_error() {
     };
 
     let merge_block = match &hir.blocks[then_block.0 as usize].terminator {
-        crate::compiler_frontend::hir::hir_nodes::HirTerminator::Jump { target, .. } => *target,
+        crate::compiler_frontend::hir::terminators::HirTerminator::Jump { target, .. } => *target,
         other => panic!("expected then jump, found {:?}", other),
     };
 
@@ -267,7 +266,7 @@ fn dead_local_access_reports_borrow_error() {
 
     let synthetic_value = HirExpression {
         id: HirValueId(77_001),
-        kind: HirExpressionKind::Load(crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(
+        kind: HirExpressionKind::Load(crate::compiler_frontend::hir::places::HirPlace::Local(
             then_local.id,
         )),
         ty: then_local.ty,

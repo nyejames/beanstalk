@@ -5,9 +5,10 @@
 
 use crate::backends::js::JsEmitter;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
-use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, HirFunction, HirMatchArm, HirPattern, HirTerminator, LocalId,
-};
+use crate::compiler_frontend::hir::functions::HirFunction;
+use crate::compiler_frontend::hir::ids::{BlockId, LocalId};
+use crate::compiler_frontend::hir::patterns::{HirMatchArm, HirPattern};
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::hir::utils::terminator_targets;
 use std::collections::{HashMap, HashSet};
 
@@ -443,7 +444,7 @@ impl<'hir> JsEmitter<'hir> {
 
     fn emit_structured_if(
         &mut self,
-        condition: &crate::compiler_frontend::hir::hir_nodes::HirExpression,
+        condition: &crate::compiler_frontend::hir::expressions::HirExpression,
         then_block: BlockId,
         else_block: BlockId,
         emitted_blocks: &mut HashSet<BlockId>,
@@ -474,7 +475,7 @@ impl<'hir> JsEmitter<'hir> {
 
     fn emit_structured_match(
         &mut self,
-        scrutinee: &crate::compiler_frontend::hir::hir_nodes::HirExpression,
+        scrutinee: &crate::compiler_frontend::hir::expressions::HirExpression,
         arms: &[HirMatchArm],
         emitted_blocks: &mut HashSet<BlockId>,
     ) -> Result<(), CompilerError> {

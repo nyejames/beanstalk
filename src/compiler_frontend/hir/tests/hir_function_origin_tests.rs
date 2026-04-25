@@ -9,8 +9,9 @@
 
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind, SourceLocation};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
+use crate::compiler_frontend::hir::functions::HirFunctionOrigin;
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
-use crate::compiler_frontend::hir::hir_nodes::{FunctionId, HirFunctionOrigin};
+use crate::compiler_frontend::hir::ids::FunctionId;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -45,7 +46,7 @@ fn function_node(name: InternedPath, location: SourceLocation) -> AstNode {
 use crate::compiler_frontend::hir::hir_builder::build_ast;
 
 fn find_function_id_by_path(
-    module: &crate::compiler_frontend::hir::hir_nodes::HirModule,
+    module: &crate::compiler_frontend::hir::module::HirModule,
     target_path: &InternedPath,
 ) -> Option<FunctionId> {
     module.functions.iter().find_map(|function| {

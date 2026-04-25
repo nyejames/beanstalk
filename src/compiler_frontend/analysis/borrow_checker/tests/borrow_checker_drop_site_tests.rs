@@ -20,7 +20,7 @@ use crate::compiler_frontend::value_mode::ValueMode;
 fn lower_hir(
     ast: crate::compiler_frontend::ast::Ast,
     string_table: &mut StringTable,
-) -> crate::compiler_frontend::hir::hir_nodes::HirModule {
+) -> crate::compiler_frontend::hir::module::HirModule {
     HirBuilder::new(string_table, PathStringFormatConfig::default())
         .build_hir_module(ast)
         .expect("HIR lowering should succeed")

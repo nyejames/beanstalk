@@ -2,9 +2,11 @@
 
 use super::*;
 use crate::compiler_frontend::compiler_errors::ErrorType;
+use crate::compiler_frontend::hir::constants::HirModuleConst;
 use crate::compiler_frontend::hir::hir_datatypes::TypeId;
-use crate::compiler_frontend::hir::hir_nodes::{FunctionId, HirConstId, HirModule, HirModuleConst};
 use crate::compiler_frontend::hir::hir_side_table::HirSideTable;
+use crate::compiler_frontend::hir::ids::{FunctionId, HirConstId};
+use crate::compiler_frontend::hir::module::HirModule;
 use crate::compiler_frontend::interned_path::InternedPath;
 use std::path::PathBuf;
 

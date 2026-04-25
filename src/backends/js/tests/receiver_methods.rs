@@ -1,6 +1,15 @@
 //! Receiver-method call emission tests for JavaScript output.
 
 use super::support::*;
+use crate::compiler_frontend::hir::blocks::HirBlock;
+use crate::compiler_frontend::hir::expressions::{HirExpressionKind, ValueKind};
+use crate::compiler_frontend::hir::functions::{HirFunction, HirFunctionOrigin};
+use crate::compiler_frontend::hir::ids::{BlockId, FunctionId, LocalId, RegionId};
+use crate::compiler_frontend::hir::module::HirModule;
+use crate::compiler_frontend::hir::places::HirPlace;
+use crate::compiler_frontend::hir::regions::HirRegion;
+use crate::compiler_frontend::hir::statements::HirStatementKind;
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 
 // Receiver method call emission tests [receiver]
 // ---------------------------------------------------------------------------
@@ -95,14 +104,12 @@ fn receiver_method_call_emits_receiver_as_first_arg() {
         LocalId(1),
         InternedPath::from_single_str("result", &mut string_table),
     );
-    module.function_origins.insert(
-        FunctionId(0),
-        crate::compiler_frontend::hir::hir_nodes::HirFunctionOrigin::Normal,
-    );
-    module.function_origins.insert(
-        FunctionId(1),
-        crate::compiler_frontend::hir::hir_nodes::HirFunctionOrigin::Normal,
-    );
+    module
+        .function_origins
+        .insert(FunctionId(0), HirFunctionOrigin::Normal);
+    module
+        .function_origins
+        .insert(FunctionId(1), HirFunctionOrigin::Normal);
 
     let output = lower_hir_to_js(
         &module,
@@ -197,14 +204,12 @@ fn receiver_method_call_assigns_value_for_fresh_return() {
         LocalId(1),
         InternedPath::from_single_str("result", &mut string_table),
     );
-    module.function_origins.insert(
-        FunctionId(0),
-        crate::compiler_frontend::hir::hir_nodes::HirFunctionOrigin::Normal,
-    );
-    module.function_origins.insert(
-        FunctionId(1),
-        crate::compiler_frontend::hir::hir_nodes::HirFunctionOrigin::Normal,
-    );
+    module
+        .function_origins
+        .insert(FunctionId(0), HirFunctionOrigin::Normal);
+    module
+        .function_origins
+        .insert(FunctionId(1), HirFunctionOrigin::Normal);
 
     let output = lower_hir_to_js(
         &module,
@@ -306,14 +311,12 @@ fn receiver_method_call_assigns_borrow_for_alias_return() {
         LocalId(1),
         InternedPath::from_single_str("alias", &mut string_table),
     );
-    module.function_origins.insert(
-        FunctionId(0),
-        crate::compiler_frontend::hir::hir_nodes::HirFunctionOrigin::Normal,
-    );
-    module.function_origins.insert(
-        FunctionId(1),
-        crate::compiler_frontend::hir::hir_nodes::HirFunctionOrigin::Normal,
-    );
+    module
+        .function_origins
+        .insert(FunctionId(0), HirFunctionOrigin::Normal);
+    module
+        .function_origins
+        .insert(FunctionId(1), HirFunctionOrigin::Normal);
 
     let output = lower_hir_to_js(
         &module,

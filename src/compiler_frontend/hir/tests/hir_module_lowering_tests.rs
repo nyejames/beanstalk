@@ -11,9 +11,9 @@ use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::{AstDocFragment, AstDocFragmentKind};
 use crate::compiler_frontend::datatypes::DataType;
-use crate::compiler_frontend::hir::hir_nodes::{
-    HirConstValue, HirDocFragmentKind, HirExpressionKind, HirStatementKind,
-};
+use crate::compiler_frontend::hir::constants::{HirConstValue, HirDocFragmentKind};
+use crate::compiler_frontend::hir::expressions::HirExpressionKind;
+use crate::compiler_frontend::hir::statements::HirStatementKind;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::test_support::{
     function_node, make_test_variable, node, test_location,

@@ -6,7 +6,7 @@
 use crate::compiler_frontend::analysis::borrow_checker::types::{
     BorrowStateSnapshot, LocalBorrowSnapshot, LocalMode,
 };
-use crate::compiler_frontend::hir::hir_nodes::{BlockId, HirNodeId, LocalId, RegionId};
+use crate::compiler_frontend::hir::ids::{BlockId, HirNodeId, LocalId, RegionId};
 use rustc_hash::FxHashMap;
 
 // WHAT: Stable intra-function position key used by move/borrow decisions.

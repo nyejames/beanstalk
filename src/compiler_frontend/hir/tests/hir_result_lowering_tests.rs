@@ -11,9 +11,9 @@ use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnSlot,
 };
 use crate::compiler_frontend::datatypes::DataType;
-use crate::compiler_frontend::hir::hir_nodes::{
-    HirExpressionKind, HirStatementKind, HirTerminator,
-};
+use crate::compiler_frontend::hir::expressions::HirExpressionKind;
+use crate::compiler_frontend::hir::statements::HirStatementKind;
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::test_support::{
     fresh_returns, function_node, node, test_location,
@@ -89,7 +89,7 @@ fn statement_result_propagation_with_unit_success_emits_runtime_propagate_expres
     assert!(
         start_entry.statements.iter().any(|statement| matches!(
             statement.kind,
-            HirStatementKind::Expr(crate::compiler_frontend::hir::hir_nodes::HirExpression {
+            HirStatementKind::Expr(crate::compiler_frontend::hir::expressions::HirExpression {
                 kind: HirExpressionKind::ResultPropagate { .. },
                 ..
             })
@@ -165,7 +165,7 @@ fn statement_named_handler_lowering_builds_explicit_result_branching() {
         matches!(
             block.terminator,
             HirTerminator::If {
-                condition: crate::compiler_frontend::hir::hir_nodes::HirExpression {
+                condition: crate::compiler_frontend::hir::expressions::HirExpression {
                     kind: HirExpressionKind::ResultIsOk { .. },
                     ..
                 },
@@ -183,7 +183,7 @@ fn statement_named_handler_lowering_builds_explicit_result_branching() {
             matches!(
                 statement.kind,
                 HirStatementKind::Assign {
-                    value: crate::compiler_frontend::hir::hir_nodes::HirExpression {
+                    value: crate::compiler_frontend::hir::expressions::HirExpression {
                         kind: HirExpressionKind::ResultUnwrapErr { .. },
                         ..
                     },
@@ -289,7 +289,7 @@ fn multi_bind_lowering_projects_tuple_slots_from_single_rhs_call() {
             matches!(
                 statement.kind,
                 HirStatementKind::Assign {
-                    value: crate::compiler_frontend::hir::hir_nodes::HirExpression {
+                    value: crate::compiler_frontend::hir::expressions::HirExpression {
                         kind: HirExpressionKind::TupleGet { .. },
                         ..
                     },

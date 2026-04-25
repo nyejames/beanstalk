@@ -12,7 +12,8 @@ use crate::backends::rust_interpreter::result::{
 use crate::backends::rust_interpreter::runtime::RuntimeEngine;
 use crate::compiler_frontend::analysis::borrow_checker::BorrowFacts;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerMessages;
-use crate::compiler_frontend::hir::hir_nodes::{FunctionId, HirModule};
+use crate::compiler_frontend::hir::ids::FunctionId;
+use crate::compiler_frontend::hir::module::HirModule;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 pub(crate) fn lower_hir_to_exec_program(

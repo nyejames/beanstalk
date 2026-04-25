@@ -5,11 +5,10 @@
 
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::hir::expressions::{HirExpressionKind, ResultVariant, ValueKind};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_datatypes::HirTypeKind;
-use crate::compiler_frontend::hir::hir_nodes::{
-    HirExpressionKind, HirTerminator, ResultVariant, ValueKind,
-};
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::return_hir_transformation_error;
 

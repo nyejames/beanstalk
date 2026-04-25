@@ -7,19 +7,34 @@
 //! It will also enable printing out Hir structures for easy debugging also.
 
 #[cfg(any(test, feature = "show_hir"))]
-use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeContext, TypeId};
-use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FieldId, FunctionId, HirBinOp, HirNodeId, HirValueId, LocalId, OptionVariant,
-    RegionId, ResultVariant, StructId,
-};
+use crate::compiler_frontend::hir::blocks::{HirBlock, HirLocal};
 #[cfg(any(test, feature = "show_hir"))]
-use crate::compiler_frontend::hir::hir_nodes::{
-    ChoiceId, HirBlock, HirExpression, HirExpressionKind, HirField, HirFunction, HirLocal,
-    HirMatchArm, HirModule, HirPattern, HirPlace, HirRelationalPatternOp, HirStatement,
-    HirStatementKind, HirStruct, HirTerminator, ValueKind,
-};
+use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, ValueKind};
+use crate::compiler_frontend::hir::expressions::{OptionVariant, ResultVariant};
+#[cfg(any(test, feature = "show_hir"))]
+use crate::compiler_frontend::hir::functions::HirFunction;
+#[cfg(any(test, feature = "show_hir"))]
+use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeContext, TypeId};
 #[cfg(any(test, feature = "show_hir"))]
 use crate::compiler_frontend::hir::hir_side_table::HirSideTable;
+#[cfg(any(test, feature = "show_hir"))]
+use crate::compiler_frontend::hir::ids::ChoiceId;
+use crate::compiler_frontend::hir::ids::{
+    BlockId, FieldId, FunctionId, HirNodeId, HirValueId, LocalId, RegionId, StructId,
+};
+#[cfg(any(test, feature = "show_hir"))]
+use crate::compiler_frontend::hir::module::HirModule;
+use crate::compiler_frontend::hir::operators::{HirBinOp, HirUnaryOp};
+#[cfg(any(test, feature = "show_hir"))]
+use crate::compiler_frontend::hir::patterns::{HirMatchArm, HirPattern, HirRelationalPatternOp};
+#[cfg(any(test, feature = "show_hir"))]
+use crate::compiler_frontend::hir::places::HirPlace;
+#[cfg(any(test, feature = "show_hir"))]
+use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
+#[cfg(any(test, feature = "show_hir"))]
+use crate::compiler_frontend::hir::structs::{HirField, HirStruct};
+#[cfg(any(test, feature = "show_hir"))]
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 #[cfg(any(test, feature = "show_hir"))]
 use crate::compiler_frontend::host_functions::CallTarget;
 #[cfg(any(test, feature = "show_hir"))]
@@ -882,11 +897,11 @@ impl Display for HirBinOp {
     }
 }
 
-impl Display for crate::compiler_frontend::hir::hir_nodes::HirUnaryOp {
+impl Display for HirUnaryOp {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
         match self {
-            crate::compiler_frontend::hir::hir_nodes::HirUnaryOp::Neg => write!(f, "-"),
-            crate::compiler_frontend::hir::hir_nodes::HirUnaryOp::Not => write!(f, "!"),
+            HirUnaryOp::Neg => write!(f, "-"),
+            HirUnaryOp::Not => write!(f, "!"),
         }
     }
 }

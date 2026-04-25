@@ -14,12 +14,13 @@ use crate::compiler_frontend::ast::expressions::expression::{
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::hir::expressions::{HirExpressionKind, ResultVariant, ValueKind};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_datatypes::HirTypeKind;
-use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FunctionId, HirExpressionKind, HirPlace, HirStatement, HirStatementKind,
-    HirTerminator, ResultVariant, ValueKind,
-};
+use crate::compiler_frontend::hir::ids::{BlockId, FunctionId};
+use crate::compiler_frontend::hir::places::HirPlace;
+use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::return_hir_transformation_error;
@@ -302,7 +303,7 @@ impl<'a> HirBuilder<'a> {
                     value: Box::new(unit),
                 },
                 return_type,
-                crate::compiler_frontend::hir::hir_nodes::ValueKind::RValue,
+                crate::compiler_frontend::hir::expressions::ValueKind::RValue,
                 region,
             );
             self.emit_terminator(current_block, HirTerminator::Return(ok_result), location)?;

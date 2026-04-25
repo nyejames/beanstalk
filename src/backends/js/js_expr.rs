@@ -5,11 +5,12 @@
 
 use crate::backends::js::JsEmitter;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
-use crate::compiler_frontend::hir::hir_datatypes::HirTypeKind;
-use crate::compiler_frontend::hir::hir_nodes::{
-    HirBinOp, HirBuiltinCastKind, HirExpression, HirExpressionKind, HirPlace, HirUnaryOp,
-    OptionVariant, ResultVariant,
+use crate::compiler_frontend::hir::expressions::{
+    HirBuiltinCastKind, HirExpression, HirExpressionKind, OptionVariant, ResultVariant,
 };
+use crate::compiler_frontend::hir::hir_datatypes::HirTypeKind;
+use crate::compiler_frontend::hir::operators::{HirBinOp, HirUnaryOp};
+use crate::compiler_frontend::hir::places::HirPlace;
 
 impl<'hir> JsEmitter<'hir> {
     pub(crate) fn lower_expr(

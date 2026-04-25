@@ -5,7 +5,8 @@
 //!      language surface area or hidden imports.
 
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorType, SourceLocation};
-use crate::compiler_frontend::hir::hir_nodes::{HirConstValue, HirModule};
+use crate::compiler_frontend::hir::constants::HirConstValue;
+use crate::compiler_frontend::hir::module::HirModule;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 const PAGE_TITLE: &str = "page_title";

@@ -4,7 +4,7 @@
 //! WHY: keeping one explicit request object preserves stage separation and makes option growth
 //! predictable as phase-3 HTML integration and richer Wasm features are added.
 
-use crate::compiler_frontend::hir::hir_nodes::FunctionId;
+use crate::compiler_frontend::hir::ids::FunctionId;
 use rustc_hash::FxHashMap;
 
 #[derive(Debug, Clone, Default)]

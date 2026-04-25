@@ -7,7 +7,7 @@ use crate::compiler_frontend::analysis::borrow_checker::state::{FunctionLayout, 
 use crate::compiler_frontend::analysis::borrow_checker::types::{
     AccessKind, ValueAccessClassification, ValueBorrowFact,
 };
-use crate::compiler_frontend::hir::hir_nodes::{HirValueId, LocalId};
+use crate::compiler_frontend::hir::ids::{HirValueId, LocalId};
 use rustc_hash::FxHashMap;
 
 #[derive(Debug, Clone)]

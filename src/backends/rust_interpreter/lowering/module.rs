@@ -6,7 +6,7 @@ use crate::backends::rust_interpreter::lowering::context::LoweringContext;
 use crate::backends::rust_interpreter::lowering::functions::lower_function_shell;
 use crate::compiler_frontend::analysis::borrow_checker::BorrowFacts;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
-use crate::compiler_frontend::hir::hir_nodes::HirModule;
+use crate::compiler_frontend::hir::module::HirModule;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 pub(crate) fn lower_hir_module_to_exec_program(

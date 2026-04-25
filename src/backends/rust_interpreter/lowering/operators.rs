@@ -5,7 +5,7 @@
 
 use crate::backends::rust_interpreter::exec_ir::{ExecBinaryOperator, ExecUnaryOperator};
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
-use crate::compiler_frontend::hir::hir_nodes::{HirBinOp, HirUnaryOp};
+use crate::compiler_frontend::hir::operators::{HirBinOp, HirUnaryOp};
 
 /// Maps a HIR binary operator to the corresponding Exec IR binary operator.
 ///

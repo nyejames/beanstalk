@@ -1,6 +1,12 @@
 //! Runtime helper source contract tests for JavaScript output.
 
 use super::support::*;
+use crate::compiler_frontend::hir::blocks::HirBlock;
+use crate::compiler_frontend::hir::expressions::{HirExpressionKind, ValueKind};
+use crate::compiler_frontend::hir::functions::HirFunction;
+use crate::compiler_frontend::hir::ids::{BlockId, FunctionId, LocalId, RegionId};
+use crate::compiler_frontend::hir::statements::HirStatementKind;
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 
 // Runtime helper contract tests
 // ---------------------------------------------------------------------------

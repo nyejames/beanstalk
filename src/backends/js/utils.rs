@@ -4,7 +4,8 @@
 
 use crate::backends::js::JsEmitter;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
-use crate::compiler_frontend::hir::hir_nodes::{BlockId, FieldId, FunctionId, HirBlock, LocalId};
+use crate::compiler_frontend::hir::blocks::HirBlock;
+use crate::compiler_frontend::hir::ids::{BlockId, FieldId, FunctionId, LocalId};
 use crate::compiler_frontend::hir::utils::terminator_targets;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 

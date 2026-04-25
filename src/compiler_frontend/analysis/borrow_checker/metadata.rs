@@ -7,11 +7,14 @@ use super::engine::{BorrowChecker, successors};
 use super::state::{FunctionLayout, FunctionLayoutInputs, RootSet};
 use super::types::FunctionReturnAliasSummary;
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, HirExpression, HirExpressionKind, HirFunction, HirPattern, HirPlace, HirStatement,
-    HirStatementKind, HirTerminator, LocalId,
-};
+use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind};
+use crate::compiler_frontend::hir::functions::HirFunction;
 use crate::compiler_frontend::hir::hir_side_table::HirLocation;
+use crate::compiler_frontend::hir::ids::{BlockId, LocalId};
+use crate::compiler_frontend::hir::patterns::HirPattern;
+use crate::compiler_frontend::hir::places::HirPlace;
+use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::return_borrow_checker_error;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::VecDeque;
@@ -437,7 +440,7 @@ impl<'a> BorrowChecker<'a> {
 
     pub(super) fn build_visibility_masks(
         &self,
-        function_id: crate::compiler_frontend::hir::hir_nodes::FunctionId,
+        function_id: crate::compiler_frontend::hir::ids::FunctionId,
         layout: &FunctionLayout,
         reachable_blocks: &[BlockId],
     ) -> Result<FxHashMap<BlockId, RootSet>, CompilerError> {
@@ -468,9 +471,9 @@ impl<'a> BorrowChecker<'a> {
 
     fn is_region_ancestor_of(
         &self,
-        ancestor: crate::compiler_frontend::hir::hir_nodes::RegionId,
-        mut region: crate::compiler_frontend::hir::hir_nodes::RegionId,
-        function_id: crate::compiler_frontend::hir::hir_nodes::FunctionId,
+        ancestor: crate::compiler_frontend::hir::ids::RegionId,
+        mut region: crate::compiler_frontend::hir::ids::RegionId,
+        function_id: crate::compiler_frontend::hir::ids::FunctionId,
         block_id: BlockId,
     ) -> Result<bool, CompilerError> {
         // Walk parent links from `region` to root.

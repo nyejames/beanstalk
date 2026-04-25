@@ -9,9 +9,13 @@ use crate::compiler_frontend::ast::ast_nodes::{
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::datatypes::DataType;
-use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, HirBinOp, HirExpressionKind, HirModule, HirPlace, HirStatementKind, HirTerminator,
-};
+use crate::compiler_frontend::hir::expressions::HirExpressionKind;
+use crate::compiler_frontend::hir::ids::BlockId;
+use crate::compiler_frontend::hir::module::HirModule;
+use crate::compiler_frontend::hir::operators::HirBinOp;
+use crate::compiler_frontend::hir::places::HirPlace;
+use crate::compiler_frontend::hir::statements::HirStatementKind;
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::value_mode::ValueMode;
@@ -704,7 +708,7 @@ fn lowers_collection_loop_item_binding_from_indexed_place() {
                 matches!(
                     statement.kind,
                     HirStatementKind::Assign {
-                        value: crate::compiler_frontend::hir::hir_nodes::HirExpression {
+                        value: crate::compiler_frontend::hir::expressions::HirExpression {
                             kind: HirExpressionKind::Load(HirPlace::Index { .. }),
                             ..
                         },
@@ -766,7 +770,7 @@ fn lowers_collection_loop_optional_index_binding() {
         matches!(
             statement.kind,
             HirStatementKind::Assign {
-                value: crate::compiler_frontend::hir::hir_nodes::HirExpression {
+                value: crate::compiler_frontend::hir::expressions::HirExpression {
                     kind: HirExpressionKind::Load(HirPlace::Index { .. }),
                     ..
                 },
@@ -778,7 +782,7 @@ fn lowers_collection_loop_optional_index_binding() {
         matches!(
             statement.kind,
             HirStatementKind::Assign {
-                value: crate::compiler_frontend::hir::hir_nodes::HirExpression {
+                value: crate::compiler_frontend::hir::expressions::HirExpression {
                     kind: HirExpressionKind::Load(HirPlace::Local(_)),
                     ..
                 },

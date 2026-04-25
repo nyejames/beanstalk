@@ -6,7 +6,7 @@
 
 use crate::build_system::build::ResolvedConstFragment;
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
-use crate::compiler_frontend::hir::hir_nodes::HirModule;
+use crate::compiler_frontend::hir::module::HirModule;
 use crate::projects::html_project::document_config::HtmlDocumentConfig;
 
 /// Module-level inputs shared by all HTML builder compilation paths.

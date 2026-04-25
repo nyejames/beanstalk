@@ -10,10 +10,9 @@ use crate::backends::wasm::hir_to_lir::terminator::lower_terminator;
 use crate::backends::wasm::lir::function::{WasmLirFunction, WasmLirFunctionOrigin};
 use crate::backends::wasm::lir::types::{WasmAbiType, WasmLirSignature, WasmLocalRole};
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
+use crate::compiler_frontend::hir::functions::{HirFunction, HirFunctionOrigin};
 use crate::compiler_frontend::hir::hir_datatypes::TypeId;
-use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FunctionId, HirFunction, HirFunctionOrigin, LocalId,
-};
+use crate::compiler_frontend::hir::ids::{BlockId, FunctionId, LocalId};
 use rustc_hash::{FxHashMap, FxHashSet};
 
 pub(crate) fn lower_function(
@@ -225,7 +224,7 @@ fn block_by_id_or_error<'a>(
     context: &'a WasmLirLoweringContext<'_>,
     block_id: BlockId,
     function_id: FunctionId,
-) -> Result<&'a crate::compiler_frontend::hir::hir_nodes::HirBlock, CompilerError> {
+) -> Result<&'a crate::compiler_frontend::hir::blocks::HirBlock, CompilerError> {
     context
         .hir_module
         .blocks

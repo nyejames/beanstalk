@@ -7,11 +7,14 @@
 
 use crate::build_system::build::{FileKind, Module, OutputFile};
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
+use crate::compiler_frontend::hir::blocks::HirBlock;
+use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, ValueKind};
+use crate::compiler_frontend::hir::functions::{HirFunction, HirFunctionOrigin};
 use crate::compiler_frontend::hir::hir_datatypes::{HirType, HirTypeKind, TypeContext};
-use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FunctionId, HirBlock, HirExpression, HirExpressionKind, HirFunction,
-    HirFunctionOrigin, HirModule, HirRegion, HirTerminator, RegionId, ValueKind,
-};
+use crate::compiler_frontend::hir::ids::{BlockId, FunctionId, RegionId};
+use crate::compiler_frontend::hir::module::HirModule;
+use crate::compiler_frontend::hir::regions::HirRegion;
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_resolution::{CompileTimePathBase, CompileTimePathKind};
 use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
@@ -35,7 +38,7 @@ pub(crate) fn create_test_hir_module() -> HirModule {
         locals: vec![],
         statements: vec![],
         terminator: HirTerminator::Return(HirExpression {
-            id: crate::compiler_frontend::hir::hir_nodes::HirValueId(0),
+            id: crate::compiler_frontend::hir::ids::HirValueId(0),
             kind: HirExpressionKind::TupleConstruct { elements: vec![] },
             ty: unit_type,
             value_kind: ValueKind::Const,

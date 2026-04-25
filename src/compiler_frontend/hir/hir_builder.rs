@@ -19,14 +19,19 @@ use crate::compiler_frontend::ast::Ast;
 use crate::compiler_frontend::ast::AstDocFragmentKind;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, SourceLocation};
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
+use crate::compiler_frontend::hir::blocks::HirBlock;
+use crate::compiler_frontend::hir::constants::{HirDocFragment, HirDocFragmentKind};
+use crate::compiler_frontend::hir::functions::{HirFunction, HirFunctionOrigin};
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeContext, TypeId};
-use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, ChoiceId, FieldId, FunctionId, HirBlock, HirConstId, HirDocFragment,
-    HirDocFragmentKind, HirFunction, HirFunctionOrigin, HirModule, HirNodeId, HirRegion,
-    HirTerminator, HirValueId, LocalId, RegionId, StructId,
-};
 use crate::compiler_frontend::hir::hir_side_table::HirSideTable;
 use crate::compiler_frontend::hir::hir_validation::validate_hir_module;
+use crate::compiler_frontend::hir::ids::{
+    BlockId, ChoiceId, FieldId, FunctionId, HirConstId, HirNodeId, HirValueId, LocalId, RegionId,
+    StructId,
+};
+use crate::compiler_frontend::hir::module::HirModule;
+use crate::compiler_frontend::hir::regions::HirRegion;
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -358,7 +363,7 @@ impl<'a> HirBuilder<'a> {
 
     pub(super) fn push_struct(
         &mut self,
-        hir_struct: crate::compiler_frontend::hir::hir_nodes::HirStruct,
+        hir_struct: crate::compiler_frontend::hir::structs::HirStruct,
     ) {
         let struct_index = self.module.structs.len();
         self.struct_index_by_id.insert(hir_struct.id, struct_index);
@@ -374,7 +379,7 @@ impl<'a> HirBuilder<'a> {
     pub(super) fn register_local_in_block(
         &mut self,
         block_id: BlockId,
-        local: crate::compiler_frontend::hir::hir_nodes::HirLocal,
+        local: crate::compiler_frontend::hir::blocks::HirLocal,
         location: &SourceLocation,
     ) -> Result<(), CompilerError> {
         let block_index = self.block_index_or_error(block_id, location)?;

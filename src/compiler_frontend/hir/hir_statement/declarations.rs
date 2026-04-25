@@ -10,13 +10,17 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::hir::blocks::HirLocal;
+use crate::compiler_frontend::hir::constants::{HirConstField, HirConstValue, HirModuleConst};
+use crate::compiler_frontend::hir::functions::HirFunction;
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_datatypes::HirTypeKind;
-use crate::compiler_frontend::hir::hir_nodes::{
-    HirConstField, HirConstValue, HirField, HirFunction, HirLocal, HirModuleConst, HirPlace,
-    HirRegion, HirStruct, HirTerminator, LocalId,
-};
 use crate::compiler_frontend::hir::hir_side_table::{HirLocalOriginKind, HirLocation};
+use crate::compiler_frontend::hir::ids::LocalId;
+use crate::compiler_frontend::hir::places::HirPlace;
+use crate::compiler_frontend::hir::regions::HirRegion;
+use crate::compiler_frontend::hir::structs::{HirField, HirStruct};
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 use crate::return_hir_transformation_error;
@@ -138,10 +142,10 @@ impl<'a> HirBuilder<'a> {
 
                 let hir_variant = match variant {
                     crate::compiler_frontend::ast::expressions::expression::ResultVariant::Ok => {
-                        crate::compiler_frontend::hir::hir_nodes::ResultVariant::Ok
+                        crate::compiler_frontend::hir::expressions::ResultVariant::Ok
                     }
                     crate::compiler_frontend::ast::expressions::expression::ResultVariant::Err => {
-                        crate::compiler_frontend::hir::hir_nodes::ResultVariant::Err
+                        crate::compiler_frontend::hir::expressions::ResultVariant::Err
                     }
                 };
 
@@ -294,7 +298,7 @@ impl<'a> HirBuilder<'a> {
         self.push_region(HirRegion::lexical(region_id, None));
 
         let entry_block_id = self.allocate_block_id();
-        let entry_block = crate::compiler_frontend::hir::hir_nodes::HirBlock {
+        let entry_block = crate::compiler_frontend::hir::blocks::HirBlock {
             id: entry_block_id,
             region: region_id,
             locals: vec![],
@@ -357,7 +361,7 @@ impl<'a> HirBuilder<'a> {
 
     pub(super) fn lower_parameter_locals(
         &mut self,
-        function_id: crate::compiler_frontend::hir::hir_nodes::FunctionId,
+        function_id: crate::compiler_frontend::hir::ids::FunctionId,
         signature: &FunctionSignature,
         fallback_location: &SourceLocation,
     ) -> Result<(), CompilerError> {
@@ -409,7 +413,7 @@ impl<'a> HirBuilder<'a> {
         }
 
         self.emit_statement_kind(
-            crate::compiler_frontend::hir::hir_nodes::HirStatementKind::Assign {
+            crate::compiler_frontend::hir::statements::HirStatementKind::Assign {
                 target: HirPlace::Local(local_id),
                 value: lowered.value,
             },

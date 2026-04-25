@@ -3,9 +3,7 @@
 //! WHAT: defines the immutable analysis records produced while validating HIR borrows.
 //! WHY: transfer and diagnostics need a shared vocabulary for states, facts, and summaries.
 
-use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FunctionId, HirNodeId, HirValueId, LocalId,
-};
+use crate::compiler_frontend::hir::ids::{BlockId, FunctionId, HirNodeId, HirValueId, LocalId};
 use rustc_hash::FxHashMap;
 
 #[derive(Debug, Clone, Default)]

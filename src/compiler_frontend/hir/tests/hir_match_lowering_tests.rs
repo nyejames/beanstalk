@@ -14,9 +14,10 @@ use crate::compiler_frontend::ast::statements::match_patterns::{
 use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant;
-use crate::compiler_frontend::hir::hir_nodes::{
-    ChoiceId, HirExpressionKind, HirPattern, HirTerminator, ValueKind,
-};
+use crate::compiler_frontend::hir::expressions::{HirExpressionKind, ValueKind};
+use crate::compiler_frontend::hir::ids::ChoiceId;
+use crate::compiler_frontend::hir::patterns::HirPattern;
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::test_support::{
@@ -580,7 +581,7 @@ fn lowers_relational_pattern_to_hir_relational() {
         matches!(
             arms[0].pattern,
             HirPattern::Relational {
-                op: crate::compiler_frontend::hir::hir_nodes::HirRelationalPatternOp::LessThan,
+                op: crate::compiler_frontend::hir::patterns::HirRelationalPatternOp::LessThan,
                 ..
             }
         ),

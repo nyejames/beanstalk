@@ -10,10 +10,12 @@ use super::test_support::{
     local, lower_only, statement, string_expression, unit_expression,
 };
 use crate::backends::rust_interpreter::exec_ir::{ExecConstValue, ExecInstruction, ExecTerminator};
-use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FunctionId, HirBlock, HirFunction, HirFunctionOrigin, HirPlace, HirStatementKind,
-    HirTerminator, LocalId, RegionId,
-};
+use crate::compiler_frontend::hir::blocks::HirBlock;
+use crate::compiler_frontend::hir::functions::{HirFunction, HirFunctionOrigin};
+use crate::compiler_frontend::hir::ids::{BlockId, FunctionId, LocalId, RegionId};
+use crate::compiler_frontend::hir::places::HirPlace;
+use crate::compiler_frontend::hir::statements::HirStatementKind;
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
@@ -710,7 +712,8 @@ fn lowers_entry_function_id_matches_start_function() {
 
 #[test]
 fn lowers_simple_binary_operation() {
-    use crate::compiler_frontend::hir::hir_nodes::{HirBinOp, HirExpression, HirExpressionKind};
+    use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind};
+    use crate::compiler_frontend::hir::operators::HirBinOp;
 
     let mut string_table = StringTable::new();
     let (type_context, types) = build_type_context();
@@ -720,14 +723,14 @@ fn lowers_simple_binary_operation() {
     let left = Box::new(int_expression(1, 1, types.int, region));
     let right = Box::new(int_expression(2, 2, types.int, region));
     let add_expr = HirExpression {
-        id: crate::compiler_frontend::hir::hir_nodes::HirValueId(3),
+        id: crate::compiler_frontend::hir::ids::HirValueId(3),
         kind: HirExpressionKind::BinOp {
             left,
             op: HirBinOp::Add,
             right,
         },
         ty: types.int,
-        value_kind: crate::compiler_frontend::hir::hir_nodes::ValueKind::RValue,
+        value_kind: crate::compiler_frontend::hir::expressions::ValueKind::RValue,
         region,
     };
 
@@ -795,7 +798,8 @@ fn lowers_simple_binary_operation() {
 
 #[test]
 fn lowers_simple_unary_operation() {
-    use crate::compiler_frontend::hir::hir_nodes::{HirExpression, HirExpressionKind, HirUnaryOp};
+    use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind};
+    use crate::compiler_frontend::hir::operators::HirUnaryOp;
 
     let mut string_table = StringTable::new();
     let (type_context, types) = build_type_context();
@@ -804,13 +808,13 @@ fn lowers_simple_unary_operation() {
     // Create a simple unary operation: -42
     let operand = Box::new(int_expression(42, 1, types.int, region));
     let negate_expr = HirExpression {
-        id: crate::compiler_frontend::hir::hir_nodes::HirValueId(2),
+        id: crate::compiler_frontend::hir::ids::HirValueId(2),
         kind: HirExpressionKind::UnaryOp {
             op: HirUnaryOp::Neg,
             operand,
         },
         ty: types.int,
-        value_kind: crate::compiler_frontend::hir::hir_nodes::ValueKind::RValue,
+        value_kind: crate::compiler_frontend::hir::expressions::ValueKind::RValue,
         region,
     };
 

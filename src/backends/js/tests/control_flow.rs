@@ -1,6 +1,15 @@
 //! Structured and dispatcher-based JavaScript control-flow lowering tests.
 
 use super::support::*;
+use crate::compiler_frontend::hir::blocks::HirBlock;
+use crate::compiler_frontend::hir::expressions::{HirExpressionKind, ResultVariant, ValueKind};
+use crate::compiler_frontend::hir::functions::HirFunction;
+use crate::compiler_frontend::hir::hir_datatypes::{HirType, HirTypeKind};
+use crate::compiler_frontend::hir::ids::{BlockId, FunctionId, LocalId, RegionId};
+use crate::compiler_frontend::hir::patterns::{HirMatchArm, HirPattern};
+use crate::compiler_frontend::hir::places::HirPlace;
+use crate::compiler_frontend::hir::statements::HirStatementKind;
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 
 // CFG lowering tests [cfg]
 // ---------------------------------------------------------------------------

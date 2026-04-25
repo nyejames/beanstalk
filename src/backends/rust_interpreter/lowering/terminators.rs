@@ -7,7 +7,8 @@ use crate::backends::rust_interpreter::lowering::context::{
 use crate::backends::rust_interpreter::lowering::expressions::lower_expression;
 use crate::backends::rust_interpreter::lowering::materialize::local_for_expression_value;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
-use crate::compiler_frontend::hir::hir_nodes::{HirExpression, HirExpressionKind, HirTerminator};
+use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind};
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 
 pub(crate) fn lower_block_terminator(
     context: &mut LoweringContext<'_>,

@@ -12,7 +12,9 @@ use crate::backends::rust_interpreter::lowering::context::{
 use crate::backends::rust_interpreter::lowering::statements::lower_block_statements;
 use crate::backends::rust_interpreter::lowering::terminators::lower_block_terminator;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
-use crate::compiler_frontend::hir::hir_nodes::{BlockId, HirBlock, HirFunction, HirLocal, LocalId};
+use crate::compiler_frontend::hir::blocks::{HirBlock, HirLocal};
+use crate::compiler_frontend::hir::functions::HirFunction;
+use crate::compiler_frontend::hir::ids::{BlockId, LocalId};
 use crate::compiler_frontend::hir::utils::terminator_targets;
 use rustc_hash::{FxHashMap, FxHashSet};
 

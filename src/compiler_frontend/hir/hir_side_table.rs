@@ -3,10 +3,12 @@
 //! This module owns the reversible AST/HIR location mapping and the canonical path identity used
 //! by diagnostics, borrow checking, and debug rendering.
 
-use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, ChoiceId, FieldId, FunctionId, HirBlock, HirFunction, HirLocal, HirNodeId,
-    HirStatement, HirValueId, LocalId, StructId,
+use crate::compiler_frontend::hir::blocks::{HirBlock, HirLocal};
+use crate::compiler_frontend::hir::functions::HirFunction;
+use crate::compiler_frontend::hir::ids::{
+    BlockId, ChoiceId, FieldId, FunctionId, HirNodeId, HirValueId, LocalId, StructId,
 };
+use crate::compiler_frontend::hir::statements::HirStatement;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringIdRemap, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;

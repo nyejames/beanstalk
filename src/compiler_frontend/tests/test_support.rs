@@ -281,7 +281,7 @@ pub(crate) fn entry_and_start(string_table: &mut StringTable) -> (InternedPath, 
 pub(crate) fn lower_hir(
     ast: Ast,
     string_table: &mut StringTable,
-) -> crate::compiler_frontend::hir::hir_nodes::HirModule {
+) -> crate::compiler_frontend::hir::module::HirModule {
     HirBuilder::new(string_table, PathStringFormatConfig::default())
         .build_hir_module(ast)
         .expect("HIR lowering should succeed")
@@ -307,7 +307,7 @@ pub(crate) fn register_host_function(
 }
 
 pub(crate) fn run_borrow_checker(
-    module: &crate::compiler_frontend::hir::hir_nodes::HirModule,
+    module: &crate::compiler_frontend::hir::module::HirModule,
     host_registry: &HostRegistry,
     string_table: &StringTable,
 ) -> Result<BorrowCheckReport, CompilerError> {

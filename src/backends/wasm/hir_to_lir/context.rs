@@ -10,10 +10,10 @@ use crate::backends::wasm::lir::types::{
 use crate::backends::wasm::request::WasmBackendRequest;
 use crate::backends::wasm::runtime::imports::WasmHostFunction;
 use crate::compiler_frontend::analysis::borrow_checker::BorrowFacts;
+use crate::compiler_frontend::hir::functions::HirFunction;
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeClass, TypeId, classify_hir_type};
-use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FunctionId, HirFunction, HirModule, LocalId,
-};
+use crate::compiler_frontend::hir::ids::{BlockId, FunctionId, LocalId};
+use crate::compiler_frontend::hir::module::HirModule;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use rustc_hash::FxHashMap;
 

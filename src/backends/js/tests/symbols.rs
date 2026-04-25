@@ -1,6 +1,12 @@
 //! Deterministic JavaScript symbol naming tests.
 
 use super::support::*;
+use crate::compiler_frontend::hir::blocks::HirBlock;
+use crate::compiler_frontend::hir::functions::HirFunction;
+use crate::compiler_frontend::hir::ids::{BlockId, FunctionId, RegionId};
+use crate::compiler_frontend::hir::module::HirModule;
+use crate::compiler_frontend::hir::regions::HirRegion;
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 
 // Identifier sanitisation tests [names]
 // ---------------------------------------------------------------------------

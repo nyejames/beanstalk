@@ -17,13 +17,15 @@ use crate::compiler_frontend::ast::templates::template::{TemplateConstValueKind,
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::hir::blocks::{HirBlock, HirLocal};
+use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, ValueKind};
+use crate::compiler_frontend::hir::functions::HirFunction;
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeId};
-use crate::compiler_frontend::hir::hir_nodes::{
-    FunctionId, HirBlock, HirExpression, HirExpressionKind, HirFunction, HirLocal, HirPlace,
-    HirTerminator, LocalId, RegionId, ValueKind,
-};
 use crate::compiler_frontend::hir::hir_side_table::HirLocalOriginKind;
+use crate::compiler_frontend::hir::ids::{FunctionId, LocalId, RegionId};
+use crate::compiler_frontend::hir::places::HirPlace;
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
@@ -123,9 +125,10 @@ impl<'a> HirBuilder<'a> {
         let string_ty = self.intern_type_kind(HirTypeKind::String);
 
         let entry_region = self.allocate_region_id();
-        self.push_region(
-            crate::compiler_frontend::hir::hir_nodes::HirRegion::lexical(entry_region, None),
-        );
+        self.push_region(crate::compiler_frontend::hir::regions::HirRegion::lexical(
+            entry_region,
+            None,
+        ));
 
         let entry_block_id = self.allocate_block_id();
         let entry_block = HirBlock {
@@ -262,7 +265,7 @@ impl<'a> HirBuilder<'a> {
                 location,
                 HirExpressionKind::BinOp {
                     left: Box::new(accumulated),
-                    op: crate::compiler_frontend::hir::hir_nodes::HirBinOp::Add,
+                    op: crate::compiler_frontend::hir::operators::HirBinOp::Add,
                     right: Box::new(chunk_as_string),
                 },
                 string_ty,
@@ -310,7 +313,7 @@ impl<'a> HirBuilder<'a> {
             location,
             HirExpressionKind::BinOp {
                 left: Box::new(empty),
-                op: crate::compiler_frontend::hir::hir_nodes::HirBinOp::Add,
+                op: crate::compiler_frontend::hir::operators::HirBinOp::Add,
                 right: Box::new(expression),
             },
             string_ty,

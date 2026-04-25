@@ -6,10 +6,10 @@ use crate::backends::wasm::hir_to_lir::static_data::intern_static_utf8;
 use crate::backends::wasm::lir::instructions::WasmLirStmt;
 use crate::backends::wasm::lir::types::{WasmAbiType, WasmLirLocalId, WasmLocalRole};
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
+use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind};
 use crate::compiler_frontend::hir::hir_datatypes::HirTypeKind;
-use crate::compiler_frontend::hir::hir_nodes::{
-    HirBinOp, HirExpression, HirExpressionKind, HirPlace,
-};
+use crate::compiler_frontend::hir::operators::HirBinOp;
+use crate::compiler_frontend::hir::places::HirPlace;
 
 /// Result of lowering a single HIR expression into LIR statements and a destination local.
 #[derive(Debug, Clone, Copy)]

@@ -11,12 +11,14 @@ use crate::compiler_frontend::ast::statements::match_patterns::{
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::hir::blocks::HirBlock;
+use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, ValueKind};
 use crate::compiler_frontend::hir::hir_builder::{HirBuilder, LoopTargets};
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeId};
-use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, HirBlock, HirExpression, HirExpressionKind, HirMatchArm, HirPattern, HirRegion,
-    HirRelationalPatternOp, HirTerminator, ValueKind,
-};
+use crate::compiler_frontend::hir::ids::BlockId;
+use crate::compiler_frontend::hir::patterns::{HirMatchArm, HirPattern, HirRelationalPatternOp};
+use crate::compiler_frontend::hir::regions::HirRegion;
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::return_hir_transformation_error;
 
@@ -461,7 +463,7 @@ impl<'a> HirBuilder<'a> {
     /// Lazily create the shared merge block on the first non-terminal arm that needs it.
     fn ensure_match_merge_block(
         &mut self,
-        region: crate::compiler_frontend::hir::hir_nodes::RegionId,
+        region: crate::compiler_frontend::hir::ids::RegionId,
         location: &SourceLocation,
         merge_block: &mut Option<BlockId>,
     ) -> Result<BlockId, CompilerError> {
@@ -476,8 +478,8 @@ impl<'a> HirBuilder<'a> {
 
     pub(crate) fn create_child_region(
         &mut self,
-        parent: crate::compiler_frontend::hir::hir_nodes::RegionId,
-    ) -> crate::compiler_frontend::hir::hir_nodes::RegionId {
+        parent: crate::compiler_frontend::hir::ids::RegionId,
+    ) -> crate::compiler_frontend::hir::ids::RegionId {
         let region_id = self.allocate_region_id();
         self.push_region(HirRegion::lexical(region_id, Some(parent)));
         region_id
@@ -485,7 +487,7 @@ impl<'a> HirBuilder<'a> {
 
     pub(crate) fn create_block(
         &mut self,
-        region: crate::compiler_frontend::hir::hir_nodes::RegionId,
+        region: crate::compiler_frontend::hir::ids::RegionId,
         source_location: &SourceLocation,
         label: &str,
     ) -> Result<BlockId, CompilerError> {
@@ -548,7 +550,7 @@ impl<'a> HirBuilder<'a> {
         &mut self,
         from_block: BlockId,
         target: BlockId,
-        args: Vec<crate::compiler_frontend::hir::hir_nodes::LocalId>,
+        args: Vec<crate::compiler_frontend::hir::ids::LocalId>,
         location: &SourceLocation,
         edge_label: &str,
     ) -> Result<(), CompilerError> {

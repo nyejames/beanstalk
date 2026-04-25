@@ -6,7 +6,7 @@ use crate::backends::wasm::lir::linkage::{WasmImport, WasmImportKind};
 use crate::backends::wasm::lir::types::{WasmAbiType, WasmImportId, WasmLirSignature};
 use crate::backends::wasm::runtime::imports::WasmHostFunction;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
-use crate::compiler_frontend::hir::hir_nodes::HirStatementKind;
+use crate::compiler_frontend::hir::statements::HirStatementKind;
 use crate::compiler_frontend::host_functions::CallTarget;
 
 pub(crate) fn register_required_host_imports(

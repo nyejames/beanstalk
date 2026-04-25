@@ -3,7 +3,7 @@
 //! WHAT: defines the narrow backend input surface for interpreter lowering and optional execution.
 //! WHY: keeping one explicit request shape prevents frontend/runtime coupling from spreading.
 
-use crate::compiler_frontend::hir::hir_nodes::FunctionId;
+use crate::compiler_frontend::hir::ids::FunctionId;
 
 #[derive(Debug, Clone, Default)]
 pub(crate) struct InterpreterBackendRequest {

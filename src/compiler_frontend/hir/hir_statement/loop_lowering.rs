@@ -10,13 +10,14 @@ use crate::compiler_frontend::ast::ast_nodes::{
 };
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::hir::expressions::{HirExpressionKind, ValueKind};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_datatypes::HirTypeKind;
 use crate::compiler_frontend::hir::hir_datatypes::TypeId;
-use crate::compiler_frontend::hir::hir_nodes::HirPlace;
-use crate::compiler_frontend::hir::hir_nodes::{
-    HirBinOp, HirExpressionKind, HirStatementKind, HirTerminator, ValueKind,
-};
+use crate::compiler_frontend::hir::operators::HirBinOp;
+use crate::compiler_frontend::hir::places::HirPlace;
+use crate::compiler_frontend::hir::statements::HirStatementKind;
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::host_functions::{COLLECTION_LENGTH_HOST_NAME, CallTarget};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::return_hir_transformation_error;
@@ -84,7 +85,7 @@ impl<'a> HirBuilder<'a> {
         }
         self.emit_statement_kind(
             HirStatementKind::Assign {
-                target: crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(current_local),
+                target: crate::compiler_frontend::hir::places::HirPlace::Local(current_local),
                 value: lowered_start.value,
             },
             location,
@@ -96,7 +97,7 @@ impl<'a> HirBuilder<'a> {
         }
         self.emit_statement_kind(
             HirStatementKind::Assign {
-                target: crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(end_local),
+                target: crate::compiler_frontend::hir::places::HirPlace::Local(end_local),
                 value: lowered_end.value,
             },
             location,
@@ -127,7 +128,7 @@ impl<'a> HirBuilder<'a> {
 
             self.emit_statement_kind(
                 HirStatementKind::Assign {
-                    target: crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(step_local),
+                    target: crate::compiler_frontend::hir::places::HirPlace::Local(step_local),
                     value: lowered_step.value,
                 },
                 location,
@@ -154,7 +155,7 @@ impl<'a> HirBuilder<'a> {
 
             self.emit_statement_kind(
                 HirStatementKind::Assign {
-                    target: crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(step_local),
+                    target: crate::compiler_frontend::hir::places::HirPlace::Local(step_local),
                     value: default_step,
                 },
                 location,
@@ -163,7 +164,7 @@ impl<'a> HirBuilder<'a> {
 
         let ascending_current = self.make_expression(
             location,
-            HirExpressionKind::Load(crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(
+            HirExpressionKind::Load(crate::compiler_frontend::hir::places::HirPlace::Local(
                 current_local,
             )),
             binding_type,
@@ -172,7 +173,7 @@ impl<'a> HirBuilder<'a> {
         );
         let ascending_end = self.make_expression(
             location,
-            HirExpressionKind::Load(crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(
+            HirExpressionKind::Load(crate::compiler_frontend::hir::places::HirPlace::Local(
                 end_local,
             )),
             binding_type,
@@ -192,7 +193,7 @@ impl<'a> HirBuilder<'a> {
         );
         self.emit_statement_kind(
             HirStatementKind::Assign {
-                target: crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(ascending_local),
+                target: crate::compiler_frontend::hir::places::HirPlace::Local(ascending_local),
                 value: ascending_value,
             },
             location,
@@ -210,7 +211,7 @@ impl<'a> HirBuilder<'a> {
         let zero_check_region = self.current_region_or_error(location)?;
         let step_for_zero_check = self.make_expression(
             location,
-            HirExpressionKind::Load(crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(
+            HirExpressionKind::Load(crate::compiler_frontend::hir::places::HirPlace::Local(
                 step_local,
             )),
             binding_type,
@@ -287,7 +288,7 @@ impl<'a> HirBuilder<'a> {
         let abs_check_region = self.current_region_or_error(location)?;
         let step_for_abs_check = self.make_expression(
             location,
-            HirExpressionKind::Load(crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(
+            HirExpressionKind::Load(crate::compiler_frontend::hir::places::HirPlace::Local(
                 step_local,
             )),
             binding_type,
@@ -340,7 +341,7 @@ impl<'a> HirBuilder<'a> {
         let abs_negate_region = self.current_region_or_error(location)?;
         let abs_step_current = self.make_expression(
             location,
-            HirExpressionKind::Load(crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(
+            HirExpressionKind::Load(crate::compiler_frontend::hir::places::HirPlace::Local(
                 step_local,
             )),
             binding_type,
@@ -377,7 +378,7 @@ impl<'a> HirBuilder<'a> {
         );
         self.emit_statement_kind(
             HirStatementKind::Assign {
-                target: crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(step_local),
+                target: crate::compiler_frontend::hir::places::HirPlace::Local(step_local),
                 value: abs_negated,
             },
             location,
@@ -393,7 +394,7 @@ impl<'a> HirBuilder<'a> {
         let direction_check_region = self.current_region_or_error(location)?;
         let ascending_for_direction = self.make_expression(
             location,
-            HirExpressionKind::Load(crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(
+            HirExpressionKind::Load(crate::compiler_frontend::hir::places::HirPlace::Local(
                 ascending_local,
             )),
             bool_ty,
@@ -425,7 +426,7 @@ impl<'a> HirBuilder<'a> {
         let desc_negate_region = self.current_region_or_error(location)?;
         let desc_step_current = self.make_expression(
             location,
-            HirExpressionKind::Load(crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(
+            HirExpressionKind::Load(crate::compiler_frontend::hir::places::HirPlace::Local(
                 step_local,
             )),
             binding_type,
@@ -462,7 +463,7 @@ impl<'a> HirBuilder<'a> {
         );
         self.emit_statement_kind(
             HirStatementKind::Assign {
-                target: crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(step_local),
+                target: crate::compiler_frontend::hir::places::HirPlace::Local(step_local),
                 value: desc_negated,
             },
             location,
@@ -478,7 +479,7 @@ impl<'a> HirBuilder<'a> {
         let header_selector_region = self.current_region_or_error(location)?;
         let ascending_for_header = self.make_expression(
             location,
-            HirExpressionKind::Load(crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(
+            HirExpressionKind::Load(crate::compiler_frontend::hir::places::HirPlace::Local(
                 ascending_local,
             )),
             bool_ty,
@@ -510,7 +511,7 @@ impl<'a> HirBuilder<'a> {
         let header_ascending_region = self.current_region_or_error(location)?;
         let asc_current_value = self.make_expression(
             location,
-            HirExpressionKind::Load(crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(
+            HirExpressionKind::Load(crate::compiler_frontend::hir::places::HirPlace::Local(
                 current_local,
             )),
             binding_type,
@@ -519,7 +520,7 @@ impl<'a> HirBuilder<'a> {
         );
         let asc_end_value = self.make_expression(
             location,
-            HirExpressionKind::Load(crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(
+            HirExpressionKind::Load(crate::compiler_frontend::hir::places::HirPlace::Local(
                 end_local,
             )),
             binding_type,
@@ -557,7 +558,7 @@ impl<'a> HirBuilder<'a> {
         let header_descending_region = self.current_region_or_error(location)?;
         let desc_current_value = self.make_expression(
             location,
-            HirExpressionKind::Load(crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(
+            HirExpressionKind::Load(crate::compiler_frontend::hir::places::HirPlace::Local(
                 current_local,
             )),
             binding_type,
@@ -566,7 +567,7 @@ impl<'a> HirBuilder<'a> {
         );
         let desc_end_value = self.make_expression(
             location,
-            HirExpressionKind::Load(crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(
+            HirExpressionKind::Load(crate::compiler_frontend::hir::places::HirPlace::Local(
                 end_local,
             )),
             binding_type,
@@ -611,7 +612,7 @@ impl<'a> HirBuilder<'a> {
             )?;
             let body_current_value = self.make_expression(
                 location,
-                HirExpressionKind::Load(crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(
+                HirExpressionKind::Load(crate::compiler_frontend::hir::places::HirPlace::Local(
                     current_local,
                 )),
                 binding_type,
@@ -620,9 +621,7 @@ impl<'a> HirBuilder<'a> {
             );
             self.emit_statement_kind(
                 HirStatementKind::Assign {
-                    target: crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(
-                        binding_local,
-                    ),
+                    target: crate::compiler_frontend::hir::places::HirPlace::Local(binding_local),
                     value: body_current_value,
                 },
                 location,
@@ -664,7 +663,7 @@ impl<'a> HirBuilder<'a> {
         let step_region = self.current_region_or_error(location)?;
         let step_current = self.make_expression(
             location,
-            HirExpressionKind::Load(crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(
+            HirExpressionKind::Load(crate::compiler_frontend::hir::places::HirPlace::Local(
                 current_local,
             )),
             binding_type,
@@ -673,7 +672,7 @@ impl<'a> HirBuilder<'a> {
         );
         let step_delta = self.make_expression(
             location,
-            HirExpressionKind::Load(crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(
+            HirExpressionKind::Load(crate::compiler_frontend::hir::places::HirPlace::Local(
                 step_local,
             )),
             binding_type,
@@ -694,7 +693,7 @@ impl<'a> HirBuilder<'a> {
 
         self.emit_statement_kind(
             HirStatementKind::Assign {
-                target: crate::compiler_frontend::hir::hir_nodes::HirPlace::Local(current_local),
+                target: crate::compiler_frontend::hir::places::HirPlace::Local(current_local),
                 value: stepped,
             },
             location,

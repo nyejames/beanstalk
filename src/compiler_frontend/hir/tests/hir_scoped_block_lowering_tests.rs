@@ -6,7 +6,8 @@
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
-use crate::compiler_frontend::hir::hir_nodes::{HirLocal, HirModule};
+use crate::compiler_frontend::hir::blocks::HirLocal;
+use crate::compiler_frontend::hir::module::HirModule;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::test_support::{
     function_node, make_test_variable, node, test_location,

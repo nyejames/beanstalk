@@ -6,9 +6,10 @@ use crate::backends::wasm::hir_to_lir::expr::lower_expression;
 use crate::backends::wasm::hir_to_lir::imports::resolve_host_call_import;
 use crate::backends::wasm::lir::instructions::{WasmCalleeRef, WasmLirStmt};
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
-use crate::compiler_frontend::hir::hir_nodes::{
-    HirExpression, HirPlace, HirStatement, HirStatementKind, LocalId,
-};
+use crate::compiler_frontend::hir::expressions::HirExpression;
+use crate::compiler_frontend::hir::ids::LocalId;
+use crate::compiler_frontend::hir::places::HirPlace;
+use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
 use crate::compiler_frontend::host_functions::CallTarget;
 
 pub(crate) fn lower_statement(
@@ -100,7 +101,7 @@ pub(crate) fn lower_statement(
 fn lower_assignment(
     context: &mut WasmFunctionLoweringContext<'_, '_>,
     target: &HirPlace,
-    value: &crate::compiler_frontend::hir::hir_nodes::HirExpression,
+    value: &crate::compiler_frontend::hir::expressions::HirExpression,
     statements: &mut Vec<WasmLirStmt>,
 ) -> Result<(), CompilerError> {
     // WHAT: preserve explicit move/copy distinction in LIR.

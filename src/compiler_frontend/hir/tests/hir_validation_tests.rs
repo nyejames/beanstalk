@@ -11,11 +11,13 @@ use crate::compiler_frontend::ast::statements::functions::{
 use crate::compiler_frontend::ast::{AstDocFragment, AstDocFragmentKind};
 use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, ValueKind};
 use crate::compiler_frontend::hir::hir_builder::validate_module_for_tests;
-use crate::compiler_frontend::hir::hir_nodes::{
-    HirExpression, HirExpressionKind, HirMatchArm, HirPattern, HirPlace, HirRegion, HirTerminator,
-    HirValueId, RegionId, ValueKind,
-};
+use crate::compiler_frontend::hir::ids::{HirValueId, RegionId};
+use crate::compiler_frontend::hir::patterns::{HirMatchArm, HirPattern};
+use crate::compiler_frontend::hir::places::HirPlace;
+use crate::compiler_frontend::hir::regions::HirRegion;
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::hir::tests::hir_expression_lowering_tests::location;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -106,7 +108,7 @@ fn validator_rejects_invalid_jump_target() {
     let mut module = lower_ast(ast, &mut string_table).expect("lowering should succeed");
     let entry_block = module.functions[module.start_function.0 as usize].entry;
     module.blocks[entry_block.0 as usize].terminator = HirTerminator::Jump {
-        target: crate::compiler_frontend::hir::hir_nodes::BlockId(999),
+        target: crate::compiler_frontend::hir::ids::BlockId(999),
         args: vec![],
     };
 

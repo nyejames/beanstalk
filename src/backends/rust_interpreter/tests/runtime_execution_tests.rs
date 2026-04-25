@@ -16,10 +16,14 @@ use crate::backends::rust_interpreter::heap::HeapObject;
 use crate::backends::rust_interpreter::request::InterpreterExecutionPolicy;
 use crate::backends::rust_interpreter::runtime::RuntimeEngine;
 use crate::backends::rust_interpreter::value::Value;
-use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FunctionId, HirBinOp, HirBlock, HirExpressionKind, HirFunction, HirFunctionOrigin,
-    HirPlace, HirStatementKind, HirTerminator, LocalId, RegionId, ValueKind,
-};
+use crate::compiler_frontend::hir::blocks::HirBlock;
+use crate::compiler_frontend::hir::expressions::{HirExpressionKind, ValueKind};
+use crate::compiler_frontend::hir::functions::{HirFunction, HirFunctionOrigin};
+use crate::compiler_frontend::hir::ids::{BlockId, FunctionId, LocalId, RegionId};
+use crate::compiler_frontend::hir::operators::HirBinOp;
+use crate::compiler_frontend::hir::places::HirPlace;
+use crate::compiler_frontend::hir::statements::HirStatementKind;
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 

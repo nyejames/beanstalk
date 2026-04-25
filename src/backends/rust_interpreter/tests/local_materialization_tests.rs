@@ -10,10 +10,12 @@ use super::test_support::{
 use crate::backends::rust_interpreter::exec_ir::{
     ExecInstruction, ExecLocalId, ExecLocalRole, ExecTerminator,
 };
-use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FunctionId, HirBlock, HirFunction, HirFunctionOrigin, HirPlace, HirStatementKind,
-    HirTerminator, LocalId, RegionId,
-};
+use crate::compiler_frontend::hir::blocks::HirBlock;
+use crate::compiler_frontend::hir::functions::{HirFunction, HirFunctionOrigin};
+use crate::compiler_frontend::hir::ids::{BlockId, FunctionId, LocalId, RegionId};
+use crate::compiler_frontend::hir::places::HirPlace;
+use crate::compiler_frontend::hir::statements::HirStatementKind;
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 

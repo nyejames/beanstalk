@@ -5,10 +5,11 @@
 
 use crate::compiler_frontend::analysis::borrow_checker::state::{BorrowState, FunctionLayout};
 use crate::compiler_frontend::compiler_errors::SourceLocation;
-use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FunctionId, HirModule, HirStatement, HirTerminator, HirValueId, LocalId,
-};
 use crate::compiler_frontend::hir::hir_side_table::{HirLocalOriginKind, HirLocation};
+use crate::compiler_frontend::hir::ids::{BlockId, FunctionId, HirValueId, LocalId};
+use crate::compiler_frontend::hir::module::HirModule;
+use crate::compiler_frontend::hir::statements::HirStatement;
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 

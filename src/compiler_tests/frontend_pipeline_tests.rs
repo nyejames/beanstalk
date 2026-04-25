@@ -10,6 +10,9 @@ use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::headers::parse_file_headers::{HeaderKind, Headers};
+use crate::compiler_frontend::hir::places::HirPlace;
+use crate::compiler_frontend::hir::statements::HirStatementKind;
+use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::style_directives::{
@@ -21,10 +24,6 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::newline_handling::NewlineMode;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TemplateBodyMode, TokenizeMode};
 use crate::compiler_frontend::{CompilerFrontend, FrontendBuildProfile};
-use crate::compiler_frontend::{
-    hir::hir_nodes::{HirPlace, HirStatementKind},
-    host_functions::CallTarget,
-};
 use crate::projects::settings::{Config, IMPLICIT_START_FUNC_NAME};
 use std::fs;
 use std::path::PathBuf;
@@ -163,7 +162,7 @@ impl FrontendProject {
             .expect("AST construction should succeed")
     }
 
-    fn hir(&mut self) -> crate::compiler_frontend::hir::hir_nodes::HirModule {
+    fn hir(&mut self) -> crate::compiler_frontend::hir::module::HirModule {
         let ast = self.ast();
         self.frontend
             .generate_hir(ast)

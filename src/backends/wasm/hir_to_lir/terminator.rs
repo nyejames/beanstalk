@@ -6,7 +6,8 @@ use crate::backends::wasm::hir_to_lir::expr::lower_expression;
 use crate::backends::wasm::lir::instructions::{WasmLirStmt, WasmLirTerminator};
 use crate::backends::wasm::lir::types::WasmAbiType;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
-use crate::compiler_frontend::hir::hir_nodes::{BlockId, HirTerminator};
+use crate::compiler_frontend::hir::ids::BlockId;
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 
 pub(crate) fn lower_terminator(
     context: &mut WasmFunctionLoweringContext<'_, '_>,

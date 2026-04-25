@@ -8,7 +8,7 @@ use crate::backends::rust_interpreter::lowering::materialize::LoweredExpressionV
 use crate::backends::rust_interpreter::lowering::operators::{
     map_binary_operator, map_unary_operator,
 };
-use crate::compiler_frontend::hir::hir_nodes::{HirBinOp, HirUnaryOp};
+use crate::compiler_frontend::hir::operators::{HirBinOp, HirUnaryOp};
 use proptest::prelude::*;
 
 /// **Validates: Requirements 2.1, 2.4, 2.5, 2.6**
@@ -116,10 +116,10 @@ fn property_literal_lowering_efficiency() {
         FunctionLoweringLayout, LoweringContext,
     };
     use crate::backends::rust_interpreter::lowering::expressions::lower_expression;
+    use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, ValueKind};
     use crate::compiler_frontend::hir::hir_datatypes::{HirType, HirTypeKind, TypeContext};
-    use crate::compiler_frontend::hir::hir_nodes::{
-        HirExpression, HirExpressionKind, HirModule, HirValueId, RegionId, ValueKind,
-    };
+    use crate::compiler_frontend::hir::ids::{HirValueId, RegionId};
+    use crate::compiler_frontend::hir::module::HirModule;
     use rustc_hash::FxHashMap;
 
     proptest!(ProptestConfig::with_cases(100), |(literal_variant in any_literal_expression())| {
@@ -298,11 +298,11 @@ fn property_local_reference_lowering_efficiency() {
         FunctionLoweringLayout, LoweringContext,
     };
     use crate::backends::rust_interpreter::lowering::expressions::lower_expression;
+    use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, ValueKind};
     use crate::compiler_frontend::hir::hir_datatypes::{HirType, HirTypeKind, TypeContext};
-    use crate::compiler_frontend::hir::hir_nodes::{
-        HirExpression, HirExpressionKind, HirModule, HirPlace, HirValueId, LocalId, RegionId,
-        ValueKind,
-    };
+    use crate::compiler_frontend::hir::ids::{HirValueId, LocalId, RegionId};
+    use crate::compiler_frontend::hir::module::HirModule;
+    use crate::compiler_frontend::hir::places::HirPlace;
     use rustc_hash::FxHashMap;
 
     proptest!(ProptestConfig::with_cases(100), |(local_index in 0u32..=50, is_load in any::<bool>())| {
@@ -482,10 +482,11 @@ fn property_binary_operation_lowering_structure() {
         FunctionLoweringLayout, LoweringContext,
     };
     use crate::backends::rust_interpreter::lowering::expressions::lower_expression;
+    use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, ValueKind};
     use crate::compiler_frontend::hir::hir_datatypes::{HirType, HirTypeKind, TypeContext};
-    use crate::compiler_frontend::hir::hir_nodes::{
-        HirBinOp, HirExpression, HirExpressionKind, HirModule, HirValueId, RegionId, ValueKind,
-    };
+    use crate::compiler_frontend::hir::ids::{HirValueId, RegionId};
+    use crate::compiler_frontend::hir::module::HirModule;
+    use crate::compiler_frontend::hir::operators::HirBinOp;
     use rustc_hash::FxHashMap;
 
     proptest!(ProptestConfig::with_cases(100), |(
@@ -649,10 +650,11 @@ fn property_unary_operation_lowering_structure() {
         FunctionLoweringLayout, LoweringContext,
     };
     use crate::backends::rust_interpreter::lowering::expressions::lower_expression;
+    use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, ValueKind};
     use crate::compiler_frontend::hir::hir_datatypes::{HirType, HirTypeKind, TypeContext};
-    use crate::compiler_frontend::hir::hir_nodes::{
-        HirExpression, HirExpressionKind, HirModule, HirUnaryOp, HirValueId, RegionId, ValueKind,
-    };
+    use crate::compiler_frontend::hir::ids::{HirValueId, RegionId};
+    use crate::compiler_frontend::hir::module::HirModule;
+    use crate::compiler_frontend::hir::operators::HirUnaryOp;
     use rustc_hash::FxHashMap;
 
     proptest!(ProptestConfig::with_cases(100), |(
@@ -805,10 +807,11 @@ fn property_nested_expression_evaluation_order() {
         FunctionLoweringLayout, LoweringContext,
     };
     use crate::backends::rust_interpreter::lowering::expressions::lower_expression;
+    use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, ValueKind};
     use crate::compiler_frontend::hir::hir_datatypes::{HirType, HirTypeKind, TypeContext};
-    use crate::compiler_frontend::hir::hir_nodes::{
-        HirBinOp, HirExpression, HirExpressionKind, HirModule, HirValueId, RegionId, ValueKind,
-    };
+    use crate::compiler_frontend::hir::ids::{HirValueId, RegionId};
+    use crate::compiler_frontend::hir::module::HirModule;
+    use crate::compiler_frontend::hir::operators::HirBinOp;
     use rustc_hash::FxHashMap;
 
     proptest!(ProptestConfig::with_cases(100), |(
@@ -1058,11 +1061,11 @@ fn property_branch_condition_lowering() {
         FunctionLoweringLayout, LoweringContext,
     };
     use crate::backends::rust_interpreter::lowering::terminators::lower_block_terminator;
+    use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, ValueKind};
     use crate::compiler_frontend::hir::hir_datatypes::{HirType, HirTypeKind, TypeContext};
-    use crate::compiler_frontend::hir::hir_nodes::{
-        BlockId, HirExpression, HirExpressionKind, HirModule, HirTerminator, HirValueId, RegionId,
-        ValueKind,
-    };
+    use crate::compiler_frontend::hir::ids::{BlockId, HirValueId, RegionId};
+    use crate::compiler_frontend::hir::module::HirModule;
+    use crate::compiler_frontend::hir::terminators::HirTerminator;
     use rustc_hash::FxHashMap;
 
     proptest!(ProptestConfig::with_cases(100), |(
@@ -1191,10 +1194,11 @@ fn property_return_value_lowering() {
         FunctionLoweringLayout, LoweringContext,
     };
     use crate::backends::rust_interpreter::lowering::terminators::lower_block_terminator;
+    use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, ValueKind};
     use crate::compiler_frontend::hir::hir_datatypes::{HirType, HirTypeKind, TypeContext};
-    use crate::compiler_frontend::hir::hir_nodes::{
-        HirExpression, HirExpressionKind, HirModule, HirTerminator, HirValueId, RegionId, ValueKind,
-    };
+    use crate::compiler_frontend::hir::ids::{HirValueId, RegionId};
+    use crate::compiler_frontend::hir::module::HirModule;
+    use crate::compiler_frontend::hir::terminators::HirTerminator;
     use rustc_hash::FxHashMap;
 
     proptest!(ProptestConfig::with_cases(100), |(
@@ -1242,12 +1246,12 @@ fn property_return_value_lowering() {
 
         // Determine result type based on operator
         let result_type = match op {
-            crate::compiler_frontend::hir::hir_nodes::HirBinOp::Eq
-            | crate::compiler_frontend::hir::hir_nodes::HirBinOp::Ne
-            | crate::compiler_frontend::hir::hir_nodes::HirBinOp::Lt
-            | crate::compiler_frontend::hir::hir_nodes::HirBinOp::Le
-            | crate::compiler_frontend::hir::hir_nodes::HirBinOp::Gt
-            | crate::compiler_frontend::hir::hir_nodes::HirBinOp::Ge => bool_type,
+            crate::compiler_frontend::hir::operators::HirBinOp::Eq
+            | crate::compiler_frontend::hir::operators::HirBinOp::Ne
+            | crate::compiler_frontend::hir::operators::HirBinOp::Lt
+            | crate::compiler_frontend::hir::operators::HirBinOp::Le
+            | crate::compiler_frontend::hir::operators::HirBinOp::Gt
+            | crate::compiler_frontend::hir::operators::HirBinOp::Ge => bool_type,
             _ => int_type,
         };
 

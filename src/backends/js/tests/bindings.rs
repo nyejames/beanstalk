@@ -1,6 +1,16 @@
 //! Local binding, alias, and computed-place JavaScript emission tests.
 
 use super::support::*;
+use crate::compiler_frontend::hir::blocks::HirBlock;
+use crate::compiler_frontend::hir::expressions::{HirExpressionKind, ValueKind};
+use crate::compiler_frontend::hir::functions::HirFunction;
+use crate::compiler_frontend::hir::ids::{
+    BlockId, FieldId, FunctionId, HirNodeId, LocalId, RegionId, StructId,
+};
+use crate::compiler_frontend::hir::places::HirPlace;
+use crate::compiler_frontend::hir::statements::HirStatementKind;
+use crate::compiler_frontend::hir::structs::{HirField, HirStruct};
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 
 // Local binding and assignment tests [binding] [alias]
 // ---------------------------------------------------------------------------

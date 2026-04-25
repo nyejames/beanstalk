@@ -8,11 +8,12 @@ use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::datatypes::DataType;
-use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, HirExpression, HirExpressionKind, HirNodeId, HirPlace, HirStatement, HirStatementKind,
-    HirTerminator, HirValueId,
-};
+use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind};
 use crate::compiler_frontend::hir::hir_side_table::HirLocation;
+use crate::compiler_frontend::hir::ids::{BlockId, HirNodeId, HirValueId};
+use crate::compiler_frontend::hir::places::HirPlace;
+use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::test_support::{
     build_ast, default_host_registry, entry_and_start, function_node, lower_hir,
@@ -284,7 +285,7 @@ fn statement_entry_state_reflects_last_use_reborrow_window() {
 }
 
 fn find_statement_id_for_line(
-    hir: &crate::compiler_frontend::hir::hir_nodes::HirModule,
+    hir: &crate::compiler_frontend::hir::module::HirModule,
     line: i32,
 ) -> Option<HirNodeId> {
     for block in &hir.blocks {
@@ -304,9 +305,9 @@ fn find_statement_id_for_line(
 }
 
 fn find_assigned_local_for_line(
-    hir: &crate::compiler_frontend::hir::hir_nodes::HirModule,
+    hir: &crate::compiler_frontend::hir::module::HirModule,
     line: i32,
-) -> Option<crate::compiler_frontend::hir::hir_nodes::LocalId> {
+) -> Option<crate::compiler_frontend::hir::ids::LocalId> {
     for block in &hir.blocks {
         for statement in &block.statements {
             let Some(source) = hir
@@ -331,7 +332,7 @@ fn find_assigned_local_for_line(
 }
 
 fn collect_reachable_blocks(
-    hir: &crate::compiler_frontend::hir::hir_nodes::HirModule,
+    hir: &crate::compiler_frontend::hir::module::HirModule,
     entry: BlockId,
 ) -> Vec<BlockId> {
     let mut visited = FxHashSet::default();
@@ -392,7 +393,7 @@ fn collect_terminator_values(terminator: &HirTerminator, out: &mut FxHashSet<Hir
         HirTerminator::Match { scrutinee, arms } => {
             collect_expression_values(scrutinee, out);
             for arm in arms {
-                if let crate::compiler_frontend::hir::hir_nodes::HirPattern::Literal(value) =
+                if let crate::compiler_frontend::hir::patterns::HirPattern::Literal(value) =
                     &arm.pattern
                 {
                     collect_expression_values(value, out);

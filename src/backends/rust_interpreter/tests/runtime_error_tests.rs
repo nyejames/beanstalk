@@ -17,11 +17,15 @@ use crate::backends::rust_interpreter::exec_ir::{
 };
 use crate::backends::rust_interpreter::request::InterpreterExecutionPolicy;
 use crate::backends::rust_interpreter::runtime::RuntimeEngine;
-use crate::compiler_frontend::hir::hir_nodes::{
-    BlockId, FieldId, FunctionId, HirBinOp, HirBlock, HirExpressionKind, HirFunction,
-    HirFunctionOrigin, HirMatchArm, HirPattern, HirPlace, HirStatementKind, HirTerminator, LocalId,
-    RegionId, ValueKind,
-};
+use crate::compiler_frontend::hir::blocks::HirBlock;
+use crate::compiler_frontend::hir::expressions::{HirExpressionKind, ValueKind};
+use crate::compiler_frontend::hir::functions::{HirFunction, HirFunctionOrigin};
+use crate::compiler_frontend::hir::ids::{BlockId, FieldId, FunctionId, LocalId, RegionId};
+use crate::compiler_frontend::hir::operators::HirBinOp;
+use crate::compiler_frontend::hir::patterns::{HirMatchArm, HirPattern};
+use crate::compiler_frontend::hir::places::HirPlace;
+use crate::compiler_frontend::hir::statements::HirStatementKind;
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::host_functions::CallTarget;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -148,7 +152,7 @@ fn lowering_rejects_non_local_load_places() {
         }),
         types.int,
         region,
-        crate::compiler_frontend::hir::hir_nodes::ValueKind::Place,
+        crate::compiler_frontend::hir::expressions::ValueKind::Place,
     );
 
     let block = HirBlock {
@@ -202,7 +206,7 @@ fn lowering_rejects_non_local_copy_places() {
         }),
         types.int,
         region,
-        crate::compiler_frontend::hir::hir_nodes::ValueKind::RValue,
+        crate::compiler_frontend::hir::expressions::ValueKind::RValue,
     );
 
     let block = HirBlock {
