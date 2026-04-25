@@ -8,7 +8,7 @@
 
 # 🌱
 
-<p>⚠️ This is a pre-alpha work-in-progress compiler - nearly at alpha! ⚠️</p> 
+<p>⚠️ This compiler is in Alpha, not all major features are implemented yet ⚠️</p> 
 
 <p><a href="https://nyejames.github.io/beanstalk/">The documentation site for Beanstalk</a> was created using the <a href="https://github.com/nyejames/beanstalk/blob/main/docs/">Language Itself</a>. </p>
 
