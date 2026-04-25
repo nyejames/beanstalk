@@ -92,10 +92,7 @@ use crate::compiler_frontend::FrontendBuildProfile;
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
 use crate::compiler_frontend::ast::module_ast::build_state::AstBuildState;
 use crate::compiler_frontend::ast::statements::body_dispatch::parse_function_body_statements;
-use crate::compiler_frontend::ast::templates::top_level_templates::{
-    AstConstTopLevelFragment, collect_and_strip_comment_templates,
-    collect_const_top_level_fragments,
-};
+use crate::compiler_frontend::ast::templates::top_level_templates::AstConstTopLevelFragment;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
@@ -220,96 +217,6 @@ impl Ast {
         let _ = finalization_start;
 
         Ok(ast)
-    }
-}
-
-impl<'a> AstBuildState<'a> {
-    /// Pass 7: Assemble the final [`Ast`] from the accumulated build state.
-    ///
-    /// WHAT: strips doc-comment templates, collects const top-level fragment values,
-    /// normalizes all templates for HIR consumption, and assembles the final [`Ast`] output.
-    ///
-    /// WHY: this is the final transformation before HIR lowering. Templates must be fully
-    /// normalized (folded constants, render plans, complete metadata) so HIR receives
-    /// semantically complete template inputs.
-    fn finalize(
-        mut self,
-        entry_dir: InternedPath,
-        top_level_const_fragments: &[TopLevelConstFragment],
-        string_table: &mut StringTable,
-    ) -> Result<Ast, CompilerMessages> {
-        let project_path_resolver = self.project_path_resolver.as_ref().ok_or_else(|| {
-            self.error_messages(
-                CompilerError::compiler_error(
-                    "AST construction requires a project path resolver for template folding and path coercion.",
-                ),
-                string_table,
-            )
-        })?;
-
-        let doc_fragments_start = Instant::now();
-        let doc_fragments = collect_and_strip_comment_templates(
-            &mut self.ast,
-            project_path_resolver,
-            self.path_format_config,
-            string_table,
-        )
-        .map_err(|error| self.error_messages(error, string_table))?;
-        timer_log!(
-            doc_fragments_start,
-            "AST/finalize/doc fragments collected in: "
-        );
-        let _ = doc_fragments_start;
-
-        let const_fragments_start = Instant::now();
-        let const_top_level_fragments = collect_const_top_level_fragments(
-            top_level_const_fragments,
-            &self.const_templates_by_path,
-        )
-        .map_err(|error| self.error_messages(error, string_table))?;
-        timer_log!(
-            const_fragments_start,
-            "AST/finalize/const top-level fragments collected in: "
-        );
-        let _ = const_fragments_start;
-
-        let ast_template_normalization_start = Instant::now();
-        self.normalize_ast_templates_for_hir(project_path_resolver, string_table)
-            .map_err(|error| self.error_messages(error, string_table))?;
-        timer_log!(
-            ast_template_normalization_start,
-            "AST/finalize/AST templates normalized in: "
-        );
-        let _ = ast_template_normalization_start;
-
-        let module_constant_normalization_start = Instant::now();
-        let module_constants = self
-            .normalize_module_constants_for_hir(project_path_resolver, string_table)
-            .map_err(|error| self.error_messages(error, string_table))?;
-        timer_log!(
-            module_constant_normalization_start,
-            "AST/finalize/module constants normalized in: "
-        );
-        let _ = module_constant_normalization_start;
-
-        let builtin_merge_start = Instant::now();
-        if !self.builtin_struct_ast_nodes.is_empty() {
-            let mut ast_nodes = self.builtin_struct_ast_nodes;
-            ast_nodes.extend(self.ast);
-            self.ast = ast_nodes;
-        }
-        timer_log!(builtin_merge_start, "AST/finalize/builtin AST merge in: ");
-        let _ = builtin_merge_start;
-
-        Ok(Ast {
-            nodes: self.ast,
-            module_constants,
-            doc_fragments,
-            entry_path: entry_dir,
-            const_top_level_fragments,
-            rendered_path_usages: std::mem::take(&mut *self.rendered_path_usages.borrow_mut()),
-            warnings: self.warnings,
-        })
     }
 }
 

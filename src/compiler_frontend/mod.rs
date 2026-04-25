@@ -1,7 +1,7 @@
-//! Compiler frontend pipeline orchestration.
+//! Compiler frontend pipeline.
 //!
-//! WHAT: wires tokenization, header parsing, dependency sorting, AST/HIR construction, and borrow
-//! validation into the stage flow described in the compiler design overview.
+//! WHAT: tokenization, header parsing, dependency sorting, AST/HIR construction, and borrow
+//! validation, wired into the stage flow described in the compiler design overview.
 
 pub(crate) mod ast;
 pub(crate) mod declaration_syntax;
@@ -49,42 +49,15 @@ pub(crate) mod hir;
 pub(crate) mod analysis;
 
 pub(crate) mod paths;
-#[cfg(test)]
-pub(crate) mod tests {
-    pub(crate) mod test_support;
-}
 
-use crate::compiler_frontend::analysis::borrow_checker::{
-    BorrowCheckReport, check_borrows as run_borrow_checker,
-};
-use crate::compiler_frontend::ast::{Ast, AstBuildContext};
-use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
-use crate::compiler_frontend::compiler_warnings::CompilerWarning;
-use crate::compiler_frontend::headers::parse_file_headers::{
-    HeaderParseOptions, Headers, parse_headers,
-};
-use crate::compiler_frontend::hir::hir_builder::lower_module;
-use crate::compiler_frontend::hir::hir_nodes::HirModule;
-use crate::compiler_frontend::host_functions::HostRegistry;
-use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::module_dependencies::{SortedHeaders, resolve_module_dependencies};
-use crate::compiler_frontend::paths::path_format::{OutputPathStyle, PathStringFormatConfig};
-use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
-use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
-use crate::compiler_frontend::symbols::identity::SourceFileTable;
-use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::lexer::tokenize;
-use crate::compiler_frontend::tokenizer::newline_handling::NewlineMode;
-use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenizeMode};
-use crate::projects::settings::Config;
-use std::path::{Path, PathBuf};
+mod pipeline;
+
+pub use pipeline::CompilerFrontend;
 
 /// Flags change the behavior of the core `compiler_frontend` pipeline.
-/// These are a future-proof way of extending the behavior of a build system or the core pipeline.
-/// For the built-in CLI these are added as CLI flags, but builders can decide how to choose flags.
 #[derive(PartialEq, Debug, Clone)]
 pub enum Flag {
-    Release, // Dev mode is default
+    Release,
     DisableWarnings,
     DisableTimers,
     HtmlWasm,
@@ -96,227 +69,7 @@ pub enum FrontendBuildProfile {
     Release,
 }
 
-pub struct CompilerFrontend {
-    pub(crate) host_function_registry: HostRegistry,
-    pub(crate) style_directives: StyleDirectiveRegistry,
-    pub(crate) string_table: StringTable,
-    pub(crate) project_path_resolver: Option<ProjectPathResolver>,
-    pub(crate) path_format_config: PathStringFormatConfig,
-    pub(crate) source_files: SourceFileTable,
-    pub(crate) newline_mode: NewlineMode,
-}
-
-impl CompilerFrontend {
-    pub(crate) fn new(
-        project_config: &Config,
-        string_table: StringTable,
-        style_directives: StyleDirectiveRegistry,
-        project_path_resolver: Option<ProjectPathResolver>,
-        newline_mode: NewlineMode,
-    ) -> Self {
-        // Create a builtin host function registry with print and other host functions
-        let host_function_registry = HostRegistry::new();
-
-        // Build path formatting config from project settings.
-        let origin = project_config
-            .settings
-            .get("origin")
-            .cloned()
-            .unwrap_or_else(|| String::from("/"));
-        let path_format_config = PathStringFormatConfig {
-            origin,
-            output_style: OutputPathStyle::Portable,
-        };
-
-        Self {
-            host_function_registry,
-            style_directives,
-            string_table,
-            project_path_resolver,
-            path_format_config,
-            source_files: SourceFileTable::empty(),
-            newline_mode,
-        }
-    }
-
-    /// Attach per-module file identities built during Stage 0.
-    ///
-    /// WHAT: stores canonical/logical path mapping plus deterministic `FileId`s.
-    /// WHY: downstream frontend stages should not reconstruct identity from path text.
-    pub fn set_source_files(&mut self, source_files: SourceFileTable) {
-        self.source_files = source_files;
-    }
-
-    /// -----------------------------
-    /// TOKENIZER
-    /// -----------------------------
-    pub fn source_to_tokens(
-        &mut self,
-        source_code: &str,
-        module_path: &PathBuf,
-        tokenizer_mode: TokenizeMode,
-    ) -> Result<FileTokens, CompilerError> {
-        let (logical_path, file_id, canonical_os_path) = match self
-            .source_files
-            .get_by_canonical_path(module_path.as_path())
-        {
-            Some(identity) => (
-                identity.logical_path.clone(),
-                Some(identity.file_id),
-                Some(identity.canonical_os_path.clone()),
-            ),
-            None => (
-                InternedPath::from_path_buf(module_path, &mut self.string_table),
-                None,
-                Some(module_path.to_owned()),
-            ),
-        };
-
-        let mut tokens = tokenize(
-            source_code,
-            &logical_path,
-            tokenizer_mode,
-            self.newline_mode,
-            &self.style_directives,
-            &mut self.string_table,
-            file_id,
-        )?;
-        tokens.canonical_os_path = canonical_os_path;
-        Ok(tokens)
-    }
-
-    /// ---------------------------
-    /// HEADER PARSING
-    /// ---------------------------
-    /// First, each file will be parsed into separate headers
-    /// so every symbol they use is known before parsing their bodies.
-    /// This section answers the following questions:
-    /// - What has been imported from other files?
-    /// - What symbols (functions, structs, consts, types, imports) exist in this file?
-    /// - What types and shapes do those symbols have?
-    /// - What imports do headers actually depend on?
-    pub fn tokens_to_headers(
-        &mut self,
-        files: Vec<FileTokens>,
-        warnings: &mut Vec<CompilerWarning>,
-        entry_file_path: &Path,
-    ) -> Result<Headers, Vec<CompilerError>> {
-        let entry_file_id = self
-            .source_files
-            .get_by_canonical_path(entry_file_path)
-            .map(|identity| identity.file_id);
-
-        parse_headers(
-            files,
-            &self.host_function_registry,
-            warnings,
-            entry_file_path,
-            HeaderParseOptions {
-                entry_file_id,
-                project_path_resolver: self.project_path_resolver.clone(),
-                path_format_config: self.path_format_config.clone(),
-                style_directives: self.style_directives.clone(),
-            },
-            &mut self.string_table,
-        )
-    }
-
-    /// ---------------------------
-    /// DEPENDENCY SORTING
-    /// ---------------------------
-    /// Topologically sorts parsed headers and finalizes the header-owned module symbol package.
-    ///
-    /// WHY: every dependency must be sorted before the symbols that depend on it, so that
-    /// type-checking and signature resolution in AST construction proceed in a deterministic order.
-    /// The header-owned `ModuleSymbols` is also finalized here: declarations are built from the
-    /// sorted headers and staged builtin declarations are appended.
-    pub fn sort_headers(&mut self, headers: Headers) -> Result<SortedHeaders, Vec<CompilerError>> {
-        resolve_module_dependencies(headers, &mut self.string_table)
-    }
-
-    /// -----------------------------
-    /// AST CREATION
-    /// -----------------------------
-    /// Consumes sorted headers and the header-owned module symbol package to construct the AST.
-    ///
-    /// WHY: header parsing and dependency sorting together own top-level symbol discovery;
-    /// AST focuses on semantic lowering — import visibility, type/signature resolution,
-    /// receiver catalog construction, and body emission.
-    pub fn headers_to_ast(
-        &mut self,
-        sorted: SortedHeaders,
-        entry_file_path: &Path,
-        build_profile: FrontendBuildProfile,
-    ) -> Result<Ast, CompilerMessages> {
-        let SortedHeaders {
-            headers,
-            top_level_const_fragments,
-            entry_runtime_fragment_count: _,
-            module_symbols,
-        } = sorted;
-
-        let interned_entry_dir = self
-            .source_files
-            .get_by_canonical_path(entry_file_path)
-            .map_or_else(
-                || InternedPath::from_path_buf(entry_file_path, &mut self.string_table),
-                |identity| identity.logical_path.clone(),
-            );
-
-        Ast::new(
-            headers,
-            top_level_const_fragments,
-            module_symbols,
-            AstBuildContext {
-                host_registry: &self.host_function_registry,
-                style_directives: &self.style_directives,
-                string_table: &mut self.string_table,
-                entry_dir: interned_entry_dir,
-                build_profile,
-                project_path_resolver: self.project_path_resolver.clone(),
-                path_format_config: self.path_format_config.clone(),
-            },
-        )
-    }
-
-    /// -----------------------------
-    /// HIR GENERATION
-    /// -----------------------------
-    /// Generate HIR from AST nodes, making control flow explicit and preserving typed
-    /// expression trees where appropriate for backend-facing semantic lowering.
-    ///
-    /// HIR assumes AST has already finalized template foldability and runtime render plans.
-    pub fn generate_hir(&mut self, ast: Ast) -> Result<HirModule, CompilerMessages> {
-        let hir_module =
-            lower_module(ast, &mut self.string_table, self.path_format_config.clone())?;
-        Ok(hir_module)
-    }
-
-    // ------------------------------
-    //  BORROW CHECKING AND ANALYSIS
-    // ------------------------------
-    // Borrow validation runs after HIR construction. The borrow checker enforces
-    // language rules that must be consistent across all backends.
-    pub fn check_borrows(
-        &self,
-        hir_module: &HirModule,
-    ) -> Result<BorrowCheckReport, CompilerMessages> {
-        match run_borrow_checker(hir_module, &self.host_function_registry, &self.string_table) {
-            Ok(report) => Ok(report),
-            Err(error) => Err(CompilerMessages::from_error_ref(error, &self.string_table)),
-        }
-    }
-
-    // Planned: dedicated last-use analysis pass (memory-management-design.md §Last-Use Analysis).
-    // WHY: required before any backend can insert `possible_drop` sites for heap-managed values.
-    // pub fn last_use_analysis(&self, hir_module: &HirModule) -> LastUseReport
-
-    // Planned: static dispatch analysis (memory-management-design.md §Unified ABI).
-    // WHY: identifies which call sites can guarantee drop/no-drop at compile time, avoiding
-    // runtime ownership-flag checks for those calls.
-    // pub fn static_dispatch_analysis(&self, hir_module: &HirModule) -> StaticDispatchReport
-
-    // Planned: inlining analysis.
-    // WHY: small functions called from a single site can be inlined after static dispatch is known,
-    // reducing call overhead and enabling better constant folding across function boundaries.
+#[cfg(test)]
+pub(crate) mod tests {
+    pub(crate) mod test_support;
 }

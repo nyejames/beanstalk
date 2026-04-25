@@ -27,7 +27,6 @@ Land final small consistency and hygiene fixes before the release branch/tag.
 
 **Checklist**
 - Remove obsolete rejection fixtures for features that are now supported.
-- Update mod.rs files to follow the compiler style guide and refactor modules to make sure they are following `docs/codebase-style-guide`.
 - Tighten comments, TODOs, and dead-code justifications.
 - Prune stale scaffolding where the current design has clearly replaced it.
 - Update release-facing docs and contribution notes if needed.
