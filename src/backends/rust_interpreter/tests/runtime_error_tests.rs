@@ -641,7 +641,7 @@ fn runtime_rejects_integer_division_by_zero() {
 #[test]
 fn runtime_rejects_parameterized_function_execution() {
     let param_local = ExecLocalId(0);
-    let scratch_local = ExecLocalId(1);
+    let temp_local = ExecLocalId(1);
 
     let program = ExecProgram {
         module: ExecModule {
@@ -659,10 +659,10 @@ fn runtime_rejects_parameterized_function_execution() {
                         role: ExecLocalRole::Param,
                     },
                     ExecLocal {
-                        id: scratch_local,
-                        debug_name: Some("__scratch".to_owned()),
+                        id: temp_local,
+                        debug_name: Some("temp_1".to_owned()),
                         storage_type: ExecStorageType::Unknown,
-                        role: ExecLocalRole::InternalScratch,
+                        role: ExecLocalRole::Temp,
                     },
                 ],
                 blocks: vec![ExecBlock {

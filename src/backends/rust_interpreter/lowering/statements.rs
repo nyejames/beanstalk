@@ -1,10 +1,13 @@
 //! Statement lowering for the interpreter backend.
 
-use crate::backends::rust_interpreter::exec_ir::{ExecInstruction, ExecValue};
+use crate::backends::rust_interpreter::exec_ir::ExecInstruction;
 use crate::backends::rust_interpreter::lowering::context::{
     FunctionLoweringLayout, LoweringContext,
 };
 use crate::backends::rust_interpreter::lowering::expressions::lower_expression;
+use crate::backends::rust_interpreter::lowering::materialize::{
+    lower_expression_to_temporary, materialize_expression_value,
+};
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_nodes::{HirBlock, HirPlace, HirStatementKind};
 
@@ -28,22 +31,12 @@ pub(crate) fn lower_block_statements(
 
                     let value_result = lower_expression(context, layout, &mut instructions, value)?;
 
-                    // Materialize the value to the target local
-                    match value_result {
-                        ExecValue::Local(source) => {
-                            instructions.push(ExecInstruction::CopyLocal {
-                                target: exec_target,
-                                source,
-                            });
-                        }
-                        ExecValue::Literal(const_value) => {
-                            let const_id = context.intern_const(const_value);
-                            instructions.push(ExecInstruction::LoadConst {
-                                target: exec_target,
-                                const_id,
-                            });
-                        }
-                    }
+                    materialize_expression_value(
+                        context,
+                        &mut instructions,
+                        exec_target,
+                        value_result,
+                    )?;
                 }
 
                 _ => {
@@ -57,21 +50,14 @@ pub(crate) fn lower_block_statements(
                 let value_result =
                     lower_expression(context, layout, &mut instructions, expression)?;
 
-                // For expression statements, we need to materialize the value to discard it
-                // This ensures side effects are preserved even if the value isn't used
-                match value_result {
-                    ExecValue::Local(_) => {
-                        // Value is already in a local, no need to do anything
-                    }
-                    ExecValue::Literal(const_value) => {
-                        // Materialize to scratch local to ensure consistent behavior
-                        let const_id = context.intern_const(const_value);
-                        instructions.push(ExecInstruction::LoadConst {
-                            target: layout.scratch_local_id,
-                            const_id,
-                        });
-                    }
-                }
+                let storage_type = context.lower_storage_type(expression.ty);
+                lower_expression_to_temporary(
+                    context,
+                    layout,
+                    &mut instructions,
+                    value_result,
+                    storage_type,
+                )?;
             }
 
             HirStatementKind::Call { .. } => {

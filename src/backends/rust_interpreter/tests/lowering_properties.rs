@@ -4,6 +4,7 @@
 //! WHY: property tests complement unit tests by verifying universal properties hold for all inputs.
 
 use crate::backends::rust_interpreter::exec_ir::{ExecBinaryOperator, ExecUnaryOperator};
+use crate::backends::rust_interpreter::lowering::materialize::LoweredExpressionValue;
 use crate::backends::rust_interpreter::lowering::operators::{
     map_binary_operator, map_unary_operator,
 };
@@ -110,7 +111,7 @@ fn any_supported_hir_unary_operator() -> impl Strategy<Value = HirUnaryOp> {
 /// the literal value directly without allocating a temporary local.
 #[test]
 fn property_literal_lowering_efficiency() {
-    use crate::backends::rust_interpreter::exec_ir::{ExecConstValue, ExecFunctionId, ExecValue};
+    use crate::backends::rust_interpreter::exec_ir::{ExecConstValue, ExecFunctionId};
     use crate::backends::rust_interpreter::lowering::context::{
         FunctionLoweringLayout, LoweringContext,
     };
@@ -142,9 +143,6 @@ fn property_literal_lowering_efficiency() {
             exec_block_by_hir_block: FxHashMap::default(),
             ordered_hir_local_ids: vec![],
             exec_local_by_hir_local: FxHashMap::default(),
-            scratch_local_id: crate::backends::rust_interpreter::exec_ir::ExecLocalId(0),
-            next_temp_local_index: 0,
-            temp_local_count: 0,
             temp_locals: vec![],
         };
 
@@ -222,15 +220,15 @@ fn property_literal_lowering_efficiency() {
 
         let exec_value = result.unwrap();
 
-        // Property 2: Result must be ExecValue::Literal, not ExecValue::Local.
+        // Property 2: Result must be LoweredExpressionValue::Literal, not LoweredExpressionValue::LocalRead.
         prop_assert!(
-            matches!(exec_value, ExecValue::Literal(_)),
-            "Literal lowering must return ExecValue::Literal, not ExecValue::Local"
+            matches!(exec_value, LoweredExpressionValue::Literal(_)),
+            "Literal lowering must return LoweredExpressionValue::Literal, not LoweredExpressionValue::LocalRead"
         );
 
         // Property 3: No temporary locals should be allocated.
         prop_assert_eq!(
-            layout.temp_local_count,
+            layout.temp_locals.len() as u32,
             0,
             "Literal lowering must not allocate temporary locals"
         );
@@ -243,7 +241,7 @@ fn property_literal_lowering_efficiency() {
         );
 
         // Property 5: The literal value must match the input.
-        if let ExecValue::Literal(const_value) = exec_value {
+        if let LoweredExpressionValue::Literal(const_value) = exec_value {
             match (const_value, expected_const_value) {
                 (ExecConstValue::Int(a), ExecConstValue::Int(b)) => prop_assert_eq!(a, b),
                 (ExecConstValue::Float(a), ExecConstValue::Float(b)) => {
@@ -295,7 +293,7 @@ fn any_literal_expression() -> impl Strategy<Value = LiteralVariant> {
 /// without allocating a temporary local.
 #[test]
 fn property_local_reference_lowering_efficiency() {
-    use crate::backends::rust_interpreter::exec_ir::{ExecFunctionId, ExecLocalId, ExecValue};
+    use crate::backends::rust_interpreter::exec_ir::{ExecFunctionId, ExecLocalId};
     use crate::backends::rust_interpreter::lowering::context::{
         FunctionLoweringLayout, LoweringContext,
     };
@@ -330,9 +328,6 @@ fn property_local_reference_lowering_efficiency() {
             exec_block_by_hir_block: FxHashMap::default(),
             ordered_hir_local_ids: vec![hir_local_id],
             exec_local_by_hir_local,
-            scratch_local_id: ExecLocalId(100),
-            next_temp_local_index: 0,
-            temp_local_count: 0,
             temp_locals: vec![],
         };
 
@@ -365,14 +360,23 @@ fn property_local_reference_lowering_efficiency() {
 
         let exec_value = result.unwrap();
 
-        // Property 2: Result must be ExecValue::Local, not ExecValue::Literal.
+        // Property 2: Result must preserve local access mode, not become a literal.
         prop_assert!(
-            matches!(exec_value, ExecValue::Local(_)),
-            "Local reference lowering must return ExecValue::Local, not ExecValue::Literal"
+            matches!(
+                exec_value,
+                LoweredExpressionValue::LocalRead(_) | LoweredExpressionValue::LocalCopy(_)
+            ),
+            "Local reference lowering must return a local access value, not a literal"
         );
 
         // Property 3: The returned local ID must match the mapped exec local ID.
-        if let ExecValue::Local(returned_id) = exec_value {
+        let returned_id = match exec_value {
+            LoweredExpressionValue::LocalRead(returned_id)
+            | LoweredExpressionValue::LocalCopy(returned_id) => returned_id,
+            LoweredExpressionValue::Literal(_) => unreachable!("checked above"),
+        };
+
+        {
             prop_assert_eq!(
                 returned_id,
                 exec_local_id,
@@ -382,7 +386,7 @@ fn property_local_reference_lowering_efficiency() {
 
         // Property 4: No temporary locals should be allocated.
         prop_assert_eq!(
-            layout.temp_local_count,
+            layout.temp_locals.len() as u32,
             0,
             "Local reference lowering must not allocate temporary locals"
         );
@@ -417,16 +421,13 @@ fn property_temporary_local_uniqueness() {
             exec_block_by_hir_block: FxHashMap::default(),
             ordered_hir_local_ids: vec![],
             exec_local_by_hir_local: FxHashMap::default(),
-            scratch_local_id: crate::backends::rust_interpreter::exec_ir::ExecLocalId(0),
-            next_temp_local_index: 0,
-            temp_local_count: 0,
             temp_locals: vec![],
         };
 
         // Allocate multiple temporary locals.
         let mut allocated_ids = vec![];
         for _ in 0..allocation_count {
-            let temp_id = layout.allocate_temp_local(ExecStorageType::Int);
+            let temp_id = layout.allocate_temporary_local(ExecStorageType::Int);
             allocated_ids.push(temp_id);
         }
 
@@ -438,18 +439,18 @@ fn property_temporary_local_uniqueness() {
             "All temporary local IDs must be unique"
         );
 
-        // Property 2: temp_local_count must match the actual number of allocations.
+        // Property 2: temporary local count must match the actual number of allocations.
         prop_assert_eq!(
-            layout.temp_local_count,
+            layout.temp_locals.len() as u32,
             allocation_count,
-            "temp_local_count must equal the number of allocations"
+            "temporary local count must equal the number of allocations"
         );
 
-        // Property 3: The temp_locals vector must contain exactly temp_local_count entries.
+        // Property 3: The temp_locals vector must contain exactly temporary local count entries.
         prop_assert_eq!(
             layout.temp_locals.len(),
             allocation_count as usize,
-            "temp_locals vector must contain exactly temp_local_count entries"
+            "temp_locals vector must contain exactly temporary local count entries"
         );
 
         // Property 4: Each allocated ID must be registered in temp_locals.
@@ -475,7 +476,7 @@ fn property_temporary_local_uniqueness() {
 #[test]
 fn property_binary_operation_lowering_structure() {
     use crate::backends::rust_interpreter::exec_ir::{
-        ExecBinaryOperator, ExecFunctionId, ExecInstruction, ExecValue,
+        ExecBinaryOperator, ExecFunctionId, ExecInstruction,
     };
     use crate::backends::rust_interpreter::lowering::context::{
         FunctionLoweringLayout, LoweringContext,
@@ -508,9 +509,6 @@ fn property_binary_operation_lowering_structure() {
             exec_block_by_hir_block: FxHashMap::default(),
             ordered_hir_local_ids: vec![],
             exec_local_by_hir_local: FxHashMap::default(),
-            scratch_local_id: crate::backends::rust_interpreter::exec_ir::ExecLocalId(0),
-            next_temp_local_index: 0,
-            temp_local_count: 0,
             temp_locals: vec![],
         };
 
@@ -559,16 +557,16 @@ fn property_binary_operation_lowering_structure() {
 
         let exec_value = result.unwrap();
 
-        // Property 2: Result must be ExecValue::Local (a temporary was allocated).
+        // Property 2: Result must be LoweredExpressionValue::LocalRead (a temporary was allocated).
         prop_assert!(
-            matches!(exec_value, ExecValue::Local(_)),
-            "Binary operation lowering must return ExecValue::Local"
+            matches!(exec_value, LoweredExpressionValue::LocalRead(_)),
+            "Binary operation lowering must return LoweredExpressionValue::LocalRead"
         );
 
         // Property 3: At least one temporary local must be allocated for the result.
         // Note: Additional temporaries may be allocated for literal operands.
         prop_assert!(
-            layout.temp_local_count >= 1,
+            layout.temp_locals.len() as u32 >= 1,
             "Binary operation lowering must allocate at least one temporary local for the result"
         );
 
@@ -614,8 +612,8 @@ fn property_binary_operation_lowering_structure() {
                 "BinaryOp instruction must have the correct operator"
             );
 
-            // Property 7: The destination local must match the returned ExecValue::Local.
-            if let ExecValue::Local(result_local) = exec_value {
+            // Property 7: The destination local must match the returned LoweredExpressionValue::LocalRead.
+            if let LoweredExpressionValue::LocalRead(result_local) = exec_value {
                 prop_assert_eq!(
                     *destination,
                     result_local,
@@ -625,7 +623,7 @@ fn property_binary_operation_lowering_structure() {
         }
 
         // Property 8: The result local must be registered in temp_locals.
-        if let ExecValue::Local(result_local) = exec_value {
+        if let LoweredExpressionValue::LocalRead(result_local) = exec_value {
             let found = layout.temp_locals.iter().any(|temp| temp.id == result_local);
             prop_assert!(
                 found,
@@ -645,7 +643,7 @@ fn property_binary_operation_lowering_structure() {
 #[test]
 fn property_unary_operation_lowering_structure() {
     use crate::backends::rust_interpreter::exec_ir::{
-        ExecFunctionId, ExecInstruction, ExecUnaryOperator, ExecValue,
+        ExecFunctionId, ExecInstruction, ExecUnaryOperator,
     };
     use crate::backends::rust_interpreter::lowering::context::{
         FunctionLoweringLayout, LoweringContext,
@@ -677,9 +675,6 @@ fn property_unary_operation_lowering_structure() {
             exec_block_by_hir_block: FxHashMap::default(),
             ordered_hir_local_ids: vec![],
             exec_local_by_hir_local: FxHashMap::default(),
-            scratch_local_id: crate::backends::rust_interpreter::exec_ir::ExecLocalId(0),
-            next_temp_local_index: 0,
-            temp_local_count: 0,
             temp_locals: vec![],
         };
 
@@ -733,16 +728,16 @@ fn property_unary_operation_lowering_structure() {
 
         let exec_value = result.unwrap();
 
-        // Property 2: Result must be ExecValue::Local (a temporary was allocated).
+        // Property 2: Result must be LoweredExpressionValue::LocalRead (a temporary was allocated).
         prop_assert!(
-            matches!(exec_value, ExecValue::Local(_)),
-            "Unary operation lowering must return ExecValue::Local"
+            matches!(exec_value, LoweredExpressionValue::LocalRead(_)),
+            "Unary operation lowering must return LoweredExpressionValue::LocalRead"
         );
 
         // Property 3: At least one temporary local must be allocated for the result.
         // Note: Additional temporaries may be allocated for literal operands.
         prop_assert!(
-            layout.temp_local_count >= 1,
+            layout.temp_locals.len() as u32 >= 1,
             "Unary operation lowering must allocate at least one temporary local for the result"
         );
 
@@ -775,8 +770,8 @@ fn property_unary_operation_lowering_structure() {
                 "UnaryOp instruction must have the correct operator"
             );
 
-            // Property 7: The destination local must match the returned ExecValue::Local.
-            if let ExecValue::Local(result_local) = exec_value {
+            // Property 7: The destination local must match the returned LoweredExpressionValue::LocalRead.
+            if let LoweredExpressionValue::LocalRead(result_local) = exec_value {
                 prop_assert_eq!(
                     *destination,
                     result_local,
@@ -786,7 +781,7 @@ fn property_unary_operation_lowering_structure() {
         }
 
         // Property 8: The result local must be registered in temp_locals.
-        if let ExecValue::Local(result_local) = exec_value {
+        if let LoweredExpressionValue::LocalRead(result_local) = exec_value {
             let found = layout.temp_locals.iter().any(|temp| temp.id == result_local);
             prop_assert!(
                 found,
@@ -805,7 +800,7 @@ fn property_unary_operation_lowering_structure() {
 /// operand's instructions in the instruction sequence.
 #[test]
 fn property_nested_expression_evaluation_order() {
-    use crate::backends::rust_interpreter::exec_ir::{ExecFunctionId, ExecInstruction, ExecValue};
+    use crate::backends::rust_interpreter::exec_ir::{ExecFunctionId, ExecInstruction};
     use crate::backends::rust_interpreter::lowering::context::{
         FunctionLoweringLayout, LoweringContext,
     };
@@ -841,9 +836,6 @@ fn property_nested_expression_evaluation_order() {
             exec_block_by_hir_block: FxHashMap::default(),
             ordered_hir_local_ids: vec![],
             exec_local_by_hir_local: FxHashMap::default(),
-            scratch_local_id: crate::backends::rust_interpreter::exec_ir::ExecLocalId(0),
-            next_temp_local_index: 0,
-            temp_local_count: 0,
             temp_locals: vec![],
         };
 
@@ -955,10 +947,10 @@ fn property_nested_expression_evaluation_order() {
 
         let exec_value = result.unwrap();
 
-        // Property 2: Result must be ExecValue::Local.
+        // Property 2: Result must be LoweredExpressionValue::LocalRead.
         prop_assert!(
-            matches!(exec_value, ExecValue::Local(_)),
-            "Nested expression lowering must return ExecValue::Local"
+            matches!(exec_value, LoweredExpressionValue::LocalRead(_)),
+            "Nested expression lowering must return LoweredExpressionValue::LocalRead"
         );
 
         // Property 3: Instructions must be emitted.
@@ -1106,9 +1098,6 @@ fn property_branch_condition_lowering() {
             exec_block_by_hir_block,
             ordered_hir_local_ids: vec![],
             exec_local_by_hir_local: FxHashMap::default(),
-            scratch_local_id: crate::backends::rust_interpreter::exec_ir::ExecLocalId(999),
-            next_temp_local_index: 0,
-            temp_local_count: 0,
             temp_locals: vec![],
         };
 
@@ -1170,40 +1159,13 @@ fn property_branch_condition_lowering() {
             "Branch terminator with computed condition must emit instructions"
         );
 
-        // Property 4: The scratch local must NOT be used.
-        // WHAT: verify that no instruction references the scratch local (ID 999).
-        // WHY: Requirement 4.3 states no persistent scratch locals should be used.
-        let scratch_local_id = crate::backends::rust_interpreter::exec_ir::ExecLocalId(999);
-        for instruction in &instructions {
-            match instruction {
-                ExecInstruction::BinaryOp { left, right, destination, .. } => {
-                    prop_assert_ne!(*left, scratch_local_id, "BinaryOp left operand must not use scratch local");
-                    prop_assert_ne!(*right, scratch_local_id, "BinaryOp right operand must not use scratch local");
-                    prop_assert_ne!(*destination, scratch_local_id, "BinaryOp destination must not use scratch local");
-                }
-                ExecInstruction::LoadConst { target, .. } => {
-                    prop_assert_ne!(*target, scratch_local_id, "LoadConst target must not use scratch local");
-                }
-                _ => {}
-            }
-        }
-
-        // Property 5: The condition local in the terminator must NOT be the scratch local.
-        if let ExecTerminator::BranchBool { condition, .. } = exec_terminator {
-            prop_assert_ne!(
-                condition,
-                scratch_local_id,
-                "Branch condition must not use scratch local"
-            );
-        }
-
-        // Property 6: At least one temporary local should be allocated for the result.
+        // Property 4: At least one temporary local should be allocated for the result.
         prop_assert!(
-            layout.temp_local_count > 0,
+            layout.temp_locals.len() as u32 > 0,
             "Branch condition lowering must allocate at least one temporary local"
         );
 
-        // Property 7: The last instruction should be a BinaryOp (for the condition computation).
+        // Property 5: The last instruction should be a BinaryOp (for the condition computation).
         if let Some(last_instruction) = instructions.last() {
             prop_assert!(
                 matches!(last_instruction, ExecInstruction::BinaryOp { .. }),
@@ -1256,9 +1218,6 @@ fn property_return_value_lowering() {
             exec_block_by_hir_block: FxHashMap::default(),
             ordered_hir_local_ids: vec![],
             exec_local_by_hir_local: FxHashMap::default(),
-            scratch_local_id: crate::backends::rust_interpreter::exec_ir::ExecLocalId(999),
-            next_temp_local_index: 0,
-            temp_local_count: 0,
             temp_locals: vec![],
         };
 
@@ -1327,40 +1286,13 @@ fn property_return_value_lowering() {
             "Return terminator with computed value must emit instructions"
         );
 
-        // Property 4: The scratch local must NOT be used.
-        // WHAT: verify that no instruction references the scratch local (ID 999).
-        // WHY: Requirement 4.3 states no persistent scratch locals should be used.
-        let scratch_local_id = crate::backends::rust_interpreter::exec_ir::ExecLocalId(999);
-        for instruction in &instructions {
-            match instruction {
-                ExecInstruction::BinaryOp { left, right, destination, .. } => {
-                    prop_assert_ne!(*left, scratch_local_id, "BinaryOp left operand must not use scratch local");
-                    prop_assert_ne!(*right, scratch_local_id, "BinaryOp right operand must not use scratch local");
-                    prop_assert_ne!(*destination, scratch_local_id, "BinaryOp destination must not use scratch local");
-                }
-                ExecInstruction::LoadConst { target, .. } => {
-                    prop_assert_ne!(*target, scratch_local_id, "LoadConst target must not use scratch local");
-                }
-                _ => {}
-            }
-        }
-
-        // Property 5: The return value local in the terminator must NOT be the scratch local.
-        if let ExecTerminator::Return { value: Some(return_local) } = exec_terminator {
-            prop_assert_ne!(
-                return_local,
-                scratch_local_id,
-                "Return value must not use scratch local"
-            );
-        }
-
-        // Property 6: At least one temporary local should be allocated for the result.
+        // Property 4: At least one temporary local should be allocated for the result.
         prop_assert!(
-            layout.temp_local_count > 0,
+            layout.temp_locals.len() as u32 > 0,
             "Return value lowering must allocate at least one temporary local"
         );
 
-        // Property 7: The last instruction should be a BinaryOp (for the return value computation).
+        // Property 5: The last instruction should be a BinaryOp (for the return value computation).
         if let Some(last_instruction) = instructions.last() {
             prop_assert!(
                 matches!(last_instruction, ExecInstruction::BinaryOp { .. }),

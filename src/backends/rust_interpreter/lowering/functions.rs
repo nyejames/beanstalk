@@ -5,7 +5,6 @@
 
 use crate::backends::rust_interpreter::exec_ir::{
     ExecBlock, ExecBlockId, ExecFunction, ExecFunctionFlags, ExecLocal, ExecLocalId, ExecLocalRole,
-    ExecStorageType,
 };
 use crate::backends::rust_interpreter::lowering::context::{
     FunctionLoweringLayout, LoweringContext,
@@ -55,13 +54,6 @@ pub(crate) fn lower_function_shell(
         });
     }
 
-    exec_locals.push(ExecLocal {
-        id: layout.scratch_local_id,
-        debug_name: Some("__scratch".to_owned()),
-        storage_type: ExecStorageType::Unknown,
-        role: ExecLocalRole::InternalScratch,
-    });
-
     let mut exec_blocks = Vec::with_capacity(layout.ordered_hir_block_ids.len());
     let ordered_hir_block_ids = layout.ordered_hir_block_ids.clone();
     for hir_block_id in &ordered_hir_block_ids {
@@ -80,7 +72,6 @@ pub(crate) fn lower_function_shell(
         )?);
     }
 
-    // Add temporary locals to the exec_locals list after all blocks are lowered
     exec_locals.extend(layout.temp_locals.clone());
 
     let Some(entry_block) = layout.exec_block_by_hir_block.get(&function.entry).copied() else {
@@ -134,17 +125,12 @@ fn build_function_layout(
         exec_local_by_hir_local.insert(*local_id, ExecLocalId(index as u32));
     }
 
-    let scratch_local_id = ExecLocalId(ordered_hir_local_ids.len() as u32);
-
     Ok(FunctionLoweringLayout {
         exec_function_id,
         ordered_hir_block_ids,
         exec_block_by_hir_block,
         ordered_hir_local_ids,
         exec_local_by_hir_local,
-        scratch_local_id,
-        next_temp_local_index: 0,
-        temp_local_count: 0,
         temp_locals: Vec::new(),
     })
 }
@@ -237,6 +223,5 @@ fn debug_name_for_local(local_id: LocalId, hir_local: &HirLocal, role: ExecLocal
         ExecLocalRole::Param => format!("param_{}", local_id.0),
         ExecLocalRole::UserLocal => format!("local_{}", local_id.0),
         ExecLocalRole::Temp => format!("temp_{}", local_id.0),
-        ExecLocalRole::InternalScratch => "__scratch".to_owned(),
     }
 }

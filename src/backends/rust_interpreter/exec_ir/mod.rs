@@ -10,7 +10,7 @@ pub(crate) use instructions::{ExecInstruction, ExecTerminator};
 pub(crate) use types::{
     ExecBinaryOperator, ExecBlock, ExecBlockId, ExecConst, ExecConstId, ExecConstValue,
     ExecFunction, ExecFunctionFlags, ExecFunctionId, ExecLocal, ExecLocalId, ExecLocalRole,
-    ExecModule, ExecProgram, ExecStorageType, ExecUnaryOperator, ExecValue,
+    ExecModule, ExecProgram, ExecStorageType, ExecUnaryOperator,
 };
 
 #[cfg(test)]

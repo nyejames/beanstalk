@@ -92,39 +92,11 @@ pub(crate) enum ExecConstValue {
     String(String),
 }
 
-/// WHAT: represents the result of expression lowering.
-/// WHY: allows literals and local references to avoid unnecessary temporary allocation.
-#[derive(Debug, Clone)]
-pub(crate) enum ExecValue {
-    /// A compile-time constant value that hasn't been materialized to a local yet.
-    Literal(ExecConstValue),
-    /// A reference to a local variable slot.
-    Local(ExecLocalId),
-}
-
-impl ExecValue {
-    /// WHAT: extracts the local ID if this is a Local variant.
-    /// WHY: allows checking if a value is already in a local without materializing it.
-    pub(crate) fn as_local(&self) -> Option<ExecLocalId> {
-        match self {
-            ExecValue::Local(id) => Some(*id),
-            ExecValue::Literal(_) => None,
-        }
-    }
-
-    /// WHAT: returns true if this value is a literal that needs materialization.
-    /// WHY: allows callers to check if temporary allocation is needed.
-    pub(crate) fn is_literal(&self) -> bool {
-        matches!(self, ExecValue::Literal(_))
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ExecLocalRole {
     Param,
     UserLocal,
     Temp,
-    InternalScratch,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

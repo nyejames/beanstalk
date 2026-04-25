@@ -5,5 +5,6 @@
 
 mod engine;
 mod lookups;
+mod operators;
 
 pub(crate) use engine::RuntimeEngine;

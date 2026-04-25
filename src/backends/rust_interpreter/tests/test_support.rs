@@ -339,24 +339,24 @@ pub(crate) fn build_simple_exec_program(
 /// Build an ExecProgram that returns a string heap object when executed.
 pub(crate) fn build_manual_exec_program_returning_string(text: &str) -> ExecProgram {
     let const_id = ExecConstId(0);
-    let scratch_id = ExecLocalId(0);
+    let temp_id = ExecLocalId(0);
 
     build_simple_exec_program(
         vec![ExecBlock {
             id: ExecBlockId(0),
             instructions: vec![ExecInstruction::LoadConst {
-                target: scratch_id,
+                target: temp_id,
                 const_id,
             }],
             terminator: ExecTerminator::Return {
-                value: Some(scratch_id),
+                value: Some(temp_id),
             },
         }],
         vec![ExecLocal {
-            id: scratch_id,
-            debug_name: Some("__scratch".to_owned()),
+            id: temp_id,
+            debug_name: Some("temp_0".to_owned()),
             storage_type: ExecStorageType::HeapHandle,
-            role: ExecLocalRole::InternalScratch,
+            role: ExecLocalRole::Temp,
         }],
         vec![ExecConst {
             id: const_id,
@@ -389,15 +389,6 @@ pub(crate) fn exec_const_string(id: u32, value: &str) -> ExecConst {
     ExecConst {
         id: ExecConstId(id),
         value: ExecConstValue::String(value.to_owned()),
-    }
-}
-
-pub(crate) fn scratch_local(id: u32) -> ExecLocal {
-    ExecLocal {
-        id: ExecLocalId(id),
-        debug_name: Some("__scratch".to_owned()),
-        storage_type: ExecStorageType::Unknown,
-        role: ExecLocalRole::InternalScratch,
     }
 }
 

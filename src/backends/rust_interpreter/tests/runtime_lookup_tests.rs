@@ -79,7 +79,7 @@ fn runtime_resolves_block_by_function_and_block_id() {
     let function = make_function(
         ExecFunctionId(0),
         "test_fn",
-        vec![make_scratch_local(ExecLocalId(0))],
+        vec![make_temp_local(ExecLocalId(0))],
         vec![block_a, block_b],
     );
 
@@ -273,13 +273,13 @@ fn block_lookup_is_scoped_by_function() {
     let function_a = make_function(
         ExecFunctionId(0),
         "fn_a",
-        vec![make_scratch_local(ExecLocalId(0))],
+        vec![make_temp_local(ExecLocalId(0))],
         vec![block_in_fn_a],
     );
     let function_b = make_function(
         ExecFunctionId(1),
         "fn_b",
-        vec![make_scratch_local(ExecLocalId(0))],
+        vec![make_temp_local(ExecLocalId(0))],
         vec![block_in_fn_b],
     );
 
@@ -352,11 +352,11 @@ fn make_jump_block(id: ExecBlockId, target: ExecBlockId) -> ExecBlock {
     }
 }
 
-fn make_scratch_local(id: ExecLocalId) -> ExecLocal {
+fn make_temp_local(id: ExecLocalId) -> ExecLocal {
     ExecLocal {
         id,
-        debug_name: Some("__scratch".to_owned()),
+        debug_name: Some(format!("temp_{}", id.0)),
         storage_type: ExecStorageType::Unknown,
-        role: ExecLocalRole::InternalScratch,
+        role: ExecLocalRole::Temp,
     }
 }

@@ -196,7 +196,7 @@ fn lowers_assignment_to_local_then_return_load_local() {
         .any(|inst| matches!(inst, ExecInstruction::LoadConst { .. }));
     assert!(has_load_const, "expected LoadConst from assignment");
 
-    // WHAT: with ExecValue optimization, Load expressions return ExecValue::Local directly
+    // WHAT: with LoweredExpressionValue optimization, Load expressions return LoweredExpressionValue::LocalRead directly
     // WHY: no ReadLocal instruction is emitted during expression lowering; the local reference
     //      is passed directly to the terminator
     assert!(

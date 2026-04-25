@@ -6,6 +6,7 @@
 pub(crate) mod context;
 pub(crate) mod expressions;
 mod functions;
+pub(crate) mod materialize;
 mod module;
 pub(crate) mod operators;
 mod statements;
