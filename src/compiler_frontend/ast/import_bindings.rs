@@ -228,8 +228,7 @@ pub(crate) fn resolve_file_import_bindings(
                                 .unwrap_or("<unknown>");
                             return Err(CompilerError::new_rule_error(
                                 format!(
-                                    "Cannot import '{}' from package '{}': symbol not found in package.",
-                                    symbol_name, package_path
+                                    "Cannot import '{symbol_name}' from package '{package_path}': symbol not found in package."
                                 ),
                                 import.location,
                             ));

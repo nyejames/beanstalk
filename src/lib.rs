@@ -15,7 +15,6 @@ mod compiler_frontend;
 mod backends {
     pub(crate) mod error_types;
     pub(crate) mod js;
-    pub(crate) mod rust_interpreter;
     pub(crate) mod wasm;
 }
 
