@@ -342,6 +342,17 @@ pub(super) fn parse_identifier_or_call(
     }
 
     let var_name = string_table.resolve(id).to_string();
+    if context.is_visible_type_alias_name(id) {
+        return_rule_error!(
+            format!("`{}` is a type alias and cannot be used as a value.", var_name),
+            token_stream.current_location(),
+            {
+                VariableName => var_name,
+                CompilationStage => "Expression Parsing",
+                PrimarySuggestion => "Use the type alias only in type annotations, not in expressions",
+            }
+        );
+    }
     return_rule_error!(
         format!(
             "Undefined variable '{}'. Variable must be declared before use.",

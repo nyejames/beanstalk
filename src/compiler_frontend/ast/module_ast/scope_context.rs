@@ -121,6 +121,10 @@ impl TopLevelDeclarationIndex {
                 .find(|declaration| is_visible(declaration)),
         }
     }
+
+    pub fn get_by_path(&self, path: &InternedPath) -> Option<&Declaration> {
+        self.declarations.iter().find(|d| d.id == *path)
+    }
 }
 
 #[derive(Clone)]
@@ -156,6 +160,18 @@ pub struct ScopeContext {
     /// Optional file-local visibility gate over external package symbols.
     /// When present, only external symbols in this map are resolvable.
     pub visible_external_symbols: Option<FxHashMap<StringId, ExternalSymbolId>>,
+
+    /// Optional file-local source declaration aliases.
+    /// Maps local visible name → canonical declaration path.
+    pub visible_source_aliases: Option<FxHashMap<StringId, InternedPath>>,
+
+    /// Optional file-local type aliases.
+    /// Maps local visible name → canonical type alias path.
+    pub visible_type_aliases: Option<FxHashMap<StringId, InternedPath>>,
+
+    /// Resolved type alias targets: canonical path → resolved DataType.
+    /// Shared via Rc to avoid cloning the full table across scope contexts.
+    pub resolved_type_aliases: Option<Rc<FxHashMap<InternedPath, DataType>>>,
 
     // --- Control flow state ---
     pub loop_depth: usize,
@@ -234,6 +250,9 @@ impl ScopeContext {
             external_package_registry,
             style_directives: StyleDirectiveRegistry::built_ins(),
             visible_external_symbols: None,
+            visible_source_aliases: None,
+            visible_type_aliases: None,
+            resolved_type_aliases: None,
             loop_depth: 0,
             build_profile: FrontendBuildProfile::Dev,
             emitted_warnings: Rc::new(RefCell::new(Vec::new())),
@@ -272,6 +291,9 @@ impl ScopeContext {
             expected_error_type: self.expected_error_type.clone(),
             external_package_registry: self.external_package_registry.clone(),
             visible_external_symbols: self.visible_external_symbols.clone(),
+            visible_source_aliases: self.visible_source_aliases.clone(),
+            visible_type_aliases: self.visible_type_aliases.clone(),
+            resolved_type_aliases: self.resolved_type_aliases.clone(),
             style_directives: self.style_directives.clone(),
             loop_depth,
             build_profile: self.build_profile,
@@ -320,6 +342,9 @@ impl ScopeContext {
             expected_error_type: self.expected_error_type.clone(),
             external_package_registry: self.external_package_registry.clone(),
             visible_external_symbols: self.visible_external_symbols.clone(),
+            visible_source_aliases: self.visible_source_aliases.clone(),
+            visible_type_aliases: self.visible_type_aliases.clone(),
+            resolved_type_aliases: self.resolved_type_aliases.clone(),
             style_directives: self.style_directives.clone(),
             loop_depth: self.loop_depth,
             build_profile: self.build_profile,
@@ -354,6 +379,9 @@ impl ScopeContext {
             expected_error_type: self.expected_error_type.clone(),
             external_package_registry: self.external_package_registry.clone(),
             visible_external_symbols: self.visible_external_symbols.clone(),
+            visible_source_aliases: self.visible_source_aliases.clone(),
+            visible_type_aliases: self.visible_type_aliases.clone(),
+            resolved_type_aliases: self.resolved_type_aliases.clone(),
             style_directives: self.style_directives.clone(),
             loop_depth: self.loop_depth,
             build_profile: self.build_profile,
@@ -384,6 +412,9 @@ impl ScopeContext {
             expected_error_type: parent.expected_error_type.clone(),
             external_package_registry: parent.external_package_registry.clone(),
             visible_external_symbols: parent.visible_external_symbols.clone(),
+            visible_source_aliases: parent.visible_source_aliases.clone(),
+            visible_type_aliases: parent.visible_type_aliases.clone(),
+            resolved_type_aliases: parent.resolved_type_aliases.clone(),
             style_directives: parent.style_directives.clone(),
             loop_depth: parent.loop_depth,
             build_profile: parent.build_profile,
@@ -459,6 +490,30 @@ impl ScopeContext {
         self
     }
 
+    pub fn with_visible_source_aliases(
+        mut self,
+        aliases: FxHashMap<StringId, InternedPath>,
+    ) -> ScopeContext {
+        self.visible_source_aliases = Some(aliases);
+        self
+    }
+
+    pub fn with_visible_type_aliases(
+        mut self,
+        aliases: FxHashMap<StringId, InternedPath>,
+    ) -> ScopeContext {
+        self.visible_type_aliases = Some(aliases);
+        self
+    }
+
+    pub fn with_resolved_type_aliases(
+        mut self,
+        aliases: FxHashMap<InternedPath, DataType>,
+    ) -> ScopeContext {
+        self.resolved_type_aliases = Some(Rc::new(aliases));
+        self
+    }
+
     pub fn with_style_directives(
         mut self,
         style_directives: &StyleDirectiveRegistry,
@@ -507,19 +562,25 @@ impl ScopeContext {
     }
 
     pub(crate) fn get_reference(&self, name: &StringId) -> Option<&Declaration> {
-        match self.local_declarations_by_name.get(name) {
-            Some(indices) => {
-                // Walk backwards through the bucket to find the latest visible local.
-                indices
-                    .iter()
-                    .rev()
-                    .map(|index| &self.local_declarations[*index as usize])
-                    .next()
-            }
-            None => self
-                .top_level_declarations
-                .get_visible(*name, self.visible_declaration_ids.as_ref()),
+        // 1. Locals (latest visible local wins)
+        if let Some(indices) = self.local_declarations_by_name.get(name) {
+            return indices
+                .iter()
+                .rev()
+                .map(|index| &self.local_declarations[*index as usize])
+                .next();
         }
+
+        // 2. Source import aliases
+        if let Some(aliases) = &self.visible_source_aliases
+            && let Some(canonical_path) = aliases.get(name)
+        {
+            return self.top_level_declarations.get_by_path(canonical_path);
+        }
+
+        // 3. Top-level visible declarations
+        self.top_level_declarations
+            .get_visible(*name, self.visible_declaration_ids.as_ref())
     }
 
     pub(crate) fn lookup_receiver_method(
@@ -587,6 +648,27 @@ impl ScopeContext {
         self.external_package_registry
             .get_type_by_id(type_id)
             .map(|def| (type_id, def))
+    }
+
+    /// Look up a visible type alias by its source-level name.
+    /// Returns the resolved `DataType` if the alias exists and has been resolved.
+    pub(crate) fn lookup_visible_type_alias(&self, name: StringId) -> Option<DataType> {
+        let alias_path = self.visible_type_aliases.as_ref()?.get(&name)?.to_owned();
+        self.resolved_type_aliases
+            .as_ref()
+            .and_then(|table| table.get(&alias_path))
+            .cloned()
+    }
+
+    /// Check whether a name is a visible type alias, regardless of whether its target
+    /// has been resolved yet.
+    ///
+    /// WHAT: used by expression parsing to give a precise diagnostic when a type alias
+    /// is mistakenly used in value position.
+    pub(crate) fn is_visible_type_alias_name(&self, name: StringId) -> bool {
+        self.visible_type_aliases
+            .as_ref()
+            .is_some_and(|m| m.contains_key(&name))
     }
 
     pub fn add_var(&mut self, arg: Declaration) {

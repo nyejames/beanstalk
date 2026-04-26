@@ -41,6 +41,19 @@ pub(super) fn parse_mutable_receiver_expression(
     };
 
     let Some(reference_arg) = context.get_reference(&id) else {
+        if context.is_visible_type_alias_name(id) {
+            return_rule_error!(
+                format!(
+                    "`{}` is a type alias and cannot be used as a receiver.",
+                    string_table.resolve(id)
+                ),
+                token_stream.current_location(),
+                {
+                    CompilationStage => "Expression Parsing",
+                    PrimarySuggestion => "Use the type alias only in type annotations, not in expressions",
+                }
+            );
+        }
         return_rule_error!(
             format!(
                 "Undefined variable '{}'. Mutable receiver calls require a declared receiver place.",
@@ -115,6 +128,19 @@ pub(super) fn parse_copy_place_expression(
 
         TokenKind::Symbol(symbol) => {
             let Some(reference_arg) = context.get_reference(symbol) else {
+                if context.is_visible_type_alias_name(*symbol) {
+                    return_rule_error!(
+                        format!(
+                            "`{}` is a type alias and cannot be copied.",
+                            string_table.resolve(*symbol)
+                        ),
+                        token_stream.current_location(),
+                        {
+                            CompilationStage => "Expression Parsing",
+                            PrimarySuggestion => "Use the type alias only in type annotations, not in expressions",
+                        }
+                    );
+                }
                 return_rule_error!(
                     format!(
                         "Undefined variable '{}'. Explicit copies require a declared place.",

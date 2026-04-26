@@ -145,10 +145,17 @@ pub fn parse_file_path(
     return_token!(TokenKind::Path(parsed_paths), stream)
 }
 
-pub fn parse_import_clause_tokens(
+#[derive(Clone, Debug)]
+pub struct ParsedImportItem {
+    pub path: InternedPath,
+    pub alias: Option<StringId>,
+}
+
+pub fn parse_import_clause_items(
     tokens: &[Token],
     start_index: usize,
-) -> Result<(Vec<InternedPath>, usize), CompilerError> {
+    _string_table: &mut StringTable,
+) -> Result<(Vec<ParsedImportItem>, usize), CompilerError> {
     let Some(import_token) = tokens.get(start_index) else {
         return Err(CompilerError::compiler_error(
             "Import clause parsing started past the end of the token stream.",
@@ -192,7 +199,86 @@ pub fn parse_import_clause_tokens(
         );
     };
 
-    Ok((paths.to_owned(), index + 1))
+    let mut index = index + 1;
+    let mut alias: Option<StringId> = None;
+
+    // Check for `as alias_name` after the path token.
+    if tokens
+        .get(index)
+        .is_some_and(|token| matches!(token.kind, TokenKind::As))
+    {
+        index += 1;
+        let Some(alias_token) = tokens.get(index) else {
+            return_syntax_error!(
+                "Expected alias name after `as` in import.",
+                path_token.location.clone(), {
+                    CompilationStage => "Header Parsing",
+                    PrimarySuggestion => "Provide an alias name after `as`, e.g. `import @path/symbol as local_name`",
+                }
+            );
+        };
+        let TokenKind::Symbol(alias_name) = alias_token.kind else {
+            return_syntax_error!(
+                "Expected alias name after `as` in import.",
+                alias_token.location.clone(), {
+                    CompilationStage => "Header Parsing",
+                    PrimarySuggestion => "Provide an alias name after `as`, e.g. `import @path/symbol as local_name`",
+                }
+            );
+        };
+        if paths.len() > 1 {
+            return_syntax_error!(
+                "Grouped imports cannot use a single trailing alias. Use per-entry aliases instead (not yet supported).",
+                alias_token.location.clone(), {
+                    CompilationStage => "Header Parsing",
+                    PrimarySuggestion => "Import each symbol separately with its own alias, e.g. `import @path/a as x`",
+                }
+            );
+        }
+        alias = Some(alias_name);
+        index += 1;
+    }
+
+    let items = paths
+        .iter()
+        .map(|path| ParsedImportItem {
+            path: path.to_owned(),
+            alias,
+        })
+        .collect();
+
+    Ok((items, index))
+}
+
+pub fn parse_import_clause_tokens(
+    tokens: &[Token],
+    start_index: usize,
+) -> Result<(Vec<InternedPath>, usize), CompilerError> {
+    // WHAT: path-only import clause parsing for callers that do not need alias data.
+    // WHY: avoids threading StringTable through legacy call sites like path tests.
+    // Note: this intentionally loses alias information. Callers that need aliases
+    // should use parse_import_clause_items directly.
+    let mut index = start_index;
+    while tokens
+        .get(index)
+        .is_some_and(|token| matches!(token.kind, TokenKind::Newline))
+    {
+        index += 1;
+    }
+    let Some(import_token) = tokens.get(index) else {
+        return Err(CompilerError::compiler_error(
+            "Import clause parsing started past the end of the token stream.",
+        ));
+    };
+    if !matches!(import_token.kind, TokenKind::Import) {
+        return Err(CompilerError::compiler_error(
+            "Import clause parsing expected to start on an 'import' token.",
+        ));
+    }
+    let mut string_table = StringTable::new();
+    let (items, next_index) = parse_import_clause_items(tokens, index, &mut string_table)?;
+    let paths = items.into_iter().map(|item| item.path).collect();
+    Ok((paths, next_index))
 }
 
 pub fn collect_paths_from_tokens(tokens: &[Token]) -> Result<Vec<InternedPath>, CompilerError> {
@@ -284,6 +370,18 @@ fn parse_path_prefix(
             return Ok(ParsedPathPrefix {
                 components,
                 stop_reason,
+                ended_with_separator,
+            });
+        }
+
+        // Stop path parsing at the `as` keyword (used in import aliases).
+        // WHAT: `as` is a language keyword, not a valid path component.
+        // WHY: without this, `import @path/symbol as alias` tokenizes the `as alias`
+        //      as part of the path, producing a confusing "whitespace must be quoted" error.
+        if next == 'a' && peek_keyword_as(stream) {
+            return Ok(ParsedPathPrefix {
+                components,
+                stop_reason: PathStopReason::EndOfInput,
                 ended_with_separator,
             });
         }
@@ -683,13 +781,24 @@ fn parse_bare_component(
             .peek()
             .is_some_and(|next| !is_component_terminator(mode, context, *next))
         {
-            return_syntax_error!(
-                "Path components with whitespace must be quoted.",
-                stream.new_location(), {
-                    CompilationStage => "Tokenization",
-                    PrimarySuggestion => "Quote this path component, for example: \"my file.md\".",
-                }
-            );
+            // Allow the `as` keyword to follow a bare path component without quoting.
+            // WHAT: `import @path/symbol as alias` is valid syntax; `as` is a keyword.
+            // WHY: without this, the path tokenizer treats `as` as an unquoted multi-word
+            //      path component and emits a confusing error.
+            if matches!(context, ParseComponentContext::OrdinaryPath)
+                && stream.peek().copied() == Some('a')
+                && peek_keyword_as(stream)
+            {
+                // Return the component normally; `parse_path_prefix` will stop at `as`.
+            } else {
+                return_syntax_error!(
+                    "Path components with whitespace must be quoted.",
+                    stream.new_location(), {
+                        CompilationStage => "Tokenization",
+                        PrimarySuggestion => "Quote this path component, for example: \"my file.md\".",
+                    }
+                );
+            }
         }
     }
 
@@ -855,6 +964,26 @@ fn is_reserved_windows_name(component: &str) -> bool {
             | "LPT8"
             | "LPT9"
     )
+}
+
+/// WHAT: Peeks ahead to check if the stream currently points at the keyword `as`.
+/// WHY: `as` is a language keyword used for import aliases and type aliases. It must not
+///      be consumed as part of a path component.
+fn peek_keyword_as(stream: &TokenStream) -> bool {
+    // stream.peek() is already 'a'; check the next character.
+    let mut chars = stream.chars.clone();
+    chars.next(); // skip 'a'
+    let Some(second) = chars.next() else {
+        return false;
+    };
+    if second != 's' {
+        return false;
+    }
+    // `as` must be followed by whitespace, a path terminator, or EOF.
+    match chars.next() {
+        None => true,
+        Some(c) => c.is_whitespace() || ordinary_stop_reason(stream.mode, c).is_some(),
+    }
 }
 
 fn ordinary_stop_reason(mode: TokenizeMode, character: char) -> Option<PathStopReason> {

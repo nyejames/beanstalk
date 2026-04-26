@@ -14,7 +14,9 @@ use crate::compiler_frontend::declaration_syntax::declaration_shell::{
     DeclarationSyntax, parse_declaration_syntax,
 };
 use crate::compiler_frontend::declaration_syntax::r#struct::parse_struct_shell;
-use crate::compiler_frontend::declaration_syntax::type_syntax::for_each_named_type_in_data_type;
+use crate::compiler_frontend::declaration_syntax::type_syntax::{
+    TypeAnnotationContext, for_each_named_type_in_data_type, parse_type_annotation,
+};
 use crate::compiler_frontend::headers::dependency_edges::{
     collect_constant_type_dependencies, collect_named_type_dependency_edge,
 };
@@ -105,6 +107,7 @@ pub(super) fn create_header(
                         type_name,
                         context.file_imports,
                         context.source_file,
+                        context.external_package_registry,
                         context.string_table,
                         &mut dependencies,
                     );
@@ -117,6 +120,7 @@ pub(super) fn create_header(
                         type_name,
                         context.file_imports,
                         context.source_file,
+                        context.external_package_registry,
                         context.string_table,
                         &mut dependencies,
                     );
@@ -197,6 +201,7 @@ pub(super) fn create_header(
                             type_name,
                             context.file_imports,
                             context.source_file,
+                            context.external_package_registry,
                             context.string_table,
                             &mut dependencies,
                         );
@@ -287,6 +292,38 @@ pub(super) fn create_header(
             kind = HeaderKind::Choice {
                 variants: choice_header,
             };
+        }
+
+        // `as`: type alias declaration `Name as Type`
+        TokenKind::As => {
+            ensure_not_keyword_shadow_identifier(
+                declaration_name_text,
+                name_location.to_owned(),
+                "Header Parsing",
+            )?;
+            emit_header_naming_warning(
+                context.warnings,
+                declaration_name_text,
+                name_location.to_owned(),
+                IdentifierNamingKind::TypeLike,
+            );
+
+            token_stream.advance();
+            let target =
+                parse_type_annotation(token_stream, TypeAnnotationContext::TypeAliasTarget)?;
+
+            for_each_named_type_in_data_type(&target, &mut |type_name| {
+                collect_named_type_dependency_edge(
+                    type_name,
+                    context.file_imports,
+                    context.source_file,
+                    context.external_package_registry,
+                    context.string_table,
+                    &mut dependencies,
+                );
+            });
+
+            kind = HeaderKind::TypeAlias { target };
         }
 
         _ => {}

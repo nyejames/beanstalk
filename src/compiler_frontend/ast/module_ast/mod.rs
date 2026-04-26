@@ -8,11 +8,12 @@
 //! ## Pass sequence (see each sub-module for details)
 //!
 //! 1. `pass_import_bindings` — build per-file visibility gates
-//! 2. `pass_type_resolution` — resolve constants and struct field types
-//! 3. `pass_function_signatures` — resolve function signatures
-//! 4. `build_receiver_catalog` — build receiver method index from resolved signatures
-//! 5. `pass_emit_nodes` — lower function/template bodies into AST nodes
-//! 6. `finalization` — normalize templates and assemble final [`Ast`]
+//! 2. `pass_type_alias_resolution` — resolve type alias targets
+//! 3. `pass_type_resolution` — resolve constants and struct field types
+//! 4. `pass_function_signatures` — resolve function signatures
+//! 5. `build_receiver_catalog` — build receiver method index from resolved signatures
+//! 6. `pass_emit_nodes` — lower function/template bodies into AST nodes
+//! 7. `finalization` — normalize templates and assemble final [`Ast`]
 //!
 //! The entry point and final assembly live in [`crate::compiler_frontend::ast::Ast::new`].
 
@@ -21,6 +22,7 @@ mod finalization;
 mod pass_emit_nodes;
 mod pass_function_signatures;
 mod pass_import_bindings;
+mod pass_type_alias_resolution;
 mod pass_type_resolution;
 pub(crate) mod scope_context;
 

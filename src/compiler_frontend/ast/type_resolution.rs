@@ -43,13 +43,16 @@ fn visible_declaration_by_name<'a>(
 }
 
 /// Resolve a declaration type, replacing `NamedType` placeholders recursively.
-/// Falls back to external package types if no local declaration matches.
+/// Falls back to visible type aliases and external package types if no local declaration matches.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn resolve_named_signature_type(
     data_type: &DataType,
     location: &SourceLocation,
     declarations: &[Declaration],
     visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
     visible_external_symbols: Option<&FxHashMap<StringId, ExternalSymbolId>>,
+    visible_type_aliases: Option<&FxHashMap<StringId, InternedPath>>,
+    resolved_type_aliases: Option<&FxHashMap<InternedPath, DataType>>,
     string_table: &StringTable,
 ) -> Result<DataType, CompilerError> {
     resolve_named_types_in_data_type(
@@ -58,6 +61,14 @@ pub(crate) fn resolve_named_signature_type(
         &mut |type_name| {
             visible_declaration_by_name(declarations, visible_declaration_ids, type_name)
                 .map(|declaration| declaration.value.data_type.to_owned())
+                .or_else(|| {
+                    visible_type_aliases
+                        .and_then(|map| map.get(&type_name))
+                        .and_then(|alias_path| {
+                            resolved_type_aliases.and_then(|r| r.get(alias_path))
+                        })
+                        .cloned()
+                })
                 .or_else(|| {
                     visible_external_symbols
                         .and_then(|map| map.get(&type_name))
@@ -74,12 +85,15 @@ pub(crate) fn resolve_named_signature_type(
 }
 
 /// Resolve a function signature and extract receiver metadata for method cataloging.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn resolve_function_signature(
     function_path: &InternedPath,
     signature: &FunctionSignature,
     declarations: &[Declaration],
     visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
     visible_external_symbols: Option<&FxHashMap<StringId, ExternalSymbolId>>,
+    visible_type_aliases: Option<&FxHashMap<StringId, InternedPath>>,
+    resolved_type_aliases: Option<&FxHashMap<InternedPath, DataType>>,
     string_table: &mut StringTable,
 ) -> Result<ResolvedFunctionSignature, CompilerError> {
     let this_name = string_table.intern("this");
@@ -101,6 +115,8 @@ pub(crate) fn resolve_function_signature(
             declarations,
             visible_declaration_ids,
             visible_external_symbols,
+            visible_type_aliases,
+            resolved_type_aliases,
             string_table,
         )?;
 
@@ -168,6 +184,8 @@ pub(crate) fn resolve_function_signature(
                     declarations,
                     visible_declaration_ids,
                     visible_external_symbols,
+                    visible_type_aliases,
+                    resolved_type_aliases,
                     string_table,
                 )?)
             }
@@ -182,6 +200,8 @@ pub(crate) fn resolve_function_signature(
                     declarations,
                     visible_declaration_ids,
                     visible_external_symbols,
+                    visible_type_aliases,
+                    resolved_type_aliases,
                     string_table,
                 )?,
             },
@@ -203,12 +223,15 @@ pub(crate) fn resolve_function_signature(
 }
 
 /// Resolve all declared struct field types against visible declarations.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn resolve_struct_field_types(
     struct_path: &InternedPath,
     fields: &[Declaration],
     declarations: &[Declaration],
     visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
     visible_external_symbols: Option<&FxHashMap<StringId, ExternalSymbolId>>,
+    visible_type_aliases: Option<&FxHashMap<StringId, InternedPath>>,
+    resolved_type_aliases: Option<&FxHashMap<InternedPath, DataType>>,
     string_table: &mut StringTable,
 ) -> Result<Vec<Declaration>, CompilerError> {
     // WHAT: resolves field types against the declaration table visible to this struct header.
@@ -224,6 +247,8 @@ pub(crate) fn resolve_struct_field_types(
             declarations,
             visible_declaration_ids,
             visible_external_symbols,
+            visible_type_aliases,
+            resolved_type_aliases,
             string_table,
         )?;
         resolved_field.value = inline_visible_constant_references(

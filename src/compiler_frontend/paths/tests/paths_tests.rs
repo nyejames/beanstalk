@@ -848,3 +848,42 @@ fn collect_import_paths_from_tokens_rejects_missing_path() {
     let result = collect_paths_from_tokens(&file_tokens.tokens);
     assert!(result.is_err(), "import without a path token should fail");
 }
+
+#[test]
+fn parse_file_path_stops_at_as_keyword() {
+    let values = first_path_token_values("@std/io/io as print");
+    // Note: the returned path omits the leading `@` because the tokenizer
+    // consumes `@` before calling `parse_file_path`.
+    assert_eq!(values, vec!["std/io/io"]);
+}
+
+#[test]
+fn parse_import_clause_items_reads_alias() {
+    let mut string_table = StringTable::new();
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
+    let file_tokens = tokenize(
+        "import @std/io/io as print",
+        &source_path,
+        TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
+        &style_directives,
+        &mut string_table,
+        None,
+    )
+    .expect("tokenization should succeed");
+
+    let import_index = file_tokens
+        .tokens
+        .iter()
+        .position(|token| matches!(token.kind, TokenKind::Import))
+        .expect("expected an Import token");
+
+    let (items, _next_index) =
+        parse_import_clause_items(&file_tokens.tokens, import_index, &mut string_table)
+            .expect("import clause parsing should succeed");
+
+    assert_eq!(items.len(), 1);
+    assert_eq!(items[0].path.to_portable_string(&string_table), "std/io/io");
+    assert_eq!(string_table.resolve(items[0].alias.unwrap()), "print");
+}

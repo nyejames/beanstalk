@@ -179,6 +179,7 @@ pub fn resolve_declaration_syntax(
             context
                 .get_reference(&type_name)
                 .map(|declaration| declaration.value.data_type.to_owned())
+                .or_else(|| context.lookup_visible_type_alias(type_name))
                 .or_else(|| {
                     context
                         .lookup_visible_external_type(type_name)

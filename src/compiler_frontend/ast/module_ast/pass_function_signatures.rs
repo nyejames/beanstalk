@@ -48,6 +48,8 @@ impl<'a> AstBuildState<'a> {
                 &self.declarations,
                 Some(&bindings.visible_symbol_paths),
                 Some(&bindings.visible_external_symbols),
+                Some(&bindings.visible_type_aliases),
+                Some(&self.resolved_type_aliases_by_path),
                 string_table,
             )
             .map_err(|error| self.error_messages(error, string_table))?;

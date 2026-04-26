@@ -43,6 +43,7 @@ use std::rc::Rc;
 use std::time::Instant;
 
 use crate::compiler_frontend::ast::type_resolution::ResolvedFunctionSignature;
+use crate::compiler_frontend::datatypes::DataType;
 
 pub(in crate::compiler_frontend::ast) struct AstBuildState<'a> {
     // Header-owned module symbol package from the header/dependency-sort phase.
@@ -80,6 +81,8 @@ pub(in crate::compiler_frontend::ast) struct AstBuildState<'a> {
         FxHashMap<InternedPath, InternedPath>,
     pub(in crate::compiler_frontend::ast) resolved_function_signatures_by_path:
         FxHashMap<InternedPath, ResolvedFunctionSignature>,
+    pub(in crate::compiler_frontend::ast) resolved_type_aliases_by_path:
+        FxHashMap<InternedPath, DataType>,
 }
 
 impl<'a> AstBuildState<'a> {
@@ -117,6 +120,7 @@ impl<'a> AstBuildState<'a> {
             resolved_struct_fields_by_path,
             struct_source_by_path,
             resolved_function_signatures_by_path: FxHashMap::default(),
+            resolved_type_aliases_by_path: FxHashMap::default(),
         }
     }
 

@@ -67,6 +67,7 @@ pub(crate) struct ModuleSymbols {
     pub(crate) importable_symbol_exported: FxHashMap<InternedPath, bool>,
     pub(crate) declared_paths_by_file: FxHashMap<InternedPath, FxHashSet<InternedPath>>,
     pub(crate) declared_names_by_file: FxHashMap<InternedPath, FxHashSet<StringId>>,
+    pub(crate) type_alias_paths: FxHashSet<InternedPath>,
 
     // Builtin data merged during header parsing.
     pub(crate) builtin_visible_symbol_paths: FxHashSet<InternedPath>,
@@ -90,6 +91,7 @@ impl ModuleSymbols {
             builtin_struct_ast_nodes: Vec::new(),
             resolved_struct_fields_by_path: FxHashMap::default(),
             struct_source_by_path: FxHashMap::default(),
+            type_alias_paths: FxHashSet::default(),
         }
     }
 
@@ -180,6 +182,7 @@ fn declaration_from_header(header: &Header, string_table: &mut StringTable) -> O
                 ),
             })
         }
+        HeaderKind::TypeAlias { .. } => None,
         HeaderKind::ConstTemplate => None,
     }
 }

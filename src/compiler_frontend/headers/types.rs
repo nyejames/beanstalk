@@ -9,6 +9,7 @@ use crate::compiler_frontend::ast::TopLevelDeclarationIndex;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant;
 use crate::compiler_frontend::declaration_syntax::declaration_shell::DeclarationSyntax;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
@@ -18,7 +19,7 @@ use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::identity::FileId;
-use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation};
 use std::collections::HashSet;
 use std::fmt::Display;
@@ -99,6 +100,9 @@ pub enum HeaderKind {
     Choice {
         variants: Vec<ChoiceVariant>,
     },
+    TypeAlias {
+        target: DataType,
+    },
 
     ConstTemplate,
 
@@ -150,7 +154,14 @@ impl Header {
 #[derive(Clone, Debug)]
 pub struct FileImport {
     pub header_path: InternedPath,
+    pub alias: Option<StringId>,
     pub location: SourceLocation,
+}
+
+impl FileImport {
+    // NOTE: `local_name()` was intended for import alias binding but the
+    // resolution logic inlines `alias.unwrap_or(symbol_name)` to use the
+    // resolved symbol name rather than the raw path name.
 }
 
 // Shared file-level state that stays live while one source file is being split into headers.

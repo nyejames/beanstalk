@@ -31,6 +31,7 @@ pub(crate) enum TypeAnnotationContext {
     DeclarationTarget,
     SignatureParameter,
     SignatureReturn,
+    TypeAliasTarget,
 }
 
 pub(crate) fn parse_type_annotation(
@@ -258,6 +259,11 @@ fn none_type_annotation_error(
             "Function Signature Parsing",
             "Functions without return values should omit the return signature entirely",
         ),
+        TypeAnnotationContext::TypeAliasTarget => (
+            "None is not a valid type alias target",
+            "Type Alias Parsing",
+            "Use a concrete type such as Int, String, Float, Bool, a struct name, or a collection type",
+        ),
     }
 }
 
@@ -276,6 +282,10 @@ fn reserved_trait_type_annotation_error(
         TypeAnnotationContext::SignatureReturn => (
             "Function Signature Parsing",
             "Use a normal return type until traits are implemented",
+        ),
+        TypeAnnotationContext::TypeAliasTarget => (
+            "Type Alias Parsing",
+            "Use a normal type name until traits are implemented",
         ),
     }
 }
@@ -299,6 +309,11 @@ fn expected_type_error(
             "Function Signature Parsing",
             "Use a supported return type such as Int, String, Float, Bool, a struct name, or a collection type",
         ),
+        TypeAnnotationContext::TypeAliasTarget => (
+            "Expected a type after `as` in type alias declaration.",
+            "Type Alias Parsing",
+            "Provide a valid type after `as`, e.g. `UserId as Int`",
+        ),
     }
 }
 
@@ -307,6 +322,7 @@ fn compilation_stage(context: TypeAnnotationContext) -> &'static str {
         TypeAnnotationContext::DeclarationTarget => "Variable Declaration",
         TypeAnnotationContext::SignatureParameter => "Parameter Type Parsing",
         TypeAnnotationContext::SignatureReturn => "Function Signature Parsing",
+        TypeAnnotationContext::TypeAliasTarget => "Type Alias Parsing",
     }
 }
 

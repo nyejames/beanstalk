@@ -8,6 +8,7 @@
 use crate::compiler_frontend::builtins::error_type::is_reserved_builtin_symbol;
 use crate::compiler_frontend::declaration_syntax::declaration_shell::DeclarationSyntax;
 use crate::compiler_frontend::declaration_syntax::type_syntax::for_each_named_type_in_data_type;
+use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::types::HeaderBuildContext;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
@@ -27,6 +28,7 @@ pub(super) fn collect_constant_type_dependencies(
             type_name,
             context.file_imports,
             context.source_file,
+            context.external_package_registry,
             context.string_table,
             dependencies,
         );
@@ -37,6 +39,7 @@ pub(super) fn collect_named_type_dependency_edge(
     type_name: StringId,
     file_imports: &HashSet<InternedPath>,
     source_file: &InternedPath,
+    external_package_registry: &ExternalPackageRegistry,
     string_table: &StringTable,
     dependencies: &mut HashSet<InternedPath>,
 ) {
@@ -47,7 +50,16 @@ pub(super) fn collect_named_type_dependency_edge(
     let edge = file_imports
         .iter()
         .find(|import_path| import_path.name() == Some(type_name))
-        .cloned()
-        .unwrap_or_else(|| source_file.append(type_name));
+        .cloned();
+
+    // Virtual package imports are not source graph participants, so they must not
+    // create strict dependency edges. AST import binding resolution handles them later.
+    if let Some(ref import_path) = edge
+        && external_package_registry.is_virtual_package_import(import_path, string_table)
+    {
+        return;
+    }
+
+    let edge = edge.unwrap_or_else(|| source_file.append(type_name));
     dependencies.insert(edge);
 }

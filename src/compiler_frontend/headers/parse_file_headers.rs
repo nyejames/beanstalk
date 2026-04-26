@@ -185,6 +185,17 @@ fn build_module_symbols(
                     Some(header.exported),
                 );
             }
+            HeaderKind::TypeAlias { .. } => {
+                register_declared_symbol(
+                    &mut module_symbols,
+                    &header.tokens.src_path,
+                    &header.source_file,
+                    Some(header.exported),
+                );
+                module_symbols
+                    .type_alias_paths
+                    .insert(header.tokens.src_path.to_owned());
+            }
             _ => {}
         }
     }

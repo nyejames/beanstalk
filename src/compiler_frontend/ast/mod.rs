@@ -184,6 +184,14 @@ impl Ast {
         timer_log!(import_bindings_start, "AST/import bindings resolved in: ");
         let _ = import_bindings_start;
 
+        let type_alias_resolution_start = Instant::now();
+        state.resolve_type_aliases(&sorted_headers, &file_import_bindings, string_table)?;
+        timer_log!(
+            type_alias_resolution_start,
+            "AST/type alias resolution completed in: "
+        );
+        let _ = type_alias_resolution_start;
+
         let type_resolution_start = Instant::now();
         state.resolve_types(&sorted_headers, &file_import_bindings, string_table)?;
         timer_log!(type_resolution_start, "AST/type resolution completed in: ");

@@ -31,6 +31,7 @@ use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarati
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_errors::ErrorMetaDataKey;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::external_packages::{ExternalPackageRegistry, ExternalSymbolId};
 use crate::compiler_frontend::headers::parse_file_headers::{FileImport, Header, HeaderKind};
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -51,6 +52,12 @@ pub(crate) struct FileImportBindings {
     /// External package functions/types visible from this file.
     /// Populated by explicit virtual-package imports and prelude symbols.
     pub(crate) visible_external_symbols: FxHashMap<StringId, ExternalSymbolId>,
+
+    /// Source declaration aliases: local visible name → canonical declaration path.
+    pub(crate) visible_source_aliases: FxHashMap<StringId, InternedPath>,
+
+    /// Type aliases: local visible name → canonical type alias path.
+    pub(crate) visible_type_aliases: FxHashMap<StringId, InternedPath>,
 }
 
 #[derive(Clone)]
@@ -60,12 +67,14 @@ enum ImportPathResolution {
     Resolved(InternedPath),
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn resolve_file_import_bindings(
     file_imports_by_source: &FxHashMap<InternedPath, Vec<FileImport>>,
     module_file_paths: &FxHashSet<InternedPath>,
     importable_symbol_exported: &FxHashMap<InternedPath, bool>,
     declared_paths_by_file: &FxHashMap<InternedPath, FxHashSet<InternedPath>>,
     declared_names_by_file: &FxHashMap<InternedPath, FxHashSet<StringId>>,
+    type_alias_paths: &FxHashSet<InternedPath>,
     external_package_registry: &ExternalPackageRegistry,
     string_table: &mut StringTable,
 ) -> Result<FxHashMap<InternedPath, FileImportBindings>, CompilerError> {
@@ -88,6 +97,8 @@ pub(crate) fn resolve_file_import_bindings(
                 .cloned()
                 .unwrap_or_default(),
             visible_external_symbols: FxHashMap::default(),
+            visible_source_aliases: FxHashMap::default(),
+            visible_type_aliases: FxHashMap::default(),
         };
         let mut bound_names = declared_names_by_file
             .get(&source_file)
@@ -143,36 +154,33 @@ pub(crate) fn resolve_file_import_bindings(
                         ));
                     };
 
-                    if external_package_registry
-                        .get_function(string_table.resolve(symbol_name))
-                        .is_some()
-                        || external_package_registry
-                            .get_type(string_table.resolve(symbol_name))
-                            .is_some()
-                    {
-                        return Err(CompilerError::new_rule_error(
-                            format!(
-                                "Import name collision: '{}' conflicts with a host symbol name.",
-                                string_table.resolve(symbol_name)
-                            ),
-                            import.location,
-                        ));
-                    }
+                    let local_name = import.alias.unwrap_or(symbol_name);
 
-                    if bound_names.contains(&symbol_name)
+                    if bound_names.contains(&local_name)
                         && !bindings.visible_symbol_paths.contains(&symbol_path)
                     {
                         return Err(CompilerError::new_rule_error(
                             format!(
                                 "Import name collision: '{}' is already declared in this file.",
-                                string_table.resolve(symbol_name)
+                                string_table.resolve(local_name)
                             ),
                             import.location,
                         ));
                     }
 
-                    bindings.visible_symbol_paths.insert(symbol_path.to_owned());
-                    bound_names.insert(symbol_name);
+                    if type_alias_paths.contains(&symbol_path) {
+                        bindings
+                            .visible_type_aliases
+                            .insert(local_name, symbol_path.to_owned());
+                    } else {
+                        bindings.visible_symbol_paths.insert(symbol_path.to_owned());
+                        if import.alias.is_some() {
+                            bindings
+                                .visible_source_aliases
+                                .insert(local_name, symbol_path.to_owned());
+                        }
+                    }
+                    bound_names.insert(local_name);
                 }
                 ImportPathResolution::Ambiguous => {
                     return Err(CompilerError::new_rule_error(
@@ -191,14 +199,23 @@ pub(crate) fn resolve_file_import_bindings(
                         string_table,
                     ) {
                         VirtualPackageMatch::Found(package_path, symbol_name) => {
-                            if bound_names.contains(&symbol_name)
-                                && !bindings.visible_symbol_paths.contains(&import.header_path)
-                                && !bindings.visible_external_symbols.contains_key(&symbol_name)
-                            {
+                            let local_name = import.alias.unwrap_or(symbol_name);
+
+                            // Explicit aliases must not collide with any existing name.
+                            // For non-aliased imports, only flag if the name is new (not
+                            // the same symbol being imported twice).
+                            let is_collision = if import.alias.is_some() {
+                                bound_names.contains(&local_name)
+                            } else {
+                                bound_names.contains(&local_name)
+                                    && !bindings.visible_symbol_paths.contains(&import.header_path)
+                                    && !bindings.visible_external_symbols.contains_key(&local_name)
+                            };
+                            if is_collision {
                                 return Err(CompilerError::new_rule_error(
                                     format!(
                                         "Import name collision: '{}' is already declared in this file.",
-                                        string_table.resolve(symbol_name)
+                                        string_table.resolve(local_name)
                                     ),
                                     import.location,
                                 ));
@@ -210,15 +227,15 @@ pub(crate) fn resolve_file_import_bindings(
                             {
                                 bindings
                                     .visible_external_symbols
-                                    .insert(symbol_name, ExternalSymbolId::Function(func_id));
+                                    .insert(local_name, ExternalSymbolId::Function(func_id));
                             } else if let Some((type_id, _)) = external_package_registry
                                 .resolve_package_type(&package_path, symbol_name_str)
                             {
                                 bindings
                                     .visible_external_symbols
-                                    .insert(symbol_name, ExternalSymbolId::Type(type_id));
+                                    .insert(local_name, ExternalSymbolId::Type(type_id));
                             }
-                            bound_names.insert(symbol_name);
+                            bound_names.insert(local_name);
                             continue;
                         }
                         VirtualPackageMatch::PackageFoundSymbolMissing(package_path) => {
@@ -281,6 +298,9 @@ pub(crate) struct ConstantHeaderParseContext<'a> {
     pub top_level_declarations: Rc<TopLevelDeclarationIndex>,
     pub visible_declaration_ids: &'a FxHashSet<InternedPath>,
     pub visible_external_symbols: &'a FxHashMap<StringId, ExternalSymbolId>,
+    pub visible_source_aliases: &'a FxHashMap<StringId, InternedPath>,
+    pub visible_type_aliases: &'a FxHashMap<StringId, InternedPath>,
+    pub resolved_type_aliases: Rc<FxHashMap<InternedPath, DataType>>,
     pub external_package_registry: &'a ExternalPackageRegistry,
     pub style_directives: &'a StyleDirectiveRegistry,
     pub project_path_resolver: Option<ProjectPathResolver>,
@@ -300,6 +320,9 @@ pub(crate) fn parse_constant_header_declaration(
         top_level_declarations,
         visible_declaration_ids,
         visible_external_symbols,
+        visible_source_aliases,
+        visible_type_aliases,
+        resolved_type_aliases,
         external_package_registry,
         style_directives,
         project_path_resolver,
@@ -340,6 +363,9 @@ pub(crate) fn parse_constant_header_declaration(
     // can see to enforce import boundaries and prevent cross-file leakage.
     .with_visible_declarations(visible_declaration_ids.to_owned())
     .with_visible_external_symbols(visible_external_symbols.to_owned())
+    .with_visible_source_aliases(visible_source_aliases.to_owned())
+    .with_visible_type_aliases(visible_type_aliases.to_owned())
+    .with_resolved_type_aliases((*resolved_type_aliases).clone())
     .with_source_file_scope(source_file_scope);
 
     let declaration_result = resolve_declaration_syntax(

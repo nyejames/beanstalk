@@ -18,7 +18,7 @@ use crate::compiler_frontend::headers::types::{
     FileImport, Header, HeaderBuildContext, HeaderKind, HeaderParseContext, TopLevelConstFragment,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::paths::const_paths::parse_import_clause_tokens;
+use crate::compiler_frontend::paths::const_paths::parse_import_clause_items;
 use crate::compiler_frontend::reserved_trait_syntax::{
     reserved_trait_keyword, reserved_trait_keyword_error,
 };
@@ -177,23 +177,28 @@ pub(super) fn parse_headers_in_file(
 
             TokenKind::Import => {
                 let import_index = token_stream.index.saturating_sub(1);
-                let (paths, next_index) =
-                    parse_import_clause_tokens(&token_stream.tokens, import_index)?;
+                let (items, next_index) = parse_import_clause_items(
+                    &token_stream.tokens,
+                    import_index,
+                    context.string_table,
+                )?;
 
-                for path in paths {
+                for item in items {
                     let normalized_path = normalize_import_dependency_path(
-                        &path,
+                        &item.path,
                         &token_stream.src_path,
                         context.string_table,
                     )?;
 
-                    if let Some(name) = normalized_path.name() {
+                    let local_name = item.alias.or_else(|| normalized_path.name());
+                    if let Some(name) = local_name {
                         encountered_symbols.insert(name);
                     }
 
                     if file_import_paths.insert(normalized_path.to_owned()) {
                         file_imports.push(FileImport {
                             header_path: normalized_path,
+                            alias: item.alias,
                             location: current_location.clone(),
                         });
                     }
@@ -383,10 +388,13 @@ fn discover_visible_constant_placeholders(
     let mut index = 0usize;
     while index < tokens.len() {
         if scope_depth == 0 && matches!(tokens[index].kind, TokenKind::Import) {
-            let (paths, next_index) = parse_import_clause_tokens(tokens, index)?;
-            for path in paths {
-                let normalized =
-                    normalize_import_dependency_path(&path, &token_stream.src_path, string_table)?;
+            let (items, next_index) = parse_import_clause_items(tokens, index, string_table)?;
+            for item in items {
+                let normalized = normalize_import_dependency_path(
+                    &item.path,
+                    &token_stream.src_path,
+                    string_table,
+                )?;
                 if normalized.name().is_some() {
                     let placeholder = header_constant_placeholder_declaration(
                         normalized,

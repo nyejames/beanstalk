@@ -60,6 +60,8 @@ impl<'a> AstBuildState<'a> {
         );
         let _ = declaration_index_start;
 
+        let resolved_type_aliases = Rc::new(self.resolved_type_aliases_by_path.clone());
+
         #[cfg(feature = "detailed_timers")]
         let mut total_function_body_parse_time = Duration::default();
         #[cfg(feature = "detailed_timers")]
@@ -118,6 +120,9 @@ impl<'a> AstBuildState<'a> {
                     .with_build_profile(self.build_profile)
                     .with_visible_declarations(visible_declarations)
                     .with_visible_external_symbols(bindings.visible_external_symbols.clone())
+                    .with_visible_source_aliases(bindings.visible_source_aliases.clone())
+                    .with_visible_type_aliases(bindings.visible_type_aliases.clone())
+                    .with_resolved_type_aliases((*resolved_type_aliases).clone())
                     .with_project_path_resolver(self.project_path_resolver.clone())
                     .with_path_format_config(self.path_format_config.clone())
                     .with_rendered_path_usage_sink(self.rendered_path_usages.clone())
@@ -185,6 +190,9 @@ impl<'a> AstBuildState<'a> {
                     .with_build_profile(self.build_profile)
                     .with_visible_declarations(bindings.visible_symbol_paths.to_owned())
                     .with_visible_external_symbols(bindings.visible_external_symbols.clone())
+                    .with_visible_source_aliases(bindings.visible_source_aliases.clone())
+                    .with_visible_type_aliases(bindings.visible_type_aliases.clone())
+                    .with_resolved_type_aliases((*resolved_type_aliases).clone())
                     .with_project_path_resolver(self.project_path_resolver.clone())
                     .with_path_format_config(self.path_format_config.clone())
                     .with_rendered_path_usage_sink(self.rendered_path_usages.clone())
@@ -279,6 +287,9 @@ impl<'a> AstBuildState<'a> {
                     .with_build_profile(self.build_profile)
                     .with_visible_declarations(bindings.visible_symbol_paths.to_owned())
                     .with_visible_external_symbols(bindings.visible_external_symbols.clone())
+                    .with_visible_source_aliases(bindings.visible_source_aliases.clone())
+                    .with_visible_type_aliases(bindings.visible_type_aliases.clone())
+                    .with_resolved_type_aliases((*resolved_type_aliases).clone())
                     .with_project_path_resolver(self.project_path_resolver.clone())
                     .with_path_format_config(self.path_format_config.clone())
                     .with_rendered_path_usage_sink(self.rendered_path_usages.clone())
@@ -353,6 +364,10 @@ impl<'a> AstBuildState<'a> {
 
                     self.const_templates_by_path
                         .insert(template_tokens.src_path, html);
+                }
+
+                HeaderKind::TypeAlias { .. } => {
+                    // Type aliases are compile-time-only metadata; they do not emit runtime nodes.
                 }
             }
         }

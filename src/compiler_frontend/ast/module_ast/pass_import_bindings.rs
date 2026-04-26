@@ -25,18 +25,33 @@ impl<'a> AstBuildState<'a> {
             &self.module_symbols.importable_symbol_exported,
             &self.module_symbols.declared_paths_by_file,
             &self.module_symbols.declared_names_by_file,
+            &self.module_symbols.type_alias_paths,
             self.external_package_registry,
             string_table,
         )
         .map_err(|error| self.error_messages(error, string_table))?;
 
-        for binding in bindings.values_mut() {
+        for (source_file, binding) in bindings.iter_mut() {
             binding.visible_symbol_paths.extend(
                 self.module_symbols
                     .builtin_visible_symbol_paths
                     .iter()
                     .cloned(),
             );
+
+            // Add local type aliases to visible_type_aliases so they resolve in type
+            // annotations within the same file.
+            if let Some(declared_paths) =
+                self.module_symbols.declared_paths_by_file.get(source_file)
+            {
+                for path in declared_paths {
+                    if self.module_symbols.type_alias_paths.contains(path)
+                        && let Some(name) = path.name()
+                    {
+                        binding.visible_type_aliases.insert(name, path.to_owned());
+                    }
+                }
+            }
         }
 
         Ok(bindings)

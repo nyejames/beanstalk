@@ -2308,3 +2308,63 @@ tags = ["integration", "language", "external-packages"]
 id = "external_type_construction_rejected"
 path = "external_type_construction_rejected"
 tags = ["integration", "language", "external-packages"]
+
+[[case]]
+id = "external_package_import_alias"
+path = "external_package_import_alias"
+tags = ["integration", "language", "external-packages", "aliases"]
+
+[[case]]
+id = "import_alias_collision_rejected"
+path = "import_alias_collision_rejected"
+tags = ["integration", "language", "external-packages", "aliases", "diagnostics"]
+
+[[case]]
+id = "source_import_alias"
+path = "source_import_alias"
+tags = ["integration", "language", "aliases"]
+
+[[case]]
+id = "type_alias_basic"
+path = "type_alias_basic"
+tags = ["integration", "language", "aliases"]
+
+[[case]]
+id = "type_alias_collection"
+path = "type_alias_collection"
+tags = ["integration", "language", "aliases"]
+
+[[case]]
+id = "type_alias_export_import"
+path = "type_alias_export_import"
+tags = ["integration", "language", "aliases"]
+
+[[case]]
+id = "type_alias_cycle_rejected"
+path = "type_alias_cycle_rejected"
+tags = ["integration", "language", "aliases", "diagnostics"]
+
+[[case]]
+id = "import_missing_alias_rejected"
+path = "import_missing_alias_rejected"
+tags = ["integration", "language", "aliases", "diagnostics"]
+
+[[case]]
+id = "type_alias_used_as_value_rejected"
+path = "type_alias_used_as_value_rejected"
+tags = ["integration", "language", "aliases", "diagnostics"]
+
+[[case]]
+id = "external_type_alias"
+path = "external_type_alias"
+tags = ["integration", "language", "aliases"]
+
+[[case]]
+id = "import_alias_of_type_alias"
+path = "import_alias_of_type_alias"
+tags = ["integration", "language", "aliases"]
+
+[[case]]
+id = "prelude_does_not_override_alias"
+path = "prelude_does_not_override_alias"
+tags = ["integration", "language", "aliases"]
