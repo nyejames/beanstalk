@@ -77,6 +77,14 @@ pub struct RangeLoopSpec {
     pub step: Option<Expression>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MatchExhaustiveness {
+    /// The match has an explicit `else =>` arm.
+    HasDefault,
+    /// The match has no explicit default, but AST proved it covers every choice variant.
+    ExhaustiveChoice,
+}
+
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub enum NodeKind {
@@ -85,11 +93,12 @@ pub enum NodeKind {
     ReturnError(Expression),                            // return! value
     If(Expression, Vec<AstNode>, Option<Vec<AstNode>>), // Condition, If true, Else
 
-    Match(
-        Expression,           // Subject (condition)
-        Vec<MatchArm>,        // Arms
-        Option<Vec<AstNode>>, // for the wildcard/else case
-    ),
+    Match {
+        scrutinee: Expression,
+        arms: Vec<MatchArm>,
+        default: Option<Vec<AstNode>>,
+        exhaustiveness: MatchExhaustiveness,
+    },
 
     ScopedBlock {
         body: Vec<AstNode>,

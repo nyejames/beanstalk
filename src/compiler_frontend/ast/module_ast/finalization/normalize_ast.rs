@@ -105,7 +105,7 @@ fn normalize_ast_node_templates(
     match &mut node.kind {
         // Control flow nodes
         NodeKind::If(_, _, _)
-        | NodeKind::Match(_, _, _)
+        | NodeKind::Match { .. }
         | NodeKind::ScopedBlock { .. }
         | NodeKind::RangeLoop { .. }
         | NodeKind::CollectionLoop { .. }
@@ -258,7 +258,12 @@ fn normalize_control_flow_templates(
             Ok(())
         }
 
-        NodeKind::Match(scrutinee, arms, default) => {
+        NodeKind::Match {
+            scrutinee,
+            arms,
+            default,
+            exhaustiveness: _,
+        } => {
             normalize_expression_templates(
                 scrutinee,
                 source_file_scope,

@@ -1,0 +1,4 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["exhaustive_choice_match_returns message=warning"]

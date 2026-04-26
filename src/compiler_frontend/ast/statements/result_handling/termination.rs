@@ -12,7 +12,11 @@ fn statement_guarantees_termination(statement: &AstNode) -> bool {
         NodeKind::If(_, then_body, Some(else_body)) => {
             body_guarantees_termination(then_body) && body_guarantees_termination(else_body)
         }
-        NodeKind::Match(_, arms, maybe_default_body) => {
+        NodeKind::Match {
+            arms,
+            default: maybe_default_body,
+            ..
+        } => {
             // Match parsing enforces exhaustiveness for all non-choice scrutinees and for
             // choice scrutinees without an explicit `else =>` arm. Guarded choice matches
             // must also include `else =>`, so `None` here is still exhaustive by construction.

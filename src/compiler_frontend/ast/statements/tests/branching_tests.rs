@@ -4,6 +4,7 @@
 //! WHY: control-flow lowering relies on branch bodies and match arms staying structurally correct.
 
 use super::*;
+use crate::compiler_frontend::ast::ast_nodes::MatchExhaustiveness;
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, Operator,
 };
@@ -250,7 +251,13 @@ fn parses_match_statements_with_else_arm() {
 
     let body = start_function_body(&ast, &string_table);
 
-    let NodeKind::Match(subject, arms, else_block) = &body[1].kind else {
+    let NodeKind::Match {
+        scrutinee: subject,
+        arms,
+        default: else_block,
+        exhaustiveness,
+    } = &body[1].kind
+    else {
         panic!("expected match statement in start body");
     };
 
@@ -275,6 +282,7 @@ fn parses_match_statements_with_else_arm() {
         Some(1),
         "match should keep the default arm body"
     );
+    assert_eq!(*exhaustiveness, MatchExhaustiveness::HasDefault);
 }
 
 #[test]
@@ -285,7 +293,13 @@ fn parses_match_arm_with_boolean_guard() {
 
     let body = start_function_body(&ast, &string_table);
 
-    let NodeKind::Match(_, arms, else_block) = &body[1].kind else {
+    let NodeKind::Match {
+        arms,
+        default: else_block,
+        exhaustiveness,
+        ..
+    } = &body[1].kind
+    else {
         panic!("expected match statement in start body");
     };
 
@@ -301,6 +315,7 @@ fn parses_match_arm_with_boolean_guard() {
         else_block.is_some(),
         "guarded literal match should still preserve explicit else body"
     );
+    assert_eq!(*exhaustiveness, MatchExhaustiveness::HasDefault);
 }
 
 #[test]
@@ -344,7 +359,13 @@ fn parses_choice_match_arms_with_bare_and_qualified_variants() {
     );
 
     let body = start_function_body(&ast, &string_table);
-    let NodeKind::Match(subject, arms, else_block) = &body[1].kind else {
+    let NodeKind::Match {
+        scrutinee: subject,
+        arms,
+        default: else_block,
+        exhaustiveness,
+    } = &body[1].kind
+    else {
         panic!("expected match statement in start body");
     };
 
@@ -365,6 +386,34 @@ fn parses_choice_match_arms_with_bare_and_qualified_variants() {
         else_block.is_some(),
         "choice match should keep explicit else default"
     );
+    assert_eq!(*exhaustiveness, MatchExhaustiveness::HasDefault);
+}
+
+#[test]
+fn parses_exhaustive_choice_match_without_else_marks_exhaustive_choice() {
+    let (ast, string_table) = parse_single_file_ast(
+        "#Status :: Ready, Busy;\n\
+         current Status = Status::Ready\n\
+         if current is:\n\
+             case Ready => io(\"ready\")\n\
+             case Busy => io(\"busy\")\n\
+         ;\n",
+    );
+
+    let body = start_function_body(&ast, &string_table);
+    let NodeKind::Match {
+        scrutinee: _,
+        arms,
+        default,
+        exhaustiveness,
+    } = &body[1].kind
+    else {
+        panic!("expected match statement in start body");
+    };
+
+    assert_eq!(arms.len(), 2);
+    assert!(default.is_none());
+    assert_eq!(*exhaustiveness, MatchExhaustiveness::ExhaustiveChoice);
 }
 
 #[test]
@@ -451,7 +500,7 @@ fn parses_relational_match_patterns() {
     );
 
     let body = start_function_body(&ast, &string_table);
-    let NodeKind::Match(_, arms, _) = &body[1].kind else {
+    let NodeKind::Match { arms, .. } = &body[1].kind else {
         panic!("expected match statement in start body");
     };
 
@@ -493,7 +542,7 @@ fn allows_semicolons_inside_nested_structures_within_match_arms() {
 
     let body = start_function_body(&ast, &string_table);
 
-    let NodeKind::Match(_, arms, _) = &body[1].kind else {
+    let NodeKind::Match { arms, .. } = &body[1].kind else {
         panic!("expected match statement in start body");
     };
 
@@ -511,7 +560,7 @@ fn parses_relational_int_patterns() {
     );
 
     let body = start_function_body(&ast, &string_table);
-    let NodeKind::Match(_, arms, _) = &body[1].kind else {
+    let NodeKind::Match { arms, .. } = &body[1].kind else {
         panic!("expected match statement in start body");
     };
 

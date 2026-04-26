@@ -4,7 +4,7 @@
 //! WHY: if/match/loop lowering is the densest CFG-building logic in HIR and benefits from a
 //! dedicated module boundary.
 
-use crate::compiler_frontend::ast::ast_nodes::AstNode;
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, MatchExhaustiveness};
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::match_patterns::{
     MatchArm, MatchPattern, RelationalPatternOp,
@@ -226,8 +226,25 @@ impl<'a> HirBuilder<'a> {
         scrutinee: &Expression,
         arms: &[MatchArm],
         default: Option<&[AstNode]>,
+        exhaustiveness: MatchExhaustiveness,
         location: &SourceLocation,
     ) -> Result<(), CompilerError> {
+        match exhaustiveness {
+            MatchExhaustiveness::HasDefault if default.is_none() => {
+                return_hir_transformation_error!(
+                    "Match marked as having a default arm but no default body was provided",
+                    self.hir_error_location(location)
+                );
+            }
+            MatchExhaustiveness::ExhaustiveChoice if default.is_some() => {
+                return_hir_transformation_error!(
+                    "Match marked as exhaustive choice but also provided a default arm",
+                    self.hir_error_location(location)
+                );
+            }
+            _ => {}
+        }
+
         let lowered_scrutinee = self.lower_expression(scrutinee)?;
         for prelude in lowered_scrutinee.prelude {
             self.emit_statement_to_current_block(prelude, location)?;
@@ -241,17 +258,15 @@ impl<'a> HirBuilder<'a> {
             arm_blocks.push(self.create_block(arm_region, location, "match-arm")?);
         }
 
-        let default_block = if default.is_some() {
-            let default_region = self.create_child_region(parent_region);
-            Some(self.create_block(default_region, location, "match-default")?)
-        } else {
-            None
+        // AST owns exhaustiveness validation; HIR only lowers the contract it receives.
+        let default_block = match exhaustiveness {
+            MatchExhaustiveness::HasDefault => {
+                let default_region = self.create_child_region(parent_region);
+                Some(self.create_block(default_region, location, "match-default")?)
+            }
+            MatchExhaustiveness::ExhaustiveChoice => None,
         };
-        let mut merge_block = if default.is_none() {
-            Some(self.create_block(parent_region, location, "match-merge")?)
-        } else {
-            None
-        };
+        let mut merge_block = None;
 
         let mut hir_arms = Vec::with_capacity(arms.len() + 1);
         for (index, arm) in arms.iter().enumerate() {
@@ -273,18 +288,6 @@ impl<'a> HirBuilder<'a> {
                 pattern: HirPattern::Wildcard,
                 guard: None,
                 body: default_block_id,
-            });
-        } else {
-            let Some(merge_block) = merge_block else {
-                return_hir_transformation_error!(
-                    "Match lowering missing merge block for match without default arm",
-                    self.hir_error_location(location)
-                );
-            };
-            hir_arms.push(HirMatchArm {
-                pattern: HirPattern::Wildcard,
-                guard: None,
-                body: merge_block,
             });
         }
 
@@ -348,7 +351,10 @@ impl<'a> HirBuilder<'a> {
             return self.set_current_block(anchor_block, location);
         }
 
-        self.set_current_block(current_block, location)
+        return_hir_transformation_error!(
+            "Match lowering produced no merge block and no terminated anchor block",
+            self.hir_error_location(location)
+        )
     }
 
     /// Validate and lower a match arm pattern, rejecting non-literal expressions.

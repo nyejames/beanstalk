@@ -3,7 +3,7 @@
 //! WHAT: validates how lexical scopes and nested blocks constrain borrow visibility and drops.
 //! WHY: scope boundaries drive many lifetime rules, so regressions here tend to cascade widely.
 
-use crate::compiler_frontend::ast::ast_nodes::NodeKind;
+use crate::compiler_frontend::ast::ast_nodes::{MatchExhaustiveness, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::statements::match_patterns::{MatchArm, MatchPattern};
@@ -113,11 +113,12 @@ fn match_arm_local_alias_does_not_escape_merge() {
                 test_location(1),
             ),
             node(
-                NodeKind::Match(
-                    Expression::int(1, test_location(2), ValueMode::ImmutableOwned),
-                    vec![arm],
-                    None,
-                ),
+                NodeKind::Match {
+                    scrutinee: Expression::int(1, test_location(2), ValueMode::ImmutableOwned),
+                    arms: vec![arm],
+                    default: Some(vec![]),
+                    exhaustiveness: MatchExhaustiveness::HasDefault,
+                },
                 test_location(2),
             ),
             node(

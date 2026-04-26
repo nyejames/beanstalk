@@ -6,7 +6,7 @@
 //! rejection, and choice-variant resolution at the AST level so HIR lowering
 //! receives validated, normalized match structures.
 
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, MatchExhaustiveness, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::expressions::parse_expression::{
     create_expression, create_expression_until,
@@ -298,8 +298,19 @@ fn create_match_node(
         string_table,
     )?;
 
+    let exhaustiveness = if else_block.is_some() {
+        MatchExhaustiveness::HasDefault
+    } else {
+        MatchExhaustiveness::ExhaustiveChoice
+    };
+
     Ok(AstNode {
-        kind: NodeKind::Match(subject, arms, else_block),
+        kind: NodeKind::Match {
+            scrutinee: subject,
+            arms,
+            default: else_block,
+            exhaustiveness,
+        },
         location: token_stream.current_location(),
         scope: match_context.scope,
     })

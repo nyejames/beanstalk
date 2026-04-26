@@ -194,9 +194,18 @@ impl<'a> HirBuilder<'a> {
 
             NodeKind::Continue => self.lower_continue_statement(&node.location),
 
-            NodeKind::Match(scrutinee, arms, default) => {
-                self.lower_match_statement(scrutinee, arms, default.as_deref(), &node.location)
-            }
+            NodeKind::Match {
+                scrutinee,
+                arms,
+                default,
+                exhaustiveness,
+            } => self.lower_match_statement(
+                scrutinee,
+                arms,
+                default.as_deref(),
+                *exhaustiveness,
+                &node.location,
+            ),
 
             NodeKind::ScopedBlock { body } => {
                 self.lower_scoped_block_statement(body, &node.location)

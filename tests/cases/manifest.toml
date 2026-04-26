@@ -2268,3 +2268,13 @@ tags = ["integration", "constants", "dependency-resolution", "imports"]
 id = "struct_placeholder_visible_before_resolution"
 path = "struct_placeholder_visible_before_resolution"
 tags = ["integration", "structs", "dependency-resolution"]
+
+[[case]]
+id = "exhaustive_choice_match_returns"
+path = "exhaustive_choice_match_returns"
+tags = ["integration", "control-flow", "language"]
+
+[[case]]
+id = "exhaustive_choice_match_partial_return_failure"
+path = "exhaustive_choice_match_partial_return_failure"
+tags = ["integration", "control-flow", "diagnostics"]

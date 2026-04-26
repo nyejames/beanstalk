@@ -205,12 +205,12 @@ monday_readings ~{Reading} = {}
 ~monday_readings.push(Reading(SensorKind::Humidity, 91.0, "greenhouse-a"))
 ~monday_readings.push(Reading(SensorKind::Pressure, 1012.0, "weather-station"))
 
-tuesday_readings ~= {}
+tuesday_readings ~{Reading} = {}
 ~tuesday_readings.push(Reading(SensorKind::Temperature, 83.0, "greenhouse-b"))
 ~tuesday_readings.push(Reading(SensorKind::Humidity, 50.0, "greenhouse-b"))
 ~tuesday_readings.push(Reading(SensorKind::Pressure, 945.0, "weather-station"))
 
-reports ~= {}
+reports ~{DayReport} = {}
 ~reports.push(DayReport("Monday", monday_readings))
 ~reports.push(DayReport("Tuesday", tuesday_readings))
 

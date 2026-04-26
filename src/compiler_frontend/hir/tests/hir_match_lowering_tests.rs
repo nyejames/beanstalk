@@ -5,7 +5,7 @@
 //! WHY: match lowering generates complex multi-way branching; regressions here produce wrong
 //!      control flow or missing pattern coverage silently.
 
-use crate::compiler_frontend::ast::ast_nodes::NodeKind;
+use crate::compiler_frontend::ast::ast_nodes::{MatchExhaustiveness, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::statements::match_patterns::{
@@ -43,14 +43,14 @@ fn non_unit_function_with_terminal_match_default_does_not_report_fallthrough() {
             returns: fresh_returns(vec![DataType::Int]),
         },
         vec![node(
-            NodeKind::Match(
-                Expression::reference(
+            NodeKind::Match {
+                scrutinee: Expression::reference(
                     x,
                     DataType::Int,
                     test_location(11),
                     ValueMode::ImmutableReference,
                 ),
-                vec![MatchArm {
+                arms: vec![MatchArm {
                     pattern: MatchPattern::Literal(Expression::int(
                         1,
                         test_location(11),
@@ -66,7 +66,7 @@ fn non_unit_function_with_terminal_match_default_does_not_report_fallthrough() {
                         test_location(11),
                     )],
                 }],
-                Some(vec![node(
+                default: Some(vec![node(
                     NodeKind::Return(vec![Expression::int(
                         2,
                         test_location(12),
@@ -74,7 +74,8 @@ fn non_unit_function_with_terminal_match_default_does_not_report_fallthrough() {
                     )]),
                     test_location(12),
                 )]),
-            ),
+                exhaustiveness: MatchExhaustiveness::HasDefault,
+            },
             test_location(11),
         )],
         test_location(10),
@@ -103,20 +104,137 @@ fn non_unit_function_with_terminal_match_default_does_not_report_fallthrough() {
 }
 
 #[test]
-fn lowers_match_with_literal_arms_and_synthesized_wildcard_default() {
+fn non_unit_function_with_exhaustive_choice_match_returns_on_all_arms() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let label_fn_name = super::symbol("label_status", &mut string_table);
+    let status_path = InternedPath::from_single_str("Status", &mut string_table);
+    let status_local = super::symbol("status", &mut string_table);
+    let ready_name = string_table.intern("Ready");
+    let busy_name = string_table.intern("Busy");
+
+    let choice_type = DataType::Choices {
+        nominal_path: status_path.clone(),
+        variants: vec![
+            ChoiceVariant {
+                id: ready_name,
+                data_type: DataType::None,
+                location: test_location(20),
+            },
+            ChoiceVariant {
+                id: busy_name,
+                data_type: DataType::None,
+                location: test_location(20),
+            },
+        ],
+    };
+
+    let label_fn = function_node(
+        label_fn_name,
+        FunctionSignature {
+            parameters: vec![param(
+                status_local.clone(),
+                choice_type.clone(),
+                false,
+                test_location(20),
+            )],
+            returns: fresh_returns(vec![DataType::Int]),
+        },
+        vec![node(
+            NodeKind::Match {
+                scrutinee: Expression::reference(
+                    status_local,
+                    choice_type,
+                    test_location(21),
+                    ValueMode::ImmutableReference,
+                ),
+                arms: vec![
+                    MatchArm {
+                        pattern: MatchPattern::ChoiceVariant {
+                            nominal_path: status_path.clone(),
+                            variant: ready_name,
+                            tag: 0,
+                            location: test_location(22),
+                        },
+                        guard: None,
+                        body: vec![node(
+                            NodeKind::Return(vec![Expression::int(
+                                1,
+                                test_location(22),
+                                ValueMode::ImmutableOwned,
+                            )]),
+                            test_location(22),
+                        )],
+                    },
+                    MatchArm {
+                        pattern: MatchPattern::ChoiceVariant {
+                            nominal_path: status_path,
+                            variant: busy_name,
+                            tag: 1,
+                            location: test_location(23),
+                        },
+                        guard: None,
+                        body: vec![node(
+                            NodeKind::Return(vec![Expression::int(
+                                2,
+                                test_location(23),
+                                ValueMode::ImmutableOwned,
+                            )]),
+                            test_location(23),
+                        )],
+                    },
+                ],
+                default: None,
+                exhaustiveness: MatchExhaustiveness::ExhaustiveChoice,
+            },
+            test_location(21),
+        )],
+        test_location(20),
+    );
+
+    let start_fn = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![],
+        test_location(1),
+    );
+
+    let ast = build_ast(vec![start_fn, label_fn], entry_path);
+    let module = lower_ast(ast, &mut string_table)
+        .expect("exhaustive choice match with all-returning arms should lower");
+
+    let label_entry = &module.blocks[module.functions[1].entry.0 as usize];
+    let arms = match &label_entry.terminator {
+        HirTerminator::Match { arms, .. } => arms,
+        other => panic!("expected match terminator, got {other:?}"),
+    };
+    assert_eq!(arms.len(), 2);
+    assert!(
+        arms.iter()
+            .all(|arm| !matches!(arm.pattern, HirPattern::Wildcard)),
+        "exhaustive choice match should not include a wildcard fallback arm"
+    );
+    assert_no_placeholder_terminators(&module);
+}
+
+#[test]
+fn lowers_match_with_literal_arms_and_explicit_default_wildcard() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
     let x = super::symbol("x", &mut string_table);
 
     let match_node = node(
-        NodeKind::Match(
-            Expression::reference(
+        NodeKind::Match {
+            scrutinee: Expression::reference(
                 x.clone(),
                 DataType::Int,
                 test_location(3),
                 ValueMode::ImmutableReference,
             ),
-            vec![
+            arms: vec![
                 MatchArm {
                     pattern: MatchPattern::Literal(Expression::int(
                         1,
@@ -150,8 +268,16 @@ fn lowers_match_with_literal_arms_and_synthesized_wildcard_default() {
                     )],
                 },
             ],
-            None,
-        ),
+            default: Some(vec![node(
+                NodeKind::Rvalue(Expression::int(
+                    0,
+                    test_location(3),
+                    ValueMode::ImmutableOwned,
+                )),
+                test_location(3),
+            )]),
+            exhaustiveness: MatchExhaustiveness::HasDefault,
+        },
         test_location(3),
     );
 
@@ -189,14 +315,14 @@ fn lowers_match_with_guarded_arm_into_hir_guard_expression() {
     let x = super::symbol("x", &mut string_table);
 
     let match_node = node(
-        NodeKind::Match(
-            Expression::reference(
+        NodeKind::Match {
+            scrutinee: Expression::reference(
                 x.clone(),
                 DataType::Int,
                 test_location(3),
                 ValueMode::ImmutableReference,
             ),
-            vec![MatchArm {
+            arms: vec![MatchArm {
                 pattern: MatchPattern::Literal(Expression::int(
                     1,
                     test_location(3),
@@ -216,7 +342,7 @@ fn lowers_match_with_guarded_arm_into_hir_guard_expression() {
                     test_location(3),
                 )],
             }],
-            Some(vec![node(
+            default: Some(vec![node(
                 NodeKind::Rvalue(Expression::int(
                     8,
                     test_location(4),
@@ -224,7 +350,8 @@ fn lowers_match_with_guarded_arm_into_hir_guard_expression() {
                 )),
                 test_location(4),
             )]),
-        ),
+            exhaustiveness: MatchExhaustiveness::HasDefault,
+        },
         test_location(3),
     );
 
@@ -254,7 +381,7 @@ fn lowers_match_with_guarded_arm_into_hir_guard_expression() {
     );
     assert!(
         arms[1].guard.is_none(),
-        "synthesized wildcard arm should not carry a guard"
+        "default wildcard arm should not carry a guard"
     );
 }
 
@@ -291,16 +418,17 @@ fn match_guard_rejects_lowering_when_guard_emits_prelude_statements() {
             returns: vec![],
         },
         vec![node(
-            NodeKind::Match(
-                Expression::reference(
+            NodeKind::Match {
+                scrutinee: Expression::reference(
                     x,
                     DataType::Int,
                     test_location(3),
                     ValueMode::ImmutableReference,
                 ),
-                vec![guarded_arm],
-                Some(vec![]),
-            ),
+                arms: vec![guarded_arm],
+                default: Some(vec![]),
+                exhaustiveness: MatchExhaustiveness::HasDefault,
+            },
             test_location(3),
         )],
         test_location(2),
@@ -333,14 +461,14 @@ fn match_rejects_non_literal_pattern_expressions() {
             returns: vec![],
         },
         vec![node(
-            NodeKind::Match(
-                Expression::reference(
+            NodeKind::Match {
+                scrutinee: Expression::reference(
                     x.clone(),
                     DataType::Int,
                     test_location(3),
                     ValueMode::ImmutableReference,
                 ),
-                vec![MatchArm {
+                arms: vec![MatchArm {
                     pattern: MatchPattern::Literal(Expression::reference(
                         x,
                         DataType::Int,
@@ -350,8 +478,9 @@ fn match_rejects_non_literal_pattern_expressions() {
                     guard: None,
                     body: vec![],
                 }],
-                None,
-            ),
+                default: Some(vec![]),
+                exhaustiveness: MatchExhaustiveness::HasDefault,
+            },
             test_location(3),
         )],
         test_location(2),
@@ -520,14 +649,14 @@ fn lowers_relational_pattern_to_hir_relational() {
     let x = super::symbol("x", &mut string_table);
 
     let match_node = node(
-        NodeKind::Match(
-            Expression::reference(
+        NodeKind::Match {
+            scrutinee: Expression::reference(
                 x.clone(),
                 DataType::Int,
                 test_location(3),
                 ValueMode::ImmutableReference,
             ),
-            vec![MatchArm {
+            arms: vec![MatchArm {
                 pattern: MatchPattern::Relational {
                     op: RelationalPatternOp::LessThan,
                     value: Expression::int(10, test_location(3), ValueMode::ImmutableOwned),
@@ -543,7 +672,7 @@ fn lowers_relational_pattern_to_hir_relational() {
                     test_location(3),
                 )],
             }],
-            Some(vec![node(
+            default: Some(vec![node(
                 NodeKind::Rvalue(Expression::int(
                     8,
                     test_location(4),
@@ -551,7 +680,8 @@ fn lowers_relational_pattern_to_hir_relational() {
                 )),
                 test_location(4),
             )]),
-        ),
+            exhaustiveness: MatchExhaustiveness::HasDefault,
+        },
         test_location(3),
     );
 
@@ -604,14 +734,14 @@ fn lowers_guarded_relational_pattern_preserving_guard_separation() {
     let x = super::symbol("x", &mut string_table);
 
     let match_node = node(
-        NodeKind::Match(
-            Expression::reference(
+        NodeKind::Match {
+            scrutinee: Expression::reference(
                 x.clone(),
                 DataType::Int,
                 test_location(3),
                 ValueMode::ImmutableReference,
             ),
-            vec![MatchArm {
+            arms: vec![MatchArm {
                 pattern: MatchPattern::Relational {
                     op: RelationalPatternOp::LessThan,
                     value: Expression::int(10, test_location(3), ValueMode::ImmutableOwned),
@@ -631,7 +761,7 @@ fn lowers_guarded_relational_pattern_preserving_guard_separation() {
                     test_location(3),
                 )],
             }],
-            Some(vec![node(
+            default: Some(vec![node(
                 NodeKind::Rvalue(Expression::int(
                     8,
                     test_location(4),
@@ -639,7 +769,8 @@ fn lowers_guarded_relational_pattern_preserving_guard_separation() {
                 )),
                 test_location(4),
             )]),
-        ),
+            exhaustiveness: MatchExhaustiveness::HasDefault,
+        },
         test_location(3),
     );
 
@@ -706,14 +837,14 @@ fn lowers_choice_match_arms_to_hir_choice_variant_patterns() {
     };
 
     let match_node = node(
-        NodeKind::Match(
-            Expression::reference(
+        NodeKind::Match {
+            scrutinee: Expression::reference(
                 status_local.clone(),
                 choice_type.clone(),
                 test_location(3),
                 ValueMode::ImmutableOwned,
             ),
-            vec![
+            arms: vec![
                 MatchArm {
                     pattern: MatchPattern::ChoiceVariant {
                         nominal_path: status_path.clone(),
@@ -749,8 +880,9 @@ fn lowers_choice_match_arms_to_hir_choice_variant_patterns() {
                     )],
                 },
             ],
-            None,
-        ),
+            default: None,
+            exhaustiveness: MatchExhaustiveness::ExhaustiveChoice,
+        },
         test_location(3),
     );
 
@@ -775,8 +907,7 @@ fn lowers_choice_match_arms_to_hir_choice_variant_patterns() {
         _ => panic!("expected match terminator"),
     };
 
-    // HIR match lowering synthesizes a wildcard default arm when no explicit else is given.
-    assert_eq!(arms.len(), 3);
+    assert_eq!(arms.len(), 2);
 
     let (choice_id_0, tag_0) = match &arms[0].pattern {
         HirPattern::ChoiceVariant {
@@ -803,7 +934,8 @@ fn lowers_choice_match_arms_to_hir_choice_variant_patterns() {
     );
 
     assert!(
-        matches!(arms[2].pattern, HirPattern::Wildcard),
-        "synthesized default arm should be a wildcard"
+        arms.iter()
+            .all(|arm| !matches!(arm.pattern, HirPattern::Wildcard)),
+        "exhaustive choice matches should not synthesize wildcard fallback arms"
     );
 }
