@@ -62,7 +62,7 @@ impl<'a> AstBuildState<'a> {
                 fields,
                 &self.declarations,
                 Some(&bindings.visible_symbol_paths),
-                self.external_package_registry,
+                Some(&bindings.visible_external_symbols),
                 string_table,
             )
             .map_err(|error| self.error_messages(error, string_table))?;
@@ -126,6 +126,7 @@ impl<'a> AstBuildState<'a> {
                 .filter(|header| matches!(header.kind, HeaderKind::Constant { .. }))
                 .collect::<Vec<_>>();
             let empty_visible_symbol_paths = FxHashSet::default();
+            let empty_visible_external_symbols = FxHashMap::default();
 
             while !pending_headers.is_empty() {
                 total_rounds += 1;
@@ -152,12 +153,17 @@ impl<'a> AstBuildState<'a> {
                         .get(&header.source_file)
                         .map(|bindings| &bindings.visible_symbol_paths)
                         .unwrap_or(&empty_visible_symbol_paths);
+                    let visible_external_symbols = file_import_bindings
+                        .get(&header.source_file)
+                        .map(|bindings| &bindings.visible_external_symbols)
+                        .unwrap_or(&empty_visible_external_symbols);
 
                     match parse_constant_header_declaration(
                         header,
                         ConstantHeaderParseContext {
                             top_level_declarations: Rc::clone(&declarations_snapshot),
                             visible_declaration_ids: visible_symbol_paths,
+                            visible_external_symbols,
                             external_package_registry: self.external_package_registry,
                             style_directives: self.style_directives,
                             project_path_resolver: self.project_path_resolver.clone(),

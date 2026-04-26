@@ -58,6 +58,13 @@ impl ExternalFunctionId {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ExternalTypeId(pub u32);
 
+/// Unified identifier for an external symbol visible from a single file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ExternalSymbolId {
+    Function(ExternalFunctionId),
+    Type(ExternalTypeId),
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CallTarget {
     UserFunction(FunctionId),
@@ -641,20 +648,64 @@ impl ExternalPackageRegistry {
             .and_then(|package| package.functions.get(symbol_name))
     }
 
-    /// Resolves a type symbol within a specific package.
+    /// Resolves a function symbol within a specific package, returning its ID and definition.
+    pub fn resolve_package_function(
+        &self,
+        package_path: &str,
+        symbol_name: &str,
+    ) -> Option<(ExternalFunctionId, &ExternalFunctionDef)> {
+        let package = self.packages.get(package_path)?;
+        let def = package.functions.get(symbol_name)?;
+        let id = *self.name_to_function_id.get(symbol_name)?;
+        Some((id, def))
+    }
+
+    /// Resolves a type symbol within a specific package, returning its ID and definition.
     pub fn resolve_package_type(
         &self,
         package_path: &str,
         type_name: &str,
-    ) -> Option<&ExternalTypeDef> {
-        self.packages
-            .get(package_path)
-            .and_then(|package| package.types.get(type_name))
+    ) -> Option<(ExternalTypeId, &ExternalTypeDef)> {
+        let package = self.packages.get(package_path)?;
+        let def = package.types.get(type_name)?;
+        let id = *self.name_to_type_id.get(type_name)?;
+        Some((id, def))
     }
 
     /// Returns true if the registry contains a package with the given path.
     pub fn has_package(&self, path: &str) -> bool {
         self.packages.contains_key(path)
+    }
+
+    /// Checks whether an import path should be treated as a virtual package import
+    /// rather than a file-system import.
+    ///
+    /// WHAT: tries progressively shorter prefixes of the import path against known packages.
+    /// WHY: file discovery must skip imports that target virtual packages so AST resolution
+    ///      can handle them with proper error messages.
+    pub fn is_virtual_package_import(
+        &self,
+        import_path: &crate::compiler_frontend::interned_path::InternedPath,
+        string_table: &crate::compiler_frontend::symbols::string_interning::StringTable,
+    ) -> bool {
+        let components = import_path.as_components();
+        if components.is_empty() {
+            return false;
+        }
+        for package_len in (1..=components.len()).rev() {
+            let package_path = format!(
+                "@{}",
+                components[..package_len]
+                    .iter()
+                    .map(|&id| string_table.resolve(id))
+                    .collect::<Vec<_>>()
+                    .join("/")
+            );
+            if self.has_package(&package_path) {
+                return true;
+            }
+        }
+        false
     }
 
     /// Looks up an external receiver method by receiver type name and method name.

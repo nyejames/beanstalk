@@ -47,7 +47,7 @@ impl<'a> AstBuildState<'a> {
                 signature,
                 &self.declarations,
                 Some(&bindings.visible_symbol_paths),
-                self.external_package_registry,
+                Some(&bindings.visible_external_symbols),
                 string_table,
             )
             .map_err(|error| self.error_messages(error, string_table))?;

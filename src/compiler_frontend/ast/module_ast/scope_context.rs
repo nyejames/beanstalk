@@ -25,7 +25,9 @@ use crate::compiler_frontend::ast::templates::template_folding::TemplateFoldCont
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::{DataType, ReceiverKey};
-use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
+use crate::compiler_frontend::external_packages::{
+    ExternalFunctionId, ExternalPackageRegistry, ExternalSymbolId, ExternalTypeId,
+};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
@@ -150,6 +152,11 @@ pub struct ScopeContext {
     pub style_directives: StyleDirectiveRegistry,
     pub build_profile: FrontendBuildProfile,
 
+    // --- External symbol visibility ---
+    /// Optional file-local visibility gate over external package symbols.
+    /// When present, only external symbols in this map are resolvable.
+    pub visible_external_symbols: Option<FxHashMap<StringId, ExternalSymbolId>>,
+
     // --- Control flow state ---
     pub loop_depth: usize,
 
@@ -226,6 +233,7 @@ impl ScopeContext {
             expected_error_type: None,
             external_package_registry,
             style_directives: StyleDirectiveRegistry::built_ins(),
+            visible_external_symbols: None,
             loop_depth: 0,
             build_profile: FrontendBuildProfile::Dev,
             emitted_warnings: Rc::new(RefCell::new(Vec::new())),
@@ -263,6 +271,7 @@ impl ScopeContext {
             expected_result_types: self.expected_result_types.clone(),
             expected_error_type: self.expected_error_type.clone(),
             external_package_registry: self.external_package_registry.clone(),
+            visible_external_symbols: self.visible_external_symbols.clone(),
             style_directives: self.style_directives.clone(),
             loop_depth,
             build_profile: self.build_profile,
@@ -310,6 +319,7 @@ impl ScopeContext {
             expected_result_types,
             expected_error_type: self.expected_error_type.clone(),
             external_package_registry: self.external_package_registry.clone(),
+            visible_external_symbols: self.visible_external_symbols.clone(),
             style_directives: self.style_directives.clone(),
             loop_depth: self.loop_depth,
             build_profile: self.build_profile,
@@ -343,6 +353,7 @@ impl ScopeContext {
             expected_result_types: vec![],
             expected_error_type: self.expected_error_type.clone(),
             external_package_registry: self.external_package_registry.clone(),
+            visible_external_symbols: self.visible_external_symbols.clone(),
             style_directives: self.style_directives.clone(),
             loop_depth: self.loop_depth,
             build_profile: self.build_profile,
@@ -372,6 +383,7 @@ impl ScopeContext {
             expected_result_types: Vec::new(),
             expected_error_type: parent.expected_error_type.clone(),
             external_package_registry: parent.external_package_registry.clone(),
+            visible_external_symbols: parent.visible_external_symbols.clone(),
             style_directives: parent.style_directives.clone(),
             loop_depth: parent.loop_depth,
             build_profile: parent.build_profile,
@@ -436,6 +448,14 @@ impl ScopeContext {
         // A context without this gate can resolve any declaration in the module.
         // File/start contexts set this to enforce import semantics.
         self.visible_declaration_ids = Some(visible);
+        self
+    }
+
+    pub fn with_visible_external_symbols(
+        mut self,
+        visible: FxHashMap<StringId, ExternalSymbolId>,
+    ) -> ScopeContext {
+        self.visible_external_symbols = Some(visible);
         self
     }
 
@@ -531,6 +551,42 @@ impl ScopeContext {
             .iter()
             .find(|entry| &entry.source_file == current_source_file)
             .or_else(|| entries.iter().find(|entry| entry.exported))
+    }
+
+    /// Look up a visible external function by its source-level name.
+    pub(crate) fn lookup_visible_external_function(
+        &self,
+        name: StringId,
+    ) -> Option<(
+        ExternalFunctionId,
+        &crate::compiler_frontend::external_packages::ExternalFunctionDef,
+    )> {
+        let visible = self.visible_external_symbols.as_ref()?;
+        let symbol_id = *visible.get(&name)?;
+        let ExternalSymbolId::Function(func_id) = symbol_id else {
+            return None;
+        };
+        self.external_package_registry
+            .get_function_by_id(func_id)
+            .map(|def| (func_id, def))
+    }
+
+    /// Look up a visible external type by its source-level name.
+    pub(crate) fn lookup_visible_external_type(
+        &self,
+        name: StringId,
+    ) -> Option<(
+        ExternalTypeId,
+        &crate::compiler_frontend::external_packages::ExternalTypeDef,
+    )> {
+        let visible = self.visible_external_symbols.as_ref()?;
+        let symbol_id = *visible.get(&name)?;
+        let ExternalSymbolId::Type(type_id) = symbol_id else {
+            return None;
+        };
+        self.external_package_registry
+            .get_type_by_id(type_id)
+            .map(|def| (type_id, def))
     }
 
     pub fn add_var(&mut self, arg: Declaration) {

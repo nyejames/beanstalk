@@ -31,7 +31,7 @@ use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarati
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_errors::ErrorMetaDataKey;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
-use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
+use crate::compiler_frontend::external_packages::{ExternalPackageRegistry, ExternalSymbolId};
 use crate::compiler_frontend::headers::parse_file_headers::{FileImport, Header, HeaderKind};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
@@ -45,9 +45,12 @@ use std::rc::Rc;
 
 #[derive(Clone, Default)]
 pub(crate) struct FileImportBindings {
-    /// Import-visible symbols for one source file.
-    /// This is a path set rather than names-only so resolution stays globally unique.
+    /// Source declarations visible from this file (including builtins).
     pub(crate) visible_symbol_paths: FxHashSet<InternedPath>,
+
+    /// External package functions/types visible from this file.
+    /// Populated by explicit virtual-package imports and prelude symbols.
+    pub(crate) visible_external_symbols: FxHashMap<StringId, ExternalSymbolId>,
 }
 
 #[derive(Clone)]
@@ -84,6 +87,7 @@ pub(crate) fn resolve_file_import_bindings(
                 .get(&source_file)
                 .cloned()
                 .unwrap_or_default(),
+            visible_external_symbols: FxHashMap::default(),
         };
         let mut bound_names = declared_names_by_file
             .get(&source_file)
@@ -186,9 +190,10 @@ pub(crate) fn resolve_file_import_bindings(
                         external_package_registry,
                         string_table,
                     ) {
-                        VirtualPackageMatch::Found(_package_path, symbol_name) => {
+                        VirtualPackageMatch::Found(package_path, symbol_name) => {
                             if bound_names.contains(&symbol_name)
                                 && !bindings.visible_symbol_paths.contains(&import.header_path)
+                                && !bindings.visible_external_symbols.contains_key(&symbol_name)
                             {
                                 return Err(CompilerError::new_rule_error(
                                     format!(
@@ -199,9 +204,20 @@ pub(crate) fn resolve_file_import_bindings(
                                 ));
                             }
 
-                            bindings
-                                .visible_symbol_paths
-                                .insert(import.header_path.to_owned());
+                            let symbol_name_str = string_table.resolve(symbol_name);
+                            if let Some((func_id, _)) = external_package_registry
+                                .resolve_package_function(&package_path, symbol_name_str)
+                            {
+                                bindings
+                                    .visible_external_symbols
+                                    .insert(symbol_name, ExternalSymbolId::Function(func_id));
+                            } else if let Some((type_id, _)) = external_package_registry
+                                .resolve_package_type(&package_path, symbol_name_str)
+                            {
+                                bindings
+                                    .visible_external_symbols
+                                    .insert(symbol_name, ExternalSymbolId::Type(type_id));
+                            }
                             bound_names.insert(symbol_name);
                             continue;
                         }
@@ -240,8 +256,16 @@ pub(crate) fn resolve_file_import_bindings(
                 // Already imported or declared explicitly — prelude does not override.
                 continue;
             }
-            let prelude_path = InternedPath::from_single_str(prelude_name, string_table);
-            bindings.visible_symbol_paths.insert(prelude_path);
+            if let Some((func_id, _)) = external_package_registry.resolve_function(prelude_name) {
+                bindings
+                    .visible_external_symbols
+                    .insert(symbol_name, ExternalSymbolId::Function(func_id));
+            } else if let Some((type_id, _)) = external_package_registry.resolve_type(prelude_name)
+            {
+                bindings
+                    .visible_external_symbols
+                    .insert(symbol_name, ExternalSymbolId::Type(type_id));
+            }
             bound_names.insert(symbol_name);
         }
 
@@ -257,6 +281,7 @@ pub(crate) fn resolve_file_import_bindings(
 pub(crate) struct ConstantHeaderParseContext<'a> {
     pub top_level_declarations: Rc<TopLevelDeclarationIndex>,
     pub visible_declaration_ids: &'a FxHashSet<InternedPath>,
+    pub visible_external_symbols: &'a FxHashMap<StringId, ExternalSymbolId>,
     pub external_package_registry: &'a ExternalPackageRegistry,
     pub style_directives: &'a StyleDirectiveRegistry,
     pub project_path_resolver: Option<ProjectPathResolver>,
@@ -275,6 +300,7 @@ pub(crate) fn parse_constant_header_declaration(
     let ConstantHeaderParseContext {
         top_level_declarations,
         visible_declaration_ids,
+        visible_external_symbols,
         external_package_registry,
         style_directives,
         project_path_resolver,
@@ -314,6 +340,7 @@ pub(crate) fn parse_constant_header_declaration(
     // Keep full module declarations for path identity, but explicitly gate what this file
     // can see to enforce import boundaries and prevent cross-file leakage.
     .with_visible_declarations(visible_declaration_ids.to_owned())
+    .with_visible_external_symbols(visible_external_symbols.to_owned())
     .with_source_file_scope(source_file_scope);
 
     let declaration_result = resolve_declaration_syntax(

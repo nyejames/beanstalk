@@ -2278,3 +2278,33 @@ tags = ["integration", "control-flow", "language"]
 id = "exhaustive_choice_match_partial_return_failure"
 path = "exhaustive_choice_match_partial_return_failure"
 tags = ["integration", "control-flow", "diagnostics"]
+
+[[case]]
+id = "external_package_prelude_works"
+path = "external_package_prelude_works"
+tags = ["integration", "language", "external-packages"]
+
+[[case]]
+id = "external_package_explicit_import"
+path = "external_package_explicit_import"
+tags = ["integration", "language", "external-packages"]
+
+[[case]]
+id = "external_package_unknown_package"
+path = "external_package_unknown_package"
+tags = ["integration", "language", "external-packages"]
+
+[[case]]
+id = "external_package_unknown_symbol"
+path = "external_package_unknown_symbol"
+tags = ["integration", "language", "external-packages"]
+
+[[case]]
+id = "external_package_bare_name_rejected"
+path = "external_package_bare_name_rejected"
+tags = ["integration", "language", "external-packages"]
+
+[[case]]
+id = "external_type_construction_rejected"
+path = "external_type_construction_rejected"
+tags = ["integration", "language", "external-packages"]

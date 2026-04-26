@@ -8,6 +8,7 @@ use super::reachable_file_discovery::discover_reachable_files;
 use super::source_loading::extract_source_code;
 use crate::build_system::build::InputFile;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
+use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::paths::path_resolution::{
     ProjectPathResolver, resolve_project_entry_root,
 };
@@ -78,6 +79,7 @@ pub(crate) fn discover_all_modules_in_project(
     config: &Config,
     project_path_resolver: &ProjectPathResolver,
     style_directives: &StyleDirectiveRegistry,
+    external_packages: &ExternalPackageRegistry,
     string_table: &mut StringTable,
 ) -> Result<Vec<DiscoveredModule>, CompilerError> {
     let source_root = resolve_project_entry_root(config);
@@ -117,6 +119,7 @@ pub(crate) fn discover_all_modules_in_project(
             &entry_point,
             project_path_resolver,
             style_directives,
+            external_packages,
             string_table,
         )?;
 

@@ -256,10 +256,7 @@ pub(super) fn parse_identifier_or_call(
     // ------------------------------------
     // HOST FUNCTION CALL INSIDE EXPRESSION
     // ------------------------------------
-    if let Some(host_func_def) = context
-        .external_package_registry
-        .get_function(string_table.resolve(id))
-    {
+    if let Some((_func_id, host_func_def)) = context.lookup_visible_external_function(id) {
         if context.kind.is_constant_context() {
             return_rule_error!(
                 format!(
@@ -324,10 +321,7 @@ pub(super) fn parse_identifier_or_call(
 
     // External types cannot be constructed with struct literal syntax.
     if token_stream.peek_next_token() == Some(&TokenKind::OpenParenthesis)
-        && context
-            .external_package_registry
-            .get_type(string_table.resolve(id))
-            .is_some()
+        && context.lookup_visible_external_type(id).is_some()
     {
         return_rule_error!(
             format!(

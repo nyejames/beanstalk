@@ -1,6 +1,7 @@
 use super::*;
 use crate::build_system::project_config::parse_project_config_file;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages, ErrorType};
+use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::paths::path_resolution::{
     ProjectPathResolver, resolve_project_entry_root,
 };
@@ -41,7 +42,14 @@ fn discover_modules_for_test(
     style_directives: &StyleDirectiveRegistry,
 ) -> Result<Vec<DiscoveredModule>, CompilerError> {
     let mut string_table = StringTable::new();
-    discover_all_modules_in_project(config, resolver, style_directives, &mut string_table)
+    let external_packages = ExternalPackageRegistry::new();
+    discover_all_modules_in_project(
+        config,
+        resolver,
+        style_directives,
+        &external_packages,
+        &mut string_table,
+    )
 }
 
 fn discover_modules_for_test_messages(
@@ -50,8 +58,15 @@ fn discover_modules_for_test_messages(
     style_directives: &StyleDirectiveRegistry,
 ) -> Result<Vec<DiscoveredModule>, CompilerMessages> {
     let mut string_table = StringTable::new();
-    discover_all_modules_in_project(config, resolver, style_directives, &mut string_table)
-        .map_err(|error| CompilerMessages::from_error(error, string_table))
+    let external_packages = ExternalPackageRegistry::new();
+    discover_all_modules_in_project(
+        config,
+        resolver,
+        style_directives,
+        &external_packages,
+        &mut string_table,
+    )
+    .map_err(|error| CompilerMessages::from_error(error, string_table))
 }
 
 #[test]

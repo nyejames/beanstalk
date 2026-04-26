@@ -8,6 +8,7 @@ use super::import_scanning::extract_import_paths;
 use super::source_loading::extract_source_code;
 use crate::build_system::build::InputFile;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
+use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -21,12 +22,14 @@ pub(super) fn collect_reachable_input_files(
     entry_path: &Path,
     project_path_resolver: &ProjectPathResolver,
     style_directives: &StyleDirectiveRegistry,
+    external_packages: &ExternalPackageRegistry,
     string_table: &mut StringTable,
 ) -> Result<Vec<InputFile>, CompilerMessages> {
     let reachable_files = match discover_reachable_files(
         entry_path,
         project_path_resolver,
         style_directives,
+        external_packages,
         string_table,
     ) {
         Ok(files) => files,
@@ -57,6 +60,7 @@ pub(super) fn discover_reachable_files(
     entry_point: &Path,
     project_path_resolver: &ProjectPathResolver,
     style_directives: &StyleDirectiveRegistry,
+    external_packages: &ExternalPackageRegistry,
     string_table: &mut StringTable,
 ) -> Result<Vec<PathBuf>, CompilerError> {
     let mut reachable = BTreeSet::new();
@@ -83,6 +87,10 @@ pub(super) fn discover_reachable_files(
             string_table,
         )?;
         for import_path in &import_paths {
+            // Skip virtual package imports — AST resolution handles those.
+            if external_packages.is_virtual_package_import(import_path, string_table) {
+                continue;
+            }
             let resolved = project_path_resolver.resolve_import_to_file(
                 import_path,
                 &canonical_file,

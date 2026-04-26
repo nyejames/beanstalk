@@ -44,9 +44,9 @@ pub fn parse_function_call(
 ) -> Result<AstNode, CompilerError> {
     // Host calls share the same argument parser, but they reject named targets until
     // host metadata carries stable public parameter names.
-    if let Some(host_func) = &context
-        .external_package_registry
-        .get_function(id.name_str(string_table).unwrap_or(""))
+    if let Some((_func_id, host_func)) = id
+        .name()
+        .and_then(|name| context.lookup_visible_external_function(name))
     {
         return parse_host_function_call(token_stream, host_func, context, string_table);
     }

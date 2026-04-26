@@ -175,10 +175,7 @@ pub(crate) fn parse_symbol_statement(
         }
     }
 
-    if let Some(host_func_call) = context
-        .external_package_registry
-        .get_function(string_table.resolve(id))
-    {
+    if let Some((_func_id, host_func_call)) = context.lookup_visible_external_function(id) {
         token_stream.advance();
         let host_call =
             parse_host_function_call(token_stream, host_func_call, context, string_table)?;
@@ -197,11 +194,7 @@ pub(crate) fn parse_symbol_statement(
             ));
         }
 
-        if context
-            .external_package_registry
-            .get_type(string_table.resolve(id))
-            .is_some()
-        {
+        if context.lookup_visible_external_type(id).is_some() {
             return_rule_error!(
                 format!(
                     "Cannot construct external type '{}' with a struct literal. External types are opaque and can only be obtained from external function calls.",

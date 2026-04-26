@@ -69,6 +69,7 @@ pub(crate) fn compile_single_file_frontend(
         &entry_path,
         &project_path_resolver,
         style_directives,
+        external_packages,
         string_table,
     )?;
     let local_table = string_table.clone();
@@ -102,6 +103,7 @@ pub(crate) fn compile_directory_frontend(
         config,
         &project_path_resolver,
         style_directives,
+        external_packages,
         string_table,
     ) {
         Ok(modules) => modules,

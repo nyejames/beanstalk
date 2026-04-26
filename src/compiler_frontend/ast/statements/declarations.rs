@@ -181,8 +181,7 @@ pub fn resolve_declaration_syntax(
                 .map(|declaration| declaration.value.data_type.to_owned())
                 .or_else(|| {
                     context
-                        .external_package_registry
-                        .resolve_type(string_table.resolve(type_name))
+                        .lookup_visible_external_type(type_name)
                         .map(|(type_id, _type_def)| {
                             crate::compiler_frontend::datatypes::DataType::External { type_id }
                         })
