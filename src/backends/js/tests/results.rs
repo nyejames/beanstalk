@@ -22,12 +22,12 @@ fn error_bubble_emitted_at_call_site_with_location_args() {
     let mut string_table = StringTable::new();
     let (type_context, types) = build_type_context();
 
-    let bubble_path = InternedPath::from_single_str("__bs_error_bubble", &mut string_table);
+    let bubble_id = crate::compiler_frontend::external_packages::ExternalFunctionId::ErrorBubble;
 
     let call_statement = statement(
         1,
         HirStatementKind::Call {
-            target: CallTarget::ExternalFunction(bubble_path),
+            target: CallTarget::ExternalFunction(bubble_id),
             args: vec![
                 string_expression(1, "error_value", types.string, RegionId(0)),
                 string_expression(2, "test.bst", types.string, RegionId(0)),

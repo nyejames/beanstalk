@@ -968,7 +968,7 @@ fn lowers_builtin_error_with_location_and_push_trace_methods_to_host_calls() {
     let with_location = AstNode {
         kind: NodeKind::MethodCall {
             receiver: Box::new(receiver),
-            method_path: with_location_path.to_owned(),
+            method_path: with_location_path,
             method: with_location_name,
             builtin: Some(BuiltinMethodKind::WithLocation),
             args: vec![CallArgument::positional(
@@ -994,7 +994,7 @@ fn lowers_builtin_error_with_location_and_push_trace_methods_to_host_calls() {
     assert_eq!(lowered_with_location.prelude.len(), 1);
     match &lowered_with_location.prelude[0].kind {
         HirStatementKind::Call { target, args, .. } => {
-            assert_eq!(target, &CallTarget::ExternalFunction(with_location_path));
+            assert_eq!(target, &CallTarget::ExternalFunction(crate::compiler_frontend::external_packages::ExternalFunctionId::ErrorWithLocation));
             assert_eq!(args.len(), 2);
         }
         other => panic!("expected host call for with_location builtin, got {other:?}"),
@@ -1013,7 +1013,7 @@ fn lowers_builtin_error_with_location_and_push_trace_methods_to_host_calls() {
     let push_trace = AstNode {
         kind: NodeKind::MethodCall {
             receiver: Box::new(receiver),
-            method_path: push_trace_path.to_owned(),
+            method_path: push_trace_path,
             method: push_trace_name,
             builtin: Some(BuiltinMethodKind::PushTrace),
             args: vec![CallArgument::positional(
@@ -1039,7 +1039,12 @@ fn lowers_builtin_error_with_location_and_push_trace_methods_to_host_calls() {
     assert_eq!(lowered_push_trace.prelude.len(), 1);
     match &lowered_push_trace.prelude[0].kind {
         HirStatementKind::Call { target, args, .. } => {
-            assert_eq!(target, &CallTarget::ExternalFunction(push_trace_path));
+            assert_eq!(
+                target,
+                &CallTarget::ExternalFunction(
+                    crate::compiler_frontend::external_packages::ExternalFunctionId::ErrorPushTrace
+                )
+            );
             assert_eq!(args.len(), 2);
         }
         other => panic!("expected host call for push_trace builtin, got {other:?}"),
@@ -1078,7 +1083,7 @@ fn lowers_builtin_error_bubble_with_compiler_supplied_context_args() {
                 location: call_location.to_owned(),
                 scope: InternedPath::new(),
             }),
-            method_path: bubble_path.to_owned(),
+            method_path: bubble_path,
             method: bubble_name,
             builtin: Some(BuiltinMethodKind::Bubble),
             args: vec![],
@@ -1096,7 +1101,12 @@ fn lowers_builtin_error_bubble_with_compiler_supplied_context_args() {
 
     match &lowered.prelude[0].kind {
         HirStatementKind::Call { target, args, .. } => {
-            assert_eq!(target, &CallTarget::ExternalFunction(bubble_path));
+            assert_eq!(
+                target,
+                &CallTarget::ExternalFunction(
+                    crate::compiler_frontend::external_packages::ExternalFunctionId::ErrorBubble
+                )
+            );
             assert_eq!(
                 args.len(),
                 5,
@@ -1118,12 +1128,11 @@ fn lowers_builtin_error_bubble_with_compiler_supplied_context_args() {
 fn lowers_host_call_expression_with_host_target() {
     let mut string_table = StringTable::new();
     let literal_x = string_table.intern("x");
-    let io = super::symbol("io", &mut string_table);
     let location = location(7);
     let mut builder = setup_builder(&mut string_table);
 
     let host_call = Expression::host_function_call(
-        io.clone(),
+        crate::compiler_frontend::external_packages::ExternalFunctionId::Io,
         vec![Expression::string_slice(
             literal_x,
             location.clone(),
@@ -1141,7 +1150,12 @@ fn lowers_host_call_expression_with_host_target() {
         HirStatementKind::Call { target, .. } => target,
         _ => panic!("expected call statement for host call"),
     };
-    assert_eq!(target, &CallTarget::ExternalFunction(io));
+    assert_eq!(
+        target,
+        &CallTarget::ExternalFunction(
+            crate::compiler_frontend::external_packages::ExternalFunctionId::Io
+        )
+    );
 }
 
 #[test]
@@ -1700,10 +1714,12 @@ fn lowers_collection_builtin_host_calls_from_explicit_ast_nodes() {
     let mut string_table = StringTable::new();
     let location = location(15);
     let receiver_name = super::symbol("values", &mut string_table);
-    let get_path = super::symbol("__bs_collection_get", &mut string_table);
-    let push_path = super::symbol("__bs_collection_push", &mut string_table);
-    let remove_path = super::symbol("__bs_collection_remove", &mut string_table);
-    let length_path = super::symbol("__bs_collection_length", &mut string_table);
+    let get_id = crate::compiler_frontend::external_packages::ExternalFunctionId::CollectionGet;
+    let push_id = crate::compiler_frontend::external_packages::ExternalFunctionId::CollectionPush;
+    let remove_id =
+        crate::compiler_frontend::external_packages::ExternalFunctionId::CollectionRemove;
+    let length_id =
+        crate::compiler_frontend::external_packages::ExternalFunctionId::CollectionLength;
     let mut builder = setup_builder(&mut string_table);
 
     let receiver_type = DataType::Collection(Box::new(DataType::Int));
@@ -1738,7 +1754,7 @@ fn lowers_collection_builtin_host_calls_from_explicit_ast_nodes() {
                 ok: Box::new(DataType::Int),
                 err: Box::new(DataType::Int),
             }],
-            get_path,
+            get_id,
         ),
         (
             CollectionBuiltinOp::Push,
@@ -1748,7 +1764,7 @@ fn lowers_collection_builtin_host_calls_from_explicit_ast_nodes() {
                 location.clone(),
             )],
             vec![],
-            push_path,
+            push_id,
         ),
         (
             CollectionBuiltinOp::Remove,
@@ -1758,17 +1774,17 @@ fn lowers_collection_builtin_host_calls_from_explicit_ast_nodes() {
                 location.clone(),
             )],
             vec![],
-            remove_path,
+            remove_id,
         ),
         (
             CollectionBuiltinOp::Length,
             vec![],
             vec![DataType::Int],
-            length_path,
+            length_id,
         ),
     ];
 
-    for (op, args, result_types, expected_path) in cases {
+    for (op, args, result_types, expected_id) in cases {
         let lowered = builder
             .lower_ast_node_as_expression(&AstNode {
                 kind: NodeKind::CollectionBuiltinCall {
@@ -1786,7 +1802,7 @@ fn lowers_collection_builtin_host_calls_from_explicit_ast_nodes() {
         assert_eq!(lowered.prelude.len(), 1);
         match &lowered.prelude[0].kind {
             HirStatementKind::Call { target, args, .. } => {
-                assert_eq!(target, &CallTarget::ExternalFunction(expected_path.clone()));
+                assert_eq!(target, &CallTarget::ExternalFunction(expected_id));
                 assert!(
                     !args.is_empty(),
                     "collection host calls should include receiver as first argument"

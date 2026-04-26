@@ -148,6 +148,8 @@ impl<'a> HirBuilder<'a> {
             DataType::Struct { nominal_path, .. } => HirTypeKind::Struct {
                 struct_id: self.resolve_struct_id_from_nominal_path(nominal_path, location)?,
             },
+
+            DataType::External { type_id } => HirTypeKind::External { type_id: *type_id },
         };
 
         Ok(self.intern_type_kind(kind))

@@ -167,7 +167,7 @@ impl<'a> HirBuilder<'a> {
                 result_types: _,
                 location,
             } => self.lower_call_statement(
-                CallTarget::ExternalFunction(host_function_id.to_owned()),
+                CallTarget::ExternalFunction(*host_function_id),
                 args,
                 location,
             ),

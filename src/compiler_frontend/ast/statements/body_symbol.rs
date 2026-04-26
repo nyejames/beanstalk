@@ -197,6 +197,24 @@ pub(crate) fn parse_symbol_statement(
             ));
         }
 
+        if context
+            .external_package_registry
+            .get_type(string_table.resolve(id))
+            .is_some()
+        {
+            return_rule_error!(
+                format!(
+                    "Cannot construct external type '{}' with a struct literal. External types are opaque and can only be obtained from external function calls.",
+                    string_table.resolve(id)
+                ),
+                token_stream.current_location(),
+                {
+                    CompilationStage => "AST Construction",
+                    PrimarySuggestion => "Use an external function that returns this type instead",
+                }
+            );
+        }
+
         return_rule_error!(
             format!(
                 "Call target '{}' is not declared in this scope and is not a registered host function.",

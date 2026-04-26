@@ -143,16 +143,32 @@ pub(crate) fn parse_postfix_chain(
             continue;
         }
 
+        let (message, suggestion) = if matches!(receiver_type, DataType::External { .. }) {
+            (
+                format!(
+                    "Property or method '{}' not found for external type '{}'.",
+                    string_table.resolve(member_name),
+                    receiver_type.display_with_table(string_table)
+                ),
+                "External types are opaque and do not have fields or user-defined methods",
+            )
+        } else {
+            (
+                format!(
+                    "Property or method '{}' not found for '{}'.",
+                    string_table.resolve(member_name),
+                    receiver_type.display_with_table(string_table)
+                ),
+                "Check the available fields and receiver methods for this type",
+            )
+        };
+
         return_rule_error!(
-            format!(
-                "Property or method '{}' not found for '{}'.",
-                string_table.resolve(member_name),
-                receiver_type.display_with_table(string_table)
-            ),
+            message,
             member_location,
             {
                 CompilationStage => "AST Construction",
-                PrimarySuggestion => "Check the available fields and receiver methods for this type",
+                PrimarySuggestion => suggestion,
             }
         );
     }

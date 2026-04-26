@@ -43,11 +43,13 @@ fn visible_declaration_by_name<'a>(
 }
 
 /// Resolve a declaration type, replacing `NamedType` placeholders recursively.
+/// Falls back to external package types if no local declaration matches.
 pub(crate) fn resolve_named_signature_type(
     data_type: &DataType,
     location: &SourceLocation,
     declarations: &[Declaration],
     visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
+    external_package_registry: &ExternalPackageRegistry,
     string_table: &StringTable,
 ) -> Result<DataType, CompilerError> {
     resolve_named_types_in_data_type(
@@ -56,6 +58,11 @@ pub(crate) fn resolve_named_signature_type(
         &mut |type_name| {
             visible_declaration_by_name(declarations, visible_declaration_ids, type_name)
                 .map(|declaration| declaration.value.data_type.to_owned())
+                .or_else(|| {
+                    external_package_registry
+                        .resolve_type(string_table.resolve(type_name))
+                        .map(|(type_id, _type_def)| DataType::External { type_id })
+                })
         },
         string_table,
     )
@@ -67,6 +74,7 @@ pub(crate) fn resolve_function_signature(
     signature: &FunctionSignature,
     declarations: &[Declaration],
     visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
+    external_package_registry: &ExternalPackageRegistry,
     string_table: &mut StringTable,
 ) -> Result<ResolvedFunctionSignature, CompilerError> {
     let this_name = string_table.intern("this");
@@ -87,6 +95,7 @@ pub(crate) fn resolve_function_signature(
             &parameter.value.location,
             declarations,
             visible_declaration_ids,
+            external_package_registry,
             string_table,
         )?;
 
@@ -153,6 +162,7 @@ pub(crate) fn resolve_function_signature(
                     &function_location,
                     declarations,
                     visible_declaration_ids,
+                    external_package_registry,
                     string_table,
                 )?)
             }
@@ -166,6 +176,7 @@ pub(crate) fn resolve_function_signature(
                     &function_location,
                     declarations,
                     visible_declaration_ids,
+                    external_package_registry,
                     string_table,
                 )?,
             },
@@ -192,6 +203,7 @@ pub(crate) fn resolve_struct_field_types(
     fields: &[Declaration],
     declarations: &[Declaration],
     visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
+    external_package_registry: &ExternalPackageRegistry,
     string_table: &mut StringTable,
 ) -> Result<Vec<Declaration>, CompilerError> {
     // WHAT: resolves field types against the declaration table visible to this struct header.
@@ -206,6 +218,7 @@ pub(crate) fn resolve_struct_field_types(
             &field.value.location,
             declarations,
             visible_declaration_ids,
+            external_package_registry,
             string_table,
         )?;
         resolved_field.value = inline_visible_constant_references(

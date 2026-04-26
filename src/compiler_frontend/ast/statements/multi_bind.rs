@@ -521,6 +521,14 @@ fn resolve_target_explicit_type(
             context
                 .get_reference(&type_name)
                 .map(|declaration| declaration.value.data_type.to_owned())
+                .or_else(|| {
+                    context
+                        .external_package_registry
+                        .resolve_type(string_table.resolve(type_name))
+                        .map(|(type_id, _type_def)| {
+                            crate::compiler_frontend::datatypes::DataType::External { type_id }
+                        })
+                })
         },
         string_table,
     )?;

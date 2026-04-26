@@ -322,6 +322,26 @@ pub(super) fn parse_identifier_or_call(
         ));
     }
 
+    // External types cannot be constructed with struct literal syntax.
+    if token_stream.peek_next_token() == Some(&TokenKind::OpenParenthesis)
+        && context
+            .external_package_registry
+            .get_type(string_table.resolve(id))
+            .is_some()
+    {
+        return_rule_error!(
+            format!(
+                "Cannot construct external type '{}' with a struct literal. External types are opaque and can only be obtained from external function calls.",
+                string_table.resolve(id)
+            ),
+            token_stream.current_location(),
+            {
+                CompilationStage => "Expression Parsing",
+                PrimarySuggestion => "Use an external function that returns this type instead",
+            }
+        );
+    }
+
     let var_name = string_table.resolve(id).to_string();
     return_rule_error!(
         format!(

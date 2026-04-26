@@ -390,8 +390,6 @@ fn match_guard_rejects_lowering_when_guard_emits_prelude_statements() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
     let x = super::symbol("x", &mut string_table);
-    let io_path = super::symbol("io", &mut string_table);
-
     let guarded_arm = MatchArm {
         pattern: MatchPattern::Literal(Expression::int(
             1,
@@ -399,7 +397,7 @@ fn match_guard_rejects_lowering_when_guard_emits_prelude_statements() {
             ValueMode::ImmutableOwned,
         )),
         guard: Some(Expression::host_function_call(
-            io_path,
+            crate::compiler_frontend::external_packages::ExternalFunctionId::Io,
             vec![Expression::bool(
                 true,
                 test_location(3),

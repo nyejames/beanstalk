@@ -23,6 +23,8 @@ fn return_slots_preserve_alias_metadata() {
         ],
         return_type: ExternalAbiType::Utf8Str,
         return_alias: ExternalReturnAlias::AliasArgs(vec![1]),
+        receiver_type: None,
+        receiver_access: ExternalAccessKind::Shared,
     };
 
     let returns = host_function.return_slots();
@@ -45,6 +47,8 @@ fn register_function_rejects_duplicates() {
             parameters: Vec::new(),
             return_type: ExternalAbiType::Void,
             return_alias: ExternalReturnAlias::Fresh,
+            receiver_type: None,
+            receiver_access: ExternalAccessKind::Shared,
         })
         .unwrap();
 
@@ -53,7 +57,37 @@ fn register_function_rejects_duplicates() {
         parameters: Vec::new(),
         return_type: ExternalAbiType::Void,
         return_alias: ExternalReturnAlias::Fresh,
+        receiver_type: None,
+        receiver_access: ExternalAccessKind::Shared,
     });
 
     assert!(result.is_err());
+}
+
+#[test]
+fn collection_methods_have_receiver_type() {
+    let registry = ExternalPackageRegistry::new();
+    let push = registry.get_function(COLLECTION_PUSH_HOST_NAME).unwrap();
+    assert!(
+        push.receiver_type.is_some(),
+        "collection push should have receiver_type"
+    );
+    assert_eq!(push.receiver_access, ExternalAccessKind::Mutable);
+
+    let length = registry.get_function(COLLECTION_LENGTH_HOST_NAME).unwrap();
+    assert!(
+        length.receiver_type.is_some(),
+        "collection length should have receiver_type"
+    );
+    assert_eq!(length.receiver_access, ExternalAccessKind::Shared);
+}
+
+#[test]
+fn resolve_method_finds_collection_length() {
+    let registry = ExternalPackageRegistry::new();
+    let result = registry.resolve_method("Int Collection", COLLECTION_LENGTH_HOST_NAME);
+    assert!(
+        result.is_some(),
+        "resolve_method should find collection length"
+    );
 }

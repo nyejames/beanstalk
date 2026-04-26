@@ -558,10 +558,7 @@ impl<'a> HirDisplayContext<'a> {
     fn render_call_target(&self, target: &CallTarget) -> String {
         match target {
             CallTarget::UserFunction(function_id) => self.function_label(*function_id),
-            CallTarget::ExternalFunction(path) => path
-                .name_str(self.string_table)
-                .map(str::to_owned)
-                .unwrap_or_else(|| path.to_string(self.string_table)),
+            CallTarget::ExternalFunction(id) => id.name().to_owned(),
         }
     }
 
@@ -620,6 +617,9 @@ impl<'a> HirDisplayContext<'a> {
                 )
             }
             HirTypeKind::Struct { struct_id } => self.struct_label(*struct_id),
+            HirTypeKind::External { type_id } => {
+                format!("External({})", type_id.0)
+            }
             HirTypeKind::Function {
                 receiver,
                 params,

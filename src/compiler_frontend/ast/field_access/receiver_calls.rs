@@ -9,12 +9,15 @@ use super::receiver_access::{
 };
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
+use crate::compiler_frontend::ast::expressions::call_argument::CallArgument;
 use crate::compiler_frontend::ast::expressions::call_validation::{
-    CallDiagnosticContext, expectations_from_receiver_method_signature, resolve_call_arguments,
+    CallDiagnosticContext, expectations_from_external_method,
+    expectations_from_receiver_method_signature, resolve_call_arguments,
 };
 use crate::compiler_frontend::ast::expressions::function_calls::parse_call_arguments;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, ReceiverKey};
+use crate::compiler_frontend::external_packages::ExternalAccessKind;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::return_rule_error;
@@ -56,78 +59,153 @@ pub(super) fn parse_receiver_method_call(
     } = context;
 
     let context = scope_context;
-    let Some(method_entry) = lookup_receiver_method(context, receiver_type, member_name) else {
-        return Ok(None);
-    };
 
-    if receiver_type.is_const_record_struct() {
-        return_rule_error!(
-            format!(
-                "Const struct records are data-only and do not support runtime method calls like '{}'.",
-                string_table.resolve(member_name)
-            ),
-            member_location,
-            {
-                CompilationStage => "AST Construction",
-                PrimarySuggestion => "Call methods on a runtime struct value instead of a '#'-coerced const record",
-            }
-        );
-    }
+    // Try user-defined receiver method first.
+    if let Some(method_entry) = lookup_receiver_method(context, receiver_type, member_name) {
+        if receiver_type.is_const_record_struct() {
+            return_rule_error!(
+                format!(
+                    "Const struct records are data-only and do not support runtime method calls like '{}'.",
+                    string_table.resolve(member_name)
+                ),
+                member_location,
+                {
+                    CompilationStage => "AST Construction",
+                    PrimarySuggestion => "Call methods on a runtime struct value instead of a '#'-coerced const record",
+                }
+            );
+        }
 
-    if token_stream.peek_next_token() != Some(&TokenKind::OpenParenthesis) {
-        return_rule_error!(
-            format!(
-                "'{}' is a receiver method and must be called with parentheses.",
-                string_table.resolve(member_name)
-            ),
-            member_location,
-            {
-                CompilationStage => "AST Construction",
-                PrimarySuggestion => "Call the method with 'value.method(...)'",
-            }
-        );
-    }
+        if token_stream.peek_next_token() != Some(&TokenKind::OpenParenthesis) {
+            return_rule_error!(
+                format!(
+                    "'{}' is a receiver method and must be called with parentheses.",
+                    string_table.resolve(member_name)
+                ),
+                member_location,
+                {
+                    CompilationStage => "AST Construction",
+                    PrimarySuggestion => "Call the method with 'value.method(...)'",
+                }
+            );
+        }
 
-    token_stream.advance();
+        token_stream.advance();
 
-    let method_name = string_table.resolve(member_name).to_owned();
-    validate_receiver_access(
-        &receiver_node,
-        receiver_access_mode,
-        &member_location,
-        ReceiverAccessRequirement {
-            requires_mutable: method_entry.receiver_mutable,
-            diagnostic: ReceiverAccessDiagnostic::ReceiverMethod {
-                receiver_type,
-                method_name: &method_name,
+        let method_name = string_table.resolve(member_name).to_owned();
+        validate_receiver_access(
+            &receiver_node,
+            receiver_access_mode,
+            &member_location,
+            ReceiverAccessRequirement {
+                requires_mutable: method_entry.receiver_mutable,
+                diagnostic: ReceiverAccessDiagnostic::ReceiverMethod {
+                    receiver_type,
+                    method_name: &method_name,
+                },
             },
-        },
-        string_table,
-    )?;
+            string_table,
+        )?;
 
-    let raw_args = parse_call_arguments(token_stream, context, string_table)?;
-    let expectations =
-        expectations_from_receiver_method_signature(&method_entry.signature.parameters[1..]);
-    let args = resolve_call_arguments(
-        CallDiagnosticContext::receiver_method(&method_name),
-        &raw_args,
-        &expectations,
-        member_location.clone(),
-        string_table,
-    )?;
-    let result_types = method_entry.signature.return_data_types();
+        let raw_args = parse_call_arguments(token_stream, context, string_table)?;
+        let expectations =
+            expectations_from_receiver_method_signature(&method_entry.signature.parameters[1..]);
+        let args = resolve_call_arguments(
+            CallDiagnosticContext::receiver_method(&method_name),
+            &raw_args,
+            &expectations,
+            member_location.clone(),
+            string_table,
+        )?;
+        let result_types = method_entry.signature.return_data_types();
 
-    Ok(Some(AstNode {
-        kind: NodeKind::MethodCall {
-            receiver: Box::new(receiver_node),
-            method_path: method_entry.function_path.to_owned(),
-            method: member_name,
-            builtin: None,
-            args,
-            result_types,
-            location: member_location.clone(),
-        },
-        scope: context.scope.to_owned(),
-        location: member_location,
-    }))
+        return Ok(Some(AstNode {
+            kind: NodeKind::MethodCall {
+                receiver: Box::new(receiver_node),
+                method_path: method_entry.function_path.to_owned(),
+                method: member_name,
+                builtin: None,
+                args,
+                result_types,
+                location: member_location.clone(),
+            },
+            scope: context.scope.to_owned(),
+            location: member_location,
+        }));
+    }
+
+    // Try external (platform-package) receiver method.
+    let receiver_type_name = receiver_type.display_with_table(string_table);
+    let method_name_str = string_table.resolve(member_name).to_owned();
+    if let Some((external_id, external_def)) = context
+        .external_package_registry
+        .resolve_method(&receiver_type_name, &method_name_str)
+    {
+        if token_stream.peek_next_token() != Some(&TokenKind::OpenParenthesis) {
+            return_rule_error!(
+                format!(
+                    "'{}' is a receiver method and must be called with parentheses.",
+                    method_name_str
+                ),
+                member_location,
+                {
+                    CompilationStage => "AST Construction",
+                    PrimarySuggestion => "Call the method with 'value.method(...)'",
+                }
+            );
+        }
+
+        token_stream.advance();
+
+        let requires_mutable = external_def.receiver_access == ExternalAccessKind::Mutable;
+        validate_receiver_access(
+            &receiver_node,
+            receiver_access_mode,
+            &member_location,
+            ReceiverAccessRequirement {
+                requires_mutable,
+                diagnostic: ReceiverAccessDiagnostic::ReceiverMethod {
+                    receiver_type,
+                    method_name: &method_name_str,
+                },
+            },
+            string_table,
+        )?;
+
+        let raw_args = parse_call_arguments(token_stream, context, string_table)?;
+        let expectations = expectations_from_external_method(external_def);
+        let mut args = resolve_call_arguments(
+            CallDiagnosticContext::receiver_method(&method_name_str),
+            &raw_args,
+            &expectations,
+            member_location.clone(),
+            string_table,
+        )?;
+
+        // Prepend the receiver as the first argument (mirrors user-method lowering).
+        let receiver_expr = receiver_node.get_expr()?.to_owned();
+        let receiver_access = if requires_mutable {
+            crate::compiler_frontend::ast::expressions::call_argument::CallAccessMode::Mutable
+        } else {
+            crate::compiler_frontend::ast::expressions::call_argument::CallAccessMode::Shared
+        };
+        let receiver_arg =
+            CallArgument::positional(receiver_expr, receiver_access, member_location.clone());
+        args.insert(0, receiver_arg);
+
+        let result_types = external_def.return_data_types();
+
+        return Ok(Some(AstNode {
+            kind: NodeKind::HostFunctionCall {
+                name: external_id,
+                args,
+                result_types,
+                location: member_location.clone(),
+            },
+            scope: context.scope.to_owned(),
+            location: member_location,
+        }));
+    }
+
+    Ok(None)
 }

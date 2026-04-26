@@ -241,12 +241,12 @@ fn collection_push_call_is_wrapped_with_result_propagate() {
     let mut string_table = StringTable::new();
     let (type_context, types) = build_type_context();
 
-    let push_path = InternedPath::from_single_str("__bs_collection_push", &mut string_table);
+    let push_id = crate::compiler_frontend::external_packages::ExternalFunctionId::CollectionPush;
 
     let call_statement = statement(
         1,
         HirStatementKind::Call {
-            target: CallTarget::ExternalFunction(push_path),
+            target: CallTarget::ExternalFunction(push_id),
             args: vec![
                 expression(
                     1,
@@ -309,12 +309,13 @@ fn collection_remove_call_is_wrapped_with_result_propagate() {
     let mut string_table = StringTable::new();
     let (type_context, types) = build_type_context();
 
-    let remove_path = InternedPath::from_single_str("__bs_collection_remove", &mut string_table);
+    let remove_id =
+        crate::compiler_frontend::external_packages::ExternalFunctionId::CollectionRemove;
 
     let call_statement = statement(
         1,
         HirStatementKind::Call {
-            target: CallTarget::ExternalFunction(remove_path),
+            target: CallTarget::ExternalFunction(remove_id),
             args: vec![
                 expression(
                     1,
@@ -377,12 +378,13 @@ fn collection_length_call_is_wrapped_with_result_propagate() {
     let mut string_table = StringTable::new();
     let (type_context, types) = build_type_context();
 
-    let length_path = InternedPath::from_single_str("__bs_collection_length", &mut string_table);
+    let length_id =
+        crate::compiler_frontend::external_packages::ExternalFunctionId::CollectionLength;
 
     let call_statement = statement(
         1,
         HirStatementKind::Call {
-            target: CallTarget::ExternalFunction(length_path),
+            target: CallTarget::ExternalFunction(length_id),
             args: vec![expression(
                 1,
                 HirExpressionKind::Collection(vec![]),

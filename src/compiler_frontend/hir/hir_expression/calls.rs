@@ -14,8 +14,8 @@ use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::external_packages::CallTarget;
 use crate::compiler_frontend::external_packages::{
-    COLLECTION_GET_HOST_NAME, COLLECTION_LENGTH_HOST_NAME, COLLECTION_PUSH_HOST_NAME,
-    COLLECTION_REMOVE_HOST_NAME, ERROR_BUBBLE_HOST_NAME,
+    ERROR_BUBBLE_HOST_NAME, ERROR_PUSH_TRACE_HOST_NAME, ERROR_WITH_LOCATION_HOST_NAME,
+    ExternalFunctionId,
 };
 use crate::compiler_frontend::hir::expressions::{HirExpressionKind, ValueKind};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
@@ -169,8 +169,23 @@ impl<'a> HirBuilder<'a> {
                 let mut full_args = Vec::with_capacity(args.len() + 1);
                 full_args.push(Self::shared_call_argument(receiver.get_expr()?, location));
                 full_args.extend(args.iter().cloned());
+                let id = match method_path.name_str(self.string_table).unwrap_or("") {
+                    ERROR_WITH_LOCATION_HOST_NAME => ExternalFunctionId::ErrorWithLocation,
+                    ERROR_PUSH_TRACE_HOST_NAME => ExternalFunctionId::ErrorPushTrace,
+                    _ => {
+                        return_hir_transformation_error!(
+                            format!(
+                                "Unknown error builtin method '{}'",
+                                method_path
+                                    .name_str(self.string_table)
+                                    .unwrap_or("<unknown>")
+                            ),
+                            self.hir_error_location(location)
+                        );
+                    }
+                };
                 self.lower_call_expression(
-                    CallTarget::ExternalFunction(method_path.to_owned()),
+                    CallTarget::ExternalFunction(id),
                     &full_args,
                     result_types,
                     location,
@@ -207,17 +222,16 @@ impl<'a> HirBuilder<'a> {
                 full_args.push(Self::shared_call_argument(receiver.get_expr()?, location));
                 full_args.extend(args.iter().cloned());
 
-                let host_name = match op {
-                    CollectionBuiltinOp::Get => COLLECTION_GET_HOST_NAME,
-                    CollectionBuiltinOp::Push => COLLECTION_PUSH_HOST_NAME,
-                    CollectionBuiltinOp::Remove => COLLECTION_REMOVE_HOST_NAME,
-                    CollectionBuiltinOp::Length => COLLECTION_LENGTH_HOST_NAME,
+                let id = match op {
+                    CollectionBuiltinOp::Get => ExternalFunctionId::CollectionGet,
+                    CollectionBuiltinOp::Push => ExternalFunctionId::CollectionPush,
+                    CollectionBuiltinOp::Remove => ExternalFunctionId::CollectionRemove,
+                    CollectionBuiltinOp::Length => ExternalFunctionId::CollectionLength,
                     CollectionBuiltinOp::Set => unreachable!("set is handled above"),
                 };
-                let host_path = InternedPath::from_single_str(host_name, self.string_table);
 
                 self.lower_call_expression(
-                    CallTarget::ExternalFunction(host_path),
+                    CallTarget::ExternalFunction(id),
                     &full_args,
                     result_types,
                     location,
@@ -252,8 +266,23 @@ impl<'a> HirBuilder<'a> {
                 .map(|value| Self::shared_call_argument(value, location)),
         );
 
+        let id = match method_path.name_str(self.string_table).unwrap_or("") {
+            ERROR_BUBBLE_HOST_NAME => ExternalFunctionId::ErrorBubble,
+            _ => {
+                return_hir_transformation_error!(
+                    format!(
+                        "Unknown error bubble method '{}'",
+                        method_path
+                            .name_str(self.string_table)
+                            .unwrap_or("<unknown>")
+                    ),
+                    self.hir_error_location(location)
+                );
+            }
+        };
+
         self.lower_call_expression(
-            CallTarget::ExternalFunction(method_path.to_owned()),
+            CallTarget::ExternalFunction(id),
             &full_args,
             result_types,
             location,

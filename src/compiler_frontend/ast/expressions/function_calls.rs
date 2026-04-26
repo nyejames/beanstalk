@@ -23,6 +23,7 @@ use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::external_packages::ExternalFunctionDef;
+use crate::compiler_frontend::external_packages::ExternalFunctionId;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
@@ -411,11 +412,40 @@ pub fn parse_host_function_call(
     )?;
     validate_host_specific_call_rules(host_func, &args, location.clone(), string_table)?;
 
-    let name = InternedPath::from_single_str(host_func.name, string_table);
+    let id = match host_func.name {
+        crate::compiler_frontend::external_packages::IO_FUNC_NAME => ExternalFunctionId::Io,
+        crate::compiler_frontend::external_packages::COLLECTION_GET_HOST_NAME => {
+            ExternalFunctionId::CollectionGet
+        }
+        crate::compiler_frontend::external_packages::COLLECTION_PUSH_HOST_NAME => {
+            ExternalFunctionId::CollectionPush
+        }
+        crate::compiler_frontend::external_packages::COLLECTION_REMOVE_HOST_NAME => {
+            ExternalFunctionId::CollectionRemove
+        }
+        crate::compiler_frontend::external_packages::COLLECTION_LENGTH_HOST_NAME => {
+            ExternalFunctionId::CollectionLength
+        }
+        crate::compiler_frontend::external_packages::ERROR_WITH_LOCATION_HOST_NAME => {
+            ExternalFunctionId::ErrorWithLocation
+        }
+        crate::compiler_frontend::external_packages::ERROR_PUSH_TRACE_HOST_NAME => {
+            ExternalFunctionId::ErrorPushTrace
+        }
+        crate::compiler_frontend::external_packages::ERROR_BUBBLE_HOST_NAME => {
+            ExternalFunctionId::ErrorBubble
+        }
+        _ => {
+            return Err(CompilerError::compiler_error(format!(
+                "Unknown host function '{}' during parsing",
+                host_func.name
+            )));
+        }
+    };
 
     Ok(AstNode {
         kind: NodeKind::HostFunctionCall {
-            name,
+            name: id,
             args,
             result_types: host_func.return_data_types(),
             location: location.clone(),

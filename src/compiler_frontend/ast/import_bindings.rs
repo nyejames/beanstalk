@@ -142,10 +142,13 @@ pub(crate) fn resolve_file_import_bindings(
                     if external_package_registry
                         .get_function(string_table.resolve(symbol_name))
                         .is_some()
+                        || external_package_registry
+                            .get_type(string_table.resolve(symbol_name))
+                            .is_some()
                     {
                         return Err(CompilerError::new_rule_error(
                             format!(
-                                "Import name collision: '{}' conflicts with a host function name.",
+                                "Import name collision: '{}' conflicts with a host symbol name.",
                                 string_table.resolve(symbol_name)
                             ),
                             import.location,
@@ -227,6 +230,19 @@ pub(crate) fn resolve_file_import_bindings(
                     ));
                 }
             }
+        }
+
+        // Inject prelude symbols (e.g. io, IO from @std/io) so they are visible
+        // in every module without an explicit import statement.
+        for prelude_name in external_package_registry.prelude_symbols() {
+            let symbol_name = string_table.intern(prelude_name);
+            if bound_names.contains(&symbol_name) {
+                // Already imported or declared explicitly — prelude does not override.
+                continue;
+            }
+            let prelude_path = InternedPath::from_single_str(prelude_name, string_table);
+            bindings.visible_symbol_paths.insert(prelude_path);
+            bound_names.insert(symbol_name);
         }
 
         bindings_by_file.insert(source_file, bindings);
@@ -528,6 +544,9 @@ fn resolve_virtual_package_import(
         if registry
             .resolve_package_symbol(&package_path, symbol_name_str)
             .is_some()
+            || registry
+                .resolve_package_type(&package_path, symbol_name_str)
+                .is_some()
         {
             return VirtualPackageMatch::Found(package_path, symbol_name);
         }

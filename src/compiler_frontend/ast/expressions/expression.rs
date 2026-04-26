@@ -10,6 +10,7 @@ use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::templates::template::TemplateConstValueKind;
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::datatypes::{DataType, PathTypeKind, ReceiverKey};
+use crate::compiler_frontend::external_packages::ExternalFunctionId;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_resolution::CompileTimePaths;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
@@ -363,13 +364,13 @@ impl Expression {
     }
 
     pub fn host_function_call(
-        name: InternedPath,
+        id: ExternalFunctionId,
         args: Vec<Expression>,
         result_types: Vec<DataType>,
         location: SourceLocation,
     ) -> Self {
         Self::host_function_call_with_arguments(
-            name,
+            id,
             Self::shared_positional_call_arguments(args),
             result_types,
             location,
@@ -377,13 +378,13 @@ impl Expression {
     }
 
     pub fn host_function_call_with_arguments(
-        name: InternedPath,
+        id: ExternalFunctionId,
         args: Vec<CallArgument>,
         result_types: Vec<DataType>,
         location: SourceLocation,
     ) -> Self {
         Self::call_expression(
-            ExpressionKind::HostFunctionCall(name, args),
+            ExpressionKind::HostFunctionCall(id, args),
             result_types,
             location,
         )
@@ -749,7 +750,7 @@ pub enum ExpressionKind {
         handling: ResultCallHandling,
     },
 
-    HostFunctionCall(InternedPath, Vec<CallArgument>),
+    HostFunctionCall(ExternalFunctionId, Vec<CallArgument>),
 
     // Also equivalent to a String if it folds into a string
     Template(Box<Template>), // Template Body, Styles, ID

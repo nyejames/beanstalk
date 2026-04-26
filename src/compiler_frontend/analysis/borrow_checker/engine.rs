@@ -118,7 +118,6 @@ impl<'a> BorrowChecker<'a> {
             self.build_visibility_masks(function.id, &layout, &reachable_blocks)?;
 
         let transfer_context = BorrowTransferContext {
-            string_table: self.string_table,
             external_package_registry: self.external_package_registry,
             function_param_mutability: &self.function_param_mutability,
             function_return_alias: &self.function_return_alias,

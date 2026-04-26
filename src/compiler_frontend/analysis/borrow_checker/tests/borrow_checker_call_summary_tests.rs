@@ -387,15 +387,13 @@ fn host_mutable_parameter_requires_mutable_access() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_and_start(&mut string_table);
     let mut external_package_registry = default_external_package_registry(&mut string_table);
-    register_external_function(
+    let host_fn = register_external_function(
         &mut external_package_registry,
         "host_mut",
         vec![ExternalAccessKind::Mutable],
         ExternalReturnAlias::Fresh,
         ExternalAbiType::Void,
     );
-
-    let host_fn = symbol("host_mut", &mut string_table);
     let x = symbol("x", &mut string_table);
 
     let start = function_node(
@@ -441,15 +439,13 @@ fn host_mutable_parameter_accepts_mutable_local_argument() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_and_start(&mut string_table);
     let mut external_package_registry = default_external_package_registry(&mut string_table);
-    register_external_function(
+    let host_fn = register_external_function(
         &mut external_package_registry,
         "host_mut_ok",
         vec![ExternalAccessKind::Mutable],
         ExternalReturnAlias::Fresh,
         ExternalAbiType::Void,
     );
-
-    let host_fn = symbol("host_mut_ok", &mut string_table);
     let x = symbol("x", &mut string_table);
 
     let start = function_node(
@@ -493,15 +489,13 @@ fn host_shared_parameter_is_shared_only() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_and_start(&mut string_table);
     let mut external_package_registry = default_external_package_registry(&mut string_table);
-    register_external_function(
+    let host_fn = register_external_function(
         &mut external_package_registry,
         "host_shared",
         vec![ExternalAccessKind::Shared],
         ExternalReturnAlias::Fresh,
         ExternalAbiType::Void,
     );
-
-    let host_fn = symbol("host_shared", &mut string_table);
     let x = symbol("x", &mut string_table);
 
     let start = function_node(
@@ -688,7 +682,7 @@ fn unresolved_or_mismatched_host_signature_errors() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_and_start(&mut string_table);
     let mut external_package_registry = default_external_package_registry(&mut string_table);
-    register_external_function(
+    let one_arg = register_external_function(
         &mut external_package_registry,
         "one_arg",
         vec![ExternalAccessKind::Shared],
@@ -696,8 +690,8 @@ fn unresolved_or_mismatched_host_signature_errors() {
         ExternalAbiType::Void,
     );
 
-    let missing_host = symbol("missing_host", &mut string_table);
-    let one_arg = symbol("one_arg", &mut string_table);
+    let missing_host =
+        crate::compiler_frontend::external_packages::ExternalFunctionId::Synthetic(9999);
 
     let start_missing = function_node(
         symbol("start_missing", &mut string_table),
@@ -822,15 +816,13 @@ fn out_of_range_return_alias_metadata_is_reported_at_call_site() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = entry_and_start(&mut string_table);
     let mut external_package_registry = default_external_package_registry(&mut string_table);
-    register_external_function(
+    let bad_alias_host = register_external_function(
         &mut external_package_registry,
         "bad_alias_host",
         vec![ExternalAccessKind::Shared],
         ExternalReturnAlias::AliasArgs(vec![1]),
         ExternalAbiType::I32,
     );
-
-    let bad_alias_host = symbol("bad_alias_host", &mut string_table);
     let x = symbol("x", &mut string_table);
 
     let start = function_node(

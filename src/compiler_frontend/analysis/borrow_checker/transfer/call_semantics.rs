@@ -5,9 +5,8 @@
 use crate::compiler_frontend::analysis::borrow_checker::types::FunctionReturnAliasSummary;
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
 use crate::compiler_frontend::external_packages::{
-    CallTarget, ExternalAccessKind, ExternalFunctionDef, ExternalReturnAlias,
+    CallTarget, ExternalAccessKind, ExternalFunctionDef, ExternalFunctionId, ExternalReturnAlias,
 };
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::return_borrow_checker_error;
 
 use super::BorrowTransferContext;
@@ -111,8 +110,8 @@ pub(super) fn resolve_call_semantics(
             })
         }
 
-        CallTarget::ExternalFunction(path) => {
-            let host_def = resolve_host_definition(context, path, location.clone())?;
+        CallTarget::ExternalFunction(id) => {
+            let host_def = resolve_host_definition(context, *id, location.clone())?;
             if host_def.parameters.len() != arg_len {
                 return_borrow_checker_error!(
                     format!(
@@ -161,21 +160,20 @@ pub(super) fn resolve_call_semantics(
 
 fn resolve_host_definition<'a>(
     context: &'a BorrowTransferContext<'_>,
-    path: &InternedPath,
+    id: ExternalFunctionId,
     location: SourceLocation,
 ) -> Result<&'a ExternalFunctionDef, CompilerError> {
-    // Host metadata is keyed by the canonical host call name emitted into HIR.
+    // Host metadata is keyed by the stable ExternalFunctionId emitted into HIR.
     // Borrow checking should not silently reinterpret a missing symbol through a
     // second fallback path because that can hide registry drift.
-    let full = path.to_string(context.string_table);
-    if let Some(definition) = context.external_package_registry.get_function(&full) {
+    if let Some(definition) = context.external_package_registry.get_function_by_id(id) {
         return Ok(definition);
     }
 
     return_borrow_checker_error!(
         format!(
             "Borrow checker could not resolve host call target '{}'",
-            context.diagnostics.path_name(path)
+            id.name()
         ),
         location,
         {

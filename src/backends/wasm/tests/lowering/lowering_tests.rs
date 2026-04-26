@@ -919,7 +919,7 @@ fn resolves_supported_host_call_to_correct_import() {
     let start_path = InternedPath::from_single_str("main", &mut string_table);
 
     // "io" is the supported host function name for LogString.
-    let io_path = InternedPath::from_single_str("io", &mut string_table);
+    let io_id = crate::compiler_frontend::external_packages::ExternalFunctionId::Io;
     let start_block = HirBlock {
         id: BlockId(0),
         region: RegionId(0),
@@ -936,7 +936,7 @@ fn resolves_supported_host_call_to_correct_import() {
             statement(
                 2,
                 HirStatementKind::Call {
-                    target: CallTarget::ExternalFunction(io_path),
+                    target: CallTarget::ExternalFunction(io_id),
                     args: vec![load_local(710, LocalId(0), types.string, RegionId(0))],
                     result: None,
                 },
@@ -996,7 +996,8 @@ fn rejects_unsupported_host_call_with_diagnostic() {
     let (type_context, types) = build_type_context();
     let start_path = InternedPath::from_single_str("main", &mut string_table);
 
-    let unknown_path = InternedPath::from_single_str("unknown_host_fn", &mut string_table);
+    let unknown_id =
+        crate::compiler_frontend::external_packages::ExternalFunctionId::Synthetic(9999);
     let start_block = HirBlock {
         id: BlockId(0),
         region: RegionId(0),
@@ -1004,7 +1005,7 @@ fn rejects_unsupported_host_call_with_diagnostic() {
         statements: vec![statement(
             1,
             HirStatementKind::Call {
-                target: CallTarget::ExternalFunction(unknown_path),
+                target: CallTarget::ExternalFunction(unknown_id),
                 args: vec![],
                 result: None,
             },
@@ -1035,7 +1036,7 @@ fn rejects_unsupported_host_call_with_diagnostic() {
         &string_table,
     )
     .expect_err("unsupported host call should produce diagnostic");
-    assert!(error.errors[0].msg.contains("unknown_host_fn"));
+    assert!(error.errors[0].msg.contains("<synthetic>"));
 }
 
 #[test]
@@ -1044,8 +1045,8 @@ fn deduplicates_host_imports_across_multiple_calls() {
     let (type_context, types) = build_type_context();
     let start_path = InternedPath::from_single_str("main", &mut string_table);
 
-    let io_path_a = InternedPath::from_single_str("io", &mut string_table);
-    let io_path_b = InternedPath::from_single_str("io", &mut string_table);
+    let io_id_a = crate::compiler_frontend::external_packages::ExternalFunctionId::Io;
+    let io_id_b = crate::compiler_frontend::external_packages::ExternalFunctionId::Io;
 
     let start_block = HirBlock {
         id: BlockId(0),
@@ -1066,7 +1067,7 @@ fn deduplicates_host_imports_across_multiple_calls() {
             statement(
                 2,
                 HirStatementKind::Call {
-                    target: CallTarget::ExternalFunction(io_path_a),
+                    target: CallTarget::ExternalFunction(io_id_a),
                     args: vec![load_local(910, LocalId(0), types.string, RegionId(0))],
                     result: None,
                 },
@@ -1083,7 +1084,7 @@ fn deduplicates_host_imports_across_multiple_calls() {
             statement(
                 4,
                 HirStatementKind::Call {
-                    target: CallTarget::ExternalFunction(io_path_b),
+                    target: CallTarget::ExternalFunction(io_id_b),
                     args: vec![load_local(920, LocalId(1), types.string, RegionId(0))],
                     result: None,
                 },

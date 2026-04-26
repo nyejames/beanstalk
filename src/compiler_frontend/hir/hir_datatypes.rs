@@ -10,6 +10,7 @@
 //
 // ============================================================
 
+use crate::compiler_frontend::external_packages::ExternalTypeId;
 use crate::compiler_frontend::hir::ids::StructId;
 
 /// Stable identifier for a canonical HIR type.
@@ -136,6 +137,14 @@ pub enum HirTypeKind {
     Choice {
         choice_id: crate::compiler_frontend::hir::ids::ChoiceId,
     },
+
+    /// Opaque external type provided by a platform package.
+    ///
+    /// WHY: external types are nominal and sealed; they carry no field or variant
+    /// information in HIR. Backends classify them as `HeapAllocated`.
+    External {
+        type_id: ExternalTypeId,
+    },
 }
 
 /// Backend-agnostic classification of a HIR type.
@@ -171,6 +180,7 @@ pub fn classify_hir_type(kind: &HirTypeKind) -> HirTypeClass {
         | HirTypeKind::Struct { .. }
         | HirTypeKind::Option { .. }
         | HirTypeKind::Result { .. }
-        | HirTypeKind::Choice { .. } => HirTypeClass::HeapAllocated,
+        | HirTypeKind::Choice { .. }
+        | HirTypeKind::External { .. } => HirTypeClass::HeapAllocated,
     }
 }

@@ -413,10 +413,10 @@ fn compiles_collection_builtins_and_error_propagation_through_borrow_check() {
             .flat_map(|block| block.statements.iter())
             .any(|statement| match &statement.kind {
                 HirStatementKind::Call {
-                    target: CallTarget::ExternalFunction(path),
+                    target: CallTarget::ExternalFunction(id),
                     ..
                 } => {
-                    path.name_str(&project.frontend.string_table) == Some("__bs_collection_get")
+                    id.name() == "__bs_collection_get"
                 }
                 _ => false,
             }),
@@ -872,5 +872,113 @@ fn rejects_virtual_package_import_of_missing_symbol() {
             .any(|e| e.msg.contains("symbol not found in package")),
         "Expected error about missing symbol in @std/io, got: {:?}",
         messages.errors.iter().map(|e| &e.msg).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn prelude_makes_io_visible_without_import() {
+    let mut project = FrontendProject::new(
+        &[("src/#page.bst", "io(\"hello\")\n")],
+        "src/#page.bst",
+        StyleDirectiveRegistry::built_ins(),
+    );
+
+    let _ast = project.ast();
+    let hir = project.hir();
+
+    assert!(
+        hir.blocks.iter().any(|b| b.statements.iter().any(|s| {
+            matches!(
+                &s.kind,
+                crate::compiler_frontend::hir::statements::HirStatementKind::Call {
+                    target: crate::compiler_frontend::external_packages::CallTarget::ExternalFunction(
+                        _
+                    ),
+                    ..
+                }
+            )
+        })),
+        "HIR should contain an external function call for prelude-visible io()"
+    );
+}
+
+#[test]
+fn explicit_import_of_prelude_symbol_still_works() {
+    let mut project = FrontendProject::new(
+        &[("src/#page.bst", "import @std/io/io\nio(\"hello\")\n")],
+        "src/#page.bst",
+        StyleDirectiveRegistry::built_ins(),
+    );
+
+    let _ast = project.ast();
+    let hir = project.hir();
+
+    assert!(
+        hir.blocks.iter().any(|b| b.statements.iter().any(|s| {
+            matches!(
+                &s.kind,
+                crate::compiler_frontend::hir::statements::HirStatementKind::Call {
+                    target: crate::compiler_frontend::external_packages::CallTarget::ExternalFunction(
+                        _
+                    ),
+                    ..
+                }
+            )
+        })),
+        "Explicit import of prelude symbol should still compile"
+    );
+}
+
+#[test]
+fn external_type_rejects_struct_literal_construction() {
+    let mut project = FrontendProject::new(
+        &[("src/#page.bst", "IO(\"hello\")\n")],
+        "src/#page.bst",
+        StyleDirectiveRegistry::built_ins(),
+    );
+
+    let sorted = project.sorted_headers();
+    let Err(messages) =
+        project
+            .frontend
+            .headers_to_ast(sorted, &project.entry_file, FrontendBuildProfile::Dev)
+    else {
+        panic!("struct literal construction of external type should fail");
+    };
+
+    assert!(
+        messages.errors.iter().any(|e| e
+            .msg
+            .contains("Cannot construct external type 'IO' with a struct literal")),
+        "Expected error about constructing external type, got: {:?}",
+        messages.errors.iter().map(|e| &e.msg).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn external_type_resolves_in_type_annotation() {
+    // io() returns Void, so assigning it to a variable typed IO should produce
+    // a type mismatch error — but the key test is that 'IO' resolves rather
+    // than producing an 'unknown type' error.
+    let mut project = FrontendProject::new(
+        &[("src/#page.bst", "x IO = io(\"hello\")\n")],
+        "src/#page.bst",
+        StyleDirectiveRegistry::built_ins(),
+    );
+
+    let sorted = project.sorted_headers();
+    let Err(messages) =
+        project
+            .frontend
+            .headers_to_ast(sorted, &project.entry_file, FrontendBuildProfile::Dev)
+    else {
+        panic!("type mismatch should fail during AST construction");
+    };
+
+    let error_texts: Vec<&str> = messages.errors.iter().map(|e| e.msg.as_str()).collect();
+    assert!(
+        !error_texts.iter().any(|msg| msg.contains("Unknown type")),
+        "'IO' should resolve as a known external type, not produce 'Unknown type'. Got: {:?}",
+        error_texts
     );
 }

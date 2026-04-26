@@ -11,6 +11,7 @@
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant;
+use crate::compiler_frontend::external_packages::ExternalTypeId;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_resolution::CompileTimePathKind;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
@@ -96,6 +97,11 @@ pub enum DataType {
         nominal_path: InternedPath,
         variants: Vec<ChoiceVariant>,
     }, // Choice declaration identity + variant list
+    /// Opaque external type provided by a platform package (e.g. `IO`, `Canvas`).
+    /// Cannot be constructed with struct literals or field-accessed.
+    External {
+        type_id: ExternalTypeId,
+    },
     #[allow(dead_code)] // Planned: Option<T> language-level type support.
     Option(Box<DataType>), // Shorthand for a choice of a type or None
     Result {
@@ -243,6 +249,10 @@ impl DataType {
                     bare_name.to_owned()
                 }
             }
+            DataType::External { type_id } => {
+                // External types are opaque; display uses the stable ID.
+                format!("External({})", type_id.0)
+            }
             DataType::Returns(returns) => {
                 let mut returns_string = String::new();
                 for return_type in returns {
@@ -387,6 +397,9 @@ impl PartialEq for DataType {
                         .iter()
                         .zip(variants_b.iter())
                         .all(|(variant_a, variant_b)| variant_a.id == variant_b.id)
+            }
+            (DataType::External { type_id: id_a }, DataType::External { type_id: id_b }) => {
+                id_a == id_b
             }
             _ => false,
         }

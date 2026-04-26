@@ -74,7 +74,7 @@ impl<'a> HirBuilder<'a> {
                 result_types,
                 location,
             } => self.lower_call_expression(
-                CallTarget::ExternalFunction(host_function_id.to_owned()),
+                CallTarget::ExternalFunction(*host_function_id),
                 args,
                 result_types,
                 location,
@@ -235,7 +235,7 @@ impl<'a> HirBuilder<'a> {
                 location,
             } => {
                 let lowered = self.lower_call_expression(
-                    CallTarget::ExternalFunction(host_function_id.to_owned()),
+                    CallTarget::ExternalFunction(*host_function_id),
                     args,
                     result_types,
                     location,

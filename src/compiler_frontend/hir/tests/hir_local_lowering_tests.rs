@@ -19,6 +19,7 @@ use crate::compiler_frontend::tests::test_support::{
 };
 use crate::compiler_frontend::value_mode::ValueMode;
 
+use crate::compiler_frontend::external_packages::ExternalFunctionId;
 use crate::compiler_frontend::hir::hir_builder::{build_ast, lower_ast};
 
 #[test]
@@ -226,7 +227,7 @@ fn call_statements_emit_without_result_binding() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
     let callee = super::symbol("callee", &mut string_table);
-    let alloc = super::symbol("alloc", &mut string_table);
+    let alloc_id = ExternalFunctionId::Synthetic(0);
 
     let callee_fn = function_node(
         callee.clone(),
@@ -263,7 +264,7 @@ fn call_statements_emit_without_result_binding() {
             ),
             node(
                 NodeKind::HostFunctionCall {
-                    name: alloc,
+                    name: alloc_id,
                     args: vec![CallArgument::positional(
                         Expression::int(1, test_location(3), ValueMode::ImmutableOwned),
                         CallAccessMode::Shared,

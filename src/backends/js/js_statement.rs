@@ -4,12 +4,10 @@
 //! control-flow edges explicit.
 
 use crate::backends::js::JsEmitter;
-use crate::backends::js::js_host_functions::resolve_host_function_path;
+use crate::backends::js::js_host_functions::resolve_host_function_id;
 use crate::compiler_frontend::analysis::borrow_checker::LocalMode;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
-use crate::compiler_frontend::external_packages::{
-    COLLECTION_LENGTH_HOST_NAME, COLLECTION_PUSH_HOST_NAME, COLLECTION_REMOVE_HOST_NAME, CallTarget,
-};
+use crate::compiler_frontend::external_packages::{CallTarget, ExternalFunctionId};
 use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind};
 use crate::compiler_frontend::hir::functions::HirFunction;
 use crate::compiler_frontend::hir::ids::{BlockId, LocalId};
@@ -61,10 +59,12 @@ impl<'hir> JsEmitter<'hir> {
                 // must unwrap so errors are not silently swallowed.
                 // WHY: push/remove/length must be strict; silent no-ops hide user bugs.
                 let needs_propagation = matches!(
-                    target_name.as_str(),
-                    COLLECTION_PUSH_HOST_NAME
-                        | COLLECTION_REMOVE_HOST_NAME
-                        | COLLECTION_LENGTH_HOST_NAME
+                    target,
+                    CallTarget::ExternalFunction(
+                        ExternalFunctionId::CollectionPush
+                            | ExternalFunctionId::CollectionRemove
+                            | ExternalFunctionId::CollectionLength
+                    )
                 );
 
                 if let Some(result_local) = result {
@@ -116,11 +116,11 @@ impl<'hir> JsEmitter<'hir> {
             CallTarget::UserFunction(function_id) => {
                 Ok(self.function_name(*function_id)?.to_owned())
             }
-            CallTarget::ExternalFunction(path) => {
-                let Some(host_target) = resolve_host_function_path(path, self.string_table) else {
+            CallTarget::ExternalFunction(id) => {
+                let Some(host_target) = resolve_host_function_id(*id) else {
                     return Err(CompilerError::compiler_error(format!(
                         "JavaScript backend: unknown host function '{}'",
-                        path.to_string(self.string_table)
+                        id.name()
                     )));
                 };
 

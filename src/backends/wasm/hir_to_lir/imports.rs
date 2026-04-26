@@ -6,7 +6,7 @@ use crate::backends::wasm::lir::linkage::{WasmImport, WasmImportKind};
 use crate::backends::wasm::lir::types::{WasmAbiType, WasmImportId, WasmLirSignature};
 use crate::backends::wasm::runtime::imports::WasmHostFunction;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
-use crate::compiler_frontend::external_packages::CallTarget;
+use crate::compiler_frontend::external_packages::{CallTarget, ExternalFunctionId};
 use crate::compiler_frontend::hir::statements::HirStatementKind;
 
 pub(crate) fn register_required_host_imports(
@@ -17,11 +17,11 @@ pub(crate) fn register_required_host_imports(
     for block in &context.hir_module.blocks {
         for statement in &block.statements {
             if let HirStatementKind::Call {
-                target: CallTarget::ExternalFunction(path),
+                target: CallTarget::ExternalFunction(id),
                 ..
             } = &statement.kind
             {
-                let host_function = resolve_host_function_name(context, path)?;
+                let host_function = resolve_host_function_id(*id)?;
                 ensure_host_import(context, host_function);
             }
         }
@@ -37,32 +37,24 @@ pub(crate) fn resolve_host_call_import(
     // WHAT: resolve a host call target to its pre-registered import id.
     // WHY: each distinct host function maps to exactly one import; unsupported targets
     // must fail with a structured diagnostic instead of silently mapping to the wrong import.
-    let CallTarget::ExternalFunction(path) = target else {
+    let CallTarget::ExternalFunction(id) = target else {
         return Err(lir_transformation_error(
             "Wasm lowering expected a HostFunction call target in resolve_host_call_import",
         ));
     };
 
-    let host_function = resolve_host_function_name(context, path)?;
+    let host_function = resolve_host_function_id(*id)?;
     Ok(ensure_host_import(context, host_function))
 }
 
-fn resolve_host_function_name(
-    context: &WasmLirLoweringContext<'_>,
-    path: &crate::compiler_frontend::interned_path::InternedPath,
-) -> Result<WasmHostFunction, CompilerError> {
-    // WHAT: map a host function path to its Wasm backend import identity.
+fn resolve_host_function_id(id: ExternalFunctionId) -> Result<WasmHostFunction, CompilerError> {
+    // WHAT: map a host function id to its Wasm backend import identity.
     // WHY: ensures only explicitly supported host calls are lowered.
-    let Some(name) = path.name_str(context.string_table) else {
-        return Err(lir_transformation_error(
-            "Wasm lowering could not resolve host function path to a name",
-        ));
-    };
-
-    match name {
-        "io" => Ok(WasmHostFunction::LogString),
+    match id {
+        ExternalFunctionId::Io => Ok(WasmHostFunction::LogString),
         _ => Err(lir_transformation_error(format!(
-            "Wasm backend does not yet support host function '{name}'"
+            "Wasm backend does not yet support host function '{}'",
+            id.name()
         ))),
     }
 }

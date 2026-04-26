@@ -212,7 +212,7 @@ impl<'a> HirBuilder<'a> {
                 .lower_handled_result_expression(value, handling, &expr.location, &expr.data_type),
 
             ExpressionKind::HostFunctionCall(host_id, args) => self.lower_call_expression(
-                CallTarget::ExternalFunction(host_id.to_owned()),
+                CallTarget::ExternalFunction(*host_id),
                 args,
                 &self.extract_return_types_from_datatype(&expr.data_type),
                 &expr.location,

@@ -16,6 +16,7 @@ use crate::compiler_frontend::ast::statements::match_patterns::MatchArm;
 use crate::compiler_frontend::builtins::{BuiltinMethodKind, CollectionBuiltinOp};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::external_packages::ExternalFunctionId;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringId;
 pub(crate) use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
@@ -176,7 +177,7 @@ pub enum NodeKind {
 
     // Host function call (functions provided by the runtime)
     HostFunctionCall {
-        name: InternedPath,
+        name: ExternalFunctionId,
         args: Vec<CallArgument>,
         result_types: Vec<DataType>,
         location: SourceLocation,
@@ -235,7 +236,7 @@ impl AstNode {
                 result_types,
                 location,
             } => Ok(Expression::host_function_call_with_arguments(
-                name.to_owned(),
+                *name,
                 normalize_call_arguments(arguments),
                 result_types.to_owned(),
                 location.to_owned(),

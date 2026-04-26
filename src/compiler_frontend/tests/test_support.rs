@@ -301,7 +301,7 @@ pub(crate) fn register_external_function(
     >,
     return_alias: crate::compiler_frontend::external_packages::test_support::TestExternalReturnAlias,
     return_type: crate::compiler_frontend::external_packages::test_support::TestExternalAbiType,
-) {
+) -> crate::compiler_frontend::external_packages::ExternalFunctionId {
     let parameters = param_access
         .into_iter()
         .map(|access_kind| {
@@ -312,7 +312,7 @@ pub(crate) fn register_external_function(
         })
         .collect::<Vec<_>>();
     register_test_external_function(registry, name, parameters, return_alias, return_type)
-        .expect("external function registration should succeed");
+        .expect("external function registration should succeed")
 }
 
 pub(crate) fn run_borrow_checker(

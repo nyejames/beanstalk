@@ -187,6 +187,29 @@ pub(crate) fn expectations_from_host_function(
         .collect()
 }
 
+/// Build parameter expectations for an external receiver method (excludes the receiver parameter).
+pub(crate) fn expectations_from_external_method(
+    function: &ExternalFunctionDef,
+) -> Vec<ParameterExpectation> {
+    function
+        .parameters
+        .iter()
+        .skip(1)
+        .map(|parameter| ParameterExpectation {
+            name: None,
+            data_type: parameter
+                .language_type
+                .to_datatype()
+                .unwrap_or(DataType::Inferred),
+            access_mode: match parameter.access_kind {
+                ExternalAccessKind::Shared => ExpectedAccessMode::Shared,
+                ExternalAccessKind::Mutable => ExpectedAccessMode::Mutable,
+            },
+            default_value: None,
+        })
+        .collect()
+}
+
 pub(crate) fn expectations_from_struct_fields(fields: &[Declaration]) -> Vec<ParameterExpectation> {
     fields
         .iter()

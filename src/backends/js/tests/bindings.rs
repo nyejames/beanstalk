@@ -210,7 +210,7 @@ fn alias_local_read_emits_bs_read() {
     let mut string_table = StringTable::new();
     let (type_context, types) = build_type_context();
 
-    let io_path = InternedPath::from_single_str("io", &mut string_table);
+    let io_id = crate::compiler_frontend::external_packages::ExternalFunctionId::Io;
 
     let assign_source = statement(
         1,
@@ -239,7 +239,7 @@ fn alias_local_read_emits_bs_read() {
     let log_alias = statement(
         3,
         HirStatementKind::Call {
-            target: CallTarget::ExternalFunction(io_path),
+            target: CallTarget::ExternalFunction(io_id),
             args: vec![expression(
                 3,
                 HirExpressionKind::Load(HirPlace::Local(LocalId(1))),
@@ -514,12 +514,12 @@ fn computed_place_read_composes_with_bs_read() {
     let mut string_table = StringTable::new();
     let (type_context, types) = build_type_context();
 
-    let io_path = InternedPath::from_single_str("io", &mut string_table);
+    let io_id = crate::compiler_frontend::external_packages::ExternalFunctionId::Io;
 
     let log_field = statement(
         1,
         HirStatementKind::Call {
-            target: CallTarget::ExternalFunction(io_path),
+            target: CallTarget::ExternalFunction(io_id),
             args: vec![expression(
                 1,
                 HirExpressionKind::Load(HirPlace::Field {

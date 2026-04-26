@@ -18,7 +18,7 @@ fn host_io_reads_the_underlying_value_before_logging() {
     let mut string_table = StringTable::new();
     let (type_context, types) = build_type_context();
 
-    let io_path = InternedPath::from_single_str("io", &mut string_table);
+    let io_id = crate::compiler_frontend::external_packages::ExternalFunctionId::Io;
 
     let assign_message = statement(
         1,
@@ -32,7 +32,7 @@ fn host_io_reads_the_underlying_value_before_logging() {
     let call_statement = statement(
         2,
         HirStatementKind::Call {
-            target: CallTarget::ExternalFunction(io_path),
+            target: CallTarget::ExternalFunction(io_id),
             args: vec![expression(
                 2,
                 HirExpressionKind::Load(HirPlace::Local(LocalId(0))),

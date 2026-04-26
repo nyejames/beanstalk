@@ -80,9 +80,8 @@ pub(crate) fn offending_value_snippet(
             let call_name = name.name_str(string_table).unwrap_or("<function>");
             format!("{call_name}(...)[handled]")
         }
-        ExpressionKind::HostFunctionCall(path, _) => {
-            let name = path.name_str(string_table).unwrap_or("<host function>");
-            format!("{name}(...)")
+        ExpressionKind::HostFunctionCall(id, _) => {
+            format!("{}(...)", id.name())
         }
         ExpressionKind::BuiltinCast { kind, .. } => match kind {
             crate::compiler_frontend::ast::expressions::expression::BuiltinCastKind::Int => {

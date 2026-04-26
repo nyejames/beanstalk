@@ -10,7 +10,7 @@ use crate::compiler_frontend::ast::ast_nodes::{
 };
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::external_packages::{COLLECTION_LENGTH_HOST_NAME, CallTarget};
+use crate::compiler_frontend::external_packages::{CallTarget, ExternalFunctionId};
 use crate::compiler_frontend::hir::expressions::{HirExpressionKind, ValueKind};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_datatypes::HirTypeKind;
@@ -19,7 +19,6 @@ use crate::compiler_frontend::hir::operators::HirBinOp;
 use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::statements::HirStatementKind;
 use crate::compiler_frontend::hir::terminators::HirTerminator;
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::return_hir_transformation_error;
 
 impl<'a> HirBuilder<'a> {
@@ -794,11 +793,9 @@ impl<'a> HirBuilder<'a> {
             ValueKind::Place,
             pre_header_region,
         );
-        let length_host_path =
-            InternedPath::from_single_str(COLLECTION_LENGTH_HOST_NAME, self.string_table);
         self.emit_statement_kind(
             HirStatementKind::Call {
-                target: CallTarget::ExternalFunction(length_host_path),
+                target: CallTarget::ExternalFunction(ExternalFunctionId::CollectionLength),
                 args: vec![iterable_for_length],
                 result: Some(length_local),
             },

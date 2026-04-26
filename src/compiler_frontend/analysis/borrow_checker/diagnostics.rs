@@ -10,7 +10,6 @@ use crate::compiler_frontend::hir::ids::{BlockId, FunctionId, HirValueId, LocalI
 use crate::compiler_frontend::hir::module::HirModule;
 use crate::compiler_frontend::hir::statements::HirStatement;
 use crate::compiler_frontend::hir::terminators::HirTerminator;
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 pub(super) struct BorrowDiagnostics<'a> {
@@ -44,12 +43,6 @@ impl<'a> BorrowDiagnostics<'a> {
             .resolve_function_name(function_id, self.string_table)
             .map(str::to_owned)
             .unwrap_or_else(|| format!("{function_id}"))
-    }
-
-    pub(super) fn path_name(&self, path: &InternedPath) -> String {
-        path.name_str(self.string_table)
-            .map(str::to_owned)
-            .unwrap_or_else(|| path.to_string(self.string_table))
     }
 
     pub(super) fn statement_error_location(&self, statement: &HirStatement) -> SourceLocation {
