@@ -43,6 +43,9 @@ pub trait BackendBuilder {
 
     /// Project-specific frontend style directives.
     fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec>;
+
+    /// Builder-provided external platform packages.
+    fn external_packages(&self) -> ExternalPackageRegistry;
 }
 
 pub struct ProjectBuilder {
@@ -67,12 +70,20 @@ Frontend style directives:
 - Tokenizer and template parsing use the same merged registry and reject unknown directives strictly
 
 External platform packages:
-- Project builders declare typed virtual packages (`@std/io`, `@web/canvas`, etc.) via `BackendBuilder::external_packages()`
-- The frontend resolves imports from these packages during header parsing and AST construction
-- Each package exposes functions, opaque types, and receiver methods with ABI metadata
-- The compiler prelude auto-imports required symbols such as `io()` from `@std/io`
-- Style directives and external packages are separate surfaces: directives affect tokenization/templates, packages affect runtime semantics
-- Backends map stable `ExternalFunctionId` values to their own lowering keys (JS runtime names, Wasm imports, Rust host bindings)
+- Project builders provide virtual packages through `BackendBuilder::external_packages()`.
+- Virtual packages are not source files.
+- Virtual package imports use normal `@...` import syntax.
+- External package symbols are resolved into `visible_external_symbols`, not `visible_symbol_paths`.
+- External expression/type resolution must go through `ScopeContext` visibility lookup.
+- Prelude symbols such as `io` and `IO` are added to external visibility, not source declaration visibility.
+- Style directives remain separate and must not be modeled as packages.
+- Backends map stable `ExternalFunctionId` values to their own lowering keys (JS runtime names, Wasm imports, Rust host bindings).
+
+Current limitations:
+- User-authored external binding files are not supported.
+- External package definitions are currently registered from Rust-side builder/compiler metadata.
+- External receiver methods are early-stage and should not be expanded without nominal receiver-key lookup.
+- External package symbol IDs are still transitional and should move toward package-scoped registration before larger platform APIs are added.
 
 Project builders do **not**:
 - Parse files
@@ -155,6 +166,8 @@ Determines boundaries for each module in the project and the config for the proj
 - Determines which top-level root folders are visible to imports and future path resolution
 - Provides the project builder with the file name and path to each module's entry point file
 
+Virtual package imports are recognized during reachable-file discovery and are not resolved as filesystem paths. File discovery skips imports whose prefix matches a builder-provided external package. AST import binding later validates the package and symbol. Builder package prefixes reserve that import namespace.
+
 **`#config.bst`**
 - A project-level configuration file
 - Always located at the project root
@@ -210,7 +223,10 @@ Consumes the already-shaped, already-sorted top-level headers and the header-own
 AST resolves and validates those headers, enforces file-local import visibility, lowers executable bodies, and prepares templates for HIR.
 It does not rediscover top-level symbols or reparse top-level declaration shells.
 
-- **Import Visibility**: AST resolves per-file import visibility while still using the shared module-wide top-level symbol package
+- **Import Visibility**: AST resolves per-file import visibility while still using the shared module-wide top-level symbol package. AST import binding builds two per-file visibility maps:
+  - `visible_symbol_paths`: source declarations and compiler-owned builtin declarations.
+  - `visible_external_symbols`: builder-provided external functions/types from explicit virtual imports and prelude imports.
+  Expression parsing and type resolution must resolve external symbols through the active `ScopeContext`, not through global registry lookup.
 - **Top-Level Resolution**: AST resolves and validates constants, struct field types, and function signatures from the parsed header payloads
 - **Body Parsing**: Function bodies and the entry `start` body are parsed and lowered here
 - **Local Scope Growth**: Executable bodies register local declarations incrementally in source order. Body-local declarations reuse shared declaration syntax, but top-level declaration shells remain header-owned
@@ -353,10 +369,13 @@ HIR is the first stage where resource lifetime semantics are made explicit, but 
 - Calls to runtime templates appear as normal HIR call nodes
 - Fresh rvalues passed to mutable (`~T`) call slots are materialized as compiler-introduced hidden locals, then passed as ordinary `Load(Local(...))` call arguments
 
-#### Host Calls
-- Builtins such as `io` are preserved as explicit call nodes
-- HIR assumes required host imports exist
-- No abstraction layer exists between HIR and host calls
+#### External Calls
+
+Calls to builder-provided package functions lower to `CallTarget::ExternalFunction(ExternalFunctionId)`.
+
+HIR does not store package import syntax or backend runtime names. It stores the stable external function ID selected during AST resolution.
+
+Borrow validation resolves that ID through the external package registry to recover argument access rules and return-alias metadata. Backends map the same ID to backend-specific lowering targets such as JS runtime helpers, Wasm imports, or Rust host bindings.
 
 ## Stage 6: Borrow Validation (`src/compiler_frontend/analysis/borrow_checker/`)
 Statically determines which values are not managed by the GC heap.

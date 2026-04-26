@@ -5,7 +5,7 @@
 
 use super::call_argument::normalize_call_arguments;
 use super::expression::{Expression, ExpressionKind};
-use super::function_calls::{parse_function_call, parse_host_function_call};
+use super::function_calls::{parse_external_function_call, parse_function_call};
 use super::parse_expression_dispatch::push_expression_node;
 use super::struct_instance::parse_struct_constructor_expression;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
@@ -256,11 +256,11 @@ pub(super) fn parse_identifier_or_call(
     // ------------------------------------
     // HOST FUNCTION CALL INSIDE EXPRESSION
     // ------------------------------------
-    if let Some((_func_id, host_func_def)) = context.lookup_visible_external_function(id) {
+    if let Some((func_id, host_func_def)) = context.lookup_visible_external_function(id) {
         if context.kind.is_constant_context() {
             return_rule_error!(
                 format!(
-                    "Constants cannot call host functions. '{}' is a runtime host call.",
+                    "Constants cannot call external functions. '{}' is a runtime external call.",
                     string_table.resolve(id)
                 ),
                 token_stream.current_location(),
@@ -271,11 +271,16 @@ pub(super) fn parse_identifier_or_call(
             );
         }
 
-        // Host calls parse from metadata directly; do not synthesize fake parameter declarations.
+        // External calls parse from metadata directly; do not synthesize fake parameter declarations.
         token_stream.advance();
 
-        let function_call_node =
-            parse_host_function_call(token_stream, host_func_def, context, string_table)?;
+        let function_call_node = parse_external_function_call(
+            token_stream,
+            func_id,
+            host_func_def,
+            context,
+            string_table,
+        )?;
 
         if let NodeKind::HostFunctionCall {
             name: host_function_id,

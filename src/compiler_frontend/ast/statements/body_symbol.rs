@@ -7,7 +7,7 @@
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
-use crate::compiler_frontend::ast::expressions::function_calls::parse_host_function_call;
+use crate::compiler_frontend::ast::expressions::function_calls::parse_external_function_call;
 use crate::compiler_frontend::ast::expressions::mutation::{
     handle_mutation, handle_mutation_target,
 };
@@ -175,10 +175,15 @@ pub(crate) fn parse_symbol_statement(
         }
     }
 
-    if let Some((_func_id, host_func_call)) = context.lookup_visible_external_function(id) {
+    if let Some((func_id, host_func_call)) = context.lookup_visible_external_function(id) {
         token_stream.advance();
-        let host_call =
-            parse_host_function_call(token_stream, host_func_call, context, string_table)?;
+        let host_call = parse_external_function_call(
+            token_stream,
+            func_id,
+            host_func_call,
+            context,
+            string_table,
+        )?;
         ast.push(host_call);
         return Ok(());
     }

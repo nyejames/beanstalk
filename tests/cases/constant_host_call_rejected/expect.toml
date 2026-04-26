@@ -2,4 +2,4 @@
 mode = "failure"
 warnings = "forbid"
 error_type = "Rule"
-message_contains = ["Constants cannot call host functions", "runtime host call"]
+message_contains = ["Constants cannot call external functions", "runtime external call"]

@@ -42,13 +42,19 @@ pub fn parse_function_call(
     warnings: Option<&mut Vec<CompilerWarning>>,
     string_table: &mut StringTable,
 ) -> Result<AstNode, CompilerError> {
-    // Host calls share the same argument parser, but they reject named targets until
-    // host metadata carries stable public parameter names.
-    if let Some((_func_id, host_func)) = id
+    // External calls share the same argument parser, but they reject named targets until
+    // external metadata carries stable public parameter names.
+    if let Some((func_id, host_func)) = id
         .name()
         .and_then(|name| context.lookup_visible_external_function(name))
     {
-        return parse_host_function_call(token_stream, host_func, context, string_table);
+        return parse_external_function_call(
+            token_stream,
+            func_id,
+            host_func,
+            context,
+            string_table,
+        );
     }
 
     let raw_args = parse_call_arguments(token_stream, context, string_table)?;
@@ -376,16 +382,17 @@ fn resolve_user_function_call_arguments(
     )
 }
 
-/// Parses a host-function call using the shared argument resolver plus host-only validation.
-pub fn parse_host_function_call(
+/// Parses an external-function call using the shared argument resolver plus external-only validation.
+pub fn parse_external_function_call(
     token_stream: &mut FileTokens,
-    host_func: &ExternalFunctionDef,
+    external_function_id: ExternalFunctionId,
+    external_function: &ExternalFunctionDef,
     context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> Result<AstNode, CompilerError> {
     let location = token_stream.current_location();
 
-    // Host metadata does not expose public parameter names yet, so named arguments remain
+    // External metadata does not expose public parameter names yet, so named arguments remain
     // intentionally unsupported.
     let raw_args = parse_call_arguments(token_stream, context, string_table)?;
     if raw_args
@@ -393,61 +400,36 @@ pub fn parse_host_function_call(
         .any(|argument| argument.target_param.is_some())
     {
         return_rule_error!(
-            "Named arguments are not supported for host function calls",
+            "Named arguments are not supported for external function calls",
             location.clone(),
             {
                 CompilationStage => "Function Call Validation",
-                PrimarySuggestion => "Use positional arguments when calling host functions",
+                PrimarySuggestion => "Use positional arguments when calling external functions",
             }
         );
     }
 
-    let expectations = expectations_from_host_function(host_func);
+    let expectations = expectations_from_host_function(external_function);
     let args = resolve_call_arguments(
-        CallDiagnosticContext::host_function(host_func.name),
+        CallDiagnosticContext::host_function(external_function.name),
         &raw_args,
         &expectations,
         location.clone(),
         string_table,
     )?;
-    validate_host_specific_call_rules(host_func, &args, location.clone(), string_table)?;
-
-    let id = match host_func.name {
-        crate::compiler_frontend::external_packages::IO_FUNC_NAME => ExternalFunctionId::Io,
-        crate::compiler_frontend::external_packages::COLLECTION_GET_HOST_NAME => {
-            ExternalFunctionId::CollectionGet
-        }
-        crate::compiler_frontend::external_packages::COLLECTION_PUSH_HOST_NAME => {
-            ExternalFunctionId::CollectionPush
-        }
-        crate::compiler_frontend::external_packages::COLLECTION_REMOVE_HOST_NAME => {
-            ExternalFunctionId::CollectionRemove
-        }
-        crate::compiler_frontend::external_packages::COLLECTION_LENGTH_HOST_NAME => {
-            ExternalFunctionId::CollectionLength
-        }
-        crate::compiler_frontend::external_packages::ERROR_WITH_LOCATION_HOST_NAME => {
-            ExternalFunctionId::ErrorWithLocation
-        }
-        crate::compiler_frontend::external_packages::ERROR_PUSH_TRACE_HOST_NAME => {
-            ExternalFunctionId::ErrorPushTrace
-        }
-        crate::compiler_frontend::external_packages::ERROR_BUBBLE_HOST_NAME => {
-            ExternalFunctionId::ErrorBubble
-        }
-        _ => {
-            return Err(CompilerError::compiler_error(format!(
-                "Unknown host function '{}' during parsing",
-                host_func.name
-            )));
-        }
-    };
+    validate_host_specific_call_rules(
+        external_function_id,
+        external_function,
+        &args,
+        location.clone(),
+        string_table,
+    )?;
 
     Ok(AstNode {
         kind: NodeKind::HostFunctionCall {
-            name: id,
+            name: external_function_id,
             args,
-            result_types: host_func.return_data_types(),
+            result_types: external_function.return_data_types(),
             location: location.clone(),
         },
         location,
@@ -455,14 +437,15 @@ pub fn parse_host_function_call(
     })
 }
 
-/// Validates host-specific semantic rules that sit on top of shared call validation.
+/// Validates external-specific semantic rules that sit on top of shared call validation.
 fn validate_host_specific_call_rules(
+    function_id: ExternalFunctionId,
     function: &ExternalFunctionDef,
     args: &[CallArgument],
     location: SourceLocation,
     string_table: &StringTable,
 ) -> Result<(), CompilerError> {
-    if function.name == crate::compiler_frontend::external_packages::IO_FUNC_NAME {
+    if function_id == ExternalFunctionId::Io {
         for (i, argument) in args.iter().enumerate() {
             if argument.value.data_type.is_result() {
                 return_type_error!(

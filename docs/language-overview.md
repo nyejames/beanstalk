@@ -780,6 +780,23 @@ Other files contribute declarations that must be imported explicitly by symbol.
 - Grouped imports expand into multiple individual symbol imports.
 - Circular imports are detected and cause compilation errors
 
+### External platform package imports
+
+Project builders may provide virtual packages such as `@std/io` or `@web/canvas`.
+These are not Beanstalk source files. They expose typed external functions and opaque external types.
+
+```beanstalk
+import @std/io/io
+
+io("hello")
+```
+
+Some symbols may be imported automatically by the builder prelude. For normal builds, `io()` and `IO` are available without explicit imports.
+
+External types are opaque. They can be passed, returned, and used by external functions, but cannot be constructed with struct syntax or field-accessed by Beanstalk code.
+
+Prelude external symbols do not override source declarations or explicit imports. Explicit external imports must not collide with already visible source symbols in the same file.
+
 ### Hash (`#`) semantics
 At top level, `#` changes behavior by declaration kind:
 - Variable declaration: exported constant declaration (compile-time only)
