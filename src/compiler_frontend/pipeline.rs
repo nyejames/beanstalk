@@ -219,7 +219,4 @@ impl CompilerFrontend {
 
     // Planned: static dispatch analysis (memory-management-design.md §Unified ABI).
     // pub fn static_dispatch_analysis(&self, hir_module: &HirModule) -> StaticDispatchReport
-
-    // Planned: inlining analysis.
-    // pub fn static_dispatch_analysis(&self, hir_module: &HirModule) -> StaticDispatchReport
 }

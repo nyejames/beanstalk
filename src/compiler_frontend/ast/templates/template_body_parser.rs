@@ -113,7 +113,7 @@ fn parse_nested_template(
     let nested_inheritance = TemplateInheritance {
         direct_child_wrappers: template.style.child_templates.to_owned(),
     };
-    let nested_template = Template::new_with_doc_context(
+    let nested_template = Template::new_nested_template(
         token_stream,
         context,
         nested_inheritance,

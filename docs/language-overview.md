@@ -12,18 +12,18 @@ The design principles are:
 For developers coming from most other languages, 
 here are some key idiosyncrasies:
 
-- Colon opens a scope, semicolon closes it. Semicolon does not end statements!
-- Square brackets are NOT used for arrays, curly braces are used instead. 
+- Colon opens a scope, semicolon closes it. Semicolon does not end statements
+- Square brackets are NOT used for arrays, curly braces are used instead
 Square brackets are only used for string templates.
 - Equality and other logical operators use keywords like "is" and "not" 
 (you can't use == or ! for example)
-- ~ tilde symbol to indicate mutability (mutability must be explicit). 
-This comes before the type if there is an explicit type declaration.
+- ~ tilde symbol to indicate mutability (mutability must be explicit).
+This comes before the type if there is an explicit type declaration
 - Double dashes for single line comments (--)
-- Immutable reference semantics are the default for all stack and heap allocated types. 
-- All copies have to be explicit unless they are used in part of a new expression. Including integers, floats and bools.
+- Immutable reference semantics are the default for all stack and heap allocated types.
+- All copies have to be explicit unless they are used in part of a new expression. Including integers, floats and bools
 - Parameters and struct definitions use vertical pipes | 
-- Result types are created with the '!' symbol. Options use '?'.
+- Result types are created with the '!' symbol. Options use '?'
 
 **Naming conventions:**
 - Types/Objects/Choices: `PascalCase`

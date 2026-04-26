@@ -9,7 +9,13 @@ Use the language surface integration matrix as a reference for what is currently
 ---
 
 # Plans / Notes / TODOS
+- Implement alias syntax with "as" keyword (supported in import synax and for Type aliasing - probably should not be usable for anything else).
+Full plan: `docs\roadmap\plans\as_aliases_implementation_plan.md`
+
+- External packages scoping: `docs\roadmap\plans\package-scoped-external-symbols.md`
+
 - Bug with nested templates always having a space between their end and the text piece of content
+
 - full tagged unions
 - full pattern-matching design (capture patterns)
 - full traits implementation
@@ -18,7 +24,7 @@ Use the language surface integration matrix as a reference for what is currently
 - Compile time arbitary precision aritmetic + Decimals Type support
 - Core Math library
 - Optimised template folding
-- Move to more specific explicit type declarations for numbers (I32, I64, F32, F64) - JS backend just makes all an F64 and accepts the precision loss, more for future Wasm backend.
+- Move to more specific explicit type declarations for numbers (I32, I64, F32, F64) - JS backend just makes all an F64 and accepts the precision loss, more for future Wasm backend
 
 ## Wasm
 

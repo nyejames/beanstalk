@@ -70,14 +70,12 @@ Frontend style directives:
 - Tokenizer and template parsing use the same merged registry and reject unknown directives strictly
 
 External platform packages:
-- Project builders provide virtual packages through `BackendBuilder::external_packages()`.
-- Virtual packages are not source files.
-- Virtual package imports use normal `@...` import syntax.
-- External package symbols are resolved into `visible_external_symbols`, not `visible_symbol_paths`.
-- External expression/type resolution must go through `ScopeContext` visibility lookup.
-- Prelude symbols such as `io` and `IO` are added to external visibility, not source declaration visibility.
-- Style directives remain separate and must not be modeled as packages.
-- Backends map stable `ExternalFunctionId` values to their own lowering keys (JS runtime names, Wasm imports, Rust host bindings).
+- Provided by project builders through `BackendBuilder::external_packages()`
+- Virtual packages are not source files but use the normal import syntax
+- External package symbols are resolved into `visible_external_symbols`, not `visible_symbol_paths`
+- External expression/type resolution must go through `ScopeContext` visibility lookup
+- Prelude symbols such as `io` and `IO` are added to external visibility, not source declaration visibility
+- Backends map stable `ExternalFunctionId` values to their own lowering keys (JS runtime names, Wasm imports, Rust host bindings)
 
 Current limitations:
 - User-authored external binding files are not supported.

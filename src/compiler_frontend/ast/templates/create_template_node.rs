@@ -57,12 +57,12 @@ impl Template {
         string_table: &mut StringTable,
     ) -> Result<Template, CompilerError> {
         let inheritance = TemplateInheritance::from_parent_wrappers(templates_inherited);
-        Self::new_with_doc_context(token_stream, context, inheritance, string_table, false)
+        Self::new_nested_template(token_stream, context, inheritance, string_table, false)
     }
 
     /// Internal constructor that supports doc comment context propagation.
     /// Called recursively for nested templates in the body parser.
-    pub(crate) fn new_with_doc_context(
+    pub(crate) fn new_nested_template(
         token_stream: &mut FileTokens,
         context: &ScopeContext,
         inheritance: TemplateInheritance,
@@ -105,6 +105,7 @@ impl Template {
             &mut foldable,
             string_table,
         )?;
+
         let requires_post_format_recomposition =
             template_requires_post_format_recomposition(&template);
 
