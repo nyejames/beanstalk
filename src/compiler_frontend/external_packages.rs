@@ -2,13 +2,16 @@
 //!
 //! WHAT: defines the external-call surface the frontend and borrow checker understand today.
 //! WHY: external calls need one canonical metadata source for signature lowering and call semantics.
+//!
+//! External symbols are registered by package scope: `(package_path, symbol_name)` uniquely
+//! identifies a function or type. The same symbol name may exist in multiple packages.
+//! The prelude (`io`, `IO`) is the only exception where bare-name lookup is valid.
+//! All other external symbol resolution must go through file-local `visible_external_symbols`.
 
 use crate::compiler_frontend::ast::statements::functions::{FunctionReturn, ReturnSlot};
-#[cfg(test)]
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::hir::ids::FunctionId;
-#[cfg(test)]
 use crate::return_compiler_error;
 use std::collections::HashMap;
 
@@ -33,6 +36,12 @@ pub enum ExternalFunctionId {
     ErrorWithLocation,
     ErrorPushTrace,
     ErrorBubble,
+    /// Test package A function `open`.
+    /// Registered in `@test/pkg-a` for integration-test coverage of package-scoped resolution.
+    TestPkgAOpen,
+    /// Test package B function `open`.
+    /// Registered in `@test/pkg-b` for integration-test coverage of package-scoped resolution.
+    TestPkgBOpen,
     /// Synthetic functions registered by tests. Never emitted by production parsers.
     Synthetic(u32),
 }
@@ -49,6 +58,8 @@ impl ExternalFunctionId {
             Self::ErrorWithLocation => ERROR_WITH_LOCATION_HOST_NAME,
             Self::ErrorPushTrace => ERROR_PUSH_TRACE_HOST_NAME,
             Self::ErrorBubble => ERROR_BUBBLE_HOST_NAME,
+            Self::TestPkgAOpen => "test_pkg_a_open",
+            Self::TestPkgBOpen => "test_pkg_b_open",
             Self::Synthetic(_) => "<synthetic>",
         }
     }
@@ -63,6 +74,17 @@ pub struct ExternalTypeId(pub u32);
 pub enum ExternalSymbolId {
     Function(ExternalFunctionId),
     Type(ExternalTypeId),
+}
+
+/// Package-scoped key for looking up an external symbol in the registry.
+///
+/// WHAT: `(package_path, symbol_name)` pair that uniquely identifies an external
+/// function or type within the registry.
+/// WHY: prevents collisions when two packages expose the same symbol name.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+struct ExternalPackageSymbolKey {
+    package_path: String,
+    symbol_name: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -202,9 +224,14 @@ impl ExternalPackage {
 pub struct ExternalPackageRegistry {
     packages: HashMap<&'static str, ExternalPackage>,
     functions_by_id: HashMap<ExternalFunctionId, ExternalFunctionDef>,
-    name_to_function_id: HashMap<&'static str, ExternalFunctionId>,
     types_by_id: HashMap<ExternalTypeId, ExternalTypeDef>,
-    name_to_type_id: HashMap<&'static str, ExternalTypeId>,
+    /// Package-scoped function lookup: (package_path, symbol_name) -> ExternalFunctionId.
+    function_ids_by_package_symbol: HashMap<ExternalPackageSymbolKey, ExternalFunctionId>,
+    /// Package-scoped type lookup: (package_path, symbol_name) -> ExternalTypeId.
+    type_ids_by_package_symbol: HashMap<ExternalPackageSymbolKey, ExternalTypeId>,
+    /// Prelude symbols that are auto-imported into every module.
+    /// Bare-name lookup is only valid for the prelude.
+    prelude_symbols_by_name: HashMap<&'static str, ExternalSymbolId>,
     #[cfg(test)]
     next_synthetic_id: u32,
 }
@@ -214,387 +241,394 @@ impl ExternalPackageRegistry {
     pub fn new() -> Self {
         let mut registry = ExternalPackageRegistry::default();
 
-        let std_io = ExternalPackage::new("@std/io")
-            .with_function(ExternalFunctionDef {
-                name: IO_FUNC_NAME,
-                parameters: vec![ExternalParameter {
-                    language_type: ExternalAbiType::Inferred,
-                    access_kind: ExternalAccessKind::Shared,
-                }],
-                return_type: ExternalAbiType::Void,
-                return_alias: ExternalReturnAlias::Fresh,
-                receiver_type: None,
-                receiver_access: ExternalAccessKind::Shared,
-            })
-            .with_type(ExternalTypeDef {
-                name: IO_TYPE_NAME,
-                package: "@std/io",
-                abi_type: ExternalAbiType::Handle,
-            });
-        registry.packages.insert(std_io.path, std_io);
-        registry.functions_by_id.insert(
-            ExternalFunctionId::Io,
-            ExternalFunctionDef {
-                name: IO_FUNC_NAME,
-                parameters: vec![ExternalParameter {
-                    language_type: ExternalAbiType::Inferred,
-                    access_kind: ExternalAccessKind::Shared,
-                }],
-                return_type: ExternalAbiType::Void,
-                return_alias: ExternalReturnAlias::Fresh,
-                receiver_type: None,
-                receiver_access: ExternalAccessKind::Shared,
-            },
-        );
+        // @std/io
         registry
-            .name_to_function_id
-            .insert(IO_FUNC_NAME, ExternalFunctionId::Io);
-        registry.types_by_id.insert(
-            ExternalTypeId(0),
-            ExternalTypeDef {
-                name: IO_TYPE_NAME,
-                package: "@std/io",
-                abi_type: ExternalAbiType::Handle,
-            },
-        );
+            .register_package(ExternalPackage::new("@std/io"))
+            .expect("builtin package registration should not collide");
         registry
-            .name_to_type_id
-            .insert(IO_TYPE_NAME, ExternalTypeId(0));
+            .register_function_in_package(
+                "@std/io",
+                ExternalFunctionId::Io,
+                ExternalFunctionDef {
+                    name: IO_FUNC_NAME,
+                    parameters: vec![ExternalParameter {
+                        language_type: ExternalAbiType::Inferred,
+                        access_kind: ExternalAccessKind::Shared,
+                    }],
+                    return_type: ExternalAbiType::Void,
+                    return_alias: ExternalReturnAlias::Fresh,
+                    receiver_type: None,
+                    receiver_access: ExternalAccessKind::Shared,
+                },
+            )
+            .expect("builtin function registration should not collide");
+        registry
+            .register_type_in_package(
+                "@std/io",
+                ExternalTypeId(0),
+                ExternalTypeDef {
+                    name: IO_TYPE_NAME,
+                    package: "@std/io",
+                    abi_type: ExternalAbiType::Handle,
+                },
+            )
+            .expect("builtin type registration should not collide");
+        registry
+            .register_prelude_symbol(
+                IO_FUNC_NAME,
+                ExternalSymbolId::Function(ExternalFunctionId::Io),
+            )
+            .expect("prelude registration should not collide");
+        registry
+            .register_prelude_symbol(IO_TYPE_NAME, ExternalSymbolId::Type(ExternalTypeId(0)))
+            .expect("prelude registration should not collide");
 
-        let std_collections = ExternalPackage::new("@std/collections")
-            .with_function(ExternalFunctionDef {
-                name: COLLECTION_GET_HOST_NAME,
-                parameters: vec![
-                    ExternalParameter {
-                        language_type: ExternalAbiType::Inferred,
-                        access_kind: ExternalAccessKind::Shared,
-                    },
-                    ExternalParameter {
-                        language_type: ExternalAbiType::I32,
-                        access_kind: ExternalAccessKind::Shared,
-                    },
-                ],
-                return_type: ExternalAbiType::Void,
-                return_alias: ExternalReturnAlias::Fresh,
-                receiver_type: Some(ExternalAbiType::Inferred),
-                receiver_access: ExternalAccessKind::Shared,
-            })
-            .with_function(ExternalFunctionDef {
-                name: COLLECTION_PUSH_HOST_NAME,
-                parameters: vec![
-                    ExternalParameter {
-                        language_type: ExternalAbiType::Inferred,
-                        access_kind: ExternalAccessKind::Mutable,
-                    },
-                    ExternalParameter {
-                        language_type: ExternalAbiType::Inferred,
-                        access_kind: ExternalAccessKind::Shared,
-                    },
-                ],
-                return_type: ExternalAbiType::Void,
-                return_alias: ExternalReturnAlias::Fresh,
-                receiver_type: Some(ExternalAbiType::Inferred),
-                receiver_access: ExternalAccessKind::Mutable,
-            })
-            .with_function(ExternalFunctionDef {
-                name: COLLECTION_REMOVE_HOST_NAME,
-                parameters: vec![
-                    ExternalParameter {
-                        language_type: ExternalAbiType::Inferred,
-                        access_kind: ExternalAccessKind::Mutable,
-                    },
-                    ExternalParameter {
-                        language_type: ExternalAbiType::I32,
-                        access_kind: ExternalAccessKind::Shared,
-                    },
-                ],
-                return_type: ExternalAbiType::Void,
-                return_alias: ExternalReturnAlias::Fresh,
-                receiver_type: Some(ExternalAbiType::Inferred),
-                receiver_access: ExternalAccessKind::Mutable,
-            })
-            .with_function(ExternalFunctionDef {
-                name: COLLECTION_LENGTH_HOST_NAME,
-                parameters: vec![ExternalParameter {
-                    language_type: ExternalAbiType::Inferred,
-                    access_kind: ExternalAccessKind::Shared,
-                }],
-                return_type: ExternalAbiType::I32,
-                return_alias: ExternalReturnAlias::Fresh,
-                receiver_type: Some(ExternalAbiType::Inferred),
-                receiver_access: ExternalAccessKind::Shared,
-            });
+        // @std/collections
         registry
-            .packages
-            .insert(std_collections.path, std_collections);
-        registry.functions_by_id.insert(
-            ExternalFunctionId::CollectionGet,
-            ExternalFunctionDef {
-                name: COLLECTION_GET_HOST_NAME,
-                parameters: vec![
-                    ExternalParameter {
-                        language_type: ExternalAbiType::Inferred,
-                        access_kind: ExternalAccessKind::Shared,
-                    },
-                    ExternalParameter {
-                        language_type: ExternalAbiType::I32,
-                        access_kind: ExternalAccessKind::Shared,
-                    },
-                ],
-                return_type: ExternalAbiType::Void,
-                return_alias: ExternalReturnAlias::Fresh,
-                receiver_type: Some(ExternalAbiType::Inferred),
-                receiver_access: ExternalAccessKind::Shared,
-            },
-        );
+            .register_package(ExternalPackage::new("@std/collections"))
+            .expect("builtin package registration should not collide");
         registry
-            .name_to_function_id
-            .insert(COLLECTION_GET_HOST_NAME, ExternalFunctionId::CollectionGet);
-        registry.functions_by_id.insert(
-            ExternalFunctionId::CollectionPush,
-            ExternalFunctionDef {
-                name: COLLECTION_PUSH_HOST_NAME,
-                parameters: vec![
-                    ExternalParameter {
-                        language_type: ExternalAbiType::Inferred,
-                        access_kind: ExternalAccessKind::Mutable,
-                    },
-                    ExternalParameter {
+            .register_function_in_package(
+                "@std/collections",
+                ExternalFunctionId::CollectionGet,
+                ExternalFunctionDef {
+                    name: COLLECTION_GET_HOST_NAME,
+                    parameters: vec![
+                        ExternalParameter {
+                            language_type: ExternalAbiType::Inferred,
+                            access_kind: ExternalAccessKind::Shared,
+                        },
+                        ExternalParameter {
+                            language_type: ExternalAbiType::I32,
+                            access_kind: ExternalAccessKind::Shared,
+                        },
+                    ],
+                    return_type: ExternalAbiType::Void,
+                    return_alias: ExternalReturnAlias::Fresh,
+                    receiver_type: Some(ExternalAbiType::Inferred),
+                    receiver_access: ExternalAccessKind::Shared,
+                },
+            )
+            .expect("builtin function registration should not collide");
+        registry
+            .register_function_in_package(
+                "@std/collections",
+                ExternalFunctionId::CollectionPush,
+                ExternalFunctionDef {
+                    name: COLLECTION_PUSH_HOST_NAME,
+                    parameters: vec![
+                        ExternalParameter {
+                            language_type: ExternalAbiType::Inferred,
+                            access_kind: ExternalAccessKind::Mutable,
+                        },
+                        ExternalParameter {
+                            language_type: ExternalAbiType::Inferred,
+                            access_kind: ExternalAccessKind::Shared,
+                        },
+                    ],
+                    return_type: ExternalAbiType::Void,
+                    return_alias: ExternalReturnAlias::Fresh,
+                    receiver_type: Some(ExternalAbiType::Inferred),
+                    receiver_access: ExternalAccessKind::Mutable,
+                },
+            )
+            .expect("builtin function registration should not collide");
+        registry
+            .register_function_in_package(
+                "@std/collections",
+                ExternalFunctionId::CollectionRemove,
+                ExternalFunctionDef {
+                    name: COLLECTION_REMOVE_HOST_NAME,
+                    parameters: vec![
+                        ExternalParameter {
+                            language_type: ExternalAbiType::Inferred,
+                            access_kind: ExternalAccessKind::Mutable,
+                        },
+                        ExternalParameter {
+                            language_type: ExternalAbiType::I32,
+                            access_kind: ExternalAccessKind::Shared,
+                        },
+                    ],
+                    return_type: ExternalAbiType::Void,
+                    return_alias: ExternalReturnAlias::Fresh,
+                    receiver_type: Some(ExternalAbiType::Inferred),
+                    receiver_access: ExternalAccessKind::Mutable,
+                },
+            )
+            .expect("builtin function registration should not collide");
+        registry
+            .register_function_in_package(
+                "@std/collections",
+                ExternalFunctionId::CollectionLength,
+                ExternalFunctionDef {
+                    name: COLLECTION_LENGTH_HOST_NAME,
+                    parameters: vec![ExternalParameter {
                         language_type: ExternalAbiType::Inferred,
                         access_kind: ExternalAccessKind::Shared,
-                    },
-                ],
-                return_type: ExternalAbiType::Void,
-                return_alias: ExternalReturnAlias::Fresh,
-                receiver_type: Some(ExternalAbiType::Inferred),
-                receiver_access: ExternalAccessKind::Mutable,
-            },
-        );
-        registry.name_to_function_id.insert(
-            COLLECTION_PUSH_HOST_NAME,
-            ExternalFunctionId::CollectionPush,
-        );
-        registry.functions_by_id.insert(
-            ExternalFunctionId::CollectionRemove,
-            ExternalFunctionDef {
-                name: COLLECTION_REMOVE_HOST_NAME,
-                parameters: vec![
-                    ExternalParameter {
-                        language_type: ExternalAbiType::Inferred,
-                        access_kind: ExternalAccessKind::Mutable,
-                    },
-                    ExternalParameter {
-                        language_type: ExternalAbiType::I32,
-                        access_kind: ExternalAccessKind::Shared,
-                    },
-                ],
-                return_type: ExternalAbiType::Void,
-                return_alias: ExternalReturnAlias::Fresh,
-                receiver_type: Some(ExternalAbiType::Inferred),
-                receiver_access: ExternalAccessKind::Mutable,
-            },
-        );
-        registry.name_to_function_id.insert(
-            COLLECTION_REMOVE_HOST_NAME,
-            ExternalFunctionId::CollectionRemove,
-        );
-        registry.functions_by_id.insert(
-            ExternalFunctionId::CollectionLength,
-            ExternalFunctionDef {
-                name: COLLECTION_LENGTH_HOST_NAME,
-                parameters: vec![ExternalParameter {
-                    language_type: ExternalAbiType::Inferred,
-                    access_kind: ExternalAccessKind::Shared,
-                }],
-                return_type: ExternalAbiType::I32,
-                return_alias: ExternalReturnAlias::Fresh,
-                receiver_type: Some(ExternalAbiType::Inferred),
-                receiver_access: ExternalAccessKind::Shared,
-            },
-        );
-        registry.name_to_function_id.insert(
-            COLLECTION_LENGTH_HOST_NAME,
-            ExternalFunctionId::CollectionLength,
-        );
+                    }],
+                    return_type: ExternalAbiType::I32,
+                    return_alias: ExternalReturnAlias::Fresh,
+                    receiver_type: Some(ExternalAbiType::Inferred),
+                    receiver_access: ExternalAccessKind::Shared,
+                },
+            )
+            .expect("builtin function registration should not collide");
 
-        let std_error = ExternalPackage::new("@std/error")
-            .with_function(ExternalFunctionDef {
-                name: ERROR_WITH_LOCATION_HOST_NAME,
-                parameters: vec![
-                    ExternalParameter {
-                        language_type: ExternalAbiType::Inferred,
-                        access_kind: ExternalAccessKind::Shared,
-                    },
-                    ExternalParameter {
-                        language_type: ExternalAbiType::Inferred,
-                        access_kind: ExternalAccessKind::Shared,
-                    },
-                ],
-                return_type: ExternalAbiType::Void,
-                return_alias: ExternalReturnAlias::Fresh,
-                receiver_type: Some(ExternalAbiType::Inferred),
-                receiver_access: ExternalAccessKind::Shared,
-            })
-            .with_function(ExternalFunctionDef {
-                name: ERROR_PUSH_TRACE_HOST_NAME,
-                parameters: vec![
-                    ExternalParameter {
-                        language_type: ExternalAbiType::Inferred,
-                        access_kind: ExternalAccessKind::Shared,
-                    },
-                    ExternalParameter {
-                        language_type: ExternalAbiType::Inferred,
-                        access_kind: ExternalAccessKind::Shared,
-                    },
-                ],
-                return_type: ExternalAbiType::Void,
-                return_alias: ExternalReturnAlias::Fresh,
-                receiver_type: Some(ExternalAbiType::Inferred),
-                receiver_access: ExternalAccessKind::Shared,
-            })
-            .with_function(ExternalFunctionDef {
-                name: ERROR_BUBBLE_HOST_NAME,
-                parameters: vec![
-                    ExternalParameter {
-                        language_type: ExternalAbiType::Inferred,
-                        access_kind: ExternalAccessKind::Shared,
-                    },
-                    ExternalParameter {
-                        language_type: ExternalAbiType::Utf8Str,
-                        access_kind: ExternalAccessKind::Shared,
-                    },
-                    ExternalParameter {
-                        language_type: ExternalAbiType::I32,
-                        access_kind: ExternalAccessKind::Shared,
-                    },
-                    ExternalParameter {
-                        language_type: ExternalAbiType::I32,
-                        access_kind: ExternalAccessKind::Shared,
-                    },
-                    ExternalParameter {
-                        language_type: ExternalAbiType::Utf8Str,
-                        access_kind: ExternalAccessKind::Shared,
-                    },
-                ],
-                return_type: ExternalAbiType::Void,
-                return_alias: ExternalReturnAlias::Fresh,
-                receiver_type: Some(ExternalAbiType::Inferred),
-                receiver_access: ExternalAccessKind::Shared,
-            });
-        registry.packages.insert(std_error.path, std_error);
-        registry.functions_by_id.insert(
-            ExternalFunctionId::ErrorWithLocation,
-            ExternalFunctionDef {
-                name: ERROR_WITH_LOCATION_HOST_NAME,
-                parameters: vec![
-                    ExternalParameter {
-                        language_type: ExternalAbiType::Inferred,
-                        access_kind: ExternalAccessKind::Shared,
-                    },
-                    ExternalParameter {
-                        language_type: ExternalAbiType::Inferred,
-                        access_kind: ExternalAccessKind::Shared,
-                    },
-                ],
-                return_type: ExternalAbiType::Void,
-                return_alias: ExternalReturnAlias::Fresh,
-                receiver_type: Some(ExternalAbiType::Inferred),
-                receiver_access: ExternalAccessKind::Shared,
-            },
-        );
-        registry.name_to_function_id.insert(
-            ERROR_WITH_LOCATION_HOST_NAME,
-            ExternalFunctionId::ErrorWithLocation,
-        );
-        registry.functions_by_id.insert(
-            ExternalFunctionId::ErrorPushTrace,
-            ExternalFunctionDef {
-                name: ERROR_PUSH_TRACE_HOST_NAME,
-                parameters: vec![
-                    ExternalParameter {
-                        language_type: ExternalAbiType::Inferred,
-                        access_kind: ExternalAccessKind::Shared,
-                    },
-                    ExternalParameter {
-                        language_type: ExternalAbiType::Inferred,
-                        access_kind: ExternalAccessKind::Shared,
-                    },
-                ],
-                return_type: ExternalAbiType::Void,
-                return_alias: ExternalReturnAlias::Fresh,
-                receiver_type: Some(ExternalAbiType::Inferred),
-                receiver_access: ExternalAccessKind::Shared,
-            },
-        );
-        registry.name_to_function_id.insert(
-            ERROR_PUSH_TRACE_HOST_NAME,
-            ExternalFunctionId::ErrorPushTrace,
-        );
-        registry.functions_by_id.insert(
-            ExternalFunctionId::ErrorBubble,
-            ExternalFunctionDef {
-                name: ERROR_BUBBLE_HOST_NAME,
-                parameters: vec![
-                    ExternalParameter {
-                        language_type: ExternalAbiType::Inferred,
-                        access_kind: ExternalAccessKind::Shared,
-                    },
-                    ExternalParameter {
-                        language_type: ExternalAbiType::Utf8Str,
-                        access_kind: ExternalAccessKind::Shared,
-                    },
-                    ExternalParameter {
-                        language_type: ExternalAbiType::I32,
-                        access_kind: ExternalAccessKind::Shared,
-                    },
-                    ExternalParameter {
-                        language_type: ExternalAbiType::I32,
-                        access_kind: ExternalAccessKind::Shared,
-                    },
-                    ExternalParameter {
-                        language_type: ExternalAbiType::Utf8Str,
-                        access_kind: ExternalAccessKind::Shared,
-                    },
-                ],
-                return_type: ExternalAbiType::Void,
-                return_alias: ExternalReturnAlias::Fresh,
-                receiver_type: Some(ExternalAbiType::Inferred),
-                receiver_access: ExternalAccessKind::Shared,
-            },
-        );
+        // @std/error
         registry
-            .name_to_function_id
-            .insert(ERROR_BUBBLE_HOST_NAME, ExternalFunctionId::ErrorBubble);
+            .register_package(ExternalPackage::new("@std/error"))
+            .expect("builtin package registration should not collide");
+        registry
+            .register_function_in_package(
+                "@std/error",
+                ExternalFunctionId::ErrorWithLocation,
+                ExternalFunctionDef {
+                    name: ERROR_WITH_LOCATION_HOST_NAME,
+                    parameters: vec![
+                        ExternalParameter {
+                            language_type: ExternalAbiType::Inferred,
+                            access_kind: ExternalAccessKind::Shared,
+                        },
+                        ExternalParameter {
+                            language_type: ExternalAbiType::Inferred,
+                            access_kind: ExternalAccessKind::Shared,
+                        },
+                    ],
+                    return_type: ExternalAbiType::Void,
+                    return_alias: ExternalReturnAlias::Fresh,
+                    receiver_type: Some(ExternalAbiType::Inferred),
+                    receiver_access: ExternalAccessKind::Shared,
+                },
+            )
+            .expect("builtin function registration should not collide");
+        registry
+            .register_function_in_package(
+                "@std/error",
+                ExternalFunctionId::ErrorPushTrace,
+                ExternalFunctionDef {
+                    name: ERROR_PUSH_TRACE_HOST_NAME,
+                    parameters: vec![
+                        ExternalParameter {
+                            language_type: ExternalAbiType::Inferred,
+                            access_kind: ExternalAccessKind::Shared,
+                        },
+                        ExternalParameter {
+                            language_type: ExternalAbiType::Inferred,
+                            access_kind: ExternalAccessKind::Shared,
+                        },
+                    ],
+                    return_type: ExternalAbiType::Void,
+                    return_alias: ExternalReturnAlias::Fresh,
+                    receiver_type: Some(ExternalAbiType::Inferred),
+                    receiver_access: ExternalAccessKind::Shared,
+                },
+            )
+            .expect("builtin function registration should not collide");
+        registry
+            .register_function_in_package(
+                "@std/error",
+                ExternalFunctionId::ErrorBubble,
+                ExternalFunctionDef {
+                    name: ERROR_BUBBLE_HOST_NAME,
+                    parameters: vec![
+                        ExternalParameter {
+                            language_type: ExternalAbiType::Inferred,
+                            access_kind: ExternalAccessKind::Shared,
+                        },
+                        ExternalParameter {
+                            language_type: ExternalAbiType::Utf8Str,
+                            access_kind: ExternalAccessKind::Shared,
+                        },
+                        ExternalParameter {
+                            language_type: ExternalAbiType::I32,
+                            access_kind: ExternalAccessKind::Shared,
+                        },
+                        ExternalParameter {
+                            language_type: ExternalAbiType::I32,
+                            access_kind: ExternalAccessKind::Shared,
+                        },
+                        ExternalParameter {
+                            language_type: ExternalAbiType::Utf8Str,
+                            access_kind: ExternalAccessKind::Shared,
+                        },
+                    ],
+                    return_type: ExternalAbiType::Void,
+                    return_alias: ExternalReturnAlias::Fresh,
+                    receiver_type: Some(ExternalAbiType::Inferred),
+                    receiver_access: ExternalAccessKind::Shared,
+                },
+            )
+            .expect("builtin function registration should not collide");
+
+        // Test packages with duplicate symbol names (for integration-test coverage).
+        registry
+            .register_package(ExternalPackage::new("@test/pkg-a"))
+            .expect("test package registration should not collide");
+        registry
+            .register_function_in_package(
+                "@test/pkg-a",
+                ExternalFunctionId::TestPkgAOpen,
+                ExternalFunctionDef {
+                    name: "open",
+                    parameters: vec![ExternalParameter {
+                        language_type: ExternalAbiType::Inferred,
+                        access_kind: ExternalAccessKind::Shared,
+                    }],
+                    return_type: ExternalAbiType::Void,
+                    return_alias: ExternalReturnAlias::Fresh,
+                    receiver_type: None,
+                    receiver_access: ExternalAccessKind::Shared,
+                },
+            )
+            .expect("test function registration should not collide");
+
+        registry
+            .register_package(ExternalPackage::new("@test/pkg-b"))
+            .expect("test package registration should not collide");
+        registry
+            .register_function_in_package(
+                "@test/pkg-b",
+                ExternalFunctionId::TestPkgBOpen,
+                ExternalFunctionDef {
+                    name: "open",
+                    parameters: vec![ExternalParameter {
+                        language_type: ExternalAbiType::Inferred,
+                        access_kind: ExternalAccessKind::Shared,
+                    }],
+                    return_type: ExternalAbiType::Void,
+                    return_alias: ExternalReturnAlias::Fresh,
+                    receiver_type: None,
+                    receiver_access: ExternalAccessKind::Shared,
+                },
+            )
+            .expect("test function registration should not collide");
 
         registry
     }
 
-    /// Resolves an external function by name, returning its stable ID and definition.
-    pub fn resolve_function(
-        &self,
-        name: &str,
-    ) -> Option<(ExternalFunctionId, &ExternalFunctionDef)> {
-        self.name_to_function_id
-            .get(name)
-            .and_then(|id| self.functions_by_id.get(id).map(|def| (*id, def)))
+    // ------------------------------------------------------------------
+    // Registration helpers (centralized)
+    // ------------------------------------------------------------------
+
+    /// Registers a new virtual package in the registry.
+    fn register_package(&mut self, package: ExternalPackage) -> Result<(), CompilerError> {
+        if self.packages.contains_key(package.path) {
+            return_compiler_error!("External package '{}' is already registered.", package.path);
+        }
+        self.packages.insert(package.path, package);
+        Ok(())
     }
+
+    /// Registers an external function within a specific package.
+    fn register_function_in_package(
+        &mut self,
+        package_path: &'static str,
+        id: ExternalFunctionId,
+        function: ExternalFunctionDef,
+    ) -> Result<(), CompilerError> {
+        let package = self.packages.get_mut(package_path).ok_or_else(|| {
+            CompilerError::compiler_error(format!(
+                "Cannot register function '{}' in unknown package '{}'.",
+                function.name, package_path
+            ))
+        })?;
+
+        if package.functions.contains_key(function.name) {
+            return_compiler_error!(
+                "External function '{}' is already registered in package '{}'.",
+                function.name,
+                package_path
+            );
+        }
+
+        let key = ExternalPackageSymbolKey {
+            package_path: package_path.to_string(),
+            symbol_name: function.name.to_string(),
+        };
+        if self.function_ids_by_package_symbol.contains_key(&key) {
+            return_compiler_error!(
+                "External function '{}' is already registered in package '{}'.",
+                function.name,
+                package_path
+            );
+        }
+
+        package.functions.insert(function.name, function.clone());
+        self.functions_by_id.insert(id, function.clone());
+        self.function_ids_by_package_symbol.insert(key, id);
+        Ok(())
+    }
+
+    /// Registers an external type within a specific package.
+    fn register_type_in_package(
+        &mut self,
+        package_path: &'static str,
+        id: ExternalTypeId,
+        type_def: ExternalTypeDef,
+    ) -> Result<(), CompilerError> {
+        let package = self.packages.get_mut(package_path).ok_or_else(|| {
+            CompilerError::compiler_error(format!(
+                "Cannot register type '{}' in unknown package '{}'.",
+                type_def.name, package_path
+            ))
+        })?;
+
+        if package.types.contains_key(type_def.name) {
+            return_compiler_error!(
+                "External type '{}' is already registered in package '{}'.",
+                type_def.name,
+                package_path
+            );
+        }
+
+        let key = ExternalPackageSymbolKey {
+            package_path: package_path.to_string(),
+            symbol_name: type_def.name.to_string(),
+        };
+        if self.type_ids_by_package_symbol.contains_key(&key) {
+            return_compiler_error!(
+                "External type '{}' is already registered in package '{}'.",
+                type_def.name,
+                package_path
+            );
+        }
+
+        package.types.insert(type_def.name, type_def.clone());
+        self.types_by_id.insert(id, type_def.clone());
+        self.type_ids_by_package_symbol.insert(key, id);
+        Ok(())
+    }
+
+    /// Registers a prelude symbol that is auto-imported into every module.
+    fn register_prelude_symbol(
+        &mut self,
+        public_name: &'static str,
+        symbol_id: ExternalSymbolId,
+    ) -> Result<(), CompilerError> {
+        if self.prelude_symbols_by_name.contains_key(public_name) {
+            return_compiler_error!("Prelude symbol '{}' is already registered.", public_name);
+        }
+        self.prelude_symbols_by_name.insert(public_name, symbol_id);
+        Ok(())
+    }
+
+    // ------------------------------------------------------------------
+    // Lookup by stable ID (always safe, no visibility involved)
+    // ------------------------------------------------------------------
 
     /// Looks up an external function by its stable ID.
     pub fn get_function_by_id(&self, id: ExternalFunctionId) -> Option<&ExternalFunctionDef> {
         self.functions_by_id.get(&id)
     }
 
-    /// Resolves an external type by name, returning its stable ID and definition.
-    pub fn resolve_type(&self, name: &str) -> Option<(ExternalTypeId, &ExternalTypeDef)> {
-        self.name_to_type_id
-            .get(name)
-            .and_then(|id| self.types_by_id.get(id).map(|def| (*id, def)))
-    }
-
     /// Looks up an external type by its stable ID.
     pub fn get_type_by_id(&self, id: ExternalTypeId) -> Option<&ExternalTypeDef> {
         self.types_by_id.get(&id)
     }
+
+    // ------------------------------------------------------------------
+    // Test-only registration
+    // ------------------------------------------------------------------
 
     /// Registers a synthetic external function for test-only lowering and borrow-check scenarios.
     #[cfg(test)]
@@ -616,21 +650,20 @@ impl ExternalPackageRegistry {
         test_package.functions.insert(name, function.clone());
         let id = ExternalFunctionId::Synthetic(self.next_synthetic_id);
         self.next_synthetic_id += 1;
-        self.functions_by_id.insert(id, function);
-        self.name_to_function_id.insert(name, id);
+        self.functions_by_id.insert(id, function.clone());
+        self.function_ids_by_package_symbol.insert(
+            ExternalPackageSymbolKey {
+                package_path: "@test/default".to_string(),
+                symbol_name: name.to_string(),
+            },
+            id,
+        );
         Ok(id)
     }
 
-    /// Looks up an external function by name across all packages.
-    /// Used for prelude-visible symbols and internal compiler-generated calls.
-    pub fn get_function(&self, name: &str) -> Option<&ExternalFunctionDef> {
-        self.resolve_function(name).map(|(_, def)| def)
-    }
-
-    /// Looks up an external type by name across all packages.
-    pub fn get_type(&self, name: &str) -> Option<&ExternalTypeDef> {
-        self.resolve_type(name).map(|(_, def)| def)
-    }
+    // ------------------------------------------------------------------
+    // Package-scoped resolution (used by import binding)
+    // ------------------------------------------------------------------
 
     /// Looks up a specific package by path.
     pub fn get_package(&self, path: &str) -> Option<&ExternalPackage> {
@@ -656,7 +689,11 @@ impl ExternalPackageRegistry {
     ) -> Option<(ExternalFunctionId, &ExternalFunctionDef)> {
         let package = self.packages.get(package_path)?;
         let def = package.functions.get(symbol_name)?;
-        let id = *self.name_to_function_id.get(symbol_name)?;
+        let key = ExternalPackageSymbolKey {
+            package_path: package_path.to_string(),
+            symbol_name: symbol_name.to_string(),
+        };
+        let id = *self.function_ids_by_package_symbol.get(&key)?;
         Some((id, def))
     }
 
@@ -668,7 +705,11 @@ impl ExternalPackageRegistry {
     ) -> Option<(ExternalTypeId, &ExternalTypeDef)> {
         let package = self.packages.get(package_path)?;
         let def = package.types.get(type_name)?;
-        let id = *self.name_to_type_id.get(type_name)?;
+        let key = ExternalPackageSymbolKey {
+            package_path: package_path.to_string(),
+            symbol_name: type_name.to_string(),
+        };
+        let id = *self.type_ids_by_package_symbol.get(&key)?;
         Some((id, def))
     }
 
@@ -714,13 +755,12 @@ impl ExternalPackageRegistry {
         receiver_type_name: &str,
         method_name: &str,
     ) -> Option<(ExternalFunctionId, &ExternalFunctionDef)> {
-        for package in self.packages.values() {
+        for (package_path, package) in &self.packages {
             for (name, function) in &package.functions {
                 if *name == method_name
                     && let Some(receiver_type) = &function.receiver_type
                 {
                     // Match by ABI type name for now.
-                    // In Phase 6 this will use ExternalTypeId for stable matching.
                     let receiver_matches = match receiver_type {
                         ExternalAbiType::Handle => !receiver_type_name.is_empty(),
                         ExternalAbiType::Inferred => true,
@@ -729,9 +769,13 @@ impl ExternalPackageRegistry {
                         ExternalAbiType::Void => false,
                     };
                     if receiver_matches {
+                        let key = ExternalPackageSymbolKey {
+                            package_path: package_path.to_string(),
+                            symbol_name: name.to_string(),
+                        };
                         return self
-                            .name_to_function_id
-                            .get(name)
+                            .function_ids_by_package_symbol
+                            .get(&key)
                             .copied()
                             .map(|id| (id, function));
                     }
@@ -741,9 +785,28 @@ impl ExternalPackageRegistry {
         None
     }
 
-    /// Returns the list of symbol names that should be auto-imported into every module.
-    pub fn prelude_symbols(&self) -> Vec<&'static str> {
-        vec![IO_FUNC_NAME, IO_TYPE_NAME]
+    // ------------------------------------------------------------------
+    // Prelude
+    // ------------------------------------------------------------------
+
+    /// Returns the prelude symbol map.
+    /// Bare-name lookup is only valid for the prelude.
+    pub fn prelude_symbols_by_name(&self) -> &HashMap<&'static str, ExternalSymbolId> {
+        &self.prelude_symbols_by_name
+    }
+
+    /// Returns true if the given name is a prelude function.
+    pub fn is_prelude_function(&self, name: &str) -> bool {
+        self.prelude_symbols_by_name
+            .get(name)
+            .is_some_and(|symbol_id| matches!(symbol_id, ExternalSymbolId::Function(_)))
+    }
+
+    /// Returns true if the given name is a prelude type.
+    pub fn is_prelude_type(&self, name: &str) -> bool {
+        self.prelude_symbols_by_name
+            .get(name)
+            .is_some_and(|symbol_id| matches!(symbol_id, ExternalSymbolId::Type(_)))
     }
 }
 

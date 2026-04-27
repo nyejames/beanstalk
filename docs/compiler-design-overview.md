@@ -72,7 +72,9 @@ Frontend style directives:
 External platform packages:
 - Provided by project builders through `BackendBuilder::external_packages()`
 - Virtual packages are not source files but use the normal import syntax
-- External package symbols are resolved into `visible_external_symbols`, not `visible_symbol_paths`
+- External symbols are registered by package scope. The same symbol name may exist in multiple packages.
+- Import binding resolves a concrete `(package, symbol)` pair into an `ExternalSymbolId`, then stores that ID in `visible_external_symbols`
+- Global bare-name external lookup is only valid for the builder prelude. User-authored external calls and type annotations must resolve through file-local external visibility.
 - External expression/type resolution must go through `ScopeContext` visibility lookup
 - Prelude symbols such as `io` and `IO` are added to external visibility, not source declaration visibility
 - Backends map stable `ExternalFunctionId` values to their own lowering keys (JS runtime names, Wasm imports, Rust host bindings)
@@ -81,7 +83,6 @@ Current limitations:
 - User-authored external binding files are not supported.
 - External package definitions are currently registered from Rust-side builder/compiler metadata.
 - External receiver methods are early-stage and should not be expanded without nominal receiver-key lookup.
-- External package symbol IDs are still transitional and should move toward package-scoped registration before larger platform APIs are added.
 
 Project builders do **not**:
 - Parse files
@@ -223,7 +224,7 @@ It does not rediscover top-level symbols or reparse top-level declaration shells
 
 - **Import Visibility**: AST resolves per-file import visibility while still using the shared module-wide top-level symbol package. AST import binding builds per-file visibility maps:
   - `visible_symbol_paths`: source declarations and compiler-owned builtin declarations.
-  - `visible_external_symbols`: builder-provided external functions/types from explicit virtual imports and prelude imports.
+  - `visible_external_symbols`: builder-provided external functions/types from explicit virtual imports and prelude imports. This map stores source-visible names mapped to already-resolved `ExternalSymbolId` values. Later expression and type resolution never re-resolves those names globally.
   - `visible_type_aliases`: type aliases visible in this file (same-file and imported).
   - `visible_source_aliases`: source declaration import aliases (local rename → canonical path).
   Expression parsing and type resolution must resolve external symbols through the active `ScopeContext`, not through global registry lookup.

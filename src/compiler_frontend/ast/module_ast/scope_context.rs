@@ -17,6 +17,12 @@
 //! `Rc<TopLevelDeclarationIndex>` for top-level symbols, `Rc<ReceiverMethodCatalog>` for method
 //! lookup, `ExternalPackageRegistry` clone) so body parsing is self-contained without referencing the mutable
 //! build state directly.
+//!
+//! ## External symbol visibility
+//!
+//! `visible_external_symbols` stores source-visible names mapped to already-resolved
+//! `ExternalSymbolId` values. Expression and type resolution must use these IDs directly;
+//! they must never re-resolve names globally through the registry.
 
 use crate::compiler_frontend::FrontendBuildProfile;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
@@ -648,6 +654,22 @@ impl ScopeContext {
         self.external_package_registry
             .get_type_by_id(type_id)
             .map(|def| (type_id, def))
+    }
+
+    /// Check whether a given `ExternalFunctionId` is present in the visible external symbols.
+    ///
+    /// WHAT: used by receiver method resolution to validate that a method found in the
+    ///       registry is actually visible from the current file.
+    /// WHY: package-scoped external symbols must respect file-local visibility.
+    pub(crate) fn is_visible_external_function_id(&self, id: ExternalFunctionId) -> bool {
+        self.visible_external_symbols
+            .as_ref()
+            .is_some_and(|symbols| {
+                symbols.values().any(|symbol_id| match symbol_id {
+                    ExternalSymbolId::Function(func_id) => *func_id == id,
+                    _ => false,
+                })
+            })
     }
 
     /// Look up a visible type alias by its source-level name.

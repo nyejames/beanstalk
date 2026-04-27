@@ -67,14 +67,18 @@ fn register_function_rejects_duplicates() {
 #[test]
 fn collection_methods_have_receiver_type() {
     let registry = ExternalPackageRegistry::new();
-    let push = registry.get_function(COLLECTION_PUSH_HOST_NAME).unwrap();
+    let push = registry
+        .get_function_by_id(ExternalFunctionId::CollectionPush)
+        .unwrap();
     assert!(
         push.receiver_type.is_some(),
         "collection push should have receiver_type"
     );
     assert_eq!(push.receiver_access, ExternalAccessKind::Mutable);
 
-    let length = registry.get_function(COLLECTION_LENGTH_HOST_NAME).unwrap();
+    let length = registry
+        .get_function_by_id(ExternalFunctionId::CollectionLength)
+        .unwrap();
     assert!(
         length.receiver_type.is_some(),
         "collection length should have receiver_type"
@@ -90,4 +94,40 @@ fn resolve_method_finds_collection_length() {
         result.is_some(),
         "resolve_method should find collection length"
     );
+}
+
+#[test]
+fn same_symbol_name_across_packages_is_allowed() {
+    let registry = ExternalPackageRegistry::new();
+
+    // Both @test/pkg-a and @test/pkg-b expose a function named "open".
+    let a_result = registry.resolve_package_function("@test/pkg-a", "open");
+    assert!(a_result.is_some(), "@test/pkg-a/open should resolve");
+
+    let b_result = registry.resolve_package_function("@test/pkg-b", "open");
+    assert!(b_result.is_some(), "@test/pkg-b/open should resolve");
+
+    // They must map to distinct IDs.
+    let (a_id, _) = a_result.unwrap();
+    let (b_id, _) = b_result.unwrap();
+    assert_ne!(
+        a_id, b_id,
+        "same symbol in different packages must have distinct IDs"
+    );
+}
+
+#[test]
+fn resolve_package_function_selects_correct_package() {
+    let registry = ExternalPackageRegistry::new();
+
+    let (a_id, a_def) = registry
+        .resolve_package_function("@test/pkg-a", "open")
+        .unwrap();
+    let (b_id, b_def) = registry
+        .resolve_package_function("@test/pkg-b", "open")
+        .unwrap();
+
+    assert_eq!(a_def.name, "open");
+    assert_eq!(b_def.name, "open");
+    assert_ne!(a_id, b_id);
 }

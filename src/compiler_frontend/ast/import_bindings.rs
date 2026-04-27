@@ -7,6 +7,10 @@
 //! resolves those imports into concrete symbol paths and validates that constants are
 //! compile-time foldable.
 //!
+//! Virtual package imports are resolved into stable `ExternalSymbolId` values by
+//! `(package_path, symbol_name)` and stored in `visible_external_symbols`. Later
+//! expression and type resolution never re-resolves those names globally.
+//!
 //! ## Header/AST responsibility split
 //!
 //! *Header parsing owns:*
@@ -110,6 +114,11 @@ pub(crate) fn resolve_file_import_bindings(
             .cloned()
             .unwrap_or_default();
 
+        // Tracks which external import paths have already been bound.
+        // Used to allow re-importing the same external symbol while rejecting
+        // imports of different external symbols that share the same local name.
+        let mut imported_external_paths: FxHashSet<InternedPath> = FxHashSet::default();
+
         for import in imports {
             // Bare-file imports (`@path/to/file` resolving to a module file path) are rejected.
             // Start functions are build-system-only and are not importable or callable from modules.
@@ -202,14 +211,13 @@ pub(crate) fn resolve_file_import_bindings(
                             let local_name = import.alias.unwrap_or(symbol_name);
 
                             // Explicit aliases must not collide with any existing name.
-                            // For non-aliased imports, only flag if the name is new (not
-                            // the same symbol being imported twice).
+                            // For non-aliased imports, allow re-importing the same path
+                            // but reject different external symbols that share the name.
                             let is_collision = if import.alias.is_some() {
                                 bound_names.contains(&local_name)
                             } else {
                                 bound_names.contains(&local_name)
-                                    && !bindings.visible_symbol_paths.contains(&import.header_path)
-                                    && !bindings.visible_external_symbols.contains_key(&local_name)
+                                    && !imported_external_paths.contains(&import.header_path)
                             };
                             if is_collision {
                                 return Err(CompilerError::new_rule_error(
@@ -236,6 +244,7 @@ pub(crate) fn resolve_file_import_bindings(
                                     .insert(local_name, ExternalSymbolId::Type(type_id));
                             }
                             bound_names.insert(local_name);
+                            imported_external_paths.insert(import.header_path.clone());
                             continue;
                         }
                         VirtualPackageMatch::PackageFoundSymbolMissing(package_path) => {
@@ -266,22 +275,15 @@ pub(crate) fn resolve_file_import_bindings(
 
         // Inject prelude symbols (e.g. io, IO from @std/io) so they are visible
         // in every module without an explicit import statement.
-        for prelude_name in external_package_registry.prelude_symbols() {
+        for (prelude_name, symbol_id) in external_package_registry.prelude_symbols_by_name() {
             let symbol_name = string_table.intern(prelude_name);
             if bound_names.contains(&symbol_name) {
                 // Already imported or declared explicitly — prelude does not override.
                 continue;
             }
-            if let Some((func_id, _)) = external_package_registry.resolve_function(prelude_name) {
-                bindings
-                    .visible_external_symbols
-                    .insert(symbol_name, ExternalSymbolId::Function(func_id));
-            } else if let Some((type_id, _)) = external_package_registry.resolve_type(prelude_name)
-            {
-                bindings
-                    .visible_external_symbols
-                    .insert(symbol_name, ExternalSymbolId::Type(type_id));
-            }
+            bindings
+                .visible_external_symbols
+                .insert(symbol_name, *symbol_id);
             bound_names.insert(symbol_name);
         }
 

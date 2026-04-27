@@ -80,10 +80,12 @@ pub(super) fn parse_headers_in_file(
                 }
 
                 // Unique non-host registry symbol
-                if context
+                // Only prelude-visible external symbols block local declarations;
+                // package-scoped symbols that are not imported should not prevent
+                // a file from declaring its own symbol with the same name.
+                if !context
                     .external_package_registry
-                    .get_function(context.string_table.resolve(name_id))
-                    .is_none()
+                    .is_prelude_function(context.string_table.resolve(name_id))
                 {
                     // Reference to an existing symbol in scope
                     if encountered_symbols.contains(&name_id) {

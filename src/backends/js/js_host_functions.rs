@@ -14,6 +14,8 @@ pub(crate) fn resolve_host_function_id(id: ExternalFunctionId) -> Option<&'stati
         ExternalFunctionId::ErrorWithLocation => Some("__bs_error_with_location"),
         ExternalFunctionId::ErrorPushTrace => Some("__bs_error_push_trace"),
         ExternalFunctionId::ErrorBubble => Some("__bs_error_bubble"),
+        ExternalFunctionId::TestPkgAOpen => Some("__bs_test_pkg_a_open"),
+        ExternalFunctionId::TestPkgBOpen => Some("__bs_test_pkg_b_open"),
         ExternalFunctionId::Synthetic(_) => None,
     }
 }

@@ -2305,6 +2305,16 @@ path = "external_package_bare_name_rejected"
 tags = ["integration", "language", "external-packages"]
 
 [[case]]
+id = "external_package_import_selects_correct_package"
+path = "external_package_import_selects_correct_package"
+tags = ["integration", "language", "external-packages"]
+
+[[case]]
+id = "external_package_duplicate_visible_names_conflict"
+path = "external_package_duplicate_visible_names_conflict"
+tags = ["integration", "language", "external-packages", "diagnostics"]
+
+[[case]]
 id = "external_type_construction_rejected"
 path = "external_type_construction_rejected"
 tags = ["integration", "language", "external-packages"]
