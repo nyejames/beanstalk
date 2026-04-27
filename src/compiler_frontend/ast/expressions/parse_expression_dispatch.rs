@@ -322,7 +322,7 @@ pub(super) fn dispatch_expression_token(
             Ok(ExpressionTokenStep::Break)
         }
 
-        TokenKind::Symbol(..) => {
+        TokenKind::Symbol(..) | TokenKind::This => {
             parse_identifier_or_call(token_stream, context, state.expression, string_table)?;
             Ok(ExpressionTokenStep::Continue)
         }

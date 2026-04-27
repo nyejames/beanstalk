@@ -593,6 +593,7 @@ pub(crate) fn keyword_or_variable(
 
             // Traits
             "must" => return_token!(TokenKind::Must, stream),
+            "this" => return_token!(TokenKind::This, stream),
             "This" => return_token!(TokenKind::TraitThis, stream),
 
             // Async

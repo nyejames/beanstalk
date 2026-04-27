@@ -9,9 +9,6 @@ Use the language surface integration matrix as a reference for what is currently
 ---
 
 # Plans / Notes / TODOS
-- Implement alias syntax with "as" keyword (supported in import synax and for Type aliasing - probably should not be usable for anything else).
-Full plan: `docs\roadmap\plans\as_aliases_implementation_plan.md`
-
 - External packages scoping: `docs\roadmap\plans\package-scoped-external-symbols.md`
 
 - Bug with nested templates always having a space between their end and the text piece of content

@@ -413,6 +413,16 @@ fn parse_binding_tokens(
 
     while cursor < filtered_tokens.len() {
         let token = &filtered_tokens[cursor];
+        if token.kind == TokenKind::This {
+            return_syntax_error!(
+                "'this' is reserved for method receiver parameters and cannot be used as a loop binding.",
+                token.location.clone(),
+                {
+                    CompilationStage => LOOP_PARSING_STAGE,
+                    PrimarySuggestion => "Choose a different name for the loop binding",
+                }
+            );
+        }
         let TokenKind::Symbol(symbol_id) = token.kind else {
             return_syntax_error!(
                 "Loop bindings must be symbol names",

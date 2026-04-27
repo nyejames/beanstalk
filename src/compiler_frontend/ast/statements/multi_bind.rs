@@ -121,6 +121,16 @@ fn parse_target_list(
     let mut seen_comma = false;
 
     loop {
+        if token_stream.current_token_kind() == &TokenKind::This {
+            return_syntax_error!(
+                "'this' is reserved for method receiver parameters and cannot be used in multi-bind declarations.",
+                token_stream.current_location(),
+                {
+                    CompilationStage => "AST Construction",
+                    PrimarySuggestion => "Choose a different name for the multi-bind target",
+                }
+            );
+        }
         let TokenKind::Symbol(name) = token_stream.current_token_kind().to_owned() else {
             return_syntax_error!(
                 "Malformed multi-bind target list. Expected a symbol target name.",

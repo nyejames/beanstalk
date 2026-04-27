@@ -13,7 +13,9 @@ use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::declaration_syntax::signature_members::parse_signature_members;
+use crate::compiler_frontend::declaration_syntax::signature_members::{
+    SignatureMemberContext, parse_signature_members,
+};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::FileTokens;
 use crate::return_rule_error;
@@ -31,7 +33,12 @@ pub fn parse_struct_shell(
 ) -> Result<Vec<Declaration>, CompilerError> {
     token_stream.advance();
 
-    let fields = parse_signature_members(token_stream, string_table, context)?;
+    let fields = parse_signature_members(
+        token_stream,
+        string_table,
+        context,
+        SignatureMemberContext::StructField,
+    )?;
 
     token_stream.advance();
 

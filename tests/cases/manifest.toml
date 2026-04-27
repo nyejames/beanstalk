@@ -2368,3 +2368,43 @@ tags = ["integration", "language", "aliases"]
 id = "prelude_does_not_override_alias"
 path = "prelude_does_not_override_alias"
 tags = ["integration", "language", "aliases"]
+
+[[case]]
+id = "method_receiver_this_success"
+path = "method_receiver_this_success"
+tags = ["integration", "language", "receiver-methods"]
+
+[[case]]
+id = "this_outside_method_body_error"
+path = "this_outside_method_body_error"
+tags = ["integration", "diagnostics", "receiver-methods"]
+
+[[case]]
+id = "this_local_declaration_error"
+path = "this_local_declaration_error"
+tags = ["integration", "diagnostics", "receiver-methods"]
+
+[[case]]
+id = "this_struct_field_error"
+path = "this_struct_field_error"
+tags = ["integration", "diagnostics", "receiver-methods"]
+
+[[case]]
+id = "this_second_parameter_error"
+path = "this_second_parameter_error"
+tags = ["integration", "diagnostics", "receiver-methods"]
+
+[[case]]
+id = "this_duplicate_receiver_error"
+path = "this_duplicate_receiver_error"
+tags = ["integration", "diagnostics", "receiver-methods"]
+
+[[case]]
+id = "this_unsupported_receiver_type_error"
+path = "this_unsupported_receiver_type_error"
+tags = ["integration", "diagnostics", "receiver-methods"]
+
+[[case]]
+id = "this_free_function_name_error"
+path = "this_free_function_name_error"
+tags = ["integration", "diagnostics", "receiver-methods"]

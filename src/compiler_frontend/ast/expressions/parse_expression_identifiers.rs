@@ -30,6 +30,11 @@ pub(super) fn parse_identifier_or_call(
     expression: &mut Vec<AstNode>,
     string_table: &mut StringTable,
 ) -> Result<(), CompilerError> {
+    // Fast path for reserved receiver keyword `this`.
+    if token_stream.current_token_kind() == &TokenKind::This {
+        return parse_this_reference(token_stream, context, expression, string_table);
+    }
+
     // One identifier token can expand into several expression forms: a local/reference read,
     // struct construction, user-function call, host call, or imported start-function call.
     let TokenKind::Symbol(id) = token_stream.current_token_kind().to_owned() else {
@@ -364,6 +369,44 @@ pub(super) fn parse_identifier_or_call(
             CompilationStage => "Expression Parsing",
             PrimarySuggestion => "Declare the variable before using it in this expression",
         }
+    )
+}
+
+/// Parse a `this` reference inside a receiver method body.
+///
+/// WHAT: validates that `this` is in scope (i.e. the current function declared a receiver)
+/// and emits a reference node identical to a normal local read.
+/// WHY: `this` is a reserved keyword token, not an ordinary identifier, so it needs its own
+/// parse path, but semantically it behaves like any other parameter reference.
+fn parse_this_reference(
+    token_stream: &mut FileTokens,
+    context: &ScopeContext,
+    expression: &mut Vec<AstNode>,
+    string_table: &mut StringTable,
+) -> Result<(), CompilerError> {
+    let this_id = string_table.intern("this");
+
+    let Some(receiver_declaration) = context.get_reference(&this_id) else {
+        return_rule_error!(
+            "'this' can only be used inside the body of a receiver method.",
+            token_stream.current_location(),
+            {
+                VariableName => "this",
+                CompilationStage => "Expression Parsing",
+                PrimarySuggestion => "Declare a receiver method with 'this' as the first parameter, or use a normal variable name",
+            }
+        );
+    };
+
+    let reference_node =
+        create_reference(token_stream, receiver_declaration, context, string_table)?;
+
+    push_expression_node(
+        token_stream,
+        context,
+        string_table,
+        expression,
+        reference_node,
     )
 }
 

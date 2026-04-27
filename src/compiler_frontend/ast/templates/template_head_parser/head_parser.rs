@@ -212,6 +212,43 @@ pub fn parse_template_head(
                 }
             }
 
+            TokenKind::This => {
+                let this_id = string_table.intern("this");
+                if let Some(arg) = context.get_reference(&this_id) {
+                    enforce_head_compatibility(
+                        &head_state,
+                        &meaningful_item_compatibility,
+                        token_stream,
+                        None,
+                    )?;
+                    let value_location = token_stream.current_location();
+                    let expr = create_expression(
+                        token_stream,
+                        context,
+                        &mut DataType::Inferred,
+                        &arg.value.value_mode,
+                        false,
+                        string_table,
+                    )?;
+
+                    push_template_head_expression(
+                        expr,
+                        context,
+                        template,
+                        foldable,
+                        &value_location,
+                        string_table,
+                    )?;
+                    defer_separator_token = true;
+                    apply_head_compatibility(&mut head_state, &meaningful_item_compatibility);
+                } else {
+                    return_syntax_error!(
+                        "'this' can only be used inside the body of a receiver method.",
+                        token_stream.current_location()
+                    )
+                }
+            }
+
             // Constants can be inserted directly into head content.
             TokenKind::FloatLiteral(_)
             | TokenKind::BoolLiteral(_)

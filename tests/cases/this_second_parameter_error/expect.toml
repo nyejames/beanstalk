@@ -1,0 +1,7 @@
+entry = "."
+
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+error_type = "Rule"
+message_contains = ["'this' as a receiver parameter, but it is not the first parameter"]

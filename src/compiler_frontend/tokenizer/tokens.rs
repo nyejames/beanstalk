@@ -375,7 +375,10 @@ pub enum TokenKind {
     DoubleColon, // ::
     Assign,      // =
 
-    // Reserved trait syntax
+    // Reserved receiver / trait syntax
+    // `this` is reserved for explicit method receiver parameters.
+    // `This` is reserved for future trait syntax.
+    This,
     Must,
     TraitThis,
 

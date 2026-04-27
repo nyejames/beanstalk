@@ -1,0 +1,7 @@
+entry = "."
+
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+error_type = "Syntax"
+message_contains = ["'this' is reserved for method receiver parameters and cannot be used as a struct field name"]

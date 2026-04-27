@@ -8,7 +8,9 @@ use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::body_expr_stmt::parse_expression_statement_candidate;
 use crate::compiler_frontend::ast::statements::body_return::parse_return_statement;
-use crate::compiler_frontend::ast::statements::body_symbol::parse_symbol_statement;
+use crate::compiler_frontend::ast::statements::body_symbol::{
+    parse_symbol_statement, parse_this_statement,
+};
 use crate::compiler_frontend::ast::statements::branching::create_branch;
 use crate::compiler_frontend::ast::statements::loops::create_loop;
 use crate::compiler_frontend::ast::statements::scoped_blocks::{
@@ -290,6 +292,10 @@ pub(crate) fn parse_function_body_statements(
                 warnings,
                 string_table,
             )?,
+
+            TokenKind::This => {
+                parse_this_statement(token_stream, &mut ast, &mut context, string_table)?
+            }
 
             TokenKind::Block => ast.push(parse_scoped_block_statement(
                 token_stream,

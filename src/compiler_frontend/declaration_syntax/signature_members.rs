@@ -30,6 +30,16 @@ use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::value_mode::ValueMode;
 use crate::return_syntax_error;
 
+/// Distinguishes the two syntactic contexts that share `| ... |` member parsing.
+///
+/// WHAT: `this` is valid only in function parameter lists (as a receiver), not in struct fields.
+/// WHY: both forms share the same parser, but the set of legal names differs by context.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SignatureMemberContext {
+    FunctionParameter,
+    StructField,
+}
+
 /// Parses a `| name [~]Type [= default], ... |` member list.
 ///
 /// WHAT: shared parser for both function parameters and struct field declarations.
@@ -41,6 +51,7 @@ pub fn parse_signature_members(
     token_stream: &mut FileTokens,
     string_table: &mut StringTable,
     expression_context: &ScopeContext,
+    member_context: SignatureMemberContext,
 ) -> Result<Vec<Declaration>, CompilerError> {
     let mut members = Vec::with_capacity(1);
     let mut expecting_member = true;
@@ -93,11 +104,49 @@ pub fn parse_signature_members(
                     token_stream.src_path.append(arg_name),
                     expression_context,
                     string_table,
+                    false,
                 )?;
 
                 members.push(member);
 
                 expecting_member = false;
+            }
+
+            TokenKind::This if member_context == SignatureMemberContext::FunctionParameter => {
+                if !expecting_member {
+                    return_syntax_error!(
+                        "Should have a comma to separate arguments",
+                        token_stream.current_location(),
+                        {
+                            CompilationStage => "Struct/Parameter Parsing",
+                            PrimarySuggestion => "Add ',' between function parameters",
+                            SuggestedInsertion => ",",
+                        }
+                    )
+                }
+
+                let this_id = string_table.intern("this");
+                let member = parse_signature_member(
+                    token_stream,
+                    token_stream.src_path.append(this_id),
+                    expression_context,
+                    string_table,
+                    true,
+                )?;
+
+                members.push(member);
+                expecting_member = false;
+            }
+
+            TokenKind::This => {
+                return_syntax_error!(
+                    "'this' is reserved for method receiver parameters and cannot be used as a struct field name.",
+                    token_stream.current_location(),
+                    {
+                        CompilationStage => "Struct/Parameter Parsing",
+                        PrimarySuggestion => "Rename this field or use 'this' only as the first parameter of a receiver method",
+                    }
+                )
             }
 
             TokenKind::Comma => {
@@ -172,17 +221,20 @@ fn parse_signature_member(
     full_name: InternedPath,
     expression_context: &ScopeContext,
     string_table: &mut StringTable,
+    allow_reserved_this: bool,
 ) -> Result<Declaration, CompilerError> {
     let member_name = full_name
         .name()
         .map(|id| string_table.resolve(id).to_owned())
         .unwrap_or_else(|| String::from("<unknown>"));
 
-    ensure_not_keyword_shadow_identifier(
-        &member_name,
-        token_stream.current_location(),
-        "Struct/Parameter Parsing",
-    )?;
+    if !allow_reserved_this || member_name != "this" {
+        ensure_not_keyword_shadow_identifier(
+            &member_name,
+            token_stream.current_location(),
+            "Struct/Parameter Parsing",
+        )?;
+    }
 
     if let Some(warning) = naming_warning_for_identifier(
         &member_name,

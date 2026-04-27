@@ -689,7 +689,8 @@ loop 0.0 to 1.0 by 0.1 |t|:
 Runtime structs are nominal types. Matching field shapes do not make two structs interchangeable.
 
 Receiver methods in v1 are statically resolved:
-- A method is a top-level function whose first parameter is literally named `this`
+- `this` is a reserved word. It can only appear as the first parameter of a receiver method and inside that method's body. It cannot be used as a normal variable, field, function name, loop binding, or top-level declaration.
+- A method is a top-level function whose first parameter is named `this`
 - There may be exactly one `this` parameter
 - Supported receiver types are user-defined structs and built-in scalars (`Int`, `Float`, `Bool`, `String`)
 - Collection built-ins (`get`, `set`, `push`, `remove`, `length`) are compiler-owned operations and are not declared via `this`

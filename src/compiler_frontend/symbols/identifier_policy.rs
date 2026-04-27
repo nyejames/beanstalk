@@ -12,10 +12,10 @@ use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
 /// Canonical keyword set used by the tokenizer's `keyword_or_variable()` mapping.
 ///
 /// NOTE: matching is case-insensitive and ignores any number of leading underscores.
-const RESERVED_KEYWORD_SHADOWS: [&str; 30] = [
+const RESERVED_KEYWORD_SHADOWS: [&str; 31] = [
     "import", "if", "case", "return", "yield", "else", "block", "checked", "async", "as", "copy",
-    "must", "loop", "to", "by", "break", "continue", "is", "not", "and", "or", "true", "false",
-    "none", "fn", "float", "int", "string", "bool", "char",
+    "must", "this", "loop", "to", "by", "break", "continue", "is", "not", "and", "or", "true",
+    "false", "none", "fn", "float", "int", "string", "bool", "char",
 ];
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

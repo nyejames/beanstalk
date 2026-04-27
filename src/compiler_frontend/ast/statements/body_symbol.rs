@@ -68,6 +68,82 @@ fn push_accessed_symbol_statement(
     }
 }
 
+pub(crate) fn parse_this_statement(
+    token_stream: &mut FileTokens,
+    ast: &mut Vec<AstNode>,
+    context: &mut ScopeContext,
+    string_table: &mut StringTable,
+) -> Result<(), CompilerError> {
+    let this_id = string_table.intern("this");
+
+    let Some(arg) = context.get_reference(&this_id) else {
+        return_rule_error!(
+            "'this' can only be used inside the body of a receiver method.",
+            token_stream.current_location(),
+            {
+                VariableName => "this",
+                CompilationStage => "AST Construction",
+                PrimarySuggestion => "Declare a receiver method with 'this' as the first parameter, or use a normal variable name",
+            }
+        );
+    };
+
+    match token_stream.peek_next_token() {
+        Some(next_token) if next_token.is_assignment_operator() => {
+            return_rule_error!(
+                "'this' is a reserved receiver parameter and cannot be reassigned.",
+                token_stream.current_location(),
+                {
+                    CompilationStage => "AST Construction",
+                    PrimarySuggestion => "Use 'this' to access fields or call methods, but do not try to reassign it",
+                }
+            );
+        }
+
+        Some(TokenKind::Dot) => {
+            token_stream.advance();
+            let accessed = parse_field_access(token_stream, arg, context, string_table)?;
+
+            if token_stream.current_token_kind().is_assignment_operator() {
+                ast.push(handle_mutation_target(
+                    token_stream,
+                    arg,
+                    accessed,
+                    context,
+                    string_table,
+                )?);
+                return Ok(());
+            }
+
+            push_accessed_symbol_statement(
+                accessed,
+                ast,
+                context,
+                token_stream,
+                this_id,
+                string_table,
+            )?;
+            Ok(())
+        }
+
+        _ => {
+            let expr = parse_symbol_expression_statement_candidate(
+                token_stream,
+                context,
+                this_id,
+                string_table,
+            )?;
+
+            ast.push(AstNode {
+                kind: NodeKind::Rvalue(expr),
+                location: token_stream.current_location(),
+                scope: context.scope.clone(),
+            });
+            Ok(())
+        }
+    }
+}
+
 pub(crate) fn parse_symbol_statement(
     token_stream: &mut FileTokens,
     ast: &mut Vec<AstNode>,

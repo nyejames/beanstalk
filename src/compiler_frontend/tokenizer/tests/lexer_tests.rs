@@ -240,6 +240,36 @@ fn tokenizes_reserved_trait_keywords_as_reserved_tokens() {
 }
 
 #[test]
+fn tokenizes_lowercase_this_as_reserved_receiver_keyword() {
+    let (file_tokens, _string_table) = tokenize_source("this this_value This _this\n");
+
+    assert!(
+        matches!(file_tokens.tokens[0].kind, TokenKind::ModuleStart),
+        "token streams always begin with the module sentinel"
+    );
+    assert!(
+        matches!(file_tokens.tokens[1].kind, TokenKind::This),
+        "expected 'this' to lex as a reserved receiver token"
+    );
+    assert!(
+        matches!(file_tokens.tokens[2].kind, TokenKind::Symbol(_)),
+        "expected 'this_value' to remain a user symbol"
+    );
+    assert!(
+        matches!(file_tokens.tokens[3].kind, TokenKind::TraitThis),
+        "expected 'This' to lex as a reserved trait token"
+    );
+    assert!(
+        matches!(file_tokens.tokens[4].kind, TokenKind::Symbol(_)),
+        "expected '_this' to remain a user symbol (shadow policy rejects it later)"
+    );
+    assert!(
+        !matches!(file_tokens.tokens[1].kind, TokenKind::Symbol(_)),
+        "'this' should not remain a user symbol"
+    );
+}
+
+#[test]
 fn tokenizes_statement_block_keywords_as_reserved_tokens() {
     let (file_tokens, _string_table) = tokenize_source("block checked async\n");
 

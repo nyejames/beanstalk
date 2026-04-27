@@ -8,7 +8,9 @@ use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::DataType;
-use crate::compiler_frontend::declaration_syntax::signature_members::parse_signature_members;
+use crate::compiler_frontend::declaration_syntax::signature_members::{
+    SignatureMemberContext, parse_signature_members,
+};
 use crate::compiler_frontend::declaration_syntax::type_syntax::{
     TypeAnnotationContext, parse_type_annotation,
 };
@@ -106,7 +108,12 @@ impl FunctionSignature {
         token_stream.advance();
 
         let signature_context = ScopeContext::new_constant(scope.to_owned(), parent_context);
-        let parameters = parse_signature_members(token_stream, string_table, &signature_context)?;
+        let parameters = parse_signature_members(
+            token_stream,
+            string_table,
+            &signature_context,
+            SignatureMemberContext::FunctionParameter,
+        )?;
         warnings.extend(signature_context.take_emitted_warnings());
         token_stream.advance();
 
@@ -220,7 +227,7 @@ impl FunctionSignature {
 fn parse_return_list(
     token_stream: &mut FileTokens,
     parameters: &[Declaration],
-    string_table: &StringTable,
+    string_table: &mut StringTable,
 ) -> Result<Vec<ReturnSlot>, CompilerError> {
     let mut returns = Vec::new();
 
@@ -302,10 +309,10 @@ fn parse_return_list(
 fn parse_single_return_item(
     token_stream: &mut FileTokens,
     parameters: &[Declaration],
-    string_table: &StringTable,
+    string_table: &mut StringTable,
 ) -> Result<ReturnSlot, CompilerError> {
     let current_location = token_stream.current_location();
-    if let Some(symbol) = parameter_alias_symbol(token_stream.current_token_kind()) {
+    if let Some(symbol) = parameter_alias_symbol(token_stream.current_token_kind(), string_table) {
         if parameters
             .iter()
             .any(|parameter| parameter.id.name() == Some(symbol))
@@ -351,14 +358,16 @@ fn parse_value_return_type(
 fn parse_alias_return_item(
     token_stream: &mut FileTokens,
     parameters: &[Declaration],
-    string_table: &StringTable,
+    string_table: &mut StringTable,
     current_location: SourceLocation,
 ) -> Result<ReturnSlot, CompilerError> {
     let mut parameter_indices = Vec::new();
     let mut alias_type: Option<DataType> = None;
 
     loop {
-        let Some(current_symbol) = parameter_alias_symbol(token_stream.current_token_kind()) else {
+        let Some(current_symbol) =
+            parameter_alias_symbol(token_stream.current_token_kind(), string_table)
+        else {
             return_syntax_error!(
                 "Expected a parameter name in an alias return declaration",
                 token_stream.current_location(),
@@ -420,7 +429,8 @@ fn parse_alias_return_item(
         match token_stream.current_token_kind() {
             TokenKind::Or => {
                 token_stream.advance();
-                if parameter_alias_symbol(token_stream.current_token_kind()).is_none() {
+                if parameter_alias_symbol(token_stream.current_token_kind(), string_table).is_none()
+                {
                     return_syntax_error!(
                         "Expected a parameter name after 'or' in an alias return declaration",
                         token_stream.current_location(),
@@ -518,9 +528,11 @@ fn validate_return_slots(
 
 fn parameter_alias_symbol(
     token_kind: &TokenKind,
+    string_table: &mut StringTable,
 ) -> Option<crate::compiler_frontend::symbols::string_interning::StringId> {
     match token_kind {
         TokenKind::Symbol(symbol) => Some(*symbol),
+        TokenKind::This => Some(string_table.intern("this")),
         _ => None,
     }
 }
