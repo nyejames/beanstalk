@@ -51,7 +51,9 @@ pub(crate) fn lower_expression(
             match carrier {
                 crate::compiler_frontend::hir::expressions::HirVariantCarrier::Choice {
                     ..
-                } => {
+                }
+                | crate::compiler_frontend::hir::expressions::HirVariantCarrier::Option
+                | crate::compiler_frontend::hir::expressions::HirVariantCarrier::Result => {
                     let dst = context.alloc_temp(WasmAbiType::I64);
                     statements.push(WasmLirStmt::ConstI64 {
                         dst,
@@ -153,8 +155,6 @@ pub(crate) fn lower_expression(
         | HirExpressionKind::Range { .. }
         | HirExpressionKind::TupleConstruct { .. }
         | HirExpressionKind::TupleGet { .. }
-        | HirExpressionKind::OptionConstruct { .. }
-        | HirExpressionKind::ResultConstruct { .. }
         | HirExpressionKind::ResultPropagate { .. }
         | HirExpressionKind::ResultIsOk { .. }
         | HirExpressionKind::ResultUnwrapOk { .. }

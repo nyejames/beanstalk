@@ -2,7 +2,9 @@
 
 use super::support::*;
 use crate::compiler_frontend::hir::blocks::HirBlock;
-use crate::compiler_frontend::hir::expressions::{HirExpressionKind, ResultVariant, ValueKind};
+use crate::compiler_frontend::hir::expressions::{
+    HirExpressionKind, HirVariantCarrier, HirVariantField, ValueKind,
+};
 use crate::compiler_frontend::hir::functions::HirFunction;
 use crate::compiler_frontend::hir::hir_datatypes::{HirType, HirTypeKind};
 use crate::compiler_frontend::hir::ids::{BlockId, FunctionId, LocalId, RegionId};
@@ -1606,9 +1608,13 @@ fn dispatcher_with_result_return_wraps_dispatcher_in_try_catch() {
             statements: vec![],
             terminator: HirTerminator::Return(expression(
                 3,
-                HirExpressionKind::ResultConstruct {
-                    variant: ResultVariant::Ok,
-                    value: Box::new(string_expression(4, "done", types.string, RegionId(0))),
+                HirExpressionKind::VariantConstruct {
+                    carrier: HirVariantCarrier::Result,
+                    variant_index: 0,
+                    fields: vec![HirVariantField {
+                        name: Some(string_table.intern("value")),
+                        value: string_expression(4, "done", types.string, RegionId(0)),
+                    }],
                 },
                 result_type,
                 RegionId(0),

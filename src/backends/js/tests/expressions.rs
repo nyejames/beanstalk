@@ -2,7 +2,9 @@
 
 use super::support::*;
 use crate::compiler_frontend::hir::blocks::HirBlock;
-use crate::compiler_frontend::hir::expressions::{HirExpressionKind, OptionVariant, ValueKind};
+use crate::compiler_frontend::hir::expressions::{
+    HirExpressionKind, HirVariantCarrier, HirVariantField, ValueKind,
+};
 use crate::compiler_frontend::hir::functions::HirFunction;
 use crate::compiler_frontend::hir::ids::{BlockId, FunctionId, LocalId, RegionId};
 use crate::compiler_frontend::hir::operators::HirBinOp;
@@ -205,17 +207,22 @@ fn explicit_copy_emits_clone_value_wrapped_read() {
 // Error handling test [error]
 // ---------------------------------------------------------------------------
 
-/// Verifies that OptionConstruct expressions lower to tagged JS objects. [option]
+/// Verifies that VariantConstruct with Option carrier lowers to tagged JS objects. [option]
 #[test]
 fn lowers_option_construct_expression() {
     let mut string_table = StringTable::new();
     let (type_context, types) = build_type_context();
 
+    let value_name = string_table.intern("value");
     let option_value = expression(
         1,
-        HirExpressionKind::OptionConstruct {
-            variant: OptionVariant::Some,
-            value: Some(Box::new(int_expression(2, 10, types.int, RegionId(0)))),
+        HirExpressionKind::VariantConstruct {
+            carrier: HirVariantCarrier::Option,
+            variant_index: 1,
+            fields: vec![HirVariantField {
+                name: Some(value_name),
+                value: int_expression(2, 10, types.int, RegionId(0)),
+            }],
         },
         types.option_int,
         RegionId(0),
@@ -255,11 +262,11 @@ fn lowers_option_construct_expression() {
         &string_table,
         default_config(),
     )
-    .expect("OptionConstruct lowering should succeed");
+    .expect("VariantConstruct(Option) lowering should succeed");
 
     assert!(
         output.source.contains("{ tag: \"some\", value: 10 }"),
-        "expected OptionConstruct(Some) to lower into a tagged JS object"
+        "expected VariantConstruct(Option) to lower into a tagged JS object"
     );
 }
 

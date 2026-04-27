@@ -839,6 +839,29 @@ impl<'a> HirValidator<'a> {
                             ));
                         }
                     }
+                    crate::compiler_frontend::hir::expressions::HirVariantCarrier::Option => {
+                        let expected = if *variant_index == 0 { 0 } else { 1 };
+                        if fields.len() != expected {
+                            return Err(self.error_with_hir(
+                                format!(
+                                    "VariantConstruct(Option) field count {} does not match expected {} for variant index {}",
+                                    fields.len(), expected, variant_index
+                                ),
+                                anchor,
+                            ));
+                        }
+                    }
+                    crate::compiler_frontend::hir::expressions::HirVariantCarrier::Result => {
+                        if fields.len() != 1 {
+                            return Err(self.error_with_hir(
+                                format!(
+                                    "VariantConstruct(Result) field count {} does not match expected 1 for variant index {}",
+                                    fields.len(), variant_index
+                                ),
+                                anchor,
+                            ));
+                        }
+                    }
                 }
                 for field in fields {
                     self.validate_expression(&field.value, anchor)?;
@@ -886,26 +909,6 @@ impl<'a> HirValidator<'a> {
                 self.validate_expression(end, anchor)?;
             }
 
-            HirExpressionKind::OptionConstruct { variant, value } => match (variant, value) {
-                (crate::compiler_frontend::hir::expressions::OptionVariant::Some, Some(value)) => {
-                    self.validate_expression(value, anchor)?;
-                }
-
-                (crate::compiler_frontend::hir::expressions::OptionVariant::None, None) => {}
-
-                (crate::compiler_frontend::hir::expressions::OptionVariant::Some, None)
-                | (crate::compiler_frontend::hir::expressions::OptionVariant::None, Some(_)) => {
-                    return Err(self.error_with_hir(
-                        "Invalid OptionConstruct variant/value pairing in HIR expression",
-                        anchor,
-                    ));
-                }
-            },
-
-            HirExpressionKind::ResultConstruct { value, .. } => {
-                self.validate_expression(value, anchor)?;
-            }
-
             HirExpressionKind::VariantPayloadGet {
                 carrier,
                 source,
@@ -938,6 +941,27 @@ impl<'a> HirValidator<'a> {
                                 format!(
                                     "VariantPayloadGet field index {field_index} out of range for variant with {} fields",
                                     variant.fields.len()
+                                ),
+                                anchor,
+                            ));
+                        }
+                    }
+                    crate::compiler_frontend::hir::expressions::HirVariantCarrier::Option => {
+                        let max_fields = if *variant_index == 0 { 0 } else { 1 };
+                        if *field_index >= max_fields {
+                            return Err(self.error_with_hir(
+                                format!(
+                                    "VariantPayloadGet field index {field_index} out of range for Option variant {variant_index} with {max_fields} fields",
+                                ),
+                                anchor,
+                            ));
+                        }
+                    }
+                    crate::compiler_frontend::hir::expressions::HirVariantCarrier::Result => {
+                        if *field_index >= 1 {
+                            return Err(self.error_with_hir(
+                                format!(
+                                    "VariantPayloadGet field index {field_index} out of range for Result variant {variant_index} with 1 field",
                                 ),
                                 anchor,
                             ));

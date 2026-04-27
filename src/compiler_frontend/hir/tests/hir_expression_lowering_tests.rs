@@ -8,7 +8,7 @@ use crate::compiler_frontend::ast::expressions::call_argument::{
     CallAccessMode, CallArgument, CallPassingMode,
 };
 use crate::compiler_frontend::ast::expressions::expression::{
-    Expression, ExpressionKind, Operator,
+    Expression, ExpressionKind, Operator, ResultVariant as AstResultVariant,
 };
 use crate::compiler_frontend::ast::templates::template::{SlotKey, SlotPlaceholder, TemplateAtom};
 use crate::compiler_frontend::ast::templates::template_types::Template;
@@ -2009,4 +2009,88 @@ fn struct_lowering_uses_nominal_identity_only() {
         "expected Struct HirTypeKind with StructId(0), got {:?}",
         hir_type.kind
     );
+}
+
+/// Verifies that `ExpressionKind::OptionNone` lowers to `HirExpressionKind::VariantConstruct`
+/// with `HirVariantCarrier::Option` and zero fields.
+#[test]
+fn lowers_option_none_to_hir_variant_construct() {
+    let mut string_table = StringTable::new();
+    let location = location(1);
+    let mut builder = setup_builder(&mut string_table);
+
+    let option_expr = Expression::option_none(DataType::Int, location.clone());
+
+    let lowered = builder
+        .lower_expression(&option_expr)
+        .expect("option none lowering should succeed");
+
+    assert!(lowered.prelude.is_empty());
+
+    match &lowered.value.kind {
+        HirExpressionKind::VariantConstruct {
+            carrier: HirVariantCarrier::Option,
+            variant_index: 0,
+            fields,
+        } => {
+            assert!(fields.is_empty(), "Option none should have no fields");
+        }
+        other => panic!("expected VariantConstruct(Option, 0, []), got {other:?}"),
+    }
+}
+
+/// Verifies that `ExpressionKind::ResultConstruct` lowers to `HirExpressionKind::VariantConstruct`
+/// with `HirVariantCarrier::Result` and a single value field.
+#[test]
+fn lowers_result_ok_to_hir_variant_construct() {
+    let mut string_table = StringTable::new();
+    let location = location(1);
+    let mut builder = setup_builder(&mut string_table);
+
+    let ok_type = DataType::Int;
+    let err_type = DataType::StringSlice;
+    let result_type = DataType::Result {
+        ok: Box::new(ok_type.clone()),
+        err: Box::new(err_type),
+    };
+
+    let value_expr = Expression::new(
+        ExpressionKind::Int(42),
+        location.clone(),
+        ok_type,
+        ValueMode::ImmutableOwned,
+    );
+
+    let result_expr = Expression::result_construct(
+        AstResultVariant::Ok,
+        value_expr,
+        result_type,
+        location.clone(),
+        ValueMode::ImmutableOwned,
+    );
+
+    let lowered = builder
+        .lower_expression(&result_expr)
+        .expect("result ok lowering should succeed");
+
+    assert!(lowered.prelude.is_empty());
+
+    match &lowered.value.kind {
+        HirExpressionKind::VariantConstruct {
+            carrier: HirVariantCarrier::Result,
+            variant_index: 0,
+            fields,
+        } => {
+            assert_eq!(fields.len(), 1, "Result Ok should have one field");
+            assert!(
+                fields[0].name.is_some(),
+                "Result Ok field should have a name"
+            );
+            assert!(
+                matches!(fields[0].value.kind, HirExpressionKind::Int(42)),
+                "Result Ok field value should be Int(42)"
+            );
+        }
+        other => panic!("expected VariantConstruct(Result, 0, [_]), got {other:?}"),
+    }
 }

@@ -15,7 +15,9 @@ use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::external_packages::CallTarget;
-use crate::compiler_frontend::hir::expressions::{HirExpressionKind, ResultVariant, ValueKind};
+use crate::compiler_frontend::hir::expressions::{
+    HirExpressionKind, HirVariantCarrier, HirVariantField, ValueKind,
+};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_datatypes::HirTypeKind;
 use crate::compiler_frontend::hir::ids::{BlockId, FunctionId};
@@ -305,11 +307,16 @@ impl<'a> HirBuilder<'a> {
                 );
             }
 
+            let value_name = self.string_table.intern("value");
             let ok_result = self.make_expression(
                 location,
-                HirExpressionKind::ResultConstruct {
-                    variant: ResultVariant::Ok,
-                    value: Box::new(unit),
+                HirExpressionKind::VariantConstruct {
+                    carrier: HirVariantCarrier::Result,
+                    variant_index: 0,
+                    fields: vec![HirVariantField {
+                        name: Some(value_name),
+                        value: unit,
+                    }],
                 },
                 return_type,
                 crate::compiler_frontend::hir::expressions::ValueKind::RValue,

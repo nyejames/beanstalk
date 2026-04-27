@@ -11,9 +11,7 @@ use crate::compiler_frontend::analysis::borrow_checker::types::{
     LocalMode, StatementBorrowFact, TerminatorBorrowFact, ValueAccessClassification,
 };
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
-use crate::compiler_frontend::hir::expressions::{
-    HirExpression, HirExpressionKind, OptionVariant, ValueKind,
-};
+use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, ValueKind};
 use crate::compiler_frontend::hir::ids::BlockId;
 use crate::compiler_frontend::hir::patterns::{HirMatchArm, HirPattern};
 use crate::compiler_frontend::hir::places::HirPlace;
@@ -1124,18 +1122,6 @@ fn record_shared_reads_in_expression(
             record_shared_reads_in_expression(env, end, location.clone(), roots)?;
         }
 
-        HirExpressionKind::OptionConstruct { variant, value } => {
-            if matches!(variant, OptionVariant::Some)
-                && let Some(inner) = value
-            {
-                record_shared_reads_in_expression(env, inner, location.clone(), roots)?;
-            }
-        }
-
-        HirExpressionKind::ResultConstruct { value, .. } => {
-            record_shared_reads_in_expression(env, value, location.clone(), roots)?;
-        }
-
         HirExpressionKind::ResultPropagate { result } => {
             record_shared_reads_in_expression(env, result, location.clone(), roots)?;
         }
@@ -1214,16 +1200,6 @@ fn collect_expression_roots(
         HirExpressionKind::Range { start, end } => {
             collect_expression_roots(layout, state, start, out, location.clone())?;
             collect_expression_roots(layout, state, end, out, location)?;
-        }
-
-        HirExpressionKind::OptionConstruct { value, .. } => {
-            if let Some(inner) = value {
-                collect_expression_roots(layout, state, inner, out, location)?;
-            }
-        }
-
-        HirExpressionKind::ResultConstruct { value, .. } => {
-            collect_expression_roots(layout, state, value, out, location)?;
         }
 
         HirExpressionKind::ResultPropagate { result } => {

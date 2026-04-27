@@ -6,8 +6,7 @@
 use crate::backends::js::JsEmitter;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::expressions::{
-    HirBuiltinCastKind, HirExpression, HirExpressionKind, HirVariantCarrier, OptionVariant,
-    ResultVariant,
+    HirBuiltinCastKind, HirExpression, HirExpressionKind, HirVariantCarrier,
 };
 use crate::compiler_frontend::hir::hir_datatypes::HirTypeKind;
 use crate::compiler_frontend::hir::operators::{HirBinOp, HirUnaryOp};
@@ -28,7 +27,7 @@ impl<'hir> JsEmitter<'hir> {
                 variant_index,
                 fields,
             } => {
-                let mut entries = vec![format!("tag: {variant_index}")];
+                let mut entries = vec![];
                 for field in fields {
                     let js_value = self.lower_expr(&field.value)?;
                     if let Some(name) = field.name {
@@ -39,7 +38,23 @@ impl<'hir> JsEmitter<'hir> {
                     }
                 }
                 match carrier {
-                    HirVariantCarrier::Choice { .. } => Ok(format!("{{ {} }}", entries.join(", "))),
+                    HirVariantCarrier::Choice { .. } => {
+                        let mut all_entries = vec![format!("tag: {variant_index}")];
+                        all_entries.extend(entries);
+                        Ok(format!("{{ {} }}", all_entries.join(", ")))
+                    }
+                    HirVariantCarrier::Option => {
+                        let tag = if *variant_index == 0 { "none" } else { "some" };
+                        let mut all_entries = vec![format!("tag: \"{tag}\"")];
+                        all_entries.extend(entries);
+                        Ok(format!("{{ {} }}", all_entries.join(", ")))
+                    }
+                    HirVariantCarrier::Result => {
+                        let tag = if *variant_index == 0 { "ok" } else { "err" };
+                        let mut all_entries = vec![format!("tag: \"{tag}\"")];
+                        all_entries.extend(entries);
+                        Ok(format!("{{ {} }}", all_entries.join(", ")))
+                    }
                 }
             }
 
@@ -115,29 +130,6 @@ impl<'hir> JsEmitter<'hir> {
                 Ok(format!("({tuple})[{index}]"))
             }
 
-            HirExpressionKind::OptionConstruct { variant, value } => match (variant, value) {
-                (OptionVariant::None, None) => Ok("{ tag: \"none\" }".to_owned()),
-                (OptionVariant::Some, Some(value)) => Ok(format!(
-                    "{{ tag: \"some\", value: {} }}",
-                    self.lower_expr(value)?
-                )),
-                (OptionVariant::Some, None) => Err(CompilerError::compiler_error(
-                    "JavaScript backend: OptionConstruct(Some) missing value",
-                )),
-                (OptionVariant::None, Some(_)) => Err(CompilerError::compiler_error(
-                    "JavaScript backend: OptionConstruct(None) should not carry a value",
-                )),
-            },
-
-            HirExpressionKind::ResultConstruct { variant, value } => {
-                let lowered_value = self.lower_expr(value)?;
-                let tag = match variant {
-                    ResultVariant::Ok => "ok",
-                    ResultVariant::Err => "err",
-                };
-                Ok(format!("{{ tag: \"{tag}\", value: {lowered_value} }}"))
-            }
-
             HirExpressionKind::ResultPropagate { result } => {
                 let lowered_result = self.lower_expr(result)?;
                 Ok(format!("__bs_result_propagate({lowered_result})"))
@@ -196,6 +188,7 @@ impl<'hir> JsEmitter<'hir> {
                         })?;
                         self.string_table.resolve(field.name)
                     }
+                    HirVariantCarrier::Option | HirVariantCarrier::Result => "value",
                 };
                 Ok(format!("({source_js}).{field_name}"))
             }

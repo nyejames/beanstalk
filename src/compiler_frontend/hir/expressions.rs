@@ -13,10 +13,11 @@ use crate::compiler_frontend::symbols::string_interning::StringId;
 ///
 /// WHY: Choices, Options, and Results all construct variant-shaped values. A shared carrier
 /// keeps backend lowering uniform while preserving distinct semantic type identity.
-/// Phase 3 uses this for choices; Phase 6 will migrate Option/Result.
 #[derive(Debug, Clone)]
 pub enum HirVariantCarrier {
     Choice { choice_id: ChoiceId },
+    Option,
+    Result,
 }
 
 /// One field inside a `VariantConstruct`.
@@ -109,21 +110,6 @@ pub enum HirExpressionKind {
         index: usize,
     },
 
-    ///Construct an Option value
-    /// - Some variant: value must be Some(expr)
-    /// - None variant: value must be None
-    OptionConstruct {
-        variant: OptionVariant,
-        value: Option<Box<HirExpression>>, // None for None variant, Some for Some variant
-    },
-
-    /// Construct a Result value
-    /// Example: Ok(42) or Err("error")
-    ResultConstruct {
-        variant: ResultVariant,
-        value: Box<HirExpression>, // The wrapped value
-    },
-
     /// Unwraps an internal Result value for `call(...)!` propagation:
     /// - Ok(v)  => evaluates to v
     /// - Err(e) => propagates through the current function's error channel
@@ -175,13 +161,8 @@ pub enum HirExpressionKind {
     },
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum OptionVariant {
-    #[allow(dead_code)]
-    // Kept until alpha Option<T> lowering emits explicit Some carriers.
-    Some,
-    None,
-}
+// OptionVariant was removed during Phase 6 HIR carrier unification.
+// Option none/some are now represented through VariantConstruct with HirVariantCarrier::Option.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum HirBuiltinCastKind {

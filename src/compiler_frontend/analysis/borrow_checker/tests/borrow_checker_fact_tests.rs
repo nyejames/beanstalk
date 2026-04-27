@@ -442,12 +442,11 @@ fn collect_expression_values(expression: &HirExpression, out: &mut FxHashSet<Hir
             collect_expression_values(start, out);
             collect_expression_values(end, out);
         }
-        HirExpressionKind::OptionConstruct { value, .. } => {
-            if let Some(value) = value {
-                collect_expression_values(value, out);
+        HirExpressionKind::VariantConstruct { fields, .. } => {
+            for field in fields {
+                collect_expression_values(&field.value, out);
             }
         }
-        HirExpressionKind::ResultConstruct { value, .. } => collect_expression_values(value, out),
         HirExpressionKind::ResultPropagate { result } => collect_expression_values(result, out),
         HirExpressionKind::ResultIsOk { result }
         | HirExpressionKind::ResultUnwrapOk { result }
@@ -463,11 +462,6 @@ fn collect_expression_values(expression: &HirExpression, out: &mut FxHashSet<Hir
         | HirExpressionKind::Copy(_)
         | HirExpressionKind::Load(_) => {}
 
-        HirExpressionKind::VariantConstruct { fields, .. } => {
-            for field in fields {
-                collect_expression_values(&field.value, out);
-            }
-        }
         HirExpressionKind::VariantPayloadGet { source, .. } => {
             collect_expression_values(source, out);
         }

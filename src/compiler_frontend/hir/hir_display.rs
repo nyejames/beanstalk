@@ -10,9 +10,10 @@
 use crate::compiler_frontend::external_packages::CallTarget;
 #[cfg(any(test, feature = "show_hir"))]
 use crate::compiler_frontend::hir::blocks::{HirBlock, HirLocal};
+use crate::compiler_frontend::hir::expressions::ResultVariant;
 #[cfg(any(test, feature = "show_hir"))]
 use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, ValueKind};
-use crate::compiler_frontend::hir::expressions::{OptionVariant, ResultVariant};
+// WHY: ResultVariant is still used by HirConstValue and its Display impl.
 #[cfg(any(test, feature = "show_hir"))]
 use crate::compiler_frontend::hir::functions::HirFunction;
 #[cfg(any(test, feature = "show_hir"))]
@@ -467,17 +468,6 @@ impl<'a> HirDisplayContext<'a> {
             HirExpressionKind::TupleGet { tuple, index } => {
                 format!("tuple_get({}, {})", self.render_expression(tuple), index)
             }
-            HirExpressionKind::OptionConstruct { variant, value } => match (variant, value) {
-                (OptionVariant::Some, Some(expr)) => {
-                    format!("Some({})", self.render_expression(expr))
-                }
-                (OptionVariant::None, None) => "None".to_owned(),
-                (OptionVariant::Some, None) => "Some(<missing>)".to_owned(),
-                (OptionVariant::None, Some(_)) => "None(<unexpected>)".to_owned(),
-            },
-            HirExpressionKind::ResultConstruct { variant, value } => {
-                format!("{}({})", variant, self.render_expression(value))
-            }
             HirExpressionKind::ResultPropagate { result } => {
                 format!("propagate!({})", self.render_expression(result))
             }
@@ -507,6 +497,12 @@ impl<'a> HirDisplayContext<'a> {
                     crate::compiler_frontend::hir::expressions::HirVariantCarrier::Choice {
                         ..
                     } => "choice".to_owned(),
+                    crate::compiler_frontend::hir::expressions::HirVariantCarrier::Option => {
+                        "option".to_owned()
+                    }
+                    crate::compiler_frontend::hir::expressions::HirVariantCarrier::Result => {
+                        "result".to_owned()
+                    }
                 };
                 let fields_str = if fields.is_empty() {
                     String::new()
@@ -543,6 +539,12 @@ impl<'a> HirDisplayContext<'a> {
                     crate::compiler_frontend::hir::expressions::HirVariantCarrier::Choice {
                         ..
                     } => "choice".to_owned(),
+                    crate::compiler_frontend::hir::expressions::HirVariantCarrier::Option => {
+                        "option".to_owned()
+                    }
+                    crate::compiler_frontend::hir::expressions::HirVariantCarrier::Result => {
+                        "result".to_owned()
+                    }
                 };
                 format!(
                     "variant_payload_get({}, tag={}, field={}) from {}",
@@ -963,15 +965,6 @@ impl Display for HirUnaryOp {
         match self {
             HirUnaryOp::Neg => write!(f, "-"),
             HirUnaryOp::Not => write!(f, "!"),
-        }
-    }
-}
-
-impl Display for OptionVariant {
-    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        match self {
-            OptionVariant::Some => write!(f, "Some"),
-            OptionVariant::None => write!(f, "None"),
         }
     }
 }

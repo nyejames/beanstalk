@@ -5,7 +5,9 @@
 
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::hir::expressions::{HirExpressionKind, ResultVariant, ValueKind};
+use crate::compiler_frontend::hir::expressions::{
+    HirExpressionKind, HirVariantCarrier, HirVariantField, ValueKind,
+};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_datatypes::HirTypeKind;
 use crate::compiler_frontend::hir::terminators::HirTerminator;
@@ -76,11 +78,16 @@ impl<'a> HirBuilder<'a> {
                 }
                 let return_region = return_value.region;
 
+                let value_name = self.string_table.intern("value");
                 self.make_expression(
                     location,
-                    HirExpressionKind::ResultConstruct {
-                        variant: ResultVariant::Ok,
-                        value: Box::new(return_value),
+                    HirExpressionKind::VariantConstruct {
+                        carrier: HirVariantCarrier::Result,
+                        variant_index: 0,
+                        fields: vec![HirVariantField {
+                            name: Some(value_name),
+                            value: return_value,
+                        }],
                     },
                     function_return_type,
                     ValueKind::RValue,
@@ -135,11 +142,16 @@ impl<'a> HirBuilder<'a> {
         }
         let error_region = lowered_error.region;
 
+        let value_name = self.string_table.intern("value");
         let return_expression = self.make_expression(
             location,
-            HirExpressionKind::ResultConstruct {
-                variant: ResultVariant::Err,
-                value: Box::new(lowered_error),
+            HirExpressionKind::VariantConstruct {
+                carrier: HirVariantCarrier::Result,
+                variant_index: 1,
+                fields: vec![HirVariantField {
+                    name: Some(value_name),
+                    value: lowered_error,
+                }],
             },
             function_return_type,
             ValueKind::RValue,

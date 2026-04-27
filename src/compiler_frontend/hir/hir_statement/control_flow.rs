@@ -122,22 +122,6 @@ fn substitute_locals_in_expression(
             index: *index,
         },
 
-        HirExpressionKind::OptionConstruct { variant, value } => {
-            HirExpressionKind::OptionConstruct {
-                variant: *variant,
-                value: value
-                    .as_ref()
-                    .map(|v| Box::new(substitute_locals_in_expression(v, substitutions))),
-            }
-        }
-
-        HirExpressionKind::ResultConstruct { variant, value } => {
-            HirExpressionKind::ResultConstruct {
-                variant: *variant,
-                value: Box::new(substitute_locals_in_expression(value, substitutions)),
-            }
-        }
-
         HirExpressionKind::ResultPropagate { result } => HirExpressionKind::ResultPropagate {
             result: Box::new(substitute_locals_in_expression(result, substitutions)),
         },

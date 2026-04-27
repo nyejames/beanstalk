@@ -781,13 +781,10 @@ fn collect_expression_loaded_locals(expression: &HirExpression, visitor: &mut im
             collect_expression_loaded_locals(start, visitor);
             collect_expression_loaded_locals(end, visitor);
         }
-        HirExpressionKind::OptionConstruct { value, .. } => {
-            if let Some(value) = value {
-                collect_expression_loaded_locals(value, visitor);
+        HirExpressionKind::VariantConstruct { fields, .. } => {
+            for field in fields {
+                collect_expression_loaded_locals(&field.value, visitor);
             }
-        }
-        HirExpressionKind::ResultConstruct { value, .. } => {
-            collect_expression_loaded_locals(value, visitor);
         }
         HirExpressionKind::ResultPropagate { result } => {
             collect_expression_loaded_locals(result, visitor);
@@ -804,11 +801,6 @@ fn collect_expression_loaded_locals(expression: &HirExpression, visitor: &mut im
         | HirExpressionKind::Char(_)
         | HirExpressionKind::StringLiteral(_) => {}
 
-        HirExpressionKind::VariantConstruct { fields, .. } => {
-            for field in fields {
-                collect_expression_loaded_locals(&field.value, visitor);
-            }
-        }
         HirExpressionKind::VariantPayloadGet { source, .. } => {
             collect_expression_loaded_locals(source, visitor);
         }

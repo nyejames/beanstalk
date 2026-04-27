@@ -12,7 +12,7 @@ use crate::compiler_frontend::external_packages::CallTarget;
 use crate::compiler_frontend::hir::blocks::{HirBlock, HirLocal};
 use crate::compiler_frontend::hir::expressions::{
     HirBuiltinCastKind, HirExpression, HirExpressionKind, HirVariantCarrier, HirVariantField,
-    OptionVariant, ResultVariant, ValueKind,
+    ValueKind,
 };
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeId};
@@ -209,18 +209,23 @@ impl<'a> HirBuilder<'a> {
                 let lowered_value = self.lower_expression(value)?;
                 let region = self.current_region_or_error(&expr.location)?;
                 let ty = self.lower_data_type(&expr.data_type, &expr.location)?;
-                let hir_variant = match variant {
-                    AstResultVariant::Ok => ResultVariant::Ok,
-                    AstResultVariant::Err => ResultVariant::Err,
+                let variant_index = match variant {
+                    AstResultVariant::Ok => 0,
+                    AstResultVariant::Err => 1,
                 };
+                let value_name = self.string_table.intern("value");
 
                 Ok(LoweredExpression {
                     prelude: lowered_value.prelude,
                     value: self.make_expression(
                         &expr.location,
-                        HirExpressionKind::ResultConstruct {
-                            variant: hir_variant,
-                            value: Box::new(lowered_value.value),
+                        HirExpressionKind::VariantConstruct {
+                            carrier: HirVariantCarrier::Result,
+                            variant_index,
+                            fields: vec![HirVariantField {
+                                name: Some(value_name),
+                                value: lowered_value.value,
+                            }],
                         },
                         ty,
                         ValueKind::RValue,
@@ -370,9 +375,10 @@ impl<'a> HirBuilder<'a> {
                     prelude: vec![],
                     value: self.make_expression(
                         &expr.location,
-                        HirExpressionKind::OptionConstruct {
-                            variant: OptionVariant::None,
-                            value: None,
+                        HirExpressionKind::VariantConstruct {
+                            carrier: HirVariantCarrier::Option,
+                            variant_index: 0,
+                            fields: vec![],
                         },
                         ty,
                         ValueKind::RValue,

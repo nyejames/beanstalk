@@ -2,7 +2,9 @@
 
 use super::support::*;
 use crate::compiler_frontend::hir::blocks::HirBlock;
-use crate::compiler_frontend::hir::expressions::{HirExpressionKind, ResultVariant, ValueKind};
+use crate::compiler_frontend::hir::expressions::{
+    HirExpressionKind, HirVariantCarrier, HirVariantField, ValueKind,
+};
 use crate::compiler_frontend::hir::functions::{HirFunction, HirFunctionOrigin};
 use crate::compiler_frontend::hir::hir_datatypes::{HirType, HirTypeKind};
 use crate::compiler_frontend::hir::ids::{BlockId, FunctionId, LocalId, RegionId};
@@ -102,11 +104,16 @@ fn result_propagate_emitted_in_nested_function_calls() {
     });
 
     // Function C (id 0): innermost, returns Result directly
+    let value_name = string_table.intern("value");
     let c_return = expression(
         1,
-        HirExpressionKind::ResultConstruct {
-            variant: ResultVariant::Ok,
-            value: Box::new(string_expression(2, "inner", types.string, region)),
+        HirExpressionKind::VariantConstruct {
+            carrier: HirVariantCarrier::Result,
+            variant_index: 0,
+            fields: vec![HirVariantField {
+                name: Some(value_name),
+                value: string_expression(2, "inner", types.string, region),
+            }],
         },
         result_type,
         region,
@@ -139,23 +146,27 @@ fn result_propagate_emitted_in_nested_function_calls() {
     );
     let b_return = expression(
         4,
-        HirExpressionKind::ResultConstruct {
-            variant: ResultVariant::Ok,
-            value: Box::new(expression(
-                5,
-                HirExpressionKind::ResultPropagate {
-                    result: Box::new(expression(
-                        6,
-                        HirExpressionKind::Load(HirPlace::Local(LocalId(0))),
-                        result_type,
-                        region,
-                        ValueKind::RValue,
-                    )),
-                },
-                types.string,
-                region,
-                ValueKind::RValue,
-            )),
+        HirExpressionKind::VariantConstruct {
+            carrier: HirVariantCarrier::Result,
+            variant_index: 0,
+            fields: vec![HirVariantField {
+                name: Some(value_name),
+                value: expression(
+                    5,
+                    HirExpressionKind::ResultPropagate {
+                        result: Box::new(expression(
+                            6,
+                            HirExpressionKind::Load(HirPlace::Local(LocalId(0))),
+                            result_type,
+                            region,
+                            ValueKind::RValue,
+                        )),
+                    },
+                    types.string,
+                    region,
+                    ValueKind::RValue,
+                ),
+            }],
         },
         result_type,
         region,
@@ -188,23 +199,27 @@ fn result_propagate_emitted_in_nested_function_calls() {
     );
     let a_return = expression(
         8,
-        HirExpressionKind::ResultConstruct {
-            variant: ResultVariant::Ok,
-            value: Box::new(expression(
-                9,
-                HirExpressionKind::ResultPropagate {
-                    result: Box::new(expression(
-                        10,
-                        HirExpressionKind::Load(HirPlace::Local(LocalId(0))),
-                        result_type,
-                        region,
-                        ValueKind::RValue,
-                    )),
-                },
-                types.string,
-                region,
-                ValueKind::RValue,
-            )),
+        HirExpressionKind::VariantConstruct {
+            carrier: HirVariantCarrier::Result,
+            variant_index: 0,
+            fields: vec![HirVariantField {
+                name: Some(value_name),
+                value: expression(
+                    9,
+                    HirExpressionKind::ResultPropagate {
+                        result: Box::new(expression(
+                            10,
+                            HirExpressionKind::Load(HirPlace::Local(LocalId(0))),
+                            result_type,
+                            region,
+                            ValueKind::RValue,
+                        )),
+                    },
+                    types.string,
+                    region,
+                    ValueKind::RValue,
+                ),
+            }],
         },
         result_type,
         region,
