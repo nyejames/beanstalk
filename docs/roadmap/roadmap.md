@@ -19,7 +19,6 @@ Full plan: `docs/roadmap/plans/std-math.md`
 - Closures
 - Hash Maps
 - Compile time arbitary precision aritmetic + Decimals Type support
-
 - Optimised template folding
 - Move to more specific explicit type declarations for numbers (I32, I64, F32, F64) - JS backend just makes all an F64 and accepts the precision loss, more for future Wasm backend
 
