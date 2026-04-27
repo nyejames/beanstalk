@@ -51,14 +51,17 @@ use std::rc::Rc;
 #[derive(Clone, Default)]
 pub(crate) struct FileImportBindings {
     /// Source declarations visible from this file (including builtins).
+    /// Used as an access gate for permission checks and constant deferral only;
+    /// name lookup goes through `visible_source_bindings`.
     pub(crate) visible_symbol_paths: FxHashSet<InternedPath>,
 
     /// External package functions/types visible from this file.
     /// Populated by explicit virtual-package imports and prelude symbols.
     pub(crate) visible_external_symbols: FxHashMap<StringId, ExternalSymbolId>,
 
-    /// Source declaration aliases: local visible name → canonical declaration path.
-    pub(crate) visible_source_aliases: FxHashMap<StringId, InternedPath>,
+    /// Source-visible names → canonical declaration path.
+    /// Includes same-file declarations and imported source symbols (aliased or not).
+    pub(crate) visible_source_bindings: FxHashMap<StringId, InternedPath>,
 
     /// Type aliases: local visible name → canonical type alias path.
     pub(crate) visible_type_aliases: FxHashMap<StringId, InternedPath>,
@@ -101,9 +104,21 @@ pub(crate) fn resolve_file_import_bindings(
                 .cloned()
                 .unwrap_or_default(),
             visible_external_symbols: FxHashMap::default(),
-            visible_source_aliases: FxHashMap::default(),
+            visible_source_bindings: FxHashMap::default(),
             visible_type_aliases: FxHashMap::default(),
         };
+
+        // Populate same-file declarations into visible_source_bindings.
+        if let Some(declared_paths) = declared_paths_by_file.get(&source_file) {
+            for path in declared_paths {
+                if let Some(name) = path.name() {
+                    bindings
+                        .visible_source_bindings
+                        .insert(name, path.to_owned());
+                }
+            }
+        }
+
         let mut bound_names = declared_names_by_file
             .get(&source_file)
             .cloned()
@@ -183,11 +198,9 @@ pub(crate) fn resolve_file_import_bindings(
                             .insert(local_name, symbol_path.to_owned());
                     } else {
                         bindings.visible_symbol_paths.insert(symbol_path.to_owned());
-                        if import.alias.is_some() {
-                            bindings
-                                .visible_source_aliases
-                                .insert(local_name, symbol_path.to_owned());
-                        }
+                        bindings
+                            .visible_source_bindings
+                            .insert(local_name, symbol_path.to_owned());
                     }
                     bound_names.insert(local_name);
                 }
@@ -300,7 +313,7 @@ pub(crate) struct ConstantHeaderParseContext<'a> {
     pub top_level_declarations: Rc<TopLevelDeclarationIndex>,
     pub visible_declaration_ids: &'a FxHashSet<InternedPath>,
     pub visible_external_symbols: &'a FxHashMap<StringId, ExternalSymbolId>,
-    pub visible_source_aliases: &'a FxHashMap<StringId, InternedPath>,
+    pub visible_source_bindings: &'a FxHashMap<StringId, InternedPath>,
     pub visible_type_aliases: &'a FxHashMap<StringId, InternedPath>,
     pub resolved_type_aliases: Rc<FxHashMap<InternedPath, DataType>>,
     pub external_package_registry: &'a ExternalPackageRegistry,
@@ -322,7 +335,7 @@ pub(crate) fn parse_constant_header_declaration(
         top_level_declarations,
         visible_declaration_ids,
         visible_external_symbols,
-        visible_source_aliases,
+        visible_source_bindings,
         visible_type_aliases,
         resolved_type_aliases,
         external_package_registry,
@@ -365,7 +378,7 @@ pub(crate) fn parse_constant_header_declaration(
     // can see to enforce import boundaries and prevent cross-file leakage.
     .with_visible_declarations(visible_declaration_ids.to_owned())
     .with_visible_external_symbols(visible_external_symbols.to_owned())
-    .with_visible_source_aliases(visible_source_aliases.to_owned())
+    .with_visible_source_bindings(visible_source_bindings.to_owned())
     .with_visible_type_aliases(visible_type_aliases.to_owned())
     .with_resolved_type_aliases((*resolved_type_aliases).clone())
     .with_source_file_scope(source_file_scope);

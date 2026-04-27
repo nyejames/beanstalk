@@ -36,12 +36,6 @@ pub enum ExternalFunctionId {
     ErrorWithLocation,
     ErrorPushTrace,
     ErrorBubble,
-    /// Test package A function `open`.
-    /// Registered in `@test/pkg-a` for integration-test coverage of package-scoped resolution.
-    TestPkgAOpen,
-    /// Test package B function `open`.
-    /// Registered in `@test/pkg-b` for integration-test coverage of package-scoped resolution.
-    TestPkgBOpen,
     /// Synthetic functions registered by tests. Never emitted by production parsers.
     Synthetic(u32),
 }
@@ -58,8 +52,6 @@ impl ExternalFunctionId {
             Self::ErrorWithLocation => ERROR_WITH_LOCATION_HOST_NAME,
             Self::ErrorPushTrace => ERROR_PUSH_TRACE_HOST_NAME,
             Self::ErrorBubble => ERROR_BUBBLE_HOST_NAME,
-            Self::TestPkgAOpen => "test_pkg_a_open",
-            Self::TestPkgBOpen => "test_pkg_b_open",
             Self::Synthetic(_) => "<synthetic>",
         }
     }
@@ -232,8 +224,43 @@ pub struct ExternalPackageRegistry {
     /// Prelude symbols that are auto-imported into every module.
     /// Bare-name lookup is only valid for the prelude.
     prelude_symbols_by_name: HashMap<&'static str, ExternalSymbolId>,
-    #[cfg(test)]
+    /// Counter for dynamically assigned synthetic function IDs.
     next_synthetic_id: u32,
+}
+
+/// Builder-friendly spec for registering an external function.
+///
+/// WHAT: carries the metadata needed to register a function without forcing
+/// the caller to construct the full `ExternalFunctionDef` and pick a stable ID.
+/// WHY: builder packages should not need to hardcode `ExternalFunctionId` enum variants.
+#[derive(Debug, Clone)]
+pub struct ExternalFunctionSpec {
+    pub name: &'static str,
+    pub parameters: Vec<ExternalParameter>,
+    pub return_type: ExternalAbiType,
+    pub return_alias: ExternalReturnAlias,
+    pub receiver_type: Option<ExternalAbiType>,
+    pub receiver_access: ExternalAccessKind,
+}
+
+impl From<ExternalFunctionSpec> for ExternalFunctionDef {
+    fn from(spec: ExternalFunctionSpec) -> Self {
+        ExternalFunctionDef {
+            name: spec.name,
+            parameters: spec.parameters,
+            return_type: spec.return_type,
+            return_alias: spec.return_alias,
+            receiver_type: spec.receiver_type,
+            receiver_access: spec.receiver_access,
+        }
+    }
+}
+
+/// Builder-friendly spec for registering an external type.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ExternalTypeSpec {
+    pub name: &'static str,
+    pub abi_type: ExternalAbiType,
 }
 
 impl ExternalPackageRegistry {
@@ -460,50 +487,53 @@ impl ExternalPackageRegistry {
             )
             .expect("builtin function registration should not collide");
 
-        // Test packages with duplicate symbol names (for integration-test coverage).
         registry
-            .register_package(ExternalPackage::new("@test/pkg-a"))
-            .expect("test package registration should not collide");
-        registry
-            .register_function_in_package(
-                "@test/pkg-a",
-                ExternalFunctionId::TestPkgAOpen,
-                ExternalFunctionDef {
-                    name: "open",
-                    parameters: vec![ExternalParameter {
-                        language_type: ExternalAbiType::Inferred,
-                        access_kind: ExternalAccessKind::Shared,
-                    }],
-                    return_type: ExternalAbiType::Void,
-                    return_alias: ExternalReturnAlias::Fresh,
-                    receiver_type: None,
-                    receiver_access: ExternalAccessKind::Shared,
-                },
-            )
-            .expect("test function registration should not collide");
+    }
 
-        registry
-            .register_package(ExternalPackage::new("@test/pkg-b"))
+    /// Registers test packages `@test/pkg-a` and `@test/pkg-b` with a duplicate
+    /// symbol name for integration-test coverage of package-scoped resolution.
+    /// Registers test packages `@test/pkg-a` and `@test/pkg-b` with a duplicate
+    /// symbol name for integration-test coverage of package-scoped resolution.
+    pub fn with_test_packages_for_integration(mut self) -> Self {
+        self.register_package(ExternalPackage::new("@test/pkg-a"))
             .expect("test package registration should not collide");
-        registry
-            .register_function_in_package(
-                "@test/pkg-b",
-                ExternalFunctionId::TestPkgBOpen,
-                ExternalFunctionDef {
-                    name: "open",
-                    parameters: vec![ExternalParameter {
-                        language_type: ExternalAbiType::Inferred,
-                        access_kind: ExternalAccessKind::Shared,
-                    }],
-                    return_type: ExternalAbiType::Void,
-                    return_alias: ExternalReturnAlias::Fresh,
-                    receiver_type: None,
-                    receiver_access: ExternalAccessKind::Shared,
-                },
-            )
-            .expect("test function registration should not collide");
+        self.register_function_in_package(
+            "@test/pkg-a",
+            ExternalFunctionId::Synthetic(1000),
+            ExternalFunctionDef {
+                name: "open",
+                parameters: vec![ExternalParameter {
+                    language_type: ExternalAbiType::Inferred,
+                    access_kind: ExternalAccessKind::Shared,
+                }],
+                return_type: ExternalAbiType::Void,
+                return_alias: ExternalReturnAlias::Fresh,
+                receiver_type: None,
+                receiver_access: ExternalAccessKind::Shared,
+            },
+        )
+        .expect("test function registration should not collide");
 
-        registry
+        self.register_package(ExternalPackage::new("@test/pkg-b"))
+            .expect("test package registration should not collide");
+        self.register_function_in_package(
+            "@test/pkg-b",
+            ExternalFunctionId::Synthetic(1001),
+            ExternalFunctionDef {
+                name: "open",
+                parameters: vec![ExternalParameter {
+                    language_type: ExternalAbiType::Inferred,
+                    access_kind: ExternalAccessKind::Shared,
+                }],
+                return_type: ExternalAbiType::Void,
+                return_alias: ExternalReturnAlias::Fresh,
+                receiver_type: None,
+                receiver_access: ExternalAccessKind::Shared,
+            },
+        )
+        .expect("test function registration should not collide");
+
+        self
     }
 
     // ------------------------------------------------------------------
@@ -511,7 +541,7 @@ impl ExternalPackageRegistry {
     // ------------------------------------------------------------------
 
     /// Registers a new virtual package in the registry.
-    fn register_package(&mut self, package: ExternalPackage) -> Result<(), CompilerError> {
+    pub fn register_package(&mut self, package: ExternalPackage) -> Result<(), CompilerError> {
         if self.packages.contains_key(package.path) {
             return_compiler_error!("External package '{}' is already registered.", package.path);
         }
@@ -520,7 +550,7 @@ impl ExternalPackageRegistry {
     }
 
     /// Registers an external function within a specific package.
-    fn register_function_in_package(
+    pub fn register_function_in_package(
         &mut self,
         package_path: &'static str,
         id: ExternalFunctionId,
@@ -560,7 +590,7 @@ impl ExternalPackageRegistry {
     }
 
     /// Registers an external type within a specific package.
-    fn register_type_in_package(
+    pub fn register_type_in_package(
         &mut self,
         package_path: &'static str,
         id: ExternalTypeId,
@@ -624,6 +654,48 @@ impl ExternalPackageRegistry {
     /// Looks up an external type by its stable ID.
     pub fn get_type_by_id(&self, id: ExternalTypeId) -> Option<&ExternalTypeDef> {
         self.types_by_id.get(&id)
+    }
+
+    // ------------------------------------------------------------------
+    // Dynamic registration (alpha: assigns Synthetic IDs)
+    // ------------------------------------------------------------------
+
+    /// Registers an external function in a package, assigning the next available
+    /// synthetic ID automatically.
+    ///
+    /// WHAT: builder-friendly entry point that does not require hardcoding an
+    /// `ExternalFunctionId` enum variant.
+    /// WHY: alpha short-cut until the backend supports fully dynamic host imports.
+    pub fn register_external_function(
+        &mut self,
+        package_path: &'static str,
+        spec: ExternalFunctionSpec,
+    ) -> Result<ExternalFunctionId, CompilerError> {
+        let id = ExternalFunctionId::Synthetic(self.next_synthetic_id);
+        self.next_synthetic_id += 1;
+        self.register_function_in_package(package_path, id, spec.into())?;
+        Ok(id)
+    }
+
+    /// Registers an external type in a package, assigning the next available
+    /// dynamic ID automatically.
+    pub fn register_external_type(
+        &mut self,
+        package_path: &'static str,
+        spec: ExternalTypeSpec,
+    ) -> Result<ExternalTypeId, CompilerError> {
+        let id = ExternalTypeId(self.next_synthetic_id);
+        self.next_synthetic_id += 1;
+        self.register_type_in_package(
+            package_path,
+            id,
+            ExternalTypeDef {
+                name: spec.name,
+                package: package_path,
+                abi_type: spec.abi_type,
+            },
+        )?;
+        Ok(id)
     }
 
     // ------------------------------------------------------------------
@@ -747,42 +819,6 @@ impl ExternalPackageRegistry {
             }
         }
         false
-    }
-
-    /// Looks up an external receiver method by receiver type name and method name.
-    pub fn resolve_method(
-        &self,
-        receiver_type_name: &str,
-        method_name: &str,
-    ) -> Option<(ExternalFunctionId, &ExternalFunctionDef)> {
-        for (package_path, package) in &self.packages {
-            for (name, function) in &package.functions {
-                if *name == method_name
-                    && let Some(receiver_type) = &function.receiver_type
-                {
-                    // Match by ABI type name for now.
-                    let receiver_matches = match receiver_type {
-                        ExternalAbiType::Handle => !receiver_type_name.is_empty(),
-                        ExternalAbiType::Inferred => true,
-                        ExternalAbiType::I32 => receiver_type_name == "Int",
-                        ExternalAbiType::Utf8Str => receiver_type_name == "String",
-                        ExternalAbiType::Void => false,
-                    };
-                    if receiver_matches {
-                        let key = ExternalPackageSymbolKey {
-                            package_path: package_path.to_string(),
-                            symbol_name: name.to_string(),
-                        };
-                        return self
-                            .function_ids_by_package_symbol
-                            .get(&key)
-                            .copied()
-                            .map(|id| (id, function));
-                    }
-                }
-            }
-        }
-        None
     }
 
     // ------------------------------------------------------------------

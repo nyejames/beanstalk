@@ -48,7 +48,7 @@ impl<'a> AstBuildState<'a> {
                 &self.declarations,
                 Some(&bindings.visible_symbol_paths),
                 Some(&bindings.visible_external_symbols),
-                Some(&bindings.visible_source_aliases),
+                Some(&bindings.visible_source_bindings),
                 Some(&bindings.visible_type_aliases),
                 Some(&self.resolved_type_aliases_by_path),
                 string_table,

@@ -312,9 +312,21 @@ body {
         </div>
     </nav>
      <h1 style="font-size: 2em;text-align: center;"> LANGUAGE BASICS</h1>
-    <section class="container"><h1>Collections</h1><p>When a new collection uses the mutable symbol, its internal values can be mutated by default.</p><p>Instead of accessing elements directly, all collections use compiler-owned built-in methods.</p><p>Collections are ordered groups of values that are zero-indexed (start from 0).</p><p>For unordered keyed collections (Hash Map semantics), keyed method behavior is deferred in this milestone.</p><p>Elements inside collections are accessed using <span style="
-        color: #c444aff9; 
-        padding: 0.1em; 
+    <section class="container"><h1>Collections</h1><p>When a new collection uses the mutable symbol, its internal values can be mutated by default.</p><p>Instead of accessing elements directly, all collections use compiler-owned built-in methods.</p><p>Collections are ordered groups of values that are zero-indexed (start from 0).</p><p>Collection literals are homogeneous. A non-empty collection literal infers its element type from its items. Empty collection literals require an explicit collection type annotation because their element type is not immediately inferable.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    values <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-number'>1</span>, <span class='bst-code-number'>2</span>, <span class='bst-code-number'>3</span><span class='bst-code-parenthesis'>}</span>      <span class='bst-code-comment'>-- inferred as {Int}</span>
+    empty_values <span class='bst-code-operator'>~</span><span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>Int</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-comment'>-- explicit empty Int collection</span>
+
+    values <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>             <span class='bst-code-comment'>-- Type error: element type is ambiguous</span>
+    mixed <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-number'>1</span>, <span class='bst-code-string'>&quot;bad&quot;</span><span class='bst-code-parenthesis'>}</span>      <span class='bst-code-comment'>-- Type error: inconsistent item types</span>
+    </code></pre><p>The compiler does not infer an empty collection&#39;s element type from later `push`, assignment, loop, function argument, HIR, or borrow-analysis use. A declaration&#39;s type must be explicit at the declaration site or immediately inferable from its initializer.</p><p>For unordered keyed collections (Hash Map semantics), keyed method behavior is deferred in this milestone.</p><p>Elements inside collections are accessed using <span style="
+        color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     "> .get(index)</span>.</p><p>`collection.get(0)` is the equivalent of `collection0` in most C-like languages. There is no square-bracket index notation in Beanstalk.</p><p>`get(index)` returns a `Result&lt;Elem, Error&gt;`, so it must be handled with `!` in value position.</p><p>`push`, `remove`, and `length` enforce the same strict runtime validation as `get`. Invalid receivers or out-of-bounds indices produce structured errors rather than silent no-ops. The backend handles error propagation automatically for these methods.</p><p>There may not be a runtime function call under the hood for these methods. The compiler lowers many collection built-ins directly.</p></section>
     <section class="container"><h2>Immutable Collections</h2><pre style="
@@ -325,17 +337,15 @@ body {
         white-space: pre; 
         overflow-x: auto;
     "><code class='codeblock'>
-    <span class='bst-code-comment'>-- Collections assigned without the mutable symbol have immutable values inside</span>
+    <span class='bst-code-comment'>-- Collections assigned without the mutable symbol cannot be mutated</span>
     immutable_collection <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-number'>1</span>, <span class='bst-code-number'>2</span>, <span class='bst-code-number'>3</span><span class='bst-code-parenthesis'>}</span>
 
     value <span class='bst-code-operator'>=</span> immutable_collection.get<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>0</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>!</span> <span class='bst-code-number'>0</span>
 
     <span class='bst-code-operator'>~</span>immutable_collection.set<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>1</span>, <span class='bst-code-number'>69</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-comment'>-- Error, can&#39;t mutate values inside an immutable collection</span>
     immutable_collection.get<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>1</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>69</span> <span class='bst-code-comment'>-- Error, same mutable-element rule</span>
-
-    <span class='bst-code-comment'>-- You can still push and remove values from an immutable collection</span>
-    <span class='bst-code-operator'>~</span>immutable_collection.push<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>4</span><span class='bst-code-parenthesis'>)</span>
-    <span class='bst-code-operator'>~</span>immutable_collection.remove<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>0</span><span class='bst-code-parenthesis'>)</span>
+    <span class='bst-code-operator'>~</span>immutable_collection.push<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>4</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-comment'>-- Error, push mutates the collection</span>
+    <span class='bst-code-operator'>~</span>immutable_collection.remove<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>0</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-comment'>-- Error, remove mutates the collection</span>
     </code></pre></section>
     <section class="container"><h2>Mutable Collections</h2><p>Whenever a method mutates its receiver, the receiver must be marked with the mutable symbol.</p><p>This is also true of built-in collection methods that mutate the collection, such as `set`, `push`, and `remove`.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 

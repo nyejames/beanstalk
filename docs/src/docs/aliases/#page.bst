@@ -9,8 +9,6 @@ import @styles/docs {navbar, title, section, codeblock, codesnippet, theme_head}
 #[title, style.center: TYPE ALIASES]
 
 #[section, $markdown:
-    # Type Aliases
-
     Type aliases give another name to an existing type.
 
     They are useful when a type has a domain-specific meaning, when a type annotation is long,

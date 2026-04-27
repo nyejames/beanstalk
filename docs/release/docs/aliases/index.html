@@ -1,0 +1,938 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <title>Type Aliases | Beanstalk</title>
+    <meta name="description" content="Transparent type aliases in Beanstalk.">
+    <style>
+/*!
+  BS CSS CORE (absolute basics CSS reset)
+  This is inspired by Pico.css, but is an even more minimal reset.
+
+  Actual style systems are intended to be built on top of this easily.
+*/
+
+:root {
+  color-scheme: light dark;
+
+  --bst-font-size: 100%;
+
+  --bst-font-family-emoji: "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --bst-font-family-sans-serif: system-ui, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, Helvetica, Arial, "Helvetica Neue", sans-serif, var(--bst-font-family-emoji);
+  --bst-font-family-monospace: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace, var(--bst-font-family-emoji);
+  --bst-font-family: var(--bst-font-family-sans-serif);
+
+  --bst-line-height: 1.5;
+  --bst-font-weight: 400;
+  --bst-font-size: 100%;
+  --bst-text-underline-offset: 0.1rem;
+  --bst-border-radius: 0.25rem;
+  --bst-border-width: 0.0625rem;
+  --bst-outline-width: 0.125rem;
+  --bst-transition: 0.2s ease-in-out;
+
+  --bst-spacing: 1rem;
+  --bst-spacing-small: 0.5rem;
+
+  /* Code block colours */
+  --comment-dark: #838c86;
+  --comment-light: #759061;
+  --keyword-dark: #ea943e;
+  --keyword-light: #ad590e;
+  --string-dark: #4fba11;
+  --string-light: #007130;
+  --number-dark: #96b5ed;
+  --number-light: #073f85;
+  --operator-dark: #9ec1ff;
+  --operator-light: #2b476a;
+  --struct-dark: #a17fbd;
+  --struct-light: #ac2187;
+  --type-dark: #54c5d3;
+  --type-light: #0d8db3;
+  --parenthesis-dark: #bcac52;
+  --parenthesis-light: #ad7e0d;
+}
+
+/* where: is used here for less specificity, allowing easier overriding */
+:where(:root) {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  -moz-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  font-weight: var(--bst-font-weight);
+  font-size: var(--bst-font-size);
+  line-height: var(--bst-line-height);
+  font-family: var(--bst-font-family);
+  text-underline-offset: var(--bst-text-underline-offset);
+  text-rendering: optimizeLegibility;
+  overflow-wrap: break-word;
+  -moz-tab-size: 4;
+  -o-tab-size: 4;
+  tab-size: 4;
+
+}
+
+@media (min-width: 576px) {
+  :root {
+    --bst-font-size: 106.25%;
+  }
+}
+@media (min-width: 768px) {
+  :root {
+    --bst-font-size: 112.5%;
+  }
+}
+@media (min-width: 1024px) {
+  :root {
+    --bst-font-size: 118.75%;
+  }
+}
+@media (min-width: 1280px) {
+  :root {
+    --bst-font-size: 125%;
+  }
+}
+@media (min-width: 1536px) {
+  :root {
+    --bst-font-size: 131.25%;
+  }
+}
+
+body {
+  width: 100%;
+  margin: 0;
+}
+
+/* Code Style */
+.codeblock {
+  color: #222222;
+  color: light-dark(#222222, #ddd);
+  font-family: var(--bst-font-family-monospace);
+  white-space: break-spaces;
+  tab-size: 4;
+}
+.bs-code-comment,
+.bst-code-comment {
+  color: var(--comment-light);
+  color:light-dark(var(--comment-light), var(--comment-dark))
+}
+.bs-code-keyword,
+.bst-code-keyword {
+  color: var(--keyword-light);
+  color:light-dark( var(--keyword-light), var(--keyword-dark))
+}
+.bs-code-string,
+.bst-code-string {
+  color: var(--string-light);
+  color:light-dark( var(--string-light), var(--string-dark))
+}
+.bs-code-number,
+.bst-code-number {
+  color: var(--number-light);
+  color:light-dark( var(--number-light), var(--number-dark))
+}
+.bs-code-operator,
+.bst-code-operator {
+  color: var(--operator-light);
+  color:light-dark( var(--operator-light), var(--operator-dark))
+}
+.bs-code-struct,
+.bst-code-struct {
+  color: var(--struct-light);
+  color:light-dark( var(--struct-light), var(--struct-dark))
+}
+.bs-code-type,
+.bst-code-type {
+  color: var(--type-light);
+  color:light-dark( var(--type-light), var(--type-dark))
+}
+.bs-code-parenthesis,
+.bst-code-parenthesis {
+  color: var(--parenthesis-light);
+  color:light-dark( var(--parenthesis-light), var(--parenthesis-dark))
+}
+
+/* BASIC CSS RESET STUFF */
+
+/**
+ * Document
+ * Content-box & Responsive typography
+*/
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  background-repeat: no-repeat;
+}
+
+::before,
+::after {
+  text-decoration: inherit;
+  vertical-align: inherit;
+}
+    </style>
+    <style>body {
+        background-color: light-dark(hsl(125, 67%, 97%), hsl(203, 68%, 8%));
+    }
+
+    a {
+        color: light-dark(hsl(111, 96%, 26%), hsl(235, 87%, 67%));
+    }
+
+    .container {
+        width: 100%;
+        margin-right: auto;
+        margin-left: auto;
+        padding-right: var(--bst-spacing-small);
+        padding-left: var(--bst-spacing-small);
+    }
+
+    @media (min-width: 576px) {
+        .container {
+            max-width: 510px;
+            padding-right: var(--bst-spacing);
+            padding-left: var(--bst-spacing);
+            padding-bottom: var(--bst-spacing);
+        }
+    }
+
+    @media (min-width: 768px) {
+        .container {
+            max-width: 700px;
+        }
+    }
+
+    @media (min-width: 1024px) {
+        .container {
+            max-width: 950px;
+        }
+    }
+
+    @media (min-width: 1280px) {
+        .container {
+            max-width: 1200px;
+        }
+    }
+
+    @media (min-width: 1536px) {
+        .container {
+            max-width: 1450px;
+        }
+    }
+
+    .bst-nav-1 {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom-color: grey;
+        border-bottom-style: solid;
+        border-bottom-width: 1px;
+        padding: 0rem 2rem 0rem 2rem;
+    }</style>
+
+  </head>
+  <body style="">
+    <nav class="bst-nav-1" aria-label="Primary">
+        <a
+            href="/beanstalk/"
+            style="
+                display: flex;
+                align-items: center;
+                gap: 0.6rem;
+                padding: 0.9rem 0;
+                color: light-dark(var(--bst-text-lightmode), var(--bst-text-darkmode));
+                text-decoration: none;
+                font-weight: 700;
+                letter-spacing: 0.04rem;
+            "
+        >
+            <span
+                aria-hidden="true"
+                style="
+                    font-family: var(--bst-font-family-emoji);
+                    font-size: 1.4rem;
+                    line-height: 1;
+                "
+            >🌱</span>
+
+            <span>Beanstalk</span>
+        </a>
+
+        <div
+            style="
+                display: flex;
+                align-items: center;
+                gap: 1rem;
+            "
+        >
+            <a
+                href="/beanstalk/docs/"
+                style="
+                    color: light-dark(var(--bst-text-lightmode), var(--bst-text-darkmode));
+                    text-decoration: none;
+                    font-weight: 500;
+                    padding: 0.35rem 0;
+                "
+            >
+                Docs
+            </a>
+
+            <a
+                href="https://github.com/nyejames/beanstalk"
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Beanstalk GitHub repository"
+                style="
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: light-dark(var(--bst-text-lightmode), var(--bst-text-darkmode));
+                    padding: 0.35rem 0;
+                "
+            >
+                <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 16 16"
+                    width="22"
+                    height="22"
+                    fill="currentColor"
+                    aria-hidden="true"
+                >
+                    <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38
+                    0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52
+                    -.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07
+                    -1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21
+                    2.2.82a7.65 7.65 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82
+                    1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2
+                    0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
+                </svg>
+            </a>
+        </div>
+    </nav>
+     <h1 style="font-size: 2em;text-align: center;"> TYPE ALIASES</h1>
+    <section class="container"><p>Type aliases give another name to an existing type.</p><p>They are useful when a type has a domain-specific meaning, when a type annotation is long, or when imported types should have a shorter local name.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>UserId</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>Int</span>
+    <span class='bst-code-struct'>Names</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>}</span>
+    <span class='bst-code-struct'>MaybeName</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>?</span>
+    </code></pre><p>The syntax is:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>AliasName</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>ExistingType</span>
+    </code></pre><p>Alias names should use UpperCamelCase, the same as structs, choices and other type names.</p><p>Type aliases are compile-time-only. They do not create runtime values and they do not emit code.</p></section>
+    <section class="container"><h2>Transparent Aliases</h2><p>Type aliases are transparent.</p><p>This means an alias does not create a new nominal type. It is another name for the target type.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>UserId</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>Int</span>
+
+    id <span class='bst-code-struct'>UserId</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>42</span>
+    raw <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> id <span class='bst-code-comment'>-- valid, because UserId is Int</span>
+    </code></pre><p>This is different from a struct.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>UserId</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>Int</span>
+
+    <span class='bst-code-struct'>User</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
+        id <span class='bst-code-struct'>Int,</span>
+    <span class='bst-code-operator'>|</span>
+    </code></pre><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">UserId</span> is just another name for <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Int</span>.</p><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">User</span> is a distinct nominal struct type.</p><p>Use a struct when you need a real domain type with its own fields, constructor and methods. Use a type alias when you only want a clearer type name.</p></section>
+    <section class="container"><h2>Aliases Are Not Values</h2><p>A type alias can only be used where the compiler expects a type annotation.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>UserId</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>Int</span>
+
+    id <span class='bst-code-struct'>UserId</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>42</span> <span class='bst-code-comment'>-- valid</span>
+    </code></pre><p>A type alias cannot be used as a value, constructor, receiver or copy target.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>UserId</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>Int</span>
+
+    io<span class='bst-code-parenthesis'>(</span><span class='bst-code-struct'>UserId</span><span class='bst-code-parenthesis'>)</span>      <span class='bst-code-comment'>-- Error: UserId is a type alias, not a value</span>
+    id <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>UserId</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>42</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-comment'>-- Error: UserId is not a constructor</span>
+    copy_id <span class='bst-code-operator'>=</span> <span class='bst-code-keyword'>copy</span> <span class='bst-code-struct'>UserId</span> <span class='bst-code-comment'>-- Error: aliases cannot be copied</span>
+    </code></pre><p>If the alias targets a constructible type, construct the real target type instead.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>Person</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
+        name <span class='bst-code-struct'>String,</span>
+        age <span class='bst-code-struct'>Int,</span>
+    <span class='bst-code-operator'>|</span>
+
+    <span class='bst-code-struct'>MainPerson</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>Person</span>
+
+    person <span class='bst-code-struct'>MainPerson</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Person</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Ada&quot;</span>, <span class='bst-code-number'>36</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre></section>
+    <section class="container"><h2>Aliasing Collections and Options</h2><p>Aliases can target nested type expressions.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>UserId</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>Int</span>
+    <span class='bst-code-struct'>UserIds</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-struct'>UserId</span><span class='bst-code-parenthesis'>}</span>
+    <span class='bst-code-struct'>MaybeUserId</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>UserId</span><span class='bst-code-operator'>?</span>
+
+    ids <span class='bst-code-struct'>UserIds</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-number'>1</span>, <span class='bst-code-number'>2</span>, <span class='bst-code-number'>3</span><span class='bst-code-parenthesis'>}</span>
+    selected <span class='bst-code-struct'>MaybeUserId</span> <span class='bst-code-operator'>=</span> none
+    </code></pre><p>Aliases are resolved before normal type checking, so nested aliases behave exactly like their final target type.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>Name</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>String</span>
+    <span class='bst-code-struct'>Names</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-struct'>Name</span><span class='bst-code-parenthesis'>}</span>
+
+    names <span class='bst-code-struct'>Names</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;Ada&quot;</span>, <span class='bst-code-string'>&quot;Grace&quot;</span>, <span class='bst-code-string'>&quot;Evelyn&quot;</span><span class='bst-code-parenthesis'>}</span>
+    </code></pre><p>Empty collection literals still need an explicit element type at the declaration site.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>Names</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>}</span>
+
+    names <span class='bst-code-struct'>Names</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-comment'>-- valid: the alias provides the collection element type</span>
+    bad_names <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>  <span class='bst-code-comment'>-- Error: empty collection type is ambiguous</span>
+    </code></pre></section>
+    <section class="container"><h2>Aliases in Function Signatures</h2><p>Type aliases can be used in parameters, returns and local declarations.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>UserId</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>Int</span>
+    <span class='bst-code-struct'>Username</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>String</span>
+
+    format_user <span class='bst-code-operator'>|</span>id <span class='bst-code-struct'>UserId,</span> name <span class='bst-code-struct'>Username</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-operator'>#</span><span class='bst-code-parenthesis'>[</span>id<span class='bst-code-parenthesis'>]</span> <span class='bst-code-parenthesis'>[</span>name<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span>
+    ;
+
+    id <span class='bst-code-struct'>UserId</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>7</span>
+    name <span class='bst-code-struct'>Username</span> <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Bean&quot;</span>
+
+    label <span class='bst-code-operator'>=</span> format_user<span class='bst-code-parenthesis'>(</span>id, name<span class='bst-code-parenthesis'>)</span>
+    io<span class='bst-code-parenthesis'>(</span>label<span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>Because aliases are transparent, passing an <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Int</span> where <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">UserId</span> is expected is valid.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>UserId</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>Int</span>
+
+    print_id <span class='bst-code-operator'>|</span>id <span class='bst-code-struct'>UserId</span><span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        io<span class='bst-code-parenthesis'>(</span>id<span class='bst-code-parenthesis'>)</span>
+    ;
+
+    raw_id <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
+    print_id<span class='bst-code-parenthesis'>(</span>raw_id<span class='bst-code-parenthesis'>)</span> <span class='bst-code-comment'>-- valid</span>
+    </code></pre><p>If you need the compiler to reject raw <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Int</span> values in a user-id position, use a struct instead of an alias.</p></section>
+    <section class="container"><h2>Exporting and Importing Aliases</h2><p>Use <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#</span> to export a type alias from another file.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-comment'>-- types.bst</span>
+    <span class='bst-code-operator'>#</span> <span class='bst-code-struct'>UserId</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>Int</span>
+    <span class='bst-code-operator'>#</span> <span class='bst-code-struct'>Username</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>String</span>
+    </code></pre><p>Import the alias by symbol path.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-comment'>-- #page.bst</span>
+    import <span class='bst-code-operator'>@</span>types<span class='bst-code-operator'>/</span><span class='bst-code-struct'>UserId</span>
+    import <span class='bst-code-operator'>@</span>types<span class='bst-code-operator'>/</span><span class='bst-code-struct'>Username</span>
+
+    id <span class='bst-code-struct'>UserId</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
+    name <span class='bst-code-struct'>Username</span> <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Ada&quot;</span>
+    </code></pre><p>Imported aliases can also be renamed locally with <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">as</span>.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    import <span class='bst-code-operator'>@</span>types<span class='bst-code-operator'>/</span><span class='bst-code-struct'>UserId</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>Id</span>
+
+    id <span class='bst-code-struct'>Id</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
+    io<span class='bst-code-parenthesis'>(</span>id<span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>Import aliases are file-local. Renaming an imported type alias does not change the exported name in the source file.</p></section>
+    <section class="container"><h2>Aliasing Structs and Choices</h2><p>Aliases can target user-defined structs and choices.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>Person</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
+        name <span class='bst-code-struct'>String,</span>
+        age <span class='bst-code-struct'>Int,</span>
+    <span class='bst-code-operator'>|</span>
+
+    <span class='bst-code-struct'>MainPerson</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>Person</span>
+
+    person <span class='bst-code-struct'>MainPerson</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Person</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Alice&quot;</span>, <span class='bst-code-number'>30</span><span class='bst-code-parenthesis'>)</span>
+    io<span class='bst-code-parenthesis'>(</span>person.name<span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>The alias does not create a second struct identity.</p><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">MainPerson</span> and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Person</span> are the same type to the compiler.</p><p>Aliases can also target choices.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>Status</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-struct'>Ready,</span>
+        <span class='bst-code-struct'>Loading,</span>
+        <span class='bst-code-struct'>Failed</span> <span class='bst-code-struct'>String,</span>
+    ;
+
+    <span class='bst-code-struct'>LoadStatus</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>Status</span>
+
+    status <span class='bst-code-struct'>LoadStatus</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Status</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Ready</span>
+
+    <span class='bst-code-keyword'>if</span> status is<span class='bst-code-operator'>:</span>
+        case <span class='bst-code-struct'>Ready</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;ready&quot;</span><span class='bst-code-parenthesis'>)</span>
+        <span class='bst-code-keyword'>else</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;not ready&quot;</span><span class='bst-code-parenthesis'>)</span>
+    ;
+    </code></pre></section>
+    <section class="container"><h2>External Types</h2><p>Imported external package types can be aliased too.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    import <span class='bst-code-operator'>@</span>std<span class='bst-code-operator'>/</span>io<span class='bst-code-operator'>/</span><span class='bst-code-struct'>IO</span>
+
+    <span class='bst-code-struct'>StdIO</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>IO</span>
+    </code></pre><p>This is mainly useful when an external type name is too general or when a local page wants a clearer name for documentation.</p></section>
+    <section class="container"><h2>Cycles Are Invalid</h2><p>Type aliases must eventually resolve to a real type.</p><p>Recursive aliases are rejected.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>A</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>B</span>
+    <span class='bst-code-struct'>B</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>A</span> <span class='bst-code-comment'>-- Error: circular dependency</span>
+    </code></pre><p>Self-referential aliases are also invalid.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>UserId</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>UserId</span> <span class='bst-code-comment'>-- Error</span>
+    </code></pre><p>Use a real struct or another explicit runtime representation when recursive data is needed.</p></section>
+    <section class="container"><h2>When To Use Type Aliases</h2><p>Use a type alias for clarity:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>UserId</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>Int</span>
+    <span class='bst-code-struct'>HtmlFragment</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>String</span>
+    <span class='bst-code-struct'>CssClass</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>String</span>
+    <span class='bst-code-struct'>RouteParts</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>}</span>
+    </code></pre><p>Use a struct when you need a real data type:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>UserId</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
+        value <span class='bst-code-struct'>Int,</span>
+    <span class='bst-code-operator'>|</span>
+
+    user_id <span class='bst-code-struct'>UserId</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>UserId</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>42</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>A good rule:</p><ul><li>Alias: better name for an existing type.</li><li>Struct: new domain type with its own identity.</li><li>Choice: one of several named variants.</li></ul></section>
+    <script>
+    function __bs_is_ref(value) {
+    return value !== null && typeof value === "object" && value.__bs_ref === true;
+    }
+
+    function __bs_binding(value) {
+    return { __bs_ref: true, __bs_kind: "binding", __bs_mode: "slot", __bs_slot: { value }, __bs_target: null };
+    }
+
+    function __bs_param_binding(value) {
+    if (!__bs_is_ref(value)) {
+    return __bs_binding(value);
+    }
+    if (value.__bs_kind === "binding") {
+    return value;
+    }
+    const binding = __bs_binding(undefined);
+    binding.__bs_mode = "alias";
+    binding.__bs_target = value;
+    return binding;
+    }
+
+    function __bs_resolve(ref) {
+    while (ref.__bs_kind === "binding" && ref.__bs_mode === "alias") {
+    ref = ref.__bs_target;
+    }
+    return ref;
+    }
+
+    function __bs_read(ref) {
+    const resolved = __bs_resolve(ref);
+    return resolved.__bs_kind === "binding" ? resolved.__bs_slot.value : resolved.__bs_get();
+    }
+
+    function __bs_write(ref, value) {
+    const resolved = __bs_resolve(ref);
+    if (resolved.__bs_kind === "binding") {
+    resolved.__bs_slot.value = value;
+    } else {
+    resolved.__bs_set(value);
+    }
+    return value;
+    }
+
+    function __bs_assign_borrow(binding, ref) {
+    if (binding.__bs_mode === "alias") {
+    return __bs_write(binding, __bs_read(ref));
+    }
+    binding.__bs_mode = "alias";
+    binding.__bs_target = ref;
+    return binding;
+    }
+
+    function __bs_assign_value(binding, value) {
+    if (binding.__bs_mode === "alias") {
+    return __bs_write(binding, value);
+    }
+    binding.__bs_mode = "slot";
+    binding.__bs_target = null;
+    binding.__bs_slot.value = value;
+    return binding;
+    }
+
+    function __bs_field(baseRef, field) {
+    return {
+    __bs_ref: true,
+    __bs_kind: "computed",
+    __bs_get() {
+    return __bs_read(baseRef)[field];
+    },
+    __bs_set(value) {
+    __bs_read(baseRef)[field] = value;
+    }
+    };
+    }
+
+    function __bs_index(baseRef, index) {
+    return {
+    __bs_ref: true,
+    __bs_kind: "computed",
+    __bs_get() {
+    return __bs_read(baseRef)[index];
+    },
+    __bs_set(value) {
+    __bs_read(baseRef)[index] = value;
+    }
+    };
+    }
+
+    function __bs_clone_value(value) {
+    if (Array.isArray(value)) {
+    return value.map(__bs_clone_value);
+    }
+    if (value !== null && typeof value === "object") {
+    const result = {};
+    for (const key of Object.keys(value)) {
+    result[key] = __bs_clone_value(value[key]);
+    }
+    return result;
+    }
+    return value;
+    }
+
+    function __bs_error_normalize_file(file) {
+    if (typeof file !== "string") {
+    return "";
+    }
+    if (file.startsWith("/")) {
+    const parts = file.split(/[\\/]/).filter(Boolean);
+    return parts.length > 0 ? parts[parts.length - 1] : file;
+    }
+    if (/^[A-Za-z]:[\\/]/.test(file)) {
+    const parts = file.split(/[\\/]/).filter(Boolean);
+    return parts.length > 0 ? parts[parts.length - 1] : file;
+    }
+    return file;
+    }
+
+    function __bs_make_error(kind, code, message, location, trace) {
+    return {
+    kind,
+    code,
+    message,
+    location: location ?? null,
+    trace: trace ?? null
+    };
+    }
+
+    function __bs_error_with_location(error, location) {
+    return __bs_make_error(error.kind, error.code, error.message, location, error.trace);
+    }
+
+    function __bs_error_push_trace(error, frame) {
+    const nextTrace = error.trace ? error.trace.concat([frame]) : [frame];
+    return __bs_make_error(error.kind, error.code, error.message, error.location, nextTrace);
+    }
+
+    function __bs_error_bubble(error, file, line, column, functionName) {
+    const safeFunction = typeof functionName === "string" && functionName.length > 0 ? functionName : "<unknown>";
+    const location = {
+    file: __bs_error_normalize_file(file),
+    line,
+    column,
+    function: safeFunction === "<unknown>" ? null : safeFunction
+    };
+    const frame = { function: safeFunction, location };
+    const nextLocation = error.location ?? location;
+    const located = __bs_error_with_location(error, nextLocation);
+    return __bs_error_push_trace(located, frame);
+    }
+
+    function __bs_result_propagate(result) {
+    if (result && result.tag === "ok") {
+    return result.value;
+    }
+    if (result && result.tag === "err") {
+    throw { __bs_result_propagate: true, value: result.value };
+    }
+    throw new Error("Expected internal Result carrier during propagation");
+    }
+
+    function __bs_result_fallback(result, fallback) {
+    if (result && result.tag === "ok") {
+    return result.value;
+    }
+    if (result && result.tag === "err") {
+    return fallback();
+    }
+    throw new Error("Expected internal Result carrier during fallback handling");
+    }
+
+    function __bs_collection_get(collection, index) {
+    if (!Array.isArray(collection)) {
+    const err = __bs_make_error("InvalidArgument", "collection.expected_ordered_collection", "Collection get(...) expects an ordered collection", null, null);
+    return { tag: "err", value: err };
+    }
+    if (!Number.isInteger(index) || index < 0 || index >= collection.length) {
+    const err = __bs_make_error("OutOfBounds", "collection.index_out_of_bounds", "Collection index out of bounds", null, null);
+    return { tag: "err", value: err };
+    }
+    return { tag: "ok", value: collection[index] };
+    }
+
+    function __bs_collection_push(collection, value) {
+    if (!Array.isArray(collection)) {
+    const err = __bs_make_error("InvalidArgument", "collection.expected_ordered_collection", "Collection push(...) expects an ordered collection", null, null);
+    return { tag: "err", value: err };
+    }
+    collection.push(value);
+    return { tag: "ok", value: null };
+    }
+
+    function __bs_collection_remove(collection, index) {
+    if (!Array.isArray(collection)) {
+    const err = __bs_make_error("InvalidArgument", "collection.expected_ordered_collection", "Collection remove(...) expects an ordered collection", null, null);
+    return { tag: "err", value: err };
+    }
+    if (!Number.isInteger(index) || index < 0 || index >= collection.length) {
+    const err = __bs_make_error("OutOfBounds", "collection.index_out_of_bounds", "Collection index out of bounds", null, null);
+    return { tag: "err", value: err };
+    }
+    collection.splice(index, 1);
+    return { tag: "ok", value: null };
+    }
+
+    function __bs_collection_length(collection) {
+    if (!Array.isArray(collection)) {
+    const err = __bs_make_error("InvalidArgument", "collection.expected_ordered_collection", "Collection length() expects an ordered collection", null, null);
+    return { tag: "err", value: err };
+    }
+    return { tag: "ok", value: collection.length };
+    }
+
+    function __bs_value_to_string(value) {
+    if (value === undefined || value === null) {
+    return "";
+    }
+    return String(value);
+    }
+
+    function __bs_io(value) {
+    console.log(__bs_value_to_string(value));
+    }
+
+    function __bs_normalize_numeric_text(value) {
+    return value.trim().replace(/_/g, "");
+    }
+
+    function __bs_cast_int(value) {
+    if (typeof value === "number") {
+    if (!Number.isFinite(value) || !Number.isSafeInteger(value)) {
+    return { tag: "err", value: __bs_make_error("Parse", "int.parse_out_of_range", "Int value is out of supported range", null, null) };
+    }
+    if (Number.isInteger(value)) {
+    return { tag: "ok", value };
+    }
+    return { tag: "err", value: __bs_make_error("Parse", "int.parse_invalid_format", "Float value is not an exact integer", null, null) };
+    }
+    if (typeof value === "string") {
+    const normalized = __bs_normalize_numeric_text(value);
+    if (/^[+-]?[0-9]+$/.test(normalized)) {
+    const parsed = Number.parseInt(normalized, 10);
+    if (!Number.isSafeInteger(parsed)) {
+    return { tag: "err", value: __bs_make_error("Parse", "int.parse_out_of_range", "Int value is out of supported range", null, null) };
+    }
+    return { tag: "ok", value: parsed };
+    }
+    if (/^[+-]?[0-9]+\.[0-9]+$/.test(normalized)) {
+    const parsed = Number.parseFloat(normalized);
+    if (Number.isInteger(parsed) && Number.isSafeInteger(parsed)) {
+    return { tag: "ok", value: parsed };
+    }
+    }
+    return { tag: "err", value: __bs_make_error("Parse", "int.parse_invalid_format", "Cannot parse Int from text", null, null) };
+    }
+    return { tag: "err", value: __bs_make_error("Parse", "int.parse_invalid_format", "Int(...) only accepts Int, Float, or string values", null, null) };
+    }
+
+    function __bs_cast_float(value) {
+    if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+    return { tag: "err", value: __bs_make_error("Parse", "float.parse_out_of_range", "Float value is out of supported range", null, null) };
+    }
+    return { tag: "ok", value };
+    }
+    if (typeof value === "string") {
+    const normalized = __bs_normalize_numeric_text(value);
+    if (/^[+-]?[0-9]+$/.test(normalized) || /^[+-]?[0-9]+\.[0-9]+$/.test(normalized)) {
+    const parsed = Number.parseFloat(normalized);
+    if (!Number.isFinite(parsed)) {
+    return { tag: "err", value: __bs_make_error("Parse", "float.parse_out_of_range", "Float value is out of supported range", null, null) };
+    }
+    return { tag: "ok", value: parsed };
+    }
+    return { tag: "err", value: __bs_make_error("Parse", "float.parse_invalid_format", "Cannot parse Float from text", null, null) };
+    }
+    return { tag: "err", value: __bs_make_error("Parse", "float.parse_invalid_format", "Float(...) only accepts Int, Float, or string values", null, null) };
+    }
+
+    function b_fn0() {
+    let b_l0 = __bs_binding(undefined);
+
+    __bs_assign_value(b_l0, []);
+    return __bs_read(b_l0);
+    }
+
+    </script>
+    <script>
+    (function () {
+      if (typeof b_fn0 === "function") b_fn0();
+    })();
+    </script>
+  </body>
+</html>

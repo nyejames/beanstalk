@@ -39,6 +39,17 @@ impl<'a> AstBuildState<'a> {
                     .cloned(),
             );
 
+            // Add builtins to visible_source_bindings so name lookup finds them.
+            // Same-file declarations take precedence; do not overwrite.
+            for path in &self.module_symbols.builtin_visible_symbol_paths {
+                if let Some(name) = path.name() {
+                    binding
+                        .visible_source_bindings
+                        .entry(name)
+                        .or_insert_with(|| path.to_owned());
+                }
+            }
+
             // Add local type aliases to visible_type_aliases so they resolve in type
             // annotations within the same file.
             if let Some(declared_paths) =

@@ -313,8 +313,7 @@ body {
     </nav>
      <h1 style="font-size: 2em;text-align: center;"> ALPHA SURFACE MATRIX</h1>
     <section class="container"><p>This page tracks the compiler surface intended for the first Beanstalk Alpha.</p><p>It is an implementation matrix, not a full language specification. The wider language docs may describe intended or aspirational syntax. This page should describe what the compiler currently supports, rejects cleanly, or keeps experimental.</p><p>Use this together with <span style="
-        color: #c444aff9; 
-        padding: 0.1em; 
+        color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">tests/cases/manifest.toml</span> when changing language features.</p><h2>Alpha target</h2><p>The supported Alpha target is:</p><ul><li>frontend parsing and diagnostics</li><li>typed AST construction</li><li>HIR lowering</li><li>borrow validation</li><li>JavaScript backend</li><li>HTML project builder</li><li>docs-style static site generation</li></ul><p>HTML-Wasm and the Rust interpreter are not Alpha stability targets. They may have tests and scaffolding, but they should not be counted as supported Alpha runtime surfaces.</p></section>
     <section class="container"><h1>Status legend</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
@@ -384,8 +383,7 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;"> HTML Alpha matrix</td>
      <td style="padding: 0.2em 0.5em;"> <span style="
-        color: #c444aff9; 
-        padding: 0.1em; 
+        color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">cargo run -- tests --backend html</span> passed 425 / 425 expected results: 266 successful compilations and 159 expected diagnostic failures.</td>
         </tr>
@@ -393,8 +391,7 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;"> HTML-Wasm experimental matrix</td>
      <td style="padding: 0.2em 0.5em;"> <span style="
-        color: #c444aff9; 
-        padding: 0.1em; 
+        color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">cargo run -- tests --backend html_wasm</span> passed 20 / 20 expected results. This remains experimental and is not counted as Alpha runtime support.</td>
         </tr>
@@ -407,8 +404,7 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;"> Diagnostics</td>
      <td style="padding: 0.2em 0.5em;"> Representative syntax, type, rule, config/file, borrow-checker, and deferred-feature failures assert <span style="
-        color: #c444aff9; 
-        padding: 0.1em; 
+        color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">error_type</span> plus ordered message fragments.</td>
         </tr>
@@ -545,12 +541,10 @@ body {
      <td style="padding: 0.2em 0.5em;"> Broad function-call, constructor-call, duplicate, unknown, missing, ordering, and tilde diagnostics coverage.</td>
      <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
      <td style="padding: 0.2em 0.5em;"> Fresh rvalues can satisfy mutable parameters without <span style="
-        color: #c444aff9; 
-        padding: 0.1em; 
+        color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">~</span>. Existing places still require explicit <span style="
-        color: #c444aff9; 
-        padding: 0.1em; 
+        color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">~</span>.</td>
         </tr>
@@ -570,24 +564,19 @@ body {
      <td style="padding: 0.2em 0.5em;"> Broad JS helper, mutation, indexed write, out-of-bounds, and explicit-mutable-receiver coverage.</td>
      <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
      <td style="padding: 0.2em 0.5em;"> <span style="
-        color: #c444aff9; 
-        padding: 0.1em; 
+        color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">get</span>, <span style="
-        color: #c444aff9; 
-        padding: 0.1em; 
+        color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">set</span>, <span style="
-        color: #c444aff9; 
-        padding: 0.1em; 
+        color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">push</span>, <span style="
-        color: #c444aff9; 
-        padding: 0.1em; 
+        color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">remove</span>, and <span style="
-        color: #c444aff9; 
-        padding: 0.1em; 
+        color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">length</span> are compiler-owned surfaces.</td>
         </tr>
@@ -596,16 +585,13 @@ body {
              <td style="padding: 0.2em 0.5em;"> Error helper methods</td>
      <td style="padding: 0.2em 0.5em;"> Supported</td>
      <td style="padding: 0.2em 0.5em;"> Targeted coverage for <span style="
-        color: #c444aff9; 
-        padding: 0.1em; 
+        color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">with_location</span>, <span style="
-        color: #c444aff9; 
-        padding: 0.1em; 
+        color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">push_trace</span>, and <span style="
-        color: #c444aff9; 
-        padding: 0.1em; 
+        color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">bubble</span>.</td>
      <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
@@ -626,12 +612,10 @@ body {
      <td style="padding: 0.2em 0.5em;"> Broad propagation, fallback, named handler, handler fallthrough, and template-boundary coverage.</td>
      <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
      <td style="padding: 0.2em 0.5em;"> Keep <span style="
-        color: #c444aff9; 
-        padding: 0.1em; 
+        color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">__bs_result_propagate</span> and <span style="
-        color: #c444aff9; 
-        padding: 0.1em; 
+        color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">__bs_result_fallback</span> contracts covered by artifact assertions.</td>
         </tr>
@@ -658,8 +642,7 @@ body {
      <td style="padding: 0.2em 0.5em;"> Experimental</td>
      <td style="padding: 0.2em 0.5em;"> Backend experiment and integration path for future Wasm output.</td>
      <td style="padding: 0.2em 0.5em;"> Keep behind <span style="
-        color: #c444aff9; 
-        padding: 0.1em; 
+        color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">--html-wasm</span>. Tests may pin current behavior, but Alpha support is JS / HTML.</td>
         </tr>
@@ -691,12 +674,10 @@ body {
              <td style="padding: 0.2em 0.5em;"> Traits / interfaces</td>
      <td style="padding: 0.2em 0.5em;"> Deferred</td>
      <td style="padding: 0.2em 0.5em;"> <span style="
-        color: #c444aff9; 
-        padding: 0.1em; 
+        color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">trait_declaration_reserved</span>, <span style="
-        color: #c444aff9; 
-        padding: 0.1em; 
+        color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">trait_this_reserved</span></td>
      <td style="padding: 0.2em 0.5em;"> Syntax is reserved for future design work.</td>
@@ -706,8 +687,7 @@ body {
              <td style="padding: 0.2em 0.5em;"> Choice payload declarations</td>
      <td style="padding: 0.2em 0.5em;"> Deferred unless promoted before Alpha</td>
      <td style="padding: 0.2em 0.5em;"> <span style="
-        color: #c444aff9; 
-        padding: 0.1em; 
+        color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">choice_payload_decl_deferred</span></td>
      <td style="padding: 0.2em 0.5em;"> Keep rejected until the carrier representation, constructors, matching, and JS lowering are deliberately implemented together.</td>
@@ -717,12 +697,10 @@ body {
              <td style="padding: 0.2em 0.5em;"> Choice tagged/default declarations</td>
      <td style="padding: 0.2em 0.5em;"> Deferred</td>
      <td style="padding: 0.2em 0.5em;"> <span style="
-        color: #c444aff9; 
-        padding: 0.1em; 
+        color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">choice_tagged_decl_deferred</span>, <span style="
-        color: #c444aff9; 
-        padding: 0.1em; 
+        color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">choice_default_decl_deferred</span></td>
      <td style="padding: 0.2em 0.5em;"> These belong to the fuller tagged-union design, not the current Alpha subset.</td>
@@ -732,8 +710,7 @@ body {
              <td style="padding: 0.2em 0.5em;"> Choice constructor use</td>
      <td style="padding: 0.2em 0.5em;"> Deferred unless choices are expanded before Alpha</td>
      <td style="padding: 0.2em 0.5em;"> <span style="
-        color: #c444aff9; 
-        padding: 0.1em; 
+        color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">choice_constructor_use_deferred</span></td>
      <td style="padding: 0.2em 0.5em;"> Current unit variant flow is enough for the existing Alpha subset.</td>
@@ -743,8 +720,7 @@ body {
              <td style="padding: 0.2em 0.5em;"> Negated match patterns</td>
      <td style="padding: 0.2em 0.5em;"> Deferred</td>
      <td style="padding: 0.2em 0.5em;"> <span style="
-        color: #c444aff9; 
-        padding: 0.1em; 
+        color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">diagnostic_match_negated_pattern</span></td>
      <td style="padding: 0.2em 0.5em;"> Should wait until the match exhaustiveness model is deliberately extended.</td>
@@ -754,8 +730,7 @@ body {
              <td style="padding: 0.2em 0.5em;"> Capture / tagged match patterns</td>
      <td style="padding: 0.2em 0.5em;"> Deferred</td>
      <td style="padding: 0.2em 0.5em;"> <span style="
-        color: #c444aff9; 
-        padding: 0.1em; 
+        color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">diagnostic_match_deferred_capture_pattern</span></td>
      <td style="padding: 0.2em 0.5em;"> Adds bindings and scope rules inside match arms.</td>
@@ -828,16 +803,13 @@ body {
         
     </table></section>
     <section class="container"><h1>Maintenance rule</h1><p>When a language feature changes shape:</p><ol><li>Update this page.</li><li>Update <span style="
-        color: #c444aff9; 
-        padding: 0.1em; 
+        color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">tests/cases/manifest.toml</span>.</li><li>Add or rewrite canonical cases instead of layering temporary coverage.</li><li>Mark unsupported syntax as <span style="
-        color: #c444aff9; 
-        padding: 0.1em; 
+        color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">Deferred</span> or <span style="
-        color: #c444aff9; 
-        padding: 0.1em; 
+        color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">Experimental</span>, not as a vague missing test.</li><li>Do not count HTML-Wasm or the Rust interpreter as Alpha-supported unless the roadmap explicitly changes.</li></ol><p>The goal is to keep the Alpha surface small, honest, and fully exercised.</p></section>
     <script>

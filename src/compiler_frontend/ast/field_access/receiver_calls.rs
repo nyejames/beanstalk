@@ -135,12 +135,9 @@ pub(super) fn parse_receiver_method_call(
     }
 
     // Try external (platform-package) receiver method.
-    let receiver_type_name = receiver_type.display_with_table(string_table);
     let method_name_str = string_table.resolve(member_name).to_owned();
-    if let Some((external_id, external_def)) = context
-        .external_package_registry
-        .resolve_method(&receiver_type_name, &method_name_str)
-        .filter(|(id, _)| context.is_visible_external_function_id(*id))
+    if let Some((external_id, external_def)) =
+        context.lookup_visible_external_method(receiver_type, member_name)
     {
         if token_stream.peek_next_token() != Some(&TokenKind::OpenParenthesis) {
             return_rule_error!(

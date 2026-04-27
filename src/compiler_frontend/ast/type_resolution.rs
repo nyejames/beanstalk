@@ -51,7 +51,7 @@ pub(crate) fn resolve_named_signature_type(
     declarations: &[Declaration],
     visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
     visible_external_symbols: Option<&FxHashMap<StringId, ExternalSymbolId>>,
-    visible_source_aliases: Option<&FxHashMap<StringId, InternedPath>>,
+    visible_source_bindings: Option<&FxHashMap<StringId, InternedPath>>,
     visible_type_aliases: Option<&FxHashMap<StringId, InternedPath>>,
     resolved_type_aliases: Option<&FxHashMap<InternedPath, DataType>>,
     string_table: &StringTable,
@@ -60,11 +60,11 @@ pub(crate) fn resolve_named_signature_type(
         data_type,
         location,
         &mut |type_name| {
-            // 1. Visible source alias by local name → canonical declaration path.
+            // 1. Source-visible name → canonical declaration path.
             // WHY: import aliases like `import @types/Person as Human` must resolve
             // in signatures and struct fields just as they do in body code.
-            if let Some(aliases) = visible_source_aliases
-                && let Some(canonical_path) = aliases.get(&type_name)
+            if let Some(bindings) = visible_source_bindings
+                && let Some(canonical_path) = bindings.get(&type_name)
                 && let Some(declaration) = declarations.iter().rfind(|d| {
                     &d.id == canonical_path
                         && !d.is_unresolved_constant_placeholder()
@@ -110,7 +110,7 @@ pub(crate) fn resolve_function_signature(
     declarations: &[Declaration],
     visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
     visible_external_symbols: Option<&FxHashMap<StringId, ExternalSymbolId>>,
-    visible_source_aliases: Option<&FxHashMap<StringId, InternedPath>>,
+    visible_source_bindings: Option<&FxHashMap<StringId, InternedPath>>,
     visible_type_aliases: Option<&FxHashMap<StringId, InternedPath>>,
     resolved_type_aliases: Option<&FxHashMap<InternedPath, DataType>>,
     string_table: &mut StringTable,
@@ -134,7 +134,7 @@ pub(crate) fn resolve_function_signature(
             declarations,
             visible_declaration_ids,
             visible_external_symbols,
-            visible_source_aliases,
+            visible_source_bindings,
             visible_type_aliases,
             resolved_type_aliases,
             string_table,
@@ -204,7 +204,7 @@ pub(crate) fn resolve_function_signature(
                     declarations,
                     visible_declaration_ids,
                     visible_external_symbols,
-                    visible_source_aliases,
+                    visible_source_bindings,
                     visible_type_aliases,
                     resolved_type_aliases,
                     string_table,
@@ -221,7 +221,7 @@ pub(crate) fn resolve_function_signature(
                     declarations,
                     visible_declaration_ids,
                     visible_external_symbols,
-                    visible_source_aliases,
+                    visible_source_bindings,
                     visible_type_aliases,
                     resolved_type_aliases,
                     string_table,
@@ -252,7 +252,7 @@ pub(crate) fn resolve_struct_field_types(
     declarations: &[Declaration],
     visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
     visible_external_symbols: Option<&FxHashMap<StringId, ExternalSymbolId>>,
-    visible_source_aliases: Option<&FxHashMap<StringId, InternedPath>>,
+    visible_source_bindings: Option<&FxHashMap<StringId, InternedPath>>,
     visible_type_aliases: Option<&FxHashMap<StringId, InternedPath>>,
     resolved_type_aliases: Option<&FxHashMap<InternedPath, DataType>>,
     string_table: &mut StringTable,
@@ -270,7 +270,7 @@ pub(crate) fn resolve_struct_field_types(
             declarations,
             visible_declaration_ids,
             visible_external_symbols,
-            visible_source_aliases,
+            visible_source_bindings,
             visible_type_aliases,
             resolved_type_aliases,
             string_table,

@@ -32,7 +32,8 @@ use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::{DataType, ReceiverKey};
 use crate::compiler_frontend::external_packages::{
-    ExternalFunctionId, ExternalPackageRegistry, ExternalSymbolId, ExternalTypeId,
+    ExternalFunctionDef, ExternalFunctionId, ExternalPackageRegistry, ExternalSymbolId,
+    ExternalTypeId,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
@@ -50,6 +51,20 @@ use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
 pub(crate) use crate::compiler_frontend::ast::receiver_methods::{
     ReceiverMethodCatalog, ReceiverMethodEntry,
 };
+
+use crate::compiler_frontend::external_packages::ExternalAbiType;
+
+/// Checks whether an `ExternalAbiType` is compatible with a frontend `DataType`
+/// for receiver method dispatch.
+fn external_abi_matches_datatype(abi_type: &ExternalAbiType, data_type: &DataType) -> bool {
+    matches!(
+        (abi_type, data_type),
+        (ExternalAbiType::Inferred, _)
+            | (ExternalAbiType::I32, DataType::Int)
+            | (ExternalAbiType::Utf8Str, DataType::StringSlice)
+            | (ExternalAbiType::Handle, DataType::External { .. })
+    )
+}
 
 pub(super) static CONTROL_FLOW_SCOPE_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
@@ -129,7 +144,9 @@ impl TopLevelDeclarationIndex {
     }
 
     pub fn get_by_path(&self, path: &InternedPath) -> Option<&Declaration> {
-        self.declarations.iter().find(|d| d.id == *path)
+        // WHY: declarations may be appended multiple times during fixed-point
+        // constant resolution; the latest entry is the resolved one.
+        self.declarations.iter().rfind(|d| d.id == *path)
     }
 }
 
@@ -167,9 +184,9 @@ pub struct ScopeContext {
     /// When present, only external symbols in this map are resolvable.
     pub visible_external_symbols: Option<FxHashMap<StringId, ExternalSymbolId>>,
 
-    /// Optional file-local source declaration aliases.
-    /// Maps local visible name → canonical declaration path.
-    pub visible_source_aliases: Option<FxHashMap<StringId, InternedPath>>,
+    /// Optional file-local source-visible names → canonical declaration path.
+    /// Includes same-file declarations and imported source symbols (aliased or not).
+    pub visible_source_bindings: Option<FxHashMap<StringId, InternedPath>>,
 
     /// Optional file-local type aliases.
     /// Maps local visible name → canonical type alias path.
@@ -256,7 +273,7 @@ impl ScopeContext {
             external_package_registry,
             style_directives: StyleDirectiveRegistry::built_ins(),
             visible_external_symbols: None,
-            visible_source_aliases: None,
+            visible_source_bindings: None,
             visible_type_aliases: None,
             resolved_type_aliases: None,
             loop_depth: 0,
@@ -297,7 +314,7 @@ impl ScopeContext {
             expected_error_type: self.expected_error_type.clone(),
             external_package_registry: self.external_package_registry.clone(),
             visible_external_symbols: self.visible_external_symbols.clone(),
-            visible_source_aliases: self.visible_source_aliases.clone(),
+            visible_source_bindings: self.visible_source_bindings.clone(),
             visible_type_aliases: self.visible_type_aliases.clone(),
             resolved_type_aliases: self.resolved_type_aliases.clone(),
             style_directives: self.style_directives.clone(),
@@ -348,7 +365,7 @@ impl ScopeContext {
             expected_error_type: self.expected_error_type.clone(),
             external_package_registry: self.external_package_registry.clone(),
             visible_external_symbols: self.visible_external_symbols.clone(),
-            visible_source_aliases: self.visible_source_aliases.clone(),
+            visible_source_bindings: self.visible_source_bindings.clone(),
             visible_type_aliases: self.visible_type_aliases.clone(),
             resolved_type_aliases: self.resolved_type_aliases.clone(),
             style_directives: self.style_directives.clone(),
@@ -385,7 +402,7 @@ impl ScopeContext {
             expected_error_type: self.expected_error_type.clone(),
             external_package_registry: self.external_package_registry.clone(),
             visible_external_symbols: self.visible_external_symbols.clone(),
-            visible_source_aliases: self.visible_source_aliases.clone(),
+            visible_source_bindings: self.visible_source_bindings.clone(),
             visible_type_aliases: self.visible_type_aliases.clone(),
             resolved_type_aliases: self.resolved_type_aliases.clone(),
             style_directives: self.style_directives.clone(),
@@ -418,7 +435,7 @@ impl ScopeContext {
             expected_error_type: parent.expected_error_type.clone(),
             external_package_registry: parent.external_package_registry.clone(),
             visible_external_symbols: parent.visible_external_symbols.clone(),
-            visible_source_aliases: parent.visible_source_aliases.clone(),
+            visible_source_bindings: parent.visible_source_bindings.clone(),
             visible_type_aliases: parent.visible_type_aliases.clone(),
             resolved_type_aliases: parent.resolved_type_aliases.clone(),
             style_directives: parent.style_directives.clone(),
@@ -496,11 +513,11 @@ impl ScopeContext {
         self
     }
 
-    pub fn with_visible_source_aliases(
+    pub fn with_visible_source_bindings(
         mut self,
-        aliases: FxHashMap<StringId, InternedPath>,
+        bindings: FxHashMap<StringId, InternedPath>,
     ) -> ScopeContext {
-        self.visible_source_aliases = Some(aliases);
+        self.visible_source_bindings = Some(bindings);
         self
     }
 
@@ -577,14 +594,30 @@ impl ScopeContext {
                 .next();
         }
 
-        // 2. Source import aliases
-        if let Some(aliases) = &self.visible_source_aliases
-            && let Some(canonical_path) = aliases.get(name)
-        {
-            return self.top_level_declarations.get_by_path(canonical_path);
+        // 2. Source-visible names → canonical declaration path.
+        // Includes same-file declarations and imported source symbols (aliased or not).
+        // When visible_source_bindings is populated (production contexts), this is the
+        // *only* path for cross-file name lookup. The fallback below is only for test
+        // contexts that do not set visible_source_bindings.
+        // Skip receiver methods: they must be called via receiver syntax, and the
+        // receiver method catalog handles their lookup.
+        if let Some(bindings) = &self.visible_source_bindings {
+            if let Some(canonical_path) = bindings.get(name)
+                && let Some(declaration) = self.top_level_declarations.get_by_path(canonical_path)
+                && !matches!(
+                    &declaration.value.data_type,
+                    DataType::Function(receiver, _) if receiver.as_ref().is_some()
+                )
+            {
+                return Some(declaration);
+            }
+            // visible_source_bindings is set but name not found — do not fall back.
+            // This ensures import aliases hide the original name.
+            return None;
         }
 
-        // 3. Top-level visible declarations
+        // 3. Fallback for contexts that do not set visible_source_bindings
+        // (e.g. synthetic evaluation contexts and some unit-test helpers).
         self.top_level_declarations
             .get_visible(*name, self.visible_declaration_ids.as_ref())
     }
@@ -656,20 +689,28 @@ impl ScopeContext {
             .map(|def| (type_id, def))
     }
 
-    /// Check whether a given `ExternalFunctionId` is present in the visible external symbols.
+    /// Look up a visible external receiver method by receiver type and method name.
     ///
-    /// WHAT: used by receiver method resolution to validate that a method found in the
-    ///       registry is actually visible from the current file.
+    /// WHAT: only considers external functions in `visible_external_symbols`; checks
+    ///       receiver compatibility against the def's `receiver_type`.
     /// WHY: package-scoped external symbols must respect file-local visibility.
-    pub(crate) fn is_visible_external_function_id(&self, id: ExternalFunctionId) -> bool {
-        self.visible_external_symbols
-            .as_ref()
-            .is_some_and(|symbols| {
-                symbols.values().any(|symbol_id| match symbol_id {
-                    ExternalSymbolId::Function(func_id) => *func_id == id,
-                    _ => false,
-                })
-            })
+    pub(crate) fn lookup_visible_external_method(
+        &self,
+        receiver_type: &DataType,
+        method_name: StringId,
+    ) -> Option<(ExternalFunctionId, &ExternalFunctionDef)> {
+        let visible = self.visible_external_symbols.as_ref()?;
+        let symbol_id = *visible.get(&method_name)?;
+        let ExternalSymbolId::Function(func_id) = symbol_id else {
+            return None;
+        };
+        let def = self.external_package_registry.get_function_by_id(func_id)?;
+        let expected_abi = def.receiver_type.as_ref()?;
+        if external_abi_matches_datatype(expected_abi, receiver_type) {
+            Some((func_id, def))
+        } else {
+            None
+        }
     }
 
     /// Look up a visible type alias by its source-level name.

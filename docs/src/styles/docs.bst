@@ -196,8 +196,7 @@ Palette = |
 
 # codesnippet = [$html:
     <span style="
-        color: #c444aff9; 
-        padding: 0.1em; 
+        color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">[$slot]</span>
 ]

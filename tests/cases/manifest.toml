@@ -2453,3 +2453,38 @@ tags = ["integration", "diagnostics", "receiver-methods"]
 id = "this_free_function_name_error"
 path = "this_free_function_name_error"
 tags = ["integration", "diagnostics", "receiver-methods"]
+
+[[case]]
+id = "source_alias_hides_original"
+path = "source_alias_hides_original"
+tags = ["integration", "imports", "aliases", "diagnostics"]
+
+[[case]]
+id = "external_alias_hides_original"
+path = "external_alias_hides_original"
+tags = ["integration", "imports", "aliases", "diagnostics"]
+
+[[case]]
+id = "two_package_symbols_same_name_aliases"
+path = "two_package_symbols_same_name_aliases"
+tags = ["integration", "imports", "aliases"]
+
+[[case]]
+id = "type_alias_via_imported_source_alias"
+path = "type_alias_via_imported_source_alias"
+tags = ["integration", "type-aliases", "imports"]
+
+[[case]]
+id = "type_alias_via_imported_external_type_alias"
+path = "type_alias_via_imported_external_type_alias"
+tags = ["integration", "type-aliases", "imports"]
+
+[[case]]
+id = "alias_to_struct_is_annotation_only"
+path = "alias_to_struct_is_annotation_only"
+tags = ["integration", "imports", "aliases", "diagnostics"]
+
+[[case]]
+id = "alias_to_choice_is_annotation_only"
+path = "alias_to_choice_is_annotation_only"
+tags = ["integration", "imports", "aliases", "diagnostics"]

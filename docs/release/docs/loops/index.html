@@ -313,8 +313,7 @@ body {
     </nav>
      <h1 style="font-size: 2em;text-align: center;"> LOOPS</h1>
     <section class="container"><h2>Loops Syntax</h2><p>Beanstalk uses a <strong>single</strong> loop keyword: <span style="
-        color: #c444aff9; 
-        padding: 0.1em; 
+        color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     "> loop</span>.</p><ul><li><strong><code class='codeblock'><span class='bst-code-keyword'>to</span></code> / <code class='codeblock'><span class='bst-code-keyword'>to</span> <span class='bst-code-operator'>&amp;</span></code></strong> select range semantics (exclusive vs inclusive)</li><li>Range loops can bind the current counter</li><li>Collection loops can bind the current item</li><li>An optional second binding provides the zero-based iteration index</li><li>Loop bindings are written after the loop condition</li><li>When bindings exist, they always use <code class='codeblock'><span class='bst-code-operator'>|</span>...<span class='bst-code-operator'>|</span></code> syntax</li><li>No <strong><code class='codeblock'>reverse</code></strong> keyword; direction is inferred from the bounds</li><li><strong><code class='codeblock'><span class='bst-code-keyword'>by</span></code></strong> controls step size and works with both directions</li></ul><p>Loops come in two forms:</p><ol><li><strong>Conditional loops</strong> (repeat while a condition is true)</li><li><strong>Iteration loops</strong> (iterate over a collection or a numeric range)</li></ol><h3>Conditional loops</h3><p>A conditional loop repeats for as long as its condition stays true.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 

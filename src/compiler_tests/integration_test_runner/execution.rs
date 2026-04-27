@@ -73,7 +73,7 @@ pub(crate) fn panic_case_result(payload: Box<dyn Any + Send>) -> CaseExecutionRe
 fn backend_builder_for_case(_backend_id: BackendId) -> ProjectBuilder {
     // This backend-builder seam is explicit even though both current backends
     // route through the HTML builder, so future non-HTML backends can slot in cleanly.
-    ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()))
+    ProjectBuilder::new(Box::new(HtmlProjectBuilder::for_integration_tests()))
 }
 
 fn format_panic_payload(payload: Box<dyn Any + Send>) -> String {

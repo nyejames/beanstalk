@@ -63,7 +63,7 @@ impl<'a> AstBuildState<'a> {
                 &self.declarations,
                 Some(&bindings.visible_symbol_paths),
                 Some(&bindings.visible_external_symbols),
-                Some(&bindings.visible_source_aliases),
+                Some(&bindings.visible_source_bindings),
                 Some(&bindings.visible_type_aliases),
                 Some(&self.resolved_type_aliases_by_path),
                 string_table,
@@ -130,7 +130,7 @@ impl<'a> AstBuildState<'a> {
                 .collect::<Vec<_>>();
             let empty_visible_symbol_paths = FxHashSet::default();
             let empty_visible_external_symbols = FxHashMap::default();
-            let empty_visible_source_aliases = FxHashMap::default();
+            let empty_visible_source_bindings = FxHashMap::default();
             let empty_visible_type_aliases = FxHashMap::default();
             let resolved_type_aliases = Rc::new(self.resolved_type_aliases_by_path.clone());
 
@@ -163,10 +163,10 @@ impl<'a> AstBuildState<'a> {
                         .get(&header.source_file)
                         .map(|bindings| &bindings.visible_external_symbols)
                         .unwrap_or(&empty_visible_external_symbols);
-                    let visible_source_aliases = file_import_bindings
+                    let visible_source_bindings = file_import_bindings
                         .get(&header.source_file)
-                        .map(|bindings| &bindings.visible_source_aliases)
-                        .unwrap_or(&empty_visible_source_aliases);
+                        .map(|bindings| &bindings.visible_source_bindings)
+                        .unwrap_or(&empty_visible_source_bindings);
                     let visible_type_aliases = file_import_bindings
                         .get(&header.source_file)
                         .map(|bindings| &bindings.visible_type_aliases)
@@ -179,7 +179,7 @@ impl<'a> AstBuildState<'a> {
                             top_level_declarations: Rc::clone(&declarations_snapshot),
                             visible_declaration_ids: visible_symbol_paths,
                             visible_external_symbols,
-                            visible_source_aliases,
+                            visible_source_bindings,
                             visible_type_aliases,
                             resolved_type_aliases,
                             external_package_registry: self.external_package_registry,

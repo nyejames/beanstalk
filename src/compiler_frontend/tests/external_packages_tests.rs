@@ -87,18 +87,8 @@ fn collection_methods_have_receiver_type() {
 }
 
 #[test]
-fn resolve_method_finds_collection_length() {
-    let registry = ExternalPackageRegistry::new();
-    let result = registry.resolve_method("Int Collection", COLLECTION_LENGTH_HOST_NAME);
-    assert!(
-        result.is_some(),
-        "resolve_method should find collection length"
-    );
-}
-
-#[test]
 fn same_symbol_name_across_packages_is_allowed() {
-    let registry = ExternalPackageRegistry::new();
+    let registry = ExternalPackageRegistry::new().with_test_packages_for_integration();
 
     // Both @test/pkg-a and @test/pkg-b expose a function named "open".
     let a_result = registry.resolve_package_function("@test/pkg-a", "open");
@@ -118,7 +108,7 @@ fn same_symbol_name_across_packages_is_allowed() {
 
 #[test]
 fn resolve_package_function_selects_correct_package() {
-    let registry = ExternalPackageRegistry::new();
+    let registry = ExternalPackageRegistry::new().with_test_packages_for_integration();
 
     let (a_id, a_def) = registry
         .resolve_package_function("@test/pkg-a", "open")

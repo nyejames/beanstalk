@@ -9,10 +9,6 @@ Use the language surface integration matrix as a reference for what is currently
 ---
 
 # Plans / Notes / TODOS
-- External packages scoping: `docs\roadmap\plans\package-scoped-external-symbols.md`
-
-- Bug with nested templates always having a space between their end and the text piece of content
-
 - full tagged unions
 - full pattern-matching design (capture patterns)
 - full traits implementation

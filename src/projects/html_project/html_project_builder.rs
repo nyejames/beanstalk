@@ -26,7 +26,9 @@ use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 #[derive(Debug)]
-pub struct HtmlProjectBuilder {}
+pub struct HtmlProjectBuilder {
+    include_test_packages: bool,
+}
 
 impl HtmlProjectBuilder {
     /// Constructs the HTML project builder.
@@ -34,13 +36,30 @@ impl HtmlProjectBuilder {
     /// WHAT: initializes a stateless builder implementation.
     /// WHY: builder policy is encoded in methods rather than runtime state.
     pub fn new() -> Self {
-        Self {}
+        Self {
+            include_test_packages: false,
+        }
+    }
+
+    /// Constructs a builder that includes integration-test external packages.
+    ///
+    /// WHAT: used by the integration test runner so test fixtures can import
+    ///       `@test/pkg-a` and `@test/pkg-b` symbols.
+    pub fn for_integration_tests() -> Self {
+        Self {
+            include_test_packages: true,
+        }
     }
 }
 
 impl BackendBuilder for HtmlProjectBuilder {
     fn external_packages(&self) -> ExternalPackageRegistry {
-        ExternalPackageRegistry::new()
+        let registry = ExternalPackageRegistry::new();
+        if self.include_test_packages {
+            registry.with_test_packages_for_integration()
+        } else {
+            registry
+        }
     }
 
     fn build_backend(

@@ -4,5 +4,5 @@ Group = |
     owner Human,
 |
 
-g = Group(owner = Person(name = "Ana"))
+g = Group(owner = Human(name = "Ana"))
 io(g.owner.name)

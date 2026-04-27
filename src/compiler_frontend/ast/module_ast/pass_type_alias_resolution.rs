@@ -58,21 +58,19 @@ impl<'a> AstBuildState<'a> {
                         return Some(resolved_dt.to_owned());
                     }
 
-                    // 2. Check visible declarations (structs, choices, builtins).
-                    // WHY: must gate by visible_symbol_paths to enforce file-local
-                    // import boundaries instead of doing a module-wide scan.
-                    if let Some(dt) = self
-                        .declarations
-                        .iter()
-                        .rfind(|d| {
-                            d.id.name() == Some(type_name)
-                                && !d.is_unresolved_constant_placeholder()
-                                && match file_bindings {
-                                    Some(bindings) => bindings.visible_symbol_paths.contains(&d.id),
-                                    None => false,
-                                }
-                        })
-                        .map(|d| d.value.data_type.to_owned())
+                    // 2. Check visible source bindings (structs, choices, builtins).
+                    // WHY: aliases and same-file declarations are in visible_source_bindings;
+                    // visible_symbol_paths is only an access gate, not a name lookup table.
+                    if let Some(bindings) = file_bindings
+                        && let Some(canonical_path) =
+                            bindings.visible_source_bindings.get(&type_name)
+                        && let Some(dt) = self
+                            .declarations
+                            .iter()
+                            .rfind(|d| {
+                                &d.id == canonical_path && !d.is_unresolved_constant_placeholder()
+                            })
+                            .map(|d| d.value.data_type.to_owned())
                     {
                         return Some(dt);
                     }
