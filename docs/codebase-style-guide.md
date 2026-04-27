@@ -83,8 +83,7 @@ for node in ast_nodes {
 ```
 
 ### Function Size
-- Simple functions should usually stay under ~50 lines
-- Complex functions should usually stay under ~100 lines
+- Functions should usually stay under ~200 lines
 - Longer functions are acceptable when they still represent one coherent operation, such as a compiler transformation, state machine, or tightly coupled sequential process
 - Split functions when they mix unrelated responsibilities, are hard to test, or no longer match their name
 
