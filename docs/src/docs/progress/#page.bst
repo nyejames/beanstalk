@@ -130,7 +130,7 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
             [: Partial]
             [: Targeted parser, declaration, match, import, assignment, return, and JS carrier-shape coverage.]
             [: JS / HTML]
-            [: Unit variants are the current supported subset. Record-body payload declarations, constructors, and payload match extraction are planned for promotion through choices-full-tagged-unions-plan.md. Payload shorthand, generic choices, recursive choices, direct payload field access, and structural equality remain deferred.]
+            [: Unit variants are supported. Record-body payload declarations are parsed and create dependency edges (Phase 1). Payload constructors and payload match extraction land in later phases. Payload shorthand is rejected. Generic choices, recursive choices, direct payload field access, and structural equality remain deferred.]
         ]
 
         [data:
@@ -336,9 +336,9 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
 
         [data:
             [: Choice payload declarations]
-            [: Deferred unless promoted before Alpha]
-            [: [codesnippet:choice_payload_decl_deferred]]
-            [: Planned promotion — see choices-full-tagged-unions-plan.md. Record-body payload metadata will be parsed in Phase 1; value construction and payload matching land in later phases.]
+            [: Partial]
+            [: [codesnippet:choice_payload_record_declaration_success], [codesnippet:choice_payload_imported_field_type_success], [codesnippet:choice_payload_empty_record_rejected], [codesnippet:choice_payload_duplicate_field_rejected]]
+            [: Record-body payload metadata is parsed and type-checked. Value construction and payload matching land in later phases.]
         ]
 
         [data:

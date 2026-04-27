@@ -637,7 +637,13 @@ impl<'a> HirBuilder<'a> {
         let choice_id = self.allocate_choice_id();
         let hir_variants: Vec<HirChoiceVariant> = variants
             .iter()
-            .map(|v| HirChoiceVariant { name: v.id })
+            .map(|v| HirChoiceVariant {
+                name: v.id,
+                // Phase 1: payload metadata lives in AST-level ChoiceVariant.
+                // HIR field lowering is deferred until a dedicated choice-registration
+                // pass or Phase 3 constructor lowering.
+                fields: vec![],
+            })
             .collect();
 
         self.choices_by_name

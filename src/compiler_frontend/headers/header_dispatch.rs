@@ -286,8 +286,49 @@ pub(super) fn create_header(
                 IdentifierNamingKind::TypeLike,
             );
 
-            let choice_header =
-                parse_choice_header_payload(token_stream, context.string_table, context.warnings)?;
+            let choice_context = ScopeContext::new(
+                ContextKind::ConstantHeader,
+                full_name.to_owned(),
+                Rc::clone(&context.visible_constant_placeholders),
+                context.external_package_registry.to_owned(),
+                vec![],
+            )
+            .with_style_directives(context.style_directives)
+            .with_project_path_resolver(context.project_path_resolver.clone())
+            .with_source_file_scope(context.source_file.to_owned())
+            .with_path_format_config(context.path_format_config.clone());
+
+            let choice_header = parse_choice_header_payload(
+                token_stream,
+                &full_name,
+                &choice_context,
+                context.string_table,
+                context.warnings,
+            )?;
+
+            // Collect strict type edges from payload field types.
+            for variant in &choice_header {
+                if let crate::compiler_frontend::declaration_syntax::choice::ChoiceVariantPayload::Record {
+                    fields,
+                } = &variant.payload
+                {
+                    for field in fields {
+                        for_each_named_type_in_data_type(
+                            &field.value.data_type,
+                            &mut |type_name| {
+                                collect_named_type_dependency_edge(
+                                    type_name,
+                                    context.file_import_entries,
+                                    context.source_file,
+                                    context.external_package_registry,
+                                    context.string_table,
+                                    &mut dependencies,
+                                );
+                            },
+                        );
+                    }
+                }
+            }
 
             kind = HeaderKind::Choice {
                 variants: choice_header,

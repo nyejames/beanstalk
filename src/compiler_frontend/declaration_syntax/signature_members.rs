@@ -38,6 +38,12 @@ use crate::return_syntax_error;
 pub enum SignatureMemberContext {
     FunctionParameter,
     StructField,
+    /// Payload field inside a choice variant record body.
+    ///
+    /// WHY: choice payload fields share the same syntactic rules as struct fields
+    /// (name, optional mutability, type, optional default) but exist in a different
+    /// semantic context. Kept as a distinct variant for clarity.
+    ChoicePayloadField,
 }
 
 /// Parses a `| name [~]Type [= default], ... |` member list.

@@ -1,5 +1,0 @@
-Status ::
-    Pending |
-        RetryCount Int,
-    |,
-;

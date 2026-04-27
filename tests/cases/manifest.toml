@@ -204,18 +204,38 @@ path = "choice_basic_declaration_and_use"
 tags = ["integration","language"]
 
 [[case]]
-id = "choice_payload_decl_deferred"
-path = "choice_payload_decl_deferred"
+id = "choice_payload_record_declaration_success"
+path = "choice_payload_record_declaration_success"
+tags = ["integration","language"]
+
+[[case]]
+id = "choice_payload_shorthand_rejected"
+path = "choice_payload_shorthand_rejected"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "choice_payload_empty_record_rejected"
+path = "choice_payload_empty_record_rejected"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "choice_payload_duplicate_field_rejected"
+path = "choice_payload_duplicate_field_rejected"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "choice_payload_imported_field_type_success"
+path = "choice_payload_imported_field_type_success"
+tags = ["integration","language"]
+
+[[case]]
+id = "choice_payload_constructor_still_rejected_until_phase_2"
+path = "choice_payload_constructor_still_rejected_until_phase_2"
 tags = ["integration","diagnostics"]
 
 [[case]]
 id = "choice_default_decl_deferred"
 path = "choice_default_decl_deferred"
-tags = ["integration","diagnostics"]
-
-[[case]]
-id = "choice_tagged_decl_deferred"
-path = "choice_tagged_decl_deferred"
 tags = ["integration","diagnostics"]
 
 [[case]]

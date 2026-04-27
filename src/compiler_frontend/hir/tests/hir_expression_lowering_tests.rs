@@ -16,7 +16,7 @@ use crate::compiler_frontend::builtins::error_type::register_builtin_error_types
 use crate::compiler_frontend::builtins::{BuiltinMethodKind, CollectionBuiltinOp};
 use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::datatypes::DataType;
-use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant;
+use crate::compiler_frontend::declaration_syntax::choice::{ChoiceVariant, ChoiceVariantPayload};
 use crate::compiler_frontend::external_packages::CallTarget;
 use crate::compiler_frontend::hir::blocks::{HirBlock, HirLocal};
 use crate::compiler_frontend::hir::expressions::{HirExpressionKind, ValueKind};
@@ -1902,12 +1902,12 @@ fn lowers_choice_variant_expression_to_hir_choice_variant() {
         variants: vec![
             ChoiceVariant {
                 id: ready_name,
-                data_type: DataType::None,
+                payload: ChoiceVariantPayload::Unit,
                 location: location.clone(),
             },
             ChoiceVariant {
                 id: busy_name,
-                data_type: DataType::None,
+                payload: ChoiceVariantPayload::Unit,
                 location: location.clone(),
             },
         ],

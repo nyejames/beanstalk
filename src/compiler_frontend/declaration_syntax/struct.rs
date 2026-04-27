@@ -20,6 +20,27 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::FileTokens;
 use crate::return_rule_error;
 
+/// Parse a record body from `| field Type [= default], ... |` syntax.
+///
+/// WHAT: advances past the opening `|`, parses all fields via `parse_signature_members`,
+/// and advances past the closing `|`. Returns the parsed field declarations.
+/// WHY: shared helper for struct fields and choice payload fields. Keeps the
+/// field-list syntax in one place.
+pub fn parse_record_body(
+    token_stream: &mut FileTokens,
+    context: &ScopeContext,
+    string_table: &mut StringTable,
+    member_context: SignatureMemberContext,
+) -> Result<Vec<Declaration>, CompilerError> {
+    token_stream.advance();
+
+    let fields = parse_signature_members(token_stream, string_table, context, member_context)?;
+
+    token_stream.advance();
+
+    Ok(fields)
+}
+
 /// Parse a struct field-list shell from `| field Type [= default], ... |` syntax.
 ///
 /// WHAT: advances past the opening `|`, parses all fields via `parse_signature_members`,
@@ -31,18 +52,12 @@ pub fn parse_struct_shell(
     context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> Result<Vec<Declaration>, CompilerError> {
-    token_stream.advance();
-
-    let fields = parse_signature_members(
+    parse_record_body(
         token_stream,
-        string_table,
         context,
+        string_table,
         SignatureMemberContext::StructField,
-    )?;
-
-    token_stream.advance();
-
-    Ok(fields)
+    )
 }
 
 /// Validates that every struct field default is a compile-time constant.

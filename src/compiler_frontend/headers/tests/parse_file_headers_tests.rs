@@ -720,25 +720,27 @@ fn choice_headers_reject_duplicate_variants() {
 }
 
 #[test]
-fn choice_headers_reject_payload_variant_forms_for_alpha() {
-    let payload_type_result = parse_single_file_headers_with_entry(
+fn choice_headers_reject_invalid_payload_forms() {
+    // Shorthand payload is invalid by design (not deferred).
+    let payload_shorthand_result = parse_single_file_headers_with_entry(
         "Status :: Ready String;\n",
         "src/#page.bst",
         "src/#page.bst",
     );
     assert!(
-        payload_type_result.is_err(),
-        "payload choice variants must fail in alpha"
+        payload_shorthand_result.is_err(),
+        "shorthand payload variants must be rejected"
     );
-    let payload_errors = payload_type_result
+    let payload_errors = payload_shorthand_result
         .err()
         .expect("expected payload parse errors");
     assert!(payload_errors.iter().any(|error| {
         error
             .msg
-            .contains("Choice payload variants are deferred for Alpha")
+            .contains("Choice payload shorthand is not supported")
     }));
 
+    // Constructor-style declarations are invalid by design.
     let payload_paren_result = parse_single_file_headers_with_entry(
         "Status :: Ready(String);\n",
         "src/#page.bst",
@@ -746,17 +748,18 @@ fn choice_headers_reject_payload_variant_forms_for_alpha() {
     );
     assert!(
         payload_paren_result.is_err(),
-        "constructor-style payload variants must fail in alpha"
+        "constructor-style payload variants must be rejected"
     );
     let payload_paren_errors = payload_paren_result
         .err()
         .expect("expected constructor-style payload parse errors");
     assert!(payload_paren_errors.iter().any(|error| {
-        error.msg.contains(
-            "Constructor-style choice variant declarations ('Variant(...)') are deferred for Alpha",
-        )
+        error
+            .msg
+            .contains("Constructor-style choice declarations are not supported")
     }));
 
+    // Default values remain deferred.
     let defaults_result = parse_single_file_headers_with_entry(
         "Status :: Ready = true;\n",
         "src/#page.bst",
@@ -764,7 +767,7 @@ fn choice_headers_reject_payload_variant_forms_for_alpha() {
     );
     assert!(
         defaults_result.is_err(),
-        "choice variant defaults must fail in alpha"
+        "choice variant defaults must fail"
     );
     let default_errors = defaults_result
         .err()
@@ -772,24 +775,44 @@ fn choice_headers_reject_payload_variant_forms_for_alpha() {
     assert!(default_errors.iter().any(|error| {
         error
             .msg
-            .contains("Choice variant default values are deferred for Alpha")
+            .contains("Choice variant default values are deferred")
     }));
+}
 
-    let tagged_result = parse_single_file_headers_with_entry(
-        "Status :: Pending |\n    RetryCount Int,\n|;\n",
-        "src/#page.bst",
-        "src/#page.bst",
+#[test]
+fn choice_headers_accept_record_payload_variants() {
+    let (headers, string_table) =
+        parse_single_file_headers_with_table("Status :: Pending |\n    RetryCount Int,\n|;\n");
+
+    let choice_header = headers
+        .headers
+        .iter()
+        .find(|header| matches!(header.kind, HeaderKind::Choice { .. }))
+        .expect("expected choice header");
+
+    let HeaderKind::Choice { variants } = &choice_header.kind else {
+        panic!("expected choice metadata");
+    };
+
+    assert_eq!(variants.len(), 1, "expected one parsed variant");
+    assert_eq!(
+        string_table.resolve(variants[0].id),
+        "Pending",
+        "expected Pending variant"
     );
-    assert!(
-        tagged_result.is_err(),
-        "tagged choice variants must fail in alpha"
-    );
-    let tagged_errors = tagged_result.err().expect("expected tagged parse errors");
-    assert!(tagged_errors.iter().any(|error| {
-        error
-            .msg
-            .contains("Tagged choice variant bodies using '| ... |' are deferred for Alpha")
-    }));
+    match &variants[0].payload {
+        crate::compiler_frontend::declaration_syntax::choice::ChoiceVariantPayload::Record {
+            fields,
+        } => {
+            assert_eq!(fields.len(), 1, "expected one payload field");
+            assert_eq!(
+                fields[0].id.name_str(&string_table),
+                Some("RetryCount"),
+                "expected RetryCount field"
+            );
+        }
+        other => panic!("expected Record payload, got {other:?}"),
+    }
 }
 
 #[test]

@@ -2,4 +2,4 @@
 mode = "failure"
 warnings = "forbid"
 error_type = "Rule"
-message_contains = ["Choice variant default values are deferred"]
+message_contains = ["Duplicate field 'message' in choice variant 'Err'"]

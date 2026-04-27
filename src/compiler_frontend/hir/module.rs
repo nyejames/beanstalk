@@ -34,6 +34,18 @@ pub struct HirChoice {
 pub struct HirChoiceVariant {
     #[allow(dead_code)] // Stored during lowering; not read back in Alpha paths.
     pub name: StringId,
+    /// Payload field metadata. Populated in Phase 1 for type-checking scaffolding;
+    /// not walked in Alpha validation until payload construction/matching lands.
+    #[allow(dead_code)]
+    pub fields: Vec<HirChoiceField>,
+}
+
+#[derive(Debug, Clone)]
+pub struct HirChoiceField {
+    #[allow(dead_code)] // Populated in a later phase; struct shape defined in Phase 1.
+    pub name: StringId,
+    #[allow(dead_code)] // Populated in a later phase; struct shape defined in Phase 1.
+    pub ty: crate::compiler_frontend::hir::hir_datatypes::TypeId,
 }
 
 #[derive(Debug, Clone)]

@@ -10,7 +10,7 @@
 
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
-use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant;
+use crate::compiler_frontend::declaration_syntax::choice::{ChoiceVariant, ChoiceVariantPayload};
 use crate::compiler_frontend::external_packages::ExternalTypeId;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_resolution::CompileTimePathKind;
@@ -311,7 +311,13 @@ impl DataType {
                 } else {
                     let variant_names: Vec<String> = variants
                         .iter()
-                        .map(|v| string_table.resolve(v.id).to_owned())
+                        .map(|v| {
+                            let base = string_table.resolve(v.id).to_owned();
+                            match &v.payload {
+                                ChoiceVariantPayload::Unit => base,
+                                ChoiceVariantPayload::Record { .. } => format!("{base}(...)"),
+                            }
+                        })
                         .collect();
                     format!("{name}::{{{}}}", variant_names.join(", "))
                 }
@@ -396,7 +402,11 @@ impl PartialEq for DataType {
                     && variants_a
                         .iter()
                         .zip(variants_b.iter())
-                        .all(|(variant_a, variant_b)| variant_a.id == variant_b.id)
+                        .all(|(variant_a, variant_b)| {
+                            variant_a.id == variant_b.id
+                                && std::mem::discriminant(&variant_a.payload)
+                                    == std::mem::discriminant(&variant_b.payload)
+                        })
             }
             (DataType::External { type_id: id_a }, DataType::External { type_id: id_b }) => {
                 id_a == id_b

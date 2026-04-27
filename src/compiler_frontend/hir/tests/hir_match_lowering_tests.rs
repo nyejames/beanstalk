@@ -13,7 +13,7 @@ use crate::compiler_frontend::ast::statements::match_patterns::{
 };
 use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::datatypes::DataType;
-use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant;
+use crate::compiler_frontend::declaration_syntax::choice::{ChoiceVariant, ChoiceVariantPayload};
 use crate::compiler_frontend::hir::expressions::{HirExpressionKind, ValueKind};
 use crate::compiler_frontend::hir::ids::ChoiceId;
 use crate::compiler_frontend::hir::patterns::HirPattern;
@@ -118,12 +118,12 @@ fn non_unit_function_with_exhaustive_choice_match_returns_on_all_arms() {
         variants: vec![
             ChoiceVariant {
                 id: ready_name,
-                data_type: DataType::None,
+                payload: ChoiceVariantPayload::Unit,
                 location: test_location(20),
             },
             ChoiceVariant {
                 id: busy_name,
-                data_type: DataType::None,
+                payload: ChoiceVariantPayload::Unit,
                 location: test_location(20),
             },
         ],
@@ -823,12 +823,12 @@ fn lowers_choice_match_arms_to_hir_choice_variant_patterns() {
         variants: vec![
             ChoiceVariant {
                 id: ready_name,
-                data_type: DataType::None,
+                payload: ChoiceVariantPayload::Unit,
                 location: test_location(2),
             },
             ChoiceVariant {
                 id: busy_name,
-                data_type: DataType::None,
+                payload: ChoiceVariantPayload::Unit,
                 location: test_location(2),
             },
         ],
