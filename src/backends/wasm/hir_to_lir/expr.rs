@@ -38,25 +38,31 @@ pub(crate) fn lower_expression(
                 prefer_move: false,
             })
         }
-        HirExpressionKind::ChoiceVariant {
+        HirExpressionKind::VariantConstruct {
+            carrier,
             variant_index,
-            payload_fields,
-            ..
+            fields,
         } => {
-            if !payload_fields.is_empty() {
+            if !fields.is_empty() {
                 return Err(lir_transformation_error(
-                    "Wasm backend does not yet support choice payload variants",
+                    "Wasm backend does not yet support variant payload fields",
                 ));
             }
-            let dst = context.alloc_temp(WasmAbiType::I64);
-            statements.push(WasmLirStmt::ConstI64 {
-                dst,
-                value: *variant_index as i64,
-            });
-            Ok(ExprLoweringOutput {
-                value: dst,
-                prefer_move: false,
-            })
+            match carrier {
+                crate::compiler_frontend::hir::expressions::HirVariantCarrier::Choice {
+                    ..
+                } => {
+                    let dst = context.alloc_temp(WasmAbiType::I64);
+                    statements.push(WasmLirStmt::ConstI64 {
+                        dst,
+                        value: *variant_index as i64,
+                    });
+                    Ok(ExprLoweringOutput {
+                        value: dst,
+                        prefer_move: false,
+                    })
+                }
+            }
         }
         HirExpressionKind::Float(value) => {
             let dst = context.alloc_temp(WasmAbiType::F64);

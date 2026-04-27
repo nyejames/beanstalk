@@ -493,31 +493,39 @@ impl<'a> HirDisplayContext<'a> {
             HirExpressionKind::BuiltinCast { kind, value } => {
                 format!("{:?}({})", kind, self.render_expression(value))
             }
-            HirExpressionKind::ChoiceVariant {
-                choice_id,
+            HirExpressionKind::VariantConstruct {
+                carrier,
                 variant_index,
-                payload_fields,
+                fields,
             } => {
-                let fields_str = if payload_fields.is_empty() {
+                let carrier_label = match carrier {
+                    #[cfg(any(test, feature = "show_hir"))]
+                    crate::compiler_frontend::hir::expressions::HirVariantCarrier::Choice {
+                        choice_id,
+                    } => format!("choice={}", self.choice_label(*choice_id)),
+                    #[cfg(not(any(test, feature = "show_hir")))]
+                    crate::compiler_frontend::hir::expressions::HirVariantCarrier::Choice {
+                        ..
+                    } => "choice".to_owned(),
+                };
+                let fields_str = if fields.is_empty() {
                     String::new()
                 } else {
-                    let rendered: Vec<String> = payload_fields
+                    let rendered: Vec<String> = fields
                         .iter()
-                        .map(|(name, expr)| {
-                            format!(
-                                "{}: {}",
-                                self.string_table.resolve(*name),
-                                self.render_expression(expr)
-                            )
+                        .map(|field| {
+                            let name_str = field
+                                .name
+                                .map(|n| self.string_table.resolve(n))
+                                .unwrap_or("?");
+                            format!("{}: {}", name_str, self.render_expression(&field.value))
                         })
                         .collect();
                     format!(", fields=[{}]", rendered.join(", "))
                 };
                 format!(
-                    "choice_variant(choice={}, tag={}){}",
-                    self.choice_label(*choice_id),
-                    variant_index,
-                    fields_str
+                    "variant_construct({}, tag={}){}",
+                    carrier_label, variant_index, fields_str
                 )
             }
         }

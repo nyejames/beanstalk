@@ -506,7 +506,7 @@ impl<'hir> JsEmitter<'hir> {
                 format!("{scrutinee_expression} {js_op} {rhs}")
             }
             HirPattern::ChoiceVariant { variant_index, .. } => {
-                format!("{scrutinee_expression} === {variant_index}")
+                format!("{scrutinee_expression}.tag === {variant_index}")
             }
         };
 

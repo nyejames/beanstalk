@@ -803,19 +803,45 @@ impl<'a> HirValidator<'a> {
             | HirExpressionKind::Char(_)
             | HirExpressionKind::StringLiteral(_) => {}
 
-            HirExpressionKind::ChoiceVariant {
-                choice_id,
-                payload_fields,
-                ..
+            HirExpressionKind::VariantConstruct {
+                carrier,
+                variant_index,
+                fields,
             } => {
-                if self.module.choices.get(choice_id.0 as usize).is_none() {
-                    return Err(self.error_with_hir(
-                        format!("Invalid ChoiceId {choice_id:?} in expression"),
-                        anchor,
-                    ));
+                match carrier {
+                    crate::compiler_frontend::hir::expressions::HirVariantCarrier::Choice {
+                        choice_id,
+                    } => {
+                        let Some(choice) = self.module.choices.get(choice_id.0 as usize) else {
+                            return Err(self.error_with_hir(
+                                format!("Invalid ChoiceId {choice_id:?} in VariantConstruct"),
+                                anchor,
+                            ));
+                        };
+                        if *variant_index >= choice.variants.len() {
+                            return Err(self.error_with_hir(
+                                format!(
+                                    "Variant index {variant_index} out of range for choice {choice_id:?} with {} variants",
+                                    choice.variants.len()
+                                ),
+                                anchor,
+                            ));
+                        }
+                        let variant = &choice.variants[*variant_index];
+                        if fields.len() != variant.fields.len() {
+                            return Err(self.error_with_hir(
+                                format!(
+                                    "VariantConstruct field count {} does not match choice variant field count {}",
+                                    fields.len(),
+                                    variant.fields.len()
+                                ),
+                                anchor,
+                            ));
+                        }
+                    }
                 }
-                for (_name, field_expr) in payload_fields {
-                    self.validate_expression(field_expr, anchor)?;
+                for field in fields {
+                    self.validate_expression(&field.value, anchor)?;
                 }
             }
 

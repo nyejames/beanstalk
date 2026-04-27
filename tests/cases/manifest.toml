@@ -299,6 +299,26 @@ path = "choice_payload_structural_equality_deferred"
 tags = ["integration","diagnostics"]
 
 [[case]]
+id = "choice_payload_js_carrier_shape"
+path = "choice_payload_js_carrier_shape"
+tags = ["integration","language"]
+
+[[case]]
+id = "choice_payload_return_js_shape"
+path = "choice_payload_return_js_shape"
+tags = ["integration","language"]
+
+[[case]]
+id = "choice_payload_assignment_js_shape"
+path = "choice_payload_assignment_js_shape"
+tags = ["integration","language"]
+
+[[case]]
+id = "choice_payload_imported_js_shape"
+path = "choice_payload_imported_js_shape"
+tags = ["integration","language"]
+
+[[case]]
 id = "choice_imported_payload_constructor_success"
 path = "choice_imported_payload_constructor_success"
 tags = ["integration","language"]

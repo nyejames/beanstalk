@@ -19,7 +19,7 @@ use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::declaration_syntax::choice::{ChoiceVariant, ChoiceVariantPayload};
 use crate::compiler_frontend::external_packages::CallTarget;
 use crate::compiler_frontend::hir::blocks::{HirBlock, HirLocal};
-use crate::compiler_frontend::hir::expressions::{HirExpressionKind, ValueKind};
+use crate::compiler_frontend::hir::expressions::{HirExpressionKind, HirVariantCarrier, ValueKind};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_datatypes::HirTypeKind;
 use crate::compiler_frontend::hir::hir_side_table::HirLocalOriginKind;
@@ -1881,13 +1881,13 @@ fn lowers_collection_set_builtin_from_explicit_ast_node_to_index_assignment() {
     }
 }
 
-/// Verifies that `ExpressionKind::ChoiceConstruct` lowers to `HirExpressionKind::ChoiceVariant`
+/// Verifies that `ExpressionKind::ChoiceConstruct` lowers to `HirExpressionKind::VariantConstruct`
 /// with the correct tag index, and that the result type is `HirTypeKind::Choice`.
 ///
 /// WHY: this is the core contract of the Choice Hardening refactor — choice values must not
 /// masquerade as `HirExpressionKind::Int` in HIR.
 #[test]
-fn lowers_choice_variant_expression_to_hir_choice_variant() {
+fn lowers_choice_variant_expression_to_hir_variant_construct() {
     let mut string_table = StringTable::new();
     let location = location(1);
 
@@ -1933,18 +1933,18 @@ fn lowers_choice_variant_expression_to_hir_choice_variant() {
     assert_eq!(lowered.value.value_kind, ValueKind::Const);
 
     let (choice_id, variant_index) = match &lowered.value.kind {
-        HirExpressionKind::ChoiceVariant {
-            choice_id,
+        HirExpressionKind::VariantConstruct {
+            carrier: HirVariantCarrier::Choice { choice_id },
             variant_index,
-            payload_fields,
+            fields,
         } => {
             assert!(
-                payload_fields.is_empty(),
+                fields.is_empty(),
                 "unit variant should have no payload fields"
             );
             (*choice_id, *variant_index)
         }
-        other => panic!("expected ChoiceVariant, got {other:?}"),
+        other => panic!("expected VariantConstruct, got {other:?}"),
     };
 
     assert_eq!(variant_index, 0, "expected tag 0 for Ready variant");

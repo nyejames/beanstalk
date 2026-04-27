@@ -44,8 +44,11 @@ pub struct HirChoiceVariant {
 pub struct HirChoiceField {
     #[allow(dead_code)] // Populated in a later phase; struct shape defined in Phase 1.
     pub name: StringId,
-    #[allow(dead_code)] // Populated in a later phase; struct shape defined in Phase 1.
-    pub ty: crate::compiler_frontend::hir::hir_datatypes::TypeId,
+    /// Payload field type. `None` when the type cannot be resolved during lazy registration
+    /// (for example, imported types that are still `DataType::NamedType` at choice-discovery time).
+    /// A future dedicated choice-registration pass can backfill these.
+    #[allow(dead_code)]
+    pub ty: Option<crate::compiler_frontend::hir::hir_datatypes::TypeId>,
 }
 
 #[derive(Debug, Clone)]

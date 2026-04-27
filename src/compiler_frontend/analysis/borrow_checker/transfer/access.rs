@@ -1033,9 +1033,9 @@ fn record_shared_reads_in_expression(
         | HirExpressionKind::Char(_)
         | HirExpressionKind::StringLiteral(_) => {}
 
-        HirExpressionKind::ChoiceVariant { payload_fields, .. } => {
-            for (_name, field_expr) in payload_fields {
-                record_shared_reads_in_expression(env, field_expr, location.clone(), roots)?;
+        HirExpressionKind::VariantConstruct { fields, .. } => {
+            for field in fields {
+                record_shared_reads_in_expression(env, &field.value, location.clone(), roots)?;
             }
         }
 
@@ -1239,9 +1239,9 @@ fn collect_expression_roots(
         | HirExpressionKind::Char(_)
         | HirExpressionKind::StringLiteral(_) => {}
 
-        HirExpressionKind::ChoiceVariant { payload_fields, .. } => {
-            for (_name, field_expr) in payload_fields {
-                collect_expression_roots(layout, state, field_expr, out, location.clone())?;
+        HirExpressionKind::VariantConstruct { fields, .. } => {
+            for field in fields {
+                collect_expression_roots(layout, state, &field.value, out, location.clone())?;
             }
         }
     }

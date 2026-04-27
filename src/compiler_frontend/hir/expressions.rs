@@ -9,6 +9,25 @@ use crate::compiler_frontend::hir::operators::{HirBinOp, HirUnaryOp};
 use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::symbols::string_interning::StringId;
 
+/// Shared carrier tag for variant construction in HIR.
+///
+/// WHY: Choices, Options, and Results all construct variant-shaped values. A shared carrier
+/// keeps backend lowering uniform while preserving distinct semantic type identity.
+/// Phase 3 uses this for choices; Phase 6 will migrate Option/Result.
+#[derive(Debug, Clone)]
+pub enum HirVariantCarrier {
+    Choice { choice_id: ChoiceId },
+}
+
+/// One field inside a `VariantConstruct`.
+///
+/// WHY: payload field names are part of the runtime carrier shape for JS and future backends.
+#[derive(Debug, Clone)]
+pub struct HirVariantField {
+    pub name: Option<StringId>,
+    pub value: HirExpression,
+}
+
 #[derive(Debug, Clone)]
 pub struct HirExpression {
     pub id: HirValueId,
@@ -132,16 +151,14 @@ pub enum HirExpressionKind {
         value: Box<HirExpression>,
     },
 
-    /// Explicit choice variant value.
+    /// Construct a variant value through a shared carrier.
     ///
-    /// WHY: choice tags are nominal, not raw integers. A dedicated HIR node
-    /// preserves choice identity for backend lowering and future payload support.
-    /// For payload variants, `payload_fields` carries lowered field expressions
-    /// keyed by field name (StringId). Unit variants use an empty vec.
-    ChoiceVariant {
-        choice_id: ChoiceId,
+    /// WHY: unifies choice/option/result construction in HIR while keeping type kinds distinct.
+    /// Phase 3: used for choices. Phase 6: will expand to Option/Result.
+    VariantConstruct {
+        carrier: HirVariantCarrier,
         variant_index: usize,
-        payload_fields: Vec<(StringId, HirExpression)>,
+        fields: Vec<HirVariantField>,
     },
 }
 

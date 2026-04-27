@@ -463,9 +463,9 @@ fn collect_expression_values(expression: &HirExpression, out: &mut FxHashSet<Hir
         | HirExpressionKind::Copy(_)
         | HirExpressionKind::Load(_) => {}
 
-        HirExpressionKind::ChoiceVariant { payload_fields, .. } => {
-            for (_name, field_expr) in payload_fields {
-                collect_expression_values(field_expr, out);
+        HirExpressionKind::VariantConstruct { fields, .. } => {
+            for field in fields {
+                collect_expression_values(&field.value, out);
             }
         }
     }

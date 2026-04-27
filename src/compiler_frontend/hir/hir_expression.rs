@@ -11,7 +11,8 @@ use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::external_packages::CallTarget;
 use crate::compiler_frontend::hir::blocks::{HirBlock, HirLocal};
 use crate::compiler_frontend::hir::expressions::{
-    HirBuiltinCastKind, HirExpression, HirExpressionKind, OptionVariant, ResultVariant, ValueKind,
+    HirBuiltinCastKind, HirExpression, HirExpressionKind, HirVariantCarrier, HirVariantField,
+    OptionVariant, ResultVariant, ValueKind,
 };
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeId};
@@ -69,18 +70,15 @@ impl<'a> HirBuilder<'a> {
                 let ty = self.lower_data_type(&expr.data_type, &expr.location)?;
 
                 let mut prelude = vec![];
-                let mut payload_fields = Vec::with_capacity(fields.len());
+                let mut hir_fields = Vec::with_capacity(fields.len());
 
                 for field in fields {
                     let lowered = self.lower_expression(&field.value)?;
                     prelude.extend(lowered.prelude);
-                    payload_fields.push((
-                        field
-                            .id
-                            .name()
-                            .unwrap_or_else(|| self.string_table.intern("<anonymous>")),
-                        lowered.value,
-                    ));
+                    hir_fields.push(HirVariantField {
+                        name: field.id.name(),
+                        value: lowered.value,
+                    });
                 }
 
                 let value_kind = if fields.iter().all(|f| f.value.is_compile_time_constant()) {
@@ -93,10 +91,10 @@ impl<'a> HirBuilder<'a> {
                     prelude,
                     value: self.make_expression(
                         &expr.location,
-                        HirExpressionKind::ChoiceVariant {
-                            choice_id,
+                        HirExpressionKind::VariantConstruct {
+                            carrier: HirVariantCarrier::Choice { choice_id },
                             variant_index: *tag,
-                            payload_fields,
+                            fields: hir_fields,
                         },
                         ty,
                         value_kind,
@@ -649,25 +647,34 @@ impl<'a> HirBuilder<'a> {
         &mut self,
         nominal_path: &InternedPath,
         variants: &[crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant],
-        _location: &SourceLocation,
+        location: &SourceLocation,
     ) -> Result<crate::compiler_frontend::hir::ids::ChoiceId, CompilerError> {
-        use crate::compiler_frontend::hir::module::{HirChoice, HirChoiceVariant};
+        use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariantPayload;
+        use crate::compiler_frontend::hir::module::HirChoice;
 
         if let Some(&choice_id) = self.choices_by_name.get(nominal_path) {
+            // Backfill payload metadata if this choice was first discovered through a
+            // type reference before any constructor or match arm populated its fields.
+            let needs_backfill = self
+                .module
+                .choices
+                .get(choice_id.0 as usize)
+                .is_some_and(|c| c.variants.iter().all(|v| v.fields.is_empty()))
+                && variants
+                    .iter()
+                    .any(|v| matches!(v.payload, ChoiceVariantPayload::Record { .. }));
+
+            if needs_backfill {
+                let hir_variants = self.lower_choice_variants(variants, location)?;
+                if let Some(choice) = self.module.choices.get_mut(choice_id.0 as usize) {
+                    choice.variants = hir_variants;
+                }
+            }
             return Ok(choice_id);
         }
 
         let choice_id = self.allocate_choice_id();
-        let hir_variants: Vec<HirChoiceVariant> = variants
-            .iter()
-            .map(|v| HirChoiceVariant {
-                name: v.id,
-                // Phase 1: payload metadata lives in AST-level ChoiceVariant.
-                // HIR field lowering is deferred until a dedicated choice-registration
-                // pass or Phase 3 constructor lowering.
-                fields: vec![],
-            })
-            .collect();
+        let hir_variants = self.lower_choice_variants(variants, location)?;
 
         self.choices_by_name
             .insert(nominal_path.to_owned(), choice_id);
@@ -679,5 +686,46 @@ impl<'a> HirBuilder<'a> {
         });
 
         Ok(choice_id)
+    }
+
+    fn lower_choice_variants(
+        &mut self,
+        variants: &[crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant],
+        _location: &SourceLocation,
+    ) -> Result<Vec<crate::compiler_frontend::hir::module::HirChoiceVariant>, CompilerError> {
+        use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariantPayload;
+        use crate::compiler_frontend::hir::module::{HirChoiceField, HirChoiceVariant};
+
+        let mut hir_variants = Vec::with_capacity(variants.len());
+        for variant in variants {
+            let fields = match &variant.payload {
+                ChoiceVariantPayload::Unit => vec![],
+                ChoiceVariantPayload::Record { fields } => {
+                    let mut hir_fields = Vec::with_capacity(fields.len());
+                    for field in fields {
+                        let field_ty = match &field.value.data_type {
+                            crate::compiler_frontend::datatypes::DataType::NamedType(_) => None,
+                            _ => self
+                                .lower_data_type(&field.value.data_type, &field.value.location)
+                                .ok(),
+                        };
+                        let field_name = field
+                            .id
+                            .name()
+                            .unwrap_or_else(|| self.string_table.intern("<anonymous>"));
+                        hir_fields.push(HirChoiceField {
+                            name: field_name,
+                            ty: field_ty,
+                        });
+                    }
+                    hir_fields
+                }
+            };
+            hir_variants.push(HirChoiceVariant {
+                name: variant.id,
+                fields,
+            });
+        }
+        Ok(hir_variants)
     }
 }

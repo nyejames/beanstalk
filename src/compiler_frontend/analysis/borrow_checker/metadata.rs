@@ -804,9 +804,9 @@ fn collect_expression_loaded_locals(expression: &HirExpression, visitor: &mut im
         | HirExpressionKind::Char(_)
         | HirExpressionKind::StringLiteral(_) => {}
 
-        HirExpressionKind::ChoiceVariant { payload_fields, .. } => {
-            for (_name, field_expr) in payload_fields {
-                collect_expression_loaded_locals(field_expr, visitor);
+        HirExpressionKind::VariantConstruct { fields, .. } => {
+            for field in fields {
+                collect_expression_loaded_locals(&field.value, visitor);
             }
         }
     }

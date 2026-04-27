@@ -6,7 +6,8 @@
 use crate::backends::js::JsEmitter;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::expressions::{
-    HirBuiltinCastKind, HirExpression, HirExpressionKind, OptionVariant, ResultVariant,
+    HirBuiltinCastKind, HirExpression, HirExpressionKind, HirVariantCarrier, OptionVariant,
+    ResultVariant,
 };
 use crate::compiler_frontend::hir::hir_datatypes::HirTypeKind;
 use crate::compiler_frontend::hir::operators::{HirBinOp, HirUnaryOp};
@@ -22,21 +23,23 @@ impl<'hir> JsEmitter<'hir> {
         //      semantic mapping from each variant to the exact JS runtime helper sequence it needs.
         match &expression.kind {
             HirExpressionKind::Int(value) => Ok(value.to_string()),
-            HirExpressionKind::ChoiceVariant {
+            HirExpressionKind::VariantConstruct {
+                carrier,
                 variant_index,
-                payload_fields,
-                ..
+                fields,
             } => {
-                if payload_fields.is_empty() {
-                    Ok(variant_index.to_string())
-                } else {
-                    let mut entries = vec![format!("tag: {variant_index}")];
-                    for (name, expr) in payload_fields {
-                        let js_name = self.string_table.resolve(*name);
-                        let js_value = self.lower_expr(expr)?;
+                let mut entries = vec![format!("tag: {variant_index}")];
+                for field in fields {
+                    let js_value = self.lower_expr(&field.value)?;
+                    if let Some(name) = field.name {
+                        let js_name = self.string_table.resolve(name);
                         entries.push(format!("{js_name}: {js_value}"));
+                    } else {
+                        entries.push(js_value);
                     }
-                    Ok(format!("{{ {} }}", entries.join(", ")))
+                }
+                match carrier {
+                    HirVariantCarrier::Choice { .. } => Ok(format!("{{ {} }}", entries.join(", "))),
                 }
             }
 
