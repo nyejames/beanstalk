@@ -9,7 +9,7 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
 #[title, style.center: IMPLEMENTATION MATRIX]
 
 #[section, $markdown:
-    This page tracks the compiler surface intended for the first Beanstalk Alpha.
+    This page tracks the current implemented compiler surface.
 
     It is an implementation matrix, not a full language specification.
     The wider language docs may describe intended or aspirational syntax.
@@ -381,65 +381,6 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
             [: Deferred]
             [: Unsupported syntax should fail cleanly.]
             [: Includes arbitrary precision compile-time arithmetic, decimal type work, and more specific numeric widths.]
-        ]
-    ]
-]
-
-#[section, $markdown:
-    # Final sweep notes
-
-    These are the scoped follow-ups after the final pre-alpha sweep.
-    They belong to Alpha cleanup or post-Alpha planning unless they become release blockers.
-
-    [table:
-        [header: [: Area] [: Priority] [: Action] ]
-
-        [data:
-            [: CI platform coverage]
-            [: Alpha cleanup]
-            [: Add or run a Windows/macOS validation path before tagging Alpha. The repo currently has a docs deploy workflow, not a cross-platform validation workflow.]
-        ]
-
-        [data:
-            [: Pattern matching scope]
-            [: Post-Alpha unless promoted]
-            [: Relational ordered-scalar patterns are now implemented and tested. Keep negated and capture/tagged patterns deferred for Alpha unless explicitly promoted.]
-        ]
-
-        [data:
-            [: Choice scope]
-            [: Post-Alpha unless promoted]
-            [: Unit-only choices are the current Alpha contract. Constructors, payloads, tagged/default declarations, and full tagged unions stay deferred.]
-        ]
-
-        [data:
-            [: External package cleanup]
-            [: Alpha cleanup]
-            [: Keep adding small standard-package fixtures as the registry grows. Prioritise collision checks, explicit import visibility, constant folding boundaries, and backend lowering contracts over broad API expansion.]
-        ]
-
-        [data:
-            [: Docs vs implementation]
-            [: Ongoing]
-            [: Keep aspirational design docs clearly labelled as future-facing. The progress page remains the implementation tracker.]
-        ]
-
-        [data:
-            [: Char diagnostics]
-            [: Cleanup]
-            [: Add more malformed-char diagnostics if time allows. Existing success coverage and baseline failure coverage are enough for Alpha if tests remain green.]
-        ]
-
-        [data:
-            [: Cross-platform golden stability]
-            [: Ongoing]
-            [: Keep path and template output normalized where exact bytes are not contractual.]
-        ]
-
-        [data:
-            [: HTML-Wasm coverage]
-            [: Post-Alpha]
-            [: Keep experimental tests useful, but do not promote successful Wasm collection/runtime behavior to an Alpha requirement.]
         ]
     ]
 ]

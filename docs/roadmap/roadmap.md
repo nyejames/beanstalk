@@ -9,7 +9,9 @@ Use the language surface integration matrix as a reference for what is currently
 ---
 
 # Plans / Notes / TODOS
-- full tagged unions
+- Choice / Tagged Unions implementation:
+Full plan: `docs/roadmap/plans/beanstalk-full-choice-tagged-unions-plan.md`
+
 - full pattern-matching design (capture patterns)
 - full traits implementation
 - Closures

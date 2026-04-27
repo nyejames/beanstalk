@@ -134,7 +134,7 @@ When reviewing, planning, or proposing implementation changes:
 - Flag stage-boundary leaks explicitly.
 
 ## Documentation update policy
-Always update the Alpha surface matrix if your changes require it to be updated or a new limitation or bug is discovered: `docs/src/docs/progress/#page.bst`
+When a language feature changes shape or a new bug/limitation is discovered, always update the language surface matrix: `docs/src/docs/progress/#page.bst`
 
 Do not modify other documentation files unless the user explicitly requests documentation changes, or explicitly approves them after you identify that documentation should be updated.
 
