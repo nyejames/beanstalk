@@ -61,11 +61,16 @@ impl ExternalFunctionId {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ExternalTypeId(pub u32);
 
+/// Stable identifier for an external constant across all compiler stages.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ExternalConstantId(pub u32);
+
 /// Unified identifier for an external symbol visible from a single file.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ExternalSymbolId {
     Function(ExternalFunctionId),
     Type(ExternalTypeId),
+    Constant(ExternalConstantId),
 }
 
 /// Package-scoped key for looking up an external symbol in the registry.
@@ -89,6 +94,7 @@ pub enum CallTarget {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ExternalAbiType {
     I32,
+    F64,
     Utf8Str,
     Void,
     /// Opaque handle to an external type (lowers to `i32` in Wasm, object reference in JS).
@@ -119,6 +125,29 @@ pub enum ExternalReturnAlias {
     AliasArgs(Vec<usize>),
 }
 
+/// Backend-specific lowering metadata for an external function.
+#[derive(Debug, Clone, Default)]
+pub struct ExternalFunctionLowerings {
+    pub js: Option<ExternalJsLowering>,
+    pub wasm: Option<ExternalWasmLowering>,
+}
+
+/// JavaScript backend lowering strategy for an external function.
+#[derive(Debug, Clone)]
+pub enum ExternalJsLowering {
+    /// Emit a call to a named JS runtime helper function.
+    RuntimeFunction(&'static str),
+    /// Emit an inline JS expression (not used yet, reserved for future optimization).
+    InlineExpression(&'static str),
+}
+
+/// Wasm backend lowering strategy for an external function.
+/// Placeholder: Wasm external support is still experimental.
+#[derive(Debug, Clone)]
+pub enum ExternalWasmLowering {
+    HostFunction(&'static str),
+}
+
 #[derive(Debug, Clone)]
 pub struct ExternalFunctionDef {
     pub name: &'static str,
@@ -130,6 +159,8 @@ pub struct ExternalFunctionDef {
     pub receiver_type: Option<ExternalAbiType>,
     /// Access kind required for the receiver when this is a method.
     pub receiver_access: ExternalAccessKind,
+    /// Backend-specific lowering metadata.
+    pub lowerings: ExternalFunctionLowerings,
 }
 
 impl ExternalAbiType {
@@ -137,6 +168,7 @@ impl ExternalAbiType {
     pub(crate) fn to_datatype(&self) -> Option<DataType> {
         match self {
             ExternalAbiType::I32 => Some(DataType::Int),
+            ExternalAbiType::F64 => Some(DataType::Float),
             ExternalAbiType::Utf8Str => Some(DataType::StringSlice),
             ExternalAbiType::Void => None,
             ExternalAbiType::Handle => None,
@@ -184,12 +216,30 @@ pub struct ExternalTypeDef {
     pub abi_type: ExternalAbiType,
 }
 
+/// Compile-time value for an external package constant.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ExternalConstantValue {
+    Float(f64),
+    Int(i64),
+    StringSlice(&'static str),
+    Bool(bool),
+}
+
+/// Definition of a single external constant exposed by a virtual package.
+#[derive(Debug, Clone)]
+pub struct ExternalConstantDef {
+    pub name: &'static str,
+    pub data_type: ExternalAbiType,
+    pub value: ExternalConstantValue,
+}
+
 /// A single virtual package provided by a project builder.
 #[derive(Clone, Debug, Default)]
 pub struct ExternalPackage {
     pub path: &'static str,
     pub functions: HashMap<&'static str, ExternalFunctionDef>,
     pub types: HashMap<&'static str, ExternalTypeDef>,
+    pub constants: HashMap<&'static str, ExternalConstantDef>,
 }
 
 impl ExternalPackage {
@@ -198,6 +248,7 @@ impl ExternalPackage {
             path,
             functions: HashMap::new(),
             types: HashMap::new(),
+            constants: HashMap::new(),
         }
     }
 
@@ -212,19 +263,22 @@ impl ExternalPackage {
     }
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Debug, Default)]
 pub struct ExternalPackageRegistry {
     packages: HashMap<&'static str, ExternalPackage>,
     functions_by_id: HashMap<ExternalFunctionId, ExternalFunctionDef>,
     types_by_id: HashMap<ExternalTypeId, ExternalTypeDef>,
+    constants_by_id: HashMap<ExternalConstantId, ExternalConstantDef>,
     /// Package-scoped function lookup: (package_path, symbol_name) -> ExternalFunctionId.
     function_ids_by_package_symbol: HashMap<ExternalPackageSymbolKey, ExternalFunctionId>,
     /// Package-scoped type lookup: (package_path, symbol_name) -> ExternalTypeId.
     type_ids_by_package_symbol: HashMap<ExternalPackageSymbolKey, ExternalTypeId>,
+    /// Package-scoped constant lookup: (package_path, symbol_name) -> ExternalConstantId.
+    constant_ids_by_package_symbol: HashMap<ExternalPackageSymbolKey, ExternalConstantId>,
     /// Prelude symbols that are auto-imported into every module.
     /// Bare-name lookup is only valid for the prelude.
     prelude_symbols_by_name: HashMap<&'static str, ExternalSymbolId>,
-    /// Counter for dynamically assigned synthetic function IDs.
+    /// Counter for dynamically assigned synthetic IDs.
     next_synthetic_id: u32,
 }
 
@@ -241,6 +295,7 @@ pub struct ExternalFunctionSpec {
     pub return_alias: ExternalReturnAlias,
     pub receiver_type: Option<ExternalAbiType>,
     pub receiver_access: ExternalAccessKind,
+    pub lowerings: ExternalFunctionLowerings,
 }
 
 impl From<ExternalFunctionSpec> for ExternalFunctionDef {
@@ -252,6 +307,7 @@ impl From<ExternalFunctionSpec> for ExternalFunctionDef {
             return_alias: spec.return_alias,
             receiver_type: spec.receiver_type,
             receiver_access: spec.receiver_access,
+            lowerings: spec.lowerings,
         }
     }
 }
@@ -286,6 +342,10 @@ impl ExternalPackageRegistry {
                     return_alias: ExternalReturnAlias::Fresh,
                     receiver_type: None,
                     receiver_access: ExternalAccessKind::Shared,
+                    lowerings: ExternalFunctionLowerings {
+                        js: Some(ExternalJsLowering::RuntimeFunction("__bs_io")),
+                        wasm: None,
+                    },
                 },
             )
             .expect("builtin function registration should not collide");
@@ -334,6 +394,10 @@ impl ExternalPackageRegistry {
                     return_alias: ExternalReturnAlias::Fresh,
                     receiver_type: Some(ExternalAbiType::Inferred),
                     receiver_access: ExternalAccessKind::Shared,
+                    lowerings: ExternalFunctionLowerings {
+                        js: Some(ExternalJsLowering::RuntimeFunction("__bs_collection_get")),
+                        wasm: None,
+                    },
                 },
             )
             .expect("builtin function registration should not collide");
@@ -357,6 +421,10 @@ impl ExternalPackageRegistry {
                     return_alias: ExternalReturnAlias::Fresh,
                     receiver_type: Some(ExternalAbiType::Inferred),
                     receiver_access: ExternalAccessKind::Mutable,
+                    lowerings: ExternalFunctionLowerings {
+                        js: Some(ExternalJsLowering::RuntimeFunction("__bs_collection_push")),
+                        wasm: None,
+                    },
                 },
             )
             .expect("builtin function registration should not collide");
@@ -380,6 +448,12 @@ impl ExternalPackageRegistry {
                     return_alias: ExternalReturnAlias::Fresh,
                     receiver_type: Some(ExternalAbiType::Inferred),
                     receiver_access: ExternalAccessKind::Mutable,
+                    lowerings: ExternalFunctionLowerings {
+                        js: Some(ExternalJsLowering::RuntimeFunction(
+                            "__bs_collection_remove",
+                        )),
+                        wasm: None,
+                    },
                 },
             )
             .expect("builtin function registration should not collide");
@@ -397,6 +471,12 @@ impl ExternalPackageRegistry {
                     return_alias: ExternalReturnAlias::Fresh,
                     receiver_type: Some(ExternalAbiType::Inferred),
                     receiver_access: ExternalAccessKind::Shared,
+                    lowerings: ExternalFunctionLowerings {
+                        js: Some(ExternalJsLowering::RuntimeFunction(
+                            "__bs_collection_length",
+                        )),
+                        wasm: None,
+                    },
                 },
             )
             .expect("builtin function registration should not collide");
@@ -425,6 +505,12 @@ impl ExternalPackageRegistry {
                     return_alias: ExternalReturnAlias::Fresh,
                     receiver_type: Some(ExternalAbiType::Inferred),
                     receiver_access: ExternalAccessKind::Shared,
+                    lowerings: ExternalFunctionLowerings {
+                        js: Some(ExternalJsLowering::RuntimeFunction(
+                            "__bs_error_with_location",
+                        )),
+                        wasm: None,
+                    },
                 },
             )
             .expect("builtin function registration should not collide");
@@ -448,6 +534,10 @@ impl ExternalPackageRegistry {
                     return_alias: ExternalReturnAlias::Fresh,
                     receiver_type: Some(ExternalAbiType::Inferred),
                     receiver_access: ExternalAccessKind::Shared,
+                    lowerings: ExternalFunctionLowerings {
+                        js: Some(ExternalJsLowering::RuntimeFunction("__bs_error_push_trace")),
+                        wasm: None,
+                    },
                 },
             )
             .expect("builtin function registration should not collide");
@@ -483,9 +573,107 @@ impl ExternalPackageRegistry {
                     return_alias: ExternalReturnAlias::Fresh,
                     receiver_type: Some(ExternalAbiType::Inferred),
                     receiver_access: ExternalAccessKind::Shared,
+                    lowerings: ExternalFunctionLowerings {
+                        js: Some(ExternalJsLowering::RuntimeFunction("__bs_error_bubble")),
+                        wasm: None,
+                    },
                 },
             )
             .expect("builtin function registration should not collide");
+
+        // @std/math
+        registry
+            .register_package(ExternalPackage::new("@std/math"))
+            .expect("builtin package registration should not collide");
+
+        let math_f64_param = |_name: &'static str| ExternalParameter {
+            language_type: ExternalAbiType::F64,
+            access_kind: ExternalAccessKind::Shared,
+        };
+
+        let math_functions: &[(&'static str, &'static str, Vec<ExternalParameter>)] = &[
+            ("sin", "__bs_math_sin", vec![math_f64_param("x")]),
+            ("cos", "__bs_math_cos", vec![math_f64_param("x")]),
+            ("tan", "__bs_math_tan", vec![math_f64_param("x")]),
+            (
+                "atan2",
+                "__bs_math_atan2",
+                vec![math_f64_param("y"), math_f64_param("x")],
+            ),
+            ("log", "__bs_math_log", vec![math_f64_param("x")]),
+            ("log2", "__bs_math_log2", vec![math_f64_param("x")]),
+            ("log10", "__bs_math_log10", vec![math_f64_param("x")]),
+            ("exp", "__bs_math_exp", vec![math_f64_param("x")]),
+            (
+                "pow",
+                "__bs_math_pow",
+                vec![math_f64_param("base"), math_f64_param("exponent")],
+            ),
+            ("sqrt", "__bs_math_sqrt", vec![math_f64_param("x")]),
+            ("abs", "__bs_math_abs", vec![math_f64_param("x")]),
+            ("floor", "__bs_math_floor", vec![math_f64_param("x")]),
+            ("ceil", "__bs_math_ceil", vec![math_f64_param("x")]),
+            ("round", "__bs_math_round", vec![math_f64_param("x")]),
+            ("trunc", "__bs_math_trunc", vec![math_f64_param("x")]),
+            (
+                "min",
+                "__bs_math_min",
+                vec![math_f64_param("a"), math_f64_param("b")],
+            ),
+            (
+                "max",
+                "__bs_math_max",
+                vec![math_f64_param("a"), math_f64_param("b")],
+            ),
+            (
+                "clamp",
+                "__bs_math_clamp",
+                vec![
+                    math_f64_param("x"),
+                    math_f64_param("min"),
+                    math_f64_param("max"),
+                ],
+            ),
+        ];
+
+        for (name, js_name, parameters) in math_functions {
+            registry
+                .register_external_function(
+                    "@std/math",
+                    ExternalFunctionSpec {
+                        name,
+                        parameters: parameters.clone(),
+                        return_type: ExternalAbiType::F64,
+                        return_alias: ExternalReturnAlias::Fresh,
+                        receiver_type: None,
+                        receiver_access: ExternalAccessKind::Shared,
+                        lowerings: ExternalFunctionLowerings {
+                            js: Some(ExternalJsLowering::RuntimeFunction(js_name)),
+                            wasm: None,
+                        },
+                    },
+                )
+                .expect("builtin math function registration should not collide");
+        }
+
+        let math_constants: &[(&'static str, ExternalConstantValue)] = &[
+            ("PI", ExternalConstantValue::Float(std::f64::consts::PI)),
+            ("TAU", ExternalConstantValue::Float(std::f64::consts::TAU)),
+            ("E", ExternalConstantValue::Float(std::f64::consts::E)),
+        ];
+
+        for (name, value) in math_constants {
+            registry
+                .register_external_constant(
+                    "@std/math",
+                    ExternalConstantDef {
+                        name,
+                        data_type: ExternalAbiType::F64,
+                        value: *value,
+                    },
+                )
+                .expect("builtin math constant registration should not collide");
+        }
 
         registry
     }
@@ -510,6 +698,10 @@ impl ExternalPackageRegistry {
                 return_alias: ExternalReturnAlias::Fresh,
                 receiver_type: None,
                 receiver_access: ExternalAccessKind::Shared,
+                lowerings: ExternalFunctionLowerings {
+                    js: Some(ExternalJsLowering::RuntimeFunction("__bs_test_pkg_a_open")),
+                    wasm: None,
+                },
             },
         )
         .expect("test function registration should not collide");
@@ -529,6 +721,10 @@ impl ExternalPackageRegistry {
                 return_alias: ExternalReturnAlias::Fresh,
                 receiver_type: None,
                 receiver_access: ExternalAccessKind::Shared,
+                lowerings: ExternalFunctionLowerings {
+                    js: Some(ExternalJsLowering::RuntimeFunction("__bs_test_pkg_b_open")),
+                    wasm: None,
+                },
             },
         )
         .expect("test function registration should not collide");
@@ -698,6 +894,19 @@ impl ExternalPackageRegistry {
         Ok(id)
     }
 
+    /// Registers an external constant in a package, assigning the next available
+    /// dynamic ID automatically.
+    pub fn register_external_constant(
+        &mut self,
+        package_path: &'static str,
+        constant: ExternalConstantDef,
+    ) -> Result<ExternalConstantId, CompilerError> {
+        let id = ExternalConstantId(self.next_synthetic_id);
+        self.next_synthetic_id += 1;
+        self.register_constant_in_package(package_path, id, constant)?;
+        Ok(id)
+    }
+
     // ------------------------------------------------------------------
     // Test-only registration
     // ------------------------------------------------------------------
@@ -733,6 +942,46 @@ impl ExternalPackageRegistry {
         Ok(id)
     }
 
+    /// Registers an external constant within a specific package.
+    pub fn register_constant_in_package(
+        &mut self,
+        package_path: &'static str,
+        id: ExternalConstantId,
+        constant: ExternalConstantDef,
+    ) -> Result<(), CompilerError> {
+        let package = self.packages.get_mut(package_path).ok_or_else(|| {
+            CompilerError::compiler_error(format!(
+                "Cannot register constant '{}' in unknown package '{}'.",
+                constant.name, package_path
+            ))
+        })?;
+
+        if package.constants.contains_key(constant.name) {
+            return_compiler_error!(
+                "External constant '{}' is already registered in package '{}'.",
+                constant.name,
+                package_path
+            );
+        }
+
+        let key = ExternalPackageSymbolKey {
+            package_path: package_path.to_string(),
+            symbol_name: constant.name.to_string(),
+        };
+        if self.constant_ids_by_package_symbol.contains_key(&key) {
+            return_compiler_error!(
+                "External constant '{}' is already registered in package '{}'.",
+                constant.name,
+                package_path
+            );
+        }
+
+        package.constants.insert(constant.name, constant.clone());
+        self.constants_by_id.insert(id, constant);
+        self.constant_ids_by_package_symbol.insert(key, id);
+        Ok(())
+    }
+
     // ------------------------------------------------------------------
     // Package-scoped resolution (used by import binding)
     // ------------------------------------------------------------------
@@ -742,15 +991,38 @@ impl ExternalPackageRegistry {
         self.packages.get(path)
     }
 
-    /// Resolves a function symbol within a specific package.
+    /// Resolves any symbol (function, type, or constant) within a specific package.
     pub fn resolve_package_symbol(
         &self,
         package_path: &str,
         symbol_name: &str,
-    ) -> Option<&ExternalFunctionDef> {
-        self.packages
-            .get(package_path)
-            .and_then(|package| package.functions.get(symbol_name))
+    ) -> Option<ExternalSymbolId> {
+        let package = self.packages.get(package_path)?;
+        if package.functions.contains_key(symbol_name) {
+            let key = ExternalPackageSymbolKey {
+                package_path: package_path.to_string(),
+                symbol_name: symbol_name.to_string(),
+            };
+            let id = *self.function_ids_by_package_symbol.get(&key)?;
+            return Some(ExternalSymbolId::Function(id));
+        }
+        if package.types.contains_key(symbol_name) {
+            let key = ExternalPackageSymbolKey {
+                package_path: package_path.to_string(),
+                symbol_name: symbol_name.to_string(),
+            };
+            let id = *self.type_ids_by_package_symbol.get(&key)?;
+            return Some(ExternalSymbolId::Type(id));
+        }
+        if package.constants.contains_key(symbol_name) {
+            let key = ExternalPackageSymbolKey {
+                package_path: package_path.to_string(),
+                symbol_name: symbol_name.to_string(),
+            };
+            let id = *self.constant_ids_by_package_symbol.get(&key)?;
+            return Some(ExternalSymbolId::Constant(id));
+        }
+        None
     }
 
     /// Resolves a function symbol within a specific package, returning its ID and definition.
@@ -783,6 +1055,27 @@ impl ExternalPackageRegistry {
         };
         let id = *self.type_ids_by_package_symbol.get(&key)?;
         Some((id, def))
+    }
+
+    /// Resolves a constant symbol within a specific package, returning its ID and definition.
+    pub fn resolve_package_constant(
+        &self,
+        package_path: &str,
+        constant_name: &str,
+    ) -> Option<(ExternalConstantId, &ExternalConstantDef)> {
+        let package = self.packages.get(package_path)?;
+        let def = package.constants.get(constant_name)?;
+        let key = ExternalPackageSymbolKey {
+            package_path: package_path.to_string(),
+            symbol_name: constant_name.to_string(),
+        };
+        let id = *self.constant_ids_by_package_symbol.get(&key)?;
+        Some((id, def))
+    }
+
+    /// Looks up an external constant by its stable ID.
+    pub fn get_constant_by_id(&self, id: ExternalConstantId) -> Option<&ExternalConstantDef> {
+        self.constants_by_id.get(&id)
     }
 
     /// Returns true if the registry contains a package with the given path.
@@ -850,7 +1143,7 @@ impl ExternalPackageRegistry {
 pub(crate) mod test_support {
     use super::{
         ExternalAbiType, ExternalAccessKind, ExternalFunctionDef, ExternalFunctionId,
-        ExternalPackageRegistry, ExternalParameter, ExternalReturnAlias,
+        ExternalFunctionLowerings, ExternalPackageRegistry, ExternalParameter, ExternalReturnAlias,
     };
     use crate::compiler_frontend::compiler_errors::CompilerError;
 
@@ -924,6 +1217,7 @@ pub(crate) mod test_support {
             return_alias: return_alias.into(),
             receiver_type: None,
             receiver_access: ExternalAccessKind::Shared,
+            lowerings: ExternalFunctionLowerings::default(),
         })
     }
 }

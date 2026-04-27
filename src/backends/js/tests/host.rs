@@ -1,6 +1,7 @@
 //! Host-function and start-invocation JavaScript emission tests.
 
 use super::support::*;
+use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::hir::blocks::HirBlock;
 use crate::compiler_frontend::hir::expressions::{HirExpressionKind, ValueKind};
 use crate::compiler_frontend::hir::functions::HirFunction;
@@ -78,6 +79,7 @@ fn host_io_reads_the_underlying_value_before_logging() {
             pretty: true,
             emit_locations: false,
             auto_invoke_start: true,
+            external_package_registry: ExternalPackageRegistry::new(),
         },
     )
     .expect("JS lowering should succeed");
@@ -137,6 +139,7 @@ fn auto_invokes_start_function_when_enabled() {
             pretty: true,
             emit_locations: false,
             auto_invoke_start: true,
+            external_package_registry: ExternalPackageRegistry::new(),
         },
     )
     .expect("JS lowering should succeed");

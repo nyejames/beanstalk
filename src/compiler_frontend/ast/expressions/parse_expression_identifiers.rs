@@ -259,6 +259,44 @@ pub(super) fn parse_identifier_or_call(
     }
 
     // ------------------------------------
+    // EXTERNAL CONSTANT INSIDE EXPRESSION
+    // ------------------------------------
+    if let Some((_const_id, const_def)) = context.lookup_visible_external_constant(id) {
+        token_stream.advance();
+        let location = token_stream.current_location();
+        let value_mode = ValueMode::ImmutableOwned;
+        let const_expr = match const_def.value {
+            crate::compiler_frontend::external_packages::ExternalConstantValue::Float(value) => {
+                Expression::float(value, location, value_mode)
+            }
+            crate::compiler_frontend::external_packages::ExternalConstantValue::Int(value) => {
+                Expression::int(value, location, value_mode)
+            }
+            crate::compiler_frontend::external_packages::ExternalConstantValue::StringSlice(
+                value,
+            ) => {
+                let string_id = string_table.intern(value);
+                Expression::string_slice(string_id, location, value_mode)
+            }
+            crate::compiler_frontend::external_packages::ExternalConstantValue::Bool(value) => {
+                Expression::bool(value, location, value_mode)
+            }
+        };
+        push_expression_node(
+            token_stream,
+            context,
+            string_table,
+            expression,
+            AstNode {
+                kind: NodeKind::Rvalue(const_expr),
+                location: SourceLocation::default(),
+                scope: context.scope.clone(),
+            },
+        )?;
+        return Ok(());
+    }
+
+    // ------------------------------------
     // HOST FUNCTION CALL INSIDE EXPRESSION
     // ------------------------------------
     if let Some((func_id, host_func_def)) = context.lookup_visible_external_function(id) {

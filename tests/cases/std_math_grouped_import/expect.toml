@@ -1,0 +1,13 @@
+entry = "."
+
+[backends.html]
+mode = "success"
+warnings = "forbid"
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = [
+    "__bs_math_sin(",
+    "1.5707963267948966",
+]

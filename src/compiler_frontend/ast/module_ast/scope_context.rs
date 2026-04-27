@@ -61,6 +61,7 @@ fn external_abi_matches_datatype(abi_type: &ExternalAbiType, data_type: &DataTyp
         (abi_type, data_type),
         (ExternalAbiType::Inferred, _)
             | (ExternalAbiType::I32, DataType::Int)
+            | (ExternalAbiType::F64, DataType::Float)
             | (ExternalAbiType::Utf8Str, DataType::StringSlice)
             | (ExternalAbiType::Handle, DataType::External { .. })
     )
@@ -687,6 +688,24 @@ impl ScopeContext {
         self.external_package_registry
             .get_type_by_id(type_id)
             .map(|def| (type_id, def))
+    }
+
+    /// Look up a visible external constant by its source-level name.
+    pub(crate) fn lookup_visible_external_constant(
+        &self,
+        name: StringId,
+    ) -> Option<(
+        crate::compiler_frontend::external_packages::ExternalConstantId,
+        &crate::compiler_frontend::external_packages::ExternalConstantDef,
+    )> {
+        let visible = self.visible_external_symbols.as_ref()?;
+        let symbol_id = *visible.get(&name)?;
+        let ExternalSymbolId::Constant(const_id) = symbol_id else {
+            return None;
+        };
+        self.external_package_registry
+            .get_constant_by_id(const_id)
+            .map(|def| (const_id, def))
     }
 
     /// Look up a visible external receiver method by receiver type and method name.

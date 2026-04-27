@@ -105,7 +105,7 @@ impl BackendBuilder for HtmlProjectBuilder {
             )
             .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
 
-            let compiled_artifacts = compile_one_module(
+            let compiled_artifacts = self.compile_one_module(
                 module,
                 &logical_html_output_path,
                 config.project_name.as_str(),
@@ -214,40 +214,45 @@ impl BackendBuilder for HtmlProjectBuilder {
     }
 }
 
-/// Compile one module through the appropriate builder path (JS-only or HTML+Wasm).
-fn compile_one_module(
-    module: &Module,
-    logical_html_output_path: &Path,
-    project_name: &str,
-    document_config: &crate::projects::html_project::document_config::HtmlDocumentConfig,
-    release_build: bool,
-    wasm_enabled: bool,
-    string_table: &mut StringTable,
-) -> Result<CompiledHtmlModuleArtifacts, CompilerMessages> {
-    let compile_input = HtmlModuleCompileInput {
-        hir_module: &module.hir,
-        const_fragments: &module.const_top_level_fragments,
-        borrow_analysis: &module.borrow_analysis,
-        project_name,
-        document_config,
-        release_build,
-        entry_runtime_fragment_count: module.entry_runtime_fragment_count,
-    };
-    if wasm_enabled {
-        let compiled_wasm =
-            compile_html_module_wasm(&compile_input, string_table, logical_html_output_path)?;
-        Ok(CompiledHtmlModuleArtifacts::from_wasm(compiled_wasm))
-    } else {
-        let output_file = compile_html_module_js(
-            &compile_input,
-            string_table,
-            logical_html_output_path.to_path_buf(),
-        )
-        .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
-        Ok(CompiledHtmlModuleArtifacts::from_js(
-            logical_html_output_path.to_path_buf(),
-            output_file,
-        ))
+impl HtmlProjectBuilder {
+    /// Compile one module through the appropriate builder path (JS-only or HTML+Wasm).
+    #[allow(clippy::too_many_arguments)]
+    fn compile_one_module(
+        &self,
+        module: &Module,
+        logical_html_output_path: &Path,
+        project_name: &str,
+        document_config: &crate::projects::html_project::document_config::HtmlDocumentConfig,
+        release_build: bool,
+        wasm_enabled: bool,
+        string_table: &mut StringTable,
+    ) -> Result<CompiledHtmlModuleArtifacts, CompilerMessages> {
+        let compile_input = HtmlModuleCompileInput {
+            hir_module: &module.hir,
+            const_fragments: &module.const_top_level_fragments,
+            borrow_analysis: &module.borrow_analysis,
+            project_name,
+            document_config,
+            release_build,
+            entry_runtime_fragment_count: module.entry_runtime_fragment_count,
+            external_package_registry: self.external_packages(),
+        };
+        if wasm_enabled {
+            let compiled_wasm =
+                compile_html_module_wasm(&compile_input, string_table, logical_html_output_path)?;
+            Ok(CompiledHtmlModuleArtifacts::from_wasm(compiled_wasm))
+        } else {
+            let output_file = compile_html_module_js(
+                &compile_input,
+                string_table,
+                logical_html_output_path.to_path_buf(),
+            )
+            .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
+            Ok(CompiledHtmlModuleArtifacts::from_js(
+                logical_html_output_path.to_path_buf(),
+                output_file,
+            ))
+        }
     }
 }
 

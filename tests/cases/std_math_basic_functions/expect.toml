@@ -1,0 +1,21 @@
+entry = "."
+
+[backends.html]
+mode = "success"
+warnings = "forbid"
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = [
+    "function __bs_math_sin(",
+    "function __bs_math_cos(",
+    "function __bs_math_pow(",
+    "function __bs_math_sqrt(",
+    "function __bs_math_clamp(",
+    "__bs_math_sin(",
+    "__bs_math_cos(",
+    "__bs_math_pow(2, 3)",
+    "__bs_math_sqrt(16)",
+    "__bs_math_clamp(5, 0, 10)",
+]

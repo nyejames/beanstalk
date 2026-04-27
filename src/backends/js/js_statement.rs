@@ -4,7 +4,6 @@
 //! control-flow edges explicit.
 
 use crate::backends::js::JsEmitter;
-use crate::backends::js::js_host_functions::resolve_host_function_id;
 use crate::compiler_frontend::analysis::borrow_checker::LocalMode;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::external_packages::{CallTarget, ExternalFunctionId};
@@ -111,20 +110,39 @@ impl<'hir> JsEmitter<'hir> {
         Ok(())
     }
 
-    fn lower_call_target(&self, target: &CallTarget) -> Result<String, CompilerError> {
+    fn lower_call_target(&mut self, target: &CallTarget) -> Result<String, CompilerError> {
         match target {
             CallTarget::UserFunction(function_id) => {
                 Ok(self.function_name(*function_id)?.to_owned())
             }
             CallTarget::ExternalFunction(id) => {
-                let Some(host_target) = resolve_host_function_id(*id) else {
-                    return Err(CompilerError::compiler_error(format!(
-                        "JavaScript backend: unknown host function '{}'",
+                self.referenced_external_functions.insert(*id);
+                let function_def = self
+                    .external_package_registry
+                    .get_function_by_id(*id)
+                    .ok_or_else(|| {
+                        CompilerError::compiler_error(format!(
+                            "JavaScript backend: unknown external function '{}'",
+                            id.name()
+                        ))
+                    })?;
+                let lowering = function_def.lowerings.js.as_ref().ok_or_else(|| {
+                    CompilerError::compiler_error(format!(
+                        "JavaScript backend: no JS lowering registered for external function '{}'",
                         id.name()
-                    )));
-                };
-
-                Ok(host_target.to_owned())
+                    ))
+                })?;
+                match lowering {
+                    crate::compiler_frontend::external_packages::ExternalJsLowering::RuntimeFunction(name) => {
+                        Ok(name.to_string())
+                    }
+                    crate::compiler_frontend::external_packages::ExternalJsLowering::InlineExpression(_) => {
+                        Err(CompilerError::compiler_error(format!(
+                            "JavaScript backend: InlineExpression lowering not yet implemented for external function '{}'",
+                            id.name()
+                        )))
+                    }
+                }
             }
         }
     }

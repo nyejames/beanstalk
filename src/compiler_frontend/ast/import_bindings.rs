@@ -255,6 +255,12 @@ pub(crate) fn resolve_file_import_bindings(
                                 bindings
                                     .visible_external_symbols
                                     .insert(local_name, ExternalSymbolId::Type(type_id));
+                            } else if let Some((const_id, _)) = external_package_registry
+                                .resolve_package_constant(&package_path, symbol_name_str)
+                            {
+                                bindings
+                                    .visible_external_symbols
+                                    .insert(local_name, ExternalSymbolId::Constant(const_id));
                             }
                             bound_names.insert(local_name);
                             imported_external_paths.insert(import.header_path.clone());

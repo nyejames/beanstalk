@@ -102,7 +102,8 @@ pub(crate) fn compile_html_module_wasm(
     let output_plan = plan_wasm_output_from_logical_html_path(logical_html_output_path)
         .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
 
-    let js_lowering_config = JsLoweringConfig::standard_html(input.release_build);
+    let mut js_lowering_config = JsLoweringConfig::standard_html(input.release_build);
+    js_lowering_config.external_package_registry = input.external_package_registry.clone();
     let js_module = lower_hir_to_js(
         input.hir_module,
         input.borrow_analysis,

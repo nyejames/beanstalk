@@ -11,7 +11,7 @@ pub(super) use crate::backends::js::{JsLoweringConfig, lower_hir_to_js};
 pub(super) use crate::compiler_frontend::analysis::borrow_checker::{
     BorrowCheckReport, BorrowStateSnapshot, LocalBorrowSnapshot, LocalMode,
 };
-pub(super) use crate::compiler_frontend::external_packages::CallTarget;
+pub(super) use crate::compiler_frontend::external_packages::{CallTarget, ExternalPackageRegistry};
 use crate::compiler_frontend::hir::blocks::{HirBlock, HirLocal};
 use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, ValueKind};
 use crate::compiler_frontend::hir::functions::HirFunction;
@@ -239,6 +239,7 @@ pub(super) fn lower_minimal_module(function_name: &str) -> String {
             pretty: true,
             emit_locations: false,
             auto_invoke_start: false,
+            external_package_registry: ExternalPackageRegistry::new(),
         },
     )
     .expect("JS lowering should succeed")
@@ -250,5 +251,6 @@ pub(super) fn default_config() -> JsLoweringConfig {
         pretty: true,
         emit_locations: false,
         auto_invoke_start: false,
+        external_package_registry: ExternalPackageRegistry::new(),
     }
 }

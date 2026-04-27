@@ -6,6 +6,7 @@
 
 use crate::build_system::build::ResolvedConstFragment;
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
+use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::hir::module::HirModule;
 use crate::projects::html_project::document_config::HtmlDocumentConfig;
 
@@ -18,4 +19,5 @@ pub(crate) struct HtmlModuleCompileInput<'a> {
     pub document_config: &'a HtmlDocumentConfig,
     pub release_build: bool,
     pub entry_runtime_fragment_count: usize,
+    pub external_package_registry: ExternalPackageRegistry,
 }

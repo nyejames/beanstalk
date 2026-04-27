@@ -52,7 +52,8 @@ pub(crate) fn compile_html_module_js(
     string_table: &StringTable,
     output_path: PathBuf,
 ) -> Result<OutputFile, CompilerError> {
-    let js_lowering_config = JsLoweringConfig::standard_html(input.release_build);
+    let mut js_lowering_config = JsLoweringConfig::standard_html(input.release_build);
+    js_lowering_config.external_package_registry = input.external_package_registry.clone();
 
     let js_module = lower_hir_to_js(
         input.hir_module,

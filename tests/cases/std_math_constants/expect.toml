@@ -1,0 +1,14 @@
+entry = "."
+
+[backends.html]
+mode = "success"
+warnings = "forbid"
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = [
+    "3.141592653589793",
+    "6.283185307179586",
+    "2.718281828459045",
+]

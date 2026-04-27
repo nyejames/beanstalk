@@ -6,7 +6,6 @@
 mod emitter;
 mod js_expr;
 mod js_function;
-mod js_host_functions;
 mod js_statement;
 mod runtime;
 mod symbols;
@@ -20,6 +19,7 @@ mod tests;
 pub(crate) use emitter::JsEmitter;
 pub use emitter::lower_hir_to_js;
 
+use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::hir::ids::FunctionId;
 use std::collections::HashMap;
 
@@ -34,6 +34,9 @@ pub struct JsLoweringConfig {
 
     /// Automatically invoke the module start function.
     pub auto_invoke_start: bool,
+
+    /// External package registry for resolving backend lowering metadata.
+    pub external_package_registry: ExternalPackageRegistry,
 }
 
 impl JsLoweringConfig {
@@ -43,6 +46,7 @@ impl JsLoweringConfig {
             pretty: !release_build,
             emit_locations: false,
             auto_invoke_start: false,
+            external_package_registry: ExternalPackageRegistry::new(),
         }
     }
 }

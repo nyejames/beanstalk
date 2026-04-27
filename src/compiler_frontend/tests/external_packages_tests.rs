@@ -25,6 +25,7 @@ fn return_slots_preserve_alias_metadata() {
         return_alias: ExternalReturnAlias::AliasArgs(vec![1]),
         receiver_type: None,
         receiver_access: ExternalAccessKind::Shared,
+        lowerings: ExternalFunctionLowerings::default(),
     };
 
     let returns = host_function.return_slots();
@@ -49,6 +50,7 @@ fn register_function_rejects_duplicates() {
             return_alias: ExternalReturnAlias::Fresh,
             receiver_type: None,
             receiver_access: ExternalAccessKind::Shared,
+            lowerings: ExternalFunctionLowerings::default(),
         })
         .unwrap();
 
@@ -59,6 +61,7 @@ fn register_function_rejects_duplicates() {
         return_alias: ExternalReturnAlias::Fresh,
         receiver_type: None,
         receiver_access: ExternalAccessKind::Shared,
+        lowerings: ExternalFunctionLowerings::default(),
     });
 
     assert!(result.is_err());
