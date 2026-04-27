@@ -1,0 +1,5 @@
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+error_type = "Rule"
+message_contains = ["Too many capture bindings for variant 'Err'"]

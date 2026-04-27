@@ -1146,6 +1146,10 @@ fn record_shared_reads_in_expression(
         | HirExpressionKind::BuiltinCast { value: result, .. } => {
             record_shared_reads_in_expression(env, result, location.clone(), roots)?;
         }
+
+        HirExpressionKind::VariantPayloadGet { source, .. } => {
+            record_shared_reads_in_expression(env, source, location.clone(), roots)?;
+        }
     }
 
     let classification = if roots.is_empty() {
@@ -1243,6 +1247,10 @@ fn collect_expression_roots(
             for field in fields {
                 collect_expression_roots(layout, state, &field.value, out, location.clone())?;
             }
+        }
+
+        HirExpressionKind::VariantPayloadGet { source, .. } => {
+            collect_expression_roots(layout, state, source, out, location)?;
         }
     }
 

@@ -7,7 +7,7 @@ use crate::compiler_frontend::ast::ast_nodes::AstNode;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
-use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant;
+use crate::compiler_frontend::declaration_syntax::choice::{ChoiceVariant, ChoiceVariantPayload};
 use crate::compiler_frontend::deferred_feature_diagnostics::deferred_feature_rule_error;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
@@ -15,12 +15,29 @@ use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, To
 use crate::compiler_frontend::type_coercion::compatibility::is_type_compatible;
 use crate::compiler_frontend::value_mode::ValueMode;
 use crate::return_rule_error;
+use rustc_hash::FxHashMap;
 
 #[derive(Debug, Clone)]
 pub struct MatchArm {
     pub pattern: MatchPattern,
     pub guard: Option<Expression>,
     pub body: Vec<AstNode>,
+}
+
+/// One payload field capture inside a choice-variant match pattern.
+///
+/// WHY: match arms can destructure payload variants by binding each field to a
+/// local name. For Alpha, captured names must exactly match the declared field
+/// names in declaration order.
+#[derive(Debug, Clone)]
+pub struct ChoicePayloadCapture {
+    pub field_name: StringId,
+    pub field_index: usize,
+    pub field_type: DataType,
+    pub location: SourceLocation,
+    /// The full interned path used for the capture binding in the arm scope.
+    /// Populated during AST branching so HIR lowering can register the local.
+    pub binding_path: Option<InternedPath>,
 }
 
 #[derive(Debug, Clone)]
@@ -41,6 +58,7 @@ pub enum MatchPattern {
         nominal_path: InternedPath,
         variant: StringId,
         tag: usize,
+        captures: Vec<ChoicePayloadCapture>,
         location: SourceLocation,
     },
 }
@@ -52,6 +70,14 @@ impl MatchPattern {
             MatchPattern::Wildcard { location }
             | MatchPattern::Relational { location, .. }
             | MatchPattern::ChoiceVariant { location, .. } => location,
+        }
+    }
+
+    /// Return the capture list if this is a choice-variant pattern.
+    pub fn choice_captures(&self) -> Option<&[ChoicePayloadCapture]> {
+        match self {
+            MatchPattern::ChoiceVariant { captures, .. } => Some(captures),
+            _ => None,
         }
     }
 }
@@ -206,16 +232,258 @@ pub(super) fn parse_choice_variant_pattern(
         string_table,
     )?;
 
+    let variant = &variants[variant_index];
+    let captures =
+        parse_choice_pattern_captures(token_stream, variant, &choice_name_display, string_table)?;
+
     Ok(ParsedChoicePattern {
         pattern: MatchPattern::ChoiceVariant {
             nominal_path: choice_nominal_path.to_owned(),
             variant: variant_name,
             tag: variant_index,
+            captures,
             location: variant_location.clone(),
         },
         variant: variant_name,
         location: variant_location,
     })
+}
+
+/// Parse optional payload captures after a choice-variant name.
+///
+/// WHAT: handles `case Err(message)` and `case Success` forms, validating that
+/// captures match the variant's payload metadata exactly.
+/// WHY: separating capture parsing from name resolution keeps each function focused
+/// and makes error messages specific to the payload layer.
+fn parse_choice_pattern_captures(
+    token_stream: &mut FileTokens,
+    variant: &ChoiceVariant,
+    _choice_name_display: &str,
+    string_table: &StringTable,
+) -> Result<Vec<ChoicePayloadCapture>, CompilerError> {
+    let variant_name_str = string_table.resolve(variant.id);
+
+    match &variant.payload {
+        ChoiceVariantPayload::Unit => {
+            if token_stream.current_token_kind() == &TokenKind::OpenParenthesis {
+                return_rule_error!(
+                    format!(
+                        "Unit variant '{}' cannot have payload captures. Use 'case {} =>' without parentheses.",
+                        variant_name_str, variant_name_str
+                    ),
+                    token_stream.current_location(),
+                    {
+                        CompilationStage => "Match Statement Parsing",
+                        PrimarySuggestion => format!("Use 'case {} =>' for unit variants", variant_name_str),
+                    }
+                );
+            }
+            Ok(Vec::new())
+        }
+
+        ChoiceVariantPayload::Record { fields } => {
+            if token_stream.current_token_kind() != &TokenKind::OpenParenthesis {
+                let field_list: Vec<String> = fields
+                    .iter()
+                    .filter_map(|f| f.id.name().map(|n| string_table.resolve(n).to_owned()))
+                    .collect();
+                return_rule_error!(
+                    format!(
+                        "Payload variant '{}' requires capture bindings. Expected 'case {}({})'.",
+                        variant_name_str,
+                        variant_name_str,
+                        field_list.join(", ")
+                    ),
+                    token_stream.current_location(),
+                    {
+                        CompilationStage => "Match Statement Parsing",
+                        PrimarySuggestion => format!(
+                            "Use 'case {}({})' to bind payload fields",
+                            variant_name_str,
+                            field_list.join(", ")
+                        ),
+                    }
+                );
+            }
+
+            token_stream.advance();
+
+            let mut captures = Vec::new();
+            let mut seen_names: FxHashMap<StringId, SourceLocation> = FxHashMap::default();
+
+            loop {
+                token_stream.skip_newlines();
+
+                if token_stream.current_token_kind() == &TokenKind::CloseParenthesis {
+                    token_stream.advance();
+                    break;
+                }
+
+                let capture_location = token_stream.current_location();
+                let capture_name = match token_stream.current_token_kind() {
+                    TokenKind::Symbol(name) => *name,
+                    _ => {
+                        return_rule_error!(
+                            "Capture binding must be a field name.",
+                            capture_location,
+                            {
+                                CompilationStage => "Match Statement Parsing",
+                                PrimarySuggestion => "Use the declared payload field name as the capture binding",
+                            }
+                        );
+                    }
+                };
+                token_stream.advance();
+
+                // Reject deferred rename syntax: `case Err(text as message)`
+                if token_stream.current_token_kind() == &TokenKind::As {
+                    return Err(deferred_feature_rule_error(
+                        "Payload binding rename syntax is deferred. Use the declared field name directly.",
+                        token_stream.current_location(),
+                        "Match Statement Parsing",
+                        format!(
+                            "Use 'case {}({})' with the original field name.",
+                            variant_name_str,
+                            string_table.resolve(capture_name)
+                        ),
+                    ));
+                }
+
+                // Reject named assignment: `case Err(message = text)`
+                if token_stream.current_token_kind() == &TokenKind::Assign {
+                    return Err(deferred_feature_rule_error(
+                        "Named payload pattern assignment is deferred. Use positional capture with the field name.",
+                        token_stream.current_location(),
+                        "Match Statement Parsing",
+                        format!(
+                            "Use 'case {}({})' with the original field name.",
+                            variant_name_str,
+                            string_table.resolve(capture_name)
+                        ),
+                    ));
+                }
+
+                // Check duplicate capture name
+                if let Some(_first_loc) = seen_names.get(&capture_name) {
+                    return_rule_error!(
+                        format!(
+                            "Duplicate capture binding '{}' in pattern for variant '{}'.",
+                            string_table.resolve(capture_name),
+                            variant_name_str
+                        ),
+                        capture_location,
+                        {
+                            CompilationStage => "Match Statement Parsing",
+                            PrimarySuggestion => "Remove the duplicate capture binding",
+                        }
+                    );
+                }
+                seen_names.insert(capture_name, capture_location.clone());
+
+                // Validate capture position and name against declaration metadata
+                let field_index = captures.len();
+                let Some(field_decl) = fields.get(field_index) else {
+                    let expected_count = fields.len();
+                    return_rule_error!(
+                        format!(
+                            "Too many capture bindings for variant '{}'. Expected {} field(s), found {}.",
+                            variant_name_str,
+                            expected_count,
+                            field_index + 1
+                        ),
+                        capture_location,
+                        {
+                            CompilationStage => "Match Statement Parsing",
+                            PrimarySuggestion => format!(
+                                "Use exactly {} capture(s): {}",
+                                expected_count,
+                                fields.iter().filter_map(|f| f.id.name().map(|n| string_table.resolve(n).to_owned())).collect::<Vec<_>>().join(", ")
+                            ),
+                        }
+                    );
+                };
+
+                let expected_field_name = field_decl
+                    .id
+                    .name()
+                    .expect("choice payload field must have a name");
+                if capture_name != expected_field_name {
+                    return_rule_error!(
+                        format!(
+                            "Capture binding '{}' does not match payload field name '{}' at position {} in variant '{}'.",
+                            string_table.resolve(capture_name),
+                            string_table.resolve(expected_field_name),
+                            field_index + 1,
+                            variant_name_str
+                        ),
+                        capture_location,
+                        {
+                            CompilationStage => "Match Statement Parsing",
+                            PrimarySuggestion => format!(
+                                "Use '{}' as the capture name: 'case {}({})'",
+                                string_table.resolve(expected_field_name),
+                                variant_name_str,
+                                fields.iter().filter_map(|f| f.id.name().map(|n| string_table.resolve(n).to_owned())).collect::<Vec<_>>().join(", ")
+                            ),
+                        }
+                    );
+                }
+
+                captures.push(ChoicePayloadCapture {
+                    field_name: capture_name,
+                    field_index,
+                    field_type: field_decl.value.data_type.clone(),
+                    location: capture_location,
+                    binding_path: None,
+                });
+
+                token_stream.skip_newlines();
+                match token_stream.current_token_kind() {
+                    TokenKind::Comma => {
+                        token_stream.advance();
+                        continue;
+                    }
+                    TokenKind::CloseParenthesis => {
+                        token_stream.advance();
+                        break;
+                    }
+                    _ => {
+                        return_rule_error!(
+                            "Expected ',' or ')' after capture binding.",
+                            token_stream.current_location(),
+                            {
+                                CompilationStage => "Match Statement Parsing",
+                                PrimarySuggestion => "Separate captures with commas and close with ')'",
+                            }
+                        );
+                    }
+                }
+            }
+
+            // Check for too few captures
+            if captures.len() != fields.len() {
+                return_rule_error!(
+                    format!(
+                        "Too few capture bindings for variant '{}'. Expected {} field(s), found {}.",
+                        variant_name_str,
+                        fields.len(),
+                        captures.len()
+                    ),
+                    variant.location.clone(),
+                    {
+                        CompilationStage => "Match Statement Parsing",
+                        PrimarySuggestion => format!(
+                            "Use exactly {} capture(s): {}",
+                            fields.len(),
+                            fields.iter().filter_map(|f| f.id.name().map(|n| string_table.resolve(n).to_owned())).collect::<Vec<_>>().join(", ")
+                        ),
+                    }
+                );
+            }
+
+            Ok(captures)
+        }
+    }
 }
 
 /// Parse a bare (`Ready`) or qualified (`Status::Ready`) variant name from the token stream.

@@ -5,7 +5,7 @@ import @types/Label
 use_choice |r Response| -> String:
     if r is:
         case Success => return "ok"
-        case Response::Err => return "err"
+        case Response::Err(message) => return "err"
     ;
 ;
 

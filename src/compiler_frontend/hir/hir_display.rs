@@ -528,6 +528,30 @@ impl<'a> HirDisplayContext<'a> {
                     carrier_label, variant_index, fields_str
                 )
             }
+            HirExpressionKind::VariantPayloadGet {
+                carrier,
+                source,
+                variant_index,
+                field_index,
+            } => {
+                let carrier_label = match carrier {
+                    #[cfg(any(test, feature = "show_hir"))]
+                    crate::compiler_frontend::hir::expressions::HirVariantCarrier::Choice {
+                        choice_id,
+                    } => format!("choice={}", self.choice_label(*choice_id)),
+                    #[cfg(not(any(test, feature = "show_hir")))]
+                    crate::compiler_frontend::hir::expressions::HirVariantCarrier::Choice {
+                        ..
+                    } => "choice".to_owned(),
+                };
+                format!(
+                    "variant_payload_get({}, tag={}, field={}) from {}",
+                    carrier_label,
+                    variant_index,
+                    field_index,
+                    self.render_expression(source)
+                )
+            }
         }
     }
 

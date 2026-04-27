@@ -249,6 +249,81 @@ path = "choice_payload_constructor_mixed_success"
 tags = ["integration","language"]
 
 [[case]]
+id = "choice_payload_match_capture_success"
+path = "choice_payload_match_capture_success"
+tags = ["integration","language"]
+
+[[case]]
+id = "choice_payload_match_qualified_capture_success"
+path = "choice_payload_match_qualified_capture_success"
+tags = ["integration","language"]
+
+[[case]]
+id = "choice_payload_match_guard_uses_capture_success"
+path = "choice_payload_match_guard_uses_capture_success"
+tags = ["integration","language"]
+
+[[case]]
+id = "choice_payload_match_exhaustive_tag_level_success"
+path = "choice_payload_match_exhaustive_tag_level_success"
+tags = ["integration","language"]
+
+[[case]]
+id = "choice_payload_match_wrong_capture_name_rejected"
+path = "choice_payload_match_wrong_capture_name_rejected"
+tags = ["integration","language"]
+
+[[case]]
+id = "choice_payload_match_too_few_captures_rejected"
+path = "choice_payload_match_too_few_captures_rejected"
+tags = ["integration","language"]
+
+[[case]]
+id = "choice_payload_match_too_many_captures_rejected"
+path = "choice_payload_match_too_many_captures_rejected"
+tags = ["integration","language"]
+
+[[case]]
+id = "choice_payload_match_duplicate_capture_rejected"
+path = "choice_payload_match_duplicate_capture_rejected"
+tags = ["integration","language"]
+
+[[case]]
+id = "choice_payload_match_capture_shadowing_rejected"
+path = "choice_payload_match_capture_shadowing_rejected"
+tags = ["integration","language"]
+
+[[case]]
+id = "choice_payload_match_rename_syntax_deferred"
+path = "choice_payload_match_rename_syntax_deferred"
+tags = ["integration","language"]
+
+[[case]]
+id = "choice_payload_match_named_assignment_rejected"
+path = "choice_payload_match_named_assignment_rejected"
+tags = ["integration","language"]
+
+[[case]]
+id = "choice_payload_match_missing_payload_rejected"
+path = "choice_payload_match_missing_payload_rejected"
+tags = ["integration","language"]
+
+[[case]]
+id = "choice_payload_match_unit_parens_rejected"
+path = "choice_payload_match_unit_parens_rejected"
+tags = ["integration","language"]
+
+[[case]]
+id = "choice_payload_match_duplicate_variant_rejected"
+path = "choice_payload_match_duplicate_variant_rejected"
+tags = ["integration","language"]
+
+[[case]]
+id = "choice_payload_match_guard_requires_else"
+path = "choice_payload_match_guard_requires_else"
+tags = ["integration","language"]
+
+[[case]]
 id = "choice_payload_constructor_missing_field_rejected"
 path = "choice_payload_constructor_missing_field_rejected"
 tags = ["integration","diagnostics"]

@@ -6,7 +6,9 @@
 //! rejection, and choice-variant resolution at the AST level so HIR lowering
 //! receives validated, normalized match structures.
 
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, MatchExhaustiveness, NodeKind};
+use crate::compiler_frontend::ast::ast_nodes::{
+    AstNode, Declaration, MatchExhaustiveness, NodeKind,
+};
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::expressions::parse_expression::{
     create_expression, create_expression_until,
@@ -16,7 +18,8 @@ use crate::compiler_frontend::ast::statements::condition_validation::{
     ensure_if_statement_condition, ensure_match_guard_condition,
 };
 use crate::compiler_frontend::ast::statements::match_patterns::{
-    MatchArm, normalized_subject_type, parse_choice_variant_pattern, parse_non_choice_pattern,
+    MatchArm, MatchPattern, normalized_subject_type, parse_choice_variant_pattern,
+    parse_non_choice_pattern,
 };
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -422,7 +425,7 @@ fn parse_case_arm(
     let normalized_subject_type = normalized_subject_type(&subject.data_type);
 
     // Choice scrutinees resolve symbols to variants; all other scrutinees stay literal-only.
-    let (pattern, matched_choice_variant, pattern_location) = match normalized_subject_type {
+    let (mut pattern, matched_choice_variant, pattern_location) = match normalized_subject_type {
         DataType::Choices {
             nominal_path,
             variants,
@@ -471,7 +474,10 @@ fn parse_case_arm(
         );
     }
 
-    let guard = parse_match_guard(token_stream, match_context, string_table)?;
+    // Build an arm scope that includes capture bindings so they are visible in the guard and body.
+    let arm_scope = build_arm_scope_with_captures(match_context, &mut pattern, string_table)?;
+
+    let guard = parse_match_guard(token_stream, &arm_scope, string_table)?;
 
     if token_stream.current_token_kind() != &TokenKind::FatArrow {
         return_rule_error!(
@@ -491,7 +497,7 @@ fn parse_case_arm(
     token_stream.advance();
     let body = function_body_to_ast(
         token_stream,
-        match_context.new_child_control_flow(ContextKind::MatchArm, string_table),
+        arm_scope.new_child_control_flow(ContextKind::MatchArm, string_table),
         warnings,
         string_table,
     )?;
@@ -505,6 +511,67 @@ fn parse_case_arm(
         matched_choice_variant,
         pattern_location,
     })
+}
+
+/// Build a scope context for one match arm, injecting choice payload captures as local declarations.
+///
+/// WHAT: clones the parent match context and adds `Declaration` entries for each capture binding.
+/// WHY: captures must be visible in both the guard and the body, but must not leak to other arms.
+///
+/// Validates:
+/// - No capture name shadows an existing visible local (Beanstalk no-shadowing rule).
+fn build_arm_scope_with_captures(
+    match_context: &ScopeContext,
+    pattern: &mut MatchPattern,
+    string_table: &mut StringTable,
+) -> Result<ScopeContext, CompilerError> {
+    let mut arm_scope = match_context.clone();
+
+    let captures = match pattern {
+        MatchPattern::ChoiceVariant { captures, .. } => captures,
+        _ => return Ok(arm_scope),
+    };
+
+    if captures.is_empty() {
+        return Ok(arm_scope);
+    }
+
+    for capture in captures.iter_mut() {
+        let capture_name = capture.field_name;
+
+        // Enforce no-shadowing: the capture name must not collide with any visible local.
+        if let Some(_existing) = arm_scope.get_reference(&capture_name) {
+            return_rule_error!(
+                format!(
+                    "Capture binding '{}' shadows an existing variable. Beanstalk does not allow shadowing.",
+                    string_table.resolve(capture_name)
+                ),
+                capture.location.clone(),
+                {
+                    CompilationStage => "Match Statement Parsing",
+                    PrimarySuggestion => "Rename the capture or the outer variable to avoid collision",
+                }
+            );
+        }
+
+        let capture_name_str = string_table.resolve(capture_name).to_owned();
+        let binding_path = arm_scope.scope.join_str(&capture_name_str, string_table);
+
+        let declaration = Declaration {
+            id: binding_path.clone(),
+            value: Expression::new(
+                crate::compiler_frontend::ast::expressions::expression::ExpressionKind::NoValue,
+                capture.location.clone(),
+                capture.field_type.clone(),
+                crate::compiler_frontend::value_mode::ValueMode::ImmutableOwned,
+            ),
+        };
+
+        arm_scope.add_var(declaration);
+        capture.binding_path = Some(binding_path);
+    }
+
+    Ok(arm_scope)
 }
 
 /// Verify that a match statement covers all possible values.

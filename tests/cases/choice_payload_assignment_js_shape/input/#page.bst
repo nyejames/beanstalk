@@ -4,5 +4,5 @@ e = Response::Err("bad")
 other = e
 if other is:
     case Success => io("ok")
-    case Err => io("err")
+    case Err(message) => io("err")
 ;

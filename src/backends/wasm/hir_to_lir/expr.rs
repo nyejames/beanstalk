@@ -159,7 +159,8 @@ pub(crate) fn lower_expression(
         | HirExpressionKind::ResultIsOk { .. }
         | HirExpressionKind::ResultUnwrapOk { .. }
         | HirExpressionKind::ResultUnwrapErr { .. }
-        | HirExpressionKind::BuiltinCast { .. } => Err(lir_transformation_error(
+        | HirExpressionKind::BuiltinCast { .. }
+        | HirExpressionKind::VariantPayloadGet { .. } => Err(lir_transformation_error(
             "Wasm lowering does not yet support this expression construct",
         )),
     }

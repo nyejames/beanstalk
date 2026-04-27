@@ -1,0 +1,5 @@
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+error_type = "Rule"
+message_contains = ["Capture binding 'other' does not match payload field name 'message'"]

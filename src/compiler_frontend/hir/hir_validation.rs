@@ -906,6 +906,46 @@ impl<'a> HirValidator<'a> {
                 self.validate_expression(value, anchor)?;
             }
 
+            HirExpressionKind::VariantPayloadGet {
+                carrier,
+                source,
+                variant_index,
+                field_index,
+            } => {
+                self.validate_expression(source, anchor)?;
+                match carrier {
+                    crate::compiler_frontend::hir::expressions::HirVariantCarrier::Choice {
+                        choice_id,
+                    } => {
+                        let Some(choice) = self.module.choices.get(choice_id.0 as usize) else {
+                            return Err(self.error_with_hir(
+                                format!("Invalid ChoiceId {choice_id:?} in VariantPayloadGet"),
+                                anchor,
+                            ));
+                        };
+                        if *variant_index >= choice.variants.len() {
+                            return Err(self.error_with_hir(
+                                format!(
+                                    "VariantPayloadGet variant index {variant_index} out of range for choice {choice_id:?} with {} variants",
+                                    choice.variants.len()
+                                ),
+                                anchor,
+                            ));
+                        }
+                        let variant = &choice.variants[*variant_index];
+                        if *field_index >= variant.fields.len() {
+                            return Err(self.error_with_hir(
+                                format!(
+                                    "VariantPayloadGet field index {field_index} out of range for variant with {} fields",
+                                    variant.fields.len()
+                                ),
+                                anchor,
+                            ));
+                        }
+                    }
+                }
+            }
+
             HirExpressionKind::ResultPropagate { result } => {
                 self.validate_expression(result, anchor)?;
             }

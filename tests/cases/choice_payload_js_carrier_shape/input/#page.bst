@@ -3,5 +3,5 @@
 e = Response::Err("bad")
 if e is:
     case Success => io("ok")
-    case Err => io("err")
+    case Err(message) => io("err")
 ;

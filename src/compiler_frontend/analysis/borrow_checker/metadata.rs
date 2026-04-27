@@ -809,6 +809,9 @@ fn collect_expression_loaded_locals(expression: &HirExpression, visitor: &mut im
                 collect_expression_loaded_locals(&field.value, visitor);
             }
         }
+        HirExpressionKind::VariantPayloadGet { source, .. } => {
+            collect_expression_loaded_locals(source, visitor);
+        }
     }
 }
 

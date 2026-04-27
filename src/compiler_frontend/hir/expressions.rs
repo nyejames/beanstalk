@@ -160,6 +160,19 @@ pub enum HirExpressionKind {
         variant_index: usize,
         fields: Vec<HirVariantField>,
     },
+
+    /// Extract a payload field from a variant-shaped value.
+    ///
+    /// WHY: match-arm capture bindings are materialized as local assignments from the
+    /// scrutinee. Using a dedicated HIR expression keeps backend lowering uniform and
+    /// preserves the carrier type for field-name resolution.
+    /// Phase 4: used for choice payload capture.
+    VariantPayloadGet {
+        carrier: HirVariantCarrier,
+        source: Box<HirExpression>,
+        variant_index: usize,
+        field_index: usize,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

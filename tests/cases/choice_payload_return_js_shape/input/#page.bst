@@ -7,5 +7,5 @@ make_err |msg String| -> Response:
 result = make_err("bad")
 if result is:
     case Success => io("ok")
-    case Err => io("err")
+    case Err(message) => io("err")
 ;
