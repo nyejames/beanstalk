@@ -18,6 +18,26 @@ use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 /// configuration, constness classification, and source location. It is the
 /// primary data structure passed between parsing, composition, formatting,
 /// folding, and HIR lowering.
+///
+/// ## Metadata lifecycle invariants
+///
+/// - **`content`** is authoritative after parsing and after every composition
+///   or formatting pass. It always reflects the current composed atom stream.
+///
+/// - **`render_plan`** is authoritative only when `content_needs_formatting` is
+///   `false`. HIR lowering requires runtime templates to carry a render plan
+///   that matches their content so the backend can emit the correct fragment
+///   sequence without re-parsing atoms.
+///
+/// - **`unformatted_content`** is a snapshot of `content` taken *before* body
+///   formatting runs. It exists so diagnostics and future re-format workflows
+///   can refer to the original composed shape. It is not updated by later
+///   composition passes — only by `resync_runtime_metadata` when formatting is
+///   deferred.
+///
+/// - **`kind`** is derived from `content` (via `refresh_kind_from_content`) but
+///   preserves semantic markers such as `SlotDefinition`, `SlotInsert`, and
+///   `Comment` that must not be overwritten by generic cleanup.
 #[derive(Clone, Debug)]
 pub struct Template {
     pub content: TemplateContent,

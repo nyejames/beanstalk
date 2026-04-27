@@ -179,6 +179,12 @@ pub(crate) fn compose_template_head_chain(
     foldable: &mut bool,
     string_table: &StringTable,
 ) -> Result<TemplateContent, CompilerError> {
+    // Cheap pre-scan: if no head atoms exist, composition is a no-op.
+    let has_head_atoms = content.atoms.iter().any(is_head_content_atom);
+    if !has_head_atoms {
+        return Ok(content.to_owned());
+    }
+
     let mut head_atoms = Vec::new();
     let mut body_atoms = Vec::new();
 
@@ -193,7 +199,12 @@ pub(crate) fn compose_template_head_chain(
         }
     }
 
-    if head_atoms.is_empty() {
+    // Second cheap check: if head atoms exist but none can open a receiving layer,
+    // skip the full chain machinery and return the content unchanged.
+    let has_receiver = head_atoms
+        .iter()
+        .any(|atom| receiver_template_from_head_atom(atom).is_some());
+    if !has_receiver {
         return Ok(content.to_owned());
     }
 
@@ -284,6 +295,14 @@ fn push_pending_atom(
 ) {
     let item = PendingChainItem::AtomRef(atom_pool.push(atom));
     push_chain_item(root_items, layers, active_layer, item);
+}
+
+/// Returns true if the atom is a head-origin content segment.
+fn is_head_content_atom(atom: &TemplateAtom) -> bool {
+    let TemplateAtom::Content(segment) = atom else {
+        return false;
+    };
+    segment.origin == TemplateSegmentOrigin::Head
 }
 
 /// Checks if a head atom is a wrapper template (has unresolved slots) that

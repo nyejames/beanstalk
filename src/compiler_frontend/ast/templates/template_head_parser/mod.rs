@@ -10,6 +10,7 @@
 
 mod children_directive;
 mod core_directives;
+pub(crate) mod directive_args;
 mod handler_directives;
 mod head_expressions;
 mod head_parser;

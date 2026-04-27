@@ -213,7 +213,7 @@ fn builder_registered_handler_directive_rejects_multiple_arguments() {
 
     let error = Template::new(&mut token_stream, &context, vec![], &mut string_table)
         .expect_err("handler directives should reject multiple arguments");
-    assert!(error.msg.contains("accepts at most one argument"));
+    assert!(error.msg.contains("do not support multiple values"));
 }
 
 #[test]

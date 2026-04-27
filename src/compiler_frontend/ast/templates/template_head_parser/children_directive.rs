@@ -9,15 +9,14 @@
 //! - `$children(..)` has directive-specific compile-time behavior that should stay
 //!   isolated from generic style-handler logic.
 
+use super::directive_args::parse_required_parenthesized_expression;
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
 use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::compiler_frontend::tokenizer::tokens::FileTokens;
 use crate::compiler_frontend::value_mode::ValueMode;
 use crate::return_syntax_error;
 
@@ -29,51 +28,8 @@ pub(super) fn parse_children_style_directive(
     template: &mut Template,
     string_table: &mut StringTable,
 ) -> Result<(), CompilerError> {
-    if token_stream.peek_next_token() != Some(&TokenKind::OpenParenthesis) {
-        return_syntax_error!(
-            "The '$children(..)' directive requires one argument: a template or string value.",
-            token_stream
-                .current_location()
-                ,
-            {
-                PrimarySuggestion => "Use '$children([:prefix])' or '$children(\"prefix\")'",
-            }
-        );
-    }
-
-    // Move from '$children' to the first token inside '(' ... ')'
-    token_stream.advance();
-    token_stream.advance();
-
-    if token_stream.current_token_kind() == &TokenKind::CloseParenthesis {
-        return_syntax_error!(
-            "The '$children(..)' directive cannot be empty. Provide a template or string argument.",
-            token_stream.current_location()
-        );
-    }
-
-    let argument_location = token_stream.current_location();
-    let argument = create_expression(
-        token_stream,
-        context,
-        &mut DataType::Inferred,
-        &ValueMode::ImmutableOwned,
-        false,
-        string_table,
-    )?;
-
-    if token_stream.current_token_kind() != &TokenKind::CloseParenthesis {
-        return_syntax_error!(
-            "The '$children(..)' directive supports exactly one argument and must end with ')'.",
-            token_stream
-                .current_location()
-                ,
-            {
-                PrimarySuggestion => "Use '$children(template_or_string)'",
-                SuggestedInsertion => ")",
-            }
-        );
-    }
+    let argument = parse_required_parenthesized_expression(token_stream, context, string_table)?;
+    let argument_location = argument.location.clone();
 
     if !argument.is_compile_time_constant() {
         return_syntax_error!(

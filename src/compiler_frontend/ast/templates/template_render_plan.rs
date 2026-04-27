@@ -122,6 +122,18 @@ pub enum FormatterOutputPiece {
 }
 
 impl TemplateRenderPlan {
+    /// Builds a render plan from composed template content.
+    ///
+    /// WHAT:
+    /// - Maps body-origin text to `Text` pieces eligible for formatting.
+    /// - Maps head-origin text to `HeadContent` pieces that bypass formatters.
+    /// - Maps child template outputs to `ChildTemplate` opaque anchors.
+    /// - Maps runtime expressions to `DynamicExpression` opaque anchors.
+    ///
+    /// WHY:
+    /// - Formatters should only see text they are allowed to rewrite and opaque
+    ///   anchors that preserve ordering. They must never inspect nested child
+    ///   template bytes directly.
     pub fn from_content(content: &TemplateContent) -> Self {
         let mut pieces = Vec::with_capacity(content.atoms.len());
 
@@ -165,6 +177,15 @@ impl TemplateRenderPlan {
     }
 
     /// Reconstructs a `TemplateContent` from this render plan.
+    ///
+    /// ## Intentionally lost metadata
+    ///
+    /// `source_child_template` is **not** restored on rebuild. It exists only
+    /// during the pre-format → plan phase so `from_content` can distinguish
+    /// folded child-template outputs from generic dynamic expressions. After
+    /// formatting, child templates are opaque anchors; their internal source
+    /// linkage is no longer needed because composition has already run and
+    /// `is_child_template_output` remains `true` for downstream consumers.
     pub fn rebuild_content(&self) -> TemplateContent {
         use crate::compiler_frontend::ast::templates::template::{
             TemplateAtom, TemplateContent, TemplateSegment, TemplateSegmentOrigin,

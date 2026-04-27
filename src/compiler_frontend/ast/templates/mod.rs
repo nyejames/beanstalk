@@ -15,7 +15,7 @@
 //!   ▼ create_template_node.rs   Assemble a typed `Template` from head + body.
 //!   ▼ template_types.rs         Core AST template data types.
 //!   │
-//!   ▼ template_slots.rs         Slot insertion and children-directive composition.
+//!   ▼ template_slots/           Slot schema, contribution bucketing, and composition.
 //!   ▼ template_composition.rs   Wrapper / head-chain composition rules.
 //!   │
 //!   ▼ styles/                   Per-directive output formatting (markdown, raw, whitespace, …).
@@ -37,7 +37,7 @@
 //! | `template_body_parser.rs` | Body token parsing (raw text, splices, nesting) |
 //! | `create_template_node.rs` | Head + body → `Template`; owns final runtime metadata |
 //! | `template_types.rs` | `Template`, `TemplateNode`, slot and directive types |
-//! | `template_slots.rs` | Slot resolution and children directive semantics |
+//! | `template_slots/` | Slot schema, contributions, and composition |
 //! | `template_composition.rs` | Wrapper chaining and head composition |
 //! | `styles/` | Style-directive output transformers |
 //! | `template_render_plan.rs` | Which style applies to which template |

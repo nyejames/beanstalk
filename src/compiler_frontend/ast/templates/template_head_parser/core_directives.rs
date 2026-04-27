@@ -9,6 +9,10 @@
 //!   control flow belongs in one dedicated module.
 
 use super::children_directive::parse_children_style_directive;
+use super::directive_args::{
+    parse_optional_slot_target_argument, parse_required_slot_name_argument,
+    reject_unexpected_directive_arguments,
+};
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::templates::styles::code::configure_code_style;
 use crate::compiler_frontend::ast::templates::styles::markdown::markdown_formatter;
@@ -16,27 +20,24 @@ use crate::compiler_frontend::ast::templates::styles::raw::configure_raw_style;
 use crate::compiler_frontend::ast::templates::template::{
     BodyWhitespacePolicy, CommentDirectiveKind, SlotKey, Style, TemplateType,
 };
-use crate::compiler_frontend::ast::templates::template_slots::{
-    parse_required_named_slot_insert_argument, parse_slot_definition_target_argument,
-};
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::style_directives::{CoreStyleDirectiveKind, StyleDirectiveKind};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::FileTokens;
-use crate::{return_compiler_error, return_syntax_error};
+use crate::return_compiler_error;
 
 pub(super) fn maybe_parse_slot_or_insert_helper_directive(
     spec_kind: &StyleDirectiveKind,
     token_stream: &mut FileTokens,
     template: &mut Template,
-    string_table: &StringTable,
+    _string_table: &StringTable,
 ) -> Result<bool, CompilerError> {
     if matches!(
         spec_kind,
         StyleDirectiveKind::Core(CoreStyleDirectiveKind::Slot)
     ) {
-        let slot_key = parse_slot_definition_target_argument(token_stream, string_table)?;
+        let slot_key = parse_optional_slot_target_argument(token_stream)?;
         template.kind = TemplateType::SlotDefinition(slot_key);
         return Ok(true);
     }
@@ -45,7 +46,7 @@ pub(super) fn maybe_parse_slot_or_insert_helper_directive(
         spec_kind,
         StyleDirectiveKind::Core(CoreStyleDirectiveKind::Insert)
     ) {
-        let slot_name = parse_required_named_slot_insert_argument(token_stream, string_table)?;
+        let slot_name = parse_required_slot_name_argument(token_stream)?;
         template.kind = TemplateType::SlotInsert(SlotKey::named(slot_name));
         return Ok(true);
     }
@@ -78,17 +79,17 @@ pub(super) fn parse_core_style_directive(
             template.apply_style_updates(|style| style.skip_parent_child_wrappers = true);
         }
         CoreStyleDirectiveKind::Note => {
-            reject_directive_arguments(token_stream, "note", string_table)?;
+            reject_unexpected_directive_arguments(token_stream, "note")?;
             template.kind = TemplateType::Comment(CommentDirectiveKind::Note);
             template.apply_style(Style::default());
         }
         CoreStyleDirectiveKind::Todo => {
-            reject_directive_arguments(token_stream, "todo", string_table)?;
+            reject_unexpected_directive_arguments(token_stream, "todo")?;
             template.kind = TemplateType::Comment(CommentDirectiveKind::Todo);
             template.apply_style(Style::default());
         }
         CoreStyleDirectiveKind::Doc => {
-            reject_directive_arguments(token_stream, "doc", string_table)?;
+            reject_unexpected_directive_arguments(token_stream, "doc")?;
             apply_doc_comment_defaults(template);
         }
         CoreStyleDirectiveKind::Slot | CoreStyleDirectiveKind::Insert => {
@@ -119,24 +120,6 @@ fn apply_markdown_style(template: &mut Template) {
         style.id = "markdown";
         style.formatter = Some(markdown_formatter());
     });
-}
-
-/// Rejects parenthesized arguments for directives that do not accept them.
-fn reject_directive_arguments(
-    token_stream: &FileTokens,
-    directive_name: &str,
-    _string_table: &StringTable,
-) -> Result<(), CompilerError> {
-    if token_stream.peek_next_token()
-        == Some(&crate::compiler_frontend::tokenizer::tokens::TokenKind::OpenParenthesis)
-    {
-        return_syntax_error!(
-            format!("'${directive_name}' does not accept arguments."),
-            token_stream.current_location()
-        );
-    }
-
-    Ok(())
 }
 
 pub(super) fn mark_template_body_whitespace_style_controlled(template: &mut Template) {

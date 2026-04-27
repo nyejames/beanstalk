@@ -7,6 +7,7 @@
 use crate::compiler_frontend::ast::templates::template::{
     Formatter, FormatterResult, TemplateFormatter,
 };
+use crate::compiler_frontend::ast::templates::template_head_parser::directive_args::parse_optional_string_literal_argument;
 use crate::compiler_frontend::ast::templates::template_render_plan::{
     FormatterInput, FormatterInputPiece, FormatterOutput, FormatterOutputPiece,
 };
@@ -15,8 +16,7 @@ use crate::compiler_frontend::basic_utility_functions::NumericalParsing;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
-use crate::return_syntax_error;
+use crate::compiler_frontend::tokenizer::tokens::FileTokens;
 use std::sync::Arc;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -125,10 +125,21 @@ pub(crate) fn configure_code_style(
 ) -> Result<(), CompilerError> {
     // `$code` is the generic highlighter, while `$code("...")` narrows the
     // token rules to one of the built-in language profiles.
-    let language = if token_stream.peek_next_token() != Some(&TokenKind::OpenParenthesis) {
-        CodeLanguage::Generic
-    } else {
-        parse_code_language_argument(token_stream, string_table)?
+    let language = match parse_optional_string_literal_argument(token_stream) {
+        Ok(Some(language_name)) => {
+            let language_text = string_table.resolve(language_name);
+            CodeLanguage::from_alias(language_text).ok_or_else(|| {
+                CompilerError::new_syntax_error(
+                    format!(
+                        "Unsupported '$code(...)' language \"{language_text}\". Supported aliases are {}.",
+                        CodeLanguage::supported_aliases()
+                    ),
+                    token_stream.current_location(),
+                )
+            })?
+        }
+        Ok(None) => CodeLanguage::Generic,
+        Err(e) => return Err(e),
     };
 
     template.apply_style_updates(|style| {
@@ -227,113 +238,6 @@ pub(crate) fn highlight_code_html(source: &str, language: CodeLanguage) -> Strin
 
     flush_word(&mut highlighted, &mut word, language);
     highlighted
-}
-
-/// Extracts the language profile argument from a `$code("language")` template style directive.
-///
-/// WHAT:
-/// - Consumes tokens from `(` through the string literal and up to `)`.
-/// - Validates the language name alias (e.g., "bst", "ts") into a typed `CodeLanguage`.
-/// - Returns syntax diagnostics with suggestions if the argument is malformed or unsupported.
-///
-/// WHY:
-/// - Standard template head parsing keeps style directives generic. Code styles specifically need a narrow inner parser to validate their typed argument payload.
-fn parse_code_language_argument(
-    token_stream: &mut FileTokens,
-    string_table: &StringTable,
-) -> Result<CodeLanguage, CompilerError> {
-    // The directive syntax intentionally stays narrow for now so style parsing
-    // remains independent from the general expression parser.
-    // Move from `StyleDirective("code")` to the opening `(` so the helper can
-    // validate only the directive-local tokens and leave the outer parser at the
-    // closing `)` token.
-    token_stream.advance();
-
-    token_stream.advance();
-    let argument_token = token_stream.current_token_kind().to_owned();
-
-    match argument_token {
-        TokenKind::CloseParenthesis => {
-            return_syntax_error!(
-                "The '$code()' directive cannot use empty parentheses. Omit the argument entirely for generic highlighting.",
-                token_stream.current_location(),
-                {
-                    PrimarySuggestion => "Use '$code' for generic highlighting or '$code(\"bst\")' to select a built-in language",
-                }
-            )
-        }
-
-        TokenKind::StringSliceLiteral(language_name) => {
-            let language_text = string_table.resolve(language_name);
-            let Some(language) = CodeLanguage::from_alias(language_text) else {
-                return_syntax_error!(
-                    format!(
-                        "Unsupported '$code(...)' language \"{language_text}\". Supported aliases are {}.",
-                        CodeLanguage::supported_aliases()
-                    ),
-                    token_stream.current_location(),
-                    {
-                        PrimarySuggestion => "Use one of the supported built-in aliases or omit the argument for generic highlighting",
-                    }
-                )
-            };
-
-            token_stream.advance();
-
-            match token_stream.current_token_kind() {
-                TokenKind::CloseParenthesis => Ok(language),
-                TokenKind::Comma => {
-                    return_syntax_error!(
-                        "The '$code(...)' directive supports only one language argument.",
-                        token_stream.current_location(),
-                        {
-                            PrimarySuggestion => "Pass a single quoted string literal such as '$code(\"bst\")'",
-                        }
-                    )
-                }
-                TokenKind::Eof => {
-                    return_syntax_error!(
-                        "Unexpected end of template head while parsing '$code(...)'. Missing ')' to close the directive.",
-                        token_stream.current_location(),
-                        {
-                            PrimarySuggestion => "Close the '$code(...)' directive with ')'",
-                            SuggestedInsertion => ")",
-                        }
-                    )
-                }
-                _ => {
-                    return_syntax_error!(
-                        "Expected ')' after the '$code(...)' language argument.",
-                        token_stream.current_location(),
-                        {
-                            PrimarySuggestion => "Close the '$code(...)' directive immediately after the quoted string literal",
-                            SuggestedInsertion => ")",
-                        }
-                    )
-                }
-            }
-        }
-
-        TokenKind::Eof => {
-            return_syntax_error!(
-                "Unexpected end of template head while parsing '$code(...)'. Missing a quoted string argument and closing ')'.",
-                token_stream.current_location(),
-                {
-                    PrimarySuggestion => "Use '$code' or complete the directive as '$code(\"bst\")'",
-                }
-            )
-        }
-
-        _ => {
-            return_syntax_error!(
-                "The '$code(...)' directive requires a single quoted string literal argument like '$code(\"bst\")'.",
-                token_stream.current_location(),
-                {
-                    PrimarySuggestion => "Use a quoted string literal or omit the argument entirely for generic highlighting",
-                }
-            )
-        }
-    }
 }
 
 /// Normalizes the minimum indentation of a block of text.

@@ -3,8 +3,16 @@ use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::templates::template::{
     SlotKey, TemplateAtom, TemplateContent, TemplateSegment, TemplateSegmentOrigin,
 };
+use crate::compiler_frontend::ast::templates::template_head_parser::directive_args::{
+    parse_optional_slot_target_argument, parse_required_slot_name_argument,
+};
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationIndex};
+use crate::compiler_frontend::compiler_errors::SourceLocation;
+
+// Internal schema helpers are tested here because they drive composition
+// correctness. These tests assert structural invariants rather than raw shapes.
+use super::schema::collect_slot_schema;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
@@ -70,7 +78,7 @@ fn test_parse_positional_slot() {
     // Position at directive
     tokens.advance();
 
-    let result = parse_slot_definition_target_argument(&mut tokens, &string_table);
+    let result = parse_optional_slot_target_argument(&mut tokens);
     assert!(result.is_ok());
     assert_eq!(result.unwrap(), SlotKey::Positional(1));
 }
@@ -82,7 +90,7 @@ fn test_parse_positional_slot_zero_errors() {
 
     tokens.advance();
 
-    let result = parse_slot_definition_target_argument(&mut tokens, &string_table);
+    let result = parse_optional_slot_target_argument(&mut tokens);
     assert!(result.is_err());
     assert!(
         result
@@ -99,7 +107,7 @@ fn test_parse_insert_positional_errors() {
 
     tokens.advance();
 
-    let result = parse_required_named_slot_insert_argument(&mut tokens, &string_table);
+    let result = parse_required_slot_name_argument(&mut tokens);
     assert!(result.is_err());
     assert!(
         result
@@ -282,4 +290,76 @@ fn test_positional_composition_mixed_content() {
     // [a] -> [$slot(1)]
     // " text " and [b] -> [$slot]
     assert_eq!(result.atoms.len(), 4); // "[a]", ":", " text ", "[b]"
+}
+
+// ------------------------------------------------------------------------
+// Slot schema tests
+// ------------------------------------------------------------------------
+
+#[test]
+fn schema_collects_default_named_and_positional_slots() {
+    let mut string_table = StringTable::new();
+    let wrapper = template_from_source("[:[$slot]-[$slot(\"a\")]-[$slot(1)]]", &mut string_table);
+
+    let schema = collect_slot_schema(&wrapper, &SourceLocation::default()).unwrap();
+
+    assert!(schema.has_default_slot);
+    assert_eq!(schema.named_slots.len(), 1);
+    assert_eq!(schema.positional_slots.len(), 1);
+    assert!(schema.accepts_target(&SlotKey::Default));
+    assert!(schema.has_any_slots());
+}
+
+#[test]
+fn schema_duplicate_default_slot_errors() {
+    let mut string_table = StringTable::new();
+    let wrapper = template_from_source("[:[$slot]-[$slot]]", &mut string_table);
+
+    let result = collect_slot_schema(&wrapper, &SourceLocation::default());
+    assert!(result.is_err());
+    assert!(result.unwrap_err().msg.contains("only define one default"));
+}
+
+#[test]
+fn schema_accepts_correct_targets_and_rejects_unknown() {
+    let mut string_table = StringTable::new();
+    let wrapper = template_from_source("[:[$slot(\"style\")]-[$slot(2)]]", &mut string_table);
+
+    let schema = collect_slot_schema(&wrapper, &SourceLocation::default()).unwrap();
+
+    let style_name = string_table.intern("style");
+    assert!(schema.accepts_target(&SlotKey::Named(style_name)));
+    assert!(schema.accepts_target(&SlotKey::Positional(2)));
+    assert!(!schema.accepts_target(&SlotKey::Default));
+    assert!(!schema.accepts_target(&SlotKey::Positional(1)));
+}
+
+#[test]
+fn schema_collects_nested_template_slots() {
+    // Build a wrapper whose content contains a regular template expression
+    // (not a slot definition itself) that itself contains a slot atom.
+    // This tests the recursive walk in collect_slot_schema_atoms.
+    let mut string_table = StringTable::new();
+    let mut wrapper = Template::empty();
+
+    let inner_template = template_from_source("[:[$slot(\"deep\")]]", &mut string_table);
+    let inner_expr = Expression::template(inner_template, ValueMode::ImmutableOwned);
+
+    wrapper.content.add(inner_expr);
+
+    let schema = collect_slot_schema(&wrapper, &SourceLocation::default()).unwrap();
+
+    let deep_name = string_table.intern("deep");
+    assert!(schema.accepts_target(&SlotKey::Named(deep_name)));
+}
+
+#[test]
+fn schema_ordered_positional_slots_is_sorted() {
+    let mut string_table = StringTable::new();
+    let wrapper = template_from_source("[:[$slot(3)]-[$slot(1)]-[$slot(2)]]", &mut string_table);
+
+    let schema = collect_slot_schema(&wrapper, &SourceLocation::default()).unwrap();
+    let ordered: Vec<usize> = schema.ordered_positional_slots().cloned().collect();
+
+    assert_eq!(ordered, vec![1, 2, 3]);
 }

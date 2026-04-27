@@ -353,8 +353,7 @@ fn code_typescript_argument_highlights_typescript_types() {
 fn code_empty_parentheses_error_cleanly() {
     let error = template_parse_error("[$code(): body]");
 
-    assert!(error.contains("$code()"));
-    assert!(error.contains("generic highlighting"));
+    assert!(error.contains("cannot be empty"));
 }
 
 #[test]
@@ -376,7 +375,7 @@ fn code_rejects_unknown_language_aliases() {
 fn code_rejects_multiple_language_arguments() {
     let error = template_parse_error("[$code(\"bst\", \"js\"): body]");
 
-    assert!(error.contains("only one language argument"));
+    assert!(error.contains("do not support multiple values"));
 }
 
 #[test]

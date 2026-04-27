@@ -256,6 +256,11 @@ fn format_template_body(
 /// - The pipeline intentionally uses compose -> format -> rebuild -> compose so formatters
 ///   only rewrite direct body-origin text while structural template composition remains
 ///   authoritative for the final render order.
+///
+/// ## Metadata invariant on exit
+///
+/// When this function returns, `template.render_plan` is guaranteed to match
+/// `template.content`. HIR lowering trusts this invariant for runtime templates.
 fn finalize_template_after_formatting(
     template: &mut Template,
     render_plan: TemplateRenderPlan,
