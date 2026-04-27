@@ -130,7 +130,7 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
             [: Partial]
             [: Targeted parser, declaration, match, import, assignment, return, and JS carrier-shape coverage.]
             [: JS / HTML]
-            [: Unit variants are the current supported subset. Payloads, tagged/default declarations, and constructor use remain deferred unless deliberately promoted before Alpha.]
+            [: Unit variants are the current supported subset. Record-body payload declarations, constructors, and payload match extraction are planned for promotion through choices-full-tagged-unions-plan.md. Payload shorthand, generic choices, recursive choices, direct payload field access, and structural equality remain deferred.]
         ]
 
         [data:
@@ -138,7 +138,7 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
             [: Partial]
             [: Broad literal and choice-match coverage, including exhaustiveness and diagnostics.]
             [: JS / HTML]
-            [: Literal patterns, choice variants, relational ordered-scalar patterns, guards, and else are supported. Wildcard in case arms is not supported—use else => instead. Negated and capture/tagged patterns remain deferred for Alpha.]
+            [: Literal patterns, choice variants, relational ordered-scalar patterns, guards, and else are supported. Wildcard in case arms is not supported—use else => instead. Choice payload capture patterns are planned for promotion. General capture/tagged patterns, rename captures, and nested patterns remain deferred.]
         ]
 
         [data:
@@ -338,7 +338,14 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
             [: Choice payload declarations]
             [: Deferred unless promoted before Alpha]
             [: [codesnippet:choice_payload_decl_deferred]]
-            [: Keep rejected until the carrier representation, constructors, matching, and JS lowering are deliberately implemented together.]
+            [: Planned promotion — see choices-full-tagged-unions-plan.md. Record-body payload metadata will be parsed in Phase 1; value construction and payload matching land in later phases.]
+        ]
+
+        [data:
+            [: Choice payload shorthand]
+            [: Rejected / Reserved]
+            [: [codesnippet:choice_payload_decl_deferred]]
+            [: `Variant Type` is invalid. The diagnostic should point to record-body syntax: `Variant | field Type |`.]
         ]
 
         [data:
@@ -352,7 +359,7 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
             [: Choice constructor use]
             [: Deferred unless choices are expanded before Alpha]
             [: [codesnippet:choice_constructor_use_deferred]]
-            [: Current unit variant flow is enough for the existing Alpha subset.]
+            [: Planned promotion — see choices-full-tagged-unions-plan.md. Payload variant construction will land in Phase 2; unit variants remain value syntax only.]
         ]
 
         [data:
@@ -366,14 +373,14 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
             [: Capture / tagged match patterns]
             [: Deferred]
             [: [codesnippet:diagnostic_match_deferred_capture_pattern]]
-            [: Adds bindings and scope rules inside match arms.]
+            [: Choice payload capture patterns are planned for promotion in Phase 4. General capture/tagged patterns and rename captures remain deferred.]
         ]
 
         [data:
             [: Full tagged unions]
             [: Deferred]
             [: Choice deferred diagnostics should cover the unsupported entry points.]
-            [: Explicitly post-Alpha unless required by a narrowed choice expansion.]
+            [: Being promoted through choices-full-tagged-unions-plan.md. This explicitly defers generic choices, recursive choices, direct payload field access, nested payload exhaustiveness, and structural equality.]
         ]
 
         [data:

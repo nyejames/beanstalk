@@ -10,7 +10,10 @@ Use the language surface integration matrix as a reference for what is currently
 
 # Plans / Notes / TODOS
 - Choice / Tagged Unions implementation:
-Full plan: `docs/roadmap/plans/beanstalk-full-choice-tagged-unions-plan.md`
+  - Full plan: `docs/roadmap/plans/beanstalk-full-choice-tagged-unions-plan.md`
+  - Phase 0 plan (docs alignment): `docs/roadmap/choices-full-tagged-unions-plan.md`
+  - This promotes choice payload declarations, constructors, JS lowering, and payload match extraction.
+  - Explicitly defers generic choices, recursive choices, direct payload field access, nested payload exhaustiveness, and structural equality.
 
 - full pattern-matching design (capture patterns)
 - full traits implementation

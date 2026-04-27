@@ -67,7 +67,9 @@ This comes before the type if there is an explicit type declaration
     -- Notice the double colon
     Choice ::
         Option1,
-        Option2 String,
+        Option2 |
+            value String,
+        |,
         Option3 |
             inner_value String,
             another_value Float,

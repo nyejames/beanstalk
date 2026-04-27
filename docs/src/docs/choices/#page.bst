@@ -11,9 +11,8 @@ import @styles/docs {navbar, title, section, codeblock, theme_head}
 #[section, $markdown:
 
     # Choices (enums)
-    Choices are a way to define a set of possible values. 
-    The Alpha compiler supports unit variants.
-    Payload variants, tagged variant bodies, default values, and constructor calls are deferred.
+    Choices are a way to define a set of possible values.
+    The Alpha compiler supports unit variants and record-body payload variants.
 
     You create and access choices using a double colon.
 
@@ -42,15 +41,62 @@ import @styles/docs {navbar, title, section, codeblock, theme_head}
             case Ready => label = "ready"
             case Busy => label = "busy"
         ;
-
-        -- Payload variant
-        Response :: Err | message String |, Success;
-
-        -- Tagged variant body
-        Response :: Pending | retry_count Int |, Success;
-
-        -- Constructor call
-        value = Response::Success
     ]
+
+    ## Payload variants
+    Payload variants must use record-body syntax.
+
+    [codeblock, $code("bst"):
+        Response ::
+            Success,
+            Err |
+                message String,
+            |,
+            Pending |
+                retry_count Int,
+                message String,
+            |,
+        ;
+
+        -- Unit variant construction
+        ok = Response::Success
+
+        -- Payload variant construction
+        error = Response::Err("bad")
+        pending = Response::Pending(3, message = "waiting")
+    ]
+
+    Payload fields are accessed only through pattern matching.
+
+    [codeblock, $code("bst"):
+        if response is:
+            case Success => io("done")
+            case Err(message) => io(message)
+            case Pending(retry_count, message) => io(message)
+        ;
+    ]
+
+    ## Invalid syntax
+    Unit variants are values, not constructor calls.
+
+    [codeblock, $code("bst"):
+        -- Invalid: empty constructor call on a unit variant
+        bad = Response::Success()
+    ]
+
+    Payload shorthand is not supported.
+
+    [codeblock, $code("bst"):
+        -- Invalid: shorthand payload declaration
+        Response :: Err String, Success;
+    ]
+
+    ## Deferred features
+    - Direct payload field access (e.g. `response.message`).
+    - Generic choice declarations.
+    - Recursive choice declarations.
+    - Payload structural equality.
+    - Capture rename syntax in patterns.
+    - Nested payload patterns and nested exhaustiveness.
 
 ]
