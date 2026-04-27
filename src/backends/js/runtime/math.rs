@@ -88,7 +88,7 @@ impl<'hir> JsEmitter<'hir> {
 
         for (js_name, body) in helpers {
             if self.referenced_external_functions.iter().any(|id| {
-                self.external_package_registry
+                self.config.external_package_registry
                     .get_function_by_id(*id)
                     .and_then(|def| def.lowerings.js.as_ref())
                     .is_some_and(|lowering| matches!(lowering, crate::compiler_frontend::external_packages::ExternalJsLowering::RuntimeFunction(name) if name == js_name))

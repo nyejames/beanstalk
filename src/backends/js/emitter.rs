@@ -7,7 +7,6 @@ use crate::backends::js::JsLoweringConfig;
 use crate::backends::js::JsModule;
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
-use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::hir::blocks::HirBlock;
 use crate::compiler_frontend::hir::ids::{BlockId, FieldId, FunctionId, LocalId};
 use crate::compiler_frontend::hir::module::HirModule;
@@ -30,7 +29,6 @@ pub(crate) struct JsEmitter<'hir> {
     pub(crate) borrow_analysis: &'hir BorrowCheckReport,
     pub(crate) string_table: &'hir StringTable,
     pub(crate) config: JsLoweringConfig,
-    pub(crate) external_package_registry: ExternalPackageRegistry,
     pub(crate) out: String,
     pub(crate) indent: usize,
     pub(crate) blocks_by_id: HashMap<BlockId, &'hir HirBlock>,
@@ -63,7 +61,6 @@ impl<'hir> JsEmitter<'hir> {
             hir,
             borrow_analysis,
             string_table,
-            external_package_registry: config.external_package_registry.clone(),
             config,
             out: String::new(),
             indent: 0,

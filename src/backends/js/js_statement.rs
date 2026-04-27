@@ -118,6 +118,7 @@ impl<'hir> JsEmitter<'hir> {
             CallTarget::ExternalFunction(id) => {
                 self.referenced_external_functions.insert(*id);
                 let function_def = self
+                    .config
                     .external_package_registry
                     .get_function_by_id(*id)
                     .ok_or_else(|| {
