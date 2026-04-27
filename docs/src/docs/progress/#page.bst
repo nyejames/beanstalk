@@ -1,12 +1,12 @@
 import @lib/html {format, style}
 import @styles/docs {navbar, title, section, palette, table, header, data, codeblock, codesnippet, theme_head}
 
-# page_title = "Alpha Surface Matrix"
-# page_description = "Current implementation and coverage status for the Beanstalk Alpha compiler surface."
+# page_title = "Implementation Matrix"
+# page_description = "Current implementation and coverage status for the Beanstalk compiler."
 # page_head = theme_head
 
 #[navbar]
-#[title, style.center: ALPHA SURFACE MATRIX]
+#[title, style.center: IMPLEMENTATION MATRIX]
 
 #[section, $markdown:
     This page tracks the compiler surface intended for the first Beanstalk Alpha.
@@ -29,8 +29,8 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
     - HTML project builder
     - docs-style static site generation
 
-    HTML-Wasm and the Rust interpreter are not Alpha stability targets.
-    They may have tests and scaffolding, but they should not be counted as supported Alpha runtime surfaces.
+    A policy for the repo is all tests must pass before each commit.
+    So all tests on all platforms can be assumed to be green for the current state of the compiler unless specifically noted here.
 ]
 
 #[section, $markdown:
@@ -85,39 +85,6 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
             [: No clear canonical coverage found.]
         ]
     ]
-
-    # Final pre-alpha sweep
-
-    Last swept: April 24, 2026.
-
-    [table:
-        [header: [: Check] [: Result] ]
-
-        [data:
-            [: HTML Alpha matrix]
-            [: [codesnippet:cargo run -- tests --backend html] passed 425 / 425 expected results: 266 successful compilations and 159 expected diagnostic failures.]
-        ]
-
-        [data:
-            [: HTML-Wasm experimental matrix]
-            [: [codesnippet:cargo run -- tests --backend html_wasm] passed 20 / 20 expected results. This remains experimental and is not counted as Alpha runtime support.]
-        ]
-
-        [data:
-            [: Deferred features]
-            [: Traits, choice payload/tagged/default/constructor paths, capture/tagged match patterns, removed collection syntax, and reserved future block forms have canonical structured-diagnostic fixtures.]
-        ]
-
-        [data:
-            [: Diagnostics]
-            [: Representative syntax, type, rule, config/file, borrow-checker, and deferred-feature failures assert [codesnippet:error_type] plus ordered message fragments.]
-        ]
-
-        [data:
-            [: Cross-platform goldens]
-            [: Exact goldens were re-checked. Non-contractual output should continue to use normalized goldens, artifact assertions, or rendered-output assertions. The current GitHub workflow deploys docs only, so Windows/macOS validation remains a separate release check.]
-        ]
-    ]
 ]
 
 #[section, $markdown:
@@ -137,9 +104,9 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
         [data:
             [: Functions and calls]
             [: Supported]
-            [: Broad function declaration, call validation, parameter passing, host-call, and return coverage.]
+            [: Broad function declaration, call validation, parameter passing, external-call, and return coverage.]
             [: JS / HTML]
-            [: Keep named and positional call semantics strict. Host and builtin calls remain positional-only.]
+            [: Keep named and positional call semantics strict. External and builtin calls remain positional-only.]
         ]
 
         [data:
@@ -207,6 +174,27 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
         ]
 
         [data:
+            [: External platform packages]
+            [: Partial]
+            [: Targeted coverage for package-scoped imports, prelude visibility, duplicate names across packages, explicit import resolution, and non-imported external rejection.]
+            [: Frontend / JS]
+            [: Functions and opaque types are supported through Rust-side registry metadata. [$markdown:
+                - User-authored external binding files are not supported. Alpha external packages are Rust-side builder/compiler metadata.
+                - External constants are not implemented yet.
+                - External ABI metadata does not yet include Float/F64, which blocks a proper `@std/math` package.
+                - External receiver methods are not a recommended expansion surface yet. Prefer free functions until external methods are keyed by nominal receiver type rather than broad ABI metadata.
+                - JS lowering for standard external packages is still explicit ID-to-runtime-name mapping.
+                - Wasm lowering for external packages is experimental and should not be counted as Alpha support.
+            ]]
+        ]
+
+        [data:
+            [: Standard math package]
+            [: Alpha testing ground]
+            [: Use @std/math to validate external constants, Float/F64 ABI, package-scoped imports, JS external lowering, and explicit non-prelude import behavior before larger platform APIs like canvas.]
+        ]
+
+        [data:
             [: HTML project builds]
             [: Supported]
             [: Broad routing, document shell, metadata, tracked asset, config, and page-fragment coverage.]
@@ -249,7 +237,7 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
 ]
 
 #[section, $markdown:
-    # Compiler-owned builtin surfaces
+    # Compiler-owned / standard external builtin surfaces
 
     [table:
         [header: [: Surface] [: Status] [: Coverage] [: Runtime target] [: Watch points] ]
@@ -316,13 +304,6 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
             [: Experimental]
             [: Long-term backend direction. Current lowering/runtime support is partial.]
             [: Do not count Wasm support as an Alpha blocker except for clean diagnostics or no-panic guarantees on covered paths.]
-        ]
-
-        [data:
-            [: Rust interpreter]
-            [: Experimental scaffolding]
-            [: Future local runtime / tooling direction.]
-            [: Ignore for Alpha readiness unless it breaks normal builds or tests.]
         ]
     ]
 ]
@@ -456,7 +437,8 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
     2. Update [codesnippet:tests/cases/manifest.toml].
     3. Add or rewrite canonical cases instead of layering temporary coverage.
     4. Mark unsupported syntax as [codesnippet:Deferred] or [codesnippet:Experimental], not as a vague missing test.
-    5. Do not count HTML-Wasm or the Rust interpreter as Alpha-supported unless the roadmap explicitly changes.
+    5. Do not count HTML-Wasm as Alpha-supported unless the roadmap explicitly changes.
+    6. When external packages change, update the package registry, backend lowering, import visibility tests, and this matrix together.
 
     The goal is to keep the Alpha surface small, honest, and fully exercised.
 ]

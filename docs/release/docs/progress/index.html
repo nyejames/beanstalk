@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
-    <title>Alpha Surface Matrix | Beanstalk</title>
-    <meta name="description" content="Current implementation and coverage status for the Beanstalk Alpha compiler surface.">
+    <title>Implementation Matrix | Beanstalk</title>
+    <meta name="description" content="Current implementation and coverage status for the Beanstalk compiler.">
     <style>
 /*!
   BS CSS CORE (absolute basics CSS reset)
@@ -311,11 +311,11 @@ body {
             </a>
         </div>
     </nav>
-     <h1 style="font-size: 2em;text-align: center;"> ALPHA SURFACE MATRIX</h1>
+     <h1 style="font-size: 2em;text-align: center;"> IMPLEMENTATION MATRIX</h1>
     <section class="container"><p>This page tracks the compiler surface intended for the first Beanstalk Alpha.</p><p>It is an implementation matrix, not a full language specification. The wider language docs may describe intended or aspirational syntax. This page should describe what the compiler currently supports, rejects cleanly, or keeps experimental.</p><p>Use this together with <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">tests/cases/manifest.toml</span> when changing language features.</p><h2>Alpha target</h2><p>The supported Alpha target is:</p><ul><li>frontend parsing and diagnostics</li><li>typed AST construction</li><li>HIR lowering</li><li>borrow validation</li><li>JavaScript backend</li><li>HTML project builder</li><li>docs-style static site generation</li></ul><p>HTML-Wasm and the Rust interpreter are not Alpha stability targets. They may have tests and scaffolding, but they should not be counted as supported Alpha runtime surfaces.</p></section>
+    ">tests/cases/manifest.toml</span> when changing language features.</p><h2>Alpha target</h2><p>The supported Alpha target is:</p><ul><li>frontend parsing and diagnostics</li><li>typed AST construction</li><li>HIR lowering</li><li>borrow validation</li><li>JavaScript backend</li><li>HTML project builder</li><li>docs-style static site generation</li></ul><p>A policy for the repo is all tests must pass before each commit. So all tests on all platforms can be assumed to be green for the current state of the compiler unless specifically noted here.</p></section>
     <section class="container"><h1>Status legend</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
             
     <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
@@ -372,48 +372,6 @@ body {
      <td style="padding: 0.2em 0.5em;"> No clear canonical coverage found.</td>
         </tr>
         
-    </table><h1>Final pre-alpha sweep</h1><p>Last swept: April 24, 2026.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
-            
-    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Check</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Result</th> 
-    </tr>
-
-            
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> HTML Alpha matrix</td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">cargo run -- tests --backend html</span> passed 425 / 425 expected results: 266 successful compilations and 159 expected diagnostic failures.</td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> HTML-Wasm experimental matrix</td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">cargo run -- tests --backend html_wasm</span> passed 20 / 20 expected results. This remains experimental and is not counted as Alpha runtime support.</td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Deferred features</td>
-     <td style="padding: 0.2em 0.5em;"> Traits, choice payload/tagged/default/constructor paths, capture/tagged match patterns, removed collection syntax, and reserved future block forms have canonical structured-diagnostic fixtures.</td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Diagnostics</td>
-     <td style="padding: 0.2em 0.5em;"> Representative syntax, type, rule, config/file, borrow-checker, and deferred-feature failures assert <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">error_type</span> plus ordered message fragments.</td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Cross-platform goldens</td>
-     <td style="padding: 0.2em 0.5em;"> Exact goldens were re-checked. Non-contractual output should continue to use normalized goldens, artifact assertions, or rendered-output assertions. The current GitHub workflow deploys docs only, so Windows/macOS validation remains a separate release check.</td>
-        </tr>
-        
     </table></section>
     <section class="container"><h1>Core Alpha surface</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
             
@@ -434,9 +392,9 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;"> Functions and calls</td>
      <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> Broad function declaration, call validation, parameter passing, host-call, and return coverage.</td>
+     <td style="padding: 0.2em 0.5em;"> Broad function declaration, call validation, parameter passing, external-call, and return coverage.</td>
      <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
-     <td style="padding: 0.2em 0.5em;"> Keep named and positional call semantics strict. Host and builtin calls remain positional-only.</td>
+     <td style="padding: 0.2em 0.5em;"> Keep named and positional call semantics strict. External and builtin calls remain positional-only.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -504,6 +462,20 @@ body {
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> External platform packages</td>
+     <td style="padding: 0.2em 0.5em;"> Partial</td>
+     <td style="padding: 0.2em 0.5em;"> Targeted coverage for package-scoped imports, prelude visibility, duplicate names across packages, explicit import resolution, and non-imported external rejection.</td>
+     <td style="padding: 0.2em 0.5em;"> Frontend / JS</td>
+     <td style="padding: 0.2em 0.5em;"> Functions and opaque types are supported through Rust-side registry metadata. <ul><li>User-authored external binding files are not supported. Alpha external packages are Rust-side builder/compiler metadata.</li><li>External constants are not implemented yet.</li><li>External ABI metadata does not yet include Float/F64, which blocks a proper `@std/math` package.</li><li>External receiver methods are not a recommended expansion surface yet. Prefer free functions until external methods are keyed by nominal receiver type rather than broad ABI metadata.</li><li>JS lowering for standard external packages is still explicit ID-to-runtime-name mapping.</li><li>Wasm lowering for external packages is experimental and should not be counted as Alpha support.</li></ul></td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Standard math package</td>
+     <td style="padding: 0.2em 0.5em;"> Alpha testing ground</td>
+     <td style="padding: 0.2em 0.5em;"> Use @std/math to validate external constants, Float/F64 ABI, package-scoped imports, JS external lowering, and explicit non-prelude import behavior before larger platform APIs like canvas.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;"> HTML project builds</td>
      <td style="padding: 0.2em 0.5em;"> Supported</td>
      <td style="padding: 0.2em 0.5em;"> Broad routing, document shell, metadata, tracked asset, config, and page-fragment coverage.</td>
@@ -550,7 +522,7 @@ body {
         </tr>
         
     </table></section>
-    <section class="container"><h1>Compiler-owned builtin surfaces</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+    <section class="container"><h1>Compiler-owned / standard external builtin surfaces</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
             
     <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
          <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Surface</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Status</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Coverage</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Runtime target</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Watch points</th> 
@@ -652,13 +624,6 @@ body {
      <td style="padding: 0.2em 0.5em;"> Experimental</td>
      <td style="padding: 0.2em 0.5em;"> Long-term backend direction. Current lowering/runtime support is partial.</td>
      <td style="padding: 0.2em 0.5em;"> Do not count Wasm support as an Alpha blocker except for clean diagnostics or no-panic guarantees on covered paths.</td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Rust interpreter</td>
-     <td style="padding: 0.2em 0.5em;"> Experimental scaffolding</td>
-     <td style="padding: 0.2em 0.5em;"> Future local runtime / tooling direction.</td>
-     <td style="padding: 0.2em 0.5em;"> Ignore for Alpha readiness unless it breaks normal builds or tests.</td>
         </tr>
         
     </table></section>
@@ -811,7 +776,7 @@ body {
     ">Deferred</span> or <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">Experimental</span>, not as a vague missing test.</li><li>Do not count HTML-Wasm or the Rust interpreter as Alpha-supported unless the roadmap explicitly changes.</li></ol><p>The goal is to keep the Alpha surface small, honest, and fully exercised.</p></section>
+    ">Experimental</span>, not as a vague missing test.</li><li>Do not count HTML-Wasm as Alpha-supported unless the roadmap explicitly changes.</li><li>When external packages change, update the package registry, backend lowering, import visibility tests, and this matrix together.</li></ol><p>The goal is to keep the Alpha surface small, honest, and fully exercised.</p></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

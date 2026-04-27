@@ -29,10 +29,7 @@ You must have `just` installed to run this.
 ### Format! and printing
 - Use the saying library macro `say!()` for std out when creating user facing messages that may need color styling in the future
 
-Use variables directly in format! strings whenever possible:
-```rust
-    format!("Rust interpreter lowering could not resolve assignment target local {local_id:?}");
-```
+Use variables directly in format! strings (in position) whenever possible.
 
 ### Imports
 - Avoid inline imports. If a type or function is used more than once in a file, import it at the top

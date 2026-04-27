@@ -9,13 +9,17 @@ Use the language surface integration matrix as a reference for what is currently
 ---
 
 # Plans / Notes / TODOS
+- Core Math library
+This will be for testing / hardening the external import system.
+Full plan: `docs/roadmap/plans/std-math.md`
+
 - full tagged unions
 - full pattern-matching design (capture patterns)
 - full traits implementation
 - Closures
 - Hash Maps
 - Compile time arbitary precision aritmetic + Decimals Type support
-- Core Math library
+
 - Optimised template folding
 - Move to more specific explicit type declarations for numbers (I32, I64, F32, F64) - JS backend just makes all an F64 and accepts the precision loss, more for future Wasm backend
 

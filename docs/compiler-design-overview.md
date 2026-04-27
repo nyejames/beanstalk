@@ -4,7 +4,7 @@ The compiler is modular and exposed as a library. The project also has a build s
 
 The near-term target is a stable JS backend/build system for static pages and JS output. Wasm remains the long-term primary target.
 
-Build systems can use the compiler up through HIR (and borrow checking) and then apply their own codegen for any backend, including potential Rust-interpreter-backed builds. They assemble single-file and multi-file projects into runnable bundles.
+Build systems can use the compiler up through HIR (and borrow checking) and then apply their own codegen for any backend. They assemble single-file and multi-file projects into runnable bundles.
 
 Beanstalk has a borrow checker, but ownership is treated as an optimisation (GC is the fallback). See `docs\memory-management-design.md` for more details.
 
@@ -78,11 +78,6 @@ External platform packages:
 - External expression/type resolution must go through `ScopeContext` visibility lookup
 - Prelude symbols such as `io` and `IO` are added to external visibility, not source declaration visibility
 - Backends map stable `ExternalFunctionId` values to their own lowering keys (JS runtime names, Wasm imports, Rust host bindings)
-
-Current limitations:
-- User-authored external binding files are not supported.
-- External package definitions are currently registered from Rust-side builder/compiler metadata.
-- External receiver methods are early-stage and should not be expanded without nominal receiver-key lookup.
 
 Project builders do **not**:
 - Parse files

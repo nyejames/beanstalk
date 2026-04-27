@@ -84,7 +84,7 @@ consult `docs/memory-management-design.md`.
 For code organization, naming, diagnostics, testing expectations, comments, and refactor standards,
 consult `docs/codebase-style-guide.md`.
 
-To see the progress and current priority goals of the compiler and language, consult: `docs/roadmap/roadmap.md`
+To see the progress and current priority goals of the compiler and language, consult: `docs/roadmap/roadmap.md` and the language surface implementation matrix: `docs/src/docs/progress/#page.bst`
 
 ## Implementation expectations
 
@@ -134,8 +134,9 @@ When reviewing, planning, or proposing implementation changes:
 - Flag stage-boundary leaks explicitly.
 
 ## Documentation update policy
+Always update the Alpha surface matrix if your changes require it to be updated or a new limitation or bug is discovered: `docs/src/docs/progress/#page.bst`
 
-Do not modify documentation files unless the user explicitly requests documentation changes, or explicitly approves them after you identify that documentation should be updated.
+Do not modify other documentation files unless the user explicitly requests documentation changes, or explicitly approves them after you identify that documentation should be updated.
 
 If implementation changes make the docs inaccurate:
 - say so clearly,

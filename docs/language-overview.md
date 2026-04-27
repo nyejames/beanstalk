@@ -20,8 +20,9 @@ Square brackets are only used for string templates.
 - ~ tilde symbol to indicate mutability (mutability must be explicit).
 This comes before the type if there is an explicit type declaration
 - Double dashes for single line comments (--)
-- Immutable reference semantics are the default for all stack and heap allocated types.
-- All copies have to be explicit unless they are used in part of a new expression. Including integers, floats and bools
+- Immutable reference semantics are the default for all stack and heap allocated types
+- `#` is used for making a declaration both public to the module and a constant
+- All copies have to be explicit unless they are used in part of a new expression (includes integers, floats and bools)
 - Parameters and struct definitions use vertical pipes | 
 - Result types are created with the '!' symbol. Options use '?'
 - Type aliases are declared with `as`: `AliasName as ExistingType`
