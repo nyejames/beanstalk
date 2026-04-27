@@ -9,6 +9,7 @@ use crate::compiler_frontend::builtins::error_type::is_reserved_builtin_symbol;
 use crate::compiler_frontend::declaration_syntax::declaration_shell::DeclarationSyntax;
 use crate::compiler_frontend::declaration_syntax::type_syntax::for_each_named_type_in_data_type;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
+use crate::compiler_frontend::headers::parse_file_headers::FileImport;
 use crate::compiler_frontend::headers::types::HeaderBuildContext;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
@@ -26,7 +27,7 @@ pub(super) fn collect_constant_type_dependencies(
     for_each_named_type_in_data_type(&declaration_syntax.type_annotation, &mut |type_name| {
         collect_named_type_dependency_edge(
             type_name,
-            context.file_imports,
+            context.file_import_entries,
             context.source_file,
             context.external_package_registry,
             context.string_table,
@@ -37,7 +38,7 @@ pub(super) fn collect_constant_type_dependencies(
 
 pub(super) fn collect_named_type_dependency_edge(
     type_name: StringId,
-    file_imports: &HashSet<InternedPath>,
+    file_imports: &[FileImport],
     source_file: &InternedPath,
     external_package_registry: &ExternalPackageRegistry,
     string_table: &StringTable,
@@ -47,10 +48,16 @@ pub(super) fn collect_named_type_dependency_edge(
         return;
     }
 
+    // WHY: match by local name, which is either the explicit import alias or
+    // the original symbol name from the path. This ensures dependency edges
+    // are created when an import alias is used as a type reference.
     let edge = file_imports
         .iter()
-        .find(|import_path| import_path.name() == Some(type_name))
-        .cloned();
+        .find(|import| {
+            let local_name = import.alias.or_else(|| import.header_path.name());
+            local_name == Some(type_name)
+        })
+        .map(|import| import.header_path.clone());
 
     // Virtual package imports are not source graph participants, so they must not
     // create strict dependency edges. AST import binding resolution handles them later.

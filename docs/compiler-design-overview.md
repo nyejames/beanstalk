@@ -192,8 +192,8 @@ Parses the top-level shape of each declaration kind so later stages do not need 
 Does not parse anything in function bodies beyond capturing their token streams and tracking their dependencies.
 
 - **Top-Level Declaration Discovery**: Header parsing is the only stage that discovers module-wide top-level declarations.
-- **Declaration Parsing**: Top-level Function signatures, exported constant declarations and structs/choices are parsed here.
-- **Strict Dependency Edge Collection**: Header parsing collects strict top-level dependency edges
+- **Declaration Parsing**: Top-level Function signatures, exported constant declarations, structs/choices, and type aliases are parsed here.
+- **Strict Dependency Edge Collection**: Header parsing collects strict top-level dependency edges, including named-type references from type alias targets, struct fields, constant type annotations, and function signatures.
 - **Implicit Entry Start Capture**: Entry-file top-level executable code is collected into a `HeaderKind::StartFunction` header for later AST lowering
 - **Import Collection**: Imports needed by top-level declarations are collected here for top-level dependency analysis
 - **Top-Level Const Fragments**: Entry-file top-level const templates are recorded as ordered compile-time fragment headers
@@ -201,7 +201,7 @@ Does not parse anything in function bodies beyond capturing their token streams 
 
 Exported constants are parsed as top-level declarations. Their declared type shape is header-owned, the AST later resolves and validates the initializer. Top-level struct field shapes and choice variant shapes are fully parsed in the header stage, but validated and type checked at the AST stage.
 
-Header parsing also builds the header-owned `ModuleSymbols` package: the order-independent top-level symbol, import, export, builtin, and source-file metadata needed by dependency sorting and AST construction. Dependency sorting later finalizes only the sorted `declarations` list inside that package; AST consumes the package directly rather than rediscovering top-level symbols.
+Header parsing also builds the header-owned `ModuleSymbols` package: the order-independent top-level symbol, import, export, builtin, type-alias, and source-file metadata needed by dependency sorting and AST construction. Dependency sorting later finalizes only the sorted `declarations` list inside that package; AST consumes the package directly rather than rediscovering top-level symbols.
 
 ### Stage 3: Dependency Sorting (`src/compiler_frontend/module_dependencies.rs`)
 Operates only on top-level declaration headers and only on strict dependency edges.
@@ -221,11 +221,13 @@ Consumes the already-shaped, already-sorted top-level headers and the header-own
 AST resolves and validates those headers, enforces file-local import visibility, lowers executable bodies, and prepares templates for HIR.
 It does not rediscover top-level symbols or reparse top-level declaration shells.
 
-- **Import Visibility**: AST resolves per-file import visibility while still using the shared module-wide top-level symbol package. AST import binding builds two per-file visibility maps:
+- **Import Visibility**: AST resolves per-file import visibility while still using the shared module-wide top-level symbol package. AST import binding builds per-file visibility maps:
   - `visible_symbol_paths`: source declarations and compiler-owned builtin declarations.
   - `visible_external_symbols`: builder-provided external functions/types from explicit virtual imports and prelude imports.
+  - `visible_type_aliases`: type aliases visible in this file (same-file and imported).
+  - `visible_source_aliases`: source declaration import aliases (local rename → canonical path).
   Expression parsing and type resolution must resolve external symbols through the active `ScopeContext`, not through global registry lookup.
-- **Top-Level Resolution**: AST resolves and validates constants, struct field types, and function signatures from the parsed header payloads
+- **Top-Level Resolution**: AST resolves and validates type aliases, constants, struct field types, and function signatures from the parsed header payloads. Type aliases are resolved to concrete `DataType`s before regular type resolution and do not emit AST runtime nodes or survive into HIR. Type alias cycles are caught by strict dependency edges during header sorting.
 - **Body Parsing**: Function bodies and the entry `start` body are parsed and lowered here
 - **Local Scope Growth**: Executable bodies register local declarations incrementally in source order. Body-local declarations reuse shared declaration syntax, but top-level declaration shells remain header-owned
 - **Multi-bind**: `a, b = pair()` is an AST statement form limited to explicit multi-return-producing surfaces (currently multi-return function calls). It is not part of general declaration syntax and does not act as a generic destructuring mechanism.
@@ -239,7 +241,7 @@ It does not rediscover top-level symbols or reparse top-level declaration shells
 - Body-local declarations are parsed in source order during AST lowering of executable code
 - Dependency sorting exists only to order top-level declarations before AST begins; it does not apply inside executable bodies
 
-Internally, AST runs in this order: resolve file import bindings, resolve constants and struct field types, resolve function signatures, build the receiver-method catalog, emit AST nodes for executable bodies, then finalize template and constant metadata for HIR and builders.
+Internally, AST runs in this order: resolve file import bindings, resolve type aliases, resolve constants and struct field types, resolve function signatures, build the receiver-method catalog, emit AST nodes for executable bodies, then finalize template and constant metadata for HIR and builders.
 
 **Type checking and coercion**
 

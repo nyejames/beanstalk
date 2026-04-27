@@ -198,6 +198,10 @@ Integration tests are the main regression check for new features and refactors.
 - Use strict goldens only when exact emitted text is contractual. Prefer rendered-output assertions for behavior-first cases
 - Avoid using host functions like io() unless they are explicitly what is being tested. Prefer top-level templates to simulate output since this shows up in emitted artifacts
 
+For new type-system syntax, add both:
+- positive end-to-end usage tests
+- negative diagnostics for value/type namespace misuse, import visibility, duplicate declarations, and cross-file resolution
+
 **Test Case Structure** (`tests/cases/`):
 ```text
 tests/cases/

@@ -2365,6 +2365,41 @@ path = "import_alias_of_type_alias"
 tags = ["integration", "language", "aliases"]
 
 [[case]]
+id = "duplicate_type_alias_rejected"
+path = "duplicate_type_alias_rejected"
+tags = ["integration", "language", "aliases", "diagnostics"]
+
+[[case]]
+id = "type_alias_same_name_different_files"
+path = "type_alias_same_name_different_files"
+tags = ["integration", "language", "aliases"]
+
+[[case]]
+id = "type_alias_target_uses_import_alias"
+path = "type_alias_target_uses_import_alias"
+tags = ["integration", "language", "aliases"]
+
+[[case]]
+id = "source_type_import_alias_in_signature"
+path = "source_type_import_alias_in_signature"
+tags = ["integration", "language", "aliases"]
+
+[[case]]
+id = "source_type_import_alias_in_struct_field"
+path = "source_type_import_alias_in_struct_field"
+tags = ["integration", "language", "aliases"]
+
+[[case]]
+id = "type_alias_is_not_constructor"
+path = "type_alias_is_not_constructor"
+tags = ["integration", "language", "aliases", "diagnostics"]
+
+[[case]]
+id = "private_type_alias_import_rejected"
+path = "private_type_alias_import_rejected"
+tags = ["integration", "language", "aliases", "diagnostics"]
+
+[[case]]
 id = "prelude_does_not_override_alias"
 path = "prelude_does_not_override_alias"
 tags = ["integration", "language", "aliases"]

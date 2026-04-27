@@ -18,7 +18,7 @@ use crate::compiler_frontend::declaration_syntax::type_syntax::resolve_named_typ
 use crate::compiler_frontend::external_packages::ExternalSymbolId;
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use rustc_hash::FxHashMap;
 
 impl<'a> AstBuildState<'a> {
@@ -34,17 +34,6 @@ impl<'a> AstBuildState<'a> {
         file_import_bindings: &FxHashMap<InternedPath, FileImportBindings>,
         string_table: &mut StringTable,
     ) -> Result<(), CompilerMessages> {
-        let mut alias_paths_by_name: FxHashMap<StringId, InternedPath> = FxHashMap::default();
-
-        // Pre-scan to build name → path map for all type aliases.
-        for header in sorted_headers {
-            if let HeaderKind::TypeAlias { .. } = &header.kind
-                && let Some(name) = header.tokens.src_path.name()
-            {
-                alias_paths_by_name.insert(name, header.tokens.src_path.to_owned());
-            }
-        }
-
         for header in sorted_headers {
             let HeaderKind::TypeAlias { target } = &header.kind else {
                 continue;
@@ -57,14 +46,10 @@ impl<'a> AstBuildState<'a> {
                 target,
                 &header.name_location,
                 &mut |type_name| {
-                    // 1. Check already-resolved type aliases (including same-file).
-                    if let Some(alias_path) = alias_paths_by_name.get(&type_name)
-                        && let Some(resolved_dt) =
-                            self.resolved_type_aliases_by_path.get(alias_path)
-                    {
-                        return Some(resolved_dt.to_owned());
-                    }
-                    // 2. Check imported type aliases by local name.
+                    // 1. Check visible type aliases (same-file + imported).
+                    // WHY: pass_import_bindings already adds local aliases to
+                    // visible_type_aliases, so this map covers both same-file and
+                    // imported aliases behind a single visibility gate.
                     if let Some(bindings) = file_bindings
                         && let Some(alias_path) = bindings.visible_type_aliases.get(&type_name)
                         && let Some(resolved_dt) =
@@ -72,19 +57,27 @@ impl<'a> AstBuildState<'a> {
                     {
                         return Some(resolved_dt.to_owned());
                     }
-                    // 3. Check visible declarations (structs, choices, builtins).
+
+                    // 2. Check visible declarations (structs, choices, builtins).
+                    // WHY: must gate by visible_symbol_paths to enforce file-local
+                    // import boundaries instead of doing a module-wide scan.
                     if let Some(dt) = self
                         .declarations
                         .iter()
                         .rfind(|d| {
                             d.id.name() == Some(type_name)
                                 && !d.is_unresolved_constant_placeholder()
+                                && match file_bindings {
+                                    Some(bindings) => bindings.visible_symbol_paths.contains(&d.id),
+                                    None => false,
+                                }
                         })
                         .map(|d| d.value.data_type.to_owned())
                     {
                         return Some(dt);
                     }
-                    // 4. Check visible external types.
+
+                    // 3. Check visible external types.
                     if let Some(bindings) = file_bindings
                         && let Some(ExternalSymbolId::Type(type_id)) =
                             bindings.visible_external_symbols.get(&type_name)

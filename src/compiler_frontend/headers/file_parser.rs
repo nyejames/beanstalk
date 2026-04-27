@@ -358,6 +358,8 @@ fn starts_duplicate_top_level_header_declaration(
             TokenKind::TypeParameterBracket
                 // Exported choice declarations parse as `#Name :: ...`.
                 | TokenKind::DoubleColon
+                // Exported type aliases parse as `#Name as ...`.
+                | TokenKind::As
         );
     }
 
@@ -371,6 +373,8 @@ fn starts_duplicate_top_level_header_declaration(
         ),
         // `name :: ...` starts a choice declaration.
         TokenKind::DoubleColon => true,
+        // `name as ...` starts a type alias declaration.
+        TokenKind::As => true,
         _ => false,
     }
 }

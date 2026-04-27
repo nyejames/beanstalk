@@ -24,9 +24,10 @@ This comes before the type if there is an explicit type declaration
 - All copies have to be explicit unless they are used in part of a new expression. Including integers, floats and bools
 - Parameters and struct definitions use vertical pipes | 
 - Result types are created with the '!' symbol. Options use '?'
+- Type aliases are declared with `as`: `AliasName as ExistingType`
 
 **Naming conventions:**
-- Types/Objects/Choices: `PascalCase`
+- Types/Objects/Choices/Type aliases: `PascalCase`
 - Variables/functions: `regular_snake_case`
 
 ## Core Syntax Patterns
@@ -686,7 +687,7 @@ loop 0.0 to 1.0 by 0.1 |t|:
     ~vec.reset()
 ```
 
-Runtime structs are nominal types. Matching field shapes do not make two structs interchangeable.
+Runtime structs are nominal types. Matching field shapes do not make two structs interchangeable. Type aliases to structs do not create a new struct identity; the alias is transparently the same type as the target struct.
 
 Receiver methods in v1 are statically resolved:
 - `this` is a reserved word. It can only appear as the first parameter of a receiver method and inside that method's body. It cannot be used as a normal variable, field, function name, loop binding, or top-level declaration.
@@ -715,10 +716,34 @@ value = 21
 io(value.double()) -- 42
 ```
 
+## Type aliases
+Type aliases give another name to an existing type at compile-time.
+They can target built-in types, structs, choices, options, collections, imported types, and external package types.
+
+```beanstalk
+UserId as Int
+Names as {String}
+MaybeName as String?
+```
+
+Type aliases are **transparent**. They do not create a new nominal type.
+
+```beanstalk
+UserId as Int
+
+id UserId = 42
+raw Int = id -- valid, UserId is Int
+```
+
+Imported types can be renamed with import aliases:
+
+```beanstalk
+import @types/UserId as Id
+
+id Id = 1
+```
+
 ## Module System and Imports
-
-**Multi-file modules**
-
 A module is multiple Beanstalk files compiled together into a single output. Each module will have its own entry point.
 
 A project is one or more of these modules together with libraries and sometimes other file types that is all compiled together into a more complex output.
@@ -739,6 +764,9 @@ Example:
 ```beanstalk
 -- Import one exported symbol:
 import @path/to/file/symbol
+
+-- Import with a local alias:
+import @path/to/file/symbol as alias_name
 
 -- Import several exported symbols from one shared file path:
 import @path/to/file {symbol_a, symbol_b}
@@ -803,6 +831,7 @@ At top level, `#` changes behavior by declaration kind:
 - Variable declaration: exported constant declaration (compile-time only)
 - Function declaration: exported function (visibility only)
 - Struct or choice declaration: exported type/symbol (visibility only)
+- Type alias declaration: exported type alias (visibility only)
 - Template head (`#[...]`): entry-file-only top-level const template declaration that must fully fold at compile time
 
 Non-`#` top-level declarations are module-private.

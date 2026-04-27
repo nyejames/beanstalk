@@ -105,7 +105,7 @@ pub(super) fn create_header(
                 for_each_named_type_in_data_type(&param.value.data_type, &mut |type_name| {
                     collect_named_type_dependency_edge(
                         type_name,
-                        context.file_imports,
+                        context.file_import_entries,
                         context.source_file,
                         context.external_package_registry,
                         context.string_table,
@@ -118,7 +118,7 @@ pub(super) fn create_header(
                 for_each_named_type_in_data_type(ret.value.data_type(), &mut |type_name| {
                     collect_named_type_dependency_edge(
                         type_name,
-                        context.file_imports,
+                        context.file_import_entries,
                         context.source_file,
                         context.external_package_registry,
                         context.string_table,
@@ -199,7 +199,7 @@ pub(super) fn create_header(
                     for_each_named_type_in_data_type(&field.value.data_type, &mut |type_name| {
                         collect_named_type_dependency_edge(
                             type_name,
-                            context.file_imports,
+                            context.file_import_entries,
                             context.source_file,
                             context.external_package_registry,
                             context.string_table,
@@ -315,7 +315,7 @@ pub(super) fn create_header(
             for_each_named_type_in_data_type(&target, &mut |type_name| {
                 collect_named_type_dependency_edge(
                     type_name,
-                    context.file_imports,
+                    context.file_import_entries,
                     context.source_file,
                     context.external_package_registry,
                     context.string_table,
