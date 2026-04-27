@@ -131,7 +131,7 @@ fn operator_node(op: Operator, location: SourceLocation) -> AstNode {
 }
 
 fn runtime_template_expression(location: SourceLocation, content: Vec<Expression>) -> Expression {
-    let mut template = Template::create_default(vec![]);
+    let mut template = Template::empty();
     template.location = location.clone();
 
     for expr in content {
@@ -175,7 +175,7 @@ fn compile_time_wrapper_templates_lower_as_runtime_templates_when_they_reach_hir
     let location = location(1);
     let mut builder = setup_builder(&mut string_table);
 
-    let mut template = Template::create_default(vec![]);
+    let mut template = Template::empty();
     template.location = location.clone();
     template.content.add(Expression::string_slice(
         before,
@@ -222,7 +222,7 @@ fn escaped_slot_insert_helpers_fail_when_they_reach_hir_runtime_lowering() {
     let location = location(2);
     let mut builder = setup_builder(&mut string_table);
 
-    let mut helper = Template::create_default(vec![]);
+    let mut helper = Template::empty();
     helper.location = location.clone();
     helper.kind = crate::compiler_frontend::ast::templates::template::TemplateType::SlotInsert(
         SlotKey::named(body_slot),
@@ -251,7 +251,7 @@ fn runtime_template_without_render_plan_reports_compiler_bug() {
     let location = location(2);
     let hello = string_table.intern("hello");
     let mut builder = setup_builder(&mut string_table);
-    let mut template = Template::create_default(vec![]);
+    let mut template = Template::empty();
     template.location = location.clone();
     template.content.add(Expression::string_slice(
         hello,

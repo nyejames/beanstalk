@@ -123,38 +123,3 @@ fn validate_expression_result_type(
         }
     )
 }
-
-// Planned: allow mixed const/runtime concatenation by splitting foldable template segments
-// from runtime segments instead of rejecting non-template values wholesale.
-#[cfg(test)]
-pub fn concat_template(
-    simplified_expression: &mut Vec<AstNode>,
-    value_mode: ValueMode,
-) -> Result<Expression, CompilerError> {
-    use crate::compiler_frontend::ast::templates::template_types::Template;
-    use crate::return_compiler_error;
-
-    let mut template: Template = Template::create_default(vec![]);
-    let _location = ordering::extract_expression_location(simplified_expression)?;
-
-    for node in simplified_expression {
-        match node.get_expr()?.kind {
-            ExpressionKind::Template(template_to_concat) => {
-                template
-                    .content
-                    .extend(template_to_concat.content.to_owned());
-
-                template.style = template_to_concat.style.to_owned();
-                template.explicit_style = template_to_concat.explicit_style.to_owned();
-            }
-
-            _ => {
-                return_compiler_error!(
-                    "Non-template value found in template expression (you can only concatenate templates with other templates)"
-                )
-            }
-        }
-    }
-
-    Ok(Expression::template(template, value_mode))
-}

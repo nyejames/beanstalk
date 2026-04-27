@@ -77,7 +77,8 @@ pub(crate) fn apply_body_formatter(
         });
     }
 
-    let mut new_plan_pieces = Vec::with_capacity(plan.pieces.len());
+    let original_pieces = std::mem::take(&mut plan.pieces);
+    let mut new_plan_pieces = Vec::with_capacity(original_pieces.len());
     let mut all_warnings: Vec<CompilerWarning> = Vec::new();
 
     let pre_format_passes = formatter
@@ -178,7 +179,17 @@ pub(crate) fn apply_body_formatter(
                     }));
                 }
                 FormatterOutputPiece::Opaque(anchor) => {
-                    replacement_pieces.push(anchor_side_table[anchor.id.0].clone());
+                    let resolved = anchor_side_table.get(anchor.id.0).ok_or_else(|| {
+                        CompilerMessages::from_error_ref(
+                            CompilerError::compiler_error(format!(
+                                "Template formatter returned invalid opaque anchor id {}; only {} anchors exist for this formatter run.",
+                                anchor.id.0,
+                                anchor_side_table.len()
+                            )),
+                            string_table,
+                        )
+                    })?;
+                    replacement_pieces.push(resolved.clone());
                 }
             }
         }
@@ -187,7 +198,7 @@ pub(crate) fn apply_body_formatter(
     };
 
     let mut is_first_run = true;
-    for piece in std::mem::take(&mut plan.pieces) {
+    for piece in original_pieces.iter().cloned() {
         match &piece {
             // Body text and non-head non-slot content forms contiguous formatter runs.
             RenderPiece::Text(_)
@@ -228,24 +239,7 @@ pub(crate) fn apply_body_formatter(
         new_plan_pieces.extend(replacement);
     }
 
-    let original_len = plan.pieces.len();
-    let content_changed = new_plan_pieces.len() != original_len
-        || plan
-            .pieces
-            .iter()
-            .zip(new_plan_pieces.iter())
-            .any(|(old, new)| {
-                match (old, new) {
-                    (RenderPiece::Text(old_t), RenderPiece::Text(new_t)) => {
-                        old_t.text != new_t.text
-                    }
-                    (RenderPiece::HeadContent(old_t), RenderPiece::HeadContent(new_t)) => {
-                        old_t.text != new_t.text
-                    }
-                    _ => false, // non-text pieces are unchanged by formatting
-                }
-            });
-
+    let content_changed = render_pieces_changed(&original_pieces, &new_plan_pieces);
     plan.pieces = new_plan_pieces;
     Ok(BodyFormattingResult {
         plan,
@@ -317,6 +311,29 @@ fn representative_text_location_for_run(run: &[RenderPiece]) -> SourceLocation {
     SourceLocation::default()
 }
 
+/// Compares two render-plan piece slices to detect whether formatting materially changed content.
+///
+/// WHAT:
+/// - Length differences mean pieces were added or removed.
+/// - Text and head-content pieces are compared by interned string id.
+/// - Non-text pieces are assumed unchanged by formatting.
+fn render_pieces_changed(original: &[RenderPiece], new: &[RenderPiece]) -> bool {
+    if original.len() != new.len() {
+        return true;
+    }
+
+    original
+        .iter()
+        .zip(new.iter())
+        .any(|(old, new)| match (old, new) {
+            (RenderPiece::Text(old_t), RenderPiece::Text(new_t)) => old_t.text != new_t.text,
+            (RenderPiece::HeadContent(old_t), RenderPiece::HeadContent(new_t)) => {
+                old_t.text != new_t.text
+            }
+            _ => false, // non-text pieces are unchanged by formatting
+        })
+}
+
 fn aggregate_text_piece_location(run: &[RenderPiece]) -> Option<SourceLocation> {
     let mut first: Option<SourceLocation> = None;
     let mut last: Option<SourceLocation> = None;
@@ -342,4 +359,161 @@ fn aggregate_text_piece_location(run: &[RenderPiece]) -> Option<SourceLocation> 
         start_pos: start.start_pos,
         end_pos: end.end_pos,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::apply_body_formatter;
+    use crate::compiler_frontend::ast::expressions::expression::Expression;
+    use crate::compiler_frontend::ast::templates::template::FormatterResult;
+    use crate::compiler_frontend::ast::templates::template::{
+        BodyWhitespacePolicy, Style, TemplateContent, TemplateSegmentOrigin,
+    };
+    use crate::compiler_frontend::ast::templates::template_render_plan::{
+        FormatterAnchorId, FormatterInput, FormatterOutput, FormatterOutputPiece,
+    };
+    use crate::compiler_frontend::ast::templates::template_types::Template;
+    use crate::compiler_frontend::symbols::string_interning::StringTable;
+    use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
+    use crate::compiler_frontend::value_mode::ValueMode;
+    use std::sync::Arc;
+
+    fn make_body_text_content(text: &str, string_table: &mut StringTable) -> TemplateContent {
+        let mut content = TemplateContent::default();
+        content.add_with_origin(
+            Expression::string_slice(
+                string_table.intern(text),
+                SourceLocation::default(),
+                ValueMode::ImmutableOwned,
+            ),
+            TemplateSegmentOrigin::Body,
+        );
+        content
+    }
+
+    fn default_style() -> Style {
+        Style {
+            body_whitespace_policy: BodyWhitespacePolicy::DefaultTemplateBehavior,
+            ..Style::default()
+        }
+    }
+
+    #[test]
+    fn no_op_formatting_detects_no_change_for_plain_text() {
+        let mut string_table = StringTable::new();
+        let content = make_body_text_content("Hello world", &mut string_table);
+        let style = default_style();
+
+        let result = apply_body_formatter(&content, &style, &mut string_table)
+            .expect("formatting should succeed");
+
+        assert!(
+            !result.content_changed,
+            "plain text with no formatter should not report content_changed"
+        );
+    }
+
+    #[test]
+    fn no_op_formatting_detects_no_change_for_empty_body() {
+        let mut string_table = StringTable::new();
+        let content = TemplateContent::default();
+        let style = default_style();
+
+        let result = apply_body_formatter(&content, &style, &mut string_table)
+            .expect("formatting should succeed");
+
+        assert!(
+            !result.content_changed,
+            "empty body should not report content_changed"
+        );
+    }
+
+    #[test]
+    fn no_op_formatting_detects_no_change_for_dynamic_expression_anchor() {
+        let mut string_table = StringTable::new();
+        let mut content = TemplateContent::default();
+        content.add_with_origin(
+            Expression::int(42, SourceLocation::default(), ValueMode::ImmutableOwned),
+            TemplateSegmentOrigin::Body,
+        );
+        let style = default_style();
+
+        let result = apply_body_formatter(&content, &style, &mut string_table)
+            .expect("formatting should succeed");
+
+        assert!(
+            !result.content_changed,
+            "dynamic expression anchor with no formatter should not report content_changed"
+        );
+    }
+
+    struct InvalidAnchorFormatter;
+
+    impl crate::compiler_frontend::ast::templates::template::TemplateFormatter
+        for InvalidAnchorFormatter
+    {
+        fn format(
+            &self,
+            _input: FormatterInput,
+            _string_table: &mut StringTable,
+        ) -> Result<FormatterResult, crate::compiler_frontend::compiler_errors::CompilerMessages>
+        {
+            Ok(FormatterResult {
+                output: FormatterOutput {
+                    pieces: vec![FormatterOutputPiece::Opaque(
+                        crate::compiler_frontend::ast::templates::template_render_plan::FormatterOpaquePiece {
+                            id: FormatterAnchorId(999),
+                            kind: crate::compiler_frontend::ast::templates::template_render_plan::FormatterOpaqueKind::ChildTemplate,
+                        },
+                    )],
+                },
+                warnings: Vec::new(),
+            })
+        }
+    }
+
+    #[test]
+    fn invalid_formatter_anchor_returns_error() {
+        let mut string_table = StringTable::new();
+        let mut content = TemplateContent::default();
+        content.add_with_origin(
+            Expression::int(42, SourceLocation::default(), ValueMode::ImmutableOwned),
+            TemplateSegmentOrigin::Body,
+        );
+
+        let mut style = default_style();
+        style.formatter = Some(
+            crate::compiler_frontend::ast::templates::template::Formatter {
+                pre_format_whitespace_passes: Vec::new(),
+                formatter: Arc::new(InvalidAnchorFormatter),
+                post_format_whitespace_passes: Vec::new(),
+            },
+        );
+
+        let err = match apply_body_formatter(&content, &style, &mut string_table) {
+            Ok(_) => panic!("invalid anchor should produce an error"),
+            Err(e) => e,
+        };
+
+        let msg = err.errors.first().map(|e| e.msg.as_str()).unwrap_or("");
+        assert!(
+            msg.contains("invalid opaque anchor id 999"),
+            "expected anchor id in error message, got: {msg}"
+        );
+        assert!(
+            msg.contains("only 1 anchors exist"),
+            "expected anchor count in error message, got: {msg}"
+        );
+    }
+
+    #[test]
+    fn empty_constructor_produces_default_semantic_shape() {
+        let template = Template::empty();
+        assert!(template.content.is_empty());
+        assert!(template.unformatted_content.is_empty());
+        assert!(!template.content_needs_formatting);
+        assert!(template.render_plan.is_none());
+        assert!(template.doc_children.is_empty());
+        assert!(template.id.is_empty());
+    }
 }

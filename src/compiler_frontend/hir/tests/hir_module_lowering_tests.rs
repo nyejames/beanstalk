@@ -168,7 +168,7 @@ fn rejects_unmaterialized_template_constants_in_hir_module_constant_lowering() {
         test_location(1),
     );
 
-    let mut template_constant = Template::create_default(vec![]);
+    let mut template_constant = Template::empty();
     template_constant.kind =
         crate::compiler_frontend::ast::templates::template::TemplateType::String;
     template_constant.location = test_location(2);
@@ -208,7 +208,7 @@ fn rejects_nested_unmaterialized_template_constants_in_hir_module_constant_lower
         test_location(1),
     );
 
-    let mut template_constant = Template::create_default(vec![]);
+    let mut template_constant = Template::empty();
     template_constant.kind =
         crate::compiler_frontend::ast::templates::template::TemplateType::String;
     template_constant.location = test_location(2);

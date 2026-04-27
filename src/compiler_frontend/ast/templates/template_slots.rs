@@ -508,7 +508,7 @@ fn wrap_child_slot_contribution(
     )?;
 
     let origin = contribution_origin(atom);
-    let mut wrapped_template = Template::create_default(vec![]);
+    let mut wrapped_template = Template::empty();
     wrapped_template.content = wrapped_content;
     wrapped_template.location = contribution_location(atom);
     wrapped_template.resync_composition_metadata();

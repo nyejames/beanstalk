@@ -104,7 +104,7 @@ pub(super) fn parse_children_style_directive(
         }
 
         ExpressionKind::StringSlice(value) => {
-            let mut wrapper = Template::create_default(vec![]);
+            let mut wrapper = Template::empty();
             wrapper.kind = TemplateType::String;
             wrapper.location = argument_location.to_owned();
             wrapper.content.add(Expression::string_slice(
@@ -124,7 +124,6 @@ pub(super) fn parse_children_style_directive(
         }
     };
 
-    template.style.child_templates.push(normalized.to_owned());
-    template.explicit_style.child_templates.push(normalized);
+    template.style.child_templates.push(normalized);
     Ok(())
 }

@@ -72,13 +72,13 @@ impl Template {
         let direct_child_wrappers = inheritance.direct_child_wrappers.to_owned();
         // These are variables or special keywords passed into the template head.
         // Nested templates do not inherit formatter/style state by default.
-        let mut template = Self::create_default(vec![]);
+        let mut template = Self::empty();
         // Capture the opening token location early so style/directive errors can
         // still point at the template even if parsing later advances deeply.
         template.location = token_stream.current_location();
 
         // Templates that call any functions or have children that call functions
-        // Can't be folded at compile time (EVENTUALLY CAN FOLD THE CONST FUNCTIONS TOO).
+        // Can't be folded at compile time.
         // This is because the template might be changing at runtime.
         // If the entire template can be folded, it just becomes a string after the AST stage.
         let mut foldable = true;

@@ -93,7 +93,7 @@ fn wrap_atom_in_child_template(
         wrapped_template.resync_composition_metadata();
         wrapped_template
     } else {
-        let mut wrapped_template = Template::create_default(vec![]);
+        let mut wrapped_template = Template::empty();
         wrapped_template.location = wrapper.location.to_owned();
         wrapped_template.content = TemplateContent {
             atoms: vec![

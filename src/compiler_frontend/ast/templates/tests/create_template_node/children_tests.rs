@@ -12,12 +12,9 @@ fn fresh_marks_template_to_skip_parent_child_wrappers() {
         template_tokens_from_source("[$fresh, $markdown:\n# Hello\n]", &mut string_table);
     let context = new_constant_context(token_stream.src_path.to_owned());
 
-    let mut inherited = Template::create_default(vec![]);
+    let mut inherited = Template::empty();
     inherited.style.formatter = Some(markdown_formatter());
-    inherited
-        .style
-        .child_templates
-        .push(Template::create_default(vec![]));
+    inherited.style.child_templates.push(Template::empty());
 
     let template = Template::new(
         &mut token_stream,

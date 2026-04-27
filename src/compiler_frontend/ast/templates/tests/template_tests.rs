@@ -158,7 +158,7 @@ fn collects_and_strips_top_level_doc_comment_templates() {
     let doc_location = test_location(2);
     let runtime_location = test_location(3);
 
-    let mut doc_template = Template::create_default(vec![]);
+    let mut doc_template = Template::empty();
     doc_template.kind = TemplateType::Comment(CommentDirectiveKind::Doc);
     doc_template.location = doc_location.clone();
     doc_template.content.add(Expression::string_slice(
@@ -167,7 +167,7 @@ fn collects_and_strips_top_level_doc_comment_templates() {
         ValueMode::ImmutableOwned,
     ));
 
-    let mut runtime_template = Template::create_default(vec![]);
+    let mut runtime_template = Template::empty();
     runtime_template.kind = TemplateType::String;
     runtime_template.location = runtime_location.clone();
     runtime_template.content.add(Expression::string_slice(
@@ -216,7 +216,7 @@ fn collects_nested_doc_fragments_in_source_order() {
     let entry_dir = InternedPath::from_single_str("main.bst", &mut string_table);
     let entry_scope = entry_dir.to_owned();
 
-    let mut parent = Template::create_default(vec![]);
+    let mut parent = Template::empty();
     parent.kind = TemplateType::Comment(CommentDirectiveKind::Doc);
     parent.location = test_location(2);
     parent.content.add(Expression::string_slice(
@@ -225,7 +225,7 @@ fn collects_nested_doc_fragments_in_source_order() {
         ValueMode::ImmutableOwned,
     ));
 
-    let mut child = Template::create_default(vec![]);
+    let mut child = Template::empty();
     child.kind = TemplateType::Comment(CommentDirectiveKind::Doc);
     child.location = test_location(3);
     child.content.add(Expression::string_slice(
@@ -234,7 +234,7 @@ fn collects_nested_doc_fragments_in_source_order() {
         ValueMode::ImmutableOwned,
     ));
 
-    let mut grandchild = Template::create_default(vec![]);
+    let mut grandchild = Template::empty();
     grandchild.kind = TemplateType::Comment(CommentDirectiveKind::Doc);
     grandchild.location = test_location(4);
     grandchild.content.add(Expression::string_slice(

@@ -9,8 +9,6 @@ mod operator_policy;
 mod ordering;
 mod result_type;
 
-#[cfg(test)]
-pub use evaluator::concat_template;
 pub use evaluator::evaluate_expression;
 
 #[cfg(test)]

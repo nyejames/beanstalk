@@ -28,7 +28,7 @@ pub struct Template {
     pub kind: TemplateType,
     pub doc_children: Vec<Template>,
     pub style: Style,
-    pub explicit_style: Style,
+
     pub id: String,
     pub location: SourceLocation,
 }
@@ -51,10 +51,8 @@ impl TemplateInheritance {
 }
 
 impl Template {
-    /// Creates a default template with no inherited formatter/style state.
-    pub fn create_default(templates: Vec<Template>) -> Template {
-        let _inheritance = TemplateInheritance::from_parent_wrappers(templates);
-
+    /// Creates an empty template with default style and no content.
+    pub fn empty() -> Template {
         Template {
             content: TemplateContent::default(),
             unformatted_content: TemplateContent::default(),
@@ -63,22 +61,19 @@ impl Template {
             kind: TemplateType::StringFunction,
             doc_children: vec![],
             style: Style::default(),
-            explicit_style: Style::default(),
             id: String::new(),
             location: SourceLocation::default(),
         }
     }
 
-    /// Replaces both the effective and explicit style with the given style.
+    /// Replaces the effective style with the given style.
     pub(crate) fn apply_style(&mut self, style: Style) {
-        self.style = style.to_owned();
-        self.explicit_style = style;
+        self.style = style;
     }
 
-    /// Applies an update function to both the effective and explicit style.
+    /// Applies an update function to the effective style.
     pub(crate) fn apply_style_updates(&mut self, mut update: impl FnMut(&mut Style)) {
         update(&mut self.style);
-        update(&mut self.explicit_style);
     }
 
     /// Returns true if this template's content contains unresolved slot placeholders.
@@ -151,7 +146,7 @@ impl Template {
             kind: self.kind.to_owned(),
             doc_children: self.doc_children.to_owned(),
             style: self.style.to_owned(),
-            explicit_style: self.explicit_style.to_owned(),
+
             id: self.id.to_owned(),
             location: self.location.to_owned(),
         }

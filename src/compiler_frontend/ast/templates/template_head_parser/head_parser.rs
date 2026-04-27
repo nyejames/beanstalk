@@ -79,7 +79,7 @@ fn apply_head_compatibility(
 // - Specify the control flow of the template (is it looped or conditional)
 // - Change the ID of the template
 // - Add to the list of inherited expressions
-// - Make the scene unfoldable
+// - Control foldability of the template
 pub fn parse_template_head(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
@@ -104,14 +104,14 @@ pub fn parse_template_head(
         ast_log!("Parsing template head: ", #token);
 
         // We are doing something similar to new_ast()
-        // But with the specific scene head syntax,
-        // so expressions are allowed and should be folded where possible.
-        // Loops and if statements can end the scene head.
+        // But with the specific template head syntax,
+        // expressions are allowed and should be folded where possible.
+        // Loops and if statements can end the template head.
 
-        // Returning without a scene body
+        // Returning without a template body
         // EOF is in here for template repl atm and for the convenience
         // of not having to explicitly close the template head from a repl session.
-        // This MIGHT lead to some overly forgiving behavior (not warning about an unclosed template head)
+        // This can lead to overly forgiving behavior (not warning about an unclosed template head)
         if token == TokenKind::TemplateClose || token == TokenKind::Eof {
             return Ok(());
         }
@@ -153,7 +153,7 @@ pub fn parse_template_head(
         match token {
             // If this is a template, we have to do some clever parsing here.
             TokenKind::Symbol(name) => {
-                // Check if it's a regular scene or variable reference.
+                // Check if it's a regular template reference or variable reference.
                 // If this is a reference to a function or variable.
                 if let Some(arg) = context.get_reference(&name) {
                     enforce_head_compatibility(

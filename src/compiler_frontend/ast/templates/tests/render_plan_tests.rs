@@ -91,7 +91,7 @@ mod tests {
         let mut string_table = StringTable::new();
         let mut content = TemplateContent::default();
 
-        let child = Template::create_default(vec![]);
+        let child = Template::empty();
         let mut segment = create_text_segment(
             "child outputs",
             TemplateSegmentOrigin::Body,
