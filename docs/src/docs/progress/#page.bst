@@ -176,22 +176,32 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
         [data:
             [: External platform packages]
             [: Partial]
-            [: Targeted coverage for package-scoped imports, prelude visibility, duplicate names across packages, explicit import resolution, and non-imported external rejection.]
+            [: Broad package-scoped import and visibility coverage, with targeted external constant, Float/F64 ABI, std/math, prelude, duplicate-name, and non-imported-symbol diagnostics.]
             [: Frontend / JS]
-            [: Functions and opaque types are supported through Rust-side registry metadata. [$markdown:
+            [: Functions, opaque types, and compile-time external constants are supported through Rust-side registry metadata. [$markdown:
                 - User-authored external binding files are not supported. Alpha external packages are Rust-side builder/compiler metadata.
-                - External constants are not implemented yet.
-                - External ABI metadata does not yet include Float/F64, which blocks a proper `@std/math` package.
+                - External constants are implemented for scalar compile-time values and lower through expression parsing as ordinary literals.
+                - External ABI metadata includes [codesnippet:F64], which enables a proper Float-based [codesnippet:@std/math] package.
+                - Explicit imports are required for non-prelude external packages. [codesnippet:io] and [codesnippet:IO] remain the only current prelude symbols.
                 - External receiver methods are not a recommended expansion surface yet. Prefer free functions until external methods are keyed by nominal receiver type rather than broad ABI metadata.
-                - JS lowering for standard external packages is still explicit ID-to-runtime-name mapping.
+                - JS lowering now resolves external runtime names through per-function lowering metadata in the registry.
+                - [codesnippet:InlineExpression] JS lowering metadata exists but is not implemented yet.
                 - Wasm lowering for external packages is experimental and should not be counted as Alpha support.
             ]]
         ]
 
         [data:
             [: Standard math package]
-            [: Alpha testing ground]
-            [: Use @std/math to validate external constants, Float/F64 ABI, package-scoped imports, JS external lowering, and explicit non-prelude import behavior before larger platform APIs like canvas.]
+            [: Supported]
+            [: Targeted success and diagnostic coverage for direct, grouped, and aliased imports; constants; const-context constants; arity errors; type errors; missing symbols; and non-imported access.]
+            [: JS / HTML]
+            [: [codesnippet:@std/math] exposes [codesnippet:PI], [codesnippet:TAU], [codesnippet:E], and Float functions backed by JavaScript [codesnippet:Math]. [$markdown:
+                - Implemented functions: [codesnippet:sin], [codesnippet:cos], [codesnippet:tan], [codesnippet:atan2], [codesnippet:log], [codesnippet:log2], [codesnippet:log10], [codesnippet:exp], [codesnippet:pow], [codesnippet:sqrt], [codesnippet:abs], [codesnippet:floor], [codesnippet:ceil], [codesnippet:round], [codesnippet:trunc], [codesnippet:min], [codesnippet:max], and [codesnippet:clamp].
+                - All functions currently accept and return [codesnippet:Float].
+                - The package is not prelude-imported. Users must explicitly import the required symbols from [codesnippet:@std/math].
+                - JS helpers are emitted only when the matching external function is referenced.
+                - Wasm support for this package remains deferred/experimental.
+            ]]
         ]
 
         [data:
@@ -400,6 +410,12 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
             [: Choice scope]
             [: Post-Alpha unless promoted]
             [: Unit-only choices are the current Alpha contract. Constructors, payloads, tagged/default declarations, and full tagged unions stay deferred.]
+        ]
+
+        [data:
+            [: External package cleanup]
+            [: Alpha cleanup]
+            [: Keep adding small standard-package fixtures as the registry grows. Prioritise collision checks, explicit import visibility, constant folding boundaries, and backend lowering contracts over broad API expansion.]
         ]
 
         [data:
