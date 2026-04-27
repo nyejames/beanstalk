@@ -109,8 +109,8 @@ To see the progress and current priority goals of the compiler and language, con
 
 Before finishing code changes, always run `just validate`.
 
-This executes:
-- `cargo clippy`
+This automatically executes:
+- `cargo clippy --all-targets --all-features -- -D warnings`
 - `cargo test`
 - `cargo run tests`
 - `cargo fmt --check`

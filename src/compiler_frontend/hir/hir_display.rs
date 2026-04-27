@@ -89,6 +89,18 @@ impl<'a> HirDisplayContext<'a> {
         }
     }
 
+    #[cfg(feature = "show_hir")]
+    pub(crate) fn with_side_table(mut self, side_table: &'a HirSideTable) -> Self {
+        self.side_table = Some(side_table);
+        self
+    }
+
+    #[cfg(feature = "show_hir")]
+    pub(crate) fn with_type_context(mut self, type_context: &'a TypeContext) -> Self {
+        self.type_context = Some(type_context);
+        self
+    }
+
     pub(crate) fn render_module(&self, module: &HirModule) -> String {
         let mut out = String::with_capacity(
             module.blocks.len() * 160 + module.functions.len() * 64 + module.structs.len() * 64,
