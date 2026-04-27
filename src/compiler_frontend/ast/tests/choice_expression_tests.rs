@@ -40,12 +40,13 @@ fn resolves_choice_variant_expressions_with_choice_types() {
         .expect("expected 'current' declaration in start function");
 
     let (nominal_path, variant, tag) = match &current_declaration.value.kind {
-        ExpressionKind::ChoiceVariant {
+        ExpressionKind::ChoiceConstruct {
             nominal_path,
             variant,
             tag,
+            ..
         } => (nominal_path, *variant, *tag),
-        other => panic!("expected ChoiceVariant, got {:?}", other),
+        other => panic!("expected ChoiceConstruct, got {:?}", other),
     };
     assert_eq!(tag, 0, "expected Status::Ready to have tag 0");
     assert_eq!(
@@ -83,12 +84,13 @@ fn resolves_choice_variant_expressions_with_choice_types() {
         .expect("expected 'selected' declaration in make_status");
 
     let (nominal_path, variant, tag) = match &selected_declaration.value.kind {
-        ExpressionKind::ChoiceVariant {
+        ExpressionKind::ChoiceConstruct {
             nominal_path,
             variant,
             tag,
+            ..
         } => (nominal_path, *variant, *tag),
-        other => panic!("expected ChoiceVariant, got {:?}", other),
+        other => panic!("expected ChoiceConstruct, got {:?}", other),
     };
     assert_eq!(tag, 1, "expected Status::Busy to have tag 1");
     assert_eq!(

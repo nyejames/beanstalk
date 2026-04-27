@@ -28,6 +28,7 @@ use rustc_hash::FxHashMap;
 pub(crate) enum CallSurfaceKind {
     Function,
     StructConstructor,
+    ChoiceConstructor,
     ReceiverMethod,
     BuiltinMember,
     HostFunction,
@@ -50,6 +51,13 @@ impl<'a> CallDiagnosticContext<'a> {
     pub(crate) fn struct_constructor(callee_name: &'a str) -> Self {
         Self {
             kind: CallSurfaceKind::StructConstructor,
+            callee_name,
+        }
+    }
+
+    pub(crate) fn choice_constructor(callee_name: &'a str) -> Self {
+        Self {
+            kind: CallSurfaceKind::ChoiceConstructor,
             callee_name,
         }
     }
@@ -79,6 +87,7 @@ impl<'a> CallDiagnosticContext<'a> {
         match self.kind {
             CallSurfaceKind::Function => "Function",
             CallSurfaceKind::StructConstructor => "Struct constructor",
+            CallSurfaceKind::ChoiceConstructor => "Choice constructor",
             CallSurfaceKind::ReceiverMethod => "Receiver method",
             CallSurfaceKind::BuiltinMember => "Builtin member",
             CallSurfaceKind::HostFunction => "Host function",
@@ -87,29 +96,31 @@ impl<'a> CallDiagnosticContext<'a> {
 
     fn slot_noun(self) -> &'static str {
         match self.kind {
-            CallSurfaceKind::StructConstructor => "field",
+            CallSurfaceKind::StructConstructor | CallSurfaceKind::ChoiceConstructor => "field",
             _ => "parameter",
         }
     }
 
     fn known_slots_label(self) -> &'static str {
         match self.kind {
-            CallSurfaceKind::StructConstructor => "Known fields",
+            CallSurfaceKind::StructConstructor | CallSurfaceKind::ChoiceConstructor => {
+                "Known fields"
+            }
             _ => "Known parameters",
         }
     }
 
     fn slot_noun_title(self) -> &'static str {
         match self.kind {
-            CallSurfaceKind::StructConstructor => "Field",
+            CallSurfaceKind::StructConstructor | CallSurfaceKind::ChoiceConstructor => "Field",
             _ => "Parameter",
         }
     }
 
     fn primary_conversion_suggestion(self) -> &'static str {
         match self.kind {
-            CallSurfaceKind::StructConstructor => {
-                "Convert this field value to the declared struct field type"
+            CallSurfaceKind::StructConstructor | CallSurfaceKind::ChoiceConstructor => {
+                "Convert this field value to the declared field type"
             }
             _ => "Convert the argument to the expected type",
         }
@@ -225,6 +236,12 @@ pub(crate) fn expectations_from_struct_fields(fields: &[Declaration]) -> Vec<Par
             },
         })
         .collect()
+}
+
+pub(crate) fn expectations_from_choice_payload_fields(
+    fields: &[Declaration],
+) -> Vec<ParameterExpectation> {
+    expectations_from_struct_fields(fields)
 }
 
 pub(crate) fn expectations_from_receiver_method_signature(

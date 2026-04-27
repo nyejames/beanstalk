@@ -136,7 +136,7 @@ impl Expression {
                     upper.as_string(string_table)
                 )
             }
-            ExpressionKind::ChoiceVariant { variant, .. } => {
+            ExpressionKind::ChoiceConstruct { variant, .. } => {
                 string_table.resolve(*variant).to_owned()
             }
             ExpressionKind::NoValue => String::new(),
@@ -605,6 +605,32 @@ impl Expression {
         )
     }
 
+    pub fn choice_construct(
+        nominal_path: InternedPath,
+        variant: StringId,
+        tag: usize,
+        fields: Vec<Declaration>,
+        data_type: DataType,
+        location: SourceLocation,
+        value_mode: ValueMode,
+    ) -> Self {
+        let contains_regular_division = fields
+            .iter()
+            .any(|field| field.value.contains_regular_division);
+        Self::new(
+            ExpressionKind::ChoiceConstruct {
+                nominal_path,
+                variant,
+                tag,
+                fields,
+            },
+            location,
+            data_type,
+            value_mode,
+        )
+        .with_regular_division_provenance(contains_regular_division)
+    }
+
     pub fn is_compile_time_constant(&self) -> bool {
         self.const_value_kind().is_compile_time_value()
     }
@@ -616,8 +642,20 @@ impl Expression {
             | ExpressionKind::StringSlice(_)
             | ExpressionKind::Bool(_)
             | ExpressionKind::Char(_)
-            | ExpressionKind::Path(_)
-            | ExpressionKind::ChoiceVariant { .. } => ConstValueKind::Literal,
+            | ExpressionKind::Path(_) => ConstValueKind::Literal,
+
+            ExpressionKind::ChoiceConstruct { fields, .. } => {
+                if fields.is_empty() {
+                    ConstValueKind::Literal
+                } else if fields
+                    .iter()
+                    .all(|field| field.value.is_compile_time_constant())
+                {
+                    ConstValueKind::Composite
+                } else {
+                    ConstValueKind::NonConst
+                }
+            }
             ExpressionKind::Collection(items) => {
                 if items.iter().all(Expression::is_compile_time_constant) {
                     ConstValueKind::Composite
@@ -779,15 +817,18 @@ pub enum ExpressionKind {
         to_type: DataType,
     },
 
-    /// Explicit choice variant value: `Choice::Variant`.
+    /// Explicit choice variant construction: `Choice::Variant` or `Choice::Variant(...)`.
     ///
     /// WHY: choice values must not masquerade as raw integer literals in AST.
     /// The tag index is deterministic but is an implementation detail; the
     /// nominal path and variant name are the semantic identity.
-    ChoiceVariant {
+    /// For unit variants, `fields` is empty. For payload variants, `fields`
+    /// carries the resolved constructor arguments in declaration order.
+    ChoiceConstruct {
         nominal_path: InternedPath,
         variant: StringId,
         tag: usize,
+        fields: Vec<Declaration>,
     },
 }
 
@@ -801,7 +842,7 @@ impl ExpressionKind {
                 | ExpressionKind::StringSlice(_)
                 | ExpressionKind::Char(_)
                 | ExpressionKind::Path(_)
-                | ExpressionKind::ChoiceVariant { .. }
+                | ExpressionKind::ChoiceConstruct { .. }
         )
     }
 

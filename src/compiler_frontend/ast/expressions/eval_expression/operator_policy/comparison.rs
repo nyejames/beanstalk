@@ -6,6 +6,7 @@ use crate::compiler_frontend::ast::expressions::expression::Operator;
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::return_rule_error;
 
 pub(super) fn is_comparison_operator(op: &Operator) -> bool {
     matches!(
@@ -48,6 +49,16 @@ pub(super) fn resolve_comparison_operator_type(
                 | Operator::GreaterThan
                 | Operator::GreaterThanOrEqual,
             ) => Ok(DataType::Bool),
+            (DataType::Choices { .. }, Operator::Equality | Operator::NotEqual) => {
+                return_rule_error!(
+                    "Equality comparison is not supported for choice variants. Use pattern matching instead.",
+                    location.clone(),
+                    {
+                        CompilationStage => "Expression Evaluation",
+                        PrimarySuggestion => "Use 'if value is: case Variant => ...' for choice comparison",
+                    }
+                )
+            }
             _ => invalid_comparison_types(lhs, rhs, op, location, string_table),
         };
     }

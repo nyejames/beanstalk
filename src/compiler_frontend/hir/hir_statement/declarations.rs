@@ -154,6 +154,23 @@ impl<'a> HirBuilder<'a> {
                     value: Box::new(lowered_value),
                 }))
             }
+            ExpressionKind::ChoiceConstruct { tag, fields, .. } => {
+                let mut lowered_fields = Vec::with_capacity(fields.len());
+                for field in fields {
+                    let Some(lowered_value) = self.lower_const_value(&field.value, location)?
+                    else {
+                        return Ok(None);
+                    };
+                    lowered_fields.push(HirConstField {
+                        name: field.id.to_string(self.string_table),
+                        value: lowered_value,
+                    });
+                }
+                Ok(Some(HirConstValue::Choice {
+                    tag: *tag,
+                    fields: lowered_fields,
+                }))
+            }
             ExpressionKind::Template(_) => return_hir_transformation_error!(
                 "Template constant reached HIR module-constant lowering before AST materialized it.",
                 self.hir_error_location(location)

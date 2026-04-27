@@ -234,6 +234,76 @@ path = "choice_payload_constructor_still_rejected_until_phase_2"
 tags = ["integration","diagnostics"]
 
 [[case]]
+id = "choice_payload_constructor_positional_success"
+path = "choice_payload_constructor_positional_success"
+tags = ["integration","language"]
+
+[[case]]
+id = "choice_payload_constructor_named_success"
+path = "choice_payload_constructor_named_success"
+tags = ["integration","language"]
+
+[[case]]
+id = "choice_payload_constructor_mixed_success"
+path = "choice_payload_constructor_mixed_success"
+tags = ["integration","language"]
+
+[[case]]
+id = "choice_payload_constructor_missing_field_rejected"
+path = "choice_payload_constructor_missing_field_rejected"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "choice_payload_constructor_unknown_field_rejected"
+path = "choice_payload_constructor_unknown_field_rejected"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "choice_payload_constructor_duplicate_field_rejected"
+path = "choice_payload_constructor_duplicate_field_rejected"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "choice_payload_constructor_positional_after_named_rejected"
+path = "choice_payload_constructor_positional_after_named_rejected"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "choice_payload_constructor_type_mismatch_rejected"
+path = "choice_payload_constructor_type_mismatch_rejected"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "choice_payload_constructor_without_args_rejected"
+path = "choice_payload_constructor_without_args_rejected"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "choice_const_unit_success"
+path = "choice_const_unit_success"
+tags = ["integration","language"]
+
+[[case]]
+id = "choice_const_payload_success"
+path = "choice_const_payload_success"
+tags = ["integration","language"]
+
+[[case]]
+id = "choice_payload_const_non_const_field_rejected"
+path = "choice_payload_const_non_const_field_rejected"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "choice_payload_structural_equality_deferred"
+path = "choice_payload_structural_equality_deferred"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "choice_imported_payload_constructor_success"
+path = "choice_imported_payload_constructor_success"
+tags = ["integration","language"]
+
+[[case]]
 id = "choice_default_decl_deferred"
 path = "choice_default_decl_deferred"
 tags = ["integration","diagnostics"]

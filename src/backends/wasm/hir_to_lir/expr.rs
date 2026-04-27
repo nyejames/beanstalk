@@ -38,7 +38,16 @@ pub(crate) fn lower_expression(
                 prefer_move: false,
             })
         }
-        HirExpressionKind::ChoiceVariant { variant_index, .. } => {
+        HirExpressionKind::ChoiceVariant {
+            variant_index,
+            payload_fields,
+            ..
+        } => {
+            if !payload_fields.is_empty() {
+                return Err(lir_transformation_error(
+                    "Wasm backend does not yet support choice payload variants",
+                ));
+            }
             let dst = context.alloc_temp(WasmAbiType::I64);
             statements.push(WasmLirStmt::ConstI64 {
                 dst,

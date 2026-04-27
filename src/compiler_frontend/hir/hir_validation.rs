@@ -311,6 +311,17 @@ impl<'a> HirValidator<'a> {
             HirConstValue::Result { value, .. } => {
                 self.validate_module_const_value(value)?;
             }
+            HirConstValue::Choice { fields, .. } => {
+                for field in fields {
+                    if field.name.trim().is_empty() {
+                        return Err(self.error_with_hir(
+                            "Module constant choice contains an empty field name",
+                            None,
+                        ));
+                    }
+                    self.validate_module_const_value(&field.value)?;
+                }
+            }
             HirConstValue::Int(_)
             | HirConstValue::Float(_)
             | HirConstValue::Bool(_)
@@ -792,12 +803,19 @@ impl<'a> HirValidator<'a> {
             | HirExpressionKind::Char(_)
             | HirExpressionKind::StringLiteral(_) => {}
 
-            HirExpressionKind::ChoiceVariant { choice_id, .. } => {
+            HirExpressionKind::ChoiceVariant {
+                choice_id,
+                payload_fields,
+                ..
+            } => {
                 if self.module.choices.get(choice_id.0 as usize).is_none() {
                     return Err(self.error_with_hir(
                         format!("Invalid ChoiceId {choice_id:?} in expression"),
                         anchor,
                     ));
+                }
+                for (_name, field_expr) in payload_fields {
+                    self.validate_expression(field_expr, anchor)?;
                 }
             }
 

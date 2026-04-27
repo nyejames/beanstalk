@@ -1031,8 +1031,13 @@ fn record_shared_reads_in_expression(
         | HirExpressionKind::Float(_)
         | HirExpressionKind::Bool(_)
         | HirExpressionKind::Char(_)
-        | HirExpressionKind::StringLiteral(_)
-        | HirExpressionKind::ChoiceVariant { .. } => {}
+        | HirExpressionKind::StringLiteral(_) => {}
+
+        HirExpressionKind::ChoiceVariant { payload_fields, .. } => {
+            for (_name, field_expr) in payload_fields {
+                record_shared_reads_in_expression(env, field_expr, location.clone(), roots)?;
+            }
+        }
 
         HirExpressionKind::Load(place) => {
             let value_location = env
@@ -1232,8 +1237,13 @@ fn collect_expression_roots(
         | HirExpressionKind::Float(_)
         | HirExpressionKind::Bool(_)
         | HirExpressionKind::Char(_)
-        | HirExpressionKind::StringLiteral(_)
-        | HirExpressionKind::ChoiceVariant { .. } => {}
+        | HirExpressionKind::StringLiteral(_) => {}
+
+        HirExpressionKind::ChoiceVariant { payload_fields, .. } => {
+            for (_name, field_expr) in payload_fields {
+                collect_expression_roots(layout, state, field_expr, out, location.clone())?;
+            }
+        }
     }
 
     Ok(())

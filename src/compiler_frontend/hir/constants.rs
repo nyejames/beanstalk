@@ -50,6 +50,12 @@ pub enum HirConstValue {
         variant: crate::compiler_frontend::hir::expressions::ResultVariant,
         value: Box<HirConstValue>,
     },
+    Choice {
+        #[allow(dead_code)]
+        // Tag is stored during lowering; Alpha validation only checks the value.
+        tag: usize,
+        fields: Vec<HirConstField>,
+    },
 }
 
 #[derive(Debug, Clone)]

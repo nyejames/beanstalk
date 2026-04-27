@@ -1881,7 +1881,7 @@ fn lowers_collection_set_builtin_from_explicit_ast_node_to_index_assignment() {
     }
 }
 
-/// Verifies that `ExpressionKind::ChoiceVariant` lowers to `HirExpressionKind::ChoiceVariant`
+/// Verifies that `ExpressionKind::ChoiceConstruct` lowers to `HirExpressionKind::ChoiceVariant`
 /// with the correct tag index, and that the result type is `HirTypeKind::Choice`.
 ///
 /// WHY: this is the core contract of the Choice Hardening refactor — choice values must not
@@ -1914,10 +1914,11 @@ fn lowers_choice_variant_expression_to_hir_choice_variant() {
     };
 
     let choice_expr = Expression::new(
-        ExpressionKind::ChoiceVariant {
+        ExpressionKind::ChoiceConstruct {
             nominal_path: status_path.clone(),
             variant: ready_name,
             tag: 0,
+            fields: vec![],
         },
         location.clone(),
         choice_type,
@@ -1935,7 +1936,14 @@ fn lowers_choice_variant_expression_to_hir_choice_variant() {
         HirExpressionKind::ChoiceVariant {
             choice_id,
             variant_index,
-        } => (*choice_id, *variant_index),
+            payload_fields,
+        } => {
+            assert!(
+                payload_fields.is_empty(),
+                "unit variant should have no payload fields"
+            );
+            (*choice_id, *variant_index)
+        }
         other => panic!("expected ChoiceVariant, got {other:?}"),
     };
 

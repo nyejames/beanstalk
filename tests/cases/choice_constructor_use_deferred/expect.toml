@@ -2,4 +2,4 @@
 mode = "failure"
 warnings = "forbid"
 error_type = "Rule"
-message_contains = ["Constructor-call syntax 'Status::Ready(...)' is deferred for Alpha"]
+message_contains = ["Unit variant 'Status::Ready' cannot be called with empty parentheses"]

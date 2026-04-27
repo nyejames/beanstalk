@@ -496,11 +496,28 @@ impl<'a> HirDisplayContext<'a> {
             HirExpressionKind::ChoiceVariant {
                 choice_id,
                 variant_index,
+                payload_fields,
             } => {
+                let fields_str = if payload_fields.is_empty() {
+                    String::new()
+                } else {
+                    let rendered: Vec<String> = payload_fields
+                        .iter()
+                        .map(|(name, expr)| {
+                            format!(
+                                "{}: {}",
+                                self.string_table.resolve(*name),
+                                self.render_expression(expr)
+                            )
+                        })
+                        .collect();
+                    format!(", fields=[{}]", rendered.join(", "))
+                };
                 format!(
-                    "choice_variant(choice={}, tag={})",
+                    "choice_variant(choice={}, tag={}){}",
                     self.choice_label(*choice_id),
-                    variant_index
+                    variant_index,
+                    fields_str
                 )
             }
         }

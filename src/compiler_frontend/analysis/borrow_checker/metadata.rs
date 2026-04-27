@@ -802,8 +802,13 @@ fn collect_expression_loaded_locals(expression: &HirExpression, visitor: &mut im
         | HirExpressionKind::Float(_)
         | HirExpressionKind::Bool(_)
         | HirExpressionKind::Char(_)
-        | HirExpressionKind::StringLiteral(_)
-        | HirExpressionKind::ChoiceVariant { .. } => {}
+        | HirExpressionKind::StringLiteral(_) => {}
+
+        HirExpressionKind::ChoiceVariant { payload_fields, .. } => {
+            for (_name, field_expr) in payload_fields {
+                collect_expression_loaded_locals(field_expr, visitor);
+            }
+        }
     }
 }
 

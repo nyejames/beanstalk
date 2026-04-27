@@ -889,8 +889,20 @@ fn normalize_expression_templates_with_context(
         | ExpressionKind::Bool(_)
         | ExpressionKind::Char(_)
         | ExpressionKind::Path(_)
-        | ExpressionKind::Reference(_)
-        | ExpressionKind::ChoiceVariant { .. } => None,
+        | ExpressionKind::Reference(_) => None,
+
+        ExpressionKind::ChoiceConstruct { fields, .. } => {
+            for field in fields {
+                normalize_expression_templates(
+                    &mut field.value,
+                    source_file_scope,
+                    path_format_config,
+                    project_path_resolver,
+                    string_table,
+                )?;
+            }
+            None
+        }
     };
 
     // If we folded a template, replace the expression with a StringSlice

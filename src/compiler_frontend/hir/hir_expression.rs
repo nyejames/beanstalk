@@ -51,14 +51,15 @@ impl<'a> HirBuilder<'a> {
         self.log_expression_input(expr);
 
         let lowered = match &expr.kind {
-            ExpressionKind::ChoiceVariant {
+            ExpressionKind::ChoiceConstruct {
                 nominal_path,
                 variant: _,
                 tag,
+                fields,
             } => {
                 let DataType::Choices { variants, .. } = &expr.data_type else {
                     return_hir_transformation_error!(
-                        "ChoiceVariant expression has non-choice data type",
+                        "ChoiceConstruct expression has non-choice data type",
                         self.hir_error_location(&expr.location)
                     );
                 };
@@ -67,16 +68,38 @@ impl<'a> HirBuilder<'a> {
                 let region = self.current_region_or_error(&expr.location)?;
                 let ty = self.lower_data_type(&expr.data_type, &expr.location)?;
 
+                let mut prelude = vec![];
+                let mut payload_fields = Vec::with_capacity(fields.len());
+
+                for field in fields {
+                    let lowered = self.lower_expression(&field.value)?;
+                    prelude.extend(lowered.prelude);
+                    payload_fields.push((
+                        field
+                            .id
+                            .name()
+                            .unwrap_or_else(|| self.string_table.intern("<anonymous>")),
+                        lowered.value,
+                    ));
+                }
+
+                let value_kind = if fields.iter().all(|f| f.value.is_compile_time_constant()) {
+                    ValueKind::Const
+                } else {
+                    ValueKind::RValue
+                };
+
                 Ok(LoweredExpression {
-                    prelude: vec![],
+                    prelude,
                     value: self.make_expression(
                         &expr.location,
                         HirExpressionKind::ChoiceVariant {
                             choice_id,
                             variant_index: *tag,
+                            payload_fields,
                         },
                         ty,
-                        ValueKind::Const,
+                        value_kind,
                         region,
                     ),
                 })

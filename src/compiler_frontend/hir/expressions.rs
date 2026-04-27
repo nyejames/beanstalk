@@ -7,6 +7,7 @@ use crate::compiler_frontend::hir::hir_datatypes::TypeId;
 use crate::compiler_frontend::hir::ids::{ChoiceId, FieldId, HirValueId, RegionId, StructId};
 use crate::compiler_frontend::hir::operators::{HirBinOp, HirUnaryOp};
 use crate::compiler_frontend::hir::places::HirPlace;
+use crate::compiler_frontend::symbols::string_interning::StringId;
 
 #[derive(Debug, Clone)]
 pub struct HirExpression {
@@ -135,9 +136,12 @@ pub enum HirExpressionKind {
     ///
     /// WHY: choice tags are nominal, not raw integers. A dedicated HIR node
     /// preserves choice identity for backend lowering and future payload support.
+    /// For payload variants, `payload_fields` carries lowered field expressions
+    /// keyed by field name (StringId). Unit variants use an empty vec.
     ChoiceVariant {
         choice_id: ChoiceId,
         variant_index: usize,
+        payload_fields: Vec<(StringId, HirExpression)>,
     },
 }
 
