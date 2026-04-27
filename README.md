@@ -8,9 +8,9 @@
 
 # 🌱
 
-<p>⚠️ This compiler is in Alpha ⚠️</p> 
+<p>⚠️ This project is in Alpha ⚠️</p> 
 
-<p><a href="https://nyejames.github.io/beanstalk/">The documentation site</a> was created using the <a href="https://github.com/nyejames/beanstalk/blob/main/docs/src">Beanstalk</a>. </p>
+<p><a href="https://nyejames.github.io/beanstalk/">The documentation site</a> was created using <a href="https://github.com/nyejames/beanstalk/blob/main/docs/src">Beanstalk</a>. </p>
 
 <p>The language is under rapid active development and evolving constantly. See <a href="https://github.com/nyejames/beanstalk/blob/main/CONTRIBUTING.md">CONTRIBUTING</a> if you're inspired to help out</p>
 </div>
@@ -22,7 +22,7 @@
 ## First Class String Template Syntax
 
 </div>
-<p>Beanstalk is designed to be an opinionated and refreshing take on modern app building.</p>
+<p>Beanstalk is designed to be an opinionated, batteries-included, refreshing take on modern app building.</p>
 
 <p>This project is focused on the long term and carefully designed to be versatile and future proof.</p>
 
@@ -145,8 +145,8 @@ Beanstalk not being saturated in LLM training data may provide a the long term a
 
 </div>
 
-Here is the current <a href="https://github.com/nyejames/beanstalk/blob/main/docs/roadmap/roadmap.md">Roadmap to the first alpha release</a>.
+Here is the current <a href="https://nyejames.github.io/beanstalk/docs/progress/">implementation progress matrix</a>.
 
-The compiler is in alpha, but already has a broad set of tooling, build system work and backend scaffolding already done.
+This project already has a broad set of tooling, build system work and most of the backend/frontend scaffolding already done.
 
 <br>
