@@ -1,0 +1,9 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = ["{ tag: 0 }", "{ tag: 1, message: ", "{ tag: 2, retry_count: "]
+must_not_contain = ["Response(", "Status(", "switch (", "while (true)"]

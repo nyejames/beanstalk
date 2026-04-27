@@ -39,6 +39,11 @@ path = "adversarial_match_result_option_flow"
 tags = ["adversarial", "bug-hunt"]
 
 [[case]]
+id = "adversarial_choice_payload_control_flow"
+path = "adversarial_choice_payload_control_flow"
+tags = ["adversarial", "bug-hunt"]
+
+[[case]]
 id = "adversarial_multi_bind_in_loops"
 path = "adversarial_multi_bind_in_loops"
 tags = ["adversarial", "bug-hunt"]
@@ -496,6 +501,16 @@ tags = ["integration","backend-contract"]
 [[case]]
 id = "js_choice_match_lowering_shape"
 path = "js_choice_match_lowering_shape"
+tags = ["integration","backend-contract","control-flow"]
+
+[[case]]
+id = "js_choice_payload_carrier_shape"
+path = "js_choice_payload_carrier_shape"
+tags = ["integration","backend-contract"]
+
+[[case]]
+id = "js_choice_payload_match_shape"
+path = "js_choice_payload_match_shape"
 tags = ["integration","backend-contract","control-flow"]
 
 [[case]]
