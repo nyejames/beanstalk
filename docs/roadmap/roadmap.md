@@ -9,10 +9,6 @@ Use the language surface integration matrix as a reference for what is currently
 ---
 
 # Plans / Notes / TODOS
-- Core Math library
-This will be for testing / hardening the external import system.
-Full plan: `docs/roadmap/plans/std-math.md`
-
 - full tagged unions
 - full pattern-matching design (capture patterns)
 - full traits implementation
