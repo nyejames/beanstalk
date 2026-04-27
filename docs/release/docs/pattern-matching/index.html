@@ -312,7 +312,7 @@ body {
         </div>
     </nav>
      <h1 style="font-size: 2em;text-align: center;"> PATTERN MATCHING</h1>
-    <section class="container"><h1>Pattern matching</h1><p>    Pattern matching is a control-flow tool for checking one value against multiple patterns.     Alpha supports literal patterns, relational ordered-scalar patterns, guards, unit choice variants, and explicit `else =&gt;` fallback arms.</p><p>    Non-choice matches must include `else =&gt;`.     Choice matches can omit `else =&gt;` only when every unit variant is covered and no arm has a guard.</p><pre style="
+    <section class="container"><h1>Pattern matching</h1><p>    Pattern matching is a control-flow tool for checking one value against multiple patterns.     Alpha supports literal patterns, relational ordered-scalar patterns, guards, choice variant patterns (including payload captures), and explicit `else =&gt;` fallback arms.</p><p>    Non-choice matches must include `else =&gt;`.     Choice matches can omit `else =&gt;` only when every variant is covered and no arm has a guard.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
         border-radius: 5px;
@@ -329,7 +329,7 @@ body {
         case <span class='bst-code-operator'>&gt;</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>70</span> <span class='bst-code-keyword'>if</span> true <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> result <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;passing&quot;</span>
         <span class='bst-code-keyword'>else</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> result <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;retry&quot;</span>
     ;
-    </code></pre><p>    Choices use unit variants in the Alpha surface.     Exhaustive choice matches do not need a fallback arm when every variant is covered.</p><pre style="
+    </code></pre><p>    Choices support unit and payload variant patterns.     Exhaustive choice matches do not need a fallback arm when every variant is covered.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
         border-radius: 5px;
@@ -347,7 +347,31 @@ body {
         case <span class='bst-code-struct'>Busy</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> label <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;busy&quot;</span>
         case <span class='bst-code-struct'>Offline</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> label <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;offline&quot;</span>
     ;
-    </code></pre><p>    Negated patterns and capture/tagged patterns such as `case Item |value| =&gt;` are deferred for Alpha.     Beanstalk does not use wildcard `case _ =&gt;` arms; use `else =&gt;` for fallback behavior.</p></section>
+    </code></pre><p>    Payload variants use constructor-like patterns with the original field names.     Captured bindings are available in the arm body and in guards.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>Response</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-struct'>Success,</span>
+        <span class='bst-code-struct'>Err</span> <span class='bst-code-operator'>|</span>
+            message <span class='bst-code-struct'>String,</span>
+        <span class='bst-code-operator'>|</span>,
+        <span class='bst-code-struct'>Pending</span> <span class='bst-code-operator'>|</span>
+            retry_count <span class='bst-code-struct'>Int,</span>
+            message <span class='bst-code-struct'>String,</span>
+        <span class='bst-code-operator'>|</span>,
+    ;
+
+    <span class='bst-code-keyword'>if</span> response is<span class='bst-code-operator'>:</span>
+        case <span class='bst-code-struct'>Success</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;done&quot;</span><span class='bst-code-parenthesis'>)</span>
+        case <span class='bst-code-struct'>Err</span><span class='bst-code-parenthesis'>(</span>message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span>message<span class='bst-code-parenthesis'>)</span>
+        case <span class='bst-code-struct'>Pending</span><span class='bst-code-parenthesis'>(</span>retry_count, message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span>message<span class='bst-code-parenthesis'>)</span>
+    ;
+    </code></pre><p>    Capture names must exactly match the declared payload field names.     Renaming captures (e.g. `case Err(text as message)`) is deferred.</p><p>    Exhaustiveness is tag-level: `case Err(message)` covers all `Err` values regardless of payload content.</p><p>    Negated patterns and general capture/tagged patterns such as `case Item |value| =&gt;` are deferred for Alpha.     Beanstalk does not use wildcard `case _ =&gt;` arms; use `else =&gt;` for fallback behavior.</p></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

@@ -229,11 +229,6 @@ path = "choice_payload_imported_field_type_success"
 tags = ["integration","language"]
 
 [[case]]
-id = "choice_payload_constructor_still_rejected_until_phase_2"
-path = "choice_payload_constructor_still_rejected_until_phase_2"
-tags = ["integration","diagnostics"]
-
-[[case]]
 id = "choice_payload_constructor_positional_success"
 path = "choice_payload_constructor_positional_success"
 tags = ["integration","language"]
@@ -404,8 +399,8 @@ path = "choice_default_decl_deferred"
 tags = ["integration","diagnostics"]
 
 [[case]]
-id = "choice_constructor_use_deferred"
-path = "choice_constructor_use_deferred"
+id = "choice_unit_constructor_call_rejected"
+path = "choice_unit_constructor_call_rejected"
 tags = ["integration","diagnostics"]
 
 [[case]]
@@ -474,8 +469,8 @@ path = "js_choice_match_lowering_shape"
 tags = ["integration","backend-contract","control-flow"]
 
 [[case]]
-id = "choice_constructor_imported_deferred_rejected"
-path = "choice_constructor_imported_deferred_rejected"
+id = "choice_imported_unit_constructor_call_rejected"
+path = "choice_imported_unit_constructor_call_rejected"
 tags = ["integration","diagnostics"]
 
 [[case]]

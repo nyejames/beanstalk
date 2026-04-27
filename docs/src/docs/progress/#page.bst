@@ -127,18 +127,18 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
 
         [data:
             [: Choices]
-            [: Partial]
-            [: Targeted parser, declaration, match, import, assignment, return, JS carrier-shape, and constructor coverage.]
+            [: Supported]
+            [: Broad parser, declaration, constructor, match, import, assignment, return, JS carrier-shape, and payload coverage.]
             [: JS / HTML]
-            [: Unit variants use value syntax `Choice::Variant`. Record-body payload declarations are parsed and type-checked. Payload constructors support positional and named arguments. Const choice values are supported for unit and payload variants. Payload shorthand is rejected. Payload structural equality is rejected. Payload match extraction, generic choices, recursive choices, and direct payload field access remain deferred.]
+            [: Unit variants use `Choice::Variant`. Empty constructor calls are invalid. Record-body payload declarations are parsed and type-checked. Payload constructors support positional and named arguments. Payload match extraction uses constructor-like patterns with original field names only. Const choice values are supported for unit and payload variants. Payload shorthand is rejected. Payload structural equality is deferred. Generic choices, recursive choices, and direct payload field access remain deferred.]
         ]
 
         [data:
             [: Pattern matching]
             [: Partial]
-            [: Broad literal and choice-match coverage, including exhaustiveness and diagnostics.]
+            [: Broad literal, choice-match, and payload-capture coverage, including exhaustiveness and diagnostics.]
             [: JS / HTML]
-            [: Literal patterns, choice variants, relational ordered-scalar patterns, guards, and else are supported. Wildcard in case arms is not supported—use else => instead. Choice payload capture patterns are planned for promotion in Phase 4. General capture/tagged patterns, rename captures, and nested patterns remain deferred.]
+            [: Literal patterns, choice variant patterns (including payload captures), relational ordered-scalar patterns, guards, and else are supported. Wildcard in case arms is not supported—use else => instead. General capture/tagged patterns, rename captures, and nested payload patterns remain deferred.]
         ]
 
         [data:
@@ -335,17 +335,24 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
         ]
 
         [data:
-            [: Choice payload declarations]
-            [: Partial]
-            [: [codesnippet:choice_payload_record_declaration_success], [codesnippet:choice_payload_imported_field_type_success], [codesnippet:choice_payload_empty_record_rejected], [codesnippet:choice_payload_duplicate_field_rejected]]
-            [: Record-body payload metadata is parsed and type-checked. Payload constructors are supported. Payload matching remains deferred.]
+            [: Choice unit variants]
+            [: Supported]
+            [: [codesnippet:choice_basic_declaration_and_use], [codesnippet:choice_unit_constructor_call_rejected], [codesnippet:choice_imported_unit_constructor_call_rejected]]
+            [: Unit variants are constructed as `Choice::Variant`. Empty constructor calls are invalid.]
         ]
 
         [data:
-            [: Choice payload shorthand]
-            [: Rejected / Reserved]
-            [: [codesnippet:choice_payload_decl_deferred]]
-            [: `Variant Type` is invalid. The diagnostic should point to record-body syntax: `Variant | field Type |`.]
+            [: Choice record payload variants]
+            [: Supported]
+            [: [codesnippet:choice_payload_record_declaration_success], [codesnippet:choice_payload_imported_field_type_success], [codesnippet:choice_payload_empty_record_rejected], [codesnippet:choice_payload_duplicate_field_rejected], [codesnippet:choice_payload_shorthand_rejected]]
+            [: Only `Variant | field Type, ... |` syntax. Payload shorthand is rejected.]
+        ]
+
+        [data:
+            [: Choice constructor use]
+            [: Supported]
+            [: [codesnippet:choice_payload_constructor_positional_success], [codesnippet:choice_payload_constructor_named_success], [codesnippet:choice_payload_constructor_mixed_success], [codesnippet:choice_payload_constructor_missing_field_rejected], [codesnippet:choice_payload_constructor_unknown_field_rejected], [codesnippet:choice_payload_constructor_duplicate_field_rejected], [codesnippet:choice_payload_constructor_positional_after_named_rejected], [codesnippet:choice_payload_constructor_type_mismatch_rejected], [codesnippet:choice_payload_constructor_without_args_rejected], [codesnippet:choice_unit_constructor_call_rejected], [codesnippet:choice_imported_unit_constructor_call_rejected], [codesnippet:choice_imported_payload_constructor_success]]
+            [: Unit variants use `Choice::Variant` without parentheses. Payload variants use `Choice::Variant(...)` with positional and named arguments. Empty constructor calls on unit variants are rejected. Missing constructor args on payload variants are rejected.]
         ]
 
         [data:
@@ -356,10 +363,52 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
         ]
 
         [data:
+            [: Choice payload matching]
+            [: Supported]
+            [: [codesnippet:choice_payload_match_capture_success], [codesnippet:choice_payload_match_qualified_capture_success], [codesnippet:choice_payload_match_guard_uses_capture_success], [codesnippet:choice_payload_match_exhaustive_tag_level_success], [codesnippet:choice_payload_match_wrong_capture_name_rejected], [codesnippet:choice_payload_match_too_few_captures_rejected], [codesnippet:choice_payload_match_too_many_captures_rejected], [codesnippet:choice_payload_match_duplicate_capture_rejected], [codesnippet:choice_payload_match_capture_shadowing_rejected], [codesnippet:choice_payload_match_rename_syntax_deferred], [codesnippet:choice_payload_match_named_assignment_rejected], [codesnippet:choice_payload_match_missing_payload_rejected], [codesnippet:choice_payload_match_unit_parens_rejected], [codesnippet:choice_payload_match_duplicate_variant_rejected], [codesnippet:choice_payload_match_guard_requires_else]]
+            [: Constructor-like patterns with original field names only. Capture names must match declared payload field names. Exhaustiveness is tag-level.]
+        ]
+
+        [data:
+            [: Choice payload field access]
+            [: Deferred]
+            [: No canonical case yet.]
+            [: No `value.field` until variant narrowing/refinement is designed. Use pattern matching to extract payload fields.]
+        ]
+
+        [data:
+            [: Choice binding renames]
+            [: Deferred]
+            [: [codesnippet:choice_payload_match_rename_syntax_deferred]]
+            [: Future syntax: `<new_name> as <original_name>`.]
+        ]
+
+        [data:
+            [: Choice nested payload patterns / exhaustiveness]
+            [: Deferred]
+            [: No canonical case yet.]
+            [: Exhaustiveness is tag-level for now.]
+        ]
+
+        [data:
+            [: Choice recursive types]
+            [: Deferred]
+            [: No canonical case yet.]
+            [: Requires layout/indirection design.]
+        ]
+
+        [data:
+            [: Choice generic declarations]
+            [: Deferred]
+            [: No canonical case yet.]
+            [: Syntax ideas live in [codesnippet:docs/src/docs/generics.md]; do not implement here.]
+        ]
+
+        [data:
             [: Choice payload structural equality]
             [: Rejected / Reserved]
             [: [codesnippet:choice_payload_structural_equality_deferred]]
-            [: Equality comparison for choice variants is not supported. Use pattern matching instead.]
+            [: Equality comparison for payload choice variants is not supported. Use pattern matching and compare fields inside the matching arm.]
         ]
 
         [data:
@@ -370,10 +419,17 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
         ]
 
         [data:
-            [: Choice constructor use]
-            [: Supported]
-            [: [codesnippet:choice_payload_constructor_positional_success], [codesnippet:choice_payload_constructor_named_success], [codesnippet:choice_payload_constructor_mixed_success], [codesnippet:choice_payload_constructor_missing_field_rejected], [codesnippet:choice_payload_constructor_unknown_field_rejected], [codesnippet:choice_payload_constructor_duplicate_field_rejected], [codesnippet:choice_payload_constructor_positional_after_named_rejected], [codesnippet:choice_payload_constructor_type_mismatch_rejected], [codesnippet:choice_payload_constructor_without_args_rejected], [codesnippet:choice_constructor_use_deferred], [codesnippet:choice_imported_payload_constructor_success]]
-            [: Unit variants use `Choice::Variant` without parentheses. Payload variants use `Choice::Variant(...)` with positional and named arguments. Empty constructor calls on unit variants are rejected. Missing constructor args on payload variants are rejected.]
+            [: Choice default variant values]
+            [: Deferred]
+            [: [codesnippet:choice_default_decl_deferred]]
+            [: If field defaults are inherited, document separately from variant defaults.]
+        ]
+
+        [data:
+            [: Wasm payload layout for choices]
+            [: Experimental]
+            [: No canonical case yet.]
+            [: JS is the supported Alpha backend. Wasm backend lowering for choice payloads remains experimental.]
         ]
 
         [data:
@@ -384,17 +440,10 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
         ]
 
         [data:
-            [: Capture / tagged match patterns]
+            [: General capture / tagged match patterns]
             [: Deferred]
             [: [codesnippet:diagnostic_match_deferred_capture_pattern]]
-            [: Choice payload capture patterns are planned for promotion in Phase 4. General capture/tagged patterns and rename captures remain deferred.]
-        ]
-
-        [data:
-            [: Full tagged unions]
-            [: Deferred]
-            [: Choice deferred diagnostics should cover the unsupported entry points.]
-            [: Being promoted through choices-full-tagged-unions-plan.md. Payload declarations and constructors are now supported. This explicitly defers generic choices, recursive choices, direct payload field access, nested payload exhaustiveness, and payload structural equality.]
+            [: Choice payload capture patterns are now supported. General capture/tagged patterns and rename captures remain deferred.]
         ]
 
         [data:

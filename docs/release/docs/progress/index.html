@@ -312,7 +312,7 @@ body {
         </div>
     </nav>
      <h1 style="font-size: 2em;text-align: center;"> IMPLEMENTATION MATRIX</h1>
-    <section class="container"><p>This page tracks the compiler surface intended for the first Beanstalk Alpha.</p><p>It is an implementation matrix, not a full language specification. The wider language docs may describe intended or aspirational syntax. This page should describe what the compiler currently supports, rejects cleanly, or keeps experimental.</p><p>Use this together with <span style="
+    <section class="container"><p>This page tracks the current implemented compiler surface.</p><p>It is an implementation matrix, not a full language specification. The wider language docs may describe intended or aspirational syntax. This page should describe what the compiler currently supports, rejects cleanly, or keeps experimental.</p><p>Use this together with <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">tests/cases/manifest.toml</span> when changing language features.</p><h2>Alpha target</h2><p>The supported Alpha target is:</p><ul><li>frontend parsing and diagnostics</li><li>typed AST construction</li><li>HIR lowering</li><li>borrow validation</li><li>JavaScript backend</li><li>HTML project builder</li><li>docs-style static site generation</li></ul><p>A policy for the repo is all tests must pass before each commit. So all tests on all platforms can be assumed to be green for the current state of the compiler unless specifically noted here.</p></section>
@@ -415,18 +415,18 @@ body {
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;"> Choices</td>
-     <td style="padding: 0.2em 0.5em;"> Partial</td>
-     <td style="padding: 0.2em 0.5em;"> Targeted parser, declaration, match, import, assignment, return, and JS carrier-shape coverage.</td>
+     <td style="padding: 0.2em 0.5em;"> Supported</td>
+     <td style="padding: 0.2em 0.5em;"> Broad parser, declaration, constructor, match, import, assignment, return, JS carrier-shape, and payload coverage.</td>
      <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
-     <td style="padding: 0.2em 0.5em;"> Unit variants are the current supported subset. Payloads, tagged/default declarations, and constructor use remain deferred unless deliberately promoted before Alpha.</td>
+     <td style="padding: 0.2em 0.5em;"> Unit variants use `Choice::Variant`. Empty constructor calls are invalid. Record-body payload declarations are parsed and type-checked. Payload constructors support positional and named arguments. Payload match extraction uses constructor-like patterns with original field names only. Const choice values are supported for unit and payload variants. Payload shorthand is rejected. Payload structural equality is deferred. Generic choices, recursive choices, and direct payload field access remain deferred.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;"> Pattern matching</td>
      <td style="padding: 0.2em 0.5em;"> Partial</td>
-     <td style="padding: 0.2em 0.5em;"> Broad literal and choice-match coverage, including exhaustiveness and diagnostics.</td>
+     <td style="padding: 0.2em 0.5em;"> Broad literal, choice-match, and payload-capture coverage, including exhaustiveness and diagnostics.</td>
      <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
-     <td style="padding: 0.2em 0.5em;"> Literal patterns, choice variants, relational ordered-scalar patterns, guards, and else are supported. Wildcard in case arms is not supported—use else => instead. Negated and capture/tagged patterns remain deferred for Alpha.</td>
+     <td style="padding: 0.2em 0.5em;"> Literal patterns, choice variant patterns (including payload captures), relational ordered-scalar patterns, guards, and else are supported. Wildcard in case arms is not supported—use else => instead. General capture/tagged patterns, rename captures, and nested payload patterns remain deferred.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -741,13 +741,200 @@ body {
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Choice payload declarations</td>
-     <td style="padding: 0.2em 0.5em;"> Deferred unless promoted before Alpha</td>
+             <td style="padding: 0.2em 0.5em;"> Choice unit variants</td>
+     <td style="padding: 0.2em 0.5em;"> Supported</td>
      <td style="padding: 0.2em 0.5em;"> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">choice_payload_decl_deferred</span></td>
-     <td style="padding: 0.2em 0.5em;"> Keep rejected until the carrier representation, constructors, matching, and JS lowering are deliberately implemented together.</td>
+    ">choice_basic_declaration_and_use</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_unit_constructor_call_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_imported_unit_constructor_call_rejected</span></td>
+     <td style="padding: 0.2em 0.5em;"> Unit variants are constructed as `Choice::Variant`. Empty constructor calls are invalid.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Choice record payload variants</td>
+     <td style="padding: 0.2em 0.5em;"> Supported</td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_record_declaration_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_imported_field_type_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_empty_record_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_duplicate_field_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_shorthand_rejected</span></td>
+     <td style="padding: 0.2em 0.5em;"> Only `Variant | field Type, ... |` syntax. Payload shorthand is rejected.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Choice constructor use</td>
+     <td style="padding: 0.2em 0.5em;"> Supported</td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_constructor_positional_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_constructor_named_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_constructor_mixed_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_constructor_missing_field_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_constructor_unknown_field_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_constructor_duplicate_field_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_constructor_positional_after_named_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_constructor_type_mismatch_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_constructor_without_args_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_unit_constructor_call_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_imported_unit_constructor_call_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_imported_payload_constructor_success</span></td>
+     <td style="padding: 0.2em 0.5em;"> Unit variants use `Choice::Variant` without parentheses. Payload variants use `Choice::Variant(...)` with positional and named arguments. Empty constructor calls on unit variants are rejected. Missing constructor args on payload variants are rejected.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Choice const values</td>
+     <td style="padding: 0.2em 0.5em;"> Supported</td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_const_unit_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_const_payload_success</span></td>
+     <td style="padding: 0.2em 0.5em;"> Unit and payload choice variants can be used in top-level `#` constant declarations.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Choice payload matching</td>
+     <td style="padding: 0.2em 0.5em;"> Supported</td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_match_capture_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_match_qualified_capture_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_match_guard_uses_capture_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_match_exhaustive_tag_level_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_match_wrong_capture_name_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_match_too_few_captures_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_match_too_many_captures_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_match_duplicate_capture_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_match_capture_shadowing_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_match_rename_syntax_deferred</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_match_named_assignment_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_match_missing_payload_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_match_unit_parens_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_match_duplicate_variant_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_match_guard_requires_else</span></td>
+     <td style="padding: 0.2em 0.5em;"> Constructor-like patterns with original field names only. Capture names must match declared payload field names. Exhaustiveness is tag-level.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Choice payload field access</td>
+     <td style="padding: 0.2em 0.5em;"> Deferred</td>
+     <td style="padding: 0.2em 0.5em;"> No canonical case yet.</td>
+     <td style="padding: 0.2em 0.5em;"> No `value.field` until variant narrowing/refinement is designed. Use pattern matching to extract payload fields.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Choice binding renames</td>
+     <td style="padding: 0.2em 0.5em;"> Deferred</td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_match_rename_syntax_deferred</span></td>
+     <td style="padding: 0.2em 0.5em;"> Future syntax: `<new_name> as <original_name>`.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Choice nested payload patterns / exhaustiveness</td>
+     <td style="padding: 0.2em 0.5em;"> Deferred</td>
+     <td style="padding: 0.2em 0.5em;"> No canonical case yet.</td>
+     <td style="padding: 0.2em 0.5em;"> Exhaustiveness is tag-level for now.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Choice recursive types</td>
+     <td style="padding: 0.2em 0.5em;"> Deferred</td>
+     <td style="padding: 0.2em 0.5em;"> No canonical case yet.</td>
+     <td style="padding: 0.2em 0.5em;"> Requires layout/indirection design.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Choice generic declarations</td>
+     <td style="padding: 0.2em 0.5em;"> Deferred</td>
+     <td style="padding: 0.2em 0.5em;"> No canonical case yet.</td>
+     <td style="padding: 0.2em 0.5em;"> Syntax ideas live in <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">docs/src/docs/generics.md</span>; do not implement here.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Choice payload structural equality</td>
+     <td style="padding: 0.2em 0.5em;"> Rejected / Reserved</td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_structural_equality_deferred</span></td>
+     <td style="padding: 0.2em 0.5em;"> Equality comparison for payload choice variants is not supported. Use pattern matching and compare fields inside the matching arm.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -764,13 +951,20 @@ body {
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Choice constructor use</td>
-     <td style="padding: 0.2em 0.5em;"> Deferred unless choices are expanded before Alpha</td>
+             <td style="padding: 0.2em 0.5em;"> Choice default variant values</td>
+     <td style="padding: 0.2em 0.5em;"> Deferred</td>
      <td style="padding: 0.2em 0.5em;"> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">choice_constructor_use_deferred</span></td>
-     <td style="padding: 0.2em 0.5em;"> Current unit variant flow is enough for the existing Alpha subset.</td>
+    ">choice_default_decl_deferred</span></td>
+     <td style="padding: 0.2em 0.5em;"> If field defaults are inherited, document separately from variant defaults.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Wasm payload layout for choices</td>
+     <td style="padding: 0.2em 0.5em;"> Experimental</td>
+     <td style="padding: 0.2em 0.5em;"> No canonical case yet.</td>
+     <td style="padding: 0.2em 0.5em;"> JS is the supported Alpha backend. Wasm backend lowering for choice payloads remains experimental.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -784,20 +978,13 @@ body {
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Capture / tagged match patterns</td>
+             <td style="padding: 0.2em 0.5em;"> General capture / tagged match patterns</td>
      <td style="padding: 0.2em 0.5em;"> Deferred</td>
      <td style="padding: 0.2em 0.5em;"> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">diagnostic_match_deferred_capture_pattern</span></td>
-     <td style="padding: 0.2em 0.5em;"> Adds bindings and scope rules inside match arms.</td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Full tagged unions</td>
-     <td style="padding: 0.2em 0.5em;"> Deferred</td>
-     <td style="padding: 0.2em 0.5em;"> Choice deferred diagnostics should cover the unsupported entry points.</td>
-     <td style="padding: 0.2em 0.5em;"> Explicitly post-Alpha unless required by a narrowed choice expansion.</td>
+     <td style="padding: 0.2em 0.5em;"> Choice payload capture patterns are now supported. General capture/tagged patterns and rename captures remain deferred.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -805,63 +992,6 @@ body {
      <td style="padding: 0.2em 0.5em;"> Deferred</td>
      <td style="padding: 0.2em 0.5em;"> Unsupported syntax should fail cleanly.</td>
      <td style="padding: 0.2em 0.5em;"> Includes arbitrary precision compile-time arithmetic, decimal type work, and more specific numeric widths.</td>
-        </tr>
-        
-    </table></section>
-    <section class="container"><h1>Final sweep notes</h1><p>These are the scoped follow-ups after the final pre-alpha sweep. They belong to Alpha cleanup or post-Alpha planning unless they become release blockers.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
-            
-    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Area</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Priority</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Action</th> 
-    </tr>
-
-            
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> CI platform coverage</td>
-     <td style="padding: 0.2em 0.5em;"> Alpha cleanup</td>
-     <td style="padding: 0.2em 0.5em;"> Add or run a Windows/macOS validation path before tagging Alpha. The repo currently has a docs deploy workflow, not a cross-platform validation workflow.</td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Pattern matching scope</td>
-     <td style="padding: 0.2em 0.5em;"> Post-Alpha unless promoted</td>
-     <td style="padding: 0.2em 0.5em;"> Relational ordered-scalar patterns are now implemented and tested. Keep negated and capture/tagged patterns deferred for Alpha unless explicitly promoted.</td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Choice scope</td>
-     <td style="padding: 0.2em 0.5em;"> Post-Alpha unless promoted</td>
-     <td style="padding: 0.2em 0.5em;"> Unit-only choices are the current Alpha contract. Constructors, payloads, tagged/default declarations, and full tagged unions stay deferred.</td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> External package cleanup</td>
-     <td style="padding: 0.2em 0.5em;"> Alpha cleanup</td>
-     <td style="padding: 0.2em 0.5em;"> Keep adding small standard-package fixtures as the registry grows. Prioritise collision checks, explicit import visibility, constant folding boundaries, and backend lowering contracts over broad API expansion.</td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Docs vs implementation</td>
-     <td style="padding: 0.2em 0.5em;"> Ongoing</td>
-     <td style="padding: 0.2em 0.5em;"> Keep aspirational design docs clearly labelled as future-facing. The progress page remains the implementation tracker.</td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Char diagnostics</td>
-     <td style="padding: 0.2em 0.5em;"> Cleanup</td>
-     <td style="padding: 0.2em 0.5em;"> Add more malformed-char diagnostics if time allows. Existing success coverage and baseline failure coverage are enough for Alpha if tests remain green.</td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Cross-platform golden stability</td>
-     <td style="padding: 0.2em 0.5em;"> Ongoing</td>
-     <td style="padding: 0.2em 0.5em;"> Keep path and template output normalized where exact bytes are not contractual.</td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> HTML-Wasm coverage</td>
-     <td style="padding: 0.2em 0.5em;"> Post-Alpha</td>
-     <td style="padding: 0.2em 0.5em;"> Keep experimental tests useful, but do not promote successful Wasm collection/runtime behavior to an Alpha requirement.</td>
         </tr>
         
     </table></section>

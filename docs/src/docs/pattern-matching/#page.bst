@@ -12,10 +12,10 @@ import @styles/docs {navbar, title, section, palette, table, codeblock, theme_he
 
     # Pattern matching
     Pattern matching is a control-flow tool for checking one value against multiple patterns.
-    Alpha supports literal patterns, relational ordered-scalar patterns, guards, unit choice variants, and explicit `else =>` fallback arms.
+    Alpha supports literal patterns, relational ordered-scalar patterns, guards, choice variant patterns (including payload captures), and explicit `else =>` fallback arms.
 
     Non-choice matches must include `else =>`.
-    Choice matches can omit `else =>` only when every unit variant is covered and no arm has a guard.
+    Choice matches can omit `else =>` only when every variant is covered and no arm has a guard.
 
     [codeblock, $code("bst"):
         score = 84
@@ -29,7 +29,7 @@ import @styles/docs {navbar, title, section, palette, table, codeblock, theme_he
         ;
     ]
 
-    Choices use unit variants in the Alpha surface.
+    Choices support unit and payload variant patterns.
     Exhaustive choice matches do not need a fallback arm when every variant is covered.
 
     [codeblock, $code("bst"):
@@ -45,6 +45,33 @@ import @styles/docs {navbar, title, section, palette, table, codeblock, theme_he
         ;
     ]
 
-    Negated patterns and capture/tagged patterns such as `case Item |value| =>` are deferred for Alpha.
+    Payload variants use constructor-like patterns with the original field names.
+    Captured bindings are available in the arm body and in guards.
+
+    [codeblock, $code("bst"):
+        Response ::
+            Success,
+            Err |
+                message String,
+            |,
+            Pending |
+                retry_count Int,
+                message String,
+            |,
+        ;
+
+        if response is:
+            case Success => io("done")
+            case Err(message) => io(message)
+            case Pending(retry_count, message) => io(message)
+        ;
+    ]
+
+    Capture names must exactly match the declared payload field names.
+    Renaming captures (e.g. `case Err(text as message)`) is deferred.
+
+    Exhaustiveness is tag-level: `case Err(message)` covers all `Err` values regardless of payload content.
+
+    Negated patterns and general capture/tagged patterns such as `case Item |value| =>` are deferred for Alpha.
     Beanstalk does not use wildcard `case _ =>` arms; use `else =>` for fallback behavior.
 ]

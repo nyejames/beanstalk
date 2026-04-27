@@ -312,7 +312,7 @@ body {
         </div>
     </nav>
      <h1 style="font-size: 2em;text-align: center;"> CHOICES</h1>
-    <section class="container"><h1>Choices (enums)</h1><p>    Choices are a way to define a set of possible values.      The Alpha compiler supports unit variants.     Payload variants, tagged variant bodies, default values, and constructor calls are deferred.</p><p>    You create and access choices using a double colon.</p><pre style="
+    <section class="container"><h1>Choices (enums)</h1><p>    Choices are a way to define a set of possible values.     The Alpha compiler supports unit variants and record-body payload variants.</p><p>    You create and access choices using a double colon.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
         border-radius: 5px;
@@ -320,7 +320,7 @@ body {
         white-space: pre; 
         overflow-x: auto;
     "><code class='codeblock'>
-    <span class='bst-code-operator'>#</span><span class='bst-code-struct'>Status</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Ready,</span> <span class='bst-code-struct'>Busy,</span> <span class='bst-code-struct'>Offline;</span>
+    <span class='bst-code-operator'>#</span> <span class='bst-code-struct'>Status</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Ready,</span> <span class='bst-code-struct'>Busy,</span> <span class='bst-code-struct'>Offline;</span>
 
     current <span class='bst-code-struct'>Status</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Status</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Busy</span>
 
@@ -337,7 +337,7 @@ body {
         white-space: pre; 
         overflow-x: auto;
     "><code class='codeblock'>
-    <span class='bst-code-operator'>#</span><span class='bst-code-struct'>Status</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Ready,</span> <span class='bst-code-struct'>Busy;</span>
+    <span class='bst-code-operator'>#</span> <span class='bst-code-struct'>Status</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Ready,</span> <span class='bst-code-struct'>Busy;</span>
 
     current <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Status</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Ready</span>
     current <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Status</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Busy</span>
@@ -347,7 +347,7 @@ body {
         case <span class='bst-code-struct'>Ready</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> label <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;ready&quot;</span>
         case <span class='bst-code-struct'>Busy</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> label <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;busy&quot;</span>
     ;
-    </code></pre><p>    These richer choice forms are reserved for post-Alpha design work and currently reject with structured diagnostics:</p><pre style="
+    </code></pre><h2>Payload variants</h2><p>    Payload variants must use record-body syntax.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
         border-radius: 5px;
@@ -355,15 +355,67 @@ body {
         white-space: pre; 
         overflow-x: auto;
     "><code class='codeblock'>
-    <span class='bst-code-comment'>-- Payload variant: deferred.</span>
-    <span class='bst-code-struct'>Response</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Error</span> <span class='bst-code-struct'>String,</span> <span class='bst-code-struct'>Success;</span>
+    <span class='bst-code-struct'>Response</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-struct'>Success,</span>
+        <span class='bst-code-struct'>Err</span> <span class='bst-code-operator'>|</span>
+            message <span class='bst-code-struct'>String,</span>
+        <span class='bst-code-operator'>|</span>,
+        <span class='bst-code-struct'>Pending</span> <span class='bst-code-operator'>|</span>
+            retry_count <span class='bst-code-struct'>Int,</span>
+            message <span class='bst-code-struct'>String,</span>
+        <span class='bst-code-operator'>|</span>,
+    ;
 
-    <span class='bst-code-comment'>-- Tagged variant body: deferred.</span>
-    <span class='bst-code-struct'>Response</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Pending</span> <span class='bst-code-operator'>|</span> retry_count <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>|</span>, <span class='bst-code-struct'>Success;</span>
+    <span class='bst-code-comment'>-- Unit variant construction</span>
+    ok <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Response</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Success</span>
 
-    <span class='bst-code-comment'>-- Constructor call: deferred.</span>
-    value <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Response</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Success</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre></section>
+    <span class='bst-code-comment'>-- Payload variant construction</span>
+    error <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Response</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Err</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;bad&quot;</span><span class='bst-code-parenthesis'>)</span>
+    pending <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Response</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Pending</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>3</span>, message <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;waiting&quot;</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>    Payload fields are accessed only through pattern matching.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-keyword'>if</span> response is<span class='bst-code-operator'>:</span>
+        case <span class='bst-code-struct'>Success</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;done&quot;</span><span class='bst-code-parenthesis'>)</span>
+        case <span class='bst-code-struct'>Err</span><span class='bst-code-parenthesis'>(</span>message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span>message<span class='bst-code-parenthesis'>)</span>
+        case <span class='bst-code-struct'>Pending</span><span class='bst-code-parenthesis'>(</span>retry_count, message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span>message<span class='bst-code-parenthesis'>)</span>
+    ;
+    </code></pre><h2>Invalid syntax</h2><p>    Unit variants are values, not constructor calls.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-comment'>-- Invalid: empty constructor call on a unit variant</span>
+    bad <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Response</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Success</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>    Payload shorthand is not supported.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-comment'>-- Invalid: shorthand payload declaration</span>
+    <span class='bst-code-struct'>Response</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Err</span> <span class='bst-code-struct'>String,</span> <span class='bst-code-struct'>Success;</span>
+    </code></pre><p>    Capture rename syntax is deferred.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-comment'>-- Invalid: capture rename syntax is not supported yet</span>
+    case <span class='bst-code-struct'>Err</span><span class='bst-code-parenthesis'>(</span>text <span class='bst-code-keyword'>as</span> message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span>text<span class='bst-code-parenthesis'>)</span>
+    </code></pre><h2>Deferred features</h2><ul><li>Direct payload field access (e.g. `response.message`).</li><li>Generic choice declarations.</li><li>Recursive choice declarations.</li><li>Payload structural equality.</li><li>Capture rename syntax in patterns.</li><li>Nested payload patterns and nested exhaustiveness.</li></ul></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

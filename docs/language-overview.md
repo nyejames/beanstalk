@@ -479,9 +479,14 @@ Currently supported patterns:
 
 - Literal patterns: `case 1 =>`, `case "ok" =>`, `case true =>`
 - Choice variant patterns: `case Ready =>` or `case Status::Ready =>`
+- Choice payload capture patterns: `case Err(message) =>` or `case Pending(retry_count, message) =>`
 - Relational patterns for ordered scalar values: `case < 0 =>`, `case <= 10 =>`, `case > 0 =>`, `case >= 100 =>`
 
 The catch-all default is expressed only through `else =>`. There is no `case _ =>`.
+
+Capture names in payload patterns must exactly match the declared field names.
+Renaming captures (e.g. `case Err(text as message) =>`) is deferred.
+Exhaustiveness is tag-level: a payload capture arm covers all values of that variant regardless of payload content.
 
 Relational patterns are supported for ordered scalar scrutinees such as `Int`, `Float`, and `Char`.
 The pattern value must be a literal of the same compatible type.

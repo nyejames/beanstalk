@@ -91,6 +91,13 @@ import @styles/docs {navbar, title, section, codeblock, theme_head}
         Response :: Err String, Success;
     ]
 
+    Capture rename syntax is deferred.
+
+    [codeblock, $code("bst"):
+        -- Invalid: capture rename syntax is not supported yet
+        case Err(text as message) => io(text)
+    ]
+
     ## Deferred features
     - Direct payload field access (e.g. `response.message`).
     - Generic choice declarations.
