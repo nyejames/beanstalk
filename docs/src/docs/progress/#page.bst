@@ -372,35 +372,35 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
         [data:
             [: Choice payload field access]
             [: Deferred]
-            [: No canonical case yet.]
+            [: [codesnippet:choice_payload_direct_field_access_deferred]]
             [: No `value.field` until variant narrowing/refinement is designed. Use pattern matching to extract payload fields.]
         ]
 
         [data:
             [: Choice binding renames]
             [: Deferred]
-            [: [codesnippet:choice_payload_match_rename_syntax_deferred]]
+            [: [codesnippet:choice_payload_match_rename_syntax_deferred], [codesnippet:choice_capture_rename_deferred]]
             [: Future syntax: `<new_name> as <original_name>`.]
         ]
 
         [data:
             [: Choice nested payload patterns / exhaustiveness]
             [: Deferred]
-            [: No canonical case yet.]
+            [: [codesnippet:choice_nested_payload_pattern_deferred]]
             [: Exhaustiveness is tag-level for now.]
         ]
 
         [data:
             [: Choice recursive types]
             [: Deferred]
-            [: No canonical case yet.]
+            [: [codesnippet:choice_recursive_direct_declaration_deferred]]
             [: Requires layout/indirection design.]
         ]
 
         [data:
             [: Choice generic declarations]
             [: Deferred]
-            [: No canonical case yet.]
+            [: [codesnippet:choice_generic_declaration_deferred]]
             [: Syntax ideas live in [codesnippet:docs/src/docs/generics.md]; do not implement here.]
         ]
 
@@ -408,7 +408,7 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
             [: Choice payload structural equality]
             [: Rejected / Reserved]
             [: [codesnippet:choice_payload_structural_equality_deferred]]
-            [: Equality comparison for payload choice variants is not supported. Use pattern matching and compare fields inside the matching arm.]
+            [: Payload structural equality is deferred. Use pattern matching and compare fields inside the matching arm.]
         ]
 
         [data:
@@ -421,7 +421,7 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
         [data:
             [: Choice default variant values]
             [: Deferred]
-            [: [codesnippet:choice_default_decl_deferred]]
+            [: [codesnippet:choice_default_decl_deferred], [codesnippet:choice_variant_default_value_deferred]]
             [: If field defaults are inherited, document separately from variant defaults.]
         ]
 

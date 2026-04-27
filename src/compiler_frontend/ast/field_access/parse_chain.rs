@@ -143,7 +143,14 @@ pub(crate) fn parse_postfix_chain(
             continue;
         }
 
-        let (message, suggestion) = if matches!(receiver_type, DataType::External { .. }) {
+        let (message, suggestion) = if matches!(receiver_type, DataType::Choices { .. })
+            && token_stream.peek_next_token() != Some(&TokenKind::OpenParenthesis)
+        {
+            (
+                "Choice payload field access is deferred. Use pattern matching to extract payload fields.".to_string(),
+                "Use 'if value is: case Variant(field) => ...' to extract payload fields",
+            )
+        } else if matches!(receiver_type, DataType::External { .. }) {
             (
                 format!(
                     "Property or method '{}' not found for external type '{}'.",

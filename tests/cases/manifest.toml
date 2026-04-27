@@ -369,6 +369,36 @@ path = "choice_payload_structural_equality_deferred"
 tags = ["integration","diagnostics"]
 
 [[case]]
+id = "choice_payload_direct_field_access_deferred"
+path = "choice_payload_direct_field_access_deferred"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "choice_recursive_direct_declaration_deferred"
+path = "choice_recursive_direct_declaration_deferred"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "choice_generic_declaration_deferred"
+path = "choice_generic_declaration_deferred"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "choice_variant_default_value_deferred"
+path = "choice_variant_default_value_deferred"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "choice_capture_rename_deferred"
+path = "choice_capture_rename_deferred"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "choice_nested_payload_pattern_deferred"
+path = "choice_nested_payload_pattern_deferred"
+tags = ["integration","diagnostics"]
+
+[[case]]
 id = "choice_payload_js_carrier_shape"
 path = "choice_payload_js_carrier_shape"
 tags = ["integration","language"]

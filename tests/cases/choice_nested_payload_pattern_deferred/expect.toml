@@ -2,4 +2,4 @@
 mode = "failure"
 warnings = "forbid"
 error_type = "Rule"
-message_contains = ["Payload structural equality is deferred"]
+message_contains = ["Nested payload patterns are deferred"]

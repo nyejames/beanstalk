@@ -447,6 +447,14 @@ fn parse_choice_pattern_captures(
                         token_stream.advance();
                         break;
                     }
+                    TokenKind::OpenParenthesis => {
+                        return Err(deferred_feature_rule_error(
+                            "Nested payload patterns are deferred. Use flat capture bindings with declared field names only.",
+                            token_stream.current_location(),
+                            "Match Statement Parsing",
+                            "Use 'case Variant(field1, field2)' with original field names only",
+                        ));
+                    }
                     _ => {
                         return_rule_error!(
                             "Expected ',' or ')' after capture binding.",

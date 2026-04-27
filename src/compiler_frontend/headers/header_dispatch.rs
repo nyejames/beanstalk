@@ -248,6 +248,19 @@ pub(super) fn create_header(
         | TokenKind::Symbol(_)
             if exported =>
         {
+            if let TokenKind::Symbol(sym) = token_stream.current_token_kind()
+                && context.string_table.resolve(*sym) == "type"
+            {
+                crate::return_rule_error!(
+                    "Generic choice declarations are not supported. See docs/src/docs/generics.md for future-facing design.",
+                    token_stream.current_location(),
+                    {
+                        CompilationStage => "Header Parsing",
+                        PrimarySuggestion => "Remove type parameters and declare a non-generic choice",
+                    }
+                );
+            }
+
             ensure_not_keyword_shadow_identifier(
                 declaration_name_text,
                 name_location.to_owned(),
@@ -367,7 +380,21 @@ pub(super) fn create_header(
             kind = HeaderKind::TypeAlias { target };
         }
 
-        _ => {}
+        _ => {
+            if let TokenKind::Symbol(sym) = &current_token
+                && context.string_table.resolve(*sym) == "type"
+                && token_stream_contains_doublecolon_within_limit(token_stream)
+            {
+                crate::return_rule_error!(
+                    "Generic choice declarations are not supported. See docs/src/docs/generics.md for future-facing design.",
+                    token_stream.current_location(),
+                    {
+                        CompilationStage => "Header Parsing",
+                        PrimarySuggestion => "Remove type parameters and declare a non-generic choice",
+                    }
+                );
+            }
+        }
     }
 
     let mut header_tokens = FileTokens::new_with_file_id(full_name, token_stream.file_id, body);
@@ -455,6 +482,24 @@ fn capture_function_body_tokens(
     }
 
     Ok(())
+}
+
+/// Scan ahead up to 20 tokens looking for `DoubleColon` before `End` or `Eof`.
+///
+/// WHAT: heuristic to detect generic choice declarations like `Name type T, E :: ...`.
+/// WHY: without this, non-exported generic choices fall through to start-function body parsing
+/// and produce confusing "unknown variable" errors on the `type` token.
+fn token_stream_contains_doublecolon_within_limit(token_stream: &FileTokens) -> bool {
+    let mut i = token_stream.index;
+    let limit = (i + 20).min(token_stream.tokens.len());
+    while i < limit {
+        match &token_stream.tokens[i].kind {
+            TokenKind::DoubleColon => return true,
+            TokenKind::End | TokenKind::Eof => return false,
+            _ => i += 1,
+        }
+    }
+    false
 }
 
 fn create_constant_header_payload(

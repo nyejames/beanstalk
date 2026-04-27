@@ -15,6 +15,7 @@ use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::declaration_syntax::signature_members::SignatureMemberContext;
 use crate::compiler_frontend::declaration_syntax::r#struct::parse_record_body;
+use crate::compiler_frontend::declaration_syntax::type_syntax::for_each_named_type_in_data_type;
 use crate::compiler_frontend::deferred_feature_diagnostics::deferred_feature_rule_error;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::reserved_trait_syntax::{
@@ -203,6 +204,33 @@ pub(crate) fn parse_choice_shell(
                                 }
                                 seen_field_names.insert(field_name, field.value.location.clone());
                             }
+
+                            // Reject direct recursive choice declarations.
+                            let mut is_recursive = false;
+                            for_each_named_type_in_data_type(
+                                &field.value.data_type,
+                                &mut |type_name| {
+                                    if Some(type_name) == choice_path.name() {
+                                        is_recursive = true;
+                                    }
+                                },
+                            );
+                            if is_recursive {
+                                let choice_name = choice_path
+                                    .name()
+                                    .map(|name| string_table.resolve(name))
+                                    .unwrap_or("<choice>");
+                                return_rule_error!(
+                                    format!(
+                                        "Recursive choice declarations are not supported. Choice '{choice_name}' cannot appear in its own variant payload.",
+                                    ),
+                                    field.value.location.clone(),
+                                    {
+                                        CompilationStage => "Header Parsing",
+                                        PrimarySuggestion => "Use an indirect representation (for example, a reference or index) instead of direct recursion",
+                                    }
+                                );
+                            }
                         }
 
                         ChoiceVariantPayload::Record { fields }
@@ -258,6 +286,14 @@ pub(crate) fn parse_choice_shell(
                     TokenKind::End => {
                         token_stream.advance();
                         break;
+                    }
+                    TokenKind::Assign => {
+                        return Err(deferred_feature_rule_error(
+                            "Choice variant default values are deferred. Construct a value explicitly with `Choice::Variant(...)`.",
+                            token_stream.current_location(),
+                            "Header Parsing",
+                            "Remove the default assignment and keep this as a unit variant or use a record payload.",
+                        ));
                     }
                     TokenKind::Newline => {
                         token_stream.skip_newlines();
