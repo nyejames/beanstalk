@@ -464,15 +464,107 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;"> External platform packages</td>
      <td style="padding: 0.2em 0.5em;"> Partial</td>
-     <td style="padding: 0.2em 0.5em;"> Targeted coverage for package-scoped imports, prelude visibility, duplicate names across packages, explicit import resolution, and non-imported external rejection.</td>
+     <td style="padding: 0.2em 0.5em;"> Broad package-scoped import and visibility coverage, with targeted external constant, Float/F64 ABI, std/math, prelude, duplicate-name, and non-imported-symbol diagnostics.</td>
      <td style="padding: 0.2em 0.5em;"> Frontend / JS</td>
-     <td style="padding: 0.2em 0.5em;"> Functions and opaque types are supported through Rust-side registry metadata. <ul><li>User-authored external binding files are not supported. Alpha external packages are Rust-side builder/compiler metadata.</li><li>External constants are not implemented yet.</li><li>External ABI metadata does not yet include Float/F64, which blocks a proper `@std/math` package.</li><li>External receiver methods are not a recommended expansion surface yet. Prefer free functions until external methods are keyed by nominal receiver type rather than broad ABI metadata.</li><li>JS lowering for standard external packages is still explicit ID-to-runtime-name mapping.</li><li>Wasm lowering for external packages is experimental and should not be counted as Alpha support.</li></ul></td>
+     <td style="padding: 0.2em 0.5em;"> Functions, opaque types, and compile-time external constants are supported through Rust-side registry metadata. <ul><li>User-authored external binding files are not supported. Alpha external packages are Rust-side builder/compiler metadata.</li><li>External constants are implemented for scalar compile-time values and lower through expression parsing as ordinary literals.</li><li>External ABI metadata includes <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">F64</span>, which enables a proper Float-based <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">@std/math</span> package.</li><li>Explicit imports are required for non-prelude external packages. <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">io</span> and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">IO</span> remain the only current prelude symbols.</li><li>External receiver methods are not a recommended expansion surface yet. Prefer free functions until external methods are keyed by nominal receiver type rather than broad ABI metadata.</li><li>JS lowering now resolves external runtime names through per-function lowering metadata in the registry.</li><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">InlineExpression</span> JS lowering metadata exists but is not implemented yet.</li><li>Wasm lowering for external packages is experimental and should not be counted as Alpha support.</li></ul></td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;"> Standard math package</td>
-     <td style="padding: 0.2em 0.5em;"> Alpha testing ground</td>
-     <td style="padding: 0.2em 0.5em;"> Use @std/math to validate external constants, Float/F64 ABI, package-scoped imports, JS external lowering, and explicit non-prelude import behavior before larger platform APIs like canvas.</td>
+     <td style="padding: 0.2em 0.5em;"> Supported</td>
+     <td style="padding: 0.2em 0.5em;"> Targeted success and diagnostic coverage for direct, grouped, and aliased imports; constants; const-context constants; arity errors; type errors; missing symbols; and non-imported access.</td>
+     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">@std/math</span> exposes <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">PI</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">TAU</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">E</span>, and Float functions backed by JavaScript <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Math</span>. <ul><li>Implemented functions: <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">sin</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">cos</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">tan</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">atan2</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">log</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">log2</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">log10</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">exp</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">pow</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">sqrt</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">abs</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">floor</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">ceil</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">round</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">trunc</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">min</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">max</span>, and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">clamp</span>.</li><li>All functions currently accept and return <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Float</span>.</li><li>The package is not prelude-imported. Users must explicitly import the required symbols from <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">@std/math</span>.</li><li>JS helpers are emitted only when the matching external function is referenced.</li><li>Wasm support for this package remains deferred/experimental.</li></ul></td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -740,6 +832,12 @@ body {
              <td style="padding: 0.2em 0.5em;"> Choice scope</td>
      <td style="padding: 0.2em 0.5em;"> Post-Alpha unless promoted</td>
      <td style="padding: 0.2em 0.5em;"> Unit-only choices are the current Alpha contract. Constructors, payloads, tagged/default declarations, and full tagged unions stay deferred.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> External package cleanup</td>
+     <td style="padding: 0.2em 0.5em;"> Alpha cleanup</td>
+     <td style="padding: 0.2em 0.5em;"> Keep adding small standard-package fixtures as the registry grows. Prioritise collision checks, explicit import visibility, constant folding boundaries, and backend lowering contracts over broad API expansion.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
