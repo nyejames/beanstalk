@@ -166,12 +166,27 @@ impl FileImport {
     // resolved symbol name rather than the raw path name.
 }
 
+/// Classification of a source file's role within the module.
+///
+/// WHAT: distinguishes entry files, normal source files, and library facade files.
+/// WHY: each role has different rules for runtime code, exports, and visibility.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum FileRole {
+    /// The module entry file. Has an implicit start function.
+    Entry,
+    /// A normal source file. No top-level runtime code allowed.
+    Normal,
+    /// A library facade file (`#mod.bst`). Defines the public export surface.
+    /// No top-level runtime code allowed. Exported declarations are visible externally.
+    ModuleFacade,
+}
+
 // Shared file-level state that stays live while one source file is being split into headers.
 pub(super) struct HeaderParseContext<'a> {
     pub external_package_registry: &'a ExternalPackageRegistry,
     pub style_directives: &'a StyleDirectiveRegistry,
     pub warnings: &'a mut Vec<CompilerWarning>,
-    pub is_entry_file: bool,
+    pub file_role: FileRole,
     pub project_path_resolver: Option<ProjectPathResolver>,
     pub path_format_config: PathStringFormatConfig,
     pub string_table: &'a mut StringTable,

@@ -116,7 +116,31 @@ pub(super) fn build_project_path_resolver(
         &config.root_folders,
         &merged_libraries,
     ) {
-        Ok(resolver) => Ok(resolver),
+        Ok(resolver) => {
+            // Validate that every source library root has a #mod.bst facade file.
+            for (prefix, root) in resolver.source_library_roots() {
+                let mod_file = root.join("#mod.bst");
+                if !mod_file.is_file() {
+                    let mut error = CompilerError::file_error(
+                        root,
+                        format!(
+                            "Source library '@{prefix}' is missing a #mod.bst facade file. Every source library must declare its public export surface through a #mod.bst facade."
+                        ),
+                        string_table,
+                    );
+                    error.new_metadata_entry(
+                        crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::CompilationStage,
+                        String::from("Project Structure"),
+                    );
+                    error.new_metadata_entry(
+                        crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+                        String::from("Create a #mod.bst file in the library root that exports the public symbols with '#'."),
+                    );
+                    return Err(CompilerMessages::from_error_ref(error, string_table));
+                }
+            }
+            Ok(resolver)
+        }
         Err(error) => Err(CompilerMessages::from_error_ref(error, string_table)),
     }
 }
@@ -229,6 +253,11 @@ fn discover_root_entry_files(
             };
 
             if !file_name.starts_with('#') || file_name == settings::CONFIG_FILE_NAME {
+                continue;
+            }
+
+            // Exclude #mod.bst so source library facades are never treated as module entries.
+            if file_name == "#mod.bst" {
                 continue;
             }
 

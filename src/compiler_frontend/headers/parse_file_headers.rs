@@ -15,12 +15,15 @@ use crate::compiler_frontend::headers::file_parser::parse_headers_in_file;
 use crate::compiler_frontend::headers::module_symbols::{ModuleSymbols, register_declared_symbol};
 use crate::compiler_frontend::headers::types::HeaderParseContext;
 pub use crate::compiler_frontend::headers::types::{
-    FileImport, Header, HeaderKind, HeaderParseOptions, Headers, TopLevelConstFragment,
+    FileImport, FileRole, Header, HeaderKind, HeaderParseOptions, Headers, TopLevelConstFragment,
 };
+use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::symbols::identifier_policy::ensure_not_keyword_shadow_identifier;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::FileTokens;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
+use rustc_hash::FxHashSet;
 use std::path::Path;
 
 pub fn parse_headers(
@@ -51,11 +54,19 @@ pub fn parse_headers(
             _ => file.src_path.to_path_buf(string_table) == entry_file_path,
         };
 
+        let file_role = if is_entry_file {
+            FileRole::Entry
+        } else if is_mod_file(&file.src_path, string_table) {
+            FileRole::ModuleFacade
+        } else {
+            FileRole::Normal
+        };
+
         let mut parse_context = HeaderParseContext {
             external_package_registry,
             style_directives: &style_directives,
             warnings,
-            is_entry_file,
+            file_role,
             project_path_resolver: project_path_resolver.clone(),
             path_format_config: path_format_config.clone(),
             string_table,
@@ -80,11 +91,16 @@ pub fn parse_headers(
         return Err(errors);
     }
 
-    let module_symbols =
+    let mut module_symbols =
         build_module_symbols(&headers, string_table).map_err(|mut symbol_errors| {
             errors.append(&mut symbol_errors);
             errors
         })?;
+
+    if let Some(resolver) = &project_path_resolver {
+        build_facade_data(&mut module_symbols, &headers, resolver, string_table)
+            .map_err(|e| vec![e])?;
+    }
 
     Ok(Headers {
         headers,
@@ -92,6 +108,58 @@ pub fn parse_headers(
         entry_runtime_fragment_count: runtime_fragment_count,
         module_symbols,
     })
+}
+
+/// Checks whether a source file is a library facade (`#mod.bst`).
+fn is_mod_file(src_path: &InternedPath, string_table: &StringTable) -> bool {
+    src_path
+        .name_str(string_table)
+        .is_some_and(|name| name == "#mod.bst")
+}
+
+/// Build facade export maps and file library membership from parsed headers and the path resolver.
+///
+/// WHAT: scans each source library root's `#mod.bst` for exported symbols, and records which
+/// source files belong to which library.
+/// WHY: AST import binding needs this data to enforce the facade gate for cross-library imports.
+fn build_facade_data(
+    module_symbols: &mut ModuleSymbols,
+    headers: &[Header],
+    resolver: &ProjectPathResolver,
+    string_table: &mut StringTable,
+) -> Result<(), CompilerError> {
+    // Build facade export maps from #mod.bst headers.
+    for (prefix, facade_file) in resolver.facade_files() {
+        let mod_file_logical =
+            resolver.logical_path_for_canonical_file(facade_file, string_table)?;
+        let mod_file_interned = InternedPath::from_path_buf(&mod_file_logical, string_table);
+
+        let mut exports = FxHashSet::default();
+        for header in headers {
+            if header.source_file == mod_file_interned && header.exported {
+                exports.insert(header.tokens.src_path.clone());
+            }
+        }
+        module_symbols
+            .facade_exports
+            .insert(prefix.clone(), exports);
+    }
+
+    // Build file library membership from canonical paths.
+    for header in headers {
+        if let Some(canonical_path) = &header.tokens.canonical_os_path {
+            for (prefix, root_path) in resolver.source_library_roots() {
+                if canonical_path.starts_with(root_path) {
+                    module_symbols
+                        .file_library_membership
+                        .insert(header.source_file.clone(), prefix.clone());
+                    break;
+                }
+            }
+        }
+    }
+
+    Ok(())
 }
 
 /// Collect all order-independent top-level symbol metadata from parsed (unsorted) headers.

@@ -2989,3 +2989,38 @@ tags = ["integration", "source-libraries", "imports"]
 id = "source_lib_and_external_package"
 path = "source_lib_and_external_package"
 tags = ["integration", "source-libraries", "imports", "external-packages"]
+
+[[case]]
+id = "source_lib_facade"
+path = "source_lib_facade"
+tags = ["integration", "source-libraries", "facades", "imports"]
+
+[[case]]
+id = "source_lib_facade_grouped"
+path = "source_lib_facade_grouped"
+tags = ["integration", "source-libraries", "facades", "imports"]
+
+[[case]]
+id = "source_lib_facade_rejected_internal"
+path = "source_lib_facade_rejected_internal"
+tags = ["integration", "source-libraries", "facades", "imports", "diagnostics"]
+
+[[case]]
+id = "source_lib_facade_private"
+path = "source_lib_facade_private"
+tags = ["integration", "source-libraries", "facades", "imports", "diagnostics"]
+
+[[case]]
+id = "source_lib_facade_sibling"
+path = "source_lib_facade_sibling"
+tags = ["integration", "source-libraries", "facades", "imports"]
+
+[[case]]
+id = "source_lib_facade_runtime_stmt"
+path = "source_lib_facade_runtime_stmt"
+tags = ["integration", "source-libraries", "facades", "diagnostics"]
+
+[[case]]
+id = "source_lib_facade_missing"
+path = "source_lib_facade_missing"
+tags = ["integration", "source-libraries", "facades", "diagnostics"]

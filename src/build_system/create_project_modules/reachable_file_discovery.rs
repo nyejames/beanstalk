@@ -91,7 +91,7 @@ pub(super) fn discover_reachable_files(
             if external_packages.is_virtual_package_import(import_path, string_table) {
                 continue;
             }
-            let resolved = project_path_resolver.resolve_import_to_file(
+            let resolved = project_path_resolver.resolve_import_to_file_with_facade_fallback(
                 import_path,
                 &canonical_file,
                 string_table,

@@ -84,6 +84,8 @@ pub(crate) struct ProjectPathResolver {
     entry_root: PathBuf,
     root_folder_names: HashSet<String>,
     source_library_roots: HashMap<String, PathBuf>,
+    /// Maps library prefix to the canonical path of its `#mod.bst` facade file, if present.
+    facade_files: HashMap<String, PathBuf>,
 }
 
 impl ProjectPathResolver {
@@ -101,11 +103,24 @@ impl ProjectPathResolver {
             let crate::libraries::ProvidedSourceRoot::Filesystem(path) = &root.root;
             source_library_roots.insert(root.import_prefix.clone(), path.clone());
         }
+
+        // Discover facade files (`#mod.bst`) in each source library root.
+        let mut facade_files = HashMap::new();
+        for (prefix, root) in &source_library_roots {
+            let mod_file = root.join("#mod.bst");
+            if mod_file.is_file()
+                && let Ok(canonical) = fs::canonicalize(&mod_file)
+            {
+                facade_files.insert(prefix.clone(), canonical);
+            }
+        }
+
         Ok(Self {
             project_root,
             entry_root,
             root_folder_names: collect_root_folder_names(root_folders)?,
             source_library_roots,
+            facade_files,
         })
     }
 
@@ -113,6 +128,16 @@ impl ProjectPathResolver {
     /// WHY: callers need one canonical source of truth after config parsing.
     pub(crate) fn entry_root(&self) -> &Path {
         &self.entry_root
+    }
+
+    /// WHAT: returns the map of source library roots.
+    pub(crate) fn source_library_roots(&self) -> &HashMap<String, PathBuf> {
+        &self.source_library_roots
+    }
+
+    /// WHAT: returns the map of discovered facade files.
+    pub(crate) fn facade_files(&self) -> &HashMap<String, PathBuf> {
+        &self.facade_files
     }
 
     /// WHAT: derive a portable logical source path from a canonical filesystem file path.
@@ -182,6 +207,40 @@ impl ProjectPathResolver {
         let (_, canonical) =
             self.resolve_import_as_compile_time_path(import_path, importer_file, string_table)?;
         Ok(canonical)
+    }
+
+    /// WHAT: resolves an import path, falling back to the library's `#mod.bst` facade file
+    /// when normal file resolution fails for a library import.
+    /// WHY: source library imports target facade-exported symbols, not individual files.
+    ///      Stage 0 must still discover the facade file so the frontend can validate exports.
+    pub(crate) fn resolve_import_to_file_with_facade_fallback(
+        &self,
+        import_path: &InternedPath,
+        importer_file: &Path,
+        string_table: &mut StringTable,
+    ) -> Result<PathBuf, CompilerError> {
+        match self.resolve_import_to_file(import_path, importer_file, string_table) {
+            Ok(path) => Ok(path),
+            Err(original_error) => {
+                if let Some(facade_file) = self.resolve_facade_fallback(import_path, string_table) {
+                    Ok(facade_file)
+                } else {
+                    Err(original_error)
+                }
+            }
+        }
+    }
+
+    /// WHAT: checks whether an import path targets a library with a facade, and if so,
+    /// returns the facade file path.
+    fn resolve_facade_fallback(
+        &self,
+        import_path: &InternedPath,
+        string_table: &StringTable,
+    ) -> Option<PathBuf> {
+        let first_component = import_path.as_components().first()?;
+        let prefix = string_table.resolve(*first_component);
+        self.facade_files.get(prefix).cloned()
     }
 
     /// WHAT: resolves one import path to both a typed compile-time path and a canonical file path.

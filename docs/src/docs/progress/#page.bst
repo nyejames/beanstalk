@@ -275,9 +275,9 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
         [data:
             [: Source library roots]
             [: Partial]
-            [: Targeted coverage for filesystem-based source library root resolution and prefix collision detection.]
+            [: Targeted coverage for filesystem-based source library root resolution, prefix collision detection, and `#mod.bst` facade enforcement.]
             [: Frontend / HTML]
-            [: Project-local libraries under `/lib` are discovered automatically and resolve through the path resolver. Builder-provided source library roots are plumbed through `LibrarySet`. Prefix collisions between builder-provided and project-local libraries produce a hard config error. No `#mod.bst` facade enforcement yet.]
+            [: Project-local libraries under `/lib` are discovered automatically and resolve through the path resolver. Builder-provided source library roots are plumbed through `LibrarySet`. Prefix collisions between builder-provided and project-local libraries produce a hard config error. Every source library root must contain a `#mod.bst` facade file. Cross-library imports are gated through the facade: external importers can only import symbols explicitly exported by `#mod.bst`.]
         ]
 
         [data:
@@ -291,9 +291,9 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
         [data:
             [: Project-local libraries]
             [: Partial]
-            [: Targeted coverage for `/lib` auto-discovery and import resolution.]
+            [: Targeted coverage for `/lib` auto-discovery, import resolution, and facade gating.]
             [: Frontend / HTML]
-            [: A `/lib` directory at the project root is scanned for subdirectories, each treated as a source library prefix. Imports like `@helper/utils` resolve to `lib/helper/utils.bst`. Covered by integration tests.]
+            [: A `/lib` directory at the project root is scanned for subdirectories, each treated as a source library prefix. Imports like `@helper/utils` resolve to `lib/helper/utils.bst`. Every library must declare a `#mod.bst` facade that exports its public surface with `#`. Cross-library imports bypassing the facade are rejected.]
         ]
 
         [data:

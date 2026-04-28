@@ -75,6 +75,11 @@ enum ImportPathResolution {
     Resolved(InternedPath),
 }
 
+enum FacadeImportResolution {
+    Resolved(InternedPath),
+    NotExported { library_prefix: String },
+}
+
 enum VisibleNameKind {
     SameFileDeclaration,
     SourceImport,
@@ -202,6 +207,124 @@ fn check_alias_case_warning(
     }
 }
 
+/// Attempts to resolve a cross-library import through the target library's `#mod.bst` facade.
+///
+/// WHAT: when an import path starts with a library prefix and the importer is outside that
+/// library, the symbol must be exported by the library's facade.
+/// WHY: library modules expose symbols only through their facade; external importers cannot
+/// bypass it to import internal implementation symbols.
+fn try_resolve_facade_import(
+    importer_file: &InternedPath,
+    import: &FileImport,
+    facade_exports: &FxHashMap<String, FxHashSet<InternedPath>>,
+    file_library_membership: &FxHashMap<InternedPath, String>,
+    string_table: &StringTable,
+) -> Option<FacadeImportResolution> {
+    let components = import.header_path.as_components();
+    if components.is_empty() {
+        return None;
+    }
+
+    let first = string_table.resolve(components[0]);
+    let library_prefix = facade_exports.keys().find(|p| *p == first)?;
+
+    // Internal imports within the same library use normal file-based resolution.
+    let importer_library = file_library_membership.get(importer_file);
+    if importer_library.map(|s| s.as_str()) == Some(library_prefix) {
+        return None;
+    }
+
+    // External import — look up the symbol name in the facade exports.
+    let symbol_name = import.header_path.name()?;
+    let exports = facade_exports.get(library_prefix)?;
+
+    for export_path in exports {
+        if let Some(export_name) = export_path.name()
+            && export_name == symbol_name
+        {
+            return Some(FacadeImportResolution::Resolved(export_path.clone()));
+        }
+    }
+
+    Some(FacadeImportResolution::NotExported {
+        library_prefix: library_prefix.clone(),
+    })
+}
+
+/// Registers a resolved source import into the visible-name registry and per-file bindings.
+///
+/// WHAT: shared logic for registering a source import once its canonical symbol path is known.
+/// WHY: both facade resolution and normal file-based resolution produce the same registration
+///      behavior; keeping it in one place avoids drift.
+#[allow(clippy::too_many_arguments)]
+fn register_source_import_binding(
+    import: &FileImport,
+    symbol_path: &InternedPath,
+    importable_symbol_exported: &FxHashMap<InternedPath, bool>,
+    type_alias_paths: &FxHashSet<InternedPath>,
+    registry: &mut VisibleNameRegistry,
+    bindings: &mut FileImportBindings,
+    string_table: &StringTable,
+    warnings: &mut Vec<CompilerWarning>,
+) -> Result<(), CompilerError> {
+    if !importable_symbol_exported
+        .get(symbol_path)
+        .copied()
+        .unwrap_or(false)
+    {
+        return Err(CompilerError::new_rule_error(
+            format!(
+                "Cannot import '{}' because it is not exported. Add '#' to export it from its source file.",
+                symbol_path.to_portable_string(string_table)
+            ),
+            import.location.clone(),
+        ));
+    }
+
+    let Some(symbol_name) = symbol_path.name() else {
+        return Err(CompilerError::new_rule_error(
+            "Imported symbol path is missing a symbol name.",
+            import.location.clone(),
+        ));
+    };
+
+    let local_name = import.alias.unwrap_or(symbol_name);
+
+    let kind = if type_alias_paths.contains(symbol_path) {
+        VisibleNameKind::TypeAliasImport
+    } else {
+        VisibleNameKind::SourceImport
+    };
+
+    registry.register(
+        local_name,
+        VisibleNameBinding {
+            kind,
+            canonical_path: Some(symbol_path.to_owned()),
+            external_symbol_id: None,
+            location: Some(import.location.clone()),
+        },
+        string_table,
+    )?;
+
+    if import.alias.is_some() {
+        check_alias_case_warning(import, local_name, symbol_name, string_table, warnings);
+    }
+
+    if type_alias_paths.contains(symbol_path) {
+        bindings
+            .visible_type_aliases
+            .insert(local_name, symbol_path.to_owned());
+    } else {
+        bindings.visible_symbol_paths.insert(symbol_path.to_owned());
+        bindings
+            .visible_source_bindings
+            .insert(local_name, symbol_path.to_owned());
+    }
+
+    Ok(())
+}
+
 #[allow(clippy::too_many_arguments)]
 pub(crate) fn resolve_file_import_bindings(
     file_imports_by_source: &FxHashMap<InternedPath, Vec<FileImport>>,
@@ -211,6 +334,8 @@ pub(crate) fn resolve_file_import_bindings(
     type_alias_paths: &FxHashSet<InternedPath>,
     builtin_paths: &FxHashSet<InternedPath>,
     external_package_registry: &ExternalPackageRegistry,
+    facade_exports: &FxHashMap<String, FxHashSet<InternedPath>>,
+    file_library_membership: &FxHashMap<InternedPath, String>,
     string_table: &mut StringTable,
 ) -> Result<
     (
@@ -310,6 +435,42 @@ pub(crate) fn resolve_file_import_bindings(
             .unwrap_or_default();
 
         for import in imports {
+            // Facade import resolution for cross-library imports.
+            // WHY: library modules expose symbols only through their #mod.bst facade.
+            //      External importers cannot bypass the facade to import internal symbols.
+            if let Some(facade_result) = try_resolve_facade_import(
+                &source_file,
+                &import,
+                facade_exports,
+                file_library_membership,
+                string_table,
+            ) {
+                match facade_result {
+                    FacadeImportResolution::Resolved(symbol_path) => {
+                        register_source_import_binding(
+                            &import,
+                            &symbol_path,
+                            importable_symbol_exported,
+                            type_alias_paths,
+                            &mut registry,
+                            &mut bindings,
+                            string_table,
+                            &mut warnings,
+                        )?;
+                        continue;
+                    }
+                    FacadeImportResolution::NotExported { library_prefix } => {
+                        return Err(CompilerError::new_rule_error(
+                            format!(
+                                "Cannot import '{}' from '@{library_prefix}' because it is not exported by the library's #mod.bst facade. Library modules expose symbols only through their facade.",
+                                import.header_path.to_portable_string(string_table)
+                            ),
+                            import.location,
+                        ));
+                    }
+                }
+            }
+
             // Bare-file imports (`@path/to/file` resolving to a module file path) are rejected.
             // Start functions are build-system-only and are not importable or callable from modules.
             if let ImportPathResolution::Resolved(_) | ImportPathResolution::Ambiguous =
@@ -332,66 +493,16 @@ pub(crate) fn resolve_file_import_bindings(
                 string_table,
             ) {
                 ImportPathResolution::Resolved(symbol_path) => {
-                    if !importable_symbol_exported
-                        .get(&symbol_path)
-                        .copied()
-                        .unwrap_or(false)
-                    {
-                        return Err(CompilerError::new_rule_error(
-                            format!(
-                                "Cannot import '{}' because it is not exported. Add '#' to export it from its source file.",
-                                symbol_path.to_portable_string(string_table)
-                            ),
-                            import.location,
-                        ));
-                    }
-
-                    let Some(symbol_name) = symbol_path.name() else {
-                        return Err(CompilerError::new_rule_error(
-                            "Imported symbol path is missing a symbol name.",
-                            import.location,
-                        ));
-                    };
-
-                    let local_name = import.alias.unwrap_or(symbol_name);
-
-                    let kind = if type_alias_paths.contains(&symbol_path) {
-                        VisibleNameKind::TypeAliasImport
-                    } else {
-                        VisibleNameKind::SourceImport
-                    };
-
-                    registry.register(
-                        local_name,
-                        VisibleNameBinding {
-                            kind,
-                            canonical_path: Some(symbol_path.to_owned()),
-                            external_symbol_id: None,
-                            location: Some(import.location.clone()),
-                        },
+                    register_source_import_binding(
+                        &import,
+                        &symbol_path,
+                        importable_symbol_exported,
+                        type_alias_paths,
+                        &mut registry,
+                        &mut bindings,
                         string_table,
+                        &mut warnings,
                     )?;
-
-                    if import.alias.is_some() {
-                        check_alias_case_warning(
-                            &import,
-                            local_name,
-                            symbol_name,
-                            string_table,
-                            &mut warnings,
-                        );
-                    }
-
-                    if type_alias_paths.contains(&symbol_path) {
-                        bindings
-                            .visible_type_aliases
-                            .insert(local_name, symbol_path.to_owned());
-                    } else {
-                        bindings.visible_symbol_paths.insert(symbol_path.to_owned());
-                        bindings
-                            .visible_source_bindings
-                            .insert(local_name, symbol_path.to_owned());
-                    }
                 }
                 ImportPathResolution::Ambiguous => {
                     return Err(CompilerError::new_rule_error(

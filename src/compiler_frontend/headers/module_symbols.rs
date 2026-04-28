@@ -74,6 +74,11 @@ pub(crate) struct ModuleSymbols {
     pub(crate) builtin_struct_ast_nodes: Vec<AstNode>,
     pub(crate) resolved_struct_fields_by_path: FxHashMap<InternedPath, Vec<Declaration>>,
     pub(crate) struct_source_by_path: FxHashMap<InternedPath, InternedPath>,
+
+    // Facade data: maps library import prefix to exported symbol paths from its #mod.bst.
+    pub(crate) facade_exports: FxHashMap<String, FxHashSet<InternedPath>>,
+    // Maps source file logical path to its library prefix, if the file belongs to a source library.
+    pub(crate) file_library_membership: FxHashMap<InternedPath, String>,
 }
 
 impl ModuleSymbols {
@@ -92,6 +97,8 @@ impl ModuleSymbols {
             resolved_struct_fields_by_path: FxHashMap::default(),
             struct_source_by_path: FxHashMap::default(),
             type_alias_paths: FxHashSet::default(),
+            facade_exports: FxHashMap::default(),
+            file_library_membership: FxHashMap::default(),
         }
     }
 

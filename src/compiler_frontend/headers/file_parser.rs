@@ -15,7 +15,8 @@ use crate::compiler_frontend::headers::header_dispatch::create_header;
 use crate::compiler_frontend::headers::imports::normalize_import_dependency_path;
 use crate::compiler_frontend::headers::start_capture::push_runtime_template_tokens_to_start_function;
 use crate::compiler_frontend::headers::types::{
-    FileImport, Header, HeaderBuildContext, HeaderKind, HeaderParseContext, TopLevelConstFragment,
+    FileImport, FileRole, Header, HeaderBuildContext, HeaderKind, HeaderParseContext,
+    TopLevelConstFragment,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::const_paths::parse_import_clause_items;
@@ -235,7 +236,7 @@ pub(super) fn parse_headers_in_file(
 
             TokenKind::TemplateHead => {
                 if next_statement_exported {
-                    if !context.is_entry_file {
+                    if context.file_role == FileRole::Normal {
                         crate::return_rule_error!(
                             "Top-level const templates are currently only supported in the module entry file.",
                             current_location, {
@@ -282,12 +283,21 @@ pub(super) fn parse_headers_in_file(
                     // Runtime top-level templates stay in the start-function body and are
                     // evaluated in source order by entry start(). Increment the runtime
                     // fragment count so subsequent const fragments get the correct insertion index.
+                    if context.file_role == FileRole::ModuleFacade {
+                        crate::return_rule_error!(
+                            "Library facade files (#mod.bst) cannot contain runtime top-level templates.",
+                            current_location, {
+                                CompilationStage => "Header Parsing",
+                                PrimarySuggestion => "Remove the template or move it to a normal source file.",
+                            }
+                        );
+                    }
                     push_runtime_template_tokens_to_start_function(
                         current_token,
                         token_stream,
                         &mut start_function_body,
                     )?;
-                    if context.is_entry_file {
+                    if context.file_role == FileRole::Entry {
                         *context.runtime_fragment_count += 1;
                     }
                 }
@@ -301,7 +311,7 @@ pub(super) fn parse_headers_in_file(
 
     // Check non-entry files for top-level executable code. Since there is no semantic consumer
     // for non-entry implicit starts, any non-trivial top-level body is rejected.
-    if !context.is_entry_file {
+    if context.file_role != FileRole::Entry {
         let has_executable_tokens = start_function_body.iter().any(|t| {
             !matches!(
                 t.kind,
@@ -309,8 +319,13 @@ pub(super) fn parse_headers_in_file(
             )
         });
         if has_executable_tokens {
+            let msg = if context.file_role == FileRole::ModuleFacade {
+                "Library facade files (#mod.bst) cannot contain top-level executable statements."
+            } else {
+                "Non-entry files cannot contain top-level executable statements. Move this code into a named function or into the entry file."
+            };
             crate::return_rule_error!(
-                "Non-entry files cannot contain top-level executable statements. Move this code into a named function or into the entry file.",
+                msg,
                 start_function_body
                     .iter()
                     .find(|t| !matches!(t.kind, TokenKind::Eof | TokenKind::Newline | TokenKind::ModuleStart))

@@ -927,7 +927,7 @@ fn entry_runtime_fragment_count_accumulates_across_multiple_runtime_templates() 
 #[test]
 fn entry_runtime_fragment_count_is_zero_when_parsed_as_non_entry_file() {
     // A library file (non-entry) with only declarations reports runtime fragment count 0.
-    // WHY: only `is_entry_file == true` increments runtime_fragment_count.
+    // WHY: only `FileRole::Entry` increments runtime_fragment_count.
     let headers = parse_single_file_headers_with_entry(
         "f || -> Int:\n    1\n;\n",
         "src/lib.bst",

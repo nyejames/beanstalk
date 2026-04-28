@@ -699,7 +699,8 @@ fn project_local_lib_directory_is_discovered_as_source_library_root() {
     fs::create_dir_all(root.join("lib/helper")).expect("should create lib/helper");
     fs::create_dir_all(root.join("src")).expect("should create src");
     fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
-    fs::write(root.join("lib/helper/utils.bst"), "#foo = 1\n").expect("should write lib file");
+    fs::write(root.join("lib/helper/#mod.bst"), "#foo = 1\n").expect("should write facade");
+    fs::write(root.join("lib/helper/utils.bst"), "#bar = 2\n").expect("should write lib file");
     fs::write(root.join("#config.bst"), "").expect("should write config");
 
     let config = Config::new(root.clone());
@@ -737,6 +738,7 @@ fn builder_provided_and_project_local_library_collision_is_error() {
     fs::create_dir_all(root.join("lib/html")).expect("should create lib/html");
     fs::create_dir_all(root.join("src")).expect("should create src");
     fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
+    fs::write(root.join("lib/html/#mod.bst"), "#foo = 1\n").expect("should write facade");
     fs::write(root.join("#config.bst"), "").expect("should write config");
 
     let config = Config::new(root.clone());
