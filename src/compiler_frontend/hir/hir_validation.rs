@@ -838,8 +838,37 @@ impl<'a> HirValidator<'a> {
                                 anchor,
                             ));
                         }
+                        for (actual, expected) in fields.iter().zip(variant.fields.iter()) {
+                            if actual.name != Some(expected.name) {
+                                return Err(self.error_with_hir(
+                                    format!(
+                                        "VariantConstruct field name {:?} does not match declared name {:?}",
+                                        actual.name, expected.name
+                                    ),
+                                    anchor,
+                                ));
+                            }
+                            if actual.value.ty != expected.ty {
+                                return Err(self.error_with_hir(
+                                    format!(
+                                        "VariantConstruct field type mismatch for field {:?}",
+                                        expected.name
+                                    ),
+                                    anchor,
+                                ));
+                            }
+                        }
                     }
                     crate::compiler_frontend::hir::expressions::HirVariantCarrier::Option => {
+                        if *variant_index > 1 {
+                            return Err(self.error_with_hir(
+                                format!(
+                                    "VariantConstruct(Option) variant index {} out of range (valid: 0..=1)",
+                                    variant_index
+                                ),
+                                anchor,
+                            ));
+                        }
                         let expected = if *variant_index == 0 { 0 } else { 1 };
                         if fields.len() != expected {
                             return Err(self.error_with_hir(
@@ -852,6 +881,15 @@ impl<'a> HirValidator<'a> {
                         }
                     }
                     crate::compiler_frontend::hir::expressions::HirVariantCarrier::Result => {
+                        if *variant_index > 1 {
+                            return Err(self.error_with_hir(
+                                format!(
+                                    "VariantConstruct(Result) variant index {} out of range (valid: 0..=1)",
+                                    variant_index
+                                ),
+                                anchor,
+                            ));
+                        }
                         if fields.len() != 1 {
                             return Err(self.error_with_hir(
                                 format!(
@@ -947,6 +985,14 @@ impl<'a> HirValidator<'a> {
                         }
                     }
                     crate::compiler_frontend::hir::expressions::HirVariantCarrier::Option => {
+                        if *variant_index > 1 {
+                            return Err(self.error_with_hir(
+                                format!(
+                                    "VariantPayloadGet variant index {variant_index} out of range for Option (valid: 0..=1)",
+                                ),
+                                anchor,
+                            ));
+                        }
                         let max_fields = if *variant_index == 0 { 0 } else { 1 };
                         if *field_index >= max_fields {
                             return Err(self.error_with_hir(
@@ -958,6 +1004,14 @@ impl<'a> HirValidator<'a> {
                         }
                     }
                     crate::compiler_frontend::hir::expressions::HirVariantCarrier::Result => {
+                        if *variant_index > 1 {
+                            return Err(self.error_with_hir(
+                                format!(
+                                    "VariantPayloadGet variant index {variant_index} out of range for Result (valid: 0..=1)",
+                                ),
+                                anchor,
+                            ));
+                        }
                         if *field_index >= 1 {
                             return Err(self.error_with_hir(
                                 format!(

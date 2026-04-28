@@ -58,14 +58,13 @@ impl<'a> HirBuilder<'a> {
                 tag,
                 fields,
             } => {
-                let DataType::Choices { variants, .. } = &expr.data_type else {
+                let DataType::Choices { .. } = &expr.data_type else {
                     return_hir_transformation_error!(
                         "ChoiceConstruct expression has non-choice data type",
                         self.hir_error_location(&expr.location)
                     );
                 };
-                let choice_id =
-                    self.resolve_or_create_choice_id(nominal_path, variants, &expr.location)?;
+                let choice_id = self.resolve_choice_id(nominal_path)?;
                 let region = self.current_region_or_error(&expr.location)?;
                 let ty = self.lower_data_type(&expr.data_type, &expr.location)?;
 
@@ -644,54 +643,66 @@ impl<'a> HirBuilder<'a> {
         ));
     }
 
-    /// Resolve a choice declaration to its stable HIR `ChoiceId`, creating one on first use.
+    /// Register a choice declaration, allocating a stable `ChoiceId`.
     ///
-    /// WHAT: lazily registers `HirChoice` entries because AST does not emit top-level
-    /// choice-definition nodes; choices are discovered via type references and expressions.
-    /// WHY: keeps choice registration simple without a separate pre-scan pass.
-    pub(crate) fn resolve_or_create_choice_id(
+    /// WHAT: called during `prepare_hir_declarations` to build the complete choice registry
+    /// before any expression or statement lowering.
+    /// WHY: separating registration from lookup keeps `lower_data_type` a pure resolution
+    ///      path and prevents lazy-creation ordering bugs.
+    pub(crate) fn register_choice_id(
         &mut self,
         nominal_path: &InternedPath,
         variants: &[crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant],
         location: &SourceLocation,
     ) -> Result<crate::compiler_frontend::hir::ids::ChoiceId, CompilerError> {
-        use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariantPayload;
         use crate::compiler_frontend::hir::module::HirChoice;
 
         if let Some(&choice_id) = self.choices_by_name.get(nominal_path) {
-            // Backfill payload metadata if this choice was first discovered through a
-            // type reference before any constructor or match arm populated its fields.
-            let needs_backfill = self
-                .module
-                .choices
-                .get(choice_id.0 as usize)
-                .is_some_and(|c| c.variants.iter().all(|v| v.fields.is_empty()))
-                && variants
-                    .iter()
-                    .any(|v| matches!(v.payload, ChoiceVariantPayload::Record { .. }));
-
-            if needs_backfill {
-                let hir_variants = self.lower_choice_variants(variants, location)?;
-                if let Some(choice) = self.module.choices.get_mut(choice_id.0 as usize) {
-                    choice.variants = hir_variants;
-                }
-            }
             return Ok(choice_id);
         }
 
         let choice_id = self.allocate_choice_id();
-        let hir_variants = self.lower_choice_variants(variants, location)?;
 
+        // Push a placeholder BEFORE lowering variants so recursive registrations
+        // preserve the invariant: ChoiceId(N) maps to module.choices[N].
         self.choices_by_name
             .insert(nominal_path.to_owned(), choice_id);
         self.side_table
             .bind_choice_name(choice_id, nominal_path.to_owned());
+        let index = choice_id.0 as usize;
+        debug_assert!(index == self.module.choices.len());
         self.module.choices.push(HirChoice {
             id: choice_id,
-            variants: hir_variants,
+            variants: vec![],
         });
 
+        let hir_variants = self.lower_choice_variants(variants, location)?;
+        self.module.choices[index].variants = hir_variants;
+
         Ok(choice_id)
+    }
+
+    /// Look up a pre-registered choice by its canonical path.
+    ///
+    /// WHAT: resolves a `ChoiceId` after `prepare_hir_declarations` has registered all choices.
+    /// WHY: expression and statement lowering should never create new choice metadata;
+    ///      missing entries indicate an AST → HIR contract violation.
+    pub(crate) fn resolve_choice_id(
+        &self,
+        nominal_path: &InternedPath,
+    ) -> Result<crate::compiler_frontend::hir::ids::ChoiceId, CompilerError> {
+        self.choices_by_name
+            .get(nominal_path)
+            .copied()
+            .ok_or_else(|| {
+                CompilerError::new_rule_error(
+                    format!(
+                        "Choice '{}' was not pre-registered during HIR declaration preparation",
+                        self.symbol_name_for_diagnostics(nominal_path)
+                    ),
+                    self.hir_error_location(&SourceLocation::default()),
+                )
+            })
     }
 
     fn lower_choice_variants(
@@ -709,16 +720,14 @@ impl<'a> HirBuilder<'a> {
                 ChoiceVariantPayload::Record { fields } => {
                     let mut hir_fields = Vec::with_capacity(fields.len());
                     for field in fields {
-                        let field_ty = match &field.value.data_type {
-                            crate::compiler_frontend::datatypes::DataType::NamedType(_) => None,
-                            _ => self
-                                .lower_data_type(&field.value.data_type, &field.value.location)
-                                .ok(),
+                        let field_ty =
+                            self.lower_data_type(&field.value.data_type, &field.value.location)?;
+                        let Some(field_name) = field.id.name() else {
+                            return_hir_transformation_error!(
+                                "Choice payload field is missing a name",
+                                self.hir_error_location(&field.value.location)
+                            );
                         };
-                        let field_name = field
-                            .id
-                            .name()
-                            .unwrap_or_else(|| self.string_table.intern("<anonymous>"));
                         hir_fields.push(HirChoiceField {
                             name: field_name,
                             ty: field_ty,

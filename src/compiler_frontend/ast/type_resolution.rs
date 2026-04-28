@@ -332,6 +332,58 @@ pub(crate) fn resolve_struct_field_types(
     Ok(resolved_fields)
 }
 
+/// Resolve choice payload field types, replacing `NamedType` placeholders in record variants.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn resolve_choice_variant_payload_types(
+    variants: &[crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant],
+    declarations: &[Declaration],
+    visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
+    visible_external_symbols: Option<&FxHashMap<StringId, ExternalSymbolId>>,
+    visible_source_bindings: Option<&FxHashMap<StringId, InternedPath>>,
+    visible_type_aliases: Option<&FxHashMap<StringId, InternedPath>>,
+    resolved_type_aliases: Option<&FxHashMap<InternedPath, DataType>>,
+    string_table: &StringTable,
+) -> Result<Vec<crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant>, CompilerError>
+{
+    use crate::compiler_frontend::declaration_syntax::choice::{
+        ChoiceVariant, ChoiceVariantPayload,
+    };
+
+    let mut resolved_variants = Vec::with_capacity(variants.len());
+    for variant in variants {
+        let payload = match &variant.payload {
+            ChoiceVariantPayload::Unit => ChoiceVariantPayload::Unit,
+            ChoiceVariantPayload::Record { fields } => {
+                let mut resolved_fields = Vec::with_capacity(fields.len());
+                for field in fields {
+                    let mut resolved_field = field.to_owned();
+                    resolved_field.value.data_type = resolve_named_signature_type(
+                        &field.value.data_type,
+                        &field.value.location,
+                        declarations,
+                        visible_declaration_ids,
+                        visible_external_symbols,
+                        visible_source_bindings,
+                        visible_type_aliases,
+                        resolved_type_aliases,
+                        string_table,
+                    )?;
+                    resolved_fields.push(resolved_field);
+                }
+                ChoiceVariantPayload::Record {
+                    fields: resolved_fields,
+                }
+            }
+        };
+        resolved_variants.push(ChoiceVariant {
+            id: variant.id,
+            payload,
+            location: variant.location.clone(),
+        });
+    }
+    Ok(resolved_variants)
+}
+
 fn inline_visible_constant_references(
     expression: &Expression,
     declarations: &[Declaration],

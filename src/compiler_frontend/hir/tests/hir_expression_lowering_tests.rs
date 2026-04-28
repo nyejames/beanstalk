@@ -1897,20 +1897,25 @@ fn lowers_choice_variant_expression_to_hir_variant_construct() {
 
     let mut builder = setup_builder(&mut string_table);
 
+    let choice_variants = vec![
+        ChoiceVariant {
+            id: ready_name,
+            payload: ChoiceVariantPayload::Unit,
+            location: location.clone(),
+        },
+        ChoiceVariant {
+            id: busy_name,
+            payload: ChoiceVariantPayload::Unit,
+            location: location.clone(),
+        },
+    ];
+    builder
+        .register_choice_id(&status_path, &choice_variants, &location)
+        .unwrap();
+
     let choice_type = DataType::Choices {
         nominal_path: status_path.clone(),
-        variants: vec![
-            ChoiceVariant {
-                id: ready_name,
-                payload: ChoiceVariantPayload::Unit,
-                location: location.clone(),
-            },
-            ChoiceVariant {
-                id: busy_name,
-                payload: ChoiceVariantPayload::Unit,
-                location: location.clone(),
-            },
-        ],
+        variants: choice_variants,
     };
 
     let choice_expr = Expression::new(

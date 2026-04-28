@@ -113,6 +113,7 @@ impl FunctionSignature {
             string_table,
             &signature_context,
             SignatureMemberContext::FunctionParameter,
+            scope,
         )?;
         warnings.extend(signature_context.take_emitted_warnings());
         token_stream.advance();

@@ -58,6 +58,7 @@ pub fn parse_signature_members(
     string_table: &mut StringTable,
     expression_context: &ScopeContext,
     member_context: SignatureMemberContext,
+    owner_path: &InternedPath,
 ) -> Result<Vec<Declaration>, CompilerError> {
     let mut members = Vec::with_capacity(1);
     let mut expecting_member = true;
@@ -107,10 +108,11 @@ pub fn parse_signature_members(
 
                 let member = parse_signature_member(
                     token_stream,
-                    token_stream.src_path.append(arg_name),
+                    owner_path.append(arg_name),
                     expression_context,
                     string_table,
                     false,
+                    member_context,
                 )?;
 
                 members.push(member);
@@ -134,10 +136,11 @@ pub fn parse_signature_members(
                 let this_id = string_table.intern("this");
                 let member = parse_signature_member(
                     token_stream,
-                    token_stream.src_path.append(this_id),
+                    owner_path.append(this_id),
                     expression_context,
                     string_table,
                     true,
+                    member_context,
                 )?;
 
                 members.push(member);
@@ -228,6 +231,7 @@ fn parse_signature_member(
     expression_context: &ScopeContext,
     string_table: &mut StringTable,
     allow_reserved_this: bool,
+    member_context: SignatureMemberContext,
 ) -> Result<Declaration, CompilerError> {
     let member_name = full_name
         .name()
@@ -260,6 +264,19 @@ fn parse_signature_member(
         value_mode = ValueMode::MutableOwned;
     };
 
+    if member_context == SignatureMemberContext::ChoicePayloadField
+        && value_mode == ValueMode::MutableOwned
+    {
+        return_syntax_error!(
+            "Choice payload fields cannot be marked mutable. Mutability belongs to bindings, not variant payload declarations.",
+            token_stream.current_location(),
+            {
+                CompilationStage => "Choice Declaration",
+                PrimarySuggestion => "Remove the '~' symbol from the payload field",
+            }
+        );
+    }
+
     while token_stream.current_token_kind() == &TokenKind::Newline {
         token_stream.advance();
     }
@@ -271,6 +288,16 @@ fn parse_signature_member(
     match token_stream.current_token_kind() {
         TokenKind::Assign => {
             token_stream.advance();
+            if member_context == SignatureMemberContext::ChoicePayloadField {
+                return_syntax_error!(
+                    "Choice payload fields cannot have default values.",
+                    token_stream.current_location(),
+                    {
+                        CompilationStage => "Choice Declaration",
+                        PrimarySuggestion => "Remove the '= value' default from the payload field",
+                    }
+                );
+            }
         }
 
         TokenKind::Comma

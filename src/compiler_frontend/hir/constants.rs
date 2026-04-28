@@ -29,16 +29,12 @@ pub struct HirConstField {
 #[derive(Debug, Clone)]
 pub enum HirConstValue {
     #[allow(dead_code)]
-    // Stored during lowering; scalar payloads are not inspected in Alpha validation.
     Int(i64),
     #[allow(dead_code)]
-    // Stored during lowering; scalar payloads are not inspected in Alpha validation.
     Float(f64),
     #[allow(dead_code)]
-    // Stored during lowering; scalar payloads are not inspected in Alpha validation.
     Bool(bool),
     #[allow(dead_code)]
-    // Stored during lowering; scalar payloads are not inspected in Alpha validation.
     Char(char),
     String(String),
     Collection(Vec<HirConstValue>),
@@ -46,13 +42,11 @@ pub enum HirConstValue {
     Range(Box<HirConstValue>, Box<HirConstValue>),
     Result {
         #[allow(dead_code)]
-        // Variant is stored during lowering; Alpha validation only checks the value.
         variant: crate::compiler_frontend::hir::expressions::ResultVariant,
         value: Box<HirConstValue>,
     },
     Choice {
         #[allow(dead_code)]
-        // Tag is stored during lowering; Alpha validation only checks the value.
         tag: usize,
         fields: Vec<HirConstField>,
     },

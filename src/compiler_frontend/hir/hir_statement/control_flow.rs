@@ -469,14 +469,13 @@ impl<'a> HirBuilder<'a> {
                     } = &arm.pattern
                     {
                         if !captures.is_empty() && !arm_capture_locals[index].is_empty() {
-                            let DataType::Choices { variants, .. } = &scrutinee.data_type else {
+                            let DataType::Choices { .. } = &scrutinee.data_type else {
                                 return_hir_transformation_error!(
                                     "Choice pattern capture used with non-choice scrutinee type",
                                     self.hir_error_location(location)
                                 );
                             };
-                            let choice_id =
-                                self.resolve_or_create_choice_id(nominal_path, variants, location)?;
+                            let choice_id = self.resolve_choice_id(nominal_path)?;
                             let region = self.current_region_or_error(location)?;
                             let mut substitutions = FxHashMap::default();
                             for (capture, &local_id) in
@@ -623,30 +622,16 @@ impl<'a> HirBuilder<'a> {
         )
     }
 
-    /// Lower a capture field type, handling unresolved `NamedType` by looking up type aliases.
+    /// Lower a capture field type.
     ///
-    /// WHAT: choice payload field types may contain `NamedType` placeholders when the type checker
-    /// has not yet resolved them (e.g. imported type aliases). `lower_data_type` panics on these,
-    /// so this helper resolves them via `module_constants_by_name` or falls back to `String`.
+    /// WHAT: delegates to `lower_data_type`. AST type resolution must have resolved all named
+    /// types before HIR lowering; any `NamedType` remaining here is a compiler invariant violation.
     fn lower_capture_field_type(
         &mut self,
         field_type: &DataType,
         location: &SourceLocation,
     ) -> Result<TypeId, CompilerError> {
-        match field_type {
-            DataType::NamedType(type_name) => {
-                let found = self
-                    .module_constants_by_name
-                    .iter()
-                    .find(|(path, _)| path.name() == Some(*type_name))
-                    .map(|(_, declaration)| declaration.value.data_type.clone());
-                if let Some(data_type) = found {
-                    return self.lower_data_type(&data_type, location);
-                }
-                Ok(self.intern_type_kind(HirTypeKind::String))
-            }
-            _ => self.lower_data_type(field_type, location),
-        }
+        self.lower_data_type(field_type, location)
     }
 
     /// Register capture locals for one match arm so guards and bodies can reference them.
@@ -674,14 +659,14 @@ impl<'a> HirBuilder<'a> {
             return Ok(Vec::new());
         }
 
-        let DataType::Choices { variants, .. } = &scrutinee_ast.data_type else {
+        let DataType::Choices { .. } = &scrutinee_ast.data_type else {
             return_hir_transformation_error!(
                 "Choice pattern capture used with non-choice scrutinee type",
                 self.hir_error_location(location)
             );
         };
 
-        let _choice_id = self.resolve_or_create_choice_id(nominal_path, variants, location)?;
+        let _choice_id = self.resolve_choice_id(nominal_path)?;
         let region = self.current_region_or_error(location)?;
 
         let mut local_ids = Vec::with_capacity(captures.len());
@@ -757,14 +742,14 @@ impl<'a> HirBuilder<'a> {
             "capture count must match registered local count"
         );
 
-        let DataType::Choices { variants, .. } = &scrutinee_ast.data_type else {
+        let DataType::Choices { .. } = &scrutinee_ast.data_type else {
             return_hir_transformation_error!(
                 "Choice pattern capture used with non-choice scrutinee type",
                 self.hir_error_location(location)
             );
         };
 
-        let choice_id = self.resolve_or_create_choice_id(nominal_path, variants, location)?;
+        let choice_id = self.resolve_choice_id(nominal_path)?;
         let region = self.current_region_or_error(location)?;
 
         for (capture, &local_id) in captures.iter().zip(capture_locals.iter()) {
@@ -864,14 +849,13 @@ impl<'a> HirBuilder<'a> {
                 location,
                 ..
             } => {
-                let DataType::Choices { variants, .. } = subject_type else {
+                let DataType::Choices { .. } = subject_type else {
                     return_hir_transformation_error!(
                         "ChoiceVariant pattern used with non-choice scrutinee type",
                         self.hir_error_location(location)
                     );
                 };
-                let choice_id =
-                    self.resolve_or_create_choice_id(nominal_path, variants, location)?;
+                let choice_id = self.resolve_choice_id(nominal_path)?;
                 Ok(HirPattern::ChoiceVariant {
                     choice_id,
                     variant_index: *tag,

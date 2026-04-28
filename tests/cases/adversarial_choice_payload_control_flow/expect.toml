@@ -8,4 +8,4 @@ rendered_output_contains = ["adversarial_choice_payload_control_flow summary=fai
 [[backends.html.artifact_assertions]]
 path = "index.html"
 kind = "html"
-must_contain = [".tag === 0", ".tag === 1", ".tag === 2", "{ tag: 0, value: ", "{ tag: 1, reason: ", "while (", "if ("]
+must_contain = [".tag === 0", ".tag === 1", ".tag === 2", "{ tag: 0, \"value\": ", "{ tag: 1, \"reason\": ", "while (", "if ("]

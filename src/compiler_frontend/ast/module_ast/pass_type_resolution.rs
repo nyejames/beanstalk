@@ -12,7 +12,8 @@ use crate::compiler_frontend::ast::import_bindings::{
 };
 use crate::compiler_frontend::ast::module_ast::scope_context::TopLevelDeclarationIndex;
 use crate::compiler_frontend::ast::type_resolution::{
-    resolve_struct_field_types, validate_no_recursive_runtime_structs,
+    resolve_choice_variant_payload_types, resolve_struct_field_types,
+    validate_no_recursive_runtime_structs,
 };
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_errors::ErrorMetaDataKey;
@@ -92,6 +93,48 @@ impl<'a> AstBuildState<'a> {
             "AST/type resolution/struct fields resolved in: "
         );
         let _ = struct_fields_resolution_start;
+
+        let choice_resolution_start = Instant::now();
+        for header in sorted_headers {
+            let HeaderKind::Choice { variants } = &header.kind else {
+                continue;
+            };
+
+            let bindings = file_import_bindings
+                .get(&header.source_file)
+                .cloned()
+                .unwrap_or_default();
+
+            let resolved_variants = resolve_choice_variant_payload_types(
+                variants,
+                &self.declarations,
+                Some(&bindings.visible_symbol_paths),
+                Some(&bindings.visible_external_symbols),
+                Some(&bindings.visible_source_bindings),
+                Some(&bindings.visible_type_aliases),
+                Some(&self.resolved_type_aliases_by_path),
+                string_table,
+            )
+            .map_err(|error| self.error_messages(error, string_table))?;
+
+            self.declarations.push(Declaration {
+                id: header.tokens.src_path.to_owned(),
+                value: Expression::new(
+                    ExpressionKind::NoValue,
+                    header.name_location.to_owned(),
+                    DataType::Choices {
+                        nominal_path: header.tokens.src_path.to_owned(),
+                        variants: resolved_variants,
+                    },
+                    ValueMode::ImmutableReference,
+                ),
+            });
+        }
+        timer_log!(
+            choice_resolution_start,
+            "AST/type resolution/choice variants resolved in: "
+        );
+        let _ = choice_resolution_start;
 
         let recursive_validation_start = Instant::now();
         validate_no_recursive_runtime_structs(&self.resolved_struct_fields_by_path, string_table)

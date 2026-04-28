@@ -131,12 +131,8 @@ impl<'a> HirBuilder<'a> {
                 HirTypeKind::Result { ok, err }
             }
 
-            DataType::Choices {
-                nominal_path,
-                variants,
-            } => {
-                let choice_id =
-                    self.resolve_or_create_choice_id(nominal_path, variants, location)?;
+            DataType::Choices { nominal_path, .. } => {
+                let choice_id = self.resolve_choice_id(nominal_path)?;
                 HirTypeKind::Choice { choice_id }
             }
 

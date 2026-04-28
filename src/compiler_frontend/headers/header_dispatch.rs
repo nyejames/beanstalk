@@ -181,17 +181,12 @@ pub(super) fn create_header(
                 .with_source_file_scope(context.source_file.to_owned())
                 .with_path_format_config(context.path_format_config.clone());
 
-                // Field IDs are built as `token_stream.src_path.append(field_name)` inside
-                // parse_signature_members. Set src_path to the struct's own path so field IDs
-                // are `struct_path/field_name` — matching what resolve_struct_field_types expects.
-                // WHY: token_stream.src_path is the file path at this point; fields need to be
-                // children of the struct path, not siblings of the struct in the file namespace.
-                let saved_src_path = token_stream.src_path.to_owned();
-                token_stream.src_path = full_name.to_owned();
-                let fields =
-                    parse_struct_shell(token_stream, &struct_context, context.string_table);
-                token_stream.src_path = saved_src_path;
-                let fields = fields?;
+                let fields = parse_struct_shell(
+                    token_stream,
+                    &struct_context,
+                    context.string_table,
+                    &full_name,
+                )?;
 
                 // Collect strict type edges from field types only (no default-expression edges).
                 // WHY: struct field type refs are the only struct edges that constrain sort order.

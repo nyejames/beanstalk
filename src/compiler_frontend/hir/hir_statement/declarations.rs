@@ -29,6 +29,18 @@ impl<'a> HirBuilder<'a> {
     // WHAT: pre-registers all structs and functions before any HIR body lowering starts.
     // WHY: later statement and expression lowering relies on complete symbol tables for stable ID lookups.
     pub(crate) fn prepare_hir_declarations(&mut self, ast: &Ast) -> Result<(), CompilerError> {
+        // Register choices FIRST so struct and function signature lowering can resolve them.
+        // WHY: choices are nominal types discovered from AST declarations. Pre-registering
+        //      them before any `lower_data_type` call ensures `resolve_choice_id` is a pure
+        //      lookup and never needs lazy creation.
+        for choice_def in &ast.choice_definitions {
+            self.register_choice_id(
+                &choice_def.nominal_path,
+                &choice_def.variants,
+                &SourceLocation::default(),
+            )?;
+        }
+
         for node in &ast.nodes {
             if let NodeKind::StructDefinition(name, fields) = &node.kind {
                 self.register_struct_declaration(name, fields, &node.location)?;

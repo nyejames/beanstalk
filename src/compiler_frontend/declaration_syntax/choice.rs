@@ -156,17 +156,13 @@ pub(crate) fn parse_choice_shell(
                 let payload = match token_stream.current_token_kind() {
                     TokenKind::TypeParameterBracket => {
                         // Record body: Variant | field Type, ... |
-                        let saved_src_path = token_stream.src_path.to_owned();
-                        token_stream.src_path = choice_path.to_owned();
-
                         let fields = parse_record_body(
                             token_stream,
                             context,
                             string_table,
                             SignatureMemberContext::ChoicePayloadField,
+                            choice_path,
                         )?;
-
-                        token_stream.src_path = saved_src_path;
 
                         if fields.is_empty() {
                             return_rule_error!(

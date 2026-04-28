@@ -19,36 +19,26 @@ use rustc_hash::FxHashMap;
 
 /// Registry entry for a nominal choice type.
 ///
-/// WHY: the `choices` vec provides a dense `ChoiceId` namespace.
-/// Alpha scope supports unit variants only; payload fields are intentionally omitted.
+/// WHY: choices are nominal variant carriers. The registry gives HIR and backends stable
+/// variant indexes and payload field metadata.
 #[derive(Debug, Clone)]
 pub struct HirChoice {
     #[allow(dead_code)]
-    // Stored during lowering; existence checked by ChoiceId index in validation.
     pub id: crate::compiler_frontend::hir::ids::ChoiceId,
-    #[allow(dead_code)] // Stored during lowering; not walked in Alpha validation.
     pub variants: Vec<HirChoiceVariant>,
 }
 
 #[derive(Debug, Clone)]
 pub struct HirChoiceVariant {
-    #[allow(dead_code)] // Stored during lowering; not read back in Alpha paths.
-    pub name: StringId,
-    /// Payload field metadata. Populated in Phase 1 for type-checking scaffolding;
-    /// not walked in Alpha validation until payload construction/matching lands.
     #[allow(dead_code)]
+    pub name: StringId,
     pub fields: Vec<HirChoiceField>,
 }
 
 #[derive(Debug, Clone)]
 pub struct HirChoiceField {
-    #[allow(dead_code)] // Populated in a later phase; struct shape defined in Phase 1.
     pub name: StringId,
-    /// Payload field type. `None` when the type cannot be resolved during lazy registration
-    /// (for example, imported types that are still `DataType::NamedType` at choice-discovery time).
-    /// A future dedicated choice-registration pass can backfill these.
-    #[allow(dead_code)]
-    pub ty: Option<crate::compiler_frontend::hir::hir_datatypes::TypeId>,
+    pub ty: crate::compiler_frontend::hir::hir_datatypes::TypeId,
 }
 
 #[derive(Debug, Clone)]

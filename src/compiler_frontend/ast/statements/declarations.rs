@@ -204,7 +204,13 @@ pub fn resolve_declaration_syntax(
     let mut parsed_expr = match initializer_stream.current_token_kind() {
         // Struct Definition
         TokenKind::TypeParameterBracket => {
-            let params = parse_struct_shell(&mut initializer_stream, &const_context, string_table)?;
+            let owner_path = initializer_stream.src_path.to_owned();
+            let params = parse_struct_shell(
+                &mut initializer_stream,
+                &const_context,
+                string_table,
+                &owner_path,
+            )?;
             validate_struct_default_values(&params, string_table)?;
 
             Expression::struct_definition(

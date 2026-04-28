@@ -286,7 +286,7 @@ fn result_propagate_emitted_in_nested_function_calls() {
 
     let propagate_return_count = output
         .source
-        .matches("return { tag: \"ok\", value: __bs_result_propagate(")
+        .matches("return { tag: \"ok\", \"value\": __bs_result_propagate(")
         .count();
     assert!(
         propagate_return_count >= 2,

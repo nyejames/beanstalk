@@ -116,6 +116,17 @@ use std::time::Instant;
 /// WHAT: the fully resolved, typed AST produced by Stage 4, ready for HIR lowering.
 /// WHY: one container keeps the pipeline contract explicit — HIR receives exactly this
 /// struct and nothing else from the AST stage.
+/// Resolved choice definition carried from AST to HIR for pre-registration.
+///
+/// WHAT: pairs a choice's canonical path with its fully resolved variants.
+/// WHY: HIR needs to register all choices before expression lowering so
+///      `lower_data_type` can resolve `ChoiceId` via lookup instead of lazy creation.
+#[derive(Clone, Debug)]
+pub struct AstChoiceDefinition {
+    pub nominal_path: InternedPath,
+    pub variants: Vec<crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant>,
+}
+
 pub struct Ast {
     pub nodes: Vec<AstNode>,
     pub module_constants: Vec<crate::compiler_frontend::ast::ast_nodes::Declaration>,
@@ -129,6 +140,12 @@ pub struct Ast {
     pub const_top_level_fragments: Vec<AstConstTopLevelFragment>,
     pub rendered_path_usages: Vec<RenderedPathUsage>,
     pub warnings: Vec<CompilerWarning>,
+
+    /// Resolved choice definitions for HIR pre-registration.
+    ///
+    /// WHAT: every choice declaration (local and imported) with fully resolved payload field types.
+    /// WHY: HIR registers choices deterministically before function lowering.
+    pub choice_definitions: Vec<AstChoiceDefinition>,
 }
 
 /// Shared dependencies/configuration required to build one module AST.

@@ -102,8 +102,97 @@ impl<'a> HirBuilder<'a> {
 // Shared AST → HIR test helpers
 // ---------------------------------------------------------------------------
 
+/// Recursively scan a `DataType` for `Choices` definitions and collect them.
+fn collect_choice_definitions_from_data_type(
+    data_type: &crate::compiler_frontend::datatypes::DataType,
+    out: &mut Vec<crate::compiler_frontend::ast::AstChoiceDefinition>,
+) {
+    use crate::compiler_frontend::datatypes::DataType;
+    match data_type {
+        DataType::Choices {
+            nominal_path,
+            variants,
+        } => {
+            if !out.iter().any(|c| &c.nominal_path == nominal_path) {
+                out.push(crate::compiler_frontend::ast::AstChoiceDefinition {
+                    nominal_path: nominal_path.to_owned(),
+                    variants: variants.to_owned(),
+                });
+            }
+            for variant in variants {
+                if let crate::compiler_frontend::declaration_syntax::choice::ChoiceVariantPayload::Record { fields } = &variant.payload {
+                    for field in fields {
+                        collect_choice_definitions_from_data_type(&field.value.data_type, out);
+                    }
+                }
+            }
+        }
+        DataType::Collection(inner) | DataType::Option(inner) | DataType::Reference(inner) => {
+            collect_choice_definitions_from_data_type(inner, out);
+        }
+        DataType::Returns(values) => {
+            for value in values {
+                collect_choice_definitions_from_data_type(value, out);
+            }
+        }
+        DataType::Function(receiver, signature) => {
+            if let Some(crate::compiler_frontend::datatypes::ReceiverKey::Struct(path)) =
+                receiver.as_ref()
+            {
+                // No nested DataType in receiver key
+                let _ = path;
+            }
+            for param in &signature.parameters {
+                collect_choice_definitions_from_data_type(&param.value.data_type, out);
+            }
+            for ret in signature.success_returns() {
+                collect_choice_definitions_from_data_type(ret.data_type(), out);
+            }
+            if let Some(err) = signature.error_return() {
+                collect_choice_definitions_from_data_type(err.data_type(), out);
+            }
+        }
+        DataType::Struct { fields, .. } | DataType::Parameters(fields) => {
+            for field in fields {
+                collect_choice_definitions_from_data_type(&field.value.data_type, out);
+            }
+        }
+        _ => {}
+    }
+}
+
+/// Extract all choice definitions referenced in AST node signatures.
+fn extract_choice_definitions_from_nodes(
+    nodes: &[AstNode],
+) -> Vec<crate::compiler_frontend::ast::AstChoiceDefinition> {
+    let mut defs = vec![];
+    for node in nodes {
+        match &node.kind {
+            crate::compiler_frontend::ast::ast_nodes::NodeKind::Function(_, signature, _) => {
+                for param in &signature.parameters {
+                    collect_choice_definitions_from_data_type(&param.value.data_type, &mut defs);
+                }
+                for ret in signature.success_returns() {
+                    collect_choice_definitions_from_data_type(ret.data_type(), &mut defs);
+                }
+                if let Some(err) = signature.error_return() {
+                    collect_choice_definitions_from_data_type(err.data_type(), &mut defs);
+                }
+            }
+            crate::compiler_frontend::ast::ast_nodes::NodeKind::StructDefinition(_, fields) => {
+                for field in fields {
+                    collect_choice_definitions_from_data_type(&field.value.data_type, &mut defs);
+                }
+            }
+            _ => {}
+        }
+    }
+    defs
+}
+
 /// Build a minimal `Ast` from nodes for HIR lowering tests.
 pub(crate) fn build_ast(nodes: Vec<AstNode>, entry_path: InternedPath) -> Ast {
+    let choice_definitions = extract_choice_definitions_from_nodes(&nodes);
     Ast {
         nodes,
         module_constants: vec![],
@@ -112,6 +201,7 @@ pub(crate) fn build_ast(nodes: Vec<AstNode>, entry_path: InternedPath) -> Ast {
         const_top_level_fragments: vec![],
         rendered_path_usages: vec![],
         warnings: vec![],
+        choice_definitions,
     }
 }
 

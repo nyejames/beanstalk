@@ -265,7 +265,7 @@ fn lowers_option_construct_expression() {
     .expect("VariantConstruct(Option) lowering should succeed");
 
     assert!(
-        output.source.contains("{ tag: \"some\", value: 10 }"),
+        output.source.contains("{ tag: \"some\", \"value\": 10 }"),
         "expected VariantConstruct(Option) to lower into a tagged JS object"
     );
 }

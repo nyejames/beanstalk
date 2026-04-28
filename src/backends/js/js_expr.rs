@@ -26,37 +26,7 @@ impl<'hir> JsEmitter<'hir> {
                 carrier,
                 variant_index,
                 fields,
-            } => {
-                let mut entries = vec![];
-                for field in fields {
-                    let js_value = self.lower_expr(&field.value)?;
-                    if let Some(name) = field.name {
-                        let js_name = self.string_table.resolve(name);
-                        entries.push(format!("{js_name}: {js_value}"));
-                    } else {
-                        entries.push(js_value);
-                    }
-                }
-                match carrier {
-                    HirVariantCarrier::Choice { .. } => {
-                        let mut all_entries = vec![format!("tag: {variant_index}")];
-                        all_entries.extend(entries);
-                        Ok(format!("{{ {} }}", all_entries.join(", ")))
-                    }
-                    HirVariantCarrier::Option => {
-                        let tag = if *variant_index == 0 { "none" } else { "some" };
-                        let mut all_entries = vec![format!("tag: \"{tag}\"")];
-                        all_entries.extend(entries);
-                        Ok(format!("{{ {} }}", all_entries.join(", ")))
-                    }
-                    HirVariantCarrier::Result => {
-                        let tag = if *variant_index == 0 { "ok" } else { "err" };
-                        let mut all_entries = vec![format!("tag: \"{tag}\"")];
-                        all_entries.extend(entries);
-                        Ok(format!("{{ {} }}", all_entries.join(", ")))
-                    }
-                }
-            }
+            } => self.lower_variant_construct(carrier, *variant_index, fields),
 
             HirExpressionKind::Float(value) => {
                 if value.is_nan() {
@@ -164,34 +134,7 @@ impl<'hir> JsEmitter<'hir> {
                 source,
                 variant_index,
                 field_index,
-            } => {
-                let source_js = self.lower_expr(source)?;
-                let field_name = match carrier {
-                    HirVariantCarrier::Choice { choice_id } => {
-                        let choice = self.hir.choices.get(choice_id.0 as usize).ok_or_else(|| {
-                            CompilerError::compiler_error(format!(
-                                "JavaScript backend: invalid ChoiceId {:?} in VariantPayloadGet",
-                                choice_id
-                            ))
-                        })?;
-                        let variant = choice.variants.get(*variant_index).ok_or_else(|| {
-                            CompilerError::compiler_error(format!(
-                                "JavaScript backend: invalid variant index {variant_index} for choice {:?}",
-                                choice_id
-                            ))
-                        })?;
-                        let field = variant.fields.get(*field_index).ok_or_else(|| {
-                            CompilerError::compiler_error(format!(
-                                "JavaScript backend: invalid field index {field_index} for variant {variant_index} of choice {:?}",
-                                choice_id
-                            ))
-                        })?;
-                        self.string_table.resolve(field.name)
-                    }
-                    HirVariantCarrier::Option | HirVariantCarrier::Result => "value",
-                };
-                Ok(format!("({source_js}).{field_name}"))
-            }
+            } => self.lower_variant_payload_get(carrier, source, *variant_index, *field_index),
         }
     }
 
@@ -248,6 +191,79 @@ impl<'hir> JsEmitter<'hir> {
             )),
             _ => Ok(format!("__bs_binding({})", self.lower_expr(expression)?)),
         }
+    }
+
+    // WHAT: lowers a variant construction into a JS object literal.
+    // WHY: centralises tag policy and field-key escaping in one place.
+    fn lower_variant_construct(
+        &mut self,
+        carrier: &HirVariantCarrier,
+        variant_index: usize,
+        fields: &[crate::compiler_frontend::hir::expressions::HirVariantField],
+    ) -> Result<String, CompilerError> {
+        let mut entries = vec![];
+        for field in fields {
+            let js_value = self.lower_expr(&field.value)?;
+            if let Some(name) = field.name {
+                let js_name = escape_js_string(self.string_table.resolve(name));
+                entries.push(format!("{js_name}: {js_value}"));
+            } else {
+                entries.push(js_value);
+            }
+        }
+
+        let tag_entry = match carrier {
+            HirVariantCarrier::Choice { .. } => format!("tag: {variant_index}"),
+            HirVariantCarrier::Option => {
+                let tag = if variant_index == 0 { "none" } else { "some" };
+                format!("tag: \"{tag}\"")
+            }
+            HirVariantCarrier::Result => {
+                let tag = if variant_index == 0 { "ok" } else { "err" };
+                format!("tag: \"{tag}\"")
+            }
+        };
+
+        let mut all_entries = vec![tag_entry];
+        all_entries.extend(entries);
+        Ok(format!("{{ {} }}", all_entries.join(", ")))
+    }
+
+    // WHAT: lowers a variant payload field access into a JS bracket-access expression.
+    // WHY: bracket access is safe for field names that collide with JS reserved words.
+    fn lower_variant_payload_get(
+        &mut self,
+        carrier: &HirVariantCarrier,
+        source: &HirExpression,
+        variant_index: usize,
+        field_index: usize,
+    ) -> Result<String, CompilerError> {
+        let source_js = self.lower_expr(source)?;
+        let field_name_js = match carrier {
+            HirVariantCarrier::Choice { choice_id } => {
+                let choice = self.hir.choices.get(choice_id.0 as usize).ok_or_else(|| {
+                    CompilerError::compiler_error(format!(
+                        "JavaScript backend: invalid ChoiceId {:?} in VariantPayloadGet",
+                        choice_id
+                    ))
+                })?;
+                let variant = choice.variants.get(variant_index).ok_or_else(|| {
+                    CompilerError::compiler_error(format!(
+                        "JavaScript backend: invalid variant index {variant_index} for choice {:?}",
+                        choice_id
+                    ))
+                })?;
+                let field = variant.fields.get(field_index).ok_or_else(|| {
+                    CompilerError::compiler_error(format!(
+                        "JavaScript backend: invalid field index {field_index} for variant {variant_index} of choice {:?}",
+                        choice_id
+                    ))
+                })?;
+                escape_js_string(self.string_table.resolve(field.name))
+            }
+            HirVariantCarrier::Option | HirVariantCarrier::Result => "\"value\"".to_owned(),
+        };
+        Ok(format!("({source_js})[{field_name_js}]"))
     }
 
     pub(crate) fn lower_host_call_argument(

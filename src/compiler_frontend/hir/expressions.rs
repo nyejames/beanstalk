@@ -140,7 +140,6 @@ pub enum HirExpressionKind {
     /// Construct a variant value through a shared carrier.
     ///
     /// WHY: unifies choice/option/result construction in HIR while keeping type kinds distinct.
-    /// Phase 3: used for choices. Phase 6: will expand to Option/Result.
     VariantConstruct {
         carrier: HirVariantCarrier,
         variant_index: usize,
@@ -152,7 +151,6 @@ pub enum HirExpressionKind {
     /// WHY: match-arm capture bindings are materialized as local assignments from the
     /// scrutinee. Using a dedicated HIR expression keeps backend lowering uniform and
     /// preserves the carrier type for field-name resolution.
-    /// Phase 4: used for choice payload capture.
     VariantPayloadGet {
         carrier: HirVariantCarrier,
         source: Box<HirExpression>,
@@ -161,8 +159,7 @@ pub enum HirExpressionKind {
     },
 }
 
-// OptionVariant was removed during Phase 6 HIR carrier unification.
-// Option none/some are now represented through VariantConstruct with HirVariantCarrier::Option.
+// Option none/some are represented through VariantConstruct with HirVariantCarrier::Option.
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum HirBuiltinCastKind {

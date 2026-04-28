@@ -209,6 +209,29 @@ impl<'a> AstBuildState<'a> {
         timer_log!(builtin_merge_start, "AST/finalize/builtin AST merge in: ");
         let _ = builtin_merge_start;
 
+        // Collect resolved choice definitions for HIR pre-registration.
+        // WHY: choices are nominal types declared at module scope. HIR needs complete
+        //      variant metadata before any expression lowering that references them.
+        // NOTE: `self.declarations` may contain multiple versions of the same choice
+        //       (unresolved placeholder from header sorting, then resolved from pass 3).
+        //       Iterate in reverse to prefer the resolved version.
+        let mut seen_choice_paths = rustc_hash::FxHashSet::<InternedPath>::default();
+        let mut choice_definitions = vec![];
+        for declaration in self.declarations.iter().rev() {
+            if let crate::compiler_frontend::datatypes::DataType::Choices {
+                nominal_path,
+                variants,
+            } = &declaration.value.data_type
+                && seen_choice_paths.insert(nominal_path.to_owned())
+            {
+                choice_definitions.push(crate::compiler_frontend::ast::AstChoiceDefinition {
+                    nominal_path: nominal_path.to_owned(),
+                    variants: variants.to_owned(),
+                });
+            }
+        }
+        choice_definitions.reverse(); // restore declaration order
+
         Ok(Ast {
             nodes: self.ast,
             module_constants,
@@ -217,6 +240,7 @@ impl<'a> AstBuildState<'a> {
             const_top_level_fragments,
             rendered_path_usages: std::mem::take(&mut *self.rendered_path_usages.borrow_mut()),
             warnings: self.warnings,
+            choice_definitions,
         })
     }
 }

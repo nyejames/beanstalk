@@ -269,6 +269,7 @@ pub(crate) fn build_ast(nodes: Vec<AstNode>, entry_path: InternedPath) -> Ast {
         const_top_level_fragments: vec![],
         rendered_path_usages: vec![],
         warnings: vec![],
+        choice_definitions: vec![],
     }
 }
 

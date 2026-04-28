@@ -392,6 +392,45 @@ pub(crate) fn resolve_named_types_in_data_type(
             }
             Ok(DataType::Returns(resolved_values))
         }
+        DataType::Choices {
+            nominal_path,
+            variants,
+        } => {
+            use crate::compiler_frontend::declaration_syntax::choice::{
+                ChoiceVariant, ChoiceVariantPayload,
+            };
+            let mut resolved_variants = Vec::with_capacity(variants.len());
+            for variant in variants {
+                let payload = match &variant.payload {
+                    ChoiceVariantPayload::Unit => ChoiceVariantPayload::Unit,
+                    ChoiceVariantPayload::Record { fields } => {
+                        let mut resolved_fields = Vec::with_capacity(fields.len());
+                        for field in fields {
+                            let mut resolved_field = field.to_owned();
+                            resolved_field.value.data_type = resolve_named_types_in_data_type(
+                                &field.value.data_type,
+                                &field.value.location,
+                                resolve_by_name,
+                                string_table,
+                            )?;
+                            resolved_fields.push(resolved_field);
+                        }
+                        ChoiceVariantPayload::Record {
+                            fields: resolved_fields,
+                        }
+                    }
+                };
+                resolved_variants.push(ChoiceVariant {
+                    id: variant.id,
+                    payload,
+                    location: variant.location.clone(),
+                });
+            }
+            Ok(DataType::Choices {
+                nominal_path: nominal_path.to_owned(),
+                variants: resolved_variants,
+            })
+        }
         _ => Ok(data_type.to_owned()),
     }
 }

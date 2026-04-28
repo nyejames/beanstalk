@@ -31,10 +31,17 @@ pub fn parse_record_body(
     context: &ScopeContext,
     string_table: &mut StringTable,
     member_context: SignatureMemberContext,
+    owner_path: &crate::compiler_frontend::interned_path::InternedPath,
 ) -> Result<Vec<Declaration>, CompilerError> {
     token_stream.advance();
 
-    let fields = parse_signature_members(token_stream, string_table, context, member_context)?;
+    let fields = parse_signature_members(
+        token_stream,
+        string_table,
+        context,
+        member_context,
+        owner_path,
+    )?;
 
     token_stream.advance();
 
@@ -51,12 +58,14 @@ pub fn parse_struct_shell(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
     string_table: &mut StringTable,
+    owner_path: &crate::compiler_frontend::interned_path::InternedPath,
 ) -> Result<Vec<Declaration>, CompilerError> {
     parse_record_body(
         token_stream,
         context,
         string_table,
         SignatureMemberContext::StructField,
+        owner_path,
     )
 }
 
