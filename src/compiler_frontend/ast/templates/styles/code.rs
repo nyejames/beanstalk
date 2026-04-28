@@ -469,11 +469,51 @@ fn is_keyword(word: &str, language: CodeLanguage) -> bool {
         ),
         CodeLanguage::Rust => matches!(
             word,
-            "if" | "else" | "return" | "break" | "continue" | "for" | "while" | "in" | "fn" | "let" | "mut" | "const" | "static" | "struct" | "enum" | "impl" | "trait" | "mod" | "use" | "pub" | "crate" | "super" | "self" | "match" | "async" | "await" | "move" | "ref" | "type" | "where" | "unsafe" | "extern" | "dyn"
+            "if" | "else"
+                | "return"
+                | "break"
+                | "continue"
+                | "for"
+                | "while"
+                | "in"
+                | "fn"
+                | "let"
+                | "mut"
+                | "const"
+                | "static"
+                | "struct"
+                | "enum"
+                | "impl"
+                | "trait"
+                | "mod"
+                | "use"
+                | "pub"
+                | "crate"
+                | "super"
+                | "self"
+                | "match"
+                | "async"
+                | "await"
+                | "move"
+                | "ref"
+                | "type"
+                | "where"
+                | "unsafe"
+                | "extern"
+                | "dyn"
         ),
         CodeLanguage::Shell => matches!(
             word,
-            "if" | "then" | "else" | "elif" | "fi" | "for" | "while" | "do" | "done" | "in" | "function"
+            "if" | "then"
+                | "else"
+                | "elif"
+                | "fi"
+                | "for"
+                | "while"
+                | "do"
+                | "done"
+                | "in"
+                | "function"
         ),
     }
 }

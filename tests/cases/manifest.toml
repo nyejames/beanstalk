@@ -216,27 +216,27 @@ tags = ["integration","language"]
 [[case]]
 id = "choice_payload_shorthand_rejected"
 path = "choice_payload_shorthand_rejected"
-tags = ["integration","diagnostics"]
+tags = ["integration","diagnostics","choices"]
 
 [[case]]
 id = "choice_payload_empty_record_rejected"
 path = "choice_payload_empty_record_rejected"
-tags = ["integration","diagnostics"]
+tags = ["integration","diagnostics","choices"]
 
 [[case]]
 id = "choice_payload_duplicate_field_rejected"
 path = "choice_payload_duplicate_field_rejected"
-tags = ["integration","diagnostics"]
+tags = ["integration","diagnostics","choices"]
 
 [[case]]
 id = "choice_payload_mutable_field_rejected"
 path = "choice_payload_mutable_field_rejected"
-tags = ["integration","diagnostics"]
+tags = ["integration","diagnostics","choices"]
 
 [[case]]
 id = "choice_payload_field_default_rejected"
 path = "choice_payload_field_default_rejected"
-tags = ["integration","diagnostics"]
+tags = ["integration","diagnostics","choices"]
 
 [[case]]
 id = "choice_payload_imported_field_type_success"
@@ -257,6 +257,11 @@ tags = ["integration","language"]
 id = "choice_payload_constructor_mixed_success"
 path = "choice_payload_constructor_mixed_success"
 tags = ["integration","language"]
+
+[[case]]
+id = "choice_payload_capture_reassignment_rejected"
+path = "choice_payload_capture_reassignment_rejected"
+tags = ["integration","diagnostics","choices","pattern-matching"]
 
 [[case]]
 id = "choice_payload_match_capture_success"
@@ -281,27 +286,27 @@ tags = ["integration","language"]
 [[case]]
 id = "choice_payload_match_wrong_capture_name_rejected"
 path = "choice_payload_match_wrong_capture_name_rejected"
-tags = ["integration","diagnostics"]
+tags = ["integration","diagnostics","choices","pattern-matching"]
 
 [[case]]
 id = "choice_payload_match_too_few_captures_rejected"
 path = "choice_payload_match_too_few_captures_rejected"
-tags = ["integration","diagnostics"]
+tags = ["integration","diagnostics","choices","pattern-matching"]
 
 [[case]]
 id = "choice_payload_match_too_many_captures_rejected"
 path = "choice_payload_match_too_many_captures_rejected"
-tags = ["integration","diagnostics"]
+tags = ["integration","diagnostics","choices","pattern-matching"]
 
 [[case]]
 id = "choice_payload_match_duplicate_capture_rejected"
 path = "choice_payload_match_duplicate_capture_rejected"
-tags = ["integration","diagnostics"]
+tags = ["integration","diagnostics","choices","pattern-matching"]
 
 [[case]]
 id = "choice_payload_match_capture_shadowing_rejected"
 path = "choice_payload_match_capture_shadowing_rejected"
-tags = ["integration","diagnostics"]
+tags = ["integration","diagnostics","choices","pattern-matching"]
 
 [[case]]
 id = "choice_payload_match_rename_success"
@@ -316,32 +321,32 @@ tags = ["integration","language"]
 [[case]]
 id = "choice_payload_match_rename_wrong_original_rejected"
 path = "choice_payload_match_rename_wrong_original_rejected"
-tags = ["integration","diagnostics"]
+tags = ["integration","diagnostics","choices","pattern-matching"]
 
 [[case]]
 id = "choice_payload_match_rename_duplicate_binding_rejected"
 path = "choice_payload_match_rename_duplicate_binding_rejected"
-tags = ["integration","diagnostics"]
+tags = ["integration","diagnostics","choices","pattern-matching"]
 
 [[case]]
 id = "choice_payload_match_rename_shadowing_rejected"
 path = "choice_payload_match_rename_shadowing_rejected"
-tags = ["integration","diagnostics"]
+tags = ["integration","diagnostics","choices","pattern-matching"]
 
 [[case]]
 id = "choice_payload_match_rename_missing_alias_rejected"
 path = "choice_payload_match_rename_missing_alias_rejected"
-tags = ["integration","diagnostics"]
+tags = ["integration","diagnostics","choices","pattern-matching"]
 
 [[case]]
 id = "choice_payload_match_rename_non_symbol_alias_rejected"
 path = "choice_payload_match_rename_non_symbol_alias_rejected"
-tags = ["integration","diagnostics"]
+tags = ["integration","diagnostics","choices","pattern-matching"]
 
 [[case]]
 id = "choice_payload_match_rename_original_not_visible_rejected"
 path = "choice_payload_match_rename_original_not_visible_rejected"
-tags = ["integration","diagnostics"]
+tags = ["integration","diagnostics","choices","pattern-matching"]
 
 [[case]]
 id = "choice_payload_match_rename_self_alias_success"
@@ -376,57 +381,57 @@ tags = ["integration","diagnostics"]
 [[case]]
 id = "choice_payload_match_named_assignment_rejected"
 path = "choice_payload_match_named_assignment_rejected"
-tags = ["integration","diagnostics"]
+tags = ["integration","diagnostics","choices","pattern-matching"]
 
 [[case]]
 id = "choice_payload_match_missing_payload_rejected"
 path = "choice_payload_match_missing_payload_rejected"
-tags = ["integration","diagnostics"]
+tags = ["integration","diagnostics","choices","pattern-matching"]
 
 [[case]]
 id = "choice_payload_match_unit_parens_rejected"
 path = "choice_payload_match_unit_parens_rejected"
-tags = ["integration","diagnostics"]
+tags = ["integration","diagnostics","choices","pattern-matching"]
 
 [[case]]
 id = "choice_payload_match_duplicate_variant_rejected"
 path = "choice_payload_match_duplicate_variant_rejected"
-tags = ["integration","diagnostics"]
+tags = ["integration","diagnostics","choices","pattern-matching"]
 
 [[case]]
 id = "choice_payload_match_guard_requires_else"
 path = "choice_payload_match_guard_requires_else"
-tags = ["integration","diagnostics"]
+tags = ["integration","diagnostics","choices","pattern-matching"]
 
 [[case]]
 id = "choice_payload_constructor_missing_field_rejected"
 path = "choice_payload_constructor_missing_field_rejected"
-tags = ["integration","diagnostics"]
+tags = ["integration","diagnostics","choices"]
 
 [[case]]
 id = "choice_payload_constructor_unknown_field_rejected"
 path = "choice_payload_constructor_unknown_field_rejected"
-tags = ["integration","diagnostics"]
+tags = ["integration","diagnostics","choices"]
 
 [[case]]
 id = "choice_payload_constructor_duplicate_field_rejected"
 path = "choice_payload_constructor_duplicate_field_rejected"
-tags = ["integration","diagnostics"]
+tags = ["integration","diagnostics","choices"]
 
 [[case]]
 id = "choice_payload_constructor_positional_after_named_rejected"
 path = "choice_payload_constructor_positional_after_named_rejected"
-tags = ["integration","diagnostics"]
+tags = ["integration","diagnostics","choices"]
 
 [[case]]
 id = "choice_payload_constructor_type_mismatch_rejected"
 path = "choice_payload_constructor_type_mismatch_rejected"
-tags = ["integration","diagnostics"]
+tags = ["integration","diagnostics","choices"]
 
 [[case]]
 id = "choice_payload_constructor_without_args_rejected"
 path = "choice_payload_constructor_without_args_rejected"
-tags = ["integration","diagnostics"]
+tags = ["integration","diagnostics","choices"]
 
 [[case]]
 id = "choice_const_unit_success"
@@ -441,7 +446,7 @@ tags = ["integration","language"]
 [[case]]
 id = "choice_payload_const_non_const_field_rejected"
 path = "choice_payload_const_non_const_field_rejected"
-tags = ["integration","diagnostics"]
+tags = ["integration","diagnostics","choices"]
 
 [[case]]
 id = "choice_payload_structural_equality_deferred"
@@ -452,6 +457,11 @@ tags = ["integration","diagnostics"]
 id = "choice_payload_direct_field_access_deferred"
 path = "choice_payload_direct_field_access_deferred"
 tags = ["integration","diagnostics"]
+
+[[case]]
+id = "choice_direct_field_access_imported_deferred"
+path = "choice_direct_field_access_imported_deferred"
+tags = ["integration","diagnostics","choices","pattern-matching"]
 
 [[case]]
 id = "choice_recursive_direct_declaration_deferred"
@@ -499,6 +509,11 @@ path = "choice_payload_match_import_alias_success"
 tags = ["integration","language"]
 
 [[case]]
+id = "choice_imported_alias_payload_capture_success"
+path = "choice_imported_alias_payload_capture_success"
+tags = ["integration","language","choices","pattern-matching"]
+
+[[case]]
 id = "choice_imported_payload_constructor_success"
 path = "choice_imported_payload_constructor_success"
 tags = ["integration","language"]
@@ -511,7 +526,7 @@ tags = ["integration","diagnostics"]
 [[case]]
 id = "choice_unit_constructor_call_rejected"
 path = "choice_unit_constructor_call_rejected"
-tags = ["integration","diagnostics"]
+tags = ["integration","diagnostics","choices"]
 
 [[case]]
 id = "choice_import_visibility_non_exported"
@@ -531,17 +546,17 @@ tags = ["integration","control-flow","language"]
 [[case]]
 id = "choice_match_guard_without_else_failure"
 path = "choice_match_guard_without_else_failure"
-tags = ["integration","control-flow","diagnostics"]
+tags = ["integration","control-flow","diagnostics","choices","pattern-matching"]
 
 [[case]]
 id = "choice_match_non_exhaustive_failure"
 path = "choice_match_non_exhaustive_failure"
-tags = ["integration","control-flow","diagnostics"]
+tags = ["integration","control-flow","diagnostics","choices","pattern-matching"]
 
 [[case]]
 id = "choice_match_unknown_variant_failure"
 path = "choice_match_unknown_variant_failure"
-tags = ["integration","control-flow","diagnostics"]
+tags = ["integration","control-flow","diagnostics","choices","pattern-matching"]
 
 [[case]]
 id = "choice_match_exhaustive_merge_continuation"
@@ -591,7 +606,7 @@ tags = ["integration","backend-contract","control-flow"]
 [[case]]
 id = "choice_imported_unit_constructor_call_rejected"
 path = "choice_imported_unit_constructor_call_rejected"
-tags = ["integration","diagnostics"]
+tags = ["integration","diagnostics","choices"]
 
 [[case]]
 id = "choice_cross_file_runtime"

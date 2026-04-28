@@ -11,12 +11,17 @@ use crate::compiler_frontend::ast::statements::functions::{
 use crate::compiler_frontend::ast::{AstDocFragment, AstDocFragmentKind};
 use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::datatypes::DataType;
-use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, ValueKind};
+use crate::compiler_frontend::declaration_syntax::choice::{ChoiceVariant, ChoiceVariantPayload};
+use crate::compiler_frontend::hir::expressions::{
+    HirExpression, HirExpressionKind, HirVariantCarrier, HirVariantField, ValueKind,
+};
 use crate::compiler_frontend::hir::hir_builder::validate_module_for_tests;
-use crate::compiler_frontend::hir::ids::{HirValueId, RegionId};
+use crate::compiler_frontend::hir::hir_datatypes::{HirType, HirTypeKind};
+use crate::compiler_frontend::hir::ids::{ChoiceId, HirNodeId, HirValueId, RegionId};
 use crate::compiler_frontend::hir::patterns::{HirMatchArm, HirPattern};
 use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::regions::HirRegion;
+use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
 use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::hir::tests::hir_expression_lowering_tests::location;
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -449,5 +454,347 @@ fn lowering_errors_preserve_string_table_context() {
     assert!(
         resolved_scope.ends_with("main.bst"),
         "HIR lowering errors should preserve the source path in the returned StringTable, got '{resolved_scope}'",
+    );
+}
+
+// ---------------------------------------------------------------------------
+// VariantConstruct validation
+// ---------------------------------------------------------------------------
+
+#[test]
+fn hir_variant_construct_option_invalid_index_rejected() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+
+    let start_fn = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![node(NodeKind::Return(vec![]), test_location(1))],
+        test_location(1),
+    );
+
+    let ast = build_ast(vec![start_fn], entry_path);
+    let mut module = lower_ast(ast, &mut string_table).expect("lowering should succeed");
+    let entry_block =
+        &mut module.blocks[module.functions[module.start_function.0 as usize].entry.0 as usize];
+    let region = entry_block.region;
+
+    let int_ty = module.type_context.insert(HirType {
+        kind: HirTypeKind::Int,
+    });
+    let option_ty = module.type_context.insert(HirType {
+        kind: HirTypeKind::Option { inner: int_ty },
+    });
+
+    let expr_id = HirValueId(9000);
+    let stmt_id = HirNodeId(9000);
+    let location = test_location(10);
+
+    let expression = HirExpression {
+        id: expr_id,
+        kind: HirExpressionKind::VariantConstruct {
+            carrier: HirVariantCarrier::Option,
+            variant_index: 99,
+            fields: vec![],
+        },
+        ty: option_ty,
+        value_kind: ValueKind::Const,
+        region,
+    };
+
+    let statement = HirStatement {
+        id: stmt_id,
+        kind: HirStatementKind::Expr(expression),
+        location: location.clone(),
+    };
+
+    module.side_table.map_statement(&location, &statement);
+    module.side_table.map_value(&location, expr_id, &location);
+    entry_block.statements.push(statement);
+
+    let error = validate_module_for_tests(&module, &string_table)
+        .expect_err("validator should reject out-of-range Option variant index");
+    assert_eq!(error.error_type, ErrorType::HirTransformation);
+    assert!(
+        error.msg.contains("out of range"),
+        "expected 'out of range' in error, got: {}",
+        error.msg
+    );
+}
+
+#[test]
+fn hir_variant_construct_result_invalid_index_rejected() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+
+    let start_fn = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![node(NodeKind::Return(vec![]), test_location(1))],
+        test_location(1),
+    );
+
+    let ast = build_ast(vec![start_fn], entry_path);
+    let mut module = lower_ast(ast, &mut string_table).expect("lowering should succeed");
+    let entry_block =
+        &mut module.blocks[module.functions[module.start_function.0 as usize].entry.0 as usize];
+    let region = entry_block.region;
+
+    let int_ty = module.type_context.insert(HirType {
+        kind: HirTypeKind::Int,
+    });
+    let result_ty = module.type_context.insert(HirType {
+        kind: HirTypeKind::Result {
+            ok: int_ty,
+            err: int_ty,
+        },
+    });
+
+    let expr_id = HirValueId(9000);
+    let stmt_id = HirNodeId(9000);
+    let location = test_location(10);
+
+    let expression = HirExpression {
+        id: expr_id,
+        kind: HirExpressionKind::VariantConstruct {
+            carrier: HirVariantCarrier::Result,
+            variant_index: 99,
+            fields: vec![],
+        },
+        ty: result_ty,
+        value_kind: ValueKind::Const,
+        region,
+    };
+
+    let statement = HirStatement {
+        id: stmt_id,
+        kind: HirStatementKind::Expr(expression),
+        location: location.clone(),
+    };
+
+    module.side_table.map_statement(&location, &statement);
+    module.side_table.map_value(&location, expr_id, &location);
+    entry_block.statements.push(statement);
+
+    let error = validate_module_for_tests(&module, &string_table)
+        .expect_err("validator should reject out-of-range Result variant index");
+    assert_eq!(error.error_type, ErrorType::HirTransformation);
+    assert!(
+        error.msg.contains("out of range"),
+        "expected 'out of range' in error, got: {}",
+        error.msg
+    );
+}
+
+#[test]
+fn hir_variant_construct_choice_wrong_field_name_rejected() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let response_param = super::symbol("response", &mut string_table);
+    let ok_name = string_table.intern("Ok");
+    let err_name = string_table.intern("Err");
+    let wrong_name = string_table.intern("content");
+
+    let choice_type = DataType::Choices {
+        nominal_path: InternedPath::from_single_str("Response", &mut string_table),
+        variants: vec![
+            ChoiceVariant {
+                id: ok_name,
+                payload: ChoiceVariantPayload::Record {
+                    fields: vec![Declaration {
+                        id: InternedPath::from_single_str("message", &mut string_table),
+                        value: Expression::new(
+                            ExpressionKind::NoValue,
+                            test_location(2),
+                            DataType::StringSlice,
+                            ValueMode::ImmutableOwned,
+                        ),
+                    }],
+                },
+                location: test_location(2),
+            },
+            ChoiceVariant {
+                id: err_name,
+                payload: ChoiceVariantPayload::Unit,
+                location: test_location(2),
+            },
+        ],
+    };
+
+    let start_fn = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![param(response_param, choice_type, false, test_location(2))],
+            returns: vec![],
+        },
+        vec![node(NodeKind::Return(vec![]), test_location(3))],
+        test_location(1),
+    );
+
+    let ast = build_ast(vec![start_fn], entry_path);
+    let mut module = lower_ast(ast, &mut string_table).expect("lowering should succeed");
+    let entry_block =
+        &mut module.blocks[module.functions[module.start_function.0 as usize].entry.0 as usize];
+    let region = entry_block.region;
+
+    let string_ty = module.type_context.insert(HirType {
+        kind: HirTypeKind::String,
+    });
+
+    let expr_id = HirValueId(9000);
+    let stmt_id = HirNodeId(9000);
+    let location = test_location(10);
+
+    let expression = HirExpression {
+        id: expr_id,
+        kind: HirExpressionKind::VariantConstruct {
+            carrier: HirVariantCarrier::Choice {
+                choice_id: ChoiceId(0),
+            },
+            variant_index: 0,
+            fields: vec![HirVariantField {
+                name: Some(wrong_name),
+                value: HirExpression {
+                    id: HirValueId(9001),
+                    kind: HirExpressionKind::StringLiteral("hello".to_owned()),
+                    ty: string_ty,
+                    value_kind: ValueKind::Const,
+                    region,
+                },
+            }],
+        },
+        ty: string_ty,
+        value_kind: ValueKind::Const,
+        region,
+    };
+
+    let statement = HirStatement {
+        id: stmt_id,
+        kind: HirStatementKind::Expr(expression),
+        location: location.clone(),
+    };
+
+    module.side_table.map_statement(&location, &statement);
+    module.side_table.map_value(&location, expr_id, &location);
+    entry_block.statements.push(statement);
+
+    let error = validate_module_for_tests(&module, &string_table)
+        .expect_err("validator should reject wrong field name in choice VariantConstruct");
+    assert_eq!(error.error_type, ErrorType::HirTransformation);
+    assert!(
+        error.msg.contains("field name"),
+        "expected 'field name' in error, got: {}",
+        error.msg
+    );
+}
+
+#[test]
+fn hir_variant_construct_choice_wrong_field_type_rejected() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let response_param = super::symbol("response", &mut string_table);
+    let ok_name = string_table.intern("Ok");
+    let err_name = string_table.intern("Err");
+    let message_name = string_table.intern("message");
+
+    let choice_type = DataType::Choices {
+        nominal_path: InternedPath::from_single_str("Response", &mut string_table),
+        variants: vec![
+            ChoiceVariant {
+                id: ok_name,
+                payload: ChoiceVariantPayload::Record {
+                    fields: vec![Declaration {
+                        id: InternedPath::from_single_str("message", &mut string_table),
+                        value: Expression::new(
+                            ExpressionKind::NoValue,
+                            test_location(2),
+                            DataType::StringSlice,
+                            ValueMode::ImmutableOwned,
+                        ),
+                    }],
+                },
+                location: test_location(2),
+            },
+            ChoiceVariant {
+                id: err_name,
+                payload: ChoiceVariantPayload::Unit,
+                location: test_location(2),
+            },
+        ],
+    };
+
+    let start_fn = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![param(response_param, choice_type, false, test_location(2))],
+            returns: vec![],
+        },
+        vec![node(NodeKind::Return(vec![]), test_location(3))],
+        test_location(1),
+    );
+
+    let ast = build_ast(vec![start_fn], entry_path);
+    let mut module = lower_ast(ast, &mut string_table).expect("lowering should succeed");
+    let entry_block =
+        &mut module.blocks[module.functions[module.start_function.0 as usize].entry.0 as usize];
+    let region = entry_block.region;
+
+    let string_ty = module.type_context.insert(HirType {
+        kind: HirTypeKind::String,
+    });
+    let bool_ty = module.type_context.insert(HirType {
+        kind: HirTypeKind::Bool,
+    });
+
+    let expr_id = HirValueId(9000);
+    let stmt_id = HirNodeId(9000);
+    let location = test_location(10);
+
+    let expression = HirExpression {
+        id: expr_id,
+        kind: HirExpressionKind::VariantConstruct {
+            carrier: HirVariantCarrier::Choice {
+                choice_id: ChoiceId(0),
+            },
+            variant_index: 0,
+            fields: vec![HirVariantField {
+                name: Some(message_name),
+                value: HirExpression {
+                    id: HirValueId(9001),
+                    kind: HirExpressionKind::Bool(true),
+                    ty: bool_ty,
+                    value_kind: ValueKind::Const,
+                    region,
+                },
+            }],
+        },
+        ty: string_ty,
+        value_kind: ValueKind::Const,
+        region,
+    };
+
+    let statement = HirStatement {
+        id: stmt_id,
+        kind: HirStatementKind::Expr(expression),
+        location: location.clone(),
+    };
+
+    module.side_table.map_statement(&location, &statement);
+    module.side_table.map_value(&location, expr_id, &location);
+    entry_block.statements.push(statement);
+
+    let error = validate_module_for_tests(&module, &string_table)
+        .expect_err("validator should reject wrong field type in choice VariantConstruct");
+    assert_eq!(error.error_type, ErrorType::HirTransformation);
+    assert!(
+        error.msg.contains("field type mismatch"),
+        "expected 'field type mismatch' in error, got: {}",
+        error.msg
     );
 }
