@@ -139,6 +139,16 @@ fn build_module_symbols(
         module_symbols
             .file_imports_by_source
             .entry(header.source_file.to_owned())
+            .and_modify(|existing| {
+                for import in &header.file_imports {
+                    let already_present = existing
+                        .iter()
+                        .any(|e| e.header_path == import.header_path && e.alias == import.alias);
+                    if !already_present {
+                        existing.push(import.clone());
+                    }
+                }
+            })
             .or_insert_with(|| header.file_imports.to_owned());
 
         match &header.kind {

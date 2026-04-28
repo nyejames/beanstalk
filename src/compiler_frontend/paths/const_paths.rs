@@ -4,7 +4,9 @@ use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable}
 use crate::compiler_frontend::tokenizer::lexer::{
     consume_all_whitespace, consume_non_newline_whitespace,
 };
-use crate::compiler_frontend::tokenizer::tokens::{Token, TokenKind, TokenStream, TokenizeMode};
+use crate::compiler_frontend::tokenizer::tokens::{
+    SourceLocation, Token, TokenKind, TokenStream, TokenizeMode,
+};
 use crate::{return_syntax_error, return_token};
 
 type PathComponents = Vec<StringId>;
@@ -149,6 +151,8 @@ pub fn parse_file_path(
 pub struct ParsedImportItem {
     pub path: InternedPath,
     pub alias: Option<StringId>,
+    pub path_location: SourceLocation,
+    pub alias_location: Option<SourceLocation>,
 }
 
 pub fn parse_import_clause_items(
@@ -201,6 +205,7 @@ pub fn parse_import_clause_items(
 
     let mut index = index + 1;
     let mut alias: Option<StringId> = None;
+    let mut alias_location: Option<SourceLocation> = None;
 
     // Check for `as alias_name` after the path token.
     if tokens
@@ -236,6 +241,7 @@ pub fn parse_import_clause_items(
             );
         }
         alias = Some(alias_name);
+        alias_location = Some(alias_token.location.clone());
         index += 1;
     }
 
@@ -244,6 +250,8 @@ pub fn parse_import_clause_items(
         .map(|path| ParsedImportItem {
             path: path.to_owned(),
             alias,
+            path_location: path_token.location.clone(),
+            alias_location: alias_location.clone(),
         })
         .collect();
 

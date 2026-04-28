@@ -202,6 +202,8 @@ pub(super) fn parse_headers_in_file(
                             header_path: normalized_path,
                             alias: item.alias,
                             location: current_location.clone(),
+                            path_location: item.path_location,
+                            alias_location: item.alias_location,
                         });
                     }
                 }

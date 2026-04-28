@@ -39,4 +39,5 @@ pub enum WarningKind {
     BstFilePathInTemplateOutput,
     LargeTrackedAsset,
     IdentifierNamingConvention,
+    ImportAliasCaseMismatch,
 }

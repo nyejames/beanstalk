@@ -156,6 +156,8 @@ pub struct FileImport {
     pub header_path: InternedPath,
     pub alias: Option<StringId>,
     pub location: SourceLocation,
+    pub path_location: SourceLocation,
+    pub alias_location: Option<SourceLocation>,
 }
 
 impl FileImport {

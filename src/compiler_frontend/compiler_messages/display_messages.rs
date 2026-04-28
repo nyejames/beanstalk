@@ -172,6 +172,9 @@ pub fn print_formatted_warning(warning: CompilerWarning, string_table: &StringTa
         WarningKind::IdentifierNamingConvention => {
             println!("Identifier naming convention: {}", warning.msg)
         }
+        WarningKind::ImportAliasCaseMismatch => {
+            println!("Import alias case mismatch: {}", warning.msg)
+        }
     }
 }
 
@@ -382,6 +385,7 @@ fn terse_warning_kind_name(warning_kind: &WarningKind) -> &'static str {
         WarningKind::BstFilePathInTemplateOutput => "bst_file_path_in_template_output",
         WarningKind::LargeTrackedAsset => "large_tracked_asset",
         WarningKind::IdentifierNamingConvention => "identifier_naming_convention",
+        WarningKind::ImportAliasCaseMismatch => "import_alias_case_mismatch",
     }
 }
 

@@ -16,20 +16,21 @@ use rustc_hash::FxHashMap;
 impl<'a> AstBuildState<'a> {
     /// Build per-source-file import visibility and start-function aliases.
     pub(in crate::compiler_frontend::ast) fn resolve_import_bindings(
-        &self,
+        &mut self,
         string_table: &mut StringTable,
     ) -> Result<FxHashMap<InternedPath, FileImportBindings>, CompilerMessages> {
-        let mut bindings = resolve_file_import_bindings(
+        let (mut bindings, import_warnings) = resolve_file_import_bindings(
             &self.module_symbols.file_imports_by_source,
             &self.module_symbols.module_file_paths,
             &self.module_symbols.importable_symbol_exported,
             &self.module_symbols.declared_paths_by_file,
-            &self.module_symbols.declared_names_by_file,
             &self.module_symbols.type_alias_paths,
             self.external_package_registry,
             string_table,
         )
         .map_err(|error| self.error_messages(error, string_table))?;
+
+        self.warnings.extend(import_warnings);
 
         for (source_file, binding) in bindings.iter_mut() {
             binding.visible_symbol_paths.extend(
