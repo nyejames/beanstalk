@@ -26,6 +26,8 @@ pub(crate) enum CodeLanguage {
     JavaScript,
     TypeScript,
     Python,
+    Rust,
+    Shell,
 }
 
 impl CodeLanguage {
@@ -35,20 +37,23 @@ impl CodeLanguage {
             "js" | "javascript" => Some(Self::JavaScript),
             "ts" | "typescript" => Some(Self::TypeScript),
             "py" | "python" => Some(Self::Python),
+            "rs" | "rust" => Some(Self::Rust),
+            "bash" | "sh" | "shell" => Some(Self::Shell),
             _ => None,
         }
     }
 
     pub(crate) fn supported_aliases() -> &'static str {
-        "\"bst\"/\"beanstalk\", \"js\"/\"javascript\", \"ts\"/\"typescript\", \"py\"/\"python\""
+        "\"bst\"/\"beanstalk\", \"js\"/\"javascript\", \"ts\"/\"typescript\", \"py\"/\"python\", \"rs\"/\"rust\", \"bash\"/\"sh\"/\"shell\""
     }
 
     fn comment_prefix(self) -> Option<&'static str> {
         match self {
-            Self::Generic => None,
+            Self::Generic => Some("//"),
             Self::Beanstalk => Some("--"),
-            Self::JavaScript | Self::TypeScript => Some("//"),
+            Self::JavaScript | Self::TypeScript | Self::Rust => Some("//"),
             Self::Python => Some("#"),
+            Self::Shell => Some("#"),
         }
     }
 }
@@ -402,7 +407,6 @@ fn flush_word(output: &mut String, word: &mut String, language: CodeLanguage) {
 
 fn is_keyword(word: &str, language: CodeLanguage) -> bool {
     match language {
-        CodeLanguage::Generic => false,
         CodeLanguage::Beanstalk => matches!(
             word,
             "if" | "else"
@@ -430,7 +434,7 @@ fn is_keyword(word: &str, language: CodeLanguage) -> bool {
                 | "let"
                 | "var"
         ),
-        CodeLanguage::TypeScript => matches!(
+        CodeLanguage::TypeScript | CodeLanguage::Generic => matches!(
             word,
             "if" | "else"
                 | "return"
@@ -463,6 +467,14 @@ fn is_keyword(word: &str, language: CodeLanguage) -> bool {
                 | "from"
                 | "as"
         ),
+        CodeLanguage::Rust => matches!(
+            word,
+            "if" | "else" | "return" | "break" | "continue" | "for" | "while" | "in" | "fn" | "let" | "mut" | "const" | "static" | "struct" | "enum" | "impl" | "trait" | "mod" | "use" | "pub" | "crate" | "super" | "self" | "match" | "async" | "await" | "move" | "ref" | "type" | "where" | "unsafe" | "extern" | "dyn"
+        ),
+        CodeLanguage::Shell => matches!(
+            word,
+            "if" | "then" | "else" | "elif" | "fi" | "for" | "while" | "do" | "done" | "in" | "function"
+        ),
     }
 }
 
@@ -476,7 +488,7 @@ fn is_type_keyword(word: &str, language: CodeLanguage) -> bool {
             )
         }
         CodeLanguage::JavaScript => matches!(word, "true" | "false" | "null" | "undefined"),
-        CodeLanguage::TypeScript => matches!(
+        CodeLanguage::TypeScript | CodeLanguage::Rust => matches!(
             word,
             "number"
                 | "string"
@@ -491,6 +503,7 @@ fn is_type_keyword(word: &str, language: CodeLanguage) -> bool {
                 | "undefined"
         ),
         CodeLanguage::Python => matches!(word, "True" | "False" | "None"),
+        CodeLanguage::Shell => matches!(word, "true" | "false"),
     }
 }
 

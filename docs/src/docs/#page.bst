@@ -23,7 +23,9 @@ import @styles/docs {navbar, title, section, palette, codeblock, theme_head}
     See the @./progress (implementation matrix) for the current implementation and coverage status.
 
     ### Introduction
-    - @./basics (Basics)
+    - @./language-overview (Language Basics)
+    - @./getting-started (Getting Started)
+    - @./project-structure (The shape of Beanstalk projects)
 
     ### Core Language Features
     - @./templates (Templates)
