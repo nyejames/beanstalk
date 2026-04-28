@@ -338,7 +338,9 @@ pub(crate) fn parse_choice_shell(
                                     "Remove the default assignment and keep this as a unit variant or use a record payload.",
                                 ));
                             }
-                            payload_token if starts_rejected_choice_payload_shorthand(payload_token) => {
+                            payload_token
+                                if starts_rejected_choice_payload_shorthand(payload_token) =>
+                            {
                                 return_rule_error!(
                                     "Choice payload shorthand is not supported. Use a record payload body: `Variant | field Type |`.",
                                     token_stream.current_location(),

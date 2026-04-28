@@ -408,7 +408,9 @@ impl PartialEq for DataType {
 #[cfg(test)]
 mod tests {
     use super::DataType;
-    use crate::compiler_frontend::declaration_syntax::choice::{ChoiceVariant, ChoiceVariantPayload};
+    use crate::compiler_frontend::declaration_syntax::choice::{
+        ChoiceVariant, ChoiceVariantPayload,
+    };
     use crate::compiler_frontend::interned_path::InternedPath;
     use crate::compiler_frontend::symbols::string_interning::StringTable;
 
