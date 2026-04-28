@@ -1,0 +1,7 @@
+entry = "."
+
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+error_type = "File"
+message_contains = ["Could not resolve import", "std/math/sin"]

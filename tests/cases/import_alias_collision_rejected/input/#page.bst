@@ -1,2 +1,2 @@
-import @std/io/io as log
-import @std/io/IO as log
+import @core/io/io as log
+import @core/io/IO as log

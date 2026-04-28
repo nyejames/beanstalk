@@ -1,3 +1,3 @@
-import @std/io/io
+import @core/io/io
 
 io("hello")

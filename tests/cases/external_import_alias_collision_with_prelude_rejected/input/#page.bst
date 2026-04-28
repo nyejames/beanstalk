@@ -1,2 +1,2 @@
-import @std/math/sin as io
+import @core/math/sin as io
 io(1.0)

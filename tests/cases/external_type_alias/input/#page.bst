@@ -1,2 +1,2 @@
-import @std/io/IO
+import @core/io/IO
 StdIO as IO

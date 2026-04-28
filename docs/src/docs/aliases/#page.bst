@@ -216,8 +216,8 @@ import @styles/docs {navbar, title, section, codeblock, codesnippet, theme_head}
     - External package functions, constants, and types.
 
     [codeblock, $code("bst"):
-        import @std/math/sin as sine
-        import @std/math/PI as CIRCLE_PI
+        import @core/math/sin as sine
+        import @core/math/PI as CIRCLE_PI
 
         value = sine(CIRCLE_PI)
     ]

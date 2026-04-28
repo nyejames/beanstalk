@@ -1,3 +1,3 @@
-import @std/io/missing
+import @core/io/missing
 
 io("hello")

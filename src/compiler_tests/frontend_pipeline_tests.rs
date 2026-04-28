@@ -831,7 +831,7 @@ fn html_style_directive_available_during_header_parsing() {
 #[test]
 fn compiles_virtual_package_import_of_std_io() {
     let mut project = FrontendProject::new(
-        &[("src/#page.bst", "import @std/io/io\nio(\"hello\")\n")],
+        &[("src/#page.bst", "import @core/io/io\nio(\"hello\")\n")],
         "src/#page.bst",
         StyleDirectiveRegistry::built_ins(),
     );
@@ -844,14 +844,14 @@ fn compiles_virtual_package_import_of_std_io() {
         hir.blocks.iter().any(|b| b.statements.iter().any(|s| {
             matches!(&s.kind, crate::compiler_frontend::hir::statements::HirStatementKind::Call { target: crate::compiler_frontend::external_packages::CallTarget::ExternalFunction(_), .. })
         })),
-        "HIR should contain an external function call after importing io from @std/io"
+        "HIR should contain an external function call after importing io from @core/io"
     );
 }
 
 #[test]
 fn rejects_virtual_package_import_of_missing_symbol() {
     let mut project = FrontendProject::new(
-        &[("src/#page.bst", "import @std/io/missing\n")],
+        &[("src/#page.bst", "import @core/io/missing\n")],
         "src/#page.bst",
         StyleDirectiveRegistry::built_ins(),
     );
@@ -870,7 +870,7 @@ fn rejects_virtual_package_import_of_missing_symbol() {
             .errors
             .iter()
             .any(|e| e.msg.contains("symbol not found in package")),
-        "Expected error about missing symbol in @std/io, got: {:?}",
+        "Expected error about missing symbol in @core/io, got: {:?}",
         messages.errors.iter().map(|e| &e.msg).collect::<Vec<_>>()
     );
 }
@@ -905,7 +905,7 @@ fn prelude_makes_io_visible_without_import() {
 #[test]
 fn explicit_import_of_prelude_symbol_still_works() {
     let mut project = FrontendProject::new(
-        &[("src/#page.bst", "import @std/io/io\nio(\"hello\")\n")],
+        &[("src/#page.bst", "import @core/io/io\nio(\"hello\")\n")],
         "src/#page.bst",
         StyleDirectiveRegistry::built_ins(),
     );

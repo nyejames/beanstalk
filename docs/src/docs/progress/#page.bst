@@ -233,12 +233,12 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
         [data:
             [: External platform packages]
             [: Partial]
-            [: Broad package-scoped import and visibility coverage, with targeted external constant, Float/F64 ABI, std/math, prelude, duplicate-name, non-imported-symbol, and alias diagnostics.]
+            [: Broad package-scoped import and visibility coverage, with targeted external constant, Float/F64 ABI, core/math, prelude, duplicate-name, non-imported-symbol, and alias diagnostics.]
             [: Frontend / JS]
             [: Functions, opaque types, and compile-time external constants are supported through Rust-side registry metadata. [$markdown:
                 - User-authored external binding files are not supported. Alpha external packages are Rust-side builder/compiler metadata.
                 - External constants are implemented for scalar compile-time values and lower through expression parsing as ordinary literals.
-                - External ABI metadata includes [codesnippet:F64], which enables a proper Float-based [codesnippet:@std/math] package.
+                - External ABI metadata includes [codesnippet:F64], which enables a proper Float-based [codesnippet:@core/math] package.
                 - Explicit imports are required for non-prelude external packages. [codesnippet:io] and [codesnippet:IO] remain the only current prelude symbols.
                 - External function aliases, external constant aliases, and external opaque type aliases are supported. Grouped external aliases are supported.
                 - Prelude collision rejection is enforced: explicit imports cannot shadow prelude names.
@@ -250,14 +250,22 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
         ]
 
         [data:
-            [: Standard math package]
+            [: Core prelude libraries]
+            [: Supported]
+            [: Targeted coverage for prelude symbol registration and collision rejection.]
+            [: Frontend / JS]
+            [: Every builder must provide `@core/prelude`. `io` and `IO` are registered as bare prelude symbols. Prelude collision rejection is enforced: explicit imports cannot shadow prelude names.]
+        ]
+
+        [data:
+            [: Core math package]
             [: Supported]
             [: Targeted success and diagnostic coverage for direct, grouped, and aliased imports; aliased constants such as [codesnippet:PI as pi]; aliased functions such as [codesnippet:sin as sine]; const-context constants; arity errors; type errors; missing symbols; and non-imported access.]
             [: JS / HTML]
-            [: [codesnippet:@std/math] exposes [codesnippet:PI], [codesnippet:TAU], [codesnippet:E], and Float functions backed by JavaScript [codesnippet:Math]. [$markdown:
+            [: [codesnippet:@core/math] exposes [codesnippet:PI], [codesnippet:TAU], [codesnippet:E], and Float functions backed by JavaScript [codesnippet:Math]. [$markdown:
                 - Implemented functions: [codesnippet:sin], [codesnippet:cos], [codesnippet:tan], [codesnippet:atan2], [codesnippet:log], [codesnippet:log2], [codesnippet:log10], [codesnippet:exp], [codesnippet:pow], [codesnippet:sqrt], [codesnippet:abs], [codesnippet:floor], [codesnippet:ceil], [codesnippet:round], [codesnippet:trunc], [codesnippet:min], [codesnippet:max], and [codesnippet:clamp].
                 - All functions currently accept and return [codesnippet:Float].
-                - The package is not prelude-imported. Users must explicitly import the required symbols from [codesnippet:@std/math].
+                - The package is not prelude-imported. Users must explicitly import the required symbols from [codesnippet:@core/math].
                 - Direct imports, grouped imports, and aliased imports are all supported.
                 - JS helpers are emitted only when the matching external function is referenced.
                 - Wasm support for this package remains deferred/experimental.

@@ -1,2 +1,2 @@
-import @std/io/io as Error
+import @core/io/io as Error
 Error("hello")

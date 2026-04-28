@@ -1,2 +1,2 @@
-import @std/io/io as print
+import @core/io/io as print
 print("hello")

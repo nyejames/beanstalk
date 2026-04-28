@@ -103,7 +103,7 @@ pub trait BackendBuilder {
 
     /// Builder-provided external platform packages.
     ///
-    /// WHAT: registers typed virtual packages such as `@std/io`, `@web/canvas`, and `@web/dom`
+    /// WHAT: registers typed virtual packages such as `@core/io`, `@web/canvas`, and `@web/dom`
     /// that the frontend resolves during import binding and type checking.
     /// WHY: backends own the runtime surface, so they must declare the typed imports the
     /// compiler frontend is allowed to see.

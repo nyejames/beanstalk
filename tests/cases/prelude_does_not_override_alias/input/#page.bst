@@ -1,2 +1,2 @@
-import @std/io/io as io
+import @core/io/io as io
 io("hello")

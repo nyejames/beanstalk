@@ -834,12 +834,12 @@ Other files contribute declarations that must be imported explicitly by symbol.
 
 ### External platform package imports
 
-Project builders may provide virtual packages such as `@std/io` or `@web/canvas`.
+Project builders may provide virtual packages such as `@core/io` or `@web/canvas`.
 These are not Beanstalk source files. They expose typed external functions and opaque external types.
 
 ```beanstalk
-import @std/io/io
-import @std/math/sin as sine
+import @core/io/io
+import @core/math/sin as sine
 
 io("hello")
 value = sine(1.0)

@@ -11,6 +11,7 @@ mod compiler_tests {
 }
 pub mod build_system;
 mod compiler_frontend;
+mod libraries;
 
 mod backends {
     pub(crate) mod error_types;

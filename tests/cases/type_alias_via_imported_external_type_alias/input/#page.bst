@@ -1,4 +1,4 @@
-import @std/io/IO as Handle
+import @core/io/IO as Handle
 Alias as Handle
 foo |x Alias|:
     return

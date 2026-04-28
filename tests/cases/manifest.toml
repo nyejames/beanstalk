@@ -2930,46 +2930,51 @@ path = "alias_to_choice_is_annotation_only"
 tags = ["integration", "imports", "aliases", "diagnostics"]
 
 [[case]]
-id = "std_math_basic_functions"
-path = "std_math_basic_functions"
+id = "core_math_basic_functions"
+path = "core_math_basic_functions"
 tags = ["integration", "math", "js-backend"]
 
 [[case]]
-id = "std_math_constants"
-path = "std_math_constants"
+id = "core_math_constants"
+path = "core_math_constants"
 tags = ["integration", "math", "constants"]
 
 [[case]]
-id = "std_math_grouped_import"
-path = "std_math_grouped_import"
+id = "core_math_grouped_import"
+path = "core_math_grouped_import"
 tags = ["integration", "math", "imports"]
 
 [[case]]
-id = "std_math_alias_import"
-path = "std_math_alias_import"
+id = "core_math_alias_import"
+path = "core_math_alias_import"
 tags = ["integration", "math", "imports", "aliases"]
 
 [[case]]
-id = "std_math_requires_import"
-path = "std_math_requires_import"
+id = "core_math_requires_import"
+path = "core_math_requires_import"
 tags = ["integration", "math", "imports", "diagnostics"]
 
 [[case]]
-id = "std_math_missing_symbol"
-path = "std_math_missing_symbol"
+id = "core_math_missing_symbol"
+path = "core_math_missing_symbol"
 tags = ["integration", "math", "imports", "diagnostics"]
 
 [[case]]
-id = "std_math_type_errors"
-path = "std_math_type_errors"
+id = "core_math_type_errors"
+path = "core_math_type_errors"
 tags = ["integration", "math", "diagnostics", "type-checking"]
 
 [[case]]
-id = "std_math_arity_error"
-path = "std_math_arity_error"
+id = "core_math_arity_error"
+path = "core_math_arity_error"
 tags = ["integration", "math", "diagnostics"]
 
 [[case]]
-id = "std_math_external_constants_const_context"
-path = "std_math_external_constants_const_context"
+id = "core_math_external_constants_const_context"
+path = "core_math_external_constants_const_context"
 tags = ["integration", "math", "constants"]
+
+[[case]]
+id = "core_math_old_std_namespace_rejected"
+path = "core_math_old_std_namespace_rejected"
+tags = ["integration", "math", "imports", "diagnostics"]

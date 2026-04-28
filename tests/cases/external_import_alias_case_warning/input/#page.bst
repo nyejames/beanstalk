@@ -1,3 +1,3 @@
-import @std/math/sin as Sine
+import @core/math/sin as Sine
 value = Sine(0.0)
 io(value)

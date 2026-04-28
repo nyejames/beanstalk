@@ -782,7 +782,7 @@ fn resolve_virtual_package_import(
     }
 
     // Build candidate package paths by joining progressively more components.
-    // For @std/io/io we try "@std/io/io", "@std/io", "@std".
+    // For @core/io/io we try "@core/io/io", "@core/io", "@core".
     for package_len in (1..=components.len()).rev() {
         let package_components = &components[..package_len];
         let package_path = format!(

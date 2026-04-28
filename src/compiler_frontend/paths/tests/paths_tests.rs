@@ -851,10 +851,10 @@ fn collect_import_paths_from_tokens_rejects_missing_path() {
 
 #[test]
 fn parse_file_path_stops_at_as_keyword() {
-    let values = first_path_token_values("@std/io/io as print");
+    let values = first_path_token_values("@core/io/io as print");
     // Note: the returned path omits the leading `@` because the tokenizer
     // consumes `@` before calling `parse_file_path`.
-    assert_eq!(values, vec!["std/io/io"]);
+    assert_eq!(values, vec!["core/io/io"]);
 }
 
 #[test]
@@ -863,7 +863,7 @@ fn parse_import_clause_items_reads_alias() {
     let style_directives = StyleDirectiveRegistry::built_ins();
     let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
     let file_tokens = tokenize(
-        "import @std/io/io as print",
+        "import @core/io/io as print",
         &source_path,
         TokenizeMode::Normal,
         NewlineMode::NormalizeToLf,
@@ -884,7 +884,10 @@ fn parse_import_clause_items_reads_alias() {
             .expect("import clause parsing should succeed");
 
     assert_eq!(items.len(), 1);
-    assert_eq!(items[0].path.to_portable_string(&string_table), "std/io/io");
+    assert_eq!(
+        items[0].path.to_portable_string(&string_table),
+        "core/io/io"
+    );
     assert_eq!(string_table.resolve(items[0].alias.unwrap()), "print");
 }
 
@@ -1024,24 +1027,24 @@ fn reject_alias_on_non_leaf_group_prefix() {
 #[test]
 fn parse_grouped_import_mixed_aliased_and_plain() {
     let (items, string_table) =
-        first_path_token("import @std/math { PI as pi, sin, cos as cosine }");
+        first_path_token("import @core/math { PI as pi, sin, cos as cosine }");
     assert_eq!(items.len(), 3);
 
     assert_eq!(
         items[0].path.to_portable_string(&string_table),
-        "std/math/PI"
+        "core/math/PI"
     );
     assert_eq!(string_table.resolve(items[0].alias.unwrap()), "pi");
 
     assert_eq!(
         items[1].path.to_portable_string(&string_table),
-        "std/math/sin"
+        "core/math/sin"
     );
     assert!(items[1].alias.is_none());
 
     assert_eq!(
         items[2].path.to_portable_string(&string_table),
-        "std/math/cos"
+        "core/math/cos"
     );
     assert_eq!(string_table.resolve(items[2].alias.unwrap()), "cosine");
 }
