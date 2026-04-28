@@ -13,6 +13,7 @@ use crate::compiler_frontend::compiler_errors::{
 use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler_frontend::style_directives::StyleDirectiveSpec;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::libraries::LibrarySet;
 use crate::projects::settings::Config;
 use std::path::PathBuf;
 use std::sync::{Mutex, MutexGuard, OnceLock};
@@ -126,10 +127,8 @@ impl BackendBuilder for WarningBuilder {
         Ok(())
     }
 
-    fn external_packages(
-        &self,
-    ) -> crate::compiler_frontend::external_packages::ExternalPackageRegistry {
-        crate::compiler_frontend::external_packages::ExternalPackageRegistry::new()
+    fn libraries(&self) -> LibrarySet {
+        LibrarySet::with_core_packages()
     }
 
     fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec> {
@@ -169,10 +168,8 @@ impl BackendBuilder for ValidationTrackingBuilder {
         Ok(())
     }
 
-    fn external_packages(
-        &self,
-    ) -> crate::compiler_frontend::external_packages::ExternalPackageRegistry {
-        crate::compiler_frontend::external_packages::ExternalPackageRegistry::new()
+    fn libraries(&self) -> LibrarySet {
+        LibrarySet::with_core_packages()
     }
 
     fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec> {
@@ -205,10 +202,8 @@ impl BackendBuilder for FailingValidationBuilder {
         ))
     }
 
-    fn external_packages(
-        &self,
-    ) -> crate::compiler_frontend::external_packages::ExternalPackageRegistry {
-        crate::compiler_frontend::external_packages::ExternalPackageRegistry::new()
+    fn libraries(&self) -> LibrarySet {
+        LibrarySet::with_core_packages()
     }
 
     fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec> {
@@ -245,10 +240,8 @@ impl BackendBuilder for NoDirectiveBuilder {
         Ok(())
     }
 
-    fn external_packages(
-        &self,
-    ) -> crate::compiler_frontend::external_packages::ExternalPackageRegistry {
-        crate::compiler_frontend::external_packages::ExternalPackageRegistry::new()
+    fn libraries(&self) -> LibrarySet {
+        LibrarySet::with_core_packages()
     }
 
     fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec> {
@@ -297,10 +290,8 @@ impl BackendBuilder for MultiModuleDiagnosticBuilder {
         Ok(())
     }
 
-    fn external_packages(
-        &self,
-    ) -> crate::compiler_frontend::external_packages::ExternalPackageRegistry {
-        crate::compiler_frontend::external_packages::ExternalPackageRegistry::new()
+    fn libraries(&self) -> LibrarySet {
+        LibrarySet::with_core_packages()
     }
 
     fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec> {

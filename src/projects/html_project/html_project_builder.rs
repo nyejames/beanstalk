@@ -6,9 +6,9 @@ use crate::build_system::build::{BackendBuilder, CleanupPolicy, Module, OutputFi
 use crate::build_system::utils::file_error_messages;
 use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages, ErrorType};
-use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::style_directives::StyleDirectiveSpec;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::libraries::LibrarySet;
 use crate::projects::html_project::compile_input::HtmlModuleCompileInput;
 use crate::projects::html_project::document_config::parse_html_document_config;
 use crate::projects::html_project::js_path::{compile_html_module_js, html_output_path};
@@ -53,13 +53,14 @@ impl HtmlProjectBuilder {
 }
 
 impl BackendBuilder for HtmlProjectBuilder {
-    fn external_packages(&self) -> ExternalPackageRegistry {
-        let registry = ExternalPackageRegistry::new();
+    fn libraries(&self) -> LibrarySet {
+        let mut libraries = LibrarySet::with_core_packages();
         if self.include_test_packages {
-            registry.with_test_packages_for_integration()
-        } else {
-            registry
+            libraries.external_packages = libraries
+                .external_packages
+                .with_test_packages_for_integration();
         }
+        libraries
     }
 
     fn build_backend(
@@ -227,6 +228,7 @@ impl HtmlProjectBuilder {
         wasm_enabled: bool,
         string_table: &mut StringTable,
     ) -> Result<CompiledHtmlModuleArtifacts, CompilerMessages> {
+        let libraries = self.libraries();
         let compile_input = HtmlModuleCompileInput {
             hir_module: &module.hir,
             const_fragments: &module.const_top_level_fragments,
@@ -235,7 +237,7 @@ impl HtmlProjectBuilder {
             document_config,
             release_build,
             entry_runtime_fragment_count: module.entry_runtime_fragment_count,
-            external_package_registry: self.external_packages(),
+            external_package_registry: libraries.external_packages,
         };
         if wasm_enabled {
             let compiled_wasm =

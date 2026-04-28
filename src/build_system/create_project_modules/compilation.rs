@@ -6,10 +6,10 @@
 use crate::build_system::build::{CompiledModuleResult, Module};
 use crate::compiler_frontend::FrontendBuildProfile;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
-use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::libraries::LibrarySet;
 use crate::projects::settings::{BEANSTALK_FILE_EXTENSION, Config};
 use rayon::prelude::*;
 use std::ffi::OsStr;
@@ -25,7 +25,7 @@ pub(crate) fn compile_single_file_frontend(
     config: &Config,
     build_profile: FrontendBuildProfile,
     style_directives: &StyleDirectiveRegistry,
-    external_packages: &ExternalPackageRegistry,
+    libraries: &LibrarySet,
     extension: &OsStr,
     string_table: &mut StringTable,
 ) -> Result<Vec<Module>, CompilerMessages> {
@@ -60,6 +60,7 @@ pub(crate) fn compile_single_file_frontend(
         source_root.clone(),
         source_root.clone(),
         &config.root_folders,
+        &libraries.source_libraries,
     ) {
         Ok(resolver) => resolver,
         Err(error) => return Err(CompilerMessages::from_error_ref(error, string_table)),
@@ -69,7 +70,7 @@ pub(crate) fn compile_single_file_frontend(
         &entry_path,
         &project_path_resolver,
         style_directives,
-        external_packages,
+        &libraries.external_packages,
         string_table,
     )?;
     let local_table = string_table.clone();
@@ -78,7 +79,7 @@ pub(crate) fn compile_single_file_frontend(
         build_profile,
         project_path_resolver: Some(project_path_resolver),
         style_directives,
-        external_packages,
+        external_packages: &libraries.external_packages,
     }
     .compile_module(&input_files, &entry_path, local_table)?;
 
@@ -93,17 +94,20 @@ pub(crate) fn compile_directory_frontend(
     config: &Config,
     build_profile: FrontendBuildProfile,
     style_directives: &StyleDirectiveRegistry,
-    external_packages: &ExternalPackageRegistry,
+    libraries: &LibrarySet,
     string_table: &mut StringTable,
 ) -> Result<Vec<Module>, CompilerMessages> {
-    let project_path_resolver =
-        module_discovery::build_project_path_resolver(config, string_table)?;
+    let project_path_resolver = module_discovery::build_project_path_resolver(
+        config,
+        &libraries.source_libraries,
+        string_table,
+    )?;
 
     let discovered_modules = match module_discovery::discover_all_modules_in_project(
         config,
         &project_path_resolver,
         style_directives,
-        external_packages,
+        &libraries.external_packages,
         string_table,
     ) {
         Ok(modules) => modules,
@@ -121,7 +125,7 @@ pub(crate) fn compile_directory_frontend(
                     build_profile,
                     project_path_resolver: Some(project_path_resolver.clone()),
                     style_directives,
-                    external_packages,
+                    external_packages: &libraries.external_packages,
                 }
                 .compile_module(
                     &discovered.input_files,

@@ -273,6 +273,30 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
         ]
 
         [data:
+            [: Source library roots]
+            [: Partial]
+            [: Targeted coverage for filesystem-based source library root resolution and prefix collision detection.]
+            [: Frontend / HTML]
+            [: Project-local libraries under `/lib` are discovered automatically and resolve through the path resolver. Builder-provided source library roots are plumbed through `LibrarySet`. Prefix collisions between builder-provided and project-local libraries produce a hard config error. No `#mod.bst` facade enforcement yet.]
+        ]
+
+        [data:
+            [: Builder-provided source libraries]
+            [: Partial]
+            [: Targeted coverage for builder-provided source library root registration.]
+            [: Frontend / HTML]
+            [: Builders expose source libraries through `LibrarySet.source_libraries`. The HTML builder does not yet provide any default source libraries. No embedded source files yet.]
+        ]
+
+        [data:
+            [: Project-local libraries]
+            [: Partial]
+            [: Targeted coverage for `/lib` auto-discovery and import resolution.]
+            [: Frontend / HTML]
+            [: A `/lib` directory at the project root is scanned for subdirectories, each treated as a source library prefix. Imports like `@helper/utils` resolve to `lib/helper/utils.bst`. Covered by integration tests.]
+        ]
+
+        [data:
             [: HTML project builds]
             [: Supported]
             [: Broad routing, document shell, metadata, tracked asset, config, and page-fragment coverage.]
@@ -504,7 +528,21 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
             [: Import re-exports]
             [: Deferred]
             [: Direct re-export syntax is not supported; aliases remain file-local.]
-            [: Public type aliases can target imported aliases, but that creates a new exported type alias declaration, not import alias re-export.]
+            [: Public type aliases can target imported aliases, but that creates a new exported type alias declaration, not import alias re-export. `export @...` syntax for `#mod.bst` facades is planned for Phase 4 of the library system.]
+        ]
+
+        [data:
+            [: Source-library HIR caching]
+            [: Deferred]
+            [: No precompiled source-library cache.]
+            [: Source libraries are compiled from `.bst` source each build. HIR caching is deferred until the library system is stable.]
+        ]
+
+        [data:
+            [: Package manager]
+            [: Deferred]
+            [: No package manager, remote registries, or dependency resolution.]
+            [: The library system plan explicitly defers package management, versioning, lockfiles, and remote fetching.]
         ]
 
         [data:

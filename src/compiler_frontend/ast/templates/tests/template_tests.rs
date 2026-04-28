@@ -78,7 +78,13 @@ fn find_function<'a>(ast_nodes: &'a [AstNode], name: &InternedPath) -> &'a AstNo
 
 fn test_project_path_resolver() -> ProjectPathResolver {
     let cwd = std::env::temp_dir();
-    ProjectPathResolver::new(cwd.clone(), cwd, &[]).expect("test path resolver should be valid")
+    ProjectPathResolver::new(
+        cwd.clone(),
+        cwd,
+        &[],
+        &crate::libraries::SourceLibraryRegistry::default(),
+    )
+    .expect("test path resolver should be valid")
 }
 
 fn collect_and_strip_comment_templates_for_tests(

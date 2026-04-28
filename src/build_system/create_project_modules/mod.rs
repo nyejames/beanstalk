@@ -28,10 +28,10 @@ pub(crate) use std::fs;
 
 use crate::build_system::build::Module;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
-use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::{Flag, FrontendBuildProfile};
+use crate::libraries::LibrarySet;
 use crate::projects::settings::{BEANSTALK_FILE_EXTENSION, Config};
 
 /// Compile all project modules through the frontend pipeline.
@@ -42,7 +42,7 @@ pub fn compile_project_frontend(
     config: &mut Config,
     flags: &[Flag],
     style_directives: &StyleDirectiveRegistry,
-    external_packages: &ExternalPackageRegistry,
+    libraries: &LibrarySet,
     string_table: &mut StringTable,
 ) -> Result<Vec<Module>, CompilerMessages> {
     let build_profile = if flags.contains(&Flag::Release) {
@@ -57,7 +57,7 @@ pub fn compile_project_frontend(
             config,
             build_profile,
             style_directives,
-            external_packages,
+            libraries,
             extension,
             string_table,
         );
@@ -79,7 +79,7 @@ pub fn compile_project_frontend(
         config,
         build_profile,
         style_directives,
-        external_packages,
+        libraries,
         string_table,
     )
 }

@@ -67,9 +67,9 @@ pub fn format_compile_time_path(
 
     let formatted = match path.base {
         CompileTimePathBase::RelativeToFile => with_trailing,
-        CompileTimePathBase::ProjectRootFolder | CompileTimePathBase::EntryRoot => {
-            apply_origin(&with_trailing, &config.origin)
-        }
+        CompileTimePathBase::ProjectRootFolder
+        | CompileTimePathBase::SourceLibraryRoot
+        | CompileTimePathBase::EntryRoot => apply_origin(&with_trailing, &config.origin),
     };
 
     match config.output_style {
@@ -91,7 +91,9 @@ fn render_public_path(
             // Relative paths keep their form as-is (e.g. "./images/logo.png").
             portable
         }
-        CompileTimePathBase::ProjectRootFolder | CompileTimePathBase::EntryRoot => {
+        CompileTimePathBase::ProjectRootFolder
+        | CompileTimePathBase::SourceLibraryRoot
+        | CompileTimePathBase::EntryRoot => {
             // Non-relative paths become absolute site paths: "/assets/logo.png".
             // An empty public path here is the Beanstalk public-root literal (`@/`),
             // which renders as "/" before origin is applied.

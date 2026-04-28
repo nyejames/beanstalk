@@ -2978,3 +2978,14 @@ tags = ["integration", "math", "constants"]
 id = "core_math_old_std_namespace_rejected"
 path = "core_math_old_std_namespace_rejected"
 tags = ["integration", "math", "imports", "diagnostics"]
+
+
+[[case]]
+id = "source_lib_project_local"
+path = "source_lib_project_local"
+tags = ["integration", "source-libraries", "imports"]
+
+[[case]]
+id = "source_lib_and_external_package"
+path = "source_lib_and_external_package"
+tags = ["integration", "source-libraries", "imports", "external-packages"]

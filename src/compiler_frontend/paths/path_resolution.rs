@@ -1,9 +1,10 @@
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::libraries::SourceLibraryRegistry;
 use crate::projects::settings::{BEANSTALK_FILE_EXTENSION, Config};
 use crate::return_file_error;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::ffi::OsStr;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
@@ -26,6 +27,8 @@ pub enum CompileTimePathBase {
     RelativeToFile,
     /// First segment matched a configured `#root_folders` entry.
     ProjectRootFolder,
+    /// First segment matched a source library prefix.
+    SourceLibraryRoot,
     /// Fell through to the configured `#entry_root`.
     EntryRoot,
 }
@@ -80,6 +83,7 @@ pub(crate) struct ProjectPathResolver {
     project_root: PathBuf,
     entry_root: PathBuf,
     root_folder_names: HashSet<String>,
+    source_library_roots: HashMap<String, PathBuf>,
 }
 
 impl ProjectPathResolver {
@@ -89,11 +93,19 @@ impl ProjectPathResolver {
         project_root: PathBuf,
         entry_root: PathBuf,
         root_folders: &[PathBuf],
+        source_libraries: &SourceLibraryRegistry,
     ) -> Result<Self, CompilerError> {
+        let mut source_library_roots = HashMap::new();
+        for root in source_libraries.iter() {
+            // Currently only filesystem roots are supported; embedded roots will be added later.
+            let crate::libraries::ProvidedSourceRoot::Filesystem(path) = &root.root;
+            source_library_roots.insert(root.import_prefix.clone(), path.clone());
+        }
         Ok(Self {
             project_root,
             entry_root,
             root_folder_names: collect_root_folder_names(root_folders)?,
+            source_library_roots,
         })
     }
 
@@ -135,6 +147,18 @@ impl ProjectPathResolver {
             return Ok(relative_to_project_root.to_path_buf());
         }
 
+        // Source library files may live outside the project root (builder-provided).
+        // Derive a logical path relative to the library root, prefixed with the library name.
+        let mut sorted_library_prefixes: Vec<_> = self.source_library_roots.iter().collect();
+        sorted_library_prefixes.sort_by_key(|(prefix, _)| *prefix);
+        for (prefix, root) in sorted_library_prefixes {
+            if let Ok(relative_to_library_root) = canonical_file.strip_prefix(root) {
+                let mut logical = PathBuf::from(prefix);
+                logical.push(relative_to_library_root);
+                return Ok(logical);
+            }
+        }
+
         Err(CompilerError::file_error(
             canonical_file,
             format!(
@@ -172,7 +196,20 @@ impl ProjectPathResolver {
     ) -> Result<(CompileTimePath, PathBuf), CompilerError> {
         let (base_kind, filesystem_base) =
             self.resolve_path_base(import_path, importer_file, string_table)?;
-        let normalized = join_and_normalize_path(&filesystem_base, import_path, string_table);
+
+        // Source library roots already include the prefix directory, so skip the first
+        // component when joining to avoid double-prefixing (e.g. `lib/helper/helper/...`).
+        let normalized = if matches!(base_kind, CompileTimePathBase::SourceLibraryRoot) {
+            let components = import_path.as_components();
+            let suffix = if components.len() <= 1 {
+                InternedPath::new()
+            } else {
+                InternedPath::from_components(components[1..].to_vec())
+            };
+            join_and_normalize_path(&filesystem_base, &suffix, string_table)
+        } else {
+            join_and_normalize_path(&filesystem_base, import_path, string_table)
+        };
 
         for candidate in candidate_import_files(&normalized, import_path.len()) {
             if candidate.is_file() {
@@ -282,6 +319,18 @@ impl ProjectPathResolver {
             .is_some_and(|segment| self.root_folder_names.contains(segment))
     }
 
+    /// WHAT: returns whether the import path starts with a registered source library prefix.
+    /// WHY: source library imports should resolve to the library root, not fall through to entry root.
+    fn matches_source_library_prefix(
+        &self,
+        import_path: &InternedPath,
+        string_table: &StringTable,
+    ) -> Option<PathBuf> {
+        let first_component = import_path.as_components().first()?;
+        let segment = string_table.resolve(*first_component);
+        self.source_library_roots.get(segment).cloned()
+    }
+
     // -----------------------------------------------------------------------
     // Compile-time path literal resolution (non-import general paths)
     // -----------------------------------------------------------------------
@@ -362,6 +411,8 @@ impl ProjectPathResolver {
                 CompileTimePathBase::ProjectRootFolder,
                 self.project_root.clone(),
             ))
+        } else if let Some(library_root) = self.matches_source_library_prefix(path, string_table) {
+            Ok((CompileTimePathBase::SourceLibraryRoot, library_root))
         } else {
             Ok((CompileTimePathBase::EntryRoot, self.entry_root.clone()))
         }
@@ -566,7 +617,9 @@ fn build_public_path(
         // which must be preserved. For entry-root paths, all segments are
         // visible. In both cases the source path already contains the
         // correct visible segments, so we can reuse it directly.
-        CompileTimePathBase::ProjectRootFolder | CompileTimePathBase::EntryRoot => {
+        CompileTimePathBase::ProjectRootFolder
+        | CompileTimePathBase::SourceLibraryRoot
+        | CompileTimePathBase::EntryRoot => {
             // Strip leading `.` or `..` (should not be present for non-relative,
             // but guard defensively).
             let components = source_path.as_components();

@@ -10,6 +10,7 @@ use crate::compiler_frontend::style_directives::{
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::TemplateBodyMode;
 use crate::compiler_tests::test_support::temp_dir;
+use crate::libraries::LibrarySet;
 use crate::projects::settings::Config;
 use std::fs;
 
@@ -34,10 +35,8 @@ impl BackendBuilder for NoopBuilder {
         Ok(())
     }
 
-    fn external_packages(
-        &self,
-    ) -> crate::compiler_frontend::external_packages::ExternalPackageRegistry {
-        crate::compiler_frontend::external_packages::ExternalPackageRegistry::new()
+    fn libraries(&self) -> LibrarySet {
+        LibrarySet::with_core_packages()
     }
 
     fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec> {
@@ -66,10 +65,8 @@ impl BackendBuilder for ConflictingDirectiveBuilder {
         Ok(())
     }
 
-    fn external_packages(
-        &self,
-    ) -> crate::compiler_frontend::external_packages::ExternalPackageRegistry {
-        crate::compiler_frontend::external_packages::ExternalPackageRegistry::new()
+    fn libraries(&self) -> LibrarySet {
+        LibrarySet::with_core_packages()
     }
 
     fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec> {

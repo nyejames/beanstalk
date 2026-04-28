@@ -16,10 +16,10 @@ use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
 use crate::compiler_frontend::basic_utility_functions::check_if_valid_path;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
-use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::hir::module::HirModule;
 use crate::compiler_frontend::style_directives::{StyleDirectiveRegistry, StyleDirectiveSpec};
 use crate::compiler_frontend::symbols::string_interning::{StringIdRemap, StringTable};
+use crate::libraries::LibrarySet;
 use crate::projects::settings::Config;
 use std::collections::HashSet;
 use std::fs;
@@ -101,13 +101,14 @@ pub trait BackendBuilder {
     /// tokenization/template parsing.
     fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec>;
 
-    /// Builder-provided external platform packages.
+    /// Builder-provided libraries.
     ///
-    /// WHAT: registers typed virtual packages such as `@core/io`, `@web/canvas`, and `@web/dom`
-    /// that the frontend resolves during import binding and type checking.
-    /// WHY: backends own the runtime surface, so they must declare the typed imports the
-    /// compiler frontend is allowed to see.
-    fn external_packages(&self) -> ExternalPackageRegistry;
+    /// WHAT: returns the complete set of libraries this builder exposes, including
+    /// external platform packages (e.g. `@core/math`) and source library roots
+    /// (e.g. `@html`).
+    /// WHY: backends own the runtime and library surface, so they must declare
+    /// everything the compiler frontend is allowed to see and resolve.
+    fn libraries(&self) -> LibrarySet;
 }
 
 /// Build-system entrypoint that owns the selected backend implementation.
@@ -251,12 +252,12 @@ pub fn build_project(
         mut string_table,
     } = bootstrap_project_build(project_builder, valid_path)?;
 
-    let external_packages = project_builder.backend.external_packages();
+    let libraries = project_builder.backend.libraries();
     let modules = compile_project_frontend(
         &mut config,
         flags,
         &style_directives,
-        &external_packages,
+        &libraries,
         &mut string_table,
     )?;
     let mut warnings = collect_frontend_warnings(&modules);

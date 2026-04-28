@@ -34,7 +34,13 @@ use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 
 pub(crate) fn test_project_path_resolver() -> ProjectPathResolver {
     let cwd = std::env::temp_dir();
-    ProjectPathResolver::new(cwd.clone(), cwd, &[]).expect("test path resolver should be valid")
+    ProjectPathResolver::new(
+        cwd.clone(),
+        cwd,
+        &[],
+        &crate::libraries::SourceLibraryRegistry::default(),
+    )
+    .expect("test path resolver should be valid")
 }
 
 /// Creates a single-line `SourceLocation` at the given line number for use in test fixtures.

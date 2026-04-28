@@ -15,6 +15,7 @@ use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler_frontend::style_directives::StyleDirectiveSpec;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_tests::test_support::temp_dir;
+use crate::libraries::LibrarySet;
 use crate::projects::dev_server::error_page::format_compiler_messages;
 use crate::projects::dev_server::state::DevServerState;
 use crate::projects::dev_server::watch;
@@ -188,10 +189,8 @@ impl BackendBuilder for InvalidOutputWarningBuilder {
         Ok(())
     }
 
-    fn external_packages(
-        &self,
-    ) -> crate::compiler_frontend::external_packages::ExternalPackageRegistry {
-        crate::compiler_frontend::external_packages::ExternalPackageRegistry::new()
+    fn libraries(&self) -> LibrarySet {
+        LibrarySet::with_core_packages()
     }
 
     fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec> {

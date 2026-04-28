@@ -14,6 +14,7 @@ use crate::compiler_frontend::paths::path_resolution::{
 };
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::libraries::SourceLibraryRegistry;
 use crate::projects::settings;
 use crate::projects::settings::{BEANSTALK_FILE_EXTENSION, Config};
 use crate::return_file_error;
@@ -33,6 +34,7 @@ pub(crate) struct DiscoveredModule {
 /// this in one helper keeps the canonicalization logic in one place.
 pub(super) fn build_project_path_resolver(
     config: &Config,
+    builder_source_libraries: &SourceLibraryRegistry,
     string_table: &mut StringTable,
 ) -> Result<ProjectPathResolver, CompilerMessages> {
     let project_root = match fs::canonicalize(&config.entry_dir) {
@@ -69,7 +71,51 @@ pub(super) fn build_project_path_resolver(
             return Err(CompilerMessages::from_error_ref(file_error, string_table));
         }
     };
-    match ProjectPathResolver::new(project_root, entry_root, &config.root_folders) {
+
+    // Discover project-local source library roots from `/lib` under the project root.
+    let mut project_local_libraries = SourceLibraryRegistry::new();
+    let lib_dir = project_root.join("lib");
+    if lib_dir.is_dir()
+        && let Ok(entries) = fs::read_dir(&lib_dir)
+    {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir()
+                && let Some(name) = path.file_name().and_then(|n| n.to_str())
+            {
+                project_local_libraries.register_filesystem_root(name, path.clone());
+            }
+        }
+    }
+
+    // Check for prefix collisions between builder-provided and project-local libraries.
+    let mut merged_libraries = builder_source_libraries.clone();
+    if let Err(collisions) = merged_libraries.merge(&project_local_libraries) {
+        let collision_list = collisions.join(", ");
+        let mut error = CompilerError::file_error(
+            &project_root,
+            format!(
+                "Project-local libraries in '/lib' collide with builder-provided libraries: {collision_list}"
+            ),
+            string_table,
+        );
+        error.new_metadata_entry(
+            crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::CompilationStage,
+            String::from("Project Structure"),
+        );
+        error.new_metadata_entry(
+            crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+            String::from("Remove the conflicting '/lib' directory or rename it so the builder-provided library can be used."),
+        );
+        return Err(CompilerMessages::from_error_ref(error, string_table));
+    }
+
+    match ProjectPathResolver::new(
+        project_root,
+        entry_root,
+        &config.root_folders,
+        &merged_libraries,
+    ) {
         Ok(resolver) => Ok(resolver),
         Err(error) => Err(CompilerMessages::from_error_ref(error, string_table)),
     }

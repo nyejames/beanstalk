@@ -82,12 +82,12 @@ fn execute_check(path: &str) -> CheckOutcome {
         }
     };
 
-    let external_packages = project_builder.backend.external_packages();
+    let libraries = project_builder.backend.libraries();
     let messages = match compile_project_frontend(
         &mut config,
         &[],
         &style_directives,
-        &external_packages,
+        &libraries,
         &mut string_table,
     ) {
         Ok(modules) => CompilerMessages {

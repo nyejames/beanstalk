@@ -19,8 +19,13 @@ fn configured_resolver(config: &Config) -> ProjectPathResolver {
     let entry_root =
         fs::canonicalize(resolve_project_entry_root(config)).expect("entry root should resolve");
 
-    ProjectPathResolver::new(project_root, entry_root, &config.root_folders)
-        .expect("project path resolver should build")
+    ProjectPathResolver::new(
+        project_root,
+        entry_root,
+        &config.root_folders,
+        &crate::libraries::SourceLibraryRegistry::default(),
+    )
+    .expect("project path resolver should build")
 }
 
 fn test_style_directives() -> StyleDirectiveRegistry {
@@ -680,6 +685,81 @@ fn detects_duplicate_config_keys() {
         error.error_type,
         ErrorType::Config,
         "duplicate config key error should use ErrorType::Config"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+// ── Source library root tests ─────────────────────────────────────────────────
+
+#[test]
+fn project_local_lib_directory_is_discovered_as_source_library_root() {
+    let root = temp_dir("project_local_lib");
+    fs::create_dir_all(&root).expect("should create root dir");
+    fs::create_dir_all(root.join("lib/helper")).expect("should create lib/helper");
+    fs::create_dir_all(root.join("src")).expect("should create src");
+    fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
+    fs::write(root.join("lib/helper/utils.bst"), "#foo = 1\n").expect("should write lib file");
+    fs::write(root.join("#config.bst"), "").expect("should write config");
+
+    let config = Config::new(root.clone());
+    let mut string_table = StringTable::new();
+    let resolver = super::module_discovery::build_project_path_resolver(
+        &config,
+        &crate::libraries::SourceLibraryRegistry::default(),
+        &mut string_table,
+    )
+    .expect("resolver should build");
+
+    // Import path `@helper/utils` should resolve to the project-local lib root.
+    let mut path = crate::compiler_frontend::interned_path::InternedPath::new();
+    path.push_str("helper", &mut string_table);
+    path.push_str("utils", &mut string_table);
+
+    let importer = root.join("src/#page.bst");
+    let resolved = resolver
+        .resolve_import_to_file(&path, &importer, &mut string_table)
+        .expect("should resolve source library import");
+
+    assert_eq!(
+        resolved,
+        fs::canonicalize(root.join("lib/helper/utils.bst")).unwrap(),
+        "should resolve to project-local lib directory"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn builder_provided_and_project_local_library_collision_is_error() {
+    let root = temp_dir("lib_collision");
+    fs::create_dir_all(&root).expect("should create root dir");
+    fs::create_dir_all(root.join("lib/html")).expect("should create lib/html");
+    fs::create_dir_all(root.join("src")).expect("should create src");
+    fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
+    fs::write(root.join("#config.bst"), "").expect("should write config");
+
+    let config = Config::new(root.clone());
+    let mut string_table = StringTable::new();
+
+    let mut builder_libraries = crate::libraries::SourceLibraryRegistry::new();
+    builder_libraries.register_filesystem_root("html", root.join("builder/html"));
+
+    let result = super::module_discovery::build_project_path_resolver(
+        &config,
+        &builder_libraries,
+        &mut string_table,
+    );
+
+    assert!(
+        result.is_err(),
+        "should fail when builder-provided and project-local libraries collide"
+    );
+    let messages = result.expect_err("checked above");
+    let error_text = &messages.errors[0].msg;
+    assert!(
+        error_text.contains("collide") || error_text.contains("html"),
+        "error should mention collision: {error_text}"
     );
 
     fs::remove_dir_all(&root).expect("should remove temp root");

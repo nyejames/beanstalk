@@ -67,9 +67,13 @@ impl FrontendProject {
             fs::canonicalize(&entry_root).expect("entry root should canonicalize");
         let entry_file = fs::canonicalize(project_root.join(entry_relative_path))
             .expect("entry file should canonicalize");
-        let resolver =
-            ProjectPathResolver::new(canonical_project_root.clone(), canonical_entry_root, &[])
-                .expect("project path resolver should build");
+        let resolver = ProjectPathResolver::new(
+            canonical_project_root.clone(),
+            canonical_entry_root,
+            &[],
+            &crate::libraries::SourceLibraryRegistry::default(),
+        )
+        .expect("project path resolver should build");
 
         let mut string_table = StringTable::new();
         let source_files = SourceFileTable::build(

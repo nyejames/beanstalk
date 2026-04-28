@@ -50,8 +50,13 @@ fn template_tokens_from_source(source: &str, string_table: &mut StringTable) -> 
 
 fn test_constant_context(scope: InternedPath) -> ScopeContext {
     let cwd = std::env::temp_dir();
-    let resolver = ProjectPathResolver::new(cwd.clone(), cwd, &[])
-        .expect("test path resolver should be valid");
+    let resolver = ProjectPathResolver::new(
+        cwd.clone(),
+        cwd,
+        &[],
+        &crate::libraries::SourceLibraryRegistry::default(),
+    )
+    .expect("test path resolver should be valid");
     ScopeContext::new(
         ContextKind::Constant,
         scope.clone(),

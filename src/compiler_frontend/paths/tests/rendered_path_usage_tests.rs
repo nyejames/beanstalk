@@ -34,9 +34,13 @@ impl TestHarness {
         fs::write(project_root.join("src/#page.bst"), b"").expect("write page");
 
         let root_folder_paths: Vec<PathBuf> = root_folders.iter().map(PathBuf::from).collect();
-        let resolver =
-            ProjectPathResolver::new(project_root.clone(), entry_root, &root_folder_paths)
-                .expect("resolver should build");
+        let resolver = ProjectPathResolver::new(
+            project_root.clone(),
+            entry_root,
+            &root_folder_paths,
+            &crate::libraries::SourceLibraryRegistry::default(),
+        )
+        .expect("resolver should build");
 
         Self {
             project_root,

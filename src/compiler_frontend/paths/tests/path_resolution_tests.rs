@@ -18,6 +18,16 @@ struct TestHarness {
 
 impl TestHarness {
     fn new(root_folders: &[&str]) -> Self {
+        Self::with_source_libraries(
+            root_folders,
+            &crate::libraries::SourceLibraryRegistry::default(),
+        )
+    }
+
+    fn with_source_libraries(
+        root_folders: &[&str],
+        source_libraries: &crate::libraries::SourceLibraryRegistry,
+    ) -> Self {
         let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
         let project_root = temp_dir.path().to_path_buf();
         let entry_root = project_root.join("src");
@@ -34,9 +44,13 @@ impl TestHarness {
 
         let root_folder_paths: Vec<PathBuf> = root_folders.iter().map(PathBuf::from).collect();
 
-        let resolver =
-            ProjectPathResolver::new(project_root.clone(), entry_root, &root_folder_paths)
-                .expect("resolver creation should succeed");
+        let resolver = ProjectPathResolver::new(
+            project_root.clone(),
+            entry_root,
+            &root_folder_paths,
+            source_libraries,
+        )
+        .expect("resolver creation should succeed");
 
         TestHarness {
             project_root,
@@ -268,4 +282,88 @@ fn empty_path_resolves_as_entry_root_public_directory() {
     assert_eq!(result.kind, CompileTimePathKind::Directory);
     assert_eq!(result.filesystem_path, h.project_root.join("src"));
     assert!(result.public_path.as_components().is_empty());
+}
+
+#[test]
+fn source_library_import_resolves_to_library_root() {
+    let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
+    let project_root = temp_dir.path().to_path_buf();
+    let entry_root = project_root.join("src");
+    let library_root = project_root.join("lib/helper");
+
+    fs::create_dir_all(&entry_root).unwrap();
+    fs::create_dir_all(&library_root).unwrap();
+    fs::write(library_root.join("utils.bst"), b"").unwrap();
+    fs::write(entry_root.join("index.bst"), b"").unwrap();
+
+    let mut source_libraries = crate::libraries::SourceLibraryRegistry::new();
+    source_libraries.register_filesystem_root("helper", library_root.clone());
+
+    let resolver = ProjectPathResolver::new(
+        project_root.clone(),
+        entry_root.clone(),
+        &[],
+        &source_libraries,
+    )
+    .expect("resolver creation should succeed");
+
+    let mut string_table = StringTable::new();
+    let mut path = InternedPath::new();
+    path.push_str("helper", &mut string_table);
+    path.push_str("utils", &mut string_table);
+
+    let importer = entry_root.join("index.bst");
+    let result = resolver
+        .resolve_import_as_compile_time_path(&path, &importer, &mut string_table)
+        .expect("source library import should resolve");
+
+    assert_eq!(result.0.base, CompileTimePathBase::SourceLibraryRoot);
+    assert_eq!(
+        result.1,
+        fs::canonicalize(library_root.join("utils.bst")).unwrap(),
+        "should resolve to source library root file"
+    );
+}
+
+#[test]
+fn source_library_prefix_takes_priority_over_entry_root() {
+    let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
+    let project_root = temp_dir.path().to_path_buf();
+    let entry_root = project_root.join("src");
+    let library_root = project_root.join("lib/helper");
+
+    fs::create_dir_all(&entry_root).unwrap();
+    fs::create_dir_all(&library_root).unwrap();
+    fs::write(library_root.join("utils.bst"), b"").unwrap();
+    // Also create a conflicting file under entry root.
+    fs::create_dir_all(entry_root.join("helper")).unwrap();
+    fs::write(entry_root.join("helper/utils.bst"), b"").unwrap();
+    fs::write(entry_root.join("index.bst"), b"").unwrap();
+
+    let mut source_libraries = crate::libraries::SourceLibraryRegistry::new();
+    source_libraries.register_filesystem_root("helper", library_root.clone());
+
+    let resolver = ProjectPathResolver::new(
+        project_root.clone(),
+        entry_root.clone(),
+        &[],
+        &source_libraries,
+    )
+    .expect("resolver creation should succeed");
+
+    let mut string_table = StringTable::new();
+    let mut path = InternedPath::new();
+    path.push_str("helper", &mut string_table);
+    path.push_str("utils", &mut string_table);
+
+    let importer = entry_root.join("index.bst");
+    let result = resolver
+        .resolve_import_as_compile_time_path(&path, &importer, &mut string_table)
+        .expect("source library import should resolve");
+
+    assert_eq!(result.0.base, CompileTimePathBase::SourceLibraryRoot);
+    assert_eq!(
+        result.1,
+        fs::canonicalize(library_root.join("utils.bst")).unwrap()
+    );
 }

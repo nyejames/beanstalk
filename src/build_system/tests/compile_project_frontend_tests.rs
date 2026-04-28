@@ -1,8 +1,8 @@
 use super::compile_project_frontend;
-use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_tests::test_support::temp_dir;
+use crate::libraries::LibrarySet;
 use crate::projects::settings::Config;
 use std::fs;
 
@@ -23,7 +23,7 @@ fn single_file_compiles_minimal_bst() {
         &mut config,
         &[],
         &style_directives,
-        &ExternalPackageRegistry::new(),
+        &LibrarySet::with_core_packages(),
         &mut string_table,
     );
 
@@ -52,7 +52,7 @@ fn single_file_rejects_wrong_extension() {
         &mut config,
         &[],
         &style_directives,
-        &ExternalPackageRegistry::new(),
+        &LibrarySet::with_core_packages(),
         &mut string_table,
     );
 
@@ -82,7 +82,7 @@ fn single_file_rejects_missing_file() {
         &mut config,
         &[],
         &style_directives,
-        &ExternalPackageRegistry::new(),
+        &LibrarySet::with_core_packages(),
         &mut string_table,
     );
 
@@ -112,7 +112,7 @@ fn directory_project_compiles_single_entry_module() {
         &mut config,
         &[],
         &style_directives,
-        &ExternalPackageRegistry::new(),
+        &LibrarySet::with_core_packages(),
         &mut string_table,
     );
 
@@ -145,7 +145,7 @@ fn directory_project_discovers_multiple_entry_modules() {
         &mut config,
         &[],
         &style_directives,
-        &ExternalPackageRegistry::new(),
+        &LibrarySet::with_core_packages(),
         &mut string_table,
     );
 
@@ -188,7 +188,7 @@ fn directory_project_rejects_missing_entry_root() {
         &mut config,
         &[],
         &style_directives,
-        &ExternalPackageRegistry::new(),
+        &LibrarySet::with_core_packages(),
         &mut string_table,
     );
 
