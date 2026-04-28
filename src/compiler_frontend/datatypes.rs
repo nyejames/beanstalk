@@ -390,28 +390,64 @@ impl PartialEq for DataType {
             (
                 DataType::Choices {
                     nominal_path: path_a,
-                    variants: variants_a,
+                    ..
                 },
                 DataType::Choices {
                     nominal_path: path_b,
-                    variants: variants_b,
+                    ..
                 },
-            ) => {
-                path_a == path_b
-                    && variants_a.len() == variants_b.len()
-                    && variants_a
-                        .iter()
-                        .zip(variants_b.iter())
-                        .all(|(variant_a, variant_b)| {
-                            variant_a.id == variant_b.id
-                                && std::mem::discriminant(&variant_a.payload)
-                                    == std::mem::discriminant(&variant_b.payload)
-                        })
-            }
+            ) => path_a == path_b,
             (DataType::External { type_id: id_a }, DataType::External { type_id: id_b }) => {
                 id_a == id_b
             }
             _ => false,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::DataType;
+    use crate::compiler_frontend::declaration_syntax::choice::{ChoiceVariant, ChoiceVariantPayload};
+    use crate::compiler_frontend::interned_path::InternedPath;
+    use crate::compiler_frontend::symbols::string_interning::StringTable;
+
+    #[test]
+    fn choice_equality_is_purely_nominal() {
+        let mut table = StringTable::new();
+        let path_a = InternedPath::from_single_str("Status", &mut table);
+        let path_b = InternedPath::from_single_str("OtherStatus", &mut table);
+        let ready = ChoiceVariant {
+            id: table.intern("Ready"),
+            payload: ChoiceVariantPayload::Unit,
+            location: Default::default(),
+        };
+        let busy = ChoiceVariant {
+            id: table.intern("Busy"),
+            payload: ChoiceVariantPayload::Unit,
+            location: Default::default(),
+        };
+
+        let status_a = DataType::Choices {
+            nominal_path: path_a.clone(),
+            variants: vec![ready.clone(), busy.clone()],
+        };
+        let status_b = DataType::Choices {
+            nominal_path: path_a.clone(),
+            variants: vec![ready.clone()],
+        };
+        let other = DataType::Choices {
+            nominal_path: path_b.clone(),
+            variants: vec![ready.clone(), busy.clone()],
+        };
+
+        assert_eq!(
+            status_a, status_b,
+            "same nominal path should make choices equal regardless of variant shape"
+        );
+        assert_ne!(
+            status_a, other,
+            "different nominal paths should make choices unequal even with identical variants"
+        );
     }
 }

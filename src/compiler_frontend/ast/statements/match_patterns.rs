@@ -6,7 +6,7 @@
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
-use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorType};
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::declaration_syntax::choice::{ChoiceVariant, ChoiceVariantPayload};
 use crate::compiler_frontend::deferred_feature_diagnostics::deferred_feature_rule_error;
@@ -28,7 +28,7 @@ pub struct MatchArm {
 /// One payload field capture inside a choice-variant match pattern.
 ///
 /// WHY: match arms can destructure payload variants by binding each field to a
-/// local name. For Alpha, captured names must exactly match the declared field
+/// local name. Captured names must exactly match the declared field
 /// names in declaration order.
 #[derive(Debug, Clone)]
 pub(super) struct ParsedChoicePayloadCapture {
@@ -205,12 +205,12 @@ fn ensure_relational_pattern_type(
     Ok(())
 }
 
-/// Resolve a choice variant pattern to its deterministic tag index.
+/// Resolve a choice variant pattern to its deterministic variant index.
 ///
 /// WHAT: accepts bare (`Ready`) or qualified (`Status::Ready`) variant names and
-/// normalizes them to the variant's positional index expression.
-/// WHY: match lowering compares integer tag indices, so normalizing here lets HIR
-/// treat choice arms identically to literal-int arms.
+/// resolves them against the scrutinee choice metadata.
+/// WHY: later lowering uses the stable variant index in `HirPattern::ChoiceVariant`,
+/// while payload captures are materialized separately at arm entry.
 pub(super) fn parse_choice_variant_pattern(
     token_stream: &mut FileTokens,
     match_context: &ScopeContext,
@@ -218,7 +218,7 @@ pub(super) fn parse_choice_variant_pattern(
     variants: &[ChoiceVariant],
     string_table: &StringTable,
 ) -> Result<ParsedChoicePattern, CompilerError> {
-    // Alpha only supports exact choice-variant names in match patterns.
+    // Choice patterns support exact variant names plus constructor-like payload captures.
     reject_deferred_pattern_lead_token(token_stream)?;
 
     let choice_name_display = choice_display_name(choice_nominal_path, string_table);
@@ -232,7 +232,7 @@ pub(super) fn parse_choice_variant_pattern(
 
     if token_stream.current_token_kind() == &TokenKind::TypeParameterBracket {
         return Err(deferred_feature_rule_error(
-            "Capture/tagged patterns using '|...|' are deferred for Alpha.",
+            "Capture/tagged patterns using '|...|' are deferred.",
             token_stream.current_location(),
             "Match Statement Parsing",
             "Use simple choice-variant patterns only in this phase.",
@@ -273,6 +273,29 @@ fn parse_choice_pattern_captures(
     string_table: &StringTable,
 ) -> Result<Vec<ParsedChoicePayloadCapture>, CompilerError> {
     let variant_name_str = string_table.resolve(variant.id);
+
+    /// Resolve the leaf name of a choice payload field declaration.
+    ///
+    /// WHAT: extracts the terminal identifier from a payload field's interned path.
+    /// WHY: payload fields are declarations with interned paths; during match-pattern
+    ///      parsing we need the leaf string ID for capture-name validation.
+    ///      This is an internal invariant: every payload field must have a leaf name.
+    fn choice_payload_field_name(
+        field: &crate::compiler_frontend::ast::ast_nodes::Declaration,
+        location: &SourceLocation,
+        string_table: &StringTable,
+    ) -> Result<StringId, CompilerError> {
+        field.id.name().ok_or_else(|| {
+            CompilerError::new(
+                format!(
+                    "Choice payload field '{}' has no leaf name during match-pattern parsing",
+                    field.id.to_string(string_table)
+                ),
+                location.clone(),
+                ErrorType::Compiler,
+            )
+        })
+    }
 
     match &variant.payload {
         ChoiceVariantPayload::Unit => {
@@ -439,10 +462,8 @@ fn parse_choice_pattern_captures(
                     );
                 };
 
-                let expected_field_name = field_decl
-                    .id
-                    .name()
-                    .expect("choice payload field must have a name");
+                let expected_field_name =
+                    choice_payload_field_name(field_decl, &capture_location, string_table)?;
                 if field_name != expected_field_name {
                     return_rule_error!(
                         format!(
@@ -805,7 +826,7 @@ pub(super) fn reject_deferred_pattern_lead_token(
         }
         TokenKind::Not => {
             return Err(deferred_feature_rule_error(
-                "Negated match patterns (for example 'case not ... =>') are deferred for Alpha.",
+                "Negated match patterns (for example 'case not ... =>') are deferred.",
                 token_stream.current_location(),
                 "Match Statement Parsing",
                 "Use explicit positive case arms and an 'else =>' fallback in this phase.",
@@ -813,7 +834,7 @@ pub(super) fn reject_deferred_pattern_lead_token(
         }
         TokenKind::TypeParameterBracket => {
             return Err(deferred_feature_rule_error(
-                "Capture/tagged patterns using '|...|' are deferred for Alpha.",
+                "Capture/tagged patterns using '|...|' are deferred.",
                 token_stream.current_location(),
                 "Match Statement Parsing",
                 "Use simple literal or choice-variant patterns only.",

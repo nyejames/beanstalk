@@ -2,4 +2,4 @@
 mode = "failure"
 warnings = "forbid"
 error_type = "Rule"
-message_contains = ["Negated match patterns", "deferred for Alpha"]
+message_contains = ["Negated match patterns", "deferred"]

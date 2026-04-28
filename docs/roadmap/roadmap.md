@@ -9,7 +9,6 @@ Use the language surface integration matrix as a reference for what is currently
 ---
 
 # Plans / Notes / TODOS
-- as keyword generalization: `docs/roadmap/plans/as-keyword-general-renaming-implementation-plan.md`
 - full pattern-matching design (capture patterns)
 - full traits implementation
 - Closures

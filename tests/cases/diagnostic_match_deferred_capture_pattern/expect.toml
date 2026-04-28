@@ -2,4 +2,4 @@
 mode = "failure"
 warnings = "forbid"
 error_type = "Rule"
-message_contains = ["Capture/tagged patterns using '|...|' are deferred for Alpha"]
+message_contains = ["Capture/tagged patterns using '|...|' are deferred"]

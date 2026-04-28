@@ -45,7 +45,7 @@ pub enum ChoiceVariantPayload {
     Record { fields: Vec<Declaration> },
 }
 
-pub(crate) fn starts_choice_payload_type(token: &TokenKind) -> bool {
+pub(crate) fn starts_rejected_choice_payload_shorthand(token: &TokenKind) -> bool {
     matches!(
         token,
         TokenKind::DatatypeInt
@@ -252,7 +252,7 @@ pub(crate) fn parse_choice_shell(
                         ));
                     }
 
-                    token if starts_choice_payload_type(token) => {
+                    token if starts_rejected_choice_payload_shorthand(token) => {
                         return_rule_error!(
                             "Choice payload shorthand is not supported. Use a record payload body: `Variant | field Type |`.",
                             token_stream.current_location(),
@@ -338,7 +338,7 @@ pub(crate) fn parse_choice_shell(
                                     "Remove the default assignment and keep this as a unit variant or use a record payload.",
                                 ));
                             }
-                            payload_token if starts_choice_payload_type(payload_token) => {
+                            payload_token if starts_rejected_choice_payload_shorthand(payload_token) => {
                                 return_rule_error!(
                                     "Choice payload shorthand is not supported. Use a record payload body: `Variant | field Type |`.",
                                     token_stream.current_location(),
