@@ -2650,6 +2650,11 @@ path = "grouped_import_alias_case_warning"
 tags = ["integration", "language", "aliases", "grouped", "diagnostics"]
 
 [[case]]
+id = "import_alias_collision_with_builtin_rejected"
+path = "import_alias_collision_with_builtin_rejected"
+tags = ["integration", "language", "aliases", "diagnostics", "builtins"]
+
+[[case]]
 id = "type_alias_basic"
 path = "type_alias_basic"
 tags = ["integration", "language", "aliases"]

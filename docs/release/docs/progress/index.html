@@ -418,7 +418,7 @@ body {
      <td style="padding: 0.2em 0.5em;"> Supported</td>
      <td style="padding: 0.2em 0.5em;"> Broad parser, declaration, constructor, match, import, assignment, return, JS carrier-shape, and payload coverage.</td>
      <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
-     <td style="padding: 0.2em 0.5em;"> Unit variants use `Choice::Variant`. Empty constructor calls are invalid. Record-body payload declarations are parsed and type-checked. Payload constructors support positional and named arguments. Payload match extraction uses constructor-like patterns with original field names only. Const choice values are supported for unit and payload variants. Payload shorthand is rejected. Payload structural equality is deferred. Generic choices, recursive choices, and direct payload field access remain deferred.</td>
+     <td style="padding: 0.2em 0.5em;"> Unit variants use `Choice::Variant`. Empty constructor calls are invalid. Record-body payload declarations are parsed and type-checked. Payload constructors support positional and named arguments. Payload match extraction uses constructor-like patterns with original field names only. Const choice values are supported for unit and payload variants. Payload shorthand is rejected. Payload structural equality is deferred. Generic choices, recursive choices, and direct payload field access remain deferred. Choices, Options, and Results share a unified HIR variant construction representation while retaining distinct semantic type kinds.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -456,15 +456,15 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;"> Paths and imports</td>
      <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> Broad import syntax, relative path, root folder, circular dependency, and multi-file module coverage.</td>
+     <td style="padding: 0.2em 0.5em;"> Broad import syntax, relative path, root folder, circular dependency, multi-file module, single-symbol aliases, grouped aliases, nested grouped aliases, collision, and file-local coverage.</td>
      <td style="padding: 0.2em 0.5em;"> Frontend / HTML builder</td>
-     <td style="padding: 0.2em 0.5em;"> Path rendering is golden-sensitive. Keep normalized output and platform-stable diagnostics covered.</td>
+     <td style="padding: 0.2em 0.5em;"> Path rendering is golden-sensitive. Keep normalized output and platform-stable diagnostics covered. Single-symbol source import aliases, grouped source import aliases, and nested grouped source import aliases are supported. Aliases are file-local and not re-exported. Alias collisions are hard errors across same-file declarations, source imports, external imports, type aliases, prelude symbols, and builtins. Alias case mismatches warn.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;"> External platform packages</td>
      <td style="padding: 0.2em 0.5em;"> Partial</td>
-     <td style="padding: 0.2em 0.5em;"> Broad package-scoped import and visibility coverage, with targeted external constant, Float/F64 ABI, std/math, prelude, duplicate-name, and non-imported-symbol diagnostics.</td>
+     <td style="padding: 0.2em 0.5em;"> Broad package-scoped import and visibility coverage, with targeted external constant, Float/F64 ABI, std/math, prelude, duplicate-name, non-imported-symbol, and alias diagnostics.</td>
      <td style="padding: 0.2em 0.5em;"> Frontend / JS</td>
      <td style="padding: 0.2em 0.5em;"> Functions, opaque types, and compile-time external constants are supported through Rust-side registry metadata. <ul><li>User-authored external binding files are not supported. Alpha external packages are Rust-side builder/compiler metadata.</li><li>External constants are implemented for scalar compile-time values and lower through expression parsing as ordinary literals.</li><li>External ABI metadata includes <span style="
         color: #c444aff9;
@@ -478,7 +478,7 @@ body {
     ">io</span> and <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">IO</span> remain the only current prelude symbols.</li><li>External receiver methods are not a recommended expansion surface yet. Prefer free functions until external methods are keyed by nominal receiver type rather than broad ABI metadata.</li><li>JS lowering now resolves external runtime names through per-function lowering metadata in the registry.</li><li><span style="
+    ">IO</span> remain the only current prelude symbols.</li><li>External function aliases, external constant aliases, and external opaque type aliases are supported. Grouped external aliases are supported.</li><li>Prelude collision rejection is enforced: explicit imports cannot shadow prelude names.</li><li>External receiver methods are not a recommended expansion surface yet. Prefer free functions until external methods are keyed by nominal receiver type rather than broad ABI metadata.</li><li>JS lowering now resolves external runtime names through per-function lowering metadata in the registry.</li><li><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">InlineExpression</span> JS lowering metadata exists but is not implemented yet.</li><li>Wasm lowering for external packages is experimental and should not be counted as Alpha support.</li></ul></td>
@@ -487,7 +487,13 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;"> Standard math package</td>
      <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> Targeted success and diagnostic coverage for direct, grouped, and aliased imports; constants; const-context constants; arity errors; type errors; missing symbols; and non-imported access.</td>
+     <td style="padding: 0.2em 0.5em;"> Targeted success and diagnostic coverage for direct, grouped, and aliased imports; aliased constants such as <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">PI as pi</span>; aliased functions such as <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">sin as sine</span>; const-context constants; arity errors; type errors; missing symbols; and non-imported access.</td>
      <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
      <td style="padding: 0.2em 0.5em;"> <span style="
         color: #c444aff9;
@@ -564,7 +570,7 @@ body {
     ">Float</span>.</li><li>The package is not prelude-imported. Users must explicitly import the required symbols from <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">@std/math</span>.</li><li>JS helpers are emitted only when the matching external function is referenced.</li><li>Wasm support for this package remains deferred/experimental.</li></ul></td>
+    ">@std/math</span>.</li><li>Direct imports, grouped imports, and aliased imports are all supported.</li><li>JS helpers are emitted only when the matching external function is referenced.</li><li>Wasm support for this package remains deferred/experimental.</li></ul></td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -774,6 +780,12 @@ body {
     ">choice_payload_duplicate_field_rejected</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
+    ">choice_payload_mutable_field_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_field_default_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
     ">choice_payload_shorthand_rejected</span></td>
      <td style="padding: 0.2em 0.5em;"> Only `Variant | field Type, ... |` syntax. Payload shorthand is rejected.</td>
         </tr>
@@ -849,6 +861,9 @@ body {
     ">choice_payload_match_guard_uses_capture_success</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
+    ">choice_payload_match_import_alias_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
     ">choice_payload_match_exhaustive_tag_level_success</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
@@ -889,7 +904,10 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;"> Choice payload field access</td>
      <td style="padding: 0.2em 0.5em;"> Deferred</td>
-     <td style="padding: 0.2em 0.5em;"> No canonical case yet.</td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_direct_field_access_deferred</span></td>
      <td style="padding: 0.2em 0.5em;"> No `value.field` until variant narrowing/refinement is designed. Use pattern matching to extract payload fields.</td>
         </tr>
 
@@ -899,28 +917,54 @@ body {
      <td style="padding: 0.2em 0.5em;"> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">choice_payload_match_rename_syntax_deferred</span></td>
-     <td style="padding: 0.2em 0.5em;"> Future syntax: `<new_name> as <original_name>`.</td>
+    ">choice_payload_match_rename_syntax_deferred</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_capture_rename_deferred</span></td>
+     <td style="padding: 0.2em 0.5em;"> Future syntax: `case Variant(original_name as local_name) =>`.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;"> Choice nested payload patterns / exhaustiveness</td>
      <td style="padding: 0.2em 0.5em;"> Deferred</td>
-     <td style="padding: 0.2em 0.5em;"> No canonical case yet.</td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_nested_payload_pattern_deferred</span></td>
      <td style="padding: 0.2em 0.5em;"> Exhaustiveness is tag-level for now.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Import re-exports</td>
+     <td style="padding: 0.2em 0.5em;"> Deferred</td>
+     <td style="padding: 0.2em 0.5em;"> Direct re-export syntax is not supported; aliases remain file-local.</td>
+     <td style="padding: 0.2em 0.5em;"> Public type aliases can target imported aliases, but that creates a new exported type alias declaration, not import alias re-export.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Namespace / wildcard imports</td>
+     <td style="padding: 0.2em 0.5em;"> Deferred</td>
+     <td style="padding: 0.2em 0.5em;"> Unsupported syntax should fail cleanly.</td>
+     <td style="padding: 0.2em 0.5em;"> No `import @pkg.*` or namespace-import syntax is planned for Alpha.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;"> Choice recursive types</td>
      <td style="padding: 0.2em 0.5em;"> Deferred</td>
-     <td style="padding: 0.2em 0.5em;"> No canonical case yet.</td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_recursive_direct_declaration_deferred</span></td>
      <td style="padding: 0.2em 0.5em;"> Requires layout/indirection design.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;"> Choice generic declarations</td>
      <td style="padding: 0.2em 0.5em;"> Deferred</td>
-     <td style="padding: 0.2em 0.5em;"> No canonical case yet.</td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_generic_declaration_deferred</span></td>
      <td style="padding: 0.2em 0.5em;"> Syntax ideas live in <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
@@ -934,7 +978,7 @@ body {
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">choice_payload_structural_equality_deferred</span></td>
-     <td style="padding: 0.2em 0.5em;"> Equality comparison for payload choice variants is not supported. Use pattern matching and compare fields inside the matching arm.</td>
+     <td style="padding: 0.2em 0.5em;"> Payload structural equality is deferred. Use pattern matching and compare fields inside the matching arm.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -956,7 +1000,10 @@ body {
      <td style="padding: 0.2em 0.5em;"> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">choice_default_decl_deferred</span></td>
+    ">choice_default_decl_deferred</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_variant_default_value_deferred</span></td>
      <td style="padding: 0.2em 0.5em;"> If field defaults are inherited, document separately from variant defaults.</td>
         </tr>
 

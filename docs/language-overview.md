@@ -25,7 +25,10 @@ This comes before the type if there is an explicit type declaration
 - All copies have to be explicit unless they are used in part of a new expression (includes integers, floats and bools)
 - Parameters and struct definitions use vertical pipes | 
 - Result types are created with the '!' symbol. Options use '?'
-- Type aliases are declared with `as`: `AliasName as ExistingType`
+- `as` is used for three renaming domains:
+  - Type aliases: `AliasName as ExistingType`
+  - Import aliases: `import @path/symbol as local_name`
+  - Grouped import per-entry aliases: `import @path { symbol as local_name }`
 
 **Naming conventions:**
 - Types/Objects/Choices/Type aliases: `PascalCase`
@@ -743,12 +746,13 @@ id UserId = 42
 raw Int = id -- valid, UserId is Int
 ```
 
-Imported types can be renamed with import aliases:
+Imported types can be renamed with import aliases, and type aliases can target those imported aliases:
 
 ```beanstalk
 import @types/UserId as Id
 
-id Id = 1
+LocalId as Id
+value LocalId = 1
 ```
 
 ## Module System and Imports
@@ -770,24 +774,33 @@ Example:
 
 **Import syntax:**
 ```beanstalk
--- Import one exported symbol:
+-- Import one exported symbol with its original name:
 import @path/to/file/symbol
 
--- Import with a local alias:
-import @path/to/file/symbol as alias_name
+-- Import with a file-local alias:
+import @path/to/file/symbol as local_name
 
--- Import several exported symbols from one shared file path:
-import @path/to/file {symbol_a, symbol_b}
+-- Grouped imports can alias individual entries:
+import @components {
+    render as render_component,
+    Button as UiButton,
+    Card,
+}
 
--- Grouped entries can include nested relative symbol paths:
+-- Nested grouped entries can alias the final imported symbol:
 import @docs {
-    pages/home/render,
-    pages/about/render,
+    pages/home/render as render_home,
+    pages/about/render as render_about,
 }
 ```
 
-Imports target exported symbols, not file-level start functions.
-Bare file imports such as import @path/to/file are invalid.
+Import rules:
+- Imports target exported symbols, not file-level start functions.
+- Bare file imports such as `import @path/to/file` are invalid.
+- An alias applies only in the importing file; it does not change the canonical declaration path.
+- Import aliases are not re-exported. A file that wants to expose an imported alias must declare a real exported type alias explicitly.
+- Alias names cannot collide with any visible name in the same file: same-file declarations, other imports, prelude symbols, builtins, or type aliases.
+- Aliases should preserve the leading-case convention of the imported symbol. A mismatch warns (for example, `User as user` or `render as Render`).
 
 **Entry files and implicit start functions:**
 - The module entry file has an implicit `start` function containing its top-level runtime code.
@@ -824,15 +837,17 @@ These are not Beanstalk source files. They expose typed external functions and o
 
 ```beanstalk
 import @std/io/io
+import @std/math/sin as sine
 
 io("hello")
+value = sine(1.0)
 ```
 
 Some symbols may be imported automatically by the builder prelude. For normal builds, `io()` and `IO` are available without explicit imports.
 
 External types are opaque. They can be passed, returned, and used by external functions, but cannot be constructed with struct syntax or field-accessed by Beanstalk code.
 
-Prelude external symbols do not override source declarations or explicit imports. Explicit external imports must not collide with already visible source symbols in the same file.
+Prelude external symbols do not override source declarations or explicit imports. Explicit external imports must not collide with already visible source symbols in the same file. External aliases follow the same file-local, collision, and case-convention rules as source import aliases.
 
 ### Hash (`#`) semantics
 At top level, `#` changes behavior by declaration kind:

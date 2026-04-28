@@ -219,10 +219,14 @@ It does not rediscover top-level symbols or reparse top-level declaration shells
 
 - **Import Visibility**: AST resolves per-file import visibility while still using the shared module-wide top-level symbol package. AST import binding builds per-file visibility maps:
   - `visible_symbol_paths`: source declarations and compiler-owned builtin declarations.
-  - `visible_external_symbols`: builder-provided external functions/types from explicit virtual imports and prelude imports. This map stores source-visible names mapped to already-resolved `ExternalSymbolId` values. Later expression and type resolution never re-resolves those names globally.
+  - `visible_source_bindings`: local visible name → canonical source declaration path. Includes same-file declarations and imported source symbols (aliased or not).
+  - `visible_external_symbols`: builder-provided external functions/types/constants from explicit virtual imports and prelude imports. This map stores source-visible names mapped to already-resolved `ExternalSymbolId` values. Later expression and type resolution never re-resolves those names globally.
   - `visible_type_aliases`: type aliases visible in this file (same-file and imported).
-  - `visible_source_aliases`: source declaration import aliases (local rename → canonical path).
   Expression parsing and type resolution must resolve external symbols through the active `ScopeContext`, not through global registry lookup.
+
+  Import binding uses a unified user-visible name registry to enforce collision rules. All names—same-file declarations, source imports, type alias imports, external imports, prelude symbols, and builtins—are registered through the same collision check. Duplicate visible spellings are rejected as hard errors. Prelude symbols and builtins are pre-registered before explicit imports so that aliases like `as io` or `as Error` are rejected.
+
+  Grouped import expansion preserves per-entry alias metadata from tokenization through header parsing. Each grouped entry produces an independent `FileImport` with its own `alias`, `path_location`, and `alias_location`, and the binder resolves them individually through the same registry.
 - **Top-Level Resolution**: AST resolves and validates type aliases, constants, struct field types, and function signatures from the parsed header payloads. Type aliases are resolved to concrete `DataType`s before regular type resolution and do not emit AST runtime nodes or survive into HIR. Type alias cycles are caught by strict dependency edges during header sorting.
 - **Body Parsing**: Function bodies and the entry `start` body are parsed and lowered here
 - **Local Scope Growth**: Executable bodies register local declarations incrementally in source order. Body-local declarations reuse shared declaration syntax, but top-level declaration shells remain header-owned

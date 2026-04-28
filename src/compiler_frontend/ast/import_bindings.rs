@@ -81,9 +81,9 @@ enum VisibleNameKind {
     TypeAliasImport,
     ExternalImport,
     PreludeExternal,
+    Builtin,
 }
 
-#[allow(dead_code)]
 struct VisibleNameBinding {
     kind: VisibleNameKind,
     canonical_path: Option<InternedPath>,
@@ -209,6 +209,7 @@ pub(crate) fn resolve_file_import_bindings(
     importable_symbol_exported: &FxHashMap<InternedPath, bool>,
     declared_paths_by_file: &FxHashMap<InternedPath, FxHashSet<InternedPath>>,
     type_alias_paths: &FxHashSet<InternedPath>,
+    builtin_paths: &FxHashSet<InternedPath>,
     external_package_registry: &ExternalPackageRegistry,
     string_table: &mut StringTable,
 ) -> Result<
@@ -283,6 +284,24 @@ pub(crate) fn resolve_file_import_bindings(
                 },
                 string_table,
             );
+        }
+
+        // Pre-register builtin error types so import aliases cannot shadow them.
+        // WHY: builtins like `Error` are reserved language types; an import alias
+        //      must not silently replace them in name lookup.
+        for builtin_path in builtin_paths {
+            if let Some(name) = builtin_path.name() {
+                let _ = registry.register(
+                    name,
+                    VisibleNameBinding {
+                        kind: VisibleNameKind::Builtin,
+                        canonical_path: Some(builtin_path.to_owned()),
+                        external_symbol_id: None,
+                        location: None,
+                    },
+                    string_table,
+                );
+            }
         }
 
         let imports = file_imports_by_source

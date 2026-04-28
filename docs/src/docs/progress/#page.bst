@@ -168,21 +168,23 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
         [data:
             [: Paths and imports]
             [: Supported]
-            [: Broad import syntax, relative path, root folder, circular dependency, and multi-file module coverage.]
+            [: Broad import syntax, relative path, root folder, circular dependency, multi-file module, single-symbol aliases, grouped aliases, nested grouped aliases, collision, and file-local coverage.]
             [: Frontend / HTML builder]
-            [: Path rendering is golden-sensitive. Keep normalized output and platform-stable diagnostics covered.]
+            [: Path rendering is golden-sensitive. Keep normalized output and platform-stable diagnostics covered. Single-symbol source import aliases, grouped source import aliases, and nested grouped source import aliases are supported. Aliases are file-local and not re-exported. Alias collisions are hard errors across same-file declarations, source imports, external imports, type aliases, prelude symbols, and builtins. Alias case mismatches warn.]
         ]
 
         [data:
             [: External platform packages]
             [: Partial]
-            [: Broad package-scoped import and visibility coverage, with targeted external constant, Float/F64 ABI, std/math, prelude, duplicate-name, and non-imported-symbol diagnostics.]
+            [: Broad package-scoped import and visibility coverage, with targeted external constant, Float/F64 ABI, std/math, prelude, duplicate-name, non-imported-symbol, and alias diagnostics.]
             [: Frontend / JS]
             [: Functions, opaque types, and compile-time external constants are supported through Rust-side registry metadata. [$markdown:
                 - User-authored external binding files are not supported. Alpha external packages are Rust-side builder/compiler metadata.
                 - External constants are implemented for scalar compile-time values and lower through expression parsing as ordinary literals.
                 - External ABI metadata includes [codesnippet:F64], which enables a proper Float-based [codesnippet:@std/math] package.
                 - Explicit imports are required for non-prelude external packages. [codesnippet:io] and [codesnippet:IO] remain the only current prelude symbols.
+                - External function aliases, external constant aliases, and external opaque type aliases are supported. Grouped external aliases are supported.
+                - Prelude collision rejection is enforced: explicit imports cannot shadow prelude names.
                 - External receiver methods are not a recommended expansion surface yet. Prefer free functions until external methods are keyed by nominal receiver type rather than broad ABI metadata.
                 - JS lowering now resolves external runtime names through per-function lowering metadata in the registry.
                 - [codesnippet:InlineExpression] JS lowering metadata exists but is not implemented yet.
@@ -193,12 +195,13 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
         [data:
             [: Standard math package]
             [: Supported]
-            [: Targeted success and diagnostic coverage for direct, grouped, and aliased imports; constants; const-context constants; arity errors; type errors; missing symbols; and non-imported access.]
+            [: Targeted success and diagnostic coverage for direct, grouped, and aliased imports; aliased constants such as [codesnippet:PI as pi]; aliased functions such as [codesnippet:sin as sine]; const-context constants; arity errors; type errors; missing symbols; and non-imported access.]
             [: JS / HTML]
             [: [codesnippet:@std/math] exposes [codesnippet:PI], [codesnippet:TAU], [codesnippet:E], and Float functions backed by JavaScript [codesnippet:Math]. [$markdown:
                 - Implemented functions: [codesnippet:sin], [codesnippet:cos], [codesnippet:tan], [codesnippet:atan2], [codesnippet:log], [codesnippet:log2], [codesnippet:log10], [codesnippet:exp], [codesnippet:pow], [codesnippet:sqrt], [codesnippet:abs], [codesnippet:floor], [codesnippet:ceil], [codesnippet:round], [codesnippet:trunc], [codesnippet:min], [codesnippet:max], and [codesnippet:clamp].
                 - All functions currently accept and return [codesnippet:Float].
                 - The package is not prelude-imported. Users must explicitly import the required symbols from [codesnippet:@std/math].
+                - Direct imports, grouped imports, and aliased imports are all supported.
                 - JS helpers are emitted only when the matching external function is referenced.
                 - Wasm support for this package remains deferred/experimental.
             ]]
@@ -380,7 +383,7 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
             [: Choice binding renames]
             [: Deferred]
             [: [codesnippet:choice_payload_match_rename_syntax_deferred], [codesnippet:choice_capture_rename_deferred]]
-            [: Future syntax: `<new_name> as <original_name>`.]
+            [: Future syntax: `case Variant(original_name as local_name) =>`.]
         ]
 
         [data:
@@ -388,6 +391,20 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
             [: Deferred]
             [: [codesnippet:choice_nested_payload_pattern_deferred]]
             [: Exhaustiveness is tag-level for now.]
+        ]
+
+        [data:
+            [: Import re-exports]
+            [: Deferred]
+            [: Direct re-export syntax is not supported; aliases remain file-local.]
+            [: Public type aliases can target imported aliases, but that creates a new exported type alias declaration, not import alias re-export.]
+        ]
+
+        [data:
+            [: Namespace / wildcard imports]
+            [: Deferred]
+            [: Unsupported syntax should fail cleanly.]
+            [: No `import @pkg.*` or namespace-import syntax is planned for Alpha.]
         ]
 
         [data:

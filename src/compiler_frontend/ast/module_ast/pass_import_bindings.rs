@@ -25,6 +25,7 @@ impl<'a> AstBuildState<'a> {
             &self.module_symbols.importable_symbol_exported,
             &self.module_symbols.declared_paths_by_file,
             &self.module_symbols.type_alias_paths,
+            &self.module_symbols.builtin_visible_symbol_paths,
             self.external_package_registry,
             string_table,
         )
