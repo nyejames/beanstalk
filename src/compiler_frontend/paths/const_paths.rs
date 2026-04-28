@@ -5,12 +5,23 @@ use crate::compiler_frontend::tokenizer::lexer::{
     consume_all_whitespace, consume_non_newline_whitespace,
 };
 use crate::compiler_frontend::tokenizer::tokens::{
-    SourceLocation, Token, TokenKind, TokenStream, TokenizeMode,
+    PathTokenItem, SourceLocation, Token, TokenKind, TokenStream, TokenizeMode,
 };
 use crate::{return_syntax_error, return_token};
 
 type PathComponents = Vec<StringId>;
-type RelativePathExpansions = Vec<PathComponents>;
+
+/// WHAT: One expanded entry from a grouped block, with optional alias and source locations.
+/// WHY: Grouped import aliases must preserve per-entry metadata through tokenization.
+#[derive(Debug)]
+struct GroupedPathExpansion {
+    components: PathComponents,
+    alias: Option<StringId>,
+    path_location: SourceLocation,
+    alias_location: Option<SourceLocation>,
+}
+
+type RelativePathExpansions = Vec<GroupedPathExpansion>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum PathStopReason {
@@ -34,10 +45,16 @@ struct ParsedPathPrefix {
     ended_with_separator: bool,
 }
 
+/// WHAT: Result of parsing one grouped entry, including optional alias.
+/// WHY: Grouped entries may end with `as alias`; this captures both the path
+///      components and the alias metadata.
 #[derive(Debug)]
-struct ParsedGroupedPrefix {
+struct ParsedGroupedEntry {
     components: PathComponents,
     ended_with_separator: bool,
+    alias: Option<StringId>,
+    path_location: SourceLocation,
+    alias_location: Option<SourceLocation>,
 }
 
 #[derive(Debug)]
@@ -75,12 +92,36 @@ pub fn parse_file_path(
         stream.next();
 
         match stream.peek().copied() {
-            None => return_token!(TokenKind::Path(vec![InternedPath::new()]), stream),
+            None => return_token!(
+                TokenKind::Path(vec![PathTokenItem {
+                    path: InternedPath::new(),
+                    alias: None,
+                    path_location: SourceLocation::new(
+                        stream.file_path.to_owned(),
+                        stream.start_position,
+                        stream.position
+                    ),
+                    alias_location: None,
+                }]),
+                stream
+            ),
             Some(next) => {
                 if let Some(stop_reason) = ordinary_stop_reason(stream.mode, next)
                     && stop_reason != PathStopReason::GroupStart
                 {
-                    return_token!(TokenKind::Path(vec![InternedPath::new()]), stream);
+                    return_token!(
+                        TokenKind::Path(vec![PathTokenItem {
+                            path: InternedPath::new(),
+                            alias: None,
+                            path_location: SourceLocation::new(
+                                stream.file_path.to_owned(),
+                                stream.start_position,
+                                stream.position
+                            ),
+                            alias_location: None,
+                        }]),
+                        stream
+                    );
                 }
 
                 return_syntax_error!(
@@ -130,7 +171,18 @@ pub fn parse_file_path(
     let mut parsed_paths = Vec::with_capacity(1);
 
     if parsed_prefix.stop_reason != PathStopReason::GroupStart {
-        parsed_paths.push(InternedPath::from_components(parsed_prefix.components));
+        let path = InternedPath::from_components(parsed_prefix.components);
+        let path_location = SourceLocation::new(
+            stream.file_path.to_owned(),
+            stream.start_position,
+            stream.position,
+        );
+        parsed_paths.push(PathTokenItem {
+            path,
+            alias: None,
+            path_location,
+            alias_location: None,
+        });
         return_token!(TokenKind::Path(parsed_paths), stream);
     }
 
@@ -138,10 +190,16 @@ pub fn parse_file_path(
     stream.next();
     let grouped_suffixes = parse_grouped_block(stream, string_table)?;
 
-    for suffix_components in grouped_suffixes {
+    for suffix in grouped_suffixes {
         let mut full_components = parsed_prefix.components.clone();
-        full_components.extend(suffix_components);
-        parsed_paths.push(InternedPath::from_components(full_components));
+        full_components.extend(suffix.components);
+        let path = InternedPath::from_components(full_components);
+        parsed_paths.push(PathTokenItem {
+            path,
+            alias: suffix.alias,
+            path_location: suffix.path_location,
+            alias_location: suffix.alias_location,
+        });
     }
 
     return_token!(TokenKind::Path(parsed_paths), stream)
@@ -190,7 +248,7 @@ pub fn parse_import_clause_items(
         );
     };
 
-    let TokenKind::Path(paths) = &path_token.kind else {
+    let TokenKind::Path(items) = &path_token.kind else {
         return_syntax_error!(
             format!(
                 "Expected a path after the 'import' keyword, found '{:?}'.",
@@ -204,8 +262,8 @@ pub fn parse_import_clause_items(
     };
 
     let mut index = index + 1;
-    let mut alias: Option<StringId> = None;
-    let mut alias_location: Option<SourceLocation> = None;
+    let mut trailing_alias: Option<StringId> = None;
+    let mut trailing_alias_location: Option<SourceLocation> = None;
 
     // Check for `as alias_name` after the path token.
     if tokens
@@ -231,31 +289,45 @@ pub fn parse_import_clause_items(
                 }
             );
         };
-        if paths.len() > 1 {
+        if items.len() > 1 {
             return_syntax_error!(
-                "Grouped imports cannot use a single trailing alias. Use per-entry aliases instead (not yet supported).",
+                "Grouped imports cannot use a group-level alias. Add `as ...` to each grouped entry that needs renaming.",
                 alias_token.location.clone(), {
                     CompilationStage => "Header Parsing",
-                    PrimarySuggestion => "Import each symbol separately with its own alias, e.g. `import @path/a as x`",
+                    PrimarySuggestion => "Add `as` to individual entries, e.g. `import @path { a as x, b as y }`",
                 }
             );
         }
-        alias = Some(alias_name);
-        alias_location = Some(alias_token.location.clone());
+        trailing_alias = Some(alias_name);
+        trailing_alias_location = Some(alias_token.location.clone());
         index += 1;
     }
 
-    let items = paths
+    // Reject double alias: per-entry alias + trailing alias.
+    if trailing_alias.is_some() && items.iter().any(|item| item.alias.is_some()) {
+        return_syntax_error!(
+            "Cannot use both per-entry aliases and a group-level alias.",
+            path_token.location.clone(), {
+                CompilationStage => "Header Parsing",
+                PrimarySuggestion => "Use only per-entry aliases inside `{}`, or a single trailing alias for one import",
+            }
+        );
+    }
+
+    let parsed_items = items
         .iter()
-        .map(|path| ParsedImportItem {
-            path: path.to_owned(),
-            alias,
-            path_location: path_token.location.clone(),
-            alias_location: alias_location.clone(),
+        .map(|item| ParsedImportItem {
+            path: item.path.clone(),
+            alias: item.alias.or(trailing_alias),
+            path_location: item.path_location.clone(),
+            alias_location: item
+                .alias_location
+                .clone()
+                .or(trailing_alias_location.clone()),
         })
         .collect();
 
-    Ok((items, index))
+    Ok((parsed_items, index))
 }
 
 pub fn parse_import_clause_tokens(
@@ -494,12 +566,22 @@ fn parse_grouped_block(
             )
         }
 
-        let parsed_prefix = parse_grouped_entry_prefix(stream, string_table)?;
+        let parsed_entry = parse_grouped_entry(stream, string_table)?;
 
         consume_all_whitespace(stream);
 
         if stream.peek() == Some(&'{') {
-            if parsed_prefix.ended_with_separator {
+            if parsed_entry.alias.is_some() {
+                return_syntax_error!(
+                    "Path aliases are only valid on leaf entries.",
+                    stream.new_location(), {
+                        CompilationStage => "Tokenization",
+                        PrimarySuggestion => "Move the alias to the final leaf entry, e.g. 'base { entry as alias }'",
+                    }
+                )
+            }
+
+            if parsed_entry.ended_with_separator {
                 return_syntax_error!(
                     "Slash-before-group syntax is not supported. Use 'base { ... }'.",
                     stream.new_location(), {
@@ -509,7 +591,7 @@ fn parse_grouped_block(
                 )
             }
 
-            if parsed_prefix.components.is_empty() {
+            if parsed_entry.components.is_empty() {
                 return_syntax_error!(
                     "Nested grouped paths require a non-empty prefix before '{'.",
                     stream.new_location(), {
@@ -523,12 +605,17 @@ fn parse_grouped_block(
             let child_suffixes = parse_grouped_block(stream, string_table)?;
 
             for child_suffix in child_suffixes {
-                let mut combined = parsed_prefix.components.clone();
-                combined.extend(child_suffix);
-                expanded_suffixes.push(combined);
+                let mut combined = parsed_entry.components.clone();
+                combined.extend(child_suffix.components);
+                expanded_suffixes.push(GroupedPathExpansion {
+                    components: combined,
+                    alias: child_suffix.alias,
+                    path_location: child_suffix.path_location,
+                    alias_location: child_suffix.alias_location,
+                });
             }
         } else {
-            if parsed_prefix.ended_with_separator {
+            if parsed_entry.ended_with_separator {
                 return_syntax_error!(
                     "A grouped path prefix cannot end with a separator.",
                     stream.new_location(), {
@@ -538,7 +625,7 @@ fn parse_grouped_block(
                 )
             }
 
-            if parsed_prefix.components.is_empty() {
+            if parsed_entry.components.is_empty() {
                 return_syntax_error!(
                     "Grouped path entry cannot be empty.",
                     stream.new_location(), {
@@ -548,7 +635,12 @@ fn parse_grouped_block(
                 )
             }
 
-            expanded_suffixes.push(parsed_prefix.components);
+            expanded_suffixes.push(GroupedPathExpansion {
+                components: parsed_entry.components,
+                alias: parsed_entry.alias,
+                path_location: parsed_entry.path_location,
+                alias_location: parsed_entry.alias_location,
+            });
         }
 
         saw_entry = true;
@@ -558,33 +650,29 @@ fn parse_grouped_block(
     Ok(expanded_suffixes)
 }
 
-/// WHAT: Parses one grouped entry prefix up to `,`, `}`, or nested `{`.
-/// WHY: Grouped entries share the same component parsing and validation rules as ordinary paths.
-fn parse_grouped_entry_prefix(
+/// WHAT: Parses one grouped entry, including optional `as alias`.
+/// WHY: Grouped import aliases require each entry to carry its own alias metadata.
+fn parse_grouped_entry(
     stream: &mut TokenStream,
     string_table: &mut StringTable,
-) -> Result<ParsedGroupedPrefix, CompilerError> {
+) -> Result<ParsedGroupedEntry, CompilerError> {
+    let entry_start = stream.position;
     let mut components = Vec::new();
     let mut seen_non_relative_component = false;
     let mut ended_with_separator = false;
     let mut expect_component = true;
 
+    // Parse path components until a grouped-entry stop character.
     loop {
         if expect_component {
             consume_all_whitespace(stream);
 
             let Some(next) = stream.peek().copied() else {
-                return Ok(ParsedGroupedPrefix {
-                    components,
-                    ended_with_separator,
-                });
+                break;
             };
 
-            if is_grouped_entry_stop_char(next) {
-                return Ok(ParsedGroupedPrefix {
-                    components,
-                    ended_with_separator,
-                });
+            if is_grouped_entry_stop_char(stream, next) {
+                break;
             }
 
             if matches!(next, '/' | '\\') {
@@ -616,17 +704,11 @@ fn parse_grouped_entry_prefix(
         let skipped_whitespace = consume_all_whitespace(stream);
 
         let Some(next) = stream.peek().copied() else {
-            return Ok(ParsedGroupedPrefix {
-                components,
-                ended_with_separator,
-            });
+            break;
         };
 
-        if is_grouped_entry_stop_char(next) {
-            return Ok(ParsedGroupedPrefix {
-                components,
-                ended_with_separator,
-            });
+        if is_grouped_entry_stop_char(stream, next) {
+            break;
         }
 
         if matches!(next, '/' | '\\') {
@@ -654,6 +736,38 @@ fn parse_grouped_entry_prefix(
             }
         )
     }
+
+    let path_end = stream.position;
+
+    // Check for optional `as alias` after the path components.
+    let mut alias = None;
+    let mut alias_location = None;
+
+    consume_all_whitespace(stream);
+    if stream.peek().copied() == Some('a') && peek_keyword_as(stream) {
+        consume_keyword_as(stream);
+        consume_all_whitespace(stream);
+
+        let alias_start = stream.position;
+        let alias_component =
+            parse_bare_component(stream, ParseComponentContext::GroupedEntry, string_table)?;
+        let alias_end = stream.position;
+
+        alias = Some(string_table.intern(&alias_component.value));
+        alias_location = Some(SourceLocation::new(
+            stream.file_path.to_owned(),
+            alias_start,
+            alias_end,
+        ));
+    }
+
+    Ok(ParsedGroupedEntry {
+        components,
+        ended_with_separator,
+        alias,
+        path_location: SourceLocation::new(stream.file_path.to_owned(), entry_start, path_end),
+        alias_location,
+    })
 }
 
 /// WHAT: Parses exactly one path component (bare or quoted) from the current stream position.
@@ -753,7 +867,7 @@ fn parse_bare_component(
     let mut value = String::new();
 
     while let Some(next) = stream.peek().copied() {
-        if is_component_terminator(stream.mode, context, next) || next.is_whitespace() {
+        if is_component_terminator(stream, context, next) || next.is_whitespace() {
             break;
         }
 
@@ -784,17 +898,15 @@ fn parse_bare_component(
             }
         }
 
-        let mode = stream.mode;
-        if stream
-            .peek()
-            .is_some_and(|next| !is_component_terminator(mode, context, *next))
+        if let Some(next) = stream.peek().copied()
+            && !is_component_terminator(stream, context, next)
         {
             // Allow the `as` keyword to follow a bare path component without quoting.
             // WHAT: `import @path/symbol as alias` is valid syntax; `as` is a keyword.
             // WHY: without this, the path tokenizer treats `as` as an unquoted multi-word
             //      path component and emits a confusing error.
             if matches!(context, ParseComponentContext::OrdinaryPath)
-                && stream.peek().copied() == Some('a')
+                && next == 'a'
                 && peek_keyword_as(stream)
             {
                 // Return the component normally; `parse_path_prefix` will stop at `as`.
@@ -1014,12 +1126,29 @@ fn ordinary_stop_reason(mode: TokenizeMode, character: char) -> Option<PathStopR
     None
 }
 
-fn is_grouped_entry_stop_char(character: char) -> bool {
-    matches!(character, ',' | '}' | '{')
+/// WHAT: Checks whether the current character ends a grouped entry.
+/// WHY: Entries stop at commas, braces, or the `as` keyword. The `as` check needs
+///      the stream to peek ahead and verify it's the keyword, not a component like `assignment`.
+fn is_grouped_entry_stop_char(stream: &TokenStream, character: char) -> bool {
+    if matches!(character, ',' | '}' | '{') {
+        return true;
+    }
+    // Stop at `as` keyword in grouped entries.
+    if character == 'a' && peek_keyword_as(stream) {
+        return true;
+    }
+    false
+}
+
+/// WHAT: Consumes the `as` keyword from the stream.
+/// WHY: After `peek_keyword_as` confirms the keyword is present, this advances past it.
+fn consume_keyword_as(stream: &mut TokenStream) {
+    stream.next(); // 'a'
+    stream.next(); // 's'
 }
 
 fn is_component_terminator(
-    mode: TokenizeMode,
+    stream: &TokenStream,
     context: ParseComponentContext,
     character: char,
 ) -> bool {
@@ -1028,8 +1157,10 @@ fn is_component_terminator(
     }
 
     match context {
-        ParseComponentContext::OrdinaryPath => ordinary_stop_reason(mode, character).is_some(),
-        ParseComponentContext::GroupedEntry => is_grouped_entry_stop_char(character),
+        ParseComponentContext::OrdinaryPath => {
+            ordinary_stop_reason(stream.mode, character).is_some()
+        }
+        ParseComponentContext::GroupedEntry => is_grouped_entry_stop_char(stream, character),
     }
 }
 

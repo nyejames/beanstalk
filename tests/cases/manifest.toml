@@ -2625,6 +2625,31 @@ path = "external_import_alias_case_warning"
 tags = ["integration", "language", "aliases", "external", "diagnostics"]
 
 [[case]]
+id = "grouped_source_import_alias_success"
+path = "grouped_source_import_alias_success"
+tags = ["integration", "language", "aliases", "grouped", "source"]
+
+[[case]]
+id = "grouped_nested_source_import_alias_success"
+path = "grouped_nested_source_import_alias_success"
+tags = ["integration", "language", "aliases", "grouped", "source"]
+
+[[case]]
+id = "grouped_external_import_alias_success"
+path = "grouped_external_import_alias_success"
+tags = ["integration", "language", "aliases", "grouped", "external"]
+
+[[case]]
+id = "grouped_import_alias_collision_rejected"
+path = "grouped_import_alias_collision_rejected"
+tags = ["integration", "language", "aliases", "grouped", "diagnostics"]
+
+[[case]]
+id = "grouped_import_alias_case_warning"
+path = "grouped_import_alias_case_warning"
+tags = ["integration", "language", "aliases", "grouped", "diagnostics"]
+
+[[case]]
 id = "type_alias_basic"
 path = "type_alias_basic"
 tags = ["integration", "language", "aliases"]

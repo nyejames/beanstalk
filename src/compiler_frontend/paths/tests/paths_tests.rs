@@ -3,18 +3,18 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
 use crate::compiler_frontend::tokenizer::newline_handling::NewlineMode;
-use crate::compiler_frontend::tokenizer::tokens::TokenizeMode;
+use crate::compiler_frontend::tokenizer::tokens::{PathTokenItem, TokenizeMode};
 
 fn first_path_token_values(source: &str) -> Vec<String> {
-    let (paths, string_table) = first_path_token(source);
+    let (items, string_table) = first_path_token(source);
 
-    paths
+    items
         .iter()
-        .map(|path| path.to_portable_string(&string_table))
+        .map(|item| item.path.to_portable_string(&string_table))
         .collect()
 }
 
-fn first_path_token(source: &str) -> (Vec<InternedPath>, StringTable) {
+fn first_path_token(source: &str) -> (Vec<PathTokenItem>, StringTable) {
     let mut string_table = StringTable::new();
     let style_directives = StyleDirectiveRegistry::built_ins();
     let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
@@ -29,18 +29,18 @@ fn first_path_token(source: &str) -> (Vec<InternedPath>, StringTable) {
     )
     .expect("tokenization should succeed");
 
-    let paths = file_tokens
+    let items = file_tokens
         .tokens
         .iter()
         .find_map(|token| {
-            let TokenKind::Path(paths) = &token.kind else {
+            let TokenKind::Path(items) = &token.kind else {
                 return None;
             };
-            Some(paths.to_owned())
+            Some(items.to_owned())
         })
         .expect("expected at least one path token");
 
-    (paths, string_table)
+    (items, string_table)
 }
 
 fn collect_import_path_values(source: &str) -> Vec<String> {
@@ -75,8 +75,8 @@ fn parse_file_path_preserves_final_segment() {
 fn parse_file_path_accepts_exact_public_root_literal() {
     let (paths, string_table) = first_path_token("import @/\n");
     assert_eq!(paths.len(), 1);
-    assert!(paths[0].as_components().is_empty());
-    assert_eq!(paths[0].to_portable_string(&string_table), "");
+    assert!(paths[0].path.as_components().is_empty());
+    assert_eq!(paths[0].path.to_portable_string(&string_table), "");
 }
 
 #[test]
@@ -886,4 +886,158 @@ fn parse_import_clause_items_reads_alias() {
     assert_eq!(items.len(), 1);
     assert_eq!(items[0].path.to_portable_string(&string_table), "std/io/io");
     assert_eq!(string_table.resolve(items[0].alias.unwrap()), "print");
+}
+
+// ---- Grouped import alias tests (Phase 3) ----
+
+#[test]
+fn parse_grouped_import_entries_with_aliases() {
+    let (items, string_table) =
+        first_path_token("import @components { render as render_component, Button as UiButton }");
+    assert_eq!(items.len(), 2);
+
+    assert_eq!(
+        items[0].path.to_portable_string(&string_table),
+        "components/render"
+    );
+    assert_eq!(
+        string_table.resolve(items[0].alias.unwrap()),
+        "render_component"
+    );
+
+    assert_eq!(
+        items[1].path.to_portable_string(&string_table),
+        "components/Button"
+    );
+    assert_eq!(string_table.resolve(items[1].alias.unwrap()), "UiButton");
+}
+
+#[test]
+fn parse_nested_grouped_import_entries_with_aliases() {
+    let (items, string_table) = first_path_token(
+        "import @docs { pages { home/render as render_home, about/render as render_about } }",
+    );
+    assert_eq!(items.len(), 2);
+
+    assert_eq!(
+        items[0].path.to_portable_string(&string_table),
+        "docs/pages/home/render"
+    );
+    assert_eq!(string_table.resolve(items[0].alias.unwrap()), "render_home");
+
+    assert_eq!(
+        items[1].path.to_portable_string(&string_table),
+        "docs/pages/about/render"
+    );
+    assert_eq!(
+        string_table.resolve(items[1].alias.unwrap()),
+        "render_about"
+    );
+}
+
+#[test]
+fn reject_group_level_alias() {
+    let mut string_table = StringTable::new();
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
+
+    let file_tokens = tokenize(
+        "import @components { render, Button } as ui",
+        &source_path,
+        TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
+        &style_directives,
+        &mut string_table,
+        None,
+    )
+    .expect("tokenization should succeed");
+
+    let import_index = file_tokens
+        .tokens
+        .iter()
+        .position(|token| matches!(token.kind, TokenKind::Import))
+        .expect("expected an Import token");
+
+    let result = parse_import_clause_items(&file_tokens.tokens, import_index, &mut string_table);
+    assert!(result.is_err(), "group-level alias should be rejected");
+    let error = result.expect_err("expected import clause error");
+    assert!(error.msg.contains("group-level alias"));
+}
+
+#[test]
+fn reject_double_alias() {
+    let mut string_table = StringTable::new();
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
+
+    let file_tokens = tokenize(
+        "import @x { foo as bar } as baz",
+        &source_path,
+        TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
+        &style_directives,
+        &mut string_table,
+        None,
+    )
+    .expect("tokenization should succeed");
+
+    let import_index = file_tokens
+        .tokens
+        .iter()
+        .position(|token| matches!(token.kind, TokenKind::Import))
+        .expect("expected an Import token");
+
+    let result = parse_import_clause_items(&file_tokens.tokens, import_index, &mut string_table);
+    assert!(result.is_err(), "double alias should be rejected");
+    let error = result.expect_err("expected import clause error");
+    assert!(error.msg.contains("Cannot use both per-entry aliases"));
+}
+
+#[test]
+fn reject_alias_on_non_leaf_group_prefix() {
+    let mut string_table = StringTable::new();
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
+
+    let result = tokenize(
+        "import @docs { pages as p { home/render } }",
+        &source_path,
+        TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
+        &style_directives,
+        &mut string_table,
+        None,
+    );
+
+    assert!(
+        result.is_err(),
+        "alias on non-leaf prefix should be rejected"
+    );
+    let error = result.expect_err("expected tokenizer error");
+    assert!(error.msg.contains("only valid on leaf entries"));
+}
+
+#[test]
+fn parse_grouped_import_mixed_aliased_and_plain() {
+    let (items, string_table) =
+        first_path_token("import @std/math { PI as pi, sin, cos as cosine }");
+    assert_eq!(items.len(), 3);
+
+    assert_eq!(
+        items[0].path.to_portable_string(&string_table),
+        "std/math/PI"
+    );
+    assert_eq!(string_table.resolve(items[0].alias.unwrap()), "pi");
+
+    assert_eq!(
+        items[1].path.to_portable_string(&string_table),
+        "std/math/sin"
+    );
+    assert!(items[1].alias.is_none());
+
+    assert_eq!(
+        items[2].path.to_portable_string(&string_table),
+        "std/math/cos"
+    );
+    assert_eq!(string_table.resolve(items[2].alias.unwrap()), "cosine");
 }

@@ -29,7 +29,7 @@ use crate::compiler_frontend::style_directives::{
     StyleDirectiveKind, StyleDirectiveSpec, TemplateHeadCompatibility, TemplateHeadTag,
 };
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind, path_token_paths};
 use crate::compiler_frontend::value_mode::ValueMode;
 use crate::projects::settings::BS_VAR_PREFIX;
 use crate::{ast_log, return_syntax_error};
@@ -283,13 +283,23 @@ pub fn parse_template_head(
                 apply_head_compatibility(&mut head_state, &meaningful_item_compatibility);
             }
 
-            TokenKind::Path(paths) => {
+            TokenKind::Path(items) => {
                 enforce_head_compatibility(
                     &head_state,
                     &meaningful_item_compatibility,
                     token_stream,
                     None,
                 )?;
+                if items.iter().any(|item| item.alias.is_some()) {
+                    return_syntax_error!(
+                        "Path aliases are only valid in import clauses.",
+                        token_stream.current_location(), {
+                            CompilationStage => "Template Parsing",
+                            PrimarySuggestion => "Remove the 'as' alias from this path",
+                        }
+                    );
+                }
+                let paths = path_token_paths(&items);
                 push_template_head_path_expression(
                     &paths,
                     token_stream,

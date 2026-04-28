@@ -51,6 +51,31 @@ impl Token {
     }
 }
 
+/// WHAT: One path entry produced by the path tokenizer, with optional per-entry alias.
+/// WHY: Grouped import syntax `import @base { a as x, b }` needs each expanded path to
+///      carry its own alias and source location. Storing alias metadata in the token
+///      payload avoids reparsing and keeps alias data attached to the entry that
+///      produced it.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PathTokenItem {
+    pub path: InternedPath,
+    pub alias: Option<StringId>,
+    pub path_location: SourceLocation,
+    pub alias_location: Option<SourceLocation>,
+}
+
+impl PathTokenItem {
+    pub fn path_only(&self) -> InternedPath {
+        self.path.clone()
+    }
+}
+
+/// WHAT: Extract bare paths from a slice of path token items.
+/// WHY: Non-import consumers (template heads, project config) only need the path data.
+pub fn path_token_paths(items: &[PathTokenItem]) -> Vec<InternedPath> {
+    items.iter().map(|item| item.path.clone()).collect()
+}
+
 #[derive(Clone, Debug)]
 pub struct FileTokens {
     pub tokens: Vec<Token>,
@@ -350,7 +375,7 @@ pub enum TokenKind {
 
     // Values
     StringSliceLiteral(StringId),
-    Path(Vec<InternedPath>), // Compile time path resolution
+    Path(Vec<PathTokenItem>), // Compile time path resolution
     FloatLiteral(f64),
     IntLiteral(i64),
     CharLiteral(char),

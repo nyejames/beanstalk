@@ -182,10 +182,17 @@ fn parse_root_folders_value(
                     *index += 1;
                     break;
                 }
-                TokenKind::Path(paths) => {
-                    for path in paths {
+                TokenKind::Path(items) => {
+                    for item in items {
+                        if item.alias.is_some() {
+                            return Err(vec![CompilerError::new(
+                                "Path aliases are only valid in import clauses.".to_string(),
+                                token.location.clone(),
+                                ErrorType::Config,
+                            )]);
+                        }
                         match validate_root_folder_path(
-                            PathBuf::from(path.to_string(string_table)),
+                            PathBuf::from(item.path.to_string(string_table)),
                             token,
                         ) {
                             Ok(validated_path) => root_folders.push(validated_path),
@@ -249,10 +256,17 @@ fn parse_root_folders_value(
     }
 
     match &start_token.kind {
-        TokenKind::Path(paths) => {
-            for path in paths {
+        TokenKind::Path(items) => {
+            for item in items {
+                if item.alias.is_some() {
+                    return Err(vec![CompilerError::new(
+                        "Path aliases are only valid in import clauses.".to_string(),
+                        start_token.location.clone(),
+                        ErrorType::Config,
+                    )]);
+                }
                 match validate_root_folder_path(
-                    PathBuf::from(path.to_string(string_table)),
+                    PathBuf::from(item.path.to_string(string_table)),
                     start_token,
                 ) {
                     Ok(validated_path) => root_folders.push(validated_path),
@@ -389,7 +403,9 @@ fn parse_config_scalar_value(kind: &TokenKind, string_table: &StringTable) -> Op
         TokenKind::IntLiteral(value) => Some(value.to_string()),
         TokenKind::FloatLiteral(value) => Some(value.to_string()),
         TokenKind::BoolLiteral(value) => Some(value.to_string()),
-        TokenKind::Path(paths) if paths.len() == 1 => Some(paths[0].to_string(string_table)),
+        TokenKind::Path(items) if items.len() == 1 && items[0].alias.is_none() => {
+            Some(items[0].path.to_string(string_table))
+        }
         _ => None,
     }
 }
