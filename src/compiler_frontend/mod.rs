@@ -6,6 +6,7 @@
 pub(crate) mod ast;
 pub(crate) mod declaration_syntax;
 pub(crate) mod headers;
+pub(crate) mod source_libraries;
 pub(crate) mod style_directives;
 pub(crate) mod tokenizer;
 pub(crate) mod optimizers {

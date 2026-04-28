@@ -12,6 +12,7 @@ use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::paths::path_resolution::{
     ProjectPathResolver, resolve_project_entry_root,
 };
+use crate::compiler_frontend::source_libraries::mod_file::{MOD_FILE_NAME, file_name_is_mod_file};
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::libraries::SourceLibraryRegistry;
@@ -119,7 +120,7 @@ pub(super) fn build_project_path_resolver(
         Ok(resolver) => {
             // Validate that every source library root has a #mod.bst facade file.
             for (prefix, root) in resolver.source_library_roots() {
-                let mod_file = root.join("#mod.bst");
+                let mod_file = root.join(MOD_FILE_NAME);
                 if !mod_file.is_file() {
                     let mut error = CompilerError::file_error(
                         root,
@@ -257,7 +258,7 @@ fn discover_root_entry_files(
             }
 
             // Exclude #mod.bst so source library facades are never treated as module entries.
-            if file_name == "#mod.bst" {
+            if file_name_is_mod_file(file_name) {
                 continue;
             }
 

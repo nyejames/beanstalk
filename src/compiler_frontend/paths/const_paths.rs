@@ -230,7 +230,27 @@ pub fn parse_import_clause_items(
     start_index: usize,
     string_table: &mut StringTable,
 ) -> Result<(Vec<ParsedImportItem>, usize), CompilerError> {
-    parse_path_clause_items(tokens, start_index, TokenKind::Import, "import", string_table)
+    parse_path_clause_items(
+        tokens,
+        start_index,
+        TokenKind::Import,
+        "import",
+        string_table,
+    )
+}
+
+pub fn parse_re_export_clause_items(
+    tokens: &[Token],
+    start_index: usize,
+    string_table: &mut StringTable,
+) -> Result<(Vec<ParsedImportItem>, usize), CompilerError> {
+    parse_path_clause_items(
+        tokens,
+        start_index,
+        TokenKind::Import,
+        "#import",
+        string_table,
+    )
 }
 
 fn parse_path_clause_items(
@@ -241,15 +261,15 @@ fn parse_path_clause_items(
     _string_table: &mut StringTable,
 ) -> Result<(Vec<ParsedImportItem>, usize), CompilerError> {
     let Some(clause_token) = tokens.get(start_index) else {
-        return Err(CompilerError::compiler_error(
-            &format!("{clause_name} clause parsing started past the end of the token stream."),
-        ));
+        return Err(CompilerError::compiler_error(format!(
+            "{clause_name} clause parsing started past the end of the token stream."
+        )));
     };
 
     if clause_token.kind != expected_token_kind {
-        return Err(CompilerError::compiler_error(
-            &format!("{clause_name} clause parsing expected to start on a '{clause_name}' token."),
-        ));
+        return Err(CompilerError::compiler_error(format!(
+            "{clause_name} clause parsing expected to start on a '{clause_name}' token."
+        )));
     }
 
     let mut index = start_index + 1;
@@ -399,13 +419,44 @@ pub fn parse_import_clause_tokens(
     Ok((paths, next_index))
 }
 
+pub fn parse_re_export_clause_tokens(
+    tokens: &[Token],
+    start_index: usize,
+) -> Result<(Vec<InternedPath>, usize), CompilerError> {
+    let mut index = start_index;
+    while tokens
+        .get(index)
+        .is_some_and(|token| matches!(token.kind, TokenKind::Newline))
+    {
+        index += 1;
+    }
+    let Some(import_token) = tokens.get(index) else {
+        return Err(CompilerError::compiler_error(
+            "#import clause parsing started past the end of the token stream.",
+        ));
+    };
+    if !matches!(import_token.kind, TokenKind::Import) {
+        return Err(CompilerError::compiler_error(
+            "#import clause parsing expected to start on an '#import' token.",
+        ));
+    }
+    let mut string_table = StringTable::new();
+    let (items, next_index) = parse_re_export_clause_items(tokens, index, &mut string_table)?;
+    let paths = items.into_iter().map(|item| item.path).collect();
+    Ok((paths, next_index))
+}
+
 pub fn collect_paths_from_tokens(tokens: &[Token]) -> Result<Vec<InternedPath>, CompilerError> {
     let mut parsed_paths = Vec::new();
     let mut index = 0usize;
 
     while index < tokens.len() {
         if matches!(tokens[index].kind, TokenKind::Import) {
-            let (paths, next_index) = parse_import_clause_tokens(tokens, index)?;
+            let (paths, next_index) = if previous_significant_token_is_hash(tokens, index) {
+                parse_re_export_clause_tokens(tokens, index)?
+            } else {
+                parse_import_clause_tokens(tokens, index)?
+            };
             parsed_paths.extend(paths);
             index = next_index;
             continue;
@@ -415,6 +466,14 @@ pub fn collect_paths_from_tokens(tokens: &[Token]) -> Result<Vec<InternedPath>, 
     }
 
     Ok(parsed_paths)
+}
+
+fn previous_significant_token_is_hash(tokens: &[Token], index: usize) -> bool {
+    tokens[..index]
+        .iter()
+        .rev()
+        .find(|token| !matches!(token.kind, TokenKind::Newline))
+        .is_some_and(|token| matches!(token.kind, TokenKind::Hash))
 }
 
 /// WHAT: Parses the base path prefix before an optional grouped block.

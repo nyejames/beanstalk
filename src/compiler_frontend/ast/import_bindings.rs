@@ -38,12 +38,15 @@ use crate::compiler_frontend::compiler_messages::source_location::SourceLocation
 use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::external_packages::{ExternalPackageRegistry, ExternalSymbolId};
-use crate::compiler_frontend::headers::module_symbols::{FacadeExportEntry, FacadeExportTarget, ModuleSymbols};
+use crate::compiler_frontend::headers::module_symbols::{
+    FacadeExportEntry, FacadeExportTarget, ModuleSymbols,
+};
 use crate::compiler_frontend::headers::parse_file_headers::{FileImport, Header, HeaderKind};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
+use crate::compiler_frontend::source_libraries::mod_file::import_path_references_mod_file;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -209,6 +212,24 @@ fn check_alias_case_warning(
     }
 }
 
+fn reject_direct_mod_file_import(
+    path: &InternedPath,
+    location: &SourceLocation,
+    string_table: &StringTable,
+) -> Result<(), CompilerError> {
+    if !import_path_references_mod_file(path, string_table) {
+        return Ok(());
+    }
+
+    Err(CompilerError::new_rule_error(
+        format!(
+            "Cannot import or re-export directly from '#mod.bst' via '{}'. Library facades are resolved automatically; import exported symbols through the library path instead.",
+            path.to_portable_string(string_table)
+        ),
+        location.clone(),
+    ))
+}
+
 /// Attempts to resolve a cross-library import through the target library's `#mod.bst` facade.
 ///
 /// WHAT: when an import path starts with a library prefix and the importer is outside that
@@ -266,16 +287,18 @@ fn register_source_import_binding(
     import: &FileImport,
     symbol_path: &InternedPath,
     importable_symbol_exported: &FxHashMap<InternedPath, bool>,
+    source_export_required: bool,
     type_alias_paths: &FxHashSet<InternedPath>,
     registry: &mut VisibleNameRegistry,
     bindings: &mut FileImportBindings,
     string_table: &StringTable,
     warnings: &mut Vec<CompilerWarning>,
 ) -> Result<(), CompilerError> {
-    if !importable_symbol_exported
-        .get(symbol_path)
-        .copied()
-        .unwrap_or(false)
+    if source_export_required
+        && !importable_symbol_exported
+            .get(symbol_path)
+            .copied()
+            .unwrap_or(false)
     {
         return Err(CompilerError::new_rule_error(
             format!(
@@ -293,7 +316,9 @@ fn register_source_import_binding(
         ));
     };
 
-    let local_name = import.alias.unwrap_or_else(|| import.header_path.name().unwrap_or(symbol_name));
+    let local_name = import
+        .alias
+        .unwrap_or_else(|| import.header_path.name().unwrap_or(symbol_name));
 
     let kind = if type_alias_paths.contains(symbol_path) {
         VisibleNameKind::TypeAliasImport
@@ -447,6 +472,8 @@ pub(crate) fn resolve_file_import_bindings(
             .unwrap_or_default();
 
         for import in imports {
+            reject_direct_mod_file_import(&import.header_path, &import.location, string_table)?;
+
             // Facade import resolution for cross-library imports.
             // WHY: library modules expose symbols only through their #mod.bst facade.
             //      External importers cannot bypass the facade to import internal symbols.
@@ -463,6 +490,7 @@ pub(crate) fn resolve_file_import_bindings(
                             &import,
                             &symbol_path,
                             importable_symbol_exported,
+                            false,
                             type_alias_paths,
                             &mut registry,
                             &mut bindings,
@@ -472,11 +500,12 @@ pub(crate) fn resolve_file_import_bindings(
                         continue;
                     }
                     FacadeImportResolution::External(symbol_id) => {
-                        // INVARIANT: try_resolve_facade_import only returns External after
-                        // confirming import.header_path.name() is Some.
-                        let symbol_name = import.header_path.name().expect(
-                            "facade resolution returned External for a path with no name"
-                        );
+                        let Some(symbol_name) = import.header_path.name() else {
+                            return Err(CompilerError::new_rule_error(
+                                "External import path is missing a symbol name.",
+                                import.location.clone(),
+                            ));
+                        };
                         let local_name = import.alias.unwrap_or(symbol_name);
 
                         registry.register(
@@ -501,7 +530,9 @@ pub(crate) fn resolve_file_import_bindings(
                             );
                         }
 
-                        bindings.visible_external_symbols.insert(local_name, symbol_id);
+                        bindings
+                            .visible_external_symbols
+                            .insert(local_name, symbol_id);
                         continue;
                     }
                     FacadeImportResolution::NotExported { library_prefix } => {
@@ -531,6 +562,7 @@ pub(crate) fn resolve_file_import_bindings(
                         &import,
                         &symbol_path,
                         importable_symbol_exported,
+                        true,
                         type_alias_paths,
                         &mut registry,
                         &mut bindings,
@@ -539,10 +571,12 @@ pub(crate) fn resolve_file_import_bindings(
                     )?;
                 }
                 ResolvedImportTarget::External(symbol_id) => {
-                    let symbol_name = import
-                        .header_path
-                        .name()
-                        .expect("virtual package import path must have a name");
+                    let Some(symbol_name) = import.header_path.name() else {
+                        return Err(CompilerError::new_rule_error(
+                            "External import path is missing a symbol name.",
+                            import.location.clone(),
+                        ));
+                    };
                     let local_name = import.alias.unwrap_or(symbol_name);
 
                     registry.register(
@@ -567,7 +601,9 @@ pub(crate) fn resolve_file_import_bindings(
                         );
                     }
 
-                    bindings.visible_external_symbols.insert(local_name, symbol_id);
+                    bindings
+                        .visible_external_symbols
+                        .insert(local_name, symbol_id);
                 }
             }
         }
@@ -607,7 +643,6 @@ pub(crate) fn resolve_re_exports(
     external_package_registry: &ExternalPackageRegistry,
     string_table: &mut StringTable,
 ) -> Result<Vec<CompilerWarning>, CompilerError> {
-    let mut warnings: Vec<CompilerWarning> = Vec::new();
     let re_exports_by_source = module_symbols.file_re_exports_by_source.clone();
     let mut warnings: Vec<CompilerWarning> = Vec::new();
 
@@ -633,10 +668,12 @@ pub(crate) fn resolve_re_exports(
                 string_table,
             )?;
 
-            let symbol_name = re_export
-                .header_path
-                .name()
-                .expect("re-export path must have a symbol name");
+            let Some(symbol_name) = re_export.header_path.name() else {
+                return Err(CompilerError::new_rule_error(
+                    "Re-export path is missing a symbol name.",
+                    re_export.location.clone(),
+                ));
+            };
             let export_name = re_export.alias.unwrap_or(symbol_name);
 
             if re_export.alias.is_some() {
@@ -1055,6 +1092,8 @@ pub(crate) fn resolve_single_import_target(
     external_package_registry: &ExternalPackageRegistry,
     string_table: &StringTable,
 ) -> Result<ResolvedImportTarget, CompilerError> {
+    reject_direct_mod_file_import(path, location, string_table)?;
+
     // Resolve as a source symbol import first.
     match resolve_import_target_path(path, importable_symbol_paths, string_table) {
         ImportPathResolution::Resolved(symbol_path) => {
@@ -1071,17 +1110,15 @@ pub(crate) fn resolve_single_import_target(
                     location.clone(),
                 ));
             }
-            return Ok(ResolvedImportTarget::Source(symbol_path));
+            Ok(ResolvedImportTarget::Source(symbol_path))
         }
-        ImportPathResolution::Ambiguous => {
-            return Err(CompilerError::new_rule_error(
-                format!(
-                    "Ambiguous import target '{}'. Use a more specific path.",
-                    path.to_portable_string(string_table)
-                ),
-                location.clone(),
-            ));
-        }
+        ImportPathResolution::Ambiguous => Err(CompilerError::new_rule_error(
+            format!(
+                "Ambiguous import target '{}'. Use a more specific path.",
+                path.to_portable_string(string_table)
+            ),
+            location.clone(),
+        )),
         ImportPathResolution::Missing => {
             // File→symbol inference: if the path matches a source file but not a symbol,
             // try appending the path's last component to the file path as the symbol name.
@@ -1089,43 +1126,42 @@ pub(crate) fn resolve_single_import_target(
             // requiring the redundant `greet/greet` syntax.
             if let ImportPathResolution::Resolved(ref file_path) =
                 resolve_import_target_path(path, module_file_paths, string_table)
+                && let Some(inferred_name) = path.name()
             {
-                if let Some(inferred_name) = path.name() {
-                    let inferred_path = file_path.append(inferred_name);
-                    match resolve_import_target_path(
-                        &inferred_path,
-                        importable_symbol_paths,
-                        string_table,
-                    ) {
-                        ImportPathResolution::Resolved(symbol_path) => {
-                            if !importable_symbol_exported
-                                .get(&symbol_path)
-                                .copied()
-                                .unwrap_or(false)
-                            {
-                                return Err(CompilerError::new_rule_error(
-                                    format!(
-                                        "Cannot import '{}' because it is not exported. Add '#' to export it from its source file.",
-                                        symbol_path.to_portable_string(string_table)
-                                    ),
-                                    location.clone(),
-                                ));
-                            }
-                            return Ok(ResolvedImportTarget::Source(symbol_path));
-                        }
-                        ImportPathResolution::Ambiguous => {
+                let inferred_path = file_path.append(inferred_name);
+                match resolve_import_target_path(
+                    &inferred_path,
+                    importable_symbol_paths,
+                    string_table,
+                ) {
+                    ImportPathResolution::Resolved(symbol_path) => {
+                        if !importable_symbol_exported
+                            .get(&symbol_path)
+                            .copied()
+                            .unwrap_or(false)
+                        {
                             return Err(CompilerError::new_rule_error(
                                 format!(
-                                    "Ambiguous import target '{}'. Use a more specific path.",
-                                    inferred_path.to_portable_string(string_table)
+                                    "Cannot import '{}' because it is not exported. Add '#' to export it from its source file.",
+                                    symbol_path.to_portable_string(string_table)
                                 ),
                                 location.clone(),
                             ));
                         }
-                        ImportPathResolution::Missing => {
-                            // The file exists but the inferred symbol does not.
-                            // Fall through to standard error handling.
-                        }
+                        return Ok(ResolvedImportTarget::Source(symbol_path));
+                    }
+                    ImportPathResolution::Ambiguous => {
+                        return Err(CompilerError::new_rule_error(
+                            format!(
+                                "Ambiguous import target '{}'. Use a more specific path.",
+                                inferred_path.to_portable_string(string_table)
+                            ),
+                            location.clone(),
+                        ));
+                    }
+                    ImportPathResolution::Missing => {
+                        // The file exists but the inferred symbol does not.
+                        // Fall through to standard error handling.
                     }
                 }
             }
@@ -1134,9 +1170,8 @@ pub(crate) fn resolve_single_import_target(
             match resolve_virtual_package_import(path, external_package_registry, string_table) {
                 VirtualPackageMatch::Found(package_path, symbol_name) => {
                     let symbol_name_str = string_table.resolve(symbol_name);
-                    let external_symbol_id = if let Some((func_id, _)) =
-                        external_package_registry
-                            .resolve_package_function(&package_path, symbol_name_str)
+                    let external_symbol_id = if let Some((func_id, _)) = external_package_registry
+                        .resolve_package_function(&package_path, symbol_name_str)
                     {
                         Some(ExternalSymbolId::Function(func_id))
                     } else if let Some((type_id, _)) = external_package_registry
@@ -1155,9 +1190,7 @@ pub(crate) fn resolve_single_import_target(
                         return Ok(ResolvedImportTarget::External(id));
                     }
 
-                    let symbol_name = path
-                        .name_str(string_table)
-                        .unwrap_or("<unknown>");
+                    let symbol_name = path.name_str(string_table).unwrap_or("<unknown>");
                     return Err(CompilerError::new_rule_error(
                         format!(
                             "Cannot import '{symbol_name}' from package '{package_path}': symbol not found in package."
@@ -1166,9 +1199,7 @@ pub(crate) fn resolve_single_import_target(
                     ));
                 }
                 VirtualPackageMatch::PackageFoundSymbolMissing(package_path) => {
-                    let symbol_name = path
-                        .name_str(string_table)
-                        .unwrap_or("<unknown>");
+                    let symbol_name = path.name_str(string_table).unwrap_or("<unknown>");
                     return Err(CompilerError::new_rule_error(
                         format!(
                             "Cannot import '{symbol_name}' from package '{package_path}': symbol not found in package."
@@ -1192,13 +1223,13 @@ pub(crate) fn resolve_single_import_target(
                 ));
             }
 
-            return Err(CompilerError::new_rule_error(
+            Err(CompilerError::new_rule_error(
                 format!(
                     "Missing import target '{}'. Could not resolve this dependency in the current module.",
                     path.to_portable_string(string_table)
                 ),
                 location.clone(),
-            ));
+            ))
         }
     }
 }

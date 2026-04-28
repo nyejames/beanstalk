@@ -20,6 +20,7 @@ use crate::compiler_frontend::headers::parse_file_headers::{
     Header, HeaderKind, Headers, TopLevelConstFragment,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::source_libraries::mod_file::path_is_mod_file;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::{header_log, return_rule_error};
 use std::collections::{HashMap, HashSet};
@@ -375,10 +376,7 @@ fn is_same_file_symbol_hint(path: &InternedPath, source_file: &InternedPath) -> 
 /// WHAT: facade files only consume dependencies from other module files and do not expose
 /// symbols to the rest of the module, so they should be excluded from dependency sorting.
 fn is_facade_header(header: &Header, string_table: &StringTable) -> bool {
-    header
-        .source_file
-        .name_str(string_table)
-        .is_some_and(|name| name == "#mod.bst")
+    path_is_mod_file(&header.source_file, string_table)
 }
 
 fn exact_path_matches_candidate(

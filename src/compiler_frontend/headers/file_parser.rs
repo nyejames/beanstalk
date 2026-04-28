@@ -19,7 +19,9 @@ use crate::compiler_frontend::headers::types::{
     TopLevelConstFragment,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::paths::const_paths::parse_import_clause_items;
+use crate::compiler_frontend::paths::const_paths::{
+    parse_import_clause_items, parse_re_export_clause_items,
+};
 use crate::compiler_frontend::reserved_trait_syntax::{
     reserved_trait_keyword, reserved_trait_keyword_error,
 };
@@ -183,13 +185,7 @@ pub(super) fn parse_headers_in_file(
 
             TokenKind::Import => {
                 let import_index = token_stream.index.saturating_sub(1);
-                let (items, next_index) = parse_import_clause_items(
-                    &token_stream.tokens,
-                    import_index,
-                    context.string_table,
-                )?;
-
-                if next_statement_exported {
+                let next_index = if next_statement_exported {
                     // `#import @...` is facade-only re-export syntax.
                     if context.file_role != FileRole::ModuleFacade {
                         crate::return_rule_error!(
@@ -200,6 +196,12 @@ pub(super) fn parse_headers_in_file(
                             }
                         );
                     }
+
+                    let (items, next_index) = parse_re_export_clause_items(
+                        &token_stream.tokens,
+                        import_index,
+                        context.string_table,
+                    )?;
 
                     for item in items {
                         let normalized_path = normalize_import_dependency_path(
@@ -218,7 +220,14 @@ pub(super) fn parse_headers_in_file(
                     }
 
                     next_statement_exported = false;
+                    next_index
                 } else {
+                    let (items, next_index) = parse_import_clause_items(
+                        &token_stream.tokens,
+                        import_index,
+                        context.string_table,
+                    )?;
+
                     for item in items {
                         let normalized_path = normalize_import_dependency_path(
                             &item.path,
@@ -242,7 +251,8 @@ pub(super) fn parse_headers_in_file(
                             });
                         }
                     }
-                }
+                    next_index
+                };
 
                 token_stream.index = next_index;
             }
@@ -348,6 +358,10 @@ pub(super) fn parse_headers_in_file(
     // WHY: non-entry files do not produce a start-function header, so file_re_exports would
     // otherwise be lost when parse_headers_in_file returns.
     if !file_re_exports.is_empty() {
+        context
+            .file_re_exports_by_source
+            .insert(token_stream.src_path.clone(), file_re_exports.clone());
+
         for header in &mut headers {
             header.file_re_exports = file_re_exports.clone();
         }

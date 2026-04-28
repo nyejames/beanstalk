@@ -21,6 +21,7 @@ use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::identity::FileId;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation};
+use rustc_hash::FxHashMap;
 use std::collections::HashSet;
 use std::fmt::Display;
 use std::rc::Rc;
@@ -210,6 +211,7 @@ pub(super) struct HeaderParseContext<'a> {
     /// Used as the runtime_insertion_index for the next const fragment.
     pub runtime_fragment_count: &'a mut usize,
     pub top_level_const_fragments: &'a mut Vec<TopLevelConstFragment>,
+    pub file_re_exports_by_source: &'a mut FxHashMap<InternedPath, Vec<FileReExport>>,
 }
 
 // Shared per-header builder inputs that stay stable while one declaration is classified.

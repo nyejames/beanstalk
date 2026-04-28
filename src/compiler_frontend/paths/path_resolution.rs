@@ -1,5 +1,6 @@
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::source_libraries::mod_file::MOD_FILE_NAME;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::libraries::SourceLibraryRegistry;
 use crate::projects::settings::{BEANSTALK_FILE_EXTENSION, Config};
@@ -107,7 +108,7 @@ impl ProjectPathResolver {
         // Discover facade files (`#mod.bst`) in each source library root.
         let mut facade_files = HashMap::new();
         for (prefix, root) in &source_library_roots {
-            let mod_file = root.join("#mod.bst");
+            let mod_file = root.join(MOD_FILE_NAME);
             if mod_file.is_file()
                 && let Ok(canonical) = fs::canonicalize(&mod_file)
             {

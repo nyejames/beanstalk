@@ -3041,6 +3041,11 @@ path = "source_lib_reexport_grouped"
 tags = ["integration", "language", "imports", "facade"]
 
 [[case]]
+id = "source_lib_reexport_grouped_nested"
+path = "source_lib_reexport_grouped_nested"
+tags = ["integration", "language", "imports", "facade"]
+
+[[case]]
 id = "source_lib_reexport_external"
 path = "source_lib_reexport_external"
 tags = ["integration", "language", "imports", "facade"]
@@ -3049,6 +3054,16 @@ tags = ["integration", "language", "imports", "facade"]
 id = "source_lib_reexport_external_alias"
 path = "source_lib_reexport_external_alias"
 tags = ["integration", "language", "imports", "facade"]
+
+[[case]]
+id = "source_lib_reexport_external_type"
+path = "source_lib_reexport_external_type"
+tags = ["integration", "language", "imports", "facade"]
+
+[[case]]
+id = "source_lib_reexport_alias_case_warning"
+path = "source_lib_reexport_alias_case_warning"
+tags = ["integration", "language", "imports", "facade", "diagnostics"]
 
 [[case]]
 id = "source_lib_reexport_duplicate"
@@ -3066,6 +3081,11 @@ path = "source_lib_reexport_outside_facade"
 tags = ["integration", "language", "imports", "facade", "diagnostics"]
 
 [[case]]
+id = "source_lib_reexport_invalid_declaration"
+path = "source_lib_reexport_invalid_declaration"
+tags = ["integration", "language", "imports", "facade", "diagnostics"]
+
+[[case]]
 id = "source_lib_reexport_not_exported"
 path = "source_lib_reexport_not_exported"
 tags = ["integration", "language", "imports", "facade", "diagnostics"]
@@ -3074,3 +3094,13 @@ tags = ["integration", "language", "imports", "facade", "diagnostics"]
 id = "source_lib_reexport_no_local_binding"
 path = "source_lib_reexport_no_local_binding"
 tags = ["integration", "language", "imports", "facade", "diagnostics"]
+
+[[case]]
+id = "source_lib_facade_direct_mod_external_rejected"
+path = "source_lib_facade_direct_mod_external_rejected"
+tags = ["integration", "source-libraries", "facades", "imports", "diagnostics"]
+
+[[case]]
+id = "source_lib_facade_direct_mod_internal_rejected"
+path = "source_lib_facade_direct_mod_internal_rejected"
+tags = ["integration", "source-libraries", "facades", "imports", "diagnostics"]

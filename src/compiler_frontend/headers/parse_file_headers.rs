@@ -15,17 +15,18 @@ use crate::compiler_frontend::headers::file_parser::parse_headers_in_file;
 use crate::compiler_frontend::headers::module_symbols::{
     FacadeExportEntry, FacadeExportTarget, ModuleSymbols, register_declared_symbol,
 };
-use crate::compiler_frontend::headers::types::HeaderParseContext;
 pub use crate::compiler_frontend::headers::types::{
     FileImport, FileRole, Header, HeaderKind, HeaderParseOptions, Headers, TopLevelConstFragment,
 };
+use crate::compiler_frontend::headers::types::{FileReExport, HeaderParseContext};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
+use crate::compiler_frontend::source_libraries::mod_file::path_is_mod_file;
 use crate::compiler_frontend::symbols::identifier_policy::ensure_not_keyword_shadow_identifier;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::FileTokens;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::path::Path;
 
 pub fn parse_headers(
@@ -47,6 +48,8 @@ pub fn parse_headers(
     let mut errors: Vec<CompilerError> = Vec::new();
     let mut const_template_count = 0;
     let mut top_level_const_fragments = Vec::new();
+    let mut file_re_exports_by_source: FxHashMap<InternedPath, Vec<FileReExport>> =
+        FxHashMap::default();
     // Tracks runtime fragments seen so far in the entry file, for const fragment insertion indices.
     let mut runtime_fragment_count = 0usize;
 
@@ -58,7 +61,7 @@ pub fn parse_headers(
 
         let file_role = if is_entry_file {
             FileRole::Entry
-        } else if is_mod_file(&file.src_path, string_table) {
+        } else if path_is_mod_file(&file.src_path, string_table) {
             FileRole::ModuleFacade
         } else {
             FileRole::Normal
@@ -75,6 +78,7 @@ pub fn parse_headers(
             const_template_number: &mut const_template_count,
             runtime_fragment_count: &mut runtime_fragment_count,
             top_level_const_fragments: &mut top_level_const_fragments,
+            file_re_exports_by_source: &mut file_re_exports_by_source,
         };
 
         let headers_from_file = parse_headers_in_file(&mut file, &mut parse_context);
@@ -99,6 +103,8 @@ pub fn parse_headers(
             errors
         })?;
 
+    merge_file_re_exports(&mut module_symbols, file_re_exports_by_source);
+
     if let Some(resolver) = &project_path_resolver {
         build_facade_data(&mut module_symbols, &headers, resolver, string_table)
             .map_err(|e| vec![e])?;
@@ -110,13 +116,6 @@ pub fn parse_headers(
         entry_runtime_fragment_count: runtime_fragment_count,
         module_symbols,
     })
-}
-
-/// Checks whether a source file is a library facade (`#mod.bst`).
-fn is_mod_file(src_path: &InternedPath, string_table: &StringTable) -> bool {
-    src_path
-        .name_str(string_table)
-        .is_some_and(|name| name == "#mod.bst")
 }
 
 /// Build facade export maps and file library membership from parsed headers and the path resolver.
@@ -137,14 +136,19 @@ fn build_facade_data(
         let mod_file_interned = InternedPath::from_path_buf(&mod_file_logical, string_table);
 
         let mut exports = FxHashSet::default();
+        module_symbols
+            .file_library_membership
+            .insert(mod_file_interned.clone(), prefix.clone());
+
         for header in headers {
-            if header.source_file == mod_file_interned && header.exported {
-                if let Some(export_name) = header.tokens.src_path.name() {
-                    exports.insert(FacadeExportEntry {
-                        export_name,
-                        target: FacadeExportTarget::Source(header.tokens.src_path.clone()),
-                    });
-                }
+            if header.source_file == mod_file_interned
+                && header.exported
+                && let Some(export_name) = header.tokens.src_path.name()
+            {
+                exports.insert(FacadeExportEntry {
+                    export_name,
+                    target: FacadeExportTarget::Source(header.tokens.src_path.clone()),
+                });
             }
         }
         module_symbols
@@ -167,6 +171,28 @@ fn build_facade_data(
     }
 
     Ok(())
+}
+
+fn merge_file_re_exports(
+    module_symbols: &mut ModuleSymbols,
+    re_exports_by_source: FxHashMap<InternedPath, Vec<FileReExport>>,
+) {
+    for (source_file, re_exports) in re_exports_by_source {
+        module_symbols
+            .file_re_exports_by_source
+            .entry(source_file)
+            .and_modify(|existing| {
+                for re_export in &re_exports {
+                    let already_present = existing.iter().any(|entry| {
+                        entry.header_path == re_export.header_path && entry.alias == re_export.alias
+                    });
+                    if !already_present {
+                        existing.push(re_export.clone());
+                    }
+                }
+            })
+            .or_insert(re_exports);
+    }
 }
 
 /// Collect all order-independent top-level symbol metadata from parsed (unsorted) headers.
@@ -241,13 +267,14 @@ fn build_module_symbols(
             })
             .or_insert_with(|| header.file_re_exports.to_owned());
 
+        let is_facade_symbol = path_is_mod_file(&header.source_file, string_table);
         match &header.kind {
             HeaderKind::Function { .. } => {
                 register_declared_symbol(
                     &mut module_symbols,
                     &header.tokens.src_path,
                     &header.source_file,
-                    Some(header.exported),
+                    Some(header.exported && !is_facade_symbol),
                 );
             }
             HeaderKind::Struct { .. } => {
@@ -255,7 +282,7 @@ fn build_module_symbols(
                     &mut module_symbols,
                     &header.tokens.src_path,
                     &header.source_file,
-                    Some(header.exported),
+                    Some(header.exported && !is_facade_symbol),
                 );
             }
             HeaderKind::Choice { .. } => {
@@ -263,7 +290,7 @@ fn build_module_symbols(
                     &mut module_symbols,
                     &header.tokens.src_path,
                     &header.source_file,
-                    Some(header.exported),
+                    Some(header.exported && !is_facade_symbol),
                 );
             }
             HeaderKind::StartFunction => {
@@ -282,7 +309,7 @@ fn build_module_symbols(
                     &mut module_symbols,
                     &header.tokens.src_path,
                     &header.source_file,
-                    Some(header.exported),
+                    Some(header.exported && !is_facade_symbol),
                 );
             }
             HeaderKind::TypeAlias { .. } => {
@@ -290,7 +317,7 @@ fn build_module_symbols(
                     &mut module_symbols,
                     &header.tokens.src_path,
                     &header.source_file,
-                    Some(header.exported),
+                    Some(header.exported && !is_facade_symbol),
                 );
                 module_symbols
                     .type_alias_paths
