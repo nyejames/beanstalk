@@ -9,6 +9,7 @@ Use the language surface integration matrix as a reference for what is currently
 ---
 
 # Plans / Notes / TODOS
+- Library system: `docs/roadmap/plans/core-and-builder-library-implementation-plan.md`
 - full pattern-matching design (capture patterns)
 - full traits implementation
 - Closures
