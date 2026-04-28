@@ -59,6 +59,7 @@ pub use pipeline::CompilerFrontend;
 /// Flags change the behavior of the core `compiler_frontend` pipeline.
 #[derive(PartialEq, Debug, Clone)]
 pub enum Flag {
+    Version,
     Release,
     DisableWarnings,
     DisableTimers,

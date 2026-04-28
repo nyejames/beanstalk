@@ -10,6 +10,7 @@ permissions:
 
 env:
   BIN_NAME: bean
+  PACKAGE_NAME: beanstalk
 
 jobs:
   validate:
@@ -41,26 +42,33 @@ jobs:
         run: just validate
 
   build:
-    name: Build ${{ matrix.asset_suffix }}
+    name: Build ${{ matrix.target }}
     needs: validate
+    runs-on: ${{ matrix.os }}
 
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
-            asset_suffix: linux-x86_64
+            target: x86_64-unknown-linux-gnu
             archive: tar.gz
+            binary: bean
 
-          - os: macos-latest
-            asset_suffix: macos
+          - os: macos-13
+            target: x86_64-apple-darwin
             archive: tar.gz
+            binary: bean
+
+          - os: macos-14
+            target: aarch64-apple-darwin
+            archive: tar.gz
+            binary: bean
 
           - os: windows-latest
-            asset_suffix: windows-x86_64
+            target: x86_64-pc-windows-msvc
             archive: zip
-
-    runs-on: ${{ matrix.os }}
+            binary: bean.exe
 
     steps:
       - name: Checkout
@@ -68,6 +76,8 @@ jobs:
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
 
       - name: Cache Rust dependencies
         uses: actions/cache@v5
@@ -76,42 +86,59 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Build release binary
-        run: cargo build --locked --release
+        run: cargo build --locked --release --target ${{ matrix.target }}
+
+      - name: Smoke test binary
+        shell: bash
+        run: |
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            "target/${{ matrix.target }}/release/${BIN_NAME}.exe" --version
+          else
+            "target/${{ matrix.target }}/release/${BIN_NAME}" --version
+          fi
 
       - name: Prepare package directory
         shell: bash
         run: |
-          mkdir -p package
+          set -euxo pipefail
+
+          ARCHIVE_NAME="${BIN_NAME}-${GITHUB_REF_NAME}-${{ matrix.target }}"
+
+          mkdir -p "package/${ARCHIVE_NAME}"
 
           if [[ "${{ runner.os }}" == "Windows" ]]; then
-            cp "target/release/${BIN_NAME}.exe" "package/${BIN_NAME}.exe"
+            cp "target/${{ matrix.target }}/release/${BIN_NAME}.exe" "package/${ARCHIVE_NAME}/${BIN_NAME}.exe"
           else
-            cp "target/release/${BIN_NAME}" "package/${BIN_NAME}"
-            chmod +x "package/${BIN_NAME}"
+            cp "target/${{ matrix.target }}/release/${BIN_NAME}" "package/${ARCHIVE_NAME}/${BIN_NAME}"
+            chmod +x "package/${ARCHIVE_NAME}/${BIN_NAME}"
           fi
 
-          cp README.md package/
-          cp LICENSE package/ 2>/dev/null || true
+          cp README.md "package/${ARCHIVE_NAME}/"
+          cp LICENSE "package/${ARCHIVE_NAME}/" 2>/dev/null || true
 
       - name: Create tar.gz package
         if: matrix.archive == 'tar.gz'
         shell: bash
         run: |
-          tar -czf "${BIN_NAME}-${{ github.ref_name }}-${{ matrix.asset_suffix }}.tar.gz" -C package .
+          set -euxo pipefail
+
+          ARCHIVE_NAME="${BIN_NAME}-${GITHUB_REF_NAME}-${{ matrix.target }}"
+          tar -czf "${ARCHIVE_NAME}.tar.gz" -C package "${ARCHIVE_NAME}"
 
       - name: Create zip package
         if: matrix.archive == 'zip'
         shell: pwsh
         run: |
-          Compress-Archive -Path package/* -DestinationPath "${env:BIN_NAME}-${env:GITHUB_REF_NAME}-${{ matrix.asset_suffix }}.zip"
+          $ArchiveName = "${env:BIN_NAME}-${env:GITHUB_REF_NAME}-${{ matrix.target }}"
+          Compress-Archive -Path "package/${ArchiveName}" -DestinationPath "${ArchiveName}.zip"
 
       - name: Upload package artifact
         uses: actions/upload-artifact@v7
         with:
-          name: ${{ env.BIN_NAME }}-${{ github.ref_name }}-${{ matrix.asset_suffix }}
+          name: ${{ env.BIN_NAME }}-${{ github.ref_name }}-${{ matrix.target }}
           path: |
             *.tar.gz
             *.zip
@@ -136,6 +163,14 @@ jobs:
         with:
           path: dist
           merge-multiple: true
+
+      - name: Generate checksums
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          cd dist
+          sha256sum * > SHA256SUMS
 
       - name: Publish release
         env:

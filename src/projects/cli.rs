@@ -50,7 +50,18 @@ enum Command {
 pub fn start_cli() {
     let compiler_args: Vec<String> = env::args().collect();
 
-    if compiler_args.len() < 2 {
+    // TODO: strip flags from args before passing to subcommands?
+    // Allows flags in any order.
+    let flags = get_flags(&compiler_args);
+
+    if flags.contains(&Flag::Version) {
+        println!("bean {}", env!("CARGO_PKG_VERSION"));
+        return;
+
+    // TODO: Should eventually be unrestricted so no specified directory = current directory,
+    // but for now require a command to avoid accidentally running build/dev in the wrong place.
+    // An explicit prompt checking the user wants to run the command in the current directory could be a good safety measure before allowing that.
+    } else if compiler_args.len() < 2 {
         print_help(true);
         return;
     }
@@ -63,8 +74,6 @@ pub fn start_cli() {
             return;
         }
     };
-
-    let flags = get_flags(&compiler_args);
 
     match command {
         Command::Help => {
@@ -243,6 +252,7 @@ fn get_flags(args: &[String]) -> Vec<Flag> {
 
     for arg in args {
         match arg.as_str() {
+            "--version" | "-v" | "-V" => flags.push(Flag::Version),
             "--release" => flags.push(Flag::Release),
             "--hide-warnings" => flags.push(Flag::DisableWarnings),
             "--hide-timers" => flags.push(Flag::DisableTimers),
