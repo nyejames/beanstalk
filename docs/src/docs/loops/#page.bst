@@ -1,12 +1,12 @@
-import @lib/html {format, style}
-import @styles/docs {navbar, title, section, palette, table, data, codeblock, codesnippet, theme_head}
+import @html {center}
+import @styles/docs {navbar, title, section, palette, styled_table, data, codeblock, codesnippet, theme_head}
 
 # page_title = "Loops"
 # page_description = "Loops in Beanstalk"
 # page_head = theme_head
 
 #[navbar]
-#[title, style.center: LOOPS]
+#[title, center: LOOPS]
 
 #[section, $markdown:
     ## Loops Syntax

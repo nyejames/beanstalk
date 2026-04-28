@@ -1,12 +1,12 @@
-import @lib/html {format, style}
-import @styles/docs {navbar, title, section, palette, table, codeblock, theme_head}
+import @html {center}
+import @styles/docs {navbar, title, section, palette, styled_table, codeblock, theme_head}
 
 # page_title = "Pattern Matching"
 # page_description = "Pattern matching in Beanstalk."
 # page_head = theme_head
 
 #[navbar]
-#[title, style.center: PATTERN MATCHING]
+#[title, center: PATTERN MATCHING]
 
 #[section, $markdown:
 

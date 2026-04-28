@@ -1,4 +1,4 @@
-import @lib/html {format}
+import @html {table}
 -- Some basic testing styles for the documentation website
 
 # theme_css = [$css:
@@ -167,7 +167,7 @@ Palette = |
     ]):[$slot]]
 ]
 
-# table = [format.table, $html:
+# styled_table = [table, $html:
     [$insert("style"):border-collapse: collapse; border: 1px solid; padding: 1em;]
     <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
         [$slot(1)]

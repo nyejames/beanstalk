@@ -1,12 +1,12 @@
-import @lib/html {format, style}
-import @styles/docs {navbar, title, section, palette, table, header, data, codeblock, codesnippet,theme_head}
+import @html {center}
+import @styles/docs {navbar, title, section, palette, styled_table, header, data, codeblock, codesnippet,theme_head}
 
 # page_title = "Language Basics"
 # page_description = "Core language syntax and semantics in Beanstalk."
 # page_head = theme_head
 
 #[navbar]
-#[title, style.center: LANGUAGE BASICS]
+#[title, center: LANGUAGE BASICS]
 
 #[section, $markdown:
     Every project has a [codesnippet:#config.bst] file that defines the entry points and dependencies of the project.
@@ -178,7 +178,7 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
     Beanstalk data type keywords use UpperCamelCase.
     Mutibility can change the underlaying data type but is not actually part of the type.
 
-    [table:
+    [styled_table:
         [header: [: Type] [: Description] ] 
 
         [data: [: Float ] [: 64-bit floating point number] ]
@@ -211,7 +211,7 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
     The "and / or" keywords are used for logical and / or and 'not' is used to invert a truthy value to falsy or vice versa.
 
     ## Mathematical Operators
-    [table:
+    [styled_table:
         [header: [: Operator] [: Description]          [: Precedence] ]
         [data: [: ^]        [: Exponent]            [: 4] ]
         [data: [: *]        [: Multiplication]       [: 3] ]

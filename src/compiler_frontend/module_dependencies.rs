@@ -15,7 +15,7 @@
 //! headers so AST emission sees all top-level declarations before processing the start body.
 
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
-use crate::compiler_frontend::headers::module_symbols::ModuleSymbols;
+use crate::compiler_frontend::headers::module_symbols::{FacadeExportEntry, ModuleSymbols};
 use crate::compiler_frontend::headers::parse_file_headers::{
     Header, HeaderKind, Headers, TopLevelConstFragment,
 };
@@ -23,6 +23,7 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::source_libraries::mod_file::path_is_mod_file;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::{header_log, return_rule_error};
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::{HashMap, HashSet};
 
 /// Dependency-sorted module headers with a finalized symbol package.
@@ -117,6 +118,7 @@ pub fn resolve_module_dependencies(
     let mut tracker = DependencyTracker::new(graph.len());
     let mut sorted: Vec<Header> = Vec::with_capacity(graph.len());
 
+    let facade_exports = &module_symbols.facade_exports;
     for path in &ordered_paths {
         if !tracker.visited.contains(path)
             && let Err(error) = visit_node(
@@ -125,6 +127,7 @@ pub fn resolve_module_dependencies(
                 &graph,
                 &order_lookup,
                 &mut sorted,
+                facade_exports,
                 string_table,
             )
         {
@@ -161,9 +164,11 @@ fn visit_node(
     graph: &HashMap<InternedPath, Header>,
     order_lookup: &HashMap<InternedPath, usize>,
     sorted: &mut Vec<Header>,
+    facade_exports: &FxHashMap<String, FxHashSet<FacadeExportEntry>>,
     string_table: &mut StringTable,
 ) -> Result<(), CompilerError> {
-    let Some(resolved_path) = resolve_graph_path(node_path, graph, string_table) else {
+    let Some(resolved_path) = resolve_graph_path(node_path, graph, facade_exports, string_table)
+    else {
         return_rule_error!(
             format!(
                 "Missing import target '{}'. Could not resolve this dependency in the current module.",
@@ -194,6 +199,12 @@ fn visit_node(
     // only proceed if not already permanently marked
     if !tracker.visited.contains(&resolved_path) {
         let Some(header) = graph.get(&resolved_path) else {
+            // Facade-declared symbols are resolved by import binding but excluded from the graph.
+            // They have no inter-file strict dependencies that affect ordering, so skip safely.
+            if is_facade_path(&resolved_path, facade_exports, string_table) {
+                tracker.visited.insert(resolved_path);
+                return Ok(());
+            }
             return Err(CompilerError::compiler_error(format!(
                 "Dependency ordering resolved '{}' but it was missing from the graph.",
                 resolved_path.to_portable_string(string_table)
@@ -208,10 +219,10 @@ fn visit_node(
         // Body / initializer expression references are soft and excluded from the graph.
         let mut strict_imports = header.dependencies.iter().cloned().collect::<Vec<_>>();
         strict_imports.sort_by(|left, right| {
-            let left_order = resolve_graph_path(left, graph, string_table)
+            let left_order = resolve_graph_path(left, graph, facade_exports, string_table)
                 .and_then(|path| order_lookup.get(&path).copied())
                 .unwrap_or(usize::MAX);
-            let right_order = resolve_graph_path(right, graph, string_table)
+            let right_order = resolve_graph_path(right, graph, facade_exports, string_table)
                 .and_then(|path| order_lookup.get(&path).copied())
                 .unwrap_or(usize::MAX);
 
@@ -222,7 +233,7 @@ fn visit_node(
         });
 
         for import in strict_imports {
-            if resolve_graph_path(&import, graph, string_table).is_none()
+            if resolve_graph_path(&import, graph, facade_exports, string_table).is_none()
                 && is_same_file_symbol_hint(&import, &header.source_file)
             {
                 // Same-file named-type edges are only ordering hints while header parsing is
@@ -231,7 +242,15 @@ fn visit_node(
                 continue;
             }
 
-            visit_node(&import, tracker, graph, order_lookup, sorted, string_table)?;
+            visit_node(
+                &import,
+                tracker,
+                graph,
+                order_lookup,
+                sorted,
+                facade_exports,
+                string_table,
+            )?;
         }
 
         // when children are done, push this node (clone of context)
@@ -248,6 +267,7 @@ fn visit_node(
 fn resolve_graph_path(
     requested_path: &InternedPath,
     graph: &HashMap<InternedPath, Header>,
+    facade_exports: &FxHashMap<String, FxHashSet<FacadeExportEntry>>,
     string_table: &StringTable,
 ) -> Option<InternedPath> {
     if graph.contains_key(requested_path) {
@@ -343,6 +363,12 @@ fn resolve_graph_path(
         })
         .collect::<Vec<_>>();
 
+    // Facade fallback: cross-library imports resolve to facade-declared symbols that are
+    // excluded from the graph. Return the path so visit_node can skip them safely.
+    if is_facade_path(requested_path, facade_exports, string_table) {
+        return Some(requested_path.to_owned());
+    }
+
     if source_file_matches.is_empty() {
         return None;
     }
@@ -365,6 +391,37 @@ fn resolve_graph_path(
     }
 
     None
+}
+
+/// Checks whether a path refers to a symbol exported by a library facade.
+///
+/// WHAT: facade files declare symbols that are visible to cross-library importers. When the
+/// facade header is excluded from the dependency graph, consumer dependencies on facade symbols
+/// still need to resolve successfully so strict-edge traversal does not fail.
+fn is_facade_path(
+    path: &InternedPath,
+    facade_exports: &FxHashMap<String, FxHashSet<FacadeExportEntry>>,
+    string_table: &StringTable,
+) -> bool {
+    let components = path.as_components();
+    if components.is_empty() {
+        return false;
+    }
+
+    let first_component = string_table.resolve(components[0]);
+    let Some(export_name) = path.name() else {
+        return false;
+    };
+
+    if let Some(entries) = facade_exports.get(first_component) {
+        for entry in entries {
+            if entry.export_name == export_name {
+                return true;
+            }
+        }
+    }
+
+    false
 }
 
 fn is_same_file_symbol_hint(path: &InternedPath, source_file: &InternedPath) -> bool {

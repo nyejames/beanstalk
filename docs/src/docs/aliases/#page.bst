@@ -1,4 +1,4 @@
-import @lib/html {style}
+import @html {center}
 import @styles/docs {navbar, title, section, codeblock, codesnippet, theme_head}
 
 # page_title = "Aliases"
@@ -6,7 +6,7 @@ import @styles/docs {navbar, title, section, codeblock, codesnippet, theme_head}
 # page_head = theme_head
 
 #[navbar]
-#[title, style.center: ALIASES]
+#[title, center: ALIASES]
 
 #[section, $markdown:
     Aliases give a local name to something that already exists.

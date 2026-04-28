@@ -1,12 +1,12 @@
-import @lib/html {style}
-import @styles/docs {navbar, title, section, table, header, data, codeblock, codesnippet, theme_head}
+import @html {center}
+import @styles/docs {navbar, title, section, styled_table, header, data, codeblock, codesnippet, theme_head}
 
 # page_title = "Getting Started with bean"
 # page_description = "How to use the Beanstalk compiler CLI, create a project, run the dev server, and read compiler diagnostics."
 # page_head = theme_head
 
 #[navbar]
-#[title, style.center: GETTING STARTED WITH BEAN]
+#[title, center: GETTING STARTED WITH BEAN]
 
 #[section, $markdown:
     [codesnippet:bean] is the Beanstalk compiler and project tool.
@@ -29,7 +29,7 @@ import @styles/docs {navbar, title, section, table, header, data, codeblock, cod
 #[section, $markdown:
     # Current commands
 
-    [table:
+    [styled_table:
         [header: [: Command] [: Use] [: Notes] ]
 
         [data:
@@ -79,7 +79,7 @@ import @styles/docs {navbar, title, section, table, header, data, codeblock, cod
 #[section, $markdown:
     # Current flags
 
-    [table:
+    [styled_table:
         [header: [: Flag] [: Applies to] [: Effect] ]
 
         [data:
@@ -278,7 +278,7 @@ import @styles/docs {navbar, title, section, table, header, data, codeblock, cod
 #[section, $markdown:
     # Error kinds
 
-    [table:
+    [styled_table:
         [header: [: Kind] [: Meaning] [: Usual fix] ]
 
         [data:

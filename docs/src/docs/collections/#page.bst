@@ -1,4 +1,4 @@
-import @lib/html {format, style}
+import @html {center}
 import @styles/docs {navbar, title, section, codeblock, codesnippet, theme_head}
 
 # page_title = "COLLECTIONS"
@@ -6,7 +6,7 @@ import @styles/docs {navbar, title, section, codeblock, codesnippet, theme_head}
 # page_head = theme_head
 
 #[navbar]
-#[title, style.center: LANGUAGE BASICS]
+#[title, center: LANGUAGE BASICS]
 
 #[section, $markdown:
     # Collections

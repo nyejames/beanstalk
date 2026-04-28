@@ -1,4 +1,4 @@
-import @lib/html {format, style, img, large}
+import @html {center, img, large}
 import @styles/docs {navbar, title, section, palette, codeblock, theme_head}
 
 # page_title = "Documentation"
@@ -6,7 +6,7 @@ import @styles/docs {navbar, title, section, palette, codeblock, theme_head}
 # page_head = theme_head
 
 #[navbar]
-#[title, style.center: THE DOCS]
+#[title, center: THE DOCS]
 
 #[section, $markdown:
     [large: Welcome to the Beanstalk documentation] 

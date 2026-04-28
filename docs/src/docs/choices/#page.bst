@@ -1,4 +1,4 @@
-import @lib/html {format, style}
+import @html {center}
 import @styles/docs {navbar, title, section, codeblock, theme_head}
 
 # page_title = "Choices"
@@ -6,7 +6,7 @@ import @styles/docs {navbar, title, section, codeblock, theme_head}
 # page_head = theme_head
 
 #[navbar]
-#[title, style.center: CHOICES]
+#[title, center: CHOICES]
 
 #[section, $markdown:
 

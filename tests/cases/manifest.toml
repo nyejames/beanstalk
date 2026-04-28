@@ -3104,3 +3104,18 @@ tags = ["integration", "source-libraries", "facades", "imports", "diagnostics"]
 id = "source_lib_facade_direct_mod_internal_rejected"
 path = "source_lib_facade_direct_mod_internal_rejected"
 tags = ["integration", "source-libraries", "facades", "imports", "diagnostics"]
+
+[[case]]
+id = "source_lib_builder_html"
+path = "source_lib_builder_html"
+tags = ["integration", "source-libraries", "builder-libraries", "html"]
+
+[[case]]
+id = "source_lib_builder_html_collision"
+path = "source_lib_builder_html_collision"
+tags = ["integration", "source-libraries", "builder-libraries", "diagnostics"]
+
+[[case]]
+id = "source_lib_builder_html_direct_internal_rejected"
+path = "source_lib_builder_html_direct_internal_rejected"
+tags = ["integration", "source-libraries", "builder-libraries", "facades", "diagnostics"]

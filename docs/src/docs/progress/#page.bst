@@ -1,12 +1,12 @@
-import @lib/html {format, style}
-import @styles/docs {navbar, title, section, palette, table, header, data, codeblock, codesnippet, theme_head}
+import @html {center}
+import @styles/docs {navbar, title, section, palette, styled_table, header, data, codeblock, codesnippet, theme_head}
 
 # page_title = "Implementation Matrix"
 # page_description = "Current implementation and coverage status for the Beanstalk compiler."
 # page_head = theme_head
 
 #[navbar]
-#[title, style.center: IMPLEMENTATION MATRIX]
+#[title, center: IMPLEMENTATION MATRIX]
 
 #[section, $markdown:
     This page tracks the current implemented compiler surface.
@@ -37,7 +37,7 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
 #[section, $markdown:
     # Status legend
 
-    [table:
+    [styled_table:
         [header: [: Status] [: Meaning] ]
 
         [data:
@@ -63,7 +63,7 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
 
     # Coverage legend
 
-    [table:
+    [styled_table:
         [header: [: Coverage] [: Meaning] ]
 
         [data:
@@ -91,7 +91,7 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
 #[section, $markdown:
     # Core Alpha surface
 
-    [table:
+    [styled_table:
         [header: [: Surface] [: Status] [: Coverage] [: Runtime target] [: Watch points] ]
 
         [data:
@@ -283,9 +283,9 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
         [data:
             [: Builder-provided source libraries]
             [: Partial]
-            [: Targeted coverage for builder-provided source library root registration.]
+            [: Targeted coverage for builder-provided source library root registration and HTML builder library.]
             [: Frontend / HTML]
-            [: Builders expose source libraries through `LibrarySet.source_libraries`. The HTML builder does not yet provide any default source libraries. No embedded source files yet.]
+            [: Builders expose source libraries through `LibrarySet.source_libraries`. The HTML builder provides `@html` as a default source library with basic HTML tag helpers and formatting utilities. Other builders may provide their own libraries. Prefix collisions between builder-provided and project-local libraries produce a hard config error.]
         ]
 
         [data:
@@ -341,7 +341,7 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
 #[section, $markdown:
     # Compiler-owned / standard external builtin surfaces
 
-    [table:
+    [styled_table:
         [header: [: Surface] [: Status] [: Coverage] [: Runtime target] [: Watch points] ]
 
         [data:
@@ -391,7 +391,7 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
 
     These are useful and may have tests, but they are not part of the Alpha stability contract.
 
-    [table:
+    [styled_table:
         [header: [: Surface] [: Status] [: Current role] [: Alpha rule] ]
 
         [data:
@@ -416,7 +416,7 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
     These are intentionally not counted as supported Alpha features.
     If syntax exists, it should fail with a structured diagnostic rather than panic or lower incorrectly.
 
-    [table:
+    [styled_table:
         [header: [: Surface] [: Status] [: Canonical diagnostic direction] [: Notes] ]
 
         [data:

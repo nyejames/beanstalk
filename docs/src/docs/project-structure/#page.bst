@@ -1,12 +1,12 @@
-import @lib/html {format, style}
-import @styles/docs {navbar, title, section, palette, table, header, data, codeblock, codesnippet, theme_head}
+import @html {center}
+import @styles/docs {navbar, title, section, palette, styled_table, header, data, codeblock, codesnippet, theme_head}
 
 # page_title = "Projects, Modules and HTML Builder"
 # page_description = "How Beanstalk projects are structured, how modules are discovered, and how the HTML project builder emits pages."
 # page_head = theme_head
 
 #[navbar]
-#[title, style.center: PROJECTS, MODULES AND HTML BUILDER]
+#[title, center: PROJECTS, MODULES AND HTML BUILDER]
 
 #[section, $markdown:
     Beanstalk projects are built around a small set of conventions:
@@ -34,7 +34,7 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
     This split matters because Beanstalk is not designed as a single hard-coded web compiler.
     The same frontend can later feed other builders, such as a Wasm module builder, a documentation builder, or project-specific tooling.
 
-    [table:
+    [styled_table:
         [header: [: Layer] [: Responsibility] ]
 
         [data:
@@ -83,7 +83,7 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
 
     Important settings:
 
-    [table:
+    [styled_table:
         [header: [: Setting] [: Meaning] ]
 
         [data:
@@ -154,7 +154,7 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
     The HTML project builder currently treats them as page entries.
     The file name and folder decide the output route.
 
-    [table:
+    [styled_table:
         [header: [: Entry file] [: HTML output path] ]
 
         [data:
@@ -191,7 +191,7 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
 
     There are two forms:
 
-    [table:
+    [styled_table:
         [header: [: Form] [: Meaning] ]
 
         [data:
@@ -243,7 +243,7 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
 
     The [codesnippet:#] prefix on top-level declarations controls module visibility.
 
-    [table:
+    [styled_table:
         [header: [: Declaration kind] [: Meaning of #] ]
 
         [data:
@@ -344,7 +344,7 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
     - If no root folder matches, the import resolves from [codesnippet:#entry_root].
 
     For the docs project, [codesnippet:#root_folders] includes [codesnippet:@lib] and [codesnippet:@assets].
-    That means [codesnippet:import @lib/html ...] resolves through the project root, while [codesnippet:import @styles/docs ...] resolves through [codesnippet:docs/src/styles/docs.bst].
+    That means [codesnippet:import @html ...] resolves through the builder-provided library, while [codesnippet:import @styles/docs ...] resolves through [codesnippet:docs/src/styles/docs.bst].
 ]
 
 #[section, $markdown:
@@ -395,7 +395,7 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
 
     The build command compiles the project, then writes the builder's output files under the selected output root.
 
-    [table:
+    [styled_table:
         [header: [: Build mode] [: Output root] ]
 
         [data:
