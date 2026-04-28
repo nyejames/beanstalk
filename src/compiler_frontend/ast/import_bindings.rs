@@ -267,6 +267,10 @@ pub(crate) fn resolve_file_import_bindings(
         }
 
         // Pre-register prelude names so explicit imports cannot collide with them.
+        // WHY: import aliases like `as io` must be rejected because prelude names are
+        // already visible. Prelude symbols are NOT added to visible_external_symbols yet;
+        // they are injected after all explicit imports so that user-declared/imported names
+        // that shadow prelude symbols do not leave stale prelude entries in the map.
         for (prelude_name, symbol_id) in external_package_registry.prelude_symbols_by_name() {
             let symbol_name = string_table.intern(prelude_name);
             let _ = registry.register(
@@ -279,9 +283,6 @@ pub(crate) fn resolve_file_import_bindings(
                 },
                 string_table,
             );
-            bindings
-                .visible_external_symbols
-                .insert(symbol_name, *symbol_id);
         }
 
         let imports = file_imports_by_source
@@ -461,6 +462,22 @@ pub(crate) fn resolve_file_import_bindings(
                         import.location,
                     ));
                 }
+            }
+        }
+
+        // Inject prelude symbols into visible_external_symbols only for names that were
+        // not shadowed by same-file declarations or explicit imports.
+        // WHY: if a user declares `io = "shadow"` or imports `as io`, the prelude `io`
+        // should not remain visible. The registry was pre-loaded with prelude names;
+        // any name whose registry entry is still PreludeExternal was never overwritten.
+        for (prelude_name, symbol_id) in external_package_registry.prelude_symbols_by_name() {
+            let symbol_name = string_table.intern(prelude_name);
+            if let Some(binding) = registry.names.get(&symbol_name)
+                && matches!(binding.kind, VisibleNameKind::PreludeExternal)
+            {
+                bindings
+                    .visible_external_symbols
+                    .insert(symbol_name, *symbol_id);
             }
         }
 
