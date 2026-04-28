@@ -108,10 +108,10 @@ Use this when you want compiler diagnostics without producing final build artifa
 
 <div align="center">
 
-## First Class String Template Syntax
+## What is Beanstalk?
 
 </div>
-<p>Beanstalk is designed to be an opinionated, batteries-included, refreshing take on modern app building.</p>
+<p>Beanstalk is designed to be an opinionated, batteries-included, refreshing language for modern app building.</p>
 
 <p>This project is focused on the long term and carefully designed to be versatile and future proof.</p>
 
