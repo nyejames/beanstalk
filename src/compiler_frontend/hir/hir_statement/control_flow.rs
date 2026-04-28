@@ -477,7 +477,7 @@ impl<'a> HirBuilder<'a> {
                         self.hir_error_location(location)
                     );
                 };
-                let choice_id = self.resolve_choice_id(nominal_path)?;
+                let choice_id = self.resolve_choice_id(nominal_path, location)?;
                 Ok(HirPattern::ChoiceVariant {
                     choice_id,
                     variant_index: *tag,

@@ -64,7 +64,7 @@ impl<'a> HirBuilder<'a> {
                         self.hir_error_location(&expr.location)
                     );
                 };
-                let choice_id = self.resolve_choice_id(nominal_path)?;
+                let choice_id = self.resolve_choice_id(nominal_path, &expr.location)?;
                 let region = self.current_region_or_error(&expr.location)?;
                 let ty = self.lower_data_type(&expr.data_type, &expr.location)?;
 
@@ -690,19 +690,18 @@ impl<'a> HirBuilder<'a> {
     pub(crate) fn resolve_choice_id(
         &self,
         nominal_path: &InternedPath,
+        location: &SourceLocation,
     ) -> Result<crate::compiler_frontend::hir::ids::ChoiceId, CompilerError> {
-        self.choices_by_name
-            .get(nominal_path)
-            .copied()
-            .ok_or_else(|| {
-                CompilerError::new_rule_error(
-                    format!(
-                        "Choice '{}' was not pre-registered during HIR declaration preparation",
-                        self.symbol_name_for_diagnostics(nominal_path)
-                    ),
-                    self.hir_error_location(&SourceLocation::default()),
-                )
-            })
+        let Some(choice_id) = self.choices_by_name.get(nominal_path).copied() else {
+            return_hir_transformation_error!(
+                format!(
+                    "Choice '{}' was not pre-registered during HIR declaration preparation",
+                    self.symbol_name_for_diagnostics(nominal_path)
+                ),
+                self.hir_error_location(location)
+            );
+        };
+        Ok(choice_id)
     }
 
     fn lower_choice_variants(
