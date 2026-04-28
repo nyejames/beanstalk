@@ -990,7 +990,11 @@ fn reject_double_alias() {
     let result = parse_import_clause_items(&file_tokens.tokens, import_index, &mut string_table);
     assert!(result.is_err(), "double alias should be rejected");
     let error = result.expect_err("expected import clause error");
-    assert!(error.msg.contains("Cannot use both per-entry aliases"));
+    assert!(
+        error
+            .msg
+            .contains("Grouped imports cannot use a group-level alias")
+    );
 }
 
 #[test]

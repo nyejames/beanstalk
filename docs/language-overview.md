@@ -801,6 +801,8 @@ Import rules:
 - Import aliases are not re-exported. A file that wants to expose an imported alias must declare a real exported type alias explicitly.
 - Alias names cannot collide with any visible name in the same file: same-file declarations, other imports, prelude symbols, builtins, or type aliases.
 - Aliases should preserve the leading-case convention of the imported symbol. A mismatch warns (for example, `User as user` or `render as Render`).
+- Grouped imports cannot use a trailing group-level alias. Alias individual entries instead:
+  `import @components { render as render_component }`.
 
 **Entry files and implicit start functions:**
 - The module entry file has an implicit `start` function containing its top-level runtime code.

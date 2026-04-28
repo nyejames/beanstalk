@@ -2,7 +2,7 @@ use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::lexer::{
-    consume_all_whitespace, consume_non_newline_whitespace,
+    consume_all_whitespace, consume_non_newline_whitespace, is_keyword, is_valid_identifier,
 };
 use crate::compiler_frontend::tokenizer::tokens::{
     PathTokenItem, SourceLocation, Token, TokenKind, TokenStream, TokenizeMode,
@@ -102,6 +102,7 @@ pub fn parse_file_path(
                         stream.position
                     ),
                     alias_location: None,
+                    from_grouped: false,
                 }]),
                 stream
             ),
@@ -119,6 +120,7 @@ pub fn parse_file_path(
                                 stream.position
                             ),
                             alias_location: None,
+                            from_grouped: false,
                         }]),
                         stream
                     );
@@ -182,6 +184,7 @@ pub fn parse_file_path(
             alias: None,
             path_location,
             alias_location: None,
+            from_grouped: false,
         });
         return_token!(TokenKind::Path(parsed_paths), stream);
     }
@@ -199,6 +202,7 @@ pub fn parse_file_path(
             alias: suffix.alias,
             path_location: suffix.path_location,
             alias_location: suffix.alias_location,
+            from_grouped: true,
         });
     }
 
@@ -289,18 +293,34 @@ pub fn parse_import_clause_items(
                 }
             );
         };
-        if items.len() > 1 {
+        let path_uses_grouped_syntax = items.iter().any(|item| item.from_grouped);
+
+        if path_uses_grouped_syntax {
             return_syntax_error!(
                 "Grouped imports cannot use a group-level alias. Add `as ...` to each grouped entry that needs renaming.",
                 alias_token.location.clone(), {
                     CompilationStage => "Header Parsing",
-                    PrimarySuggestion => "Add `as` to individual entries, e.g. `import @path { a as x, b as y }`",
+                    PrimarySuggestion => "Write `import @path { item as local_name }`, or use `import @path/item as local_name` for a single import",
                 }
             );
         }
         trailing_alias = Some(alias_name);
         trailing_alias_location = Some(alias_token.location.clone());
         index += 1;
+
+        // Reject a second trailing `as` in single-import clauses.
+        if tokens
+            .get(index)
+            .is_some_and(|token| matches!(token.kind, TokenKind::As))
+        {
+            return_syntax_error!(
+                "Import clauses can only have one alias.",
+                tokens[index].location.clone(), {
+                    CompilationStage => "Header Parsing",
+                    PrimarySuggestion => "Remove the second `as ...` alias",
+                }
+            );
+        }
     }
 
     // Reject double alias: per-entry alias + trailing alias.
@@ -650,6 +670,37 @@ fn parse_grouped_block(
     Ok(expanded_suffixes)
 }
 
+/// WHAT: Validates that a grouped import alias is a valid local binding name.
+/// WHY: Grouped aliases must follow the same identifier rules as ordinary
+///      `TokenKind::Symbol` names so invalid names like `bad-name` or `123x`
+///      are rejected with a targeted diagnostic.
+fn validate_import_alias_symbol(
+    alias: &str,
+    location: SourceLocation,
+) -> Result<(), CompilerError> {
+    if !is_valid_identifier(alias) {
+        return_syntax_error!(
+            "Import alias must be a valid local binding name.",
+            location, {
+                CompilationStage => "Tokenization",
+                PrimarySuggestion => "Use a normal identifier such as `render_component`",
+            }
+        );
+    }
+
+    if is_keyword(alias) {
+        return_syntax_error!(
+            format!("Import alias cannot be a reserved keyword: `{}`.", alias),
+            location, {
+                CompilationStage => "Tokenization",
+                PrimarySuggestion => "Choose a different name that is not a reserved keyword",
+            }
+        );
+    }
+
+    Ok(())
+}
+
 /// WHAT: Parses one grouped entry, including optional `as alias`.
 /// WHY: Grouped import aliases require each entry to carry its own alias metadata.
 fn parse_grouped_entry(
@@ -748,17 +799,41 @@ fn parse_grouped_entry(
         consume_keyword_as(stream);
         consume_all_whitespace(stream);
 
+        // Give a targeted diagnostic when the alias name is missing entirely.
+        if let Some(next) = stream.peek().copied()
+            && is_grouped_entry_stop_char(stream, next)
+        {
+            return_syntax_error!(
+                "Expected alias name after `as` in grouped import entry.",
+                stream.new_location(), {
+                    CompilationStage => "Tokenization",
+                    PrimarySuggestion => "Provide an alias name after `as`, e.g. `import @path { item as local_name }`",
+                }
+            );
+        }
+
         let alias_start = stream.position;
         let alias_component =
             parse_bare_component(stream, ParseComponentContext::GroupedEntry, string_table)?;
         let alias_end = stream.position;
+        let location = SourceLocation::new(stream.file_path.to_owned(), alias_start, alias_end);
+
+        validate_import_alias_symbol(&alias_component.value, location.clone())?;
 
         alias = Some(string_table.intern(&alias_component.value));
-        alias_location = Some(SourceLocation::new(
-            stream.file_path.to_owned(),
-            alias_start,
-            alias_end,
-        ));
+        alias_location = Some(location);
+
+        // Reject a second `as` keyword inside a grouped entry.
+        consume_all_whitespace(stream);
+        if stream.peek().copied() == Some('a') && peek_keyword_as(stream) {
+            return_syntax_error!(
+                "Grouped import entries can only have one alias.",
+                stream.new_location(), {
+                    CompilationStage => "Tokenization",
+                    PrimarySuggestion => "Remove the second `as ...` alias",
+                }
+            );
+        }
     }
 
     Ok(ParsedGroupedEntry {

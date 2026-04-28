@@ -2725,6 +2725,51 @@ path = "grouped_import_alias_case_warning"
 tags = ["integration", "language", "aliases", "grouped", "diagnostics"]
 
 [[case]]
+id = "grouped_import_single_entry_trailing_alias_rejected"
+path = "grouped_import_single_entry_trailing_alias_rejected"
+tags = ["integration", "diagnostics", "aliases", "grouped", "imports"]
+
+[[case]]
+id = "grouped_import_multi_entry_trailing_alias_rejected"
+path = "grouped_import_multi_entry_trailing_alias_rejected"
+tags = ["integration", "diagnostics", "aliases", "grouped", "imports"]
+
+[[case]]
+id = "grouped_import_alias_invalid_dash_rejected"
+path = "grouped_import_alias_invalid_dash_rejected"
+tags = ["integration", "diagnostics", "aliases", "grouped", "imports"]
+
+[[case]]
+id = "grouped_import_alias_invalid_leading_digit_rejected"
+path = "grouped_import_alias_invalid_leading_digit_rejected"
+tags = ["integration", "diagnostics", "aliases", "grouped", "imports"]
+
+[[case]]
+id = "grouped_import_alias_missing_name_rejected"
+path = "grouped_import_alias_missing_name_rejected"
+tags = ["integration", "diagnostics", "aliases", "grouped", "imports"]
+
+[[case]]
+id = "grouped_import_alias_keyword_rejected"
+path = "grouped_import_alias_keyword_rejected"
+tags = ["integration", "diagnostics", "aliases", "grouped", "imports"]
+
+[[case]]
+id = "single_import_double_alias_rejected"
+path = "single_import_double_alias_rejected"
+tags = ["integration", "diagnostics", "aliases", "imports"]
+
+[[case]]
+id = "grouped_import_entry_double_alias_rejected"
+path = "grouped_import_entry_double_alias_rejected"
+tags = ["integration", "diagnostics", "aliases", "grouped", "imports"]
+
+[[case]]
+id = "grouped_import_per_entry_and_trailing_alias_rejected"
+path = "grouped_import_per_entry_and_trailing_alias_rejected"
+tags = ["integration", "diagnostics", "aliases", "grouped", "imports"]
+
+[[case]]
 id = "import_alias_collision_with_builtin_rejected"
 path = "import_alias_collision_with_builtin_rejected"
 tags = ["integration", "language", "aliases", "diagnostics", "builtins"]

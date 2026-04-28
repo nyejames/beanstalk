@@ -62,6 +62,9 @@ pub struct PathTokenItem {
     pub alias: Option<StringId>,
     pub path_location: SourceLocation,
     pub alias_location: Option<SourceLocation>,
+    /// True when this entry came from grouped path syntax, even if the group
+    /// expanded to only one path.
+    pub from_grouped: bool,
 }
 
 impl PathTokenItem {

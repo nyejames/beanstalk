@@ -793,12 +793,54 @@ fn tokenize_numeric_literal(
 }
 
 // Checking if the variable name is valid
-fn is_valid_identifier(s: &str) -> bool {
+pub(crate) fn is_valid_identifier(s: &str) -> bool {
     // Check if the string is a valid identifier (variable name)
     s.chars()
         .next()
         .is_some_and(|c| c.is_alphabetic() || c == '_')
         && s.chars().all(|c| c.is_alphanumeric() || c == '_')
+}
+
+/// True when `s` is a reserved keyword that the tokenizer maps to a dedicated
+/// `TokenKind` instead of `TokenKind::Symbol`.
+pub(crate) fn is_keyword(s: &str) -> bool {
+    matches!(
+        s,
+        "import"
+            | "if"
+            | "case"
+            | "return"
+            | "else"
+            | "block"
+            | "checked"
+            | "as"
+            | "must"
+            | "this"
+            | "This"
+            | "async"
+            | "yield"
+            | "loop"
+            | "to"
+            | "by"
+            | "break"
+            | "continue"
+            | "is"
+            | "not"
+            | "and"
+            | "or"
+            | "true"
+            | "True"
+            | "false"
+            | "False"
+            | "Float"
+            | "Int"
+            | "String"
+            | "Bool"
+            | "Char"
+            | "None"
+            | "none"
+            | "copy"
+    )
 }
 
 fn tokenize_string(
