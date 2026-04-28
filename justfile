@@ -1,12 +1,23 @@
 set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
 
 validate:
+    @echo "format"
     cargo fmt --check
-    cargo clippy --all-targets --all-features -- -D warnings
-    cargo test
-    cargo run -- tests
-    cargo run -- check docs
-    cargo run --release -- check speed-test.bst
+
+    @echo "clippy"
+    cargo clippy --quiet --all-targets --all-features -- -D warnings
+    
+    @echo "unit tests"
+    cargo test --quiet -- --format terse
+
+    @echo "integration tests"
+    cargo run --quiet -- tests
+
+    @echo "docs build"
+    cargo run --quiet -- check docs
+
+    @echo "speed test"
+    cargo run --quiet --release -- check speed-test.bst
 
 ship:
     cargo fmt
