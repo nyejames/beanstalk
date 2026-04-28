@@ -67,12 +67,13 @@ import @styles/docs {navbar, title, section, codeblock, theme_head}
     ]
 
     Payload fields are accessed only through pattern matching.
+    Captures use the declared field names, and they may be renamed with `as` for the arm-local binding.
 
     [codeblock, $code("bst"):
         if response is:
             case Success => io("done")
             case Err(message) => io(message)
-            case Pending(retry_count, message) => io(message)
+            case Pending(retry_count, message as pending_message) => io(pending_message)
         ;
     ]
 
@@ -91,19 +92,11 @@ import @styles/docs {navbar, title, section, codeblock, theme_head}
         Response :: Err String, Success;
     ]
 
-    Capture rename syntax is deferred.
-
-    [codeblock, $code("bst"):
-        -- Invalid: capture rename syntax is not supported yet
-        case Err(text as message) => io(text)
-    ]
-
     ## Deferred features
     - Direct payload field access (e.g. `response.message`).
     - Generic choice declarations.
     - Recursive choice declarations.
     - Payload structural equality.
-    - Capture rename syntax in patterns.
     - Nested payload patterns and nested exhaustiveness.
 
 ]

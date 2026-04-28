@@ -1,7 +1,7 @@
 # Choices (enums)
 Choices are a way to define a set of possible values. 
-The Alpha compiler supports unit variants.
-Payload variants, tagged variant bodies, default values, and constructor calls are deferred.
+The Alpha compiler supports unit variants and record-body payload variants.
+Generic choices, recursive choices, direct payload field access, nested payload patterns, structural equality for payload variants, and default values are deferred.
 
 You create and access choices using a double colon.
 
@@ -32,16 +32,35 @@ Choices work with assignment and pattern matching.
     ;
 ```
 
+Payload variants use record-body syntax and support constructor calls.
+
+```beanstalk
+    Response ::
+        Success,
+        Error |
+            message String,
+        |,
+    ;
+
+    error = Response::Error("bad")
+```
+
+Payload fields are extracted through pattern matching. Captures use the declared field names and may be renamed with `as`.
+
+```beanstalk
+    if error is:
+        case Success => io("done")
+        case Error(message as error_message) => io(error_message)
+    ;
+```
+
 These richer choice forms are reserved for post-Alpha design work and currently reject with structured diagnostics:
 
 ```beanstalk
-    -- Payload variant: deferred.
+    -- Payload shorthand: deferred.
     Response :: Error String, Success;
 
-    -- Tagged variant body: deferred.
-    Response :: Pending | retry_count Int |, Success;
-
-    -- Constructor call: deferred.
+    -- Unit variants are values, not empty constructor calls.
     value = Response::Success()
 ```
 

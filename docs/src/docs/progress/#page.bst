@@ -31,6 +31,7 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
 
     A policy for the repo is all tests must pass before each commit.
     So all tests on all platforms can be assumed to be green for the current state of the compiler unless specifically noted here.
+
 ]
 
 #[section, $markdown:
@@ -94,6 +95,22 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
         [header: [: Surface] [: Status] [: Coverage] [: Runtime target] [: Watch points] ]
 
         [data:
+            [: Entry files and implicit start]
+            [: Supported]
+            [: Broad entry-start, dependency-sort, non-entry top-level rejection, imported-start, and fragment-order coverage.]
+            [: Frontend / HTML builder]
+            [: Only the module entry file runs top-level runtime code. Non-entry top-level executable code and runtime templates are rejected. The implicit [codesnippet:start] function is build-system-owned and is not an importable/callable user declaration.]
+        ]
+
+        [data:
+            [: Variables, assignment, and scoped blocks]
+            [: Supported]
+            [: Broad declaration, reassignment, mutability, scope, shadowing, undefined-mutation, block-scope, and diagnostics coverage.]
+            [: JS / HTML]
+            [: Mutable writes require mutable places. [codesnippet:block:] creates a lexical/control-flow scope. Bare labeled scopes remain rejected.]
+        ]
+
+        [data:
             [: Control flow]
             [: Supported]
             [: Broad parser, HIR, integration, dispatcher, and structured-lowering coverage.]
@@ -122,7 +139,7 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
             [: Supported]
             [: Broad integration coverage with targeted parser and receiver-catalog unit coverage.]
             [: JS / HTML]
-            [: More field-mutation and receiver runtime regressions are useful, but this is not an Alpha blocker if current tests stay green.]
+            [: Field mutation, nested field mutation, nominal mismatch, constructor named arguments, receiver borrow behavior, scalar receiver methods, and cross-file exported receiver use are covered. Keep Wasm receiver behavior experimental.]
         ]
 
         [data:
@@ -158,11 +175,51 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
         ]
 
         [data:
+            [: Constants and compile-time folding]
+            [: Supported]
+            [: Broad constant declaration, const-only validation, cross-file soft dependency, folding, overflow, const-template, and const-record coverage.]
+            [: Frontend / HTML builder]
+            [: Runtime expressions and host calls in constants are rejected. Module constants remain compile-time metadata rather than runtime top-level statements.]
+        ]
+
+        [data:
+            [: Type aliases]
+            [: Supported]
+            [: Broad alias declaration, collection/option/import/external target, visibility, cycle, duplicate, value-misuse, constructor-misuse, and import-alias interaction coverage.]
+            [: Frontend-owned]
+            [: Type aliases are transparent and annotation-only. Imported aliases are file-local; exporting an imported type under a public name requires declaring a real exported type alias.]
+        ]
+
+        [data:
+            [: Arithmetic, numeric casts, and explicit copy]
+            [: Supported]
+            [: Broad arithmetic, precedence, integer division, contextual numeric promotion, compound assignment, builtin cast, runtime fallback, explicit copy, and JS helper coverage.]
+            [: JS / HTML]
+            [: Regular [codesnippet:/] returns [codesnippet:Float]. [codesnippet://] requires [codesnippet:Int]. [codesnippet:Int(...)] and [codesnippet:Float(...)] return [codesnippet:Result] values and must be handled. [codesnippet:^] exists in frontend/JS lowering but has thin coverage; Wasm exponent support remains outside Alpha.]
+        ]
+
+        [data:
             [: Type checking and coercion]
             [: Supported]
             [: Broad type compatibility, contextual promotion, strict expression typing, call argument, and declaration coverage.]
             [: Frontend-owned]
             [: Keep strict expression typing separate from contextual declaration / return coercion.]
+        ]
+
+        [data:
+            [: String coercion and IO/template boundaries]
+            [: Supported]
+            [: Broad valid string-content coercion plus IO/template rejection coverage for structs, collections, options, results, and multiple-return values.]
+            [: Frontend / JS]
+            [: Template heads and [codesnippet:io] accept only supported string-content values. Complex values must be handled, extracted, or converted before string-boundary use.]
+        ]
+
+        [data:
+            [: Borrow validation and ownership analysis]
+            [: Supported]
+            [: Broad borrow, aliasing, mutable/exclusive access, use-after-move, branch merge, loop, short-circuit, lifetime, drop-site, and adversarial coverage.]
+            [: HIR analysis / JS GC baseline]
+            [: Borrow validation enforces exclusivity and move-safety, while ownership/drop facts remain advisory for GC-only JS. Do not make ownership semantic; GC fallback remains the language baseline.]
         ]
 
         [data:
@@ -338,6 +395,34 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
         ]
 
         [data:
+            [: Async / concurrency scopes]
+            [: Deferred]
+            [: [codesnippet:async_block_reserved], [codesnippet:async_keyword_declaration_rejected]]
+            [: Future async syntax is design-only. Current [codesnippet:async] statement and declaration positions are rejected with structured diagnostics.]
+        ]
+
+        [data:
+            [: Checked scopes]
+            [: Deferred]
+            [: [codesnippet:checked_block_reserved], [codesnippet:checked_keyword_declaration_rejected]]
+            [: [codesnippet:checked] is reserved and rejected cleanly until checked/effect semantics are designed.]
+        ]
+
+        [data:
+            [: Labeled scopes]
+            [: Rejected / Reserved]
+            [: [codesnippet:labeled_scope_rejected]]
+            [: Bare [codesnippet:label:] syntax is not supported. Use [codesnippet:block:] for ordinary scoped blocks.]
+        ]
+
+        [data:
+            [: Legacy / foreign-language syntax]
+            [: Rejected / Reserved]
+            [: [codesnippet:typescript_style_declaration_rejected], [codesnippet:diagnostic_statement_keyword_fn], [codesnippet:diagnostic_statement_keyword_let], [codesnippet:diagnostic_statement_keyword_match], [codesnippet:diagnostic_statement_comment_slash_slash], [codesnippet:diagnostic_expression_double_equal], [codesnippet:diagnostic_expression_bang_equal], [codesnippet:diagnostic_expression_and_and], [codesnippet:diagnostic_expression_or_or], [codesnippet:diagnostic_expression_bang_negation]]
+            [: These are diagnostic-quality fixtures only. Do not treat compatibility syntax as planned Alpha surface.]
+        ]
+
+        [data:
             [: Choice unit variants]
             [: Supported]
             [: [codesnippet:choice_basic_declaration_and_use], [codesnippet:choice_unit_constructor_call_rejected], [codesnippet:choice_imported_unit_constructor_call_rejected]]
@@ -445,7 +530,7 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
         [data:
             [: Choice tagged/default declarations]
             [: Deferred]
-            [: [codesnippet:choice_tagged_decl_deferred], [codesnippet:choice_default_decl_deferred]]
+            [: No canonical tagged-declaration case yet; [codesnippet:choice_default_decl_deferred] covers default declaration rejection.]
             [: These belong to the fuller tagged-union design, not the current Alpha subset.]
         ]
 

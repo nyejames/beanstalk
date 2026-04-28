@@ -47,6 +47,7 @@ import @styles/docs {navbar, title, section, palette, table, codeblock, theme_he
 
     Payload variants use constructor-like patterns with the original field names.
     Captured bindings are available in the arm body and in guards.
+    Captures may be renamed with `as` when the arm-local name should differ from the payload field name.
 
     [codeblock, $code("bst"):
         Response ::
@@ -63,12 +64,12 @@ import @styles/docs {navbar, title, section, palette, table, codeblock, theme_he
         if response is:
             case Success => io("done")
             case Err(message) => io(message)
-            case Pending(retry_count, message) => io(message)
+            case Pending(retry_count, message as pending_message) => io(pending_message)
         ;
     ]
 
-    Capture names must exactly match the declared payload field names.
-    Renaming captures (e.g. `case Err(text as message)`) is deferred.
+    Capture originals must exactly match the declared payload field names.
+    For example, `case Err(message as error_text)` binds the payload field `message` to the local name `error_text`.
 
     Exhaustiveness is tag-level: `case Err(message)` covers all `Err` values regardless of payload content.
 

@@ -17,6 +17,95 @@
 <br>
 <br>
 
+## Getting Started
+
+`bean` is the main project tool for creating, checking, building, and running Beanstalk projects.
+It is a cli tool bundled with the compiler and build system.
+
+#### macOS and Linux
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/nyejames/beanstalk/main/install.sh | sh
+````
+
+This installs `bean` into:
+
+```bash
+~/.local/bin
+```
+
+Make sure this directory is in your `PATH`:
+
+```bash
+export PATH="$PATH:$HOME/.local/bin"
+```
+
+To install somewhere else:
+
+```bash
+BIN_DIR="$HOME/bin" curl -fsSL https://raw.githubusercontent.com/nyejames/beanstalk/main/install.sh | sh
+```
+
+#### Windows
+
+In PowerShell:
+
+```powershell
+irm https://raw.githubusercontent.com/nyejames/beanstalk/main/install.ps1 | iex
+```
+
+To add `bean` to your user `PATH` automatically:
+
+```powershell
+$script = irm https://raw.githubusercontent.com/nyejames/beanstalk/main/install.ps1
+Invoke-Expression "$script -AddToPath"
+```
+
+### Check the installation
+
+```bash
+bean --version
+```
+
+Expected output:
+
+```text
+bean 0.1.4
+```
+
+### Create a project
+
+```bash
+bean new my-site
+cd my-site
+```
+
+### Run the development server
+
+```bash
+bean dev
+```
+
+The dev server rebuilds the project when files change and refreshes the browser output automatically.
+
+### Release Build
+
+```bash
+bean build --release
+```
+
+This compiles the project using the configured Beanstalk builder and writes the output to the project’s `/release` output directory.
+
+### Check a project without writing output
+
+```bash
+bean check
+```
+
+Use this when you want compiler diagnostics without producing final build artifacts.
+
+<br>
+
 <div align="center">
 
 ## First Class String Template Syntax
