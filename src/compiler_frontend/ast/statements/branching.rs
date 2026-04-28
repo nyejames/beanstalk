@@ -536,16 +536,16 @@ fn build_arm_scope_with_choice_captures(
     let mut captures = Vec::with_capacity(parsed.captures.len());
 
     for capture in parsed.captures {
-        let capture_name = capture.field_name;
+        let binding_name = capture.binding_name;
 
-        // Enforce no-shadowing: the capture name must not collide with any visible local.
-        if let Some(_existing) = arm_scope.get_reference(&capture_name) {
+        // Enforce no-shadowing: the local binding name must not collide with any visible local.
+        if let Some(_existing) = arm_scope.get_reference(&binding_name) {
             return_rule_error!(
                 format!(
                     "Capture binding '{}' shadows an existing variable. Beanstalk does not allow shadowing.",
-                    string_table.resolve(capture_name)
+                    string_table.resolve(binding_name)
                 ),
-                capture.location.clone(),
+                capture.binding_location.clone(),
                 {
                     CompilationStage => "Match Statement Parsing",
                     PrimarySuggestion => "Rename the capture or the outer variable to avoid collision",
@@ -553,14 +553,14 @@ fn build_arm_scope_with_choice_captures(
             );
         }
 
-        let capture_name_str = string_table.resolve(capture_name).to_owned();
-        let binding_path = arm_scope.scope.join_str(&capture_name_str, string_table);
+        let binding_name_str = string_table.resolve(binding_name).to_owned();
+        let binding_path = arm_scope.scope.join_str(&binding_name_str, string_table);
 
         let declaration = Declaration {
             id: binding_path.clone(),
             value: Expression::new(
                 crate::compiler_frontend::ast::expressions::expression::ExpressionKind::NoValue,
-                capture.location.clone(),
+                capture.binding_location.clone(),
                 capture.field_type.clone(),
                 crate::compiler_frontend::value_mode::ValueMode::ImmutableOwned,
             ),
@@ -569,10 +569,12 @@ fn build_arm_scope_with_choice_captures(
         arm_scope.add_var(declaration);
         captures.push(ChoicePayloadCapture {
             field_name: capture.field_name,
+            binding_name: capture.binding_name,
             field_index: capture.field_index,
             field_type: capture.field_type,
             binding_path,
             location: capture.location,
+            binding_location: capture.binding_location,
         });
     }
 

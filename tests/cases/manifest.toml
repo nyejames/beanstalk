@@ -304,9 +304,49 @@ path = "choice_payload_match_capture_shadowing_rejected"
 tags = ["integration","diagnostics"]
 
 [[case]]
-id = "choice_payload_match_rename_syntax_deferred"
-path = "choice_payload_match_rename_syntax_deferred"
+id = "choice_payload_match_rename_success"
+path = "choice_payload_match_rename_success"
+tags = ["integration","language"]
+
+[[case]]
+id = "choice_payload_match_rename_guard_success"
+path = "choice_payload_match_rename_guard_success"
+tags = ["integration","language"]
+
+[[case]]
+id = "choice_payload_match_rename_wrong_original_rejected"
+path = "choice_payload_match_rename_wrong_original_rejected"
 tags = ["integration","diagnostics"]
+
+[[case]]
+id = "choice_payload_match_rename_duplicate_binding_rejected"
+path = "choice_payload_match_rename_duplicate_binding_rejected"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "choice_payload_match_rename_shadowing_rejected"
+path = "choice_payload_match_rename_shadowing_rejected"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "choice_payload_match_rename_missing_alias_rejected"
+path = "choice_payload_match_rename_missing_alias_rejected"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "choice_payload_match_rename_non_symbol_alias_rejected"
+path = "choice_payload_match_rename_non_symbol_alias_rejected"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "choice_payload_match_rename_original_not_visible_rejected"
+path = "choice_payload_match_rename_original_not_visible_rejected"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "choice_payload_match_rename_self_alias_success"
+path = "choice_payload_match_rename_self_alias_success"
+tags = ["integration","language"]
 
 [[case]]
 id = "choice_payload_match_named_assignment_rejected"
@@ -401,11 +441,6 @@ tags = ["integration","diagnostics"]
 [[case]]
 id = "choice_variant_default_value_deferred"
 path = "choice_variant_default_value_deferred"
-tags = ["integration","diagnostics"]
-
-[[case]]
-id = "choice_capture_rename_deferred"
-path = "choice_capture_rename_deferred"
 tags = ["integration","diagnostics"]
 
 [[case]]

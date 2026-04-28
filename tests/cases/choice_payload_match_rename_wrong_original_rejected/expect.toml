@@ -1,5 +1,7 @@
+entry = "."
+
 [backends.html]
 mode = "failure"
 warnings = "forbid"
 error_type = "Rule"
-message_contains = ["Payload binding rename syntax is deferred"]
+message_contains = ["does not match payload field name"]

@@ -4,6 +4,10 @@
 //! assignments for choice-variant match arms.
 //! WHY: capture materialization has different timing from generic CFG lowering: guards are
 //! evaluated in the match terminator, while capture assignments execute inside arm blocks.
+//!
+//! NOTE: payload field aliases (for example `case Variant(field as local_name)`) are a frontend
+//! AST binding concern only. HIR extraction uses `field_index` and `binding_path`; the alias
+//! spelling never reaches HIR and does not affect variant layout or payload extraction.
 
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::match_patterns::{MatchArm, MatchPattern};

@@ -5,9 +5,9 @@ Response ::
     |,
 ;
 
-r = Response::Err("bad")
+response = Response::Err("bad")
 
-if r is:
-    case Err(text as message) => io(text)
+if response is:
+    case Err(message as) => io("bad")
     case Success => io("ok")
 ;

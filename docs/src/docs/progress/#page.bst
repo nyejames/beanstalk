@@ -130,7 +130,7 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
             [: Supported]
             [: Broad parser, declaration, constructor, match, import, assignment, return, JS carrier-shape, and payload coverage.]
             [: JS / HTML]
-            [: Unit variants use `Choice::Variant`. Empty constructor calls are invalid. Record-body payload declarations are parsed and type-checked. Payload constructors support positional and named arguments. Payload match extraction uses constructor-like patterns with original field names only. Const choice values are supported for unit and payload variants. Payload shorthand is rejected. Payload structural equality is deferred. Generic choices, recursive choices, and direct payload field access remain deferred. Choices, Options, and Results share a unified HIR variant construction representation while retaining distinct semantic type kinds.]
+            [: Unit variants use `Choice::Variant`. Empty constructor calls are invalid. Record-body payload declarations are parsed and type-checked. Payload constructors support positional and named arguments. Payload match extraction uses constructor-like patterns with original field names or `field as local_name` aliases. Const choice values are supported for unit and payload variants. Payload shorthand is rejected. Payload structural equality is deferred. Generic choices, recursive choices, and direct payload field access remain deferred. Choices, Options, and Results share a unified HIR variant construction representation while retaining distinct semantic type kinds.]
         ]
 
         [data:
@@ -138,7 +138,7 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
             [: Partial]
             [: Broad literal, choice-match, and payload-capture coverage, including exhaustiveness and diagnostics.]
             [: JS / HTML]
-            [: Literal patterns, choice variant patterns (including payload captures), relational ordered-scalar patterns, guards, and else are supported. Wildcard in case arms is not supported—use else => instead. General capture/tagged patterns, rename captures, and nested payload patterns remain deferred.]
+            [: Literal patterns, choice variant patterns (including payload captures with `field as local_name` aliases), relational ordered-scalar patterns, guards, and else are supported. Wildcard in case arms is not supported—use else => instead. General capture/tagged patterns and nested payload patterns remain deferred.]
         ]
 
         [data:
@@ -368,8 +368,8 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
         [data:
             [: Choice payload matching]
             [: Supported]
-            [: [codesnippet:choice_payload_match_capture_success], [codesnippet:choice_payload_match_qualified_capture_success], [codesnippet:choice_payload_match_guard_uses_capture_success], [codesnippet:choice_payload_match_import_alias_success], [codesnippet:choice_payload_match_exhaustive_tag_level_success], [codesnippet:choice_payload_match_wrong_capture_name_rejected], [codesnippet:choice_payload_match_too_few_captures_rejected], [codesnippet:choice_payload_match_too_many_captures_rejected], [codesnippet:choice_payload_match_duplicate_capture_rejected], [codesnippet:choice_payload_match_capture_shadowing_rejected], [codesnippet:choice_payload_match_rename_syntax_deferred], [codesnippet:choice_payload_match_named_assignment_rejected], [codesnippet:choice_payload_match_missing_payload_rejected], [codesnippet:choice_payload_match_unit_parens_rejected], [codesnippet:choice_payload_match_duplicate_variant_rejected], [codesnippet:choice_payload_match_guard_requires_else]]
-            [: Constructor-like patterns with original field names only. Capture names must match declared payload field names. Exhaustiveness is tag-level.]
+            [: [codesnippet:choice_payload_match_capture_success], [codesnippet:choice_payload_match_qualified_capture_success], [codesnippet:choice_payload_match_guard_uses_capture_success], [codesnippet:choice_payload_match_import_alias_success], [codesnippet:choice_payload_match_exhaustive_tag_level_success], [codesnippet:choice_payload_match_wrong_capture_name_rejected], [codesnippet:choice_payload_match_too_few_captures_rejected], [codesnippet:choice_payload_match_too_many_captures_rejected], [codesnippet:choice_payload_match_duplicate_capture_rejected], [codesnippet:choice_payload_match_capture_shadowing_rejected], [codesnippet:choice_payload_match_rename_success], [codesnippet:choice_payload_match_rename_guard_success], [codesnippet:choice_payload_match_rename_wrong_original_rejected], [codesnippet:choice_payload_match_rename_duplicate_binding_rejected], [codesnippet:choice_payload_match_rename_shadowing_rejected], [codesnippet:choice_payload_match_rename_missing_alias_rejected], [codesnippet:choice_payload_match_rename_non_symbol_alias_rejected], [codesnippet:choice_payload_match_rename_original_not_visible_rejected], [codesnippet:choice_payload_match_rename_self_alias_success], [codesnippet:choice_payload_match_named_assignment_rejected], [codesnippet:choice_payload_match_missing_payload_rejected], [codesnippet:choice_payload_match_unit_parens_rejected], [codesnippet:choice_payload_match_duplicate_variant_rejected], [codesnippet:choice_payload_match_guard_requires_else]]
+            [: Constructor-like patterns support declared payload field names and `field as local_name` aliases. Field matching remains positional and validated against declared field names. Exhaustiveness is tag-level.]
         ]
 
         [data:
@@ -380,10 +380,17 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
         ]
 
         [data:
-            [: Choice binding renames]
+            [: Choice payload capture renames]
+            [: Supported]
+            [: [codesnippet:choice_payload_match_rename_success], [codesnippet:choice_payload_match_rename_guard_success], [codesnippet:choice_payload_match_rename_wrong_original_rejected], [codesnippet:choice_payload_match_rename_duplicate_binding_rejected], [codesnippet:choice_payload_match_rename_shadowing_rejected], [codesnippet:choice_payload_match_rename_missing_alias_rejected], [codesnippet:choice_payload_match_rename_non_symbol_alias_rejected], [codesnippet:choice_payload_match_rename_original_not_visible_rejected], [codesnippet:choice_payload_match_rename_self_alias_success]]
+            [: `case Variant(original_name as local_name) =>` binds the payload field to a different local name visible in the guard and arm body.]
+        ]
+
+        [data:
+            [: General pattern binding renames]
             [: Deferred]
-            [: [codesnippet:choice_payload_match_rename_syntax_deferred], [codesnippet:choice_capture_rename_deferred]]
-            [: Future syntax: `case Variant(original_name as local_name) =>`.]
+            [: No canonical case yet.]
+            [: Non-choice capture renaming and nested payload pattern renaming remain deferred.]
         ]
 
         [data:

@@ -1322,16 +1322,6 @@ Should reject because unit variants cannot have captures.
 
 Add targeted negative tests for each unsupported domain above. Avoid over-testing every syntactic variant. The requirement is clear rejection, not perfect wording everywhere.
 
-## Phase 7 commit structure
-
-1. `reject-as-outside-renaming-domains`
-   - Add targeted diagnostics where current behavior is generic/confusing.
-
-2. `as-keyword-negative-tests`
-   - Add focused negative cases.
-
----
-
 # Final review phase — all touched areas
 
 This must be the final commit in the plan.

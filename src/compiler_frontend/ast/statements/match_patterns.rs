@@ -33,18 +33,22 @@ pub struct MatchArm {
 #[derive(Debug, Clone)]
 pub(super) struct ParsedChoicePayloadCapture {
     pub field_name: StringId,
+    pub binding_name: StringId,
     pub field_index: usize,
     pub field_type: DataType,
     pub location: SourceLocation,
+    pub binding_location: SourceLocation,
 }
 
 #[derive(Debug, Clone)]
 pub struct ChoicePayloadCapture {
     pub field_name: StringId,
+    pub binding_name: StringId,
     pub field_index: usize,
     pub field_type: DataType,
     pub binding_path: InternedPath,
     pub location: SourceLocation,
+    pub binding_location: SourceLocation,
 }
 
 #[derive(Debug, Clone)]
@@ -327,7 +331,7 @@ fn parse_choice_pattern_captures(
                 }
 
                 let capture_location = token_stream.current_location();
-                let capture_name = match token_stream.current_token_kind() {
+                let field_name = match token_stream.current_token_kind() {
                     TokenKind::Symbol(name) => *name,
                     _ => {
                         return_rule_error!(
@@ -342,18 +346,43 @@ fn parse_choice_pattern_captures(
                 };
                 token_stream.advance();
 
-                // Reject deferred rename syntax: `case Err(text as message)`
+                let mut binding_name = field_name;
+                let mut binding_location = capture_location.clone();
+
+                // Parse optional `as <local_binding>` rename syntax
                 if token_stream.current_token_kind() == &TokenKind::As {
-                    return Err(deferred_feature_rule_error(
-                        "Payload binding rename syntax is deferred. Use the declared field name directly.",
-                        token_stream.current_location(),
-                        "Match Statement Parsing",
-                        format!(
-                            "Use 'case {}({})' with the original field name.",
-                            variant_name_str,
-                            string_table.resolve(capture_name)
-                        ),
-                    ));
+                    token_stream.advance();
+                    binding_location = token_stream.current_location();
+                    let after_as_token = token_stream.current_token_kind().to_owned();
+                    binding_name = match after_as_token {
+                        TokenKind::Symbol(name) => {
+                            token_stream.advance();
+                            name
+                        }
+                        TokenKind::End
+                        | TokenKind::Eof
+                        | TokenKind::CloseParenthesis
+                        | TokenKind::Comma => {
+                            return_rule_error!(
+                                "Expected local binding name after `as` in choice payload pattern.",
+                                binding_location,
+                                {
+                                    CompilationStage => "Match Statement Parsing",
+                                    PrimarySuggestion => "Provide a local binding name after `as`",
+                                }
+                            );
+                        }
+                        _ => {
+                            return_rule_error!(
+                                "Choice payload alias must be a local binding name.",
+                                binding_location,
+                                {
+                                    CompilationStage => "Match Statement Parsing",
+                                    PrimarySuggestion => "Use a simple identifier as the local binding name",
+                                }
+                            );
+                        }
+                    };
                 }
 
                 // Reject named assignment: `case Err(message = text)`
@@ -365,27 +394,27 @@ fn parse_choice_pattern_captures(
                         format!(
                             "Use 'case {}({})' with the original field name.",
                             variant_name_str,
-                            string_table.resolve(capture_name)
+                            string_table.resolve(field_name)
                         ),
                     ));
                 }
 
-                // Check duplicate capture name
-                if let Some(_first_loc) = seen_names.get(&capture_name) {
+                // Check duplicate capture binding name (uses the local alias when present)
+                if let Some(_first_loc) = seen_names.get(&binding_name) {
                     return_rule_error!(
                         format!(
                             "Duplicate capture binding '{}' in pattern for variant '{}'.",
-                            string_table.resolve(capture_name),
+                            string_table.resolve(binding_name),
                             variant_name_str
                         ),
-                        capture_location,
+                        binding_location,
                         {
                             CompilationStage => "Match Statement Parsing",
                             PrimarySuggestion => "Remove the duplicate capture binding",
                         }
                     );
                 }
-                seen_names.insert(capture_name, capture_location.clone());
+                seen_names.insert(binding_name, binding_location.clone());
 
                 // Validate capture position and name against declaration metadata
                 let field_index = captures.len();
@@ -414,11 +443,11 @@ fn parse_choice_pattern_captures(
                     .id
                     .name()
                     .expect("choice payload field must have a name");
-                if capture_name != expected_field_name {
+                if field_name != expected_field_name {
                     return_rule_error!(
                         format!(
                             "Capture binding '{}' does not match payload field name '{}' at position {} in variant '{}'.",
-                            string_table.resolve(capture_name),
+                            string_table.resolve(field_name),
                             string_table.resolve(expected_field_name),
                             field_index + 1,
                             variant_name_str
@@ -437,10 +466,12 @@ fn parse_choice_pattern_captures(
                 }
 
                 captures.push(ParsedChoicePayloadCapture {
-                    field_name: capture_name,
+                    field_name,
+                    binding_name,
                     field_index,
                     field_type: field_decl.value.data_type.clone(),
                     location: capture_location,
+                    binding_location,
                 });
 
                 token_stream.skip_newlines();
