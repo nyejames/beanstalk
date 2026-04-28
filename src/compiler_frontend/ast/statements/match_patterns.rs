@@ -3,6 +3,7 @@
 //! WHAT: parses literal, relational, and choice-variant case patterns.
 //! WHY: pattern syntax and type validation evolve separately from match arm/body parsing.
 
+use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -30,14 +31,20 @@ pub struct MatchArm {
 /// local name. For Alpha, captured names must exactly match the declared field
 /// names in declaration order.
 #[derive(Debug, Clone)]
-pub struct ChoicePayloadCapture {
+pub(super) struct ParsedChoicePayloadCapture {
     pub field_name: StringId,
     pub field_index: usize,
     pub field_type: DataType,
     pub location: SourceLocation,
-    /// The full interned path used for the capture binding in the arm scope.
-    /// Populated during AST branching so HIR lowering can register the local.
-    pub binding_path: Option<InternedPath>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ChoicePayloadCapture {
+    pub field_name: StringId,
+    pub field_index: usize,
+    pub field_type: DataType,
+    pub binding_path: InternedPath,
+    pub location: SourceLocation,
 }
 
 #[derive(Debug, Clone)]
@@ -84,8 +91,10 @@ impl MatchPattern {
 
 /// Result of parsing a choice-variant pattern in a match arm.
 pub(super) struct ParsedChoicePattern {
-    pub(super) pattern: MatchPattern,
+    pub(super) nominal_path: InternedPath,
     pub(super) variant: StringId,
+    pub(super) tag: usize,
+    pub(super) captures: Vec<ParsedChoicePayloadCapture>,
     pub(super) location: SourceLocation,
 }
 
@@ -200,6 +209,7 @@ fn ensure_relational_pattern_type(
 /// treat choice arms identically to literal-int arms.
 pub(super) fn parse_choice_variant_pattern(
     token_stream: &mut FileTokens,
+    match_context: &ScopeContext,
     choice_nominal_path: &InternedPath,
     variants: &[ChoiceVariant],
     string_table: &StringTable,
@@ -210,6 +220,7 @@ pub(super) fn parse_choice_variant_pattern(
     let choice_name_display = choice_display_name(choice_nominal_path, string_table);
     let (variant_name, variant_location) = parse_variant_name(
         token_stream,
+        match_context,
         choice_nominal_path,
         &choice_name_display,
         string_table,
@@ -237,14 +248,10 @@ pub(super) fn parse_choice_variant_pattern(
         parse_choice_pattern_captures(token_stream, variant, &choice_name_display, string_table)?;
 
     Ok(ParsedChoicePattern {
-        pattern: MatchPattern::ChoiceVariant {
-            nominal_path: choice_nominal_path.to_owned(),
-            variant: variant_name,
-            tag: variant_index,
-            captures,
-            location: variant_location.clone(),
-        },
+        nominal_path: choice_nominal_path.to_owned(),
         variant: variant_name,
+        tag: variant_index,
+        captures,
         location: variant_location,
     })
 }
@@ -260,7 +267,7 @@ fn parse_choice_pattern_captures(
     variant: &ChoiceVariant,
     _choice_name_display: &str,
     string_table: &StringTable,
-) -> Result<Vec<ChoicePayloadCapture>, CompilerError> {
+) -> Result<Vec<ParsedChoicePayloadCapture>, CompilerError> {
     let variant_name_str = string_table.resolve(variant.id);
 
     match &variant.payload {
@@ -429,12 +436,11 @@ fn parse_choice_pattern_captures(
                     );
                 }
 
-                captures.push(ChoicePayloadCapture {
+                captures.push(ParsedChoicePayloadCapture {
                     field_name: capture_name,
                     field_index,
                     field_type: field_decl.value.data_type.clone(),
                     location: capture_location,
-                    binding_path: None,
                 });
 
                 token_stream.skip_newlines();
@@ -500,6 +506,7 @@ fn parse_choice_pattern_captures(
 /// and makes error messages specific to the syntactic layer they diagnose.
 fn parse_variant_name(
     token_stream: &mut FileTokens,
+    match_context: &ScopeContext,
     choice_nominal_path: &InternedPath,
     choice_name_display: &str,
     string_table: &StringTable,
@@ -514,6 +521,7 @@ fn parse_variant_name(
             if token_stream.current_token_kind() == &TokenKind::DoubleColon {
                 if let Some(expected_choice_name) = choice_nominal_path.name()
                     && first_name != expected_choice_name
+                    && !qualifier_resolves_to_choice(match_context, first_name, choice_nominal_path)
                 {
                     return_rule_error!(
                         format!(
@@ -584,6 +592,21 @@ fn parse_variant_name(
             );
         }
     }
+}
+
+fn qualifier_resolves_to_choice(
+    match_context: &ScopeContext,
+    qualifier: StringId,
+    choice_nominal_path: &InternedPath,
+) -> bool {
+    match_context
+        .get_reference(&qualifier)
+        .is_some_and(|declaration| {
+            matches!(
+                &declaration.value.data_type,
+                DataType::Choices { nominal_path, .. } if nominal_path == choice_nominal_path
+            )
+        })
 }
 
 /// Look up a variant name in the declared choice variant list and return its positional tag.

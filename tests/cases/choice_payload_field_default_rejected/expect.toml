@@ -1,0 +1,5 @@
+[backends.html]
+mode = "failure"
+error_type = "Syntax"
+message_contains = ["Choice payload fields cannot have default values"]
+warnings = "forbid"

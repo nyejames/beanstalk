@@ -4,6 +4,7 @@
 
 pub(crate) mod blocks;
 pub(crate) mod constants;
+pub(crate) mod expression_rewrite;
 pub(crate) mod expressions;
 pub(crate) mod functions;
 pub(crate) mod ids;

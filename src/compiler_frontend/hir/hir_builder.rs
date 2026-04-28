@@ -510,6 +510,29 @@ impl<'a> HirBuilder<'a> {
         self.entry_fragment_vec_local = None;
     }
 
+    pub(super) fn with_temporary_local_bindings<T>(
+        &mut self,
+        bindings: impl IntoIterator<Item = (InternedPath, LocalId)>,
+        f: impl FnOnce(&mut Self) -> Result<T, CompilerError>,
+    ) -> Result<T, CompilerError> {
+        let mut previous_bindings = Vec::new();
+        for (path, local_id) in bindings {
+            let previous = self.locals_by_name.insert(path.clone(), local_id);
+            previous_bindings.push((path, previous));
+        }
+
+        let result = f(self);
+
+        for (path, previous) in previous_bindings.into_iter().rev() {
+            self.locals_by_name.remove(&path);
+            if let Some(local_id) = previous {
+                self.locals_by_name.insert(path, local_id);
+            }
+        }
+
+        result
+    }
+
     pub(crate) fn set_current_block(
         &mut self,
         block_id: BlockId,

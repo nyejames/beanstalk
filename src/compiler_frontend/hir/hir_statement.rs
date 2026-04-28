@@ -32,6 +32,7 @@ use crate::hir_log;
 mod control_flow;
 mod declarations;
 mod loop_lowering;
+mod match_captures;
 mod returns;
 
 impl<'a> HirBuilder<'a> {
@@ -633,7 +634,7 @@ impl<'a> HirBuilder<'a> {
         self.lower_collection_loop_statement_impl(bindings, iterable, body, location)
     }
 
-    fn emit_statement_kind(
+    pub(super) fn emit_statement_kind(
         &mut self,
         kind: HirStatementKind,
         location: &SourceLocation,

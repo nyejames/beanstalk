@@ -1,0 +1,5 @@
+[backends.html]
+mode = "failure"
+error_type = "Syntax"
+message_contains = ["Choice payload fields cannot be marked mutable", "Mutability belongs to bindings"]
+warnings = "forbid"

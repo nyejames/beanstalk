@@ -11,21 +11,16 @@ use crate::compiler_frontend::ast::statements::match_patterns::{
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
-use crate::compiler_frontend::hir::blocks::{HirBlock, HirLocal};
-use crate::compiler_frontend::hir::expressions::{
-    HirExpression, HirExpressionKind, HirVariantCarrier, HirVariantField, ValueKind,
-};
+use crate::compiler_frontend::hir::blocks::HirBlock;
+use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, ValueKind};
 use crate::compiler_frontend::hir::hir_builder::{HirBuilder, LoopTargets};
 use crate::compiler_frontend::hir::hir_datatypes::{HirTypeKind, TypeId};
 use crate::compiler_frontend::hir::ids::{BlockId, LocalId};
 use crate::compiler_frontend::hir::patterns::{HirMatchArm, HirPattern, HirRelationalPatternOp};
-use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::regions::HirRegion;
-use crate::compiler_frontend::hir::statements::HirStatementKind;
 use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::return_hir_transformation_error;
-use rustc_hash::FxHashMap;
 
 fn lower_relational_pattern_op(op: RelationalPatternOp) -> HirRelationalPatternOp {
     match op {
@@ -33,168 +28,6 @@ fn lower_relational_pattern_op(op: RelationalPatternOp) -> HirRelationalPatternO
         RelationalPatternOp::LessThanOrEqual => HirRelationalPatternOp::LessThanOrEqual,
         RelationalPatternOp::GreaterThan => HirRelationalPatternOp::GreaterThan,
         RelationalPatternOp::GreaterThanOrEqual => HirRelationalPatternOp::GreaterThanOrEqual,
-    }
-}
-
-/// Recursively substitute local references in an expression with replacement expressions.
-///
-/// WHY: match guards are evaluated in the parent block (match terminator), before capture
-/// assignments run in the arm body block. By replacing capture local references in guards
-/// with direct `VariantPayloadGet` expressions on the scrutinee, guards can evaluate without
-/// referencing uninitialized locals.
-fn substitute_locals_in_expression(
-    expr: &HirExpression,
-    substitutions: &FxHashMap<LocalId, HirExpression>,
-) -> HirExpression {
-    let direct_match = match &expr.kind {
-        HirExpressionKind::Load(HirPlace::Local(local_id))
-        | HirExpressionKind::Copy(HirPlace::Local(local_id)) => {
-            substitutions.get(local_id).cloned()
-        }
-        _ => None,
-    };
-
-    if let Some(replacement) = direct_match {
-        return replacement;
-    }
-
-    let new_kind = match &expr.kind {
-        HirExpressionKind::Int(_)
-        | HirExpressionKind::Float(_)
-        | HirExpressionKind::Bool(_)
-        | HirExpressionKind::Char(_)
-        | HirExpressionKind::StringLiteral(_) => expr.kind.clone(),
-
-        HirExpressionKind::Load(place) => {
-            HirExpressionKind::Load(substitute_locals_in_place(place, substitutions))
-        }
-        HirExpressionKind::Copy(place) => {
-            HirExpressionKind::Copy(substitute_locals_in_place(place, substitutions))
-        }
-
-        HirExpressionKind::BinOp { left, op, right } => HirExpressionKind::BinOp {
-            left: Box::new(substitute_locals_in_expression(left, substitutions)),
-            op: *op,
-            right: Box::new(substitute_locals_in_expression(right, substitutions)),
-        },
-
-        HirExpressionKind::UnaryOp { op, operand } => HirExpressionKind::UnaryOp {
-            op: *op,
-            operand: Box::new(substitute_locals_in_expression(operand, substitutions)),
-        },
-
-        HirExpressionKind::StructConstruct { struct_id, fields } => {
-            HirExpressionKind::StructConstruct {
-                struct_id: *struct_id,
-                fields: fields
-                    .iter()
-                    .map(|(field_id, value)| {
-                        (
-                            *field_id,
-                            substitute_locals_in_expression(value, substitutions),
-                        )
-                    })
-                    .collect(),
-            }
-        }
-
-        HirExpressionKind::Collection(elements) => HirExpressionKind::Collection(
-            elements
-                .iter()
-                .map(|e| substitute_locals_in_expression(e, substitutions))
-                .collect(),
-        ),
-
-        HirExpressionKind::Range { start, end } => HirExpressionKind::Range {
-            start: Box::new(substitute_locals_in_expression(start, substitutions)),
-            end: Box::new(substitute_locals_in_expression(end, substitutions)),
-        },
-
-        HirExpressionKind::TupleConstruct { elements } => HirExpressionKind::TupleConstruct {
-            elements: elements
-                .iter()
-                .map(|e| substitute_locals_in_expression(e, substitutions))
-                .collect(),
-        },
-
-        HirExpressionKind::TupleGet { tuple, index } => HirExpressionKind::TupleGet {
-            tuple: Box::new(substitute_locals_in_expression(tuple, substitutions)),
-            index: *index,
-        },
-
-        HirExpressionKind::ResultPropagate { result } => HirExpressionKind::ResultPropagate {
-            result: Box::new(substitute_locals_in_expression(result, substitutions)),
-        },
-
-        HirExpressionKind::ResultIsOk { result } => HirExpressionKind::ResultIsOk {
-            result: Box::new(substitute_locals_in_expression(result, substitutions)),
-        },
-
-        HirExpressionKind::ResultUnwrapOk { result } => HirExpressionKind::ResultUnwrapOk {
-            result: Box::new(substitute_locals_in_expression(result, substitutions)),
-        },
-
-        HirExpressionKind::ResultUnwrapErr { result } => HirExpressionKind::ResultUnwrapErr {
-            result: Box::new(substitute_locals_in_expression(result, substitutions)),
-        },
-
-        HirExpressionKind::BuiltinCast { kind, value } => HirExpressionKind::BuiltinCast {
-            kind: *kind,
-            value: Box::new(substitute_locals_in_expression(value, substitutions)),
-        },
-
-        HirExpressionKind::VariantConstruct {
-            carrier,
-            variant_index,
-            fields,
-        } => HirExpressionKind::VariantConstruct {
-            carrier: carrier.clone(),
-            variant_index: *variant_index,
-            fields: fields
-                .iter()
-                .map(|field| HirVariantField {
-                    name: field.name,
-                    value: substitute_locals_in_expression(&field.value, substitutions),
-                })
-                .collect(),
-        },
-
-        HirExpressionKind::VariantPayloadGet {
-            carrier,
-            source,
-            variant_index,
-            field_index,
-        } => HirExpressionKind::VariantPayloadGet {
-            carrier: carrier.clone(),
-            source: Box::new(substitute_locals_in_expression(source, substitutions)),
-            variant_index: *variant_index,
-            field_index: *field_index,
-        },
-    };
-
-    HirExpression {
-        id: expr.id,
-        kind: new_kind,
-        ty: expr.ty,
-        value_kind: expr.value_kind,
-        region: expr.region,
-    }
-}
-
-fn substitute_locals_in_place(
-    place: &HirPlace,
-    substitutions: &FxHashMap<LocalId, HirExpression>,
-) -> HirPlace {
-    match place {
-        HirPlace::Local(_) => place.clone(),
-        HirPlace::Field { base, field } => HirPlace::Field {
-            base: Box::new(substitute_locals_in_place(base, substitutions)),
-            field: *field,
-        },
-        HirPlace::Index { base, index } => HirPlace::Index {
-            base: Box::new(substitute_locals_in_place(base, substitutions)),
-            index: Box::new(substitute_locals_in_expression(index, substitutions)),
-        },
     }
 }
 
@@ -456,50 +289,16 @@ impl<'a> HirBuilder<'a> {
             let lowered_guard = match &arm.guard {
                 Some(guard) => {
                     let guard_expr = self.lower_match_guard_expression(guard)?;
-                    // If this arm has payload captures, substitute capture local references in the
-                    // guard with direct VariantPayloadGet expressions on the scrutinee.
-                    // WHY: guards are evaluated in the parent block (match terminator) before
-                    // capture assignments run in the arm body. Without substitution, the borrow
-                    // checker sees use-before-init on capture locals.
-                    if let MatchPattern::ChoiceVariant {
-                        captures,
-                        tag,
-                        nominal_path,
-                        ..
-                    } = &arm.pattern
-                    {
+                    if let MatchPattern::ChoiceVariant { captures, .. } = &arm.pattern {
                         if !captures.is_empty() && !arm_capture_locals[index].is_empty() {
-                            let DataType::Choices { .. } = &scrutinee.data_type else {
-                                return_hir_transformation_error!(
-                                    "Choice pattern capture used with non-choice scrutinee type",
-                                    self.hir_error_location(location)
-                                );
-                            };
-                            let choice_id = self.resolve_choice_id(nominal_path)?;
-                            let region = self.current_region_or_error(location)?;
-                            let mut substitutions = FxHashMap::default();
-                            for (capture, &local_id) in
-                                captures.iter().zip(arm_capture_locals[index].iter())
-                            {
-                                let field_ty = self.lower_capture_field_type(
-                                    &capture.field_type,
-                                    &capture.location,
-                                )?;
-                                let payload_get = self.make_expression(
-                                    &capture.location,
-                                    HirExpressionKind::VariantPayloadGet {
-                                        carrier: HirVariantCarrier::Choice { choice_id },
-                                        source: Box::new(scrutinee_value.clone()),
-                                        variant_index: *tag,
-                                        field_index: capture.field_index,
-                                    },
-                                    field_ty,
-                                    ValueKind::RValue,
-                                    region,
-                                );
-                                substitutions.insert(local_id, payload_get);
-                            }
-                            Some(substitute_locals_in_expression(&guard_expr, &substitutions))
+                            Some(self.substitute_match_guard_captures(
+                                &guard_expr,
+                                arm,
+                                &arm_capture_locals[index],
+                                scrutinee,
+                                &scrutinee_value,
+                                location,
+                            )?)
                         } else {
                             Some(guard_expr)
                         }
@@ -541,36 +340,16 @@ impl<'a> HirBuilder<'a> {
             let arm_block = arm_blocks[index];
             self.set_current_block(arm_block, location)?;
 
-            // Temporarily restore this arm's capture bindings in locals_by_name so the body
-            // lowering resolves capture names to the correct local IDs. When multiple arms have
-            // captures with the same name, the last-registered local overwrites earlier ones;
-            // restoring per-arm prevents use-before-init borrow checker errors.
-            let mut restored_bindings = Vec::new();
-            if let MatchPattern::ChoiceVariant { captures, .. } = &arm.pattern {
-                for (capture, &local_id) in captures.iter().zip(arm_capture_locals[index].iter()) {
-                    if let Some(binding_path) = &capture.binding_path {
-                        let old = self.locals_by_name.remove(binding_path);
-                        self.locals_by_name.insert(binding_path.clone(), local_id);
-                        restored_bindings.push((binding_path.clone(), old));
-                    }
-                }
-            }
-
-            self.emit_match_arm_capture_assignments(
-                arm,
-                &arm_capture_locals[index],
-                &lowered_scrutinee.value.clone(),
-                scrutinee,
-                location,
-            )?;
-            self.lower_statement_sequence(&arm.body)?;
-
-            for (binding_path, old_local) in restored_bindings {
-                self.locals_by_name.remove(&binding_path);
-                if let Some(old) = old_local {
-                    self.locals_by_name.insert(binding_path, old);
-                }
-            }
+            self.with_arm_capture_bindings(arm, &arm_capture_locals[index], |builder| {
+                builder.emit_match_arm_capture_assignments(
+                    arm,
+                    &arm_capture_locals[index],
+                    &lowered_scrutinee.value,
+                    scrutinee,
+                    location,
+                )?;
+                builder.lower_statement_sequence(&arm.body)
+            })?;
 
             let arm_tail_block = self.current_block_id_or_error(location)?;
             let arm_terminated = self.block_has_explicit_terminator(arm_tail_block, location)?;
@@ -620,163 +399,6 @@ impl<'a> HirBuilder<'a> {
             "Match lowering produced no merge block and no terminated anchor block",
             self.hir_error_location(location)
         )
-    }
-
-    /// Lower a capture field type.
-    ///
-    /// WHAT: delegates to `lower_data_type`. AST type resolution must have resolved all named
-    /// types before HIR lowering; any `NamedType` remaining here is a compiler invariant violation.
-    fn lower_capture_field_type(
-        &mut self,
-        field_type: &DataType,
-        location: &SourceLocation,
-    ) -> Result<TypeId, CompilerError> {
-        self.lower_data_type(field_type, location)
-    }
-
-    /// Register capture locals for one match arm so guards and bodies can reference them.
-    ///
-    /// WHAT: for each capture in a `ChoiceVariant` pattern, allocates a block local and registers
-    /// it in `locals_by_name` so that `lower_expression` can resolve capture references.
-    /// WHY: guards are lowered before body statements but may reference captures; locals must be
-    /// visible during both guard and body lowering.
-    fn register_match_arm_capture_locals(
-        &mut self,
-        arm: &MatchArm,
-        scrutinee_ast: &Expression,
-        location: &SourceLocation,
-    ) -> Result<Vec<LocalId>, CompilerError> {
-        let MatchPattern::ChoiceVariant {
-            nominal_path,
-            captures,
-            ..
-        } = &arm.pattern
-        else {
-            return Ok(Vec::new());
-        };
-
-        if captures.is_empty() {
-            return Ok(Vec::new());
-        }
-
-        let DataType::Choices { .. } = &scrutinee_ast.data_type else {
-            return_hir_transformation_error!(
-                "Choice pattern capture used with non-choice scrutinee type",
-                self.hir_error_location(location)
-            );
-        };
-
-        let _choice_id = self.resolve_choice_id(nominal_path)?;
-        let region = self.current_region_or_error(location)?;
-
-        let mut local_ids = Vec::with_capacity(captures.len());
-        for capture in captures {
-            let field_ty = self.lower_capture_field_type(&capture.field_type, &capture.location)?;
-            let local_id = self.allocate_local_id();
-
-            let binding_path = match &capture.binding_path {
-                Some(path) => path.clone(),
-                None => {
-                    return_hir_transformation_error!(
-                        format!(
-                            "Capture '{}' is missing its binding path; AST branching should have set it",
-                            self.string_table.resolve(capture.field_name)
-                        ),
-                        self.hir_error_location(&capture.location)
-                    );
-                }
-            };
-
-            let block_id = self.current_block_id_or_error(&capture.location)?;
-            self.register_local_in_block(
-                block_id,
-                HirLocal {
-                    id: local_id,
-                    ty: field_ty,
-                    mutable: false,
-                    region,
-                    source_info: Some(capture.location.clone()),
-                },
-                &capture.location,
-            )?;
-
-            self.locals_by_name.insert(binding_path.clone(), local_id);
-            self.side_table.bind_local_name(local_id, binding_path);
-            local_ids.push(local_id);
-        }
-
-        Ok(local_ids)
-    }
-
-    /// Emit `Assign` statements that materialize choice payload captures at the start of an arm block.
-    ///
-    /// WHAT: for each capture, emits `Assign(local, VariantPayloadGet(...))` using the already-
-    /// registered local from `register_match_arm_capture_locals`.
-    /// WHY: keeping extraction in the arm block (not the JS match condition) preserves the HIR
-    /// contract: the match terminator only dispatches; side effects live in blocks.
-    fn emit_match_arm_capture_assignments(
-        &mut self,
-        arm: &MatchArm,
-        capture_locals: &[LocalId],
-        scrutinee_value: &HirExpression,
-        scrutinee_ast: &Expression,
-        location: &SourceLocation,
-    ) -> Result<(), CompilerError> {
-        let MatchPattern::ChoiceVariant {
-            nominal_path,
-            tag,
-            captures,
-            ..
-        } = &arm.pattern
-        else {
-            return Ok(());
-        };
-
-        if captures.is_empty() {
-            return Ok(());
-        }
-
-        debug_assert_eq!(
-            captures.len(),
-            capture_locals.len(),
-            "capture count must match registered local count"
-        );
-
-        let DataType::Choices { .. } = &scrutinee_ast.data_type else {
-            return_hir_transformation_error!(
-                "Choice pattern capture used with non-choice scrutinee type",
-                self.hir_error_location(location)
-            );
-        };
-
-        let choice_id = self.resolve_choice_id(nominal_path)?;
-        let region = self.current_region_or_error(location)?;
-
-        for (capture, &local_id) in captures.iter().zip(capture_locals.iter()) {
-            let field_ty = self.lower_capture_field_type(&capture.field_type, &capture.location)?;
-            let payload_get = self.make_expression(
-                &capture.location,
-                HirExpressionKind::VariantPayloadGet {
-                    carrier: HirVariantCarrier::Choice { choice_id },
-                    source: Box::new(scrutinee_value.clone()),
-                    variant_index: *tag,
-                    field_index: capture.field_index,
-                },
-                field_ty,
-                ValueKind::RValue,
-                region,
-            );
-
-            self.emit_statement_kind(
-                HirStatementKind::Assign {
-                    target: HirPlace::Local(local_id),
-                    value: payload_get,
-                },
-                &capture.location,
-            )?;
-        }
-
-        Ok(())
     }
 
     /// Validate and lower a match arm pattern, rejecting non-literal expressions.

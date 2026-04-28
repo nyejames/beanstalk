@@ -18,8 +18,8 @@ use crate::compiler_frontend::ast::statements::condition_validation::{
     ensure_if_statement_condition, ensure_match_guard_condition,
 };
 use crate::compiler_frontend::ast::statements::match_patterns::{
-    MatchArm, MatchPattern, normalized_subject_type, parse_choice_variant_pattern,
-    parse_non_choice_pattern,
+    ChoicePayloadCapture, MatchArm, MatchPattern, ParsedChoicePattern, normalized_subject_type,
+    parse_choice_variant_pattern, parse_non_choice_pattern,
 };
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -425,21 +425,31 @@ fn parse_case_arm(
     let normalized_subject_type = normalized_subject_type(&subject.data_type);
 
     // Choice scrutinees resolve symbols to variants; all other scrutinees stay literal-only.
-    let (mut pattern, matched_choice_variant, pattern_location) = match normalized_subject_type {
-        DataType::Choices {
-            nominal_path,
-            variants,
-        } => {
-            let parsed =
-                parse_choice_variant_pattern(token_stream, nominal_path, variants, string_table)?;
-            (parsed.pattern, Some(parsed.variant), parsed.location)
-        }
-        subject_type => {
-            let pattern = parse_non_choice_pattern(token_stream, subject_type, string_table)?;
-            let location = pattern.location().to_owned();
-            (pattern, None, location)
-        }
-    };
+    let (pattern, matched_choice_variant, pattern_location, arm_scope) =
+        match normalized_subject_type {
+            DataType::Choices {
+                nominal_path,
+                variants,
+            } => {
+                let parsed = parse_choice_variant_pattern(
+                    token_stream,
+                    match_context,
+                    nominal_path,
+                    variants,
+                    string_table,
+                )?;
+                let matched_choice_variant = Some(parsed.variant);
+                let pattern_location = parsed.location.clone();
+                let (arm_scope, pattern) =
+                    build_arm_scope_with_choice_captures(match_context, parsed, string_table)?;
+                (pattern, matched_choice_variant, pattern_location, arm_scope)
+            }
+            subject_type => {
+                let pattern = parse_non_choice_pattern(token_stream, subject_type, string_table)?;
+                let location = pattern.location().to_owned();
+                (pattern, None, location, match_context.clone())
+            }
+        };
 
     if token_stream.current_token_kind() == &TokenKind::TypeParameterBracket {
         return Err(deferred_feature_rule_error(
@@ -473,9 +483,6 @@ fn parse_case_arm(
             }
         );
     }
-
-    // Build an arm scope that includes capture bindings so they are visible in the guard and body.
-    let arm_scope = build_arm_scope_with_captures(match_context, &mut pattern, string_table)?;
 
     let guard = parse_match_guard(token_stream, &arm_scope, string_table)?;
 
@@ -513,30 +520,22 @@ fn parse_case_arm(
     })
 }
 
-/// Build a scope context for one match arm, injecting choice payload captures as local declarations.
+/// Build a choice arm scope and final pattern with fully resolved capture binding paths.
 ///
-/// WHAT: clones the parent match context and adds `Declaration` entries for each capture binding.
+/// WHAT: clones the parent match context and adds `Declaration` entries for each parsed capture.
 /// WHY: captures must be visible in both the guard and the body, but must not leak to other arms.
 ///
 /// Validates:
 /// - No capture name shadows an existing visible local (Beanstalk no-shadowing rule).
-fn build_arm_scope_with_captures(
+fn build_arm_scope_with_choice_captures(
     match_context: &ScopeContext,
-    pattern: &mut MatchPattern,
+    parsed: ParsedChoicePattern,
     string_table: &mut StringTable,
-) -> Result<ScopeContext, CompilerError> {
+) -> Result<(ScopeContext, MatchPattern), CompilerError> {
     let mut arm_scope = match_context.clone();
+    let mut captures = Vec::with_capacity(parsed.captures.len());
 
-    let captures = match pattern {
-        MatchPattern::ChoiceVariant { captures, .. } => captures,
-        _ => return Ok(arm_scope),
-    };
-
-    if captures.is_empty() {
-        return Ok(arm_scope);
-    }
-
-    for capture in captures.iter_mut() {
+    for capture in parsed.captures {
         let capture_name = capture.field_name;
 
         // Enforce no-shadowing: the capture name must not collide with any visible local.
@@ -568,10 +567,25 @@ fn build_arm_scope_with_captures(
         };
 
         arm_scope.add_var(declaration);
-        capture.binding_path = Some(binding_path);
+        captures.push(ChoicePayloadCapture {
+            field_name: capture.field_name,
+            field_index: capture.field_index,
+            field_type: capture.field_type,
+            binding_path,
+            location: capture.location,
+        });
     }
 
-    Ok(arm_scope)
+    Ok((
+        arm_scope,
+        MatchPattern::ChoiceVariant {
+            nominal_path: parsed.nominal_path,
+            variant: parsed.variant,
+            tag: parsed.tag,
+            captures,
+            location: parsed.location,
+        },
+    ))
 }
 
 /// Verify that a match statement covers all possible values.
