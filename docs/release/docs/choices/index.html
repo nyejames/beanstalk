@@ -372,7 +372,7 @@ body {
     <span class='bst-code-comment'>-- Payload variant construction</span>
     error <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Response</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Err</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;bad&quot;</span><span class='bst-code-parenthesis'>)</span>
     pending <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Response</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Pending</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>3</span>, message <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;waiting&quot;</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>    Payload fields are accessed only through pattern matching.</p><pre style="
+    </code></pre><p>    Payload fields are accessed only through pattern matching.     Captures use the declared field names, and they may be renamed with `as` for the arm-local binding.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
         border-radius: 5px;
@@ -383,7 +383,7 @@ body {
     <span class='bst-code-keyword'>if</span> response is<span class='bst-code-operator'>:</span>
         case <span class='bst-code-struct'>Success</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;done&quot;</span><span class='bst-code-parenthesis'>)</span>
         case <span class='bst-code-struct'>Err</span><span class='bst-code-parenthesis'>(</span>message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span>message<span class='bst-code-parenthesis'>)</span>
-        case <span class='bst-code-struct'>Pending</span><span class='bst-code-parenthesis'>(</span>retry_count, message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span>message<span class='bst-code-parenthesis'>)</span>
+        case <span class='bst-code-struct'>Pending</span><span class='bst-code-parenthesis'>(</span>retry_count, message <span class='bst-code-keyword'>as</span> pending_message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span>pending_message<span class='bst-code-parenthesis'>)</span>
     ;
     </code></pre><h2>Invalid syntax</h2><p>    Unit variants are values, not constructor calls.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
@@ -405,17 +405,7 @@ body {
     "><code class='codeblock'>
     <span class='bst-code-comment'>-- Invalid: shorthand payload declaration</span>
     <span class='bst-code-struct'>Response</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Err</span> <span class='bst-code-struct'>String,</span> <span class='bst-code-struct'>Success;</span>
-    </code></pre><p>    Capture rename syntax is deferred.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12); 
-        padding-left: 1em; 
-        border-radius: 5px;
-        max-width: 100%; 
-        white-space: pre; 
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-comment'>-- Invalid: capture rename syntax is not supported yet</span>
-    case <span class='bst-code-struct'>Err</span><span class='bst-code-parenthesis'>(</span>text <span class='bst-code-keyword'>as</span> message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span>text<span class='bst-code-parenthesis'>)</span>
-    </code></pre><h2>Deferred features</h2><ul><li>Direct payload field access (e.g. `response.message`).</li><li>Generic choice declarations.</li><li>Recursive choice declarations.</li><li>Payload structural equality.</li><li>Capture rename syntax in patterns.</li><li>Nested payload patterns and nested exhaustiveness.</li></ul></section>
+    </code></pre><h2>Deferred features</h2><ul><li>Direct payload field access (e.g. `response.message`).</li><li>Generic choice declarations.</li><li>Recursive choice declarations.</li><li>Payload structural equality.</li><li>Nested payload patterns and nested exhaustiveness.</li></ul></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

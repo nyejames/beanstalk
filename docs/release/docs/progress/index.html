@@ -382,6 +382,28 @@ body {
             
 
     <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Entry files and implicit start</td>
+     <td style="padding: 0.2em 0.5em;"> Supported</td>
+     <td style="padding: 0.2em 0.5em;"> Broad entry-start, dependency-sort, non-entry top-level rejection, imported-start, and fragment-order coverage.</td>
+     <td style="padding: 0.2em 0.5em;"> Frontend / HTML builder</td>
+     <td style="padding: 0.2em 0.5em;"> Only the module entry file runs top-level runtime code. Non-entry top-level executable code and runtime templates are rejected. The implicit <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">start</span> function is build-system-owned and is not an importable/callable user declaration.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Variables, assignment, and scoped blocks</td>
+     <td style="padding: 0.2em 0.5em;"> Supported</td>
+     <td style="padding: 0.2em 0.5em;"> Broad declaration, reassignment, mutability, scope, shadowing, undefined-mutation, block-scope, and diagnostics coverage.</td>
+     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;"> Mutable writes require mutable places. <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">block:</span> creates a lexical/control-flow scope. Bare labeled scopes remain rejected.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;"> Control flow</td>
      <td style="padding: 0.2em 0.5em;"> Supported</td>
      <td style="padding: 0.2em 0.5em;"> Broad parser, HIR, integration, dispatcher, and structured-lowering coverage.</td>
@@ -410,7 +432,7 @@ body {
      <td style="padding: 0.2em 0.5em;"> Supported</td>
      <td style="padding: 0.2em 0.5em;"> Broad integration coverage with targeted parser and receiver-catalog unit coverage.</td>
      <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
-     <td style="padding: 0.2em 0.5em;"> More field-mutation and receiver runtime regressions are useful, but this is not an Alpha blocker if current tests stay green.</td>
+     <td style="padding: 0.2em 0.5em;"> Field mutation, nested field mutation, nominal mismatch, constructor named arguments, receiver borrow behavior, scalar receiver methods, and cross-file exported receiver use are covered. Keep Wasm receiver behavior experimental.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -446,11 +468,78 @@ body {
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Constants and compile-time folding</td>
+     <td style="padding: 0.2em 0.5em;"> Supported</td>
+     <td style="padding: 0.2em 0.5em;"> Broad constant declaration, const-only validation, cross-file soft dependency, folding, overflow, const-template, and const-record coverage.</td>
+     <td style="padding: 0.2em 0.5em;"> Frontend / HTML builder</td>
+     <td style="padding: 0.2em 0.5em;"> Runtime expressions and host calls in constants are rejected. Module constants remain compile-time metadata rather than runtime top-level statements.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Type aliases</td>
+     <td style="padding: 0.2em 0.5em;"> Supported</td>
+     <td style="padding: 0.2em 0.5em;"> Broad alias declaration, collection/option/import/external target, visibility, cycle, duplicate, value-misuse, constructor-misuse, and import-alias interaction coverage.</td>
+     <td style="padding: 0.2em 0.5em;"> Frontend-owned</td>
+     <td style="padding: 0.2em 0.5em;"> Type aliases are transparent and annotation-only. Imported aliases are file-local; exporting an imported type under a public name requires declaring a real exported type alias.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Arithmetic, numeric casts, and explicit copy</td>
+     <td style="padding: 0.2em 0.5em;"> Supported</td>
+     <td style="padding: 0.2em 0.5em;"> Broad arithmetic, precedence, integer division, contextual numeric promotion, compound assignment, builtin cast, runtime fallback, explicit copy, and JS helper coverage.</td>
+     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;"> Regular <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">/</span> returns <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Float</span>. <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">//</span> requires <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Int</span>. <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Int(...)</span> and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Float(...)</span> return <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Result</span> values and must be handled. <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">^</span> exists in frontend/JS lowering but has thin coverage; Wasm exponent support remains outside Alpha.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;"> Type checking and coercion</td>
      <td style="padding: 0.2em 0.5em;"> Supported</td>
      <td style="padding: 0.2em 0.5em;"> Broad type compatibility, contextual promotion, strict expression typing, call argument, and declaration coverage.</td>
      <td style="padding: 0.2em 0.5em;"> Frontend-owned</td>
      <td style="padding: 0.2em 0.5em;"> Keep strict expression typing separate from contextual declaration / return coercion.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> String coercion and IO/template boundaries</td>
+     <td style="padding: 0.2em 0.5em;"> Supported</td>
+     <td style="padding: 0.2em 0.5em;"> Broad valid string-content coercion plus IO/template rejection coverage for structs, collections, options, results, and multiple-return values.</td>
+     <td style="padding: 0.2em 0.5em;"> Frontend / JS</td>
+     <td style="padding: 0.2em 0.5em;"> Template heads and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">io</span> accept only supported string-content values. Complex values must be handled, extracted, or converted before string-boundary use.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Borrow validation and ownership analysis</td>
+     <td style="padding: 0.2em 0.5em;"> Supported</td>
+     <td style="padding: 0.2em 0.5em;"> Broad borrow, aliasing, mutable/exclusive access, use-after-move, branch merge, loop, short-circuit, lifetime, drop-site, and adversarial coverage.</td>
+     <td style="padding: 0.2em 0.5em;"> HIR analysis / JS GC baseline</td>
+     <td style="padding: 0.2em 0.5em;"> Borrow validation enforces exclusivity and move-safety, while ownership/drop facts remain advisory for GC-only JS. Do not make ownership semantic; GC fallback remains the language baseline.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -744,6 +833,91 @@ body {
         font-family: var(--bst-font-family-monospace);
     ">trait_this_reserved</span></td>
      <td style="padding: 0.2em 0.5em;"> Syntax is reserved for future design work.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Async / concurrency scopes</td>
+     <td style="padding: 0.2em 0.5em;"> Deferred</td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">async_block_reserved</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">async_keyword_declaration_rejected</span></td>
+     <td style="padding: 0.2em 0.5em;"> Future async syntax is design-only. Current <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">async</span> statement and declaration positions are rejected with structured diagnostics.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Checked scopes</td>
+     <td style="padding: 0.2em 0.5em;"> Deferred</td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">checked_block_reserved</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">checked_keyword_declaration_rejected</span></td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">checked</span> is reserved and rejected cleanly until checked/effect semantics are designed.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Labeled scopes</td>
+     <td style="padding: 0.2em 0.5em;"> Rejected / Reserved</td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">labeled_scope_rejected</span></td>
+     <td style="padding: 0.2em 0.5em;"> Bare <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">label:</span> syntax is not supported. Use <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">block:</span> for ordinary scoped blocks.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Legacy / foreign-language syntax</td>
+     <td style="padding: 0.2em 0.5em;"> Rejected / Reserved</td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">typescript_style_declaration_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">diagnostic_statement_keyword_fn</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">diagnostic_statement_keyword_let</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">diagnostic_statement_keyword_match</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">diagnostic_statement_comment_slash_slash</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">diagnostic_expression_double_equal</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">diagnostic_expression_bang_equal</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">diagnostic_expression_and_and</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">diagnostic_expression_or_or</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">diagnostic_expression_bang_negation</span></td>
+     <td style="padding: 0.2em 0.5em;"> These are diagnostic-quality fixtures only. Do not treat compatibility syntax as planned Alpha surface.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -1058,13 +1232,10 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;"> Choice tagged/default declarations</td>
      <td style="padding: 0.2em 0.5em;"> Deferred</td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
+     <td style="padding: 0.2em 0.5em;"> No canonical tagged-declaration case yet; <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">choice_tagged_decl_deferred</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">choice_default_decl_deferred</span></td>
+    ">choice_default_decl_deferred</span> covers default declaration rejection.</td>
      <td style="padding: 0.2em 0.5em;"> These belong to the fuller tagged-union design, not the current Alpha subset.</td>
         </tr>
 
