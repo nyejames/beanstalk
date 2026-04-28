@@ -1,0 +1,1179 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <title>Projects, Modules and HTML Builder | Beanstalk</title>
+    <meta name="description" content="How Beanstalk projects are structured, how modules are discovered, and how the HTML project builder emits pages.">
+    <style>
+/*!
+  BS CSS CORE (absolute basics CSS reset)
+  This is inspired by Pico.css, but is an even more minimal reset.
+
+  Actual style systems are intended to be built on top of this easily.
+*/
+
+:root {
+  color-scheme: light dark;
+
+  --bst-font-size: 100%;
+
+  --bst-font-family-emoji: "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --bst-font-family-sans-serif: system-ui, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, Helvetica, Arial, "Helvetica Neue", sans-serif, var(--bst-font-family-emoji);
+  --bst-font-family-monospace: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace, var(--bst-font-family-emoji);
+  --bst-font-family: var(--bst-font-family-sans-serif);
+
+  --bst-line-height: 1.5;
+  --bst-font-weight: 400;
+  --bst-font-size: 100%;
+  --bst-text-underline-offset: 0.1rem;
+  --bst-border-radius: 0.25rem;
+  --bst-border-width: 0.0625rem;
+  --bst-outline-width: 0.125rem;
+  --bst-transition: 0.2s ease-in-out;
+
+  --bst-spacing: 1rem;
+  --bst-spacing-small: 0.5rem;
+
+  /* Code block colours */
+  --comment-dark: #838c86;
+  --comment-light: #759061;
+  --keyword-dark: #ea943e;
+  --keyword-light: #ad590e;
+  --string-dark: #4fba11;
+  --string-light: #007130;
+  --number-dark: #96b5ed;
+  --number-light: #073f85;
+  --operator-dark: #9ec1ff;
+  --operator-light: #2b476a;
+  --struct-dark: #a17fbd;
+  --struct-light: #ac2187;
+  --type-dark: #54c5d3;
+  --type-light: #0d8db3;
+  --parenthesis-dark: #bcac52;
+  --parenthesis-light: #ad7e0d;
+}
+
+/* where: is used here for less specificity, allowing easier overriding */
+:where(:root) {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  -moz-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  font-weight: var(--bst-font-weight);
+  font-size: var(--bst-font-size);
+  line-height: var(--bst-line-height);
+  font-family: var(--bst-font-family);
+  text-underline-offset: var(--bst-text-underline-offset);
+  text-rendering: optimizeLegibility;
+  overflow-wrap: break-word;
+  -moz-tab-size: 4;
+  -o-tab-size: 4;
+  tab-size: 4;
+
+}
+
+@media (min-width: 576px) {
+  :root {
+    --bst-font-size: 106.25%;
+  }
+}
+@media (min-width: 768px) {
+  :root {
+    --bst-font-size: 112.5%;
+  }
+}
+@media (min-width: 1024px) {
+  :root {
+    --bst-font-size: 118.75%;
+  }
+}
+@media (min-width: 1280px) {
+  :root {
+    --bst-font-size: 125%;
+  }
+}
+@media (min-width: 1536px) {
+  :root {
+    --bst-font-size: 131.25%;
+  }
+}
+
+body {
+  width: 100%;
+  margin: 0;
+}
+
+/* Code Style */
+.codeblock {
+  color: #222222;
+  color: light-dark(#222222, #ddd);
+  font-family: var(--bst-font-family-monospace);
+  white-space: break-spaces;
+  tab-size: 4;
+}
+.bs-code-comment,
+.bst-code-comment {
+  color: var(--comment-light);
+  color:light-dark(var(--comment-light), var(--comment-dark))
+}
+.bs-code-keyword,
+.bst-code-keyword {
+  color: var(--keyword-light);
+  color:light-dark( var(--keyword-light), var(--keyword-dark))
+}
+.bs-code-string,
+.bst-code-string {
+  color: var(--string-light);
+  color:light-dark( var(--string-light), var(--string-dark))
+}
+.bs-code-number,
+.bst-code-number {
+  color: var(--number-light);
+  color:light-dark( var(--number-light), var(--number-dark))
+}
+.bs-code-operator,
+.bst-code-operator {
+  color: var(--operator-light);
+  color:light-dark( var(--operator-light), var(--operator-dark))
+}
+.bs-code-struct,
+.bst-code-struct {
+  color: var(--struct-light);
+  color:light-dark( var(--struct-light), var(--struct-dark))
+}
+.bs-code-type,
+.bst-code-type {
+  color: var(--type-light);
+  color:light-dark( var(--type-light), var(--type-dark))
+}
+.bs-code-parenthesis,
+.bst-code-parenthesis {
+  color: var(--parenthesis-light);
+  color:light-dark( var(--parenthesis-light), var(--parenthesis-dark))
+}
+
+/* BASIC CSS RESET STUFF */
+
+/**
+ * Document
+ * Content-box & Responsive typography
+*/
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  background-repeat: no-repeat;
+}
+
+::before,
+::after {
+  text-decoration: inherit;
+  vertical-align: inherit;
+}
+    </style>
+    <style>body {
+        background-color: light-dark(hsl(125, 67%, 97%), hsl(203, 68%, 8%));
+    }
+
+    a {
+        color: light-dark(hsl(111, 96%, 26%), hsl(235, 87%, 67%));
+    }
+
+    .container {
+        width: 100%;
+        margin-right: auto;
+        margin-left: auto;
+        padding-right: var(--bst-spacing-small);
+        padding-left: var(--bst-spacing-small);
+    }
+
+    @media (min-width: 576px) {
+        .container {
+            max-width: 510px;
+            padding-right: var(--bst-spacing);
+            padding-left: var(--bst-spacing);
+            padding-bottom: var(--bst-spacing);
+        }
+    }
+
+    @media (min-width: 768px) {
+        .container {
+            max-width: 700px;
+        }
+    }
+
+    @media (min-width: 1024px) {
+        .container {
+            max-width: 950px;
+        }
+    }
+
+    @media (min-width: 1280px) {
+        .container {
+            max-width: 1200px;
+        }
+    }
+
+    @media (min-width: 1536px) {
+        .container {
+            max-width: 1450px;
+        }
+    }
+
+    .bst-nav-1 {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom-color: grey;
+        border-bottom-style: solid;
+        border-bottom-width: 1px;
+        padding: 0rem 2rem 0rem 2rem;
+    }</style>
+
+  </head>
+  <body style="">
+    <nav class="bst-nav-1" aria-label="Primary">
+        <a
+            href="/beanstalk/"
+            style="
+                display: flex;
+                align-items: center;
+                gap: 0.6rem;
+                padding: 0.9rem 0;
+                color: light-dark(var(--bst-text-lightmode), var(--bst-text-darkmode));
+                text-decoration: none;
+                font-weight: 700;
+                letter-spacing: 0.04rem;
+            "
+        >
+            <span
+                aria-hidden="true"
+                style="
+                    font-family: var(--bst-font-family-emoji);
+                    font-size: 1.4rem;
+                    line-height: 1;
+                "
+            >🌱</span>
+
+            <span>Beanstalk</span>
+        </a>
+
+        <div
+            style="
+                display: flex;
+                align-items: center;
+                gap: 1rem;
+            "
+        >
+            <a
+                href="/beanstalk/docs/"
+                style="
+                    color: light-dark(var(--bst-text-lightmode), var(--bst-text-darkmode));
+                    text-decoration: none;
+                    font-weight: 500;
+                    padding: 0.35rem 0;
+                "
+            >
+                Docs
+            </a>
+
+            <a
+                href="https://github.com/nyejames/beanstalk"
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Beanstalk GitHub repository"
+                style="
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: light-dark(var(--bst-text-lightmode), var(--bst-text-darkmode));
+                    padding: 0.35rem 0;
+                "
+            >
+                <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 16 16"
+                    width="22"
+                    height="22"
+                    fill="currentColor"
+                    aria-hidden="true"
+                >
+                    <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38
+                    0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52
+                    -.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07
+                    -1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21
+                    2.2.82a7.65 7.65 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82
+                    1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2
+                    0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
+                </svg>
+            </a>
+        </div>
+    </nav>
+     <h1 style="font-size: 2em;text-align: center;"> PROJECTS, MODULES AND HTML BUILDER</h1>
+    <section class="container"><p>Beanstalk projects are built around a small set of conventions:</p><ul><li>a project root with a <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#config.bst</span> file</li><li>an entry root, usually <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">src</span></li><li>module entry files named like <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#page.bst</span></li><li>normal <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">.bst</span> files that provide declarations for module entries</li><li>builder-owned output folders such as <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">dev</span> and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">release</span></li></ul><p>At this stage of development, this is the only supported project structure to rely on. The rules are deliberately narrow so the compiler, dev server, and HTML builder can stay predictable while the language is still evolving.</p></section>
+    <section class="container"><h1>The modular build system</h1><p>The Beanstalk compiler frontend is shared by every project builder. It discovers modules, parses files, type checks code, lowers to HIR, and runs borrow validation. A project builder then decides how those compiled modules become real output files.</p><p>The current user-facing project builder is the HTML project builder. It consumes each compiled module and emits one HTML page per module entry file.</p><p>This split matters because Beanstalk is not designed as a single hard-coded web compiler. The same frontend can later feed other builders, such as a Wasm module builder, a documentation builder, or project-specific tooling.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+            
+    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Layer</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Responsibility</th> 
+    </tr>
+
+            
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Compiler frontend</td>
+     <td style="padding: 0.2em 0.5em;"> Discovers modules, resolves imports, checks types, lowers code, validates borrowing, and produces backend-ready module data.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Project builder</td>
+     <td style="padding: 0.2em 0.5em;"> Interprets compiled modules for a specific project type and decides which output files to generate.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> HTML project builder</td>
+     <td style="padding: 0.2em 0.5em;"> Treats each module entry as a page and emits HTML files, with runtime code embedded as JavaScript by default.</td>
+        </tr>
+        
+    </table></section>
+    <section class="container"><h1>Project root and #config.bst</h1><p>A normal HTML project has a <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#config.bst</span> file at the project root. Config files use ordinary Beanstalk top-level constant syntax.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-operator'>#</span> project <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;html&quot;</span>
+    <span class='bst-code-operator'>#</span> entry_root <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;src&quot;</span>
+    <span class='bst-code-operator'>#</span> dev_folder <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;dev&quot;</span>
+    <span class='bst-code-operator'>#</span> output_folder <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;release&quot;</span>
+    <span class='bst-code-operator'>#</span> page_url_style <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;trailing_slash&quot;</span>
+    <span class='bst-code-operator'>#</span> redirect_index_html <span class='bst-code-operator'>=</span> true
+    <span class='bst-code-operator'>#</span> name <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;html_project&quot;</span>
+    <span class='bst-code-operator'>#</span> version <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;0.1.0&quot;</span>
+    <span class='bst-code-operator'>#</span> author <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;&quot;</span>
+    <span class='bst-code-operator'>#</span> license <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;MIT&quot;</span>
+
+    <span class='bst-code-operator'>#</span> origin <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;/beanstalk&quot;</span>
+    <span class='bst-code-operator'>#</span> html_lang <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;en&quot;</span>
+    <span class='bst-code-operator'>#</span> html_title_postfix <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot; | Beanstalk&quot;</span>
+    <span class='bst-code-operator'>#</span> root_folders <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span>
+        <span class='bst-code-operator'>@</span>lib,
+        <span class='bst-code-operator'>@</span>assets,
+    <span class='bst-code-parenthesis'>}</span>
+    </code></pre><p>Important settings:</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+            
+    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Setting</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Meaning</th> 
+    </tr>
+
+            
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#project</span></td>
+     <td style="padding: 0.2em 0.5em;"> Selects the project type. For the documentation site and current web projects, use <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">"html"</span>.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#entry_root</span></td>
+     <td style="padding: 0.2em 0.5em;"> The source folder that is searched for module entry files. Usually <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">"src"</span>.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#dev_folder</span></td>
+     <td style="padding: 0.2em 0.5em;"> Where development builds are written. The dev server serves from here.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#output_folder</span></td>
+     <td style="padding: 0.2em 0.5em;"> Where release builds are written when <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">--release</span> is used.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#root_folders</span></td>
+     <td style="padding: 0.2em 0.5em;"> Extra top-level project folders that non-relative imports can resolve through before falling back to the entry root.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> HTML-specific settings</td>
+     <td style="padding: 0.2em 0.5em;"> Settings such as <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#origin</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#html_lang</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#html_title_postfix</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#page_url_style</span>, and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#redirect_index_html</span> are interpreted by the HTML builder.</td>
+        </tr>
+        
+    </table><p>Config is loaded before module discovery. That means <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#entry_root</span> and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#root_folders</span> shape how the project is searched and how imports resolve.</p></section>
+    <section class="container"><h1>Module entry files</h1><p>A module entry file is a Beanstalk file whose file name starts with <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#</span>. In directory projects, the compiler searches the configured entry root for <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#*.bst</span> files.</p><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#config.bst</span> is not a module entry.</p><p>Examples:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    src<span class='bst-code-operator'>/</span><span class='bst-code-operator'>#</span>page.bst              <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> module entry
+    src<span class='bst-code-operator'>/</span>docs<span class='bst-code-operator'>/</span><span class='bst-code-operator'>#</span>page.bst         <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> module entry
+    src<span class='bst-code-operator'>/</span>docs<span class='bst-code-operator'>/</span>basics<span class='bst-code-operator'>/</span><span class='bst-code-operator'>#</span>page.bst  <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> module entry
+    src<span class='bst-code-operator'>/</span>styles<span class='bst-code-operator'>/</span>docs.bst        <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> normal source file
+    <span class='bst-code-operator'>#</span>config.bst                <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> project config, not a module entry
+    </code></pre><p>Only module entry files have top-level runtime execution. The compiler treats the entry file&#39;s top-level runtime code as an implicit <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">start</span> function for that module.</p><p>Normal source files can contain imports, functions, structs, choices, type aliases, and constants. They should not rely on top-level runtime statements being executed by themselves.</p></section>
+    <section class="container"><h1>Builder-owned meaning of # file names</h1><p>The compiler discovers <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#*.bst</span> files as module entries. The project builder decides what those entries mean.</p><p>The HTML project builder currently treats them as page entries. The file name and folder decide the output route.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+            
+    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Entry file</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> HTML output path</th> 
+    </tr>
+
+            
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">src/#page.bst</span></td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">index.html</span></td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">src/docs/#page.bst</span></td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">docs/index.html</span></td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">src/docs/basics/#page.bst</span></td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">docs/basics/index.html</span></td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">src/#about.bst</span></td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">about/index.html</span></td>
+        </tr>
+        
+    </table><p>This gives pages stable folder-backed routes. A <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#page.bst</span> file means &quot;the index page for this folder&quot;. Other <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#name.bst</span> files become named routes under the same folder.</p></section>
+    <section class="container"><h1>Top-level templates in page entries</h1><p>Top-level templates are special. In the HTML project builder, direct top-level templates in a module entry file become page fragments.</p><p>There are two forms:</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+            
+    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Form</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Meaning</th> 
+    </tr>
+
+            
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#[...]</span></td>
+     <td style="padding: 0.2em 0.5em;"> A top-level const template. It must fold at compile time and is emitted as static HTML.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">[...]</span></td>
+     <td style="padding: 0.2em 0.5em;"> A top-level runtime template. It is evaluated by the module's implicit start function and inserted into the page at runtime.</td>
+        </tr>
+        
+    </table><p>Example:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    import <span class='bst-code-operator'>@</span>styles<span class='bst-code-operator'>/</span>docs <span class='bst-code-parenthesis'>{</span>navbar, section, theme_head<span class='bst-code-parenthesis'>}</span>
+
+    <span class='bst-code-operator'>#</span> page_title <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Home&quot;</span>
+    <span class='bst-code-operator'>#</span> page_description <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Welcome page.&quot;</span>
+    <span class='bst-code-operator'>#</span> page_head <span class='bst-code-operator'>=</span> theme_head
+
+    <span class='bst-code-comment'>-- Const fragments are folded by the compiler and emitted directly.</span>
+    <span class='bst-code-operator'>#</span><span class='bst-code-parenthesis'>[</span>navbar<span class='bst-code-parenthesis'>]</span>
+
+    <span class='bst-code-operator'>#</span><span class='bst-code-parenthesis'>[</span>section, <span class='bst-code-operator'>$</span>markdown<span class='bst-code-operator'>:</span>
+        <span class='bst-code-operator'>#</span> <span class='bst-code-struct'>Welcome</span>
+        <span class='bst-code-struct'>This</span> part is static.
+    <span class='bst-code-parenthesis'>]</span>
+
+    name <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Beanstalk&quot;</span>
+
+    <span class='bst-code-comment'>-- Runtime fragments are produced by the implicit start function.</span>
+    <span class='bst-code-parenthesis'>[</span>section, <span class='bst-code-operator'>$</span>markdown<span class='bst-code-operator'>:</span>
+        <span class='bst-code-struct'>Runtime</span> hello from <span class='bst-code-parenthesis'>[</span>name<span class='bst-code-parenthesis'>]</span>.
+    <span class='bst-code-parenthesis'>]</span>
+    </code></pre><p>The HTML builder preserves source order between static and runtime fragments. Static fragments are emitted immediately. Runtime fragments use generated slots in the HTML document, then the embedded JavaScript calls the module start function and fills those slots.</p><p>Do not put page-producing top-level templates in helper files. Helper files should export reusable declarations, then page entries should import and use them.</p></section>
+    <section class="container"><h1>Visibility and exports with #</h1><p>The <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#</span> prefix on top-level declarations controls module visibility.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+            
+    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Declaration kind</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Meaning of #</th> 
+    </tr>
+
+            
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Variable declaration</td>
+     <td style="padding: 0.2em 0.5em;"> Creates an exported compile-time constant.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Function</td>
+     <td style="padding: 0.2em 0.5em;"> Exports the function so other files in the module can import it.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Struct or choice</td>
+     <td style="padding: 0.2em 0.5em;"> Exports the type.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Type alias</td>
+     <td style="padding: 0.2em 0.5em;"> Exports the alias.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Top-level template</td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#[...]</span> is not a normal exported value. It is an entry-file-only const page fragment.</td>
+        </tr>
+        
+    </table><p>Regular top-level declarations without <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#</span> are private to their file/module context and cannot be imported from other files.</p><p>Example helper file:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-comment'>-- src/components/card.bst</span>
+
+    <span class='bst-code-operator'>#</span> <span class='bst-code-struct'>CardData</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
+        title <span class='bst-code-struct'>String,</span>
+        body <span class='bst-code-struct'>String,</span>
+    <span class='bst-code-operator'>|</span>
+
+    <span class='bst-code-operator'>#</span> render_card <span class='bst-code-operator'>|</span>card <span class='bst-code-struct'>CardData</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span>
+            <span class='bst-code-operator'>&lt;</span>article<span class='bst-code-operator'>&gt;</span>
+                <span class='bst-code-operator'>&lt;</span>h<span class='bst-code-number'>2</span><span class='bst-code-operator'>&gt;</span><span class='bst-code-parenthesis'>[</span>card.title<span class='bst-code-parenthesis'>]</span><span class='bst-code-operator'>&lt;</span><span class='bst-code-operator'>/</span>h<span class='bst-code-number'>2</span><span class='bst-code-operator'>&gt;</span>
+                <span class='bst-code-operator'>&lt;</span>p<span class='bst-code-operator'>&gt;</span><span class='bst-code-parenthesis'>[</span>card.body<span class='bst-code-parenthesis'>]</span><span class='bst-code-operator'>&lt;</span><span class='bst-code-operator'>/</span>p<span class='bst-code-operator'>&gt;</span>
+            <span class='bst-code-operator'>&lt;</span><span class='bst-code-operator'>/</span>article<span class='bst-code-operator'>&gt;</span>
+        <span class='bst-code-parenthesis'>]</span>
+    ;
+
+    private_note <span class='bst-code-operator'>|</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> <span class='bst-code-string'>&quot;This is not exported.&quot;</span>
+    ;
+    </code></pre><p>Example page entry:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-comment'>-- src/cards/#page.bst</span>
+
+    import <span class='bst-code-operator'>@</span>components<span class='bst-code-operator'>/</span>card <span class='bst-code-parenthesis'>{</span><span class='bst-code-struct'>CardData,</span> render_card<span class='bst-code-parenthesis'>}</span>
+
+    <span class='bst-code-operator'>#</span> page_title <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Cards&quot;</span>
+
+    card <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>CardData</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Hello&quot;</span>, <span class='bst-code-string'>&quot;This was rendered by a helper function.&quot;</span><span class='bst-code-parenthesis'>)</span>
+
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-parenthesis'>[</span>render_card<span class='bst-code-parenthesis'>(</span>card<span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>]</span>
+    <span class='bst-code-parenthesis'>]</span>
+    </code></pre></section>
+    <section class="container"><h1>Imports and path resolution</h1><p>Imports target exported symbols, not whole files.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-comment'>-- Single exported symbol</span>
+    import <span class='bst-code-operator'>@</span>components<span class='bst-code-operator'>/</span>card<span class='bst-code-operator'>/</span>render_card
+
+    <span class='bst-code-comment'>-- Grouped exported symbols</span>
+    import <span class='bst-code-operator'>@</span>components<span class='bst-code-operator'>/</span>card <span class='bst-code-parenthesis'>{</span><span class='bst-code-struct'>CardData,</span> render_card<span class='bst-code-parenthesis'>}</span>
+
+    <span class='bst-code-comment'>-- Local alias</span>
+    import <span class='bst-code-operator'>@</span>components<span class='bst-code-operator'>/</span>card<span class='bst-code-operator'>/</span>render_card <span class='bst-code-keyword'>as</span> card
+
+    <span class='bst-code-comment'>-- Relative import from the current file&#39;s folder</span>
+    import <span class='bst-code-operator'>@</span>.<span class='bst-code-operator'>/</span>shared<span class='bst-code-operator'>/</span>title<span class='bst-code-operator'>/</span>render_title
+
+    <span class='bst-code-comment'>-- Parent-folder relative import</span>
+    import <span class='bst-code-operator'>@</span>..<span class='bst-code-operator'>/</span>components<span class='bst-code-operator'>/</span>card <span class='bst-code-parenthesis'>{</span><span class='bst-code-struct'>CardData,</span> render_card<span class='bst-code-parenthesis'>}</span>
+    </code></pre><p>Path resolution is project-aware:</p><ul><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">@./</span> and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">@../</span> resolve relative to the importing file.</li><li>Non-relative imports first check configured <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#root_folders</span> from the project root.</li><li>If no root folder matches, the import resolves from <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#entry_root</span>.</li></ul><p>For the docs project, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#root_folders</span> includes <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">@lib</span> and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">@assets</span>. That means <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">import @lib/html ...</span> resolves through the project root, while <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">import @styles/docs ...</span> resolves through <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">docs/src/styles/docs.bst</span>.</p></section>
+    <section class="container"><h1>Example: the documentation site structure</h1><p>The Beanstalk documentation website is itself a Beanstalk HTML project. Ignoring markdown notes and generated files, its source shape is roughly:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    docs<span class='bst-code-operator'>/</span>
+    ├── <span class='bst-code-operator'>#</span>config.bst
+    ├── src<span class='bst-code-operator'>/</span>
+    │   ├── <span class='bst-code-operator'>#</span>page.bst
+    │   ├── docs<span class='bst-code-operator'>/</span>
+    │   │   ├── <span class='bst-code-operator'>#</span>page.bst
+    │   │   ├── basics<span class='bst-code-operator'>/</span><span class='bst-code-operator'>#</span>page.bst
+    │   │   ├── templates<span class='bst-code-operator'>/</span><span class='bst-code-operator'>#</span>page.bst
+    │   │   ├── functions<span class='bst-code-operator'>/</span><span class='bst-code-operator'>#</span>page.bst
+    │   │   ├── if<span class='bst-code-operator'>-</span>statements<span class='bst-code-operator'>/</span><span class='bst-code-operator'>#</span>page.bst
+    │   │   ├── loops<span class='bst-code-operator'>/</span><span class='bst-code-operator'>#</span>page.bst
+    │   │   ├── collections<span class='bst-code-operator'>/</span><span class='bst-code-operator'>#</span>page.bst
+    │   │   ├── structs<span class='bst-code-operator'>/</span><span class='bst-code-operator'>#</span>page.bst
+    │   │   ├── choices<span class='bst-code-operator'>/</span><span class='bst-code-operator'>#</span>page.bst
+    │   │   ├── pattern<span class='bst-code-operator'>-</span>matching<span class='bst-code-operator'>/</span><span class='bst-code-operator'>#</span>page.bst
+    │   │   ├── aliases<span class='bst-code-operator'>/</span><span class='bst-code-operator'>#</span>page.bst
+    │   │   └── progress<span class='bst-code-operator'>/</span><span class='bst-code-operator'>#</span>page.bst
+    │   └── styles<span class='bst-code-operator'>/</span>
+    │       └── docs.bst
+    ├── <span class='bst-code-operator'>@</span>lib<span class='bst-code-operator'>/</span>
+    │   └── html.bst
+    ├── <span class='bst-code-operator'>@</span>assets<span class='bst-code-operator'>/</span>
+    │   └── ...
+    ├── dev<span class='bst-code-operator'>/</span>
+    └── release<span class='bst-code-operator'>/</span>
+    </code></pre><p>The important part is the split:</p><ul><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">src/</span> contains page entries and ordinary source files.</li><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#page.bst</span> files define HTML pages.</li><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">styles/docs.bst</span> is a normal source file imported by pages.</li><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">@lib</span> and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">@assets</span> are project-root import folders configured by <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#root_folders</span>.</li><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">dev/</span> and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">release/</span> are output folders, not source folders.</li></ul></section>
+    <section class="container"><h1>Output files</h1><p>The build command compiles the project, then writes the builder&#39;s output files under the selected output root.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+            
+    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Build mode</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Output root</th> 
+    </tr>
+
+            
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Default / dev</td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#dev_folder</span>, usually <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">dev</span>.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">--release</span></td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#output_folder</span>, usually <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">release</span>.</td>
+        </tr>
+        
+    </table><p>In the default JS-backed HTML mode, each page module produces an HTML file. The generated JavaScript is embedded into that HTML file.</p><p>In the experimental <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">--html-wasm</span> mode, the builder can instead emit a route folder containing:</p><ul><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">index.html</span></li><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">page.js</span></li><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">page.wasm</span></li></ul><p>The HTML builder owns stale-output cleanup for generated HTML artifacts. Generated output folders should be treated as build artifacts, not source.</p></section>
+    <section class="container"><h1>Future extension points</h1><p>The <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#file.bst</span> module-entry convention is intentionally extensible. Future builders and commands can attach special meaning to new <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#</span> file names without changing the basic project shape.</p><h2>#mod.bst library modules</h2><p>A future <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#mod.bst</span> file can act as the visibility gate for a library module. Instead of every <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#*.bst</span> file being a page, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#mod.bst</span> would define what the module exports to other modules.</p><p>This would make module boundaries explicit and would fit future parallel compilation:</p><ul><li>compile each module independently</li><li>expose only declarations exported from <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#mod.bst</span></li><li>emit either final Wasm exports or intermediate module metadata</li><li>allow other modules to depend on that stable export surface</li></ul><h2>#test.bst test modules</h2><p>A future <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#test.bst</span> file can hold project tests. Normal builds would ignore it. A planned test command could discover and run those files, similar to how <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">cargo test</span> discovers Rust tests.</p><p>This is separate from the current compiler-internal integration test runner.</p><h2>$doc documentation templates</h2><p>The <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">$doc</span> style directive can eventually make documentation part of Beanstalk source. Top-level or nested doc templates could be stripped from normal output code, then collected by a documentation command.</p><p>This would make documentation generation feel closer to Rust doc comments, but with Beanstalk&#39;s template system instead of comment syntax.</p></section>
+    <script>
+    function __bs_is_ref(value) {
+    return value !== null && typeof value === "object" && value.__bs_ref === true;
+    }
+
+    function __bs_binding(value) {
+    return { __bs_ref: true, __bs_kind: "binding", __bs_mode: "slot", __bs_slot: { value }, __bs_target: null };
+    }
+
+    function __bs_param_binding(value) {
+    if (!__bs_is_ref(value)) {
+    return __bs_binding(value);
+    }
+    if (value.__bs_kind === "binding") {
+    return value;
+    }
+    const binding = __bs_binding(undefined);
+    binding.__bs_mode = "alias";
+    binding.__bs_target = value;
+    return binding;
+    }
+
+    function __bs_resolve(ref) {
+    while (ref.__bs_kind === "binding" && ref.__bs_mode === "alias") {
+    ref = ref.__bs_target;
+    }
+    return ref;
+    }
+
+    function __bs_read(ref) {
+    const resolved = __bs_resolve(ref);
+    return resolved.__bs_kind === "binding" ? resolved.__bs_slot.value : resolved.__bs_get();
+    }
+
+    function __bs_write(ref, value) {
+    const resolved = __bs_resolve(ref);
+    if (resolved.__bs_kind === "binding") {
+    resolved.__bs_slot.value = value;
+    } else {
+    resolved.__bs_set(value);
+    }
+    return value;
+    }
+
+    function __bs_assign_borrow(binding, ref) {
+    if (binding.__bs_mode === "alias") {
+    return __bs_write(binding, __bs_read(ref));
+    }
+    binding.__bs_mode = "alias";
+    binding.__bs_target = ref;
+    return binding;
+    }
+
+    function __bs_assign_value(binding, value) {
+    if (binding.__bs_mode === "alias") {
+    return __bs_write(binding, value);
+    }
+    binding.__bs_mode = "slot";
+    binding.__bs_target = null;
+    binding.__bs_slot.value = value;
+    return binding;
+    }
+
+    function __bs_field(baseRef, field) {
+    return {
+    __bs_ref: true,
+    __bs_kind: "computed",
+    __bs_get() {
+    return __bs_read(baseRef)[field];
+    },
+    __bs_set(value) {
+    __bs_read(baseRef)[field] = value;
+    }
+    };
+    }
+
+    function __bs_index(baseRef, index) {
+    return {
+    __bs_ref: true,
+    __bs_kind: "computed",
+    __bs_get() {
+    return __bs_read(baseRef)[index];
+    },
+    __bs_set(value) {
+    __bs_read(baseRef)[index] = value;
+    }
+    };
+    }
+
+    function __bs_clone_value(value) {
+    if (Array.isArray(value)) {
+    return value.map(__bs_clone_value);
+    }
+    if (value !== null && typeof value === "object") {
+    const result = {};
+    for (const key of Object.keys(value)) {
+    result[key] = __bs_clone_value(value[key]);
+    }
+    return result;
+    }
+    return value;
+    }
+
+    function __bs_error_normalize_file(file) {
+    if (typeof file !== "string") {
+    return "";
+    }
+    if (file.startsWith("/")) {
+    const parts = file.split(/[\\/]/).filter(Boolean);
+    return parts.length > 0 ? parts[parts.length - 1] : file;
+    }
+    if (/^[A-Za-z]:[\\/]/.test(file)) {
+    const parts = file.split(/[\\/]/).filter(Boolean);
+    return parts.length > 0 ? parts[parts.length - 1] : file;
+    }
+    return file;
+    }
+
+    function __bs_make_error(kind, code, message, location, trace) {
+    return {
+    kind,
+    code,
+    message,
+    location: location ?? null,
+    trace: trace ?? null
+    };
+    }
+
+    function __bs_error_with_location(error, location) {
+    return __bs_make_error(error.kind, error.code, error.message, location, error.trace);
+    }
+
+    function __bs_error_push_trace(error, frame) {
+    const nextTrace = error.trace ? error.trace.concat([frame]) : [frame];
+    return __bs_make_error(error.kind, error.code, error.message, error.location, nextTrace);
+    }
+
+    function __bs_error_bubble(error, file, line, column, functionName) {
+    const safeFunction = typeof functionName === "string" && functionName.length > 0 ? functionName : "<unknown>";
+    const location = {
+    file: __bs_error_normalize_file(file),
+    line,
+    column,
+    function: safeFunction === "<unknown>" ? null : safeFunction
+    };
+    const frame = { function: safeFunction, location };
+    const nextLocation = error.location ?? location;
+    const located = __bs_error_with_location(error, nextLocation);
+    return __bs_error_push_trace(located, frame);
+    }
+
+    function __bs_result_propagate(result) {
+    if (result && result.tag === "ok") {
+    return result.value;
+    }
+    if (result && result.tag === "err") {
+    throw { __bs_result_propagate: true, value: result.value };
+    }
+    throw new Error("Expected internal Result carrier during propagation");
+    }
+
+    function __bs_result_fallback(result, fallback) {
+    if (result && result.tag === "ok") {
+    return result.value;
+    }
+    if (result && result.tag === "err") {
+    return fallback();
+    }
+    throw new Error("Expected internal Result carrier during fallback handling");
+    }
+
+    function __bs_collection_get(collection, index) {
+    if (!Array.isArray(collection)) {
+    const err = __bs_make_error("InvalidArgument", "collection.expected_ordered_collection", "Collection get(...) expects an ordered collection", null, null);
+    return { tag: "err", value: err };
+    }
+    if (!Number.isInteger(index) || index < 0 || index >= collection.length) {
+    const err = __bs_make_error("OutOfBounds", "collection.index_out_of_bounds", "Collection index out of bounds", null, null);
+    return { tag: "err", value: err };
+    }
+    return { tag: "ok", value: collection[index] };
+    }
+
+    function __bs_collection_push(collection, value) {
+    if (!Array.isArray(collection)) {
+    const err = __bs_make_error("InvalidArgument", "collection.expected_ordered_collection", "Collection push(...) expects an ordered collection", null, null);
+    return { tag: "err", value: err };
+    }
+    collection.push(value);
+    return { tag: "ok", value: null };
+    }
+
+    function __bs_collection_remove(collection, index) {
+    if (!Array.isArray(collection)) {
+    const err = __bs_make_error("InvalidArgument", "collection.expected_ordered_collection", "Collection remove(...) expects an ordered collection", null, null);
+    return { tag: "err", value: err };
+    }
+    if (!Number.isInteger(index) || index < 0 || index >= collection.length) {
+    const err = __bs_make_error("OutOfBounds", "collection.index_out_of_bounds", "Collection index out of bounds", null, null);
+    return { tag: "err", value: err };
+    }
+    collection.splice(index, 1);
+    return { tag: "ok", value: null };
+    }
+
+    function __bs_collection_length(collection) {
+    if (!Array.isArray(collection)) {
+    const err = __bs_make_error("InvalidArgument", "collection.expected_ordered_collection", "Collection length() expects an ordered collection", null, null);
+    return { tag: "err", value: err };
+    }
+    return { tag: "ok", value: collection.length };
+    }
+
+    function __bs_value_to_string(value) {
+    if (value === undefined || value === null) {
+    return "";
+    }
+    return String(value);
+    }
+
+    function __bs_io(value) {
+    console.log(__bs_value_to_string(value));
+    }
+
+    function __bs_normalize_numeric_text(value) {
+    return value.trim().replace(/_/g, "");
+    }
+
+    function __bs_cast_int(value) {
+    if (typeof value === "number") {
+    if (!Number.isFinite(value) || !Number.isSafeInteger(value)) {
+    return { tag: "err", value: __bs_make_error("Parse", "int.parse_out_of_range", "Int value is out of supported range", null, null) };
+    }
+    if (Number.isInteger(value)) {
+    return { tag: "ok", value };
+    }
+    return { tag: "err", value: __bs_make_error("Parse", "int.parse_invalid_format", "Float value is not an exact integer", null, null) };
+    }
+    if (typeof value === "string") {
+    const normalized = __bs_normalize_numeric_text(value);
+    if (/^[+-]?[0-9]+$/.test(normalized)) {
+    const parsed = Number.parseInt(normalized, 10);
+    if (!Number.isSafeInteger(parsed)) {
+    return { tag: "err", value: __bs_make_error("Parse", "int.parse_out_of_range", "Int value is out of supported range", null, null) };
+    }
+    return { tag: "ok", value: parsed };
+    }
+    if (/^[+-]?[0-9]+\.[0-9]+$/.test(normalized)) {
+    const parsed = Number.parseFloat(normalized);
+    if (Number.isInteger(parsed) && Number.isSafeInteger(parsed)) {
+    return { tag: "ok", value: parsed };
+    }
+    }
+    return { tag: "err", value: __bs_make_error("Parse", "int.parse_invalid_format", "Cannot parse Int from text", null, null) };
+    }
+    return { tag: "err", value: __bs_make_error("Parse", "int.parse_invalid_format", "Int(...) only accepts Int, Float, or string values", null, null) };
+    }
+
+    function __bs_cast_float(value) {
+    if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+    return { tag: "err", value: __bs_make_error("Parse", "float.parse_out_of_range", "Float value is out of supported range", null, null) };
+    }
+    return { tag: "ok", value };
+    }
+    if (typeof value === "string") {
+    const normalized = __bs_normalize_numeric_text(value);
+    if (/^[+-]?[0-9]+$/.test(normalized) || /^[+-]?[0-9]+\.[0-9]+$/.test(normalized)) {
+    const parsed = Number.parseFloat(normalized);
+    if (!Number.isFinite(parsed)) {
+    return { tag: "err", value: __bs_make_error("Parse", "float.parse_out_of_range", "Float value is out of supported range", null, null) };
+    }
+    return { tag: "ok", value: parsed };
+    }
+    return { tag: "err", value: __bs_make_error("Parse", "float.parse_invalid_format", "Cannot parse Float from text", null, null) };
+    }
+    return { tag: "err", value: __bs_make_error("Parse", "float.parse_invalid_format", "Float(...) only accepts Int, Float, or string values", null, null) };
+    }
+
+    function b_fn0() {
+    let b_l0 = __bs_binding(undefined);
+
+    __bs_assign_value(b_l0, []);
+    return __bs_read(b_l0);
+    }
+
+    </script>
+    <script>
+    (function () {
+      if (typeof b_fn0 === "function") b_fn0();
+    })();
+    </script>
+  </body>
+</html>

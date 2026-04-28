@@ -195,12 +195,12 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
         [header: [: Form] [: Meaning] ]
 
         [data:
-            [: [codesnippet:#[...]]]
+            [: [codesnippet, "#[...]"]]
             [: A top-level const template. It must fold at compile time and is emitted as static HTML.]
         ]
 
         [data:
-            [: [codesnippet:[...]]]
+            [: [codesnippet, "[...]"]]
             [: A top-level runtime template. It is evaluated by the module's implicit start function and inserted into the page at runtime.]
         ]
     ]
@@ -268,7 +268,7 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
 
         [data:
             [: Top-level template]
-            [: [codesnippet:#[...]] is not a normal exported value. It is an entry-file-only const page fragment.]
+            [: [codesnippet, "#[...]"] is not a normal exported value. It is an entry-file-only const page fragment.]
         ]
     ]
 

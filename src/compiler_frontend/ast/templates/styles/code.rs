@@ -22,6 +22,7 @@ use std::sync::Arc;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum CodeLanguage {
     Generic,
+    Text,
     Beanstalk,
     JavaScript,
     TypeScript,
@@ -33,6 +34,7 @@ pub(crate) enum CodeLanguage {
 impl CodeLanguage {
     pub(crate) fn from_alias(alias: &str) -> Option<Self> {
         match alias {
+            "txt" | "text" => Some(Self::Text),
             "bst" | "beanstalk" => Some(Self::Beanstalk),
             "js" | "javascript" => Some(Self::JavaScript),
             "ts" | "typescript" => Some(Self::TypeScript),
@@ -44,11 +46,12 @@ impl CodeLanguage {
     }
 
     pub(crate) fn supported_aliases() -> &'static str {
-        "\"bst\"/\"beanstalk\", \"js\"/\"javascript\", \"ts\"/\"typescript\", \"py\"/\"python\", \"rs\"/\"rust\", \"bash\"/\"sh\"/\"shell\""
+        "\"txt\"/\"text\", \"bst\"/\"beanstalk\", \"js\"/\"javascript\", \"ts\"/\"typescript\", \"py\"/\"python\", \"rs\"/\"rust\", \"bash\"/\"sh\"/\"shell\""
     }
 
     fn comment_prefix(self) -> Option<&'static str> {
         match self {
+            Self::Text => None,
             Self::Generic => Some("//"),
             Self::Beanstalk => Some("--"),
             Self::JavaScript | Self::TypeScript | Self::Rust => Some("//"),
@@ -407,6 +410,7 @@ fn flush_word(output: &mut String, word: &mut String, language: CodeLanguage) {
 
 fn is_keyword(word: &str, language: CodeLanguage) -> bool {
     match language {
+        CodeLanguage::Text => false,
         CodeLanguage::Beanstalk => matches!(
             word,
             "if" | "else"
@@ -520,7 +524,7 @@ fn is_keyword(word: &str, language: CodeLanguage) -> bool {
 
 fn is_type_keyword(word: &str, language: CodeLanguage) -> bool {
     match language {
-        CodeLanguage::Generic => false,
+        CodeLanguage::Generic | CodeLanguage::Text => false,
         CodeLanguage::Beanstalk => {
             matches!(
                 word,

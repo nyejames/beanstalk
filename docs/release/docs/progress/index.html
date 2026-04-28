@@ -418,7 +418,7 @@ body {
      <td style="padding: 0.2em 0.5em;"> Supported</td>
      <td style="padding: 0.2em 0.5em;"> Broad parser, declaration, constructor, match, import, assignment, return, JS carrier-shape, and payload coverage.</td>
      <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
-     <td style="padding: 0.2em 0.5em;"> Unit variants use `Choice::Variant`. Empty constructor calls are invalid. Record-body payload declarations are parsed and type-checked. Payload constructors support positional and named arguments. Payload match extraction uses constructor-like patterns with original field names only. Const choice values are supported for unit and payload variants. Payload shorthand is rejected. Payload structural equality is deferred. Generic choices, recursive choices, and direct payload field access remain deferred. Choices, Options, and Results share a unified HIR variant construction representation while retaining distinct semantic type kinds.</td>
+     <td style="padding: 0.2em 0.5em;"> Unit variants use `Choice::Variant`. Empty constructor calls are invalid. Record-body payload declarations are parsed and type-checked. Payload constructors support positional and named arguments. Payload match extraction uses constructor-like patterns with original field names or `field as local_name` aliases. Const choice values are supported for unit and payload variants. Payload shorthand is rejected. Payload structural equality is deferred. Generic choices, recursive choices, and direct payload field access remain deferred. Choices, Options, and Results share a unified HIR variant construction representation while retaining distinct semantic type kinds.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -426,7 +426,7 @@ body {
      <td style="padding: 0.2em 0.5em;"> Partial</td>
      <td style="padding: 0.2em 0.5em;"> Broad literal, choice-match, and payload-capture coverage, including exhaustiveness and diagnostics.</td>
      <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
-     <td style="padding: 0.2em 0.5em;"> Literal patterns, choice variant patterns (including payload captures), relational ordered-scalar patterns, guards, and else are supported. Wildcard in case arms is not supported—use else => instead. General capture/tagged patterns, rename captures, and nested payload patterns remain deferred.</td>
+     <td style="padding: 0.2em 0.5em;"> Literal patterns, choice variant patterns (including payload captures with `field as local_name` aliases), relational ordered-scalar patterns, guards, and else are supported. Wildcard in case arms is not supported—use else => instead. General capture/tagged patterns and nested payload patterns remain deferred. `as` in non-choice match patterns is rejected with a structured diagnostic.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -882,7 +882,31 @@ body {
     ">choice_payload_match_capture_shadowing_rejected</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">choice_payload_match_rename_syntax_deferred</span>, <span style="
+    ">choice_payload_match_rename_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_match_rename_guard_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_match_rename_wrong_original_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_match_rename_duplicate_binding_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_match_rename_shadowing_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_match_rename_missing_alias_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_match_rename_non_symbol_alias_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_match_rename_original_not_visible_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_match_rename_self_alias_success</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">choice_payload_match_named_assignment_rejected</span>, <span style="
@@ -898,7 +922,7 @@ body {
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">choice_payload_match_guard_requires_else</span></td>
-     <td style="padding: 0.2em 0.5em;"> Constructor-like patterns with original field names only. Capture names must match declared payload field names. Exhaustiveness is tag-level.</td>
+     <td style="padding: 0.2em 0.5em;"> Constructor-like patterns support declared payload field names and `field as local_name` aliases. Field matching remains positional and validated against declared field names. Exhaustiveness is tag-level.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -912,16 +936,66 @@ body {
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Choice binding renames</td>
-     <td style="padding: 0.2em 0.5em;"> Deferred</td>
+             <td style="padding: 0.2em 0.5em;"> Choice payload capture renames</td>
+     <td style="padding: 0.2em 0.5em;"> Supported</td>
      <td style="padding: 0.2em 0.5em;"> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">choice_payload_match_rename_syntax_deferred</span>, <span style="
+    ">choice_payload_match_rename_success</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">choice_capture_rename_deferred</span></td>
-     <td style="padding: 0.2em 0.5em;"> Future syntax: `case Variant(original_name as local_name) =>`.</td>
+    ">choice_payload_match_rename_guard_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_match_rename_wrong_original_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_match_rename_duplicate_binding_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_match_rename_shadowing_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_match_rename_missing_alias_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_match_rename_non_symbol_alias_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_match_rename_original_not_visible_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_match_rename_self_alias_success</span></td>
+     <td style="padding: 0.2em 0.5em;"> `case Variant(original_name as local_name) =>` binds the payload field to a different local name visible in the guard and arm body.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> `as` keyword outside supported domains</td>
+     <td style="padding: 0.2em 0.5em;"> Rejected / Reserved</td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">as_in_expression_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">as_in_variable_declaration_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">as_in_function_signature_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">as_in_non_choice_match_pattern_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">as_in_match_pattern_lead_rejected</span></td>
+     <td style="padding: 0.2em 0.5em;"> `as` is only valid in three contexts: type aliases (`TypeAlias as ExistingType`), import clauses (`import @path/symbol as local_name`), and choice payload captures (`case Variant(field as local_name)`). All other uses are rejected with targeted diagnostics.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> General pattern binding renames</td>
+     <td style="padding: 0.2em 0.5em;"> Deferred</td>
+     <td style="padding: 0.2em 0.5em;"> No canonical case yet.</td>
+     <td style="padding: 0.2em 0.5em;"> Non-choice capture renaming and nested payload pattern renaming remain deferred.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
