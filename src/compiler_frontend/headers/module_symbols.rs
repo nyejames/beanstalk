@@ -28,12 +28,34 @@ use crate::compiler_frontend::ast::statements::functions::{
 };
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::declaration_syntax::declaration_shell::DeclarationSyntax;
+use crate::compiler_frontend::external_packages::ExternalSymbolId;
 use crate::compiler_frontend::headers::parse_file_headers::{FileImport, Header, HeaderKind};
+use crate::compiler_frontend::headers::types::FileReExport;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::value_mode::ValueMode;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 use rustc_hash::{FxHashMap, FxHashSet};
+
+/// Resolved target of a facade export entry.
+///
+/// WHAT: a facade export can expose either a source declaration (via `#` or re-export)
+/// or an external package symbol (via re-export of a virtual package).
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum FacadeExportTarget {
+    Source(InternedPath),
+    External(ExternalSymbolId),
+}
+
+/// One exported symbol in a library's `#mod.bst` facade.
+///
+/// WHAT: records the name that external importers use and the resolved target.
+/// WHY: re-export aliases can expose a symbol under a different name than its canonical path.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct FacadeExportEntry {
+    pub export_name: StringId,
+    pub target: FacadeExportTarget,
+}
 
 /// Header-owned module symbol package.
 ///
@@ -75,10 +97,15 @@ pub(crate) struct ModuleSymbols {
     pub(crate) resolved_struct_fields_by_path: FxHashMap<InternedPath, Vec<Declaration>>,
     pub(crate) struct_source_by_path: FxHashMap<InternedPath, InternedPath>,
 
-    // Facade data: maps library import prefix to exported symbol paths from its #mod.bst.
-    pub(crate) facade_exports: FxHashMap<String, FxHashSet<InternedPath>>,
+    // Facade data: maps library import prefix to exported symbol entries from its #mod.bst.
+    // Each entry records the export name (which may differ from the target path name via alias)
+    // and the resolved target (source symbol path or external symbol id).
+    pub(crate) facade_exports: FxHashMap<String, FxHashSet<FacadeExportEntry>>,
     // Maps source file logical path to its library prefix, if the file belongs to a source library.
     pub(crate) file_library_membership: FxHashMap<InternedPath, String>,
+    // Re-export clauses collected from each source file during header parsing.
+    // Only `#mod.bst` files should contain entries; others are rejected during parsing.
+    pub(crate) file_re_exports_by_source: FxHashMap<InternedPath, Vec<FileReExport>>,
 }
 
 impl ModuleSymbols {
@@ -99,6 +126,7 @@ impl ModuleSymbols {
             type_alias_paths: FxHashSet::default(),
             facade_exports: FxHashMap::default(),
             file_library_membership: FxHashMap::default(),
+            file_re_exports_by_source: FxHashMap::default(),
         }
     }
 

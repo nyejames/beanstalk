@@ -403,6 +403,7 @@ pub(super) fn create_header(
         tokens: header_tokens,
         source_file: context.source_file.to_owned(),
         file_imports: context.file_import_entries.to_vec(),
+        file_re_exports: context.file_re_export_entries.to_vec(),
     })
 }
 

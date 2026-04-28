@@ -76,6 +76,7 @@ pub(super) fn create_top_level_const_template(
     let mut template_tokens = FileTokens::new_with_file_id(full_name, token_stream.file_id, body);
     template_tokens.canonical_os_path = token_stream.canonical_os_path.clone();
 
+    let re_exports = context.file_re_export_entries.to_vec();
     Ok(Header {
         kind: HeaderKind::ConstTemplate,
         exported: true,
@@ -84,5 +85,6 @@ pub(super) fn create_top_level_const_template(
         tokens: template_tokens,
         source_file: context.source_file.to_owned(),
         file_imports: context.file_import_entries.to_vec(),
+        file_re_exports: re_exports,
     })
 }

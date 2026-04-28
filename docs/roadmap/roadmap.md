@@ -10,7 +10,10 @@ Use the language surface integration matrix as a reference for what is currently
 
 # Plans / Notes / TODOS
 - Library system: `docs/roadmap/plans/core-and-builder-library-implementation-plan.md`
-- full pattern-matching design (capture patterns)
+
+- Pattern matching hardening: 
+Finish coverage and diagnostics for the supported Alpha pattern surface; keep general capture/tagged patterns, nested payload patterns and negated patterns
+
 - full traits implementation
 - Closures
 - Hash Maps

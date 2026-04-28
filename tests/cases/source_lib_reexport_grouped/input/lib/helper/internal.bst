@@ -1,0 +1,2 @@
+#greet = "Hello"
+#farewell = "Goodbye"

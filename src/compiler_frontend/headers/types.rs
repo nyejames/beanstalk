@@ -128,6 +128,7 @@ pub struct Header {
 
     pub source_file: InternedPath,
     pub file_imports: Vec<FileImport>,
+    pub file_re_exports: Vec<FileReExport>,
 }
 
 impl Display for Header {
@@ -164,6 +165,20 @@ impl FileImport {
     // NOTE: `local_name()` was intended for import alias binding but the
     // resolution logic inlines `alias.unwrap_or(symbol_name)` to use the
     // resolved symbol name rather than the raw path name.
+}
+
+/// Re-export clause item parsed from `#import @path/to/symbol` in a `#mod.bst` facade.
+///
+/// WHAT: carries the same shape as `FileImport` because re-export syntax mirrors import syntax.
+/// WHY: keeping them separate makes it explicit that re-exports do not create local bindings
+/// and do not contribute dependency edges.
+#[derive(Clone, Debug)]
+pub struct FileReExport {
+    pub header_path: InternedPath,
+    pub alias: Option<StringId>,
+    pub location: SourceLocation,
+    pub path_location: SourceLocation,
+    pub alias_location: Option<SourceLocation>,
 }
 
 /// Classification of a source file's role within the module.
@@ -208,6 +223,7 @@ pub(super) struct HeaderBuildContext<'a> {
     pub source_file: &'a InternedPath,
     pub file_imports: &'a HashSet<InternedPath>,
     pub file_import_entries: &'a [FileImport],
+    pub file_re_export_entries: &'a [FileReExport],
     pub file_constant_order: &'a mut usize,
     pub string_table: &'a mut StringTable,
 }

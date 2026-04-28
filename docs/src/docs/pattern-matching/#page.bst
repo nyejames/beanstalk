@@ -45,9 +45,7 @@ import @styles/docs {navbar, title, section, palette, table, codeblock, theme_he
         ;
     ]
 
-    Payload variants use constructor-like patterns with the original field names.
-    Captured bindings are available in the arm body and in guards.
-    Captures may be renamed with `as` when the arm-local name should differ from the payload field name.
+    Payload variants can be matched by writing the variant name followed by its payload field names in parentheses.
 
     [codeblock, $code("bst"):
         Response ::
@@ -68,11 +66,12 @@ import @styles/docs {navbar, title, section, palette, table, codeblock, theme_he
         ;
     ]
 
+    The names before `as` must match the declared payload fields. The optional name after `as` is the arm-local binding.
+
     Capture originals must exactly match the declared payload field names.
     For example, `case Err(message as error_text)` binds the payload field `message` to the local name `error_text`.
 
     Exhaustiveness is tag-level: `case Err(message)` covers all `Err` values regardless of payload content.
-
-    Negated patterns and general capture/tagged patterns such as `case Item |value| =>` are deferred for Alpha.
-    Beanstalk does not use wildcard `case _ =>` arms; use `else =>` for fallback behavior.
+    
+    Fallback match arms use `else =>`, not a `case` pattern.
 ]

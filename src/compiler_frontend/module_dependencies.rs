@@ -74,12 +74,26 @@ pub fn resolve_module_dependencies(
         mut module_symbols,
     } = parsed;
 
-    // Partition: StartFunction headers are appended last, not sorted.
-    // WHY: start is build-system-only and has no dependents; it must not participate in
-    // cycle detection or strict-edge traversal.
-    let (top_level_headers, start_headers): (Vec<Header>, Vec<Header>) = headers
+    // Partition: StartFunction and facade (#mod.bst) headers are appended last, not sorted.
+    // WHY: start is build-system-only and has no dependents; facades only consume dependencies
+    // from other files and do not expose symbols to the rest of the module, so they must not
+    // participate in cycle detection or strict-edge traversal.
+    let mut facade_headers: Vec<Header> = Vec::new();
+    let mut start_headers: Vec<Header> = Vec::new();
+    let top_level_headers: Vec<Header> = headers
         .into_iter()
-        .partition(|h| !matches!(h.kind, HeaderKind::StartFunction));
+        .filter_map(|h| {
+            if matches!(h.kind, HeaderKind::StartFunction) {
+                start_headers.push(h);
+                None
+            } else if is_facade_header(&h, string_table) {
+                facade_headers.push(h);
+                None
+            } else {
+                Some(h)
+            }
+        })
+        .collect();
 
     let mut graph: HashMap<InternedPath, Header> = HashMap::with_capacity(top_level_headers.len());
     let mut errors: Vec<CompilerError> = Vec::with_capacity(top_level_headers.len());
@@ -121,8 +135,9 @@ pub fn resolve_module_dependencies(
         return Err(errors);
     }
 
-    // Append start headers after the sorted top-level headers.
-    // WHY: start sees all top-level declarations during AST emission, so it must come last.
+    // Append facade headers and start headers after the sorted top-level headers.
+    // WHY: facades only consume dependencies and start sees all declarations, so both must come last.
+    sorted.extend(facade_headers);
     sorted.extend(start_headers);
 
     // Build the complete sorted declaration placeholder list from the topologically
@@ -353,6 +368,17 @@ fn resolve_graph_path(
 
 fn is_same_file_symbol_hint(path: &InternedPath, source_file: &InternedPath) -> bool {
     path.parent().as_ref() == Some(source_file)
+}
+
+/// Checks whether a header belongs to a library facade (`#mod.bst`).
+///
+/// WHAT: facade files only consume dependencies from other module files and do not expose
+/// symbols to the rest of the module, so they should be excluded from dependency sorting.
+fn is_facade_header(header: &Header, string_table: &StringTable) -> bool {
+    header
+        .source_file
+        .name_str(string_table)
+        .is_some_and(|name| name == "#mod.bst")
 }
 
 fn exact_path_matches_candidate(

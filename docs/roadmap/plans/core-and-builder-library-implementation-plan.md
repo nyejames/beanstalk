@@ -131,26 +131,26 @@ Add `export` only for re-exporting imports from `#mod.bst`.
 Supported initial forms:
 
 ```beanstalk
-export @path/to/symbol
-export @path/to/symbol as exported_symbol
-export @path/to/module {thing, aliased_thing as exported_symbol}
+#import @path/to/symbol
+#import @path/to/symbol as exported_symbol
+#import @path/to/module {thing, aliased_thing as exported_symbol}
 ```
 
-Grouped export entries may contain nested paths:
+Grouped re-export entries may contain nested paths:
 
 ```beanstalk
-export @core/time {date, clock/seconds}
+#import @core/time {date, clock/seconds}
 ```
 
-`export` does not create a local binding in the exporting file.
+`#import` does not create a local binding in the exporting file.
 
-`export` is restricted to `#mod.bst`.
+`#import` is restricted to `#mod.bst`.
 
-Using `export` elsewhere is a structured error.
+Using `#import` elsewhere is a structured error.
 
-Using `export` for declaration visibility is a structured error. The diagnostic should explain that `#` exports declarations, while `export` only re-exports imported symbols from a `#mod.bst` facade.
+Using `#import` for declaration visibility is a structured error. The diagnostic should explain that `#` exports declarations, while `#import` only re-exports imported symbols from a `#mod.bst` facade.
 
-External package symbols may be re-exported through `export`.
+External package symbols may be re-exported through `#import`.
 
 Export aliases should use the same case-convention warnings as import aliases.
 
@@ -624,7 +624,7 @@ Rules:
 - `#mod.bst` can contain private helper declarations visible only inside `#mod.bst`.
 - `#mod.bst` cannot contain runtime top-level statements.
 - `#mod.bst` cannot contain top-level runtime templates.
-- `#mod.bst` is the only file where `export @...` is valid.
+- `#mod.bst` is the only file where `#import @...` is valid.
 
 ### Implementation steps
 
@@ -756,37 +756,37 @@ cargo run tests
 
 Run `just validate` if practical.
 
-## Phase 4 — Add `export @...` re-export syntax
+## Phase 4 — Add `#import @...` re-export syntax
 
 ### Context
 
-`#mod.bst` needs to expose symbols from internal files and external packages without forcing wrapper declarations. `export @...` is a facade-only re-export syntax.
+`#mod.bst` needs to expose symbols from internal files and external packages without forcing wrapper declarations. `#import @...` is a facade-only re-export syntax.
 
 ### Syntax
 
 Supported forms:
 
 ```beanstalk
-export @path/to/symbol
-export @path/to/symbol as exported_symbol
-export @path/to/module {thing, aliased_thing as exported_symbol}
+#import @path/to/symbol
+#import @path/to/symbol as exported_symbol
+#import @path/to/module {thing, aliased_thing as exported_symbol}
 ```
 
 Grouped entries can contain nested paths:
 
 ```beanstalk
-export @core/time {date, clock/seconds}
+#import @core/time {date, clock/seconds}
 ```
 
 External package re-exports are allowed:
 
 ```beanstalk
-export @core/math {sin, PI}
+#import @core/math {sin, PI}
 ```
 
 ### Semantics
 
-`export @...`:
+`#import @...`:
 
 - is valid only in `#mod.bst`
 - resolves its target like an import
@@ -799,7 +799,7 @@ export @core/math {sin, PI}
 
 ### Implementation steps
 
-1. Add `export` token/keyword support if not already tokenized as a symbol.
+1. Add `#import` re-export support in the parser. `#import` reuses the existing `import` keyword preceded by `#`.
 
 2. Reuse import parsing where possible.
 
@@ -819,25 +819,25 @@ or a separate `FileReExport` collected alongside imports.
 
 4. Restrict parsing/validation to `#mod.bst`.
 
-If `export` appears outside a facade file, emit a syntax/rule error:
+If `#import` appears outside a facade file, emit a syntax/rule error:
 
-> `export` can only be used in `#mod.bst` to re-export imported symbols from a library facade. Use `#` to export declarations from normal files.
+> `#import` can only be used in `#mod.bst` to re-export imported symbols from a library facade.
 
-5. Reject invalid export forms:
+5. Reject invalid `#import` forms:
 
 ```beanstalk
-export thing = 1
-export function_name |x Int| -> Int:
-export Struct = |...|
+#import thing = 1
+#import function_name |x Int| -> Int:
+#import Struct = |...|
 ```
 
 Diagnostics should explain:
 
-- `export` only accepts import-style paths
+- `#import` only accepts import-style paths
 - declaration visibility uses `#`
-- `export` is facade-only
+- `#import` is facade-only
 
-6. Resolve export targets after imports/source visibility is available.
+6. Resolve re-export targets after imports/source visibility is available.
 
 7. Add facade export collision checks.
 
@@ -853,7 +853,7 @@ Collisions should include:
 Example:
 
 ```beanstalk
-export @core/math {sin as sine}
+#import @core/math {sin as sine}
 ```
 
 9. Preserve file-local import alias semantics.
@@ -872,10 +872,10 @@ Add tests for:
 - re-export external constant
 - re-export external opaque type if available
 - alias case warning
-- duplicate export rejection
-- export outside `#mod.bst` rejection
-- export with declaration syntax rejection
-- export does not create local binding
+- duplicate re-export rejection
+- `#import` outside `#mod.bst` rejection
+- `#import` with declaration syntax rejection
+- `#import` does not create local binding
 - exported symbol visible to importer
 - non-exported imported helper remains private
 
@@ -883,8 +883,8 @@ Add tests for:
 
 Update language/project docs with:
 
-- `export @...` syntax
-- difference between `#` and `export`
+- `#import @...` syntax
+- difference between `#` and `#import`
 - examples of facade re-export
 - examples of aliases
 - clear restrictions
@@ -909,10 +909,10 @@ feat: add mod file import reexports
 
 Audit checklist:
 
-- import/export parsing shares code cleanly
-- export errors are specific and not vague undefined-variable errors
-- export does not mutate local visibility
-- grouped export alias metadata is preserved
+- import/re-export parsing shares code cleanly
+- re-export errors are specific and not vague undefined-variable errors
+- re-export does not mutate local visibility
+- grouped re-export alias metadata is preserved
 - no new compatibility syntax is added
 
 Validation:
@@ -954,7 +954,7 @@ The exact split can be smaller for the first pass. Moving to `html/#mod.bst` is 
 Example:
 
 ```beanstalk
-export @./elements {format, style}
+#import @./elements {format, style}
 ```
 
 or declare top-level `#` exports directly in `#mod.bst` if simpler for the first pass.
@@ -1293,14 +1293,14 @@ Document clearly:
 - `#mod.bst` is not a shared implementation file
 - runtime top-level code in `#mod.bst` is invalid
 
-7. Export syntax
+7. Re-export syntax
 
 Document:
 
 ```beanstalk
-export @path/to/symbol
-export @path/to/symbol as exported_symbol
-export @path/to/module {thing, aliased_thing as exported_symbol}
+#import @path/to/symbol
+#import @path/to/symbol as exported_symbol
+#import @path/to/module {thing, aliased_thing as exported_symbol}
 ```
 
 Explain:
@@ -1602,9 +1602,9 @@ It should be closer to a facade/header file with optional private compile-time d
 
 Runtime top-level statements are invalid.
 
-### Risk: `export` accidentally behaves like `import`
+### Risk: `#import` accidentally behaves like `import`
 
-`export @...` must not create local bindings.
+`#import @...` must not create local bindings.
 
 Mitigation:
 
@@ -1663,10 +1663,10 @@ This plan is complete when:
 - `/lib/html` can be exposed as `@html` without spelling `/lib` in imports
 - source library prefix collisions are hard errors
 - `#mod.bst` is enforced as the library facade surface
-- `export @...` works only in `#mod.bst`
-- export syntax supports single, aliased, grouped, and nested grouped re-exports
-- export aliases warn like import aliases
-- `export` does not create local bindings
+- `#import @...` works only in `#mod.bst`
+- re-export syntax supports single, aliased, grouped, and nested grouped re-exports
+- re-export aliases warn like import aliases
+- `#import` does not create local bindings
 - docs explain libraries, projects, modules, facades, and visibility boundaries
 - roadmap links this plan
 - progress matrix separates implemented, partial, experimental, and deferred surfaces

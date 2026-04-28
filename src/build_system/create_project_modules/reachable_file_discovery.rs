@@ -67,6 +67,13 @@ pub(super) fn discover_reachable_files(
     let mut queue = VecDeque::new();
     queue.push_back(entry_point.to_path_buf());
 
+    // Seed all source-library facade files so re-exports are resolvable.
+    // WHY: imports may directly resolve to a target file (bypassing the facade fallback),
+    // but the facade still needs to be compiled so its re-export map can be built.
+    for facade_path in project_path_resolver.facade_files().values() {
+        queue.push_back(facade_path.clone());
+    }
+
     while let Some(next_file) = queue.pop_front() {
         let canonical_file = fs::canonicalize(&next_file).map_err(|error| {
             CompilerError::file_error(

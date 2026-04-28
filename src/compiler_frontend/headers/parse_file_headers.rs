@@ -12,7 +12,9 @@ use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::file_parser::parse_headers_in_file;
-use crate::compiler_frontend::headers::module_symbols::{ModuleSymbols, register_declared_symbol};
+use crate::compiler_frontend::headers::module_symbols::{
+    FacadeExportEntry, FacadeExportTarget, ModuleSymbols, register_declared_symbol,
+};
 use crate::compiler_frontend::headers::types::HeaderParseContext;
 pub use crate::compiler_frontend::headers::types::{
     FileImport, FileRole, Header, HeaderKind, HeaderParseOptions, Headers, TopLevelConstFragment,
@@ -137,7 +139,12 @@ fn build_facade_data(
         let mut exports = FxHashSet::default();
         for header in headers {
             if header.source_file == mod_file_interned && header.exported {
-                exports.insert(header.tokens.src_path.clone());
+                if let Some(export_name) = header.tokens.src_path.name() {
+                    exports.insert(FacadeExportEntry {
+                        export_name,
+                        target: FacadeExportTarget::Source(header.tokens.src_path.clone()),
+                    });
+                }
             }
         }
         module_symbols
@@ -218,6 +225,21 @@ fn build_module_symbols(
                 }
             })
             .or_insert_with(|| header.file_imports.to_owned());
+
+        module_symbols
+            .file_re_exports_by_source
+            .entry(header.source_file.to_owned())
+            .and_modify(|existing| {
+                for re_export in &header.file_re_exports {
+                    let already_present = existing.iter().any(|e| {
+                        e.header_path == re_export.header_path && e.alias == re_export.alias
+                    });
+                    if !already_present {
+                        existing.push(re_export.clone());
+                    }
+                }
+            })
+            .or_insert_with(|| header.file_re_exports.to_owned());
 
         match &header.kind {
             HeaderKind::Function { .. } => {

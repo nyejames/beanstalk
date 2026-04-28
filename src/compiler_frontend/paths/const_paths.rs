@@ -11,6 +11,14 @@ use crate::{return_syntax_error, return_token};
 
 type PathComponents = Vec<StringId>;
 
+fn capitalize_first(s: &str) -> String {
+    let mut chars = s.chars();
+    match chars.next() {
+        None => String::new(),
+        Some(first) => first.to_uppercase().collect::<String>() + chars.as_str(),
+    }
+}
+
 /// WHAT: One expanded entry from a grouped block, with optional alias and source locations.
 /// WHY: Grouped import aliases must preserve per-entry metadata through tokenization.
 #[derive(Debug)]
@@ -220,17 +228,27 @@ pub struct ParsedImportItem {
 pub fn parse_import_clause_items(
     tokens: &[Token],
     start_index: usize,
+    string_table: &mut StringTable,
+) -> Result<(Vec<ParsedImportItem>, usize), CompilerError> {
+    parse_path_clause_items(tokens, start_index, TokenKind::Import, "import", string_table)
+}
+
+fn parse_path_clause_items(
+    tokens: &[Token],
+    start_index: usize,
+    expected_token_kind: TokenKind,
+    clause_name: &str,
     _string_table: &mut StringTable,
 ) -> Result<(Vec<ParsedImportItem>, usize), CompilerError> {
-    let Some(import_token) = tokens.get(start_index) else {
+    let Some(clause_token) = tokens.get(start_index) else {
         return Err(CompilerError::compiler_error(
-            "Import clause parsing started past the end of the token stream.",
+            &format!("{clause_name} clause parsing started past the end of the token stream."),
         ));
     };
 
-    if !matches!(import_token.kind, TokenKind::Import) {
+    if clause_token.kind != expected_token_kind {
         return Err(CompilerError::compiler_error(
-            "Import clause parsing expected to start on an 'import' token.",
+            &format!("{clause_name} clause parsing expected to start on a '{clause_name}' token."),
         ));
     }
 
@@ -244,10 +262,10 @@ pub fn parse_import_clause_items(
 
     let Some(path_token) = tokens.get(index) else {
         return_syntax_error!(
-            "Expected a path after the 'import' keyword.",
-            import_token.location.clone(), {
+            &format!("Expected a path after the '{clause_name}' keyword."),
+            clause_token.location.clone(), {
                 CompilationStage => "Header Parsing",
-                PrimarySuggestion => "Add an import path like '@folder/file' after 'import'",
+                PrimarySuggestion => &format!("Add a path like '@folder/file' after '{clause_name}'"),
             }
         );
     };
@@ -255,12 +273,12 @@ pub fn parse_import_clause_items(
     let TokenKind::Path(items) = &path_token.kind else {
         return_syntax_error!(
             format!(
-                "Expected a path after the 'import' keyword, found '{:?}'.",
+                "Expected a path after the '{clause_name}' keyword, found '{:?}'.",
                 path_token.kind
             ),
             path_token.location.clone(), {
                 CompilationStage => "Header Parsing",
-                PrimarySuggestion => "Use import syntax like 'import @folder/file'",
+                PrimarySuggestion => &format!("Use syntax like '{clause_name} @folder/file'"),
             }
         );
     };
@@ -277,19 +295,19 @@ pub fn parse_import_clause_items(
         index += 1;
         let Some(alias_token) = tokens.get(index) else {
             return_syntax_error!(
-                "Expected alias name after `as` in import.",
+                &format!("Expected alias name after `as` in {clause_name}."),
                 path_token.location.clone(), {
                     CompilationStage => "Header Parsing",
-                    PrimarySuggestion => "Provide an alias name after `as`, e.g. `import @path/symbol as local_name`",
+                    PrimarySuggestion => &format!("Provide an alias name after `as`, e.g. `{clause_name} @path/symbol as local_name`"),
                 }
             );
         };
         let TokenKind::Symbol(alias_name) = alias_token.kind else {
             return_syntax_error!(
-                "Expected alias name after `as` in import.",
+                &format!("Expected alias name after `as` in {clause_name}."),
                 alias_token.location.clone(), {
                     CompilationStage => "Header Parsing",
-                    PrimarySuggestion => "Provide an alias name after `as`, e.g. `import @path/symbol as local_name`",
+                    PrimarySuggestion => &format!("Provide an alias name after `as`, e.g. `{clause_name} @path/symbol as local_name`"),
                 }
             );
         };
@@ -297,10 +315,10 @@ pub fn parse_import_clause_items(
 
         if path_uses_grouped_syntax {
             return_syntax_error!(
-                "Grouped imports cannot use a group-level alias. Add `as ...` to each grouped entry that needs renaming.",
+                &format!("Grouped {clause_name}s cannot use a group-level alias. Add `as ...` to each grouped entry that needs renaming."),
                 alias_token.location.clone(), {
                     CompilationStage => "Header Parsing",
-                    PrimarySuggestion => "Write `import @path { item as local_name }`, or use `import @path/item as local_name` for a single import",
+                    PrimarySuggestion => &format!("Write `{clause_name} @path {{ item as local_name }}`, or use `{clause_name} @path/item as local_name` for a single {clause_name}"),
                 }
             );
         }
@@ -314,7 +332,7 @@ pub fn parse_import_clause_items(
             .is_some_and(|token| matches!(token.kind, TokenKind::As))
         {
             return_syntax_error!(
-                "Import clauses can only have one alias.",
+                &format!("{} clauses can only have one alias.", capitalize_first(clause_name)),
                 tokens[index].location.clone(), {
                     CompilationStage => "Header Parsing",
                     PrimarySuggestion => "Remove the second `as ...` alias",
@@ -329,7 +347,7 @@ pub fn parse_import_clause_items(
             "Cannot use both per-entry aliases and a group-level alias.",
             path_token.location.clone(), {
                 CompilationStage => "Header Parsing",
-                PrimarySuggestion => "Use only per-entry aliases inside `{}`, or a single trailing alias for one import",
+                PrimarySuggestion => &format!("Use only per-entry aliases inside `{{}}`, or a single trailing alias for one {clause_name}"),
             }
         );
     }

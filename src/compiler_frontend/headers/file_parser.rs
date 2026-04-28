@@ -15,7 +15,7 @@ use crate::compiler_frontend::headers::header_dispatch::create_header;
 use crate::compiler_frontend::headers::imports::normalize_import_dependency_path;
 use crate::compiler_frontend::headers::start_capture::push_runtime_template_tokens_to_start_function;
 use crate::compiler_frontend::headers::types::{
-    FileImport, FileRole, Header, HeaderBuildContext, HeaderKind, HeaderParseContext,
+    FileImport, FileReExport, FileRole, Header, HeaderBuildContext, HeaderKind, HeaderParseContext,
     TopLevelConstFragment,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -56,6 +56,7 @@ pub(super) fn parse_headers_in_file(
     let mut seen_imports: HashSet<(InternedPath, Option<StringId>)> = HashSet::new();
     let mut file_import_paths: HashSet<InternedPath> = HashSet::new();
     let mut file_imports: Vec<FileImport> = Vec::new();
+    let mut file_re_exports: Vec<FileReExport> = Vec::new();
     let mut file_constant_order = 0usize;
 
     loop {
@@ -143,6 +144,7 @@ pub(super) fn parse_headers_in_file(
                             source_file: &source_file,
                             file_imports: &file_import_paths,
                             file_import_entries: &file_imports,
+                            file_re_export_entries: &file_re_exports,
                             file_constant_order: &mut file_constant_order,
                             string_table: context.string_table,
                         };
@@ -187,27 +189,58 @@ pub(super) fn parse_headers_in_file(
                     context.string_table,
                 )?;
 
-                for item in items {
-                    let normalized_path = normalize_import_dependency_path(
-                        &item.path,
-                        &token_stream.src_path,
-                        context.string_table,
-                    )?;
-
-                    let local_name = item.alias.or_else(|| normalized_path.name());
-                    if let Some(name) = local_name {
-                        encountered_symbols.insert(name);
+                if next_statement_exported {
+                    // `#import @...` is facade-only re-export syntax.
+                    if context.file_role != FileRole::ModuleFacade {
+                        crate::return_rule_error!(
+                            "`#import` can only be used in `#mod.bst` to re-export symbols from a library facade.",
+                            current_location, {
+                                CompilationStage => "Header Parsing",
+                                PrimarySuggestion => "Move this `#import` into a `#mod.bst` file, or use `import` for local bindings",
+                            }
+                        );
                     }
 
-                    if seen_imports.insert((normalized_path.to_owned(), item.alias)) {
-                        file_import_paths.insert(normalized_path.to_owned());
-                        file_imports.push(FileImport {
+                    for item in items {
+                        let normalized_path = normalize_import_dependency_path(
+                            &item.path,
+                            &token_stream.src_path,
+                            context.string_table,
+                        )?;
+
+                        file_re_exports.push(FileReExport {
                             header_path: normalized_path,
                             alias: item.alias,
                             location: current_location.clone(),
                             path_location: item.path_location,
                             alias_location: item.alias_location,
                         });
+                    }
+
+                    next_statement_exported = false;
+                } else {
+                    for item in items {
+                        let normalized_path = normalize_import_dependency_path(
+                            &item.path,
+                            &token_stream.src_path,
+                            context.string_table,
+                        )?;
+
+                        let local_name = item.alias.or_else(|| normalized_path.name());
+                        if let Some(name) = local_name {
+                            encountered_symbols.insert(name);
+                        }
+
+                        if seen_imports.insert((normalized_path.to_owned(), item.alias)) {
+                            file_import_paths.insert(normalized_path.to_owned());
+                            file_imports.push(FileImport {
+                                header_path: normalized_path,
+                                alias: item.alias,
+                                location: current_location.clone(),
+                                path_location: item.path_location,
+                                alias_location: item.alias_location,
+                            });
+                        }
                     }
                 }
 
@@ -256,6 +289,7 @@ pub(super) fn parse_headers_in_file(
                         source_file: &source_file,
                         file_imports: &file_import_paths,
                         file_import_entries: &file_imports,
+                        file_re_export_entries: &file_re_exports,
                         file_constant_order: &mut file_constant_order,
                         string_table: context.string_table,
                     };
@@ -309,6 +343,16 @@ pub(super) fn parse_headers_in_file(
         }
     }
 
+    // Ensure re-exports collected during parsing survive to build_module_symbols even when
+    // no header was created after the last `#import` clause (common in #mod.bst facades).
+    // WHY: non-entry files do not produce a start-function header, so file_re_exports would
+    // otherwise be lost when parse_headers_in_file returns.
+    if !file_re_exports.is_empty() {
+        for header in &mut headers {
+            header.file_re_exports = file_re_exports.clone();
+        }
+    }
+
     // Check non-entry files for top-level executable code. Since there is no semantic consumer
     // for non-entry implicit starts, any non-trivial top-level body is rejected.
     if context.file_role != FileRole::Entry {
@@ -357,6 +401,7 @@ pub(super) fn parse_headers_in_file(
         tokens: start_tokens,
         source_file: token_stream.src_path.to_owned(),
         file_imports,
+        file_re_exports: Vec::new(),
     });
 
     Ok(headers)

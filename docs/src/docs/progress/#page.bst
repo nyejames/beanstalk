@@ -528,7 +528,7 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
             [: Import re-exports]
             [: Deferred]
             [: Direct re-export syntax is not supported; aliases remain file-local.]
-            [: Public type aliases can target imported aliases, but that creates a new exported type alias declaration, not import alias re-export. `export @...` syntax for `#mod.bst` facades is planned for Phase 4 of the library system.]
+            [: Public type aliases can target imported aliases, but that creates a new exported type alias declaration, not import alias re-export. `#import @...` syntax for `#mod.bst` facades is planned for Phase 4 of the library system.]
         ]
 
         [data:

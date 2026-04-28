@@ -1,0 +1,2 @@
+#public = [: ok]
+#greet = "Hello"
