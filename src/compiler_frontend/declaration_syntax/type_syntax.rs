@@ -107,6 +107,17 @@ fn parse_required_type(
             ));
         }
         TokenKind::OpenCurly => parse_collection_type(token_stream, context)?,
+        TokenKind::As => {
+            let stage = compilation_stage(context);
+            return_syntax_error!(
+                "`as` is not valid here. It is only supported in type aliases, import clauses, and choice payload patterns.",
+                token_stream.current_location(),
+                {
+                    CompilationStage => stage,
+                    PrimarySuggestion => "Use a type name or remove `as`",
+                }
+            );
+        }
         TokenKind::Symbol(type_name) => {
             let type_name = *type_name;
             token_stream.advance();

@@ -819,6 +819,16 @@ pub(super) fn reject_deferred_pattern_lead_token(
                 "Use simple literal or choice-variant patterns only.",
             ));
         }
+        TokenKind::As => {
+            return_rule_error!(
+                "`as` is not valid in match patterns. It is only supported in choice payload captures.",
+                token_stream.current_location(),
+                {
+                    CompilationStage => "Match Statement Parsing",
+                    PrimarySuggestion => "Use 'case Variant(field as local_name)' for choice payload aliases only",
+                }
+            );
+        }
         _ => {}
     }
 

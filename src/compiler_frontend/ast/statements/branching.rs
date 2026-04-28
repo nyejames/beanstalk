@@ -460,6 +460,17 @@ fn parse_case_arm(
         ));
     }
 
+    if token_stream.current_token_kind() == &TokenKind::As {
+        return_rule_error!(
+            "`as` is not valid in match patterns. It is only supported in choice payload captures.",
+            token_stream.current_location(),
+            {
+                CompilationStage => "Match Statement Parsing",
+                PrimarySuggestion => "Use 'case Variant(field as local_name)' for choice payload aliases only",
+            }
+        );
+    }
+
     if token_stream.current_token_kind() == &TokenKind::Colon {
         return_syntax_error!(
             "Legacy match arm syntax '<pattern>:' is no longer supported. Use 'case <pattern> =>'.",

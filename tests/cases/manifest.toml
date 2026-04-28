@@ -349,6 +349,31 @@ path = "choice_payload_match_rename_self_alias_success"
 tags = ["integration","language"]
 
 [[case]]
+id = "as_in_expression_rejected"
+path = "as_in_expression_rejected"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "as_in_variable_declaration_rejected"
+path = "as_in_variable_declaration_rejected"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "as_in_function_signature_rejected"
+path = "as_in_function_signature_rejected"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "as_in_non_choice_match_pattern_rejected"
+path = "as_in_non_choice_match_pattern_rejected"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "as_in_match_pattern_lead_rejected"
+path = "as_in_match_pattern_lead_rejected"
+tags = ["integration","diagnostics"]
+
+[[case]]
 id = "choice_payload_match_named_assignment_rejected"
 path = "choice_payload_match_named_assignment_rejected"
 tags = ["integration","diagnostics"]

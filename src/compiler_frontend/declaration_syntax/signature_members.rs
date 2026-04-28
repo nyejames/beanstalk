@@ -319,6 +319,17 @@ fn parse_signature_member(
             });
         }
 
+        TokenKind::As => {
+            return_syntax_error!(
+                "`as` is not valid in function signatures or struct fields. It is only supported in type aliases, import clauses, and choice payload patterns.",
+                token_stream.current_location(),
+                {
+                    CompilationStage => "Parameter Parsing",
+                    PrimarySuggestion => "Remove `as` from the parameter/field declaration",
+                }
+            )
+        }
+
         _ => {
             return_syntax_error!(
                 format!(

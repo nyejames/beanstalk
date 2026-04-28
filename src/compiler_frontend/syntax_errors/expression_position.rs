@@ -94,6 +94,14 @@ pub(crate) fn check_expression_common_mistake(
             EXPRESSION_STAGE,
         )),
 
+        // `as` outside its three supported domains
+        TokenKind::As => Some(syntax_error_with_suggestion(
+            "`as` is not a cast operator. It is only valid in type aliases, import clauses, and choice payload patterns.",
+            location,
+            "Use builtin casts such as Int(value) where supported, or use `as` only in a supported renaming context",
+            EXPRESSION_STAGE,
+        )),
+
         _ => None,
     }
 }

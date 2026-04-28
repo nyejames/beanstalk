@@ -138,7 +138,7 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
             [: Partial]
             [: Broad literal, choice-match, and payload-capture coverage, including exhaustiveness and diagnostics.]
             [: JS / HTML]
-            [: Literal patterns, choice variant patterns (including payload captures with `field as local_name` aliases), relational ordered-scalar patterns, guards, and else are supported. Wildcard in case arms is not supported—use else => instead. General capture/tagged patterns and nested payload patterns remain deferred.]
+            [: Literal patterns, choice variant patterns (including payload captures with `field as local_name` aliases), relational ordered-scalar patterns, guards, and else are supported. Wildcard in case arms is not supported—use else => instead. General capture/tagged patterns and nested payload patterns remain deferred. `as` in non-choice match patterns is rejected with a structured diagnostic.]
         ]
 
         [data:
@@ -384,6 +384,13 @@ import @styles/docs {navbar, title, section, palette, table, header, data, codeb
             [: Supported]
             [: [codesnippet:choice_payload_match_rename_success], [codesnippet:choice_payload_match_rename_guard_success], [codesnippet:choice_payload_match_rename_wrong_original_rejected], [codesnippet:choice_payload_match_rename_duplicate_binding_rejected], [codesnippet:choice_payload_match_rename_shadowing_rejected], [codesnippet:choice_payload_match_rename_missing_alias_rejected], [codesnippet:choice_payload_match_rename_non_symbol_alias_rejected], [codesnippet:choice_payload_match_rename_original_not_visible_rejected], [codesnippet:choice_payload_match_rename_self_alias_success]]
             [: `case Variant(original_name as local_name) =>` binds the payload field to a different local name visible in the guard and arm body.]
+        ]
+
+        [data:
+            [: `as` keyword outside supported domains]
+            [: Rejected / Reserved]
+            [: [codesnippet:as_in_expression_rejected], [codesnippet:as_in_variable_declaration_rejected], [codesnippet:as_in_function_signature_rejected], [codesnippet:as_in_non_choice_match_pattern_rejected], [codesnippet:as_in_match_pattern_lead_rejected]]
+            [: `as` is only valid in three contexts: type aliases (`TypeAlias as ExistingType`), import clauses (`import @path/symbol as local_name`), and choice payload captures (`case Variant(field as local_name)`). All other uses are rejected with targeted diagnostics.]
         ]
 
         [data:

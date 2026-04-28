@@ -52,6 +52,7 @@ pub(super) fn parse_headers_in_file(
     let mut next_statement_exported = false;
     let mut start_function_body = Vec::new();
 
+    let mut seen_imports: HashSet<(InternedPath, Option<StringId>)> = HashSet::new();
     let mut file_import_paths: HashSet<InternedPath> = HashSet::new();
     let mut file_imports: Vec<FileImport> = Vec::new();
     let mut file_constant_order = 0usize;
@@ -197,7 +198,8 @@ pub(super) fn parse_headers_in_file(
                         encountered_symbols.insert(name);
                     }
 
-                    if file_import_paths.insert(normalized_path.to_owned()) {
+                    if seen_imports.insert((normalized_path.to_owned(), item.alias)) {
+                        file_import_paths.insert(normalized_path.to_owned());
                         file_imports.push(FileImport {
                             header_path: normalized_path,
                             alias: item.alias,
