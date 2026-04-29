@@ -97,10 +97,10 @@ Implemented, but review again during Phase 3 reconciliation.
 
 ### Current follow-up checks
 
-- [ ] Ensure docs use “module facade” rather than “library facade”.
-- [ ] Ensure docs explain that configured library folders are scan roots.
-- [ ] Ensure docs do not describe source libraries as a separate visibility system.
-- [ ] Ensure docs do not describe `#root_folders` as active config behavior.
+- [x] Ensure docs use “module facade” rather than “library facade”.
+- [x] Ensure docs explain that configured library folders are scan roots.
+- [x] Ensure docs do not describe source libraries as a separate visibility system.
+- [x] Ensure docs do not describe `#root_folders` as active config behavior.
 
 ---
 
@@ -112,9 +112,9 @@ Mostly implemented.
 
 ### Current follow-up checks
 
-- [ ] Confirm every `#mod.bst`, not only project-local source-library facades, receives `FileRole::ModuleFacade`.
-- [ ] Replace user-facing “Library facade files (#mod.bst)” diagnostics with “Module facade files (#mod.bst)”.
-- [ ] Replace comments that describe `#mod.bst` as a library-only facade.
+- [x] Confirm every `#mod.bst`, not only project-local source-library facades, receives `FileRole::ModuleFacade`.
+- [x] Replace user-facing “Library facade files (#mod.bst)” diagnostics with “Module facade files (#mod.bst)”.
+- [x] Replace comments that describe `#mod.bst` as a library-only facade.
 - [ ] Keep the structural rules:
   - private top-level declarations rejected
   - top-level runtime statements rejected
@@ -135,6 +135,10 @@ The old Phase 3 should be replaced by the following refactor sequence before con
 ---
 
 ## Phase 3A — Remove `#root_folders` as an active config surface
+
+### Status
+
+Implemented.
 
 ### Summary
 
@@ -191,6 +195,10 @@ Rename '#root_folders' to '#library_folders'. Configured library folders are sca
 ---
 
 ## Phase 3B — Collapse duplicate config folder parsing
+
+### Status
+
+Implemented.
 
 ### Summary
 
@@ -252,6 +260,10 @@ config_library_folders_duplicate_rejected
 
 ## Phase 3C — Remove root-folder path resolution
 
+### Status
+
+Implemented.
+
 ### Summary
 
 Remove the old project-root-folder import branch from `ProjectPathResolver`.
@@ -306,6 +318,10 @@ source_library_prefix_wins_consistently
 
 ## Phase 3D — Reframe source-library collision validation
 
+### Status
+
+Implemented.
+
 ### Summary
 
 Replace old `#root_folders` entry-root collision logic with source-library-prefix collision rules.
@@ -350,6 +366,10 @@ library_prefix_collision_with_entry_root_folder_rejected
 
 ## Phase 3E — Module-facade terminology cleanup
 
+### Status
+
+Implemented.
+
 ### Summary
 
 Align naming with the corrected semantic model.
@@ -380,6 +400,10 @@ Existing diagnostics tests may need expected message updates.
 ---
 
 ## Phase 3F — Matrix and docs reconciliation
+
+### Status
+
+Implemented.
 
 ### Summary
 

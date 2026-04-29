@@ -219,7 +219,7 @@ fn reject_direct_mod_file_import(
 
     Err(CompilerError::new_rule_error(
         format!(
-            "Cannot import or re-export directly from '#mod.bst' via '{}'. Library facades are resolved automatically; import exported symbols through the library path instead.",
+            "Cannot import or re-export directly from '#mod.bst' via '{}'. Module facades are resolved automatically; import exported symbols through the module path instead.",
             path.to_portable_string(string_table)
         ),
         location.clone(),
@@ -229,7 +229,7 @@ fn reject_direct_mod_file_import(
 /// Attempts to resolve a cross-library import through the target library's `#mod.bst` facade.
 ///
 /// WHAT: when an import path starts with a library prefix and the importer is outside that
-/// library, the symbol must be exported by the library's facade.
+/// library, the symbol must be exported by the module facade.
 /// WHY: library modules expose symbols only through their facade; external importers cannot
 /// bypass it to import internal implementation symbols.
 fn try_resolve_facade_import(
@@ -701,7 +701,7 @@ pub(crate) fn resolve_re_exports(
             if exports.iter().any(|e| e.export_name == export_name) {
                 return Err(CompilerError::new_rule_error(
                     format!(
-                        "Duplicate export name '{}' in library facade. Each exported name must be unique.",
+                        "Duplicate export name '{}' in module facade. Each exported name must be unique.",
                         string_table.resolve(export_name)
                     ),
                     re_export.location.clone(),

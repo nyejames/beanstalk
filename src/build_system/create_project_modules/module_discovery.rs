@@ -427,7 +427,7 @@ fn discover_root_entry_files(
                 continue;
             }
 
-            // Exclude #mod.bst so source library facades are never treated as module entries.
+            // Exclude #mod.bst so module facades are never treated as module entries.
             if file_name_is_mod_file(file_name) {
                 continue;
             }

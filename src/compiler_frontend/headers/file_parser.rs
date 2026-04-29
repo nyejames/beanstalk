@@ -160,7 +160,7 @@ pub(super) fn parse_headers_in_file(
 
                         if context.file_role == FileRole::ModuleFacade && !header.exported {
                             crate::return_rule_error!(
-                                "Library facade files (#mod.bst) cannot contain private top-level declarations.",
+                                "Module facade files (#mod.bst) cannot contain private top-level declarations.",
                                 header.name_location.clone(), {
                                     CompilationStage => "Header Parsing",
                                     PrimarySuggestion => "Add `#` to export it, move it to an implementation file, or remove it from `#mod.bst`.",
@@ -199,7 +199,7 @@ pub(super) fn parse_headers_in_file(
                     // `#import @...` is facade-only re-export syntax.
                     if context.file_role != FileRole::ModuleFacade {
                         crate::return_rule_error!(
-                            "`#import` can only be used in `#mod.bst` to re-export symbols from a library facade.",
+                            "`#import` can only be used in `#mod.bst` to re-export symbols from a module facade.",
                             current_location, {
                                 CompilationStage => "Header Parsing",
                                 PrimarySuggestion => "Use `import` for local imports, or move the re-export into `#mod.bst`.",
@@ -339,7 +339,7 @@ pub(super) fn parse_headers_in_file(
                     // fragment count so subsequent const fragments get the correct insertion index.
                     if context.file_role == FileRole::ModuleFacade {
                         crate::return_rule_error!(
-                            "Library facade files (#mod.bst) cannot contain runtime top-level templates.",
+                            "Module facade files (#mod.bst) cannot contain runtime top-level templates.",
                             current_location, {
                                 CompilationStage => "Header Parsing",
                                 PrimarySuggestion => "Remove the template or move it to a normal source file.",
@@ -388,7 +388,7 @@ pub(super) fn parse_headers_in_file(
         });
         if has_executable_tokens {
             let msg = if context.file_role == FileRole::ModuleFacade {
-                "Library facade files (#mod.bst) cannot contain top-level executable statements."
+                "Module facade files (#mod.bst) cannot contain top-level executable statements."
             } else {
                 "Non-entry files cannot contain top-level executable statements. Move this code into a named function or into the entry file."
             };

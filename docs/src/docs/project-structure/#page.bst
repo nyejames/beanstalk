@@ -80,9 +80,8 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
         # origin = "/beanstalk"
         # html_lang = "en"
         # html_title_postfix = " | Beanstalk"
-        # root_folders = {
+        # library_folders = {
             @lib,
-            @assets,
         }
     ]
 
@@ -112,8 +111,8 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
         ]
 
         [data:
-            [: [codesnippet:#root_folders]]
-            [: Extra top-level project folders that non-relative imports can resolve through before falling back to the entry root.]
+            [: [codesnippet:#library_folders]]
+            [: Configures source-library scan roots. Each direct child directory of a scan root becomes an import prefix. `/lib` is the default when omitted.]
         ]
 
         [data:
@@ -123,7 +122,7 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
     ]
 
     Config is loaded before module discovery.
-    That means [codesnippet:#entry_root] and [codesnippet:#root_folders] shape how the project is searched and how imports resolve.
+    That means [codesnippet:#entry_root] and [codesnippet:#library_folders] shape how the project is searched and how imports resolve.
 ]
 
 #[section, $markdown:
@@ -345,8 +344,8 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
     Path resolution is project-aware:
 
     - [codesnippet:@./] and [codesnippet:@../] resolve relative to the importing file.
-    - Non-relative imports first check configured [codesnippet:#root_folders] from the project root.
-    - If no root folder matches, the import resolves from [codesnippet:#entry_root].
+    - Non-relative imports whose first segment matches a source library prefix resolve from the corresponding library root.
+    - Other non-relative imports resolve from [codesnippet:#entry_root].
 
     Builder-provided and project-local source libraries expose their prefix directly.
     That means [codesnippet:import @html ...] resolves through the HTML builder's [codesnippet:@html] library, while [codesnippet:import @styles/docs ...] resolves through [codesnippet:docs/src/styles/docs.bst].
@@ -381,7 +380,7 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
         ├── lib/
         │   └── local_helpers/
         │       └── #mod.bst
-        ├── @assets/
+        ├── assets/
         │   └── ...
         ├── dev/
         └── release/
@@ -394,7 +393,7 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
     - [codesnippet:styles/docs.bst] is a normal source file imported by pages.
     - [codesnippet:@html] is provided by the HTML builder.
     - [codesnippet:lib/local_helpers/#mod.bst] would expose a project-local [codesnippet:@local_helpers] source library.
-    - [codesnippet:@assets] is a project-root import folder configured by [codesnippet:#root_folders].
+    - [codesnippet:assets/] is a normal project folder for static files such as images.
     - [codesnippet:dev/] and [codesnippet:release/] are output folders, not source folders.
 ]
 

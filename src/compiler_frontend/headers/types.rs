@@ -184,7 +184,7 @@ pub struct FileReExport {
 
 /// Classification of a source file's role within the module.
 ///
-/// WHAT: distinguishes entry files, normal source files, and library facade files.
+/// WHAT: distinguishes entry files, normal source files, and module facade files.
 /// WHY: each role has different rules for runtime code, exports, and visibility.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FileRole {
@@ -192,7 +192,7 @@ pub enum FileRole {
     Entry,
     /// A normal source file. No top-level runtime code allowed.
     Normal,
-    /// A library facade file (`#mod.bst`). Defines the public export surface.
+    /// A module facade file (`#mod.bst`). Defines the public export surface.
     /// No top-level runtime code allowed. Exported declarations are visible externally.
     ModuleFacade,
 }

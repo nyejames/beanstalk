@@ -95,7 +95,7 @@ Source libraries:
 - Source libraries are normal modules discovered through library roots; they do not use a separate visibility system.
 - Config-defined or builder-provided library roots expose their prefix directly; `/lib/html` imports as `@html`, not `@lib/html`.
 - Every source library module must expose its public surface through `#mod.bst`.
-- External importers cannot bypass a library facade and import private implementation files directly.
+- External importers cannot bypass a module facade and import private implementation files directly.
 - `#import @...` is valid only inside `#mod.bst` and re-exports imported symbols without creating local bindings.
 
 Project builders do **not**:

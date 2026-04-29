@@ -393,7 +393,7 @@ fn resolve_graph_path(
     None
 }
 
-/// Checks whether a path refers to a symbol exported by a library facade.
+/// Checks whether a path refers to a symbol exported by a module facade.
 ///
 /// WHAT: facade files declare symbols that are visible to cross-library importers. When the
 /// facade header is excluded from the dependency graph, consumer dependencies on facade symbols
@@ -428,7 +428,7 @@ fn is_same_file_symbol_hint(path: &InternedPath, source_file: &InternedPath) -> 
     path.parent().as_ref() == Some(source_file)
 }
 
-/// Checks whether a header belongs to a library facade (`#mod.bst`).
+/// Checks whether a header belongs to a module facade (`#mod.bst`).
 ///
 /// WHAT: facade files only consume dependencies from other module files and do not expose
 /// symbols to the rest of the module, so they should be excluded from dependency sorting.

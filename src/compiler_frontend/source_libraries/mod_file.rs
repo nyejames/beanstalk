@@ -1,4 +1,4 @@
-//! Source-library facade file identity.
+//! Module facade file identity.
 //!
 //! WHAT: centralizes `#mod.bst` path checks and import-path detection.
 //! WHY: `#mod.bst` is a boundary marker, not a normal implementation file. Keeping

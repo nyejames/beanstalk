@@ -392,9 +392,8 @@ body {
     <span class='bst-code-operator'>#</span> origin <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;/beanstalk&quot;</span>
     <span class='bst-code-operator'>#</span> html_lang <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;en&quot;</span>
     <span class='bst-code-operator'>#</span> html_title_postfix <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot; | Beanstalk&quot;</span>
-    <span class='bst-code-operator'>#</span> root_folders <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span>
+    <span class='bst-code-operator'>#</span> library_folders <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span>
         <span class='bst-code-operator'>@</span>lib,
-        <span class='bst-code-operator'>@</span>assets,
     <span class='bst-code-parenthesis'>}</span>
     </code></pre><p>Important settings:</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
         
@@ -449,8 +448,8 @@ body {
              <td style="padding: 0.2em 0.5em;"> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">#root_folders</span></td>
-     <td style="padding: 0.2em 0.5em;"> Extra top-level project folders that non-relative imports can resolve through before falling back to the entry root.</td>
+    ">#library_folders</span></td>
+     <td style="padding: 0.2em 0.5em;"> Configures source-library scan roots. Each direct child directory of a scan root becomes an import prefix. `/lib` is the default when omitted.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -479,7 +478,7 @@ body {
     ">#entry_root</span> and <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">#root_folders</span> shape how the project is searched and how imports resolve.</p></section>
+    ">#library_folders</span> shape how the project is searched and how imports resolve.</p></section>
     <section class="container"><h1>Module entry files</h1><p>A module entry file is a Beanstalk file whose file name starts with <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
@@ -738,10 +737,7 @@ body {
     ">@./</span> and <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">@../</span> resolve relative to the importing file.</li><li>Non-relative imports first check configured <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#root_folders</span> from the project root.</li><li>If no root folder matches, the import resolves from <span style="
+    ">@../</span> resolve relative to the importing file.</li><li>Non-relative imports whose first segment matches a source library prefix resolve from the corresponding library root.</li><li>Other non-relative imports resolve from <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">#entry_root</span>.</li></ul><p>Builder-provided and project-local source libraries expose their prefix directly. That means <span style="
@@ -787,7 +783,7 @@ body {
     ├── lib<span class='bst-code-operator'>/</span>
     │   └── local_helpers<span class='bst-code-operator'>/</span>
     │       └── <span class='bst-code-operator'>#</span>mod.bst
-    ├── <span class='bst-code-operator'>@</span>assets<span class='bst-code-operator'>/</span>
+    ├── assets<span class='bst-code-operator'>/</span>
     │   └── ...
     ├── dev<span class='bst-code-operator'>/</span>
     └── release<span class='bst-code-operator'>/</span>
@@ -812,10 +808,7 @@ body {
     ">@local_helpers</span> source library.</li><li><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">@assets</span> is a project-root import folder configured by <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#root_folders</span>.</li><li><span style="
+    ">assets/</span> is a normal project folder for static files such as images.</li><li><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">dev/</span> and <span style="
