@@ -53,7 +53,6 @@ fn test_constant_context(scope: InternedPath) -> ScopeContext {
     let resolver = ProjectPathResolver::new(
         cwd.clone(),
         cwd,
-        &[],
         &crate::libraries::SourceLibraryRegistry::default(),
     )
     .expect("test path resolver should be valid");

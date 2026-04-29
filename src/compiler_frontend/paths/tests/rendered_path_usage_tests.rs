@@ -19,25 +19,23 @@ struct TestHarness {
 }
 
 impl TestHarness {
-    fn new(root_folders: &[&str]) -> Self {
+    fn new() -> Self {
         let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
         let project_root = temp_dir.path().to_path_buf();
         let entry_root = project_root.join("src");
 
         fs::create_dir_all(&entry_root).expect("should create entry root");
-        fs::create_dir_all(project_root.join("assets/images")).expect("should create assets dir");
-        fs::create_dir_all(project_root.join("src/images")).expect("should create image dir");
-        fs::create_dir_all(project_root.join("src/docs")).expect("should create docs dir");
-        fs::write(project_root.join("assets/images/logo.png"), b"asset").expect("write asset");
-        fs::write(project_root.join("src/images/entry.png"), b"entry").expect("write entry asset");
-        fs::write(project_root.join("src/docs/local.png"), b"local").expect("write local asset");
-        fs::write(project_root.join("src/#page.bst"), b"").expect("write page");
+        fs::create_dir_all(entry_root.join("assets/images")).expect("should create assets dir");
+        fs::create_dir_all(entry_root.join("images")).expect("should create image dir");
+        fs::create_dir_all(entry_root.join("docs")).expect("should create docs dir");
+        fs::write(entry_root.join("assets/images/logo.png"), b"asset").expect("write asset");
+        fs::write(entry_root.join("images/entry.png"), b"entry").expect("write entry asset");
+        fs::write(entry_root.join("docs/local.png"), b"local").expect("write local asset");
+        fs::write(entry_root.join("#page.bst"), b"").expect("write page");
 
-        let root_folder_paths: Vec<PathBuf> = root_folders.iter().map(PathBuf::from).collect();
         let resolver = ProjectPathResolver::new(
             project_root.clone(),
             entry_root,
-            &root_folder_paths,
             &crate::libraries::SourceLibraryRegistry::default(),
         )
         .expect("resolver should build");
@@ -82,8 +80,8 @@ impl TestHarness {
 }
 
 #[test]
-fn root_folder_render_capture_records_semantics_and_origin_aware_text() {
-    let mut harness = TestHarness::new(&["assets"]);
+fn entry_root_render_capture_records_semantics_and_origin_aware_text() {
+    let mut harness = TestHarness::new();
     let source_scope = harness.source_scope();
     let path = harness.path(&["assets", "images", "logo.png"]);
     let importer_file = harness.importer_file();
@@ -106,7 +104,7 @@ fn root_folder_render_capture_records_semantics_and_origin_aware_text() {
     assert_eq!(recorded.rendered_text, "/beanstalk/assets/images/logo.png");
     assert_eq!(recorded.usages.len(), 1);
     let usage = &recorded.usages[0];
-    assert_eq!(usage.base, CompileTimePathBase::ProjectRootFolder);
+    assert_eq!(usage.base, CompileTimePathBase::EntryRoot);
     assert_eq!(usage.kind, CompileTimePathKind::File);
     assert_eq!(
         usage.source_path.to_portable_string(&harness.string_table),
@@ -122,7 +120,7 @@ fn root_folder_render_capture_records_semantics_and_origin_aware_text() {
 
 #[test]
 fn entry_root_render_capture_records_entry_root_semantics() {
-    let mut harness = TestHarness::new(&["assets"]);
+    let mut harness = TestHarness::new();
     let source_scope = harness.source_scope();
     let path = harness.path(&["images", "entry.png"]);
     let importer_file = harness.importer_file();
@@ -151,7 +149,7 @@ fn entry_root_render_capture_records_entry_root_semantics() {
 
 #[test]
 fn relative_render_capture_preserves_relative_text() {
-    let mut harness = TestHarness::new(&["assets"]);
+    let mut harness = TestHarness::new();
     let source_scope = harness.source_scope();
     let path = harness.path(&[".", "docs", "local.png"]);
     let importer_file = harness.importer_file();
@@ -183,7 +181,7 @@ fn relative_render_capture_preserves_relative_text() {
 
 #[test]
 fn custom_origin_changes_rendered_text_but_not_semantic_public_path() {
-    let mut harness = TestHarness::new(&["assets"]);
+    let mut harness = TestHarness::new();
     let source_scope = harness.source_scope();
     let path = harness.path(&["assets", "images", "logo.png"]);
     let importer_file = harness.importer_file();

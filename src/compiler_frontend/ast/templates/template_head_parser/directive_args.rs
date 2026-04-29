@@ -362,7 +362,6 @@ mod tests {
         let resolver = ProjectPathResolver::new(
             cwd.clone(),
             cwd,
-            &[],
             &crate::libraries::SourceLibraryRegistry::default(),
         )
         .expect("test path resolver should be valid");

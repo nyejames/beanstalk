@@ -44,7 +44,6 @@ pub const MINIMUM_LIKELY_DECLARATIONS: usize = 10; // (Maybe) How many symbols t
 /// - `#entry_root`: The root directory for source files (default: "")
 /// - `#dev_folder`: Output directory for development builds (default: "dev")
 /// - `#output_folder`: Output directory for release builds (default: "release")
-/// - `#root_folders`: Top-level project folders for explicit imports (default: [])
 /// - `#library_folders`: Top-level folders scanned for project-local source libraries (default: ["lib"])
 /// - `#project_name` or `#name`: The project name
 /// - `#version`: The project version (default: "0.1.0")
@@ -61,8 +60,6 @@ pub struct Config {
     pub entry_root: PathBuf,
     pub dev_folder: PathBuf,
     pub release_folder: PathBuf,
-    /// Top-level project folders that non-relative imports can target explicitly
-    pub root_folders: Vec<PathBuf>,
     /// Top-level project folders scanned for project-local source libraries.
     pub library_folders: Vec<PathBuf>,
     /// Whether `#library_folders` was explicitly configured in `#config.bst`.
@@ -85,7 +82,6 @@ impl Config {
             dev_folder: PathBuf::from("dev"),
             release_folder: PathBuf::from("release"),
 
-            root_folders: Vec::new(), // Explicitly-visible top-level project folders for imports and future path validation
             library_folders: vec![PathBuf::from("lib")], // Default convention for project-local source libraries
             has_explicit_library_folders: false,
             project_name: String::new(),
@@ -150,7 +146,6 @@ impl Default for Config {
             entry_root: PathBuf::from("src"),
             dev_folder: PathBuf::from("dev"),
             release_folder: PathBuf::from("release"),
-            root_folders: Vec::new(),
             library_folders: vec![PathBuf::from("lib")],
             has_explicit_library_folders: false,
             project_name: String::from("html_project"),

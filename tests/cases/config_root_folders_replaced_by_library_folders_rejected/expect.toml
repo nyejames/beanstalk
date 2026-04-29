@@ -4,4 +4,4 @@ entry = "."
 mode = "failure"
 warnings = "forbid"
 error_type = "Config"
-message_contains = ["#libraries", "replaced"]
+message_contains = ["#root_folders", "replaced", "#library_folders"]

@@ -1,0 +1,1 @@
+#root_folders = { @lib }

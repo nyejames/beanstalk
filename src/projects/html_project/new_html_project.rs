@@ -41,9 +41,7 @@ pub fn create_html_project_template(
          #version = \"0.1.0\"\n\
          #author = \"\"\n\
          #license = \"MIT\"\n\
-         #root_folders = {{\n\
-             @core,\n\
-         }}\n"
+"
     );
     fs::write(full_path.join("#config.bst"), config_content).map_err(|e| e.to_string())?;
 

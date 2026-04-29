@@ -22,7 +22,6 @@ fn configured_resolver(config: &Config) -> ProjectPathResolver {
     ProjectPathResolver::new(
         project_root,
         entry_root,
-        &config.root_folders,
         &crate::libraries::SourceLibraryRegistry::default(),
     )
     .expect("project path resolver should build")
@@ -82,7 +81,7 @@ fn parses_config_constant_declarations() {
 
     fs::write(
         &config_path,
-        "#entry_root = \"src\"\n#dev_folder = \"dev\"\n#output_folder = \"release\"\n#name = \"docs\"\n#version = \"1.2.3\"\n#project = \"html\"\n#page_url_style = \"trailing_slash\"\n#redirect_index_html = true\n#root_folders = { @lib, \"vendor\" }\n#library_folders = { @lib, @packages }\n#custom_key = \"custom_value\"\n",
+        "#entry_root = \"src\"\n#dev_folder = \"dev\"\n#output_folder = \"release\"\n#name = \"docs\"\n#version = \"1.2.3\"\n#project = \"html\"\n#page_url_style = \"trailing_slash\"\n#redirect_index_html = true\n#library_folders = { @lib, @packages }\n#custom_key = \"custom_value\"\n",
     )
     .expect("should write config");
 
@@ -108,10 +107,6 @@ fn parses_config_constant_declarations() {
     assert_eq!(
         config.settings.get("custom_key"),
         Some(&"custom_value".to_string())
-    );
-    assert_eq!(
-        config.root_folders,
-        vec![PathBuf::from("lib"), PathBuf::from("vendor")]
     );
     assert_eq!(
         config.library_folders,
@@ -200,34 +195,7 @@ fn rejects_legacy_libraries_config_key() {
     );
     let error = &messages.errors[0];
     assert!(
-        error.msg.contains("#root_folders"),
-        "unexpected error message: {}",
-        error.msg
-    );
-
-    fs::remove_dir_all(&root).expect("should remove temp root");
-}
-
-#[test]
-fn rejects_invalid_root_folder_entries() {
-    let root = temp_dir("invalid_root_folders");
-    fs::create_dir_all(&root).expect("should create root dir");
-    let config_path = root.join(settings::CONFIG_FILE_NAME);
-
-    fs::write(&config_path, "#root_folders = { @core/html }\n").expect("should write config");
-
-    let mut config = Config::new(root.clone());
-    let style_directives = test_style_directives();
-    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
-        .expect_err("config should fail");
-
-    assert!(
-        !messages.errors.is_empty(),
-        "should have at least one error"
-    );
-    let error = &messages.errors[0];
-    assert!(
-        error.msg.contains("single top-level folder name"),
+        error.msg.contains("#library_folders"),
         "unexpected error message: {}",
         error.msg
     );
@@ -453,32 +421,6 @@ fn discover_modules_uses_reachable_files_only() {
 }
 
 #[test]
-fn parses_root_folders_variants_and_dedupes_entries() {
-    let root = temp_dir("root_folders_dedup");
-    fs::create_dir_all(&root).expect("should create root dir");
-    let config_path = root.join(settings::CONFIG_FILE_NAME);
-
-    fs::write(
-        &config_path,
-        "#root_folders = { @lib, \"vendor\", vendor, @lib, \"vendor\" }\n",
-    )
-    .expect("should write config");
-
-    let mut config = Config::new(root.clone());
-    let style_directives = test_style_directives();
-    parse_project_config_for_test(&mut config, &config_path, &style_directives)
-        .expect("config should parse");
-
-    assert_eq!(
-        config.root_folders,
-        vec![PathBuf::from("lib"), PathBuf::from("vendor")],
-        "root folders should dedupe while preserving first-seen order"
-    );
-
-    fs::remove_dir_all(&root).expect("should remove temp root");
-}
-
-#[test]
 fn discover_modules_resolves_relative_imports_with_dot_segments() {
     let root = temp_dir("relative_imports");
     let src = root.join("src");
@@ -545,7 +487,7 @@ fn entry_root_fallback_wins_for_unmatched_non_relative_imports() {
 
     fs::write(
         root.join(settings::CONFIG_FILE_NAME),
-        "#entry_root = \"src\"\n#root_folders = { @lib }\n",
+        "#entry_root = \"src\"\n",
     )
     .expect("should write config");
     fs::write(
@@ -572,7 +514,8 @@ fn entry_root_fallback_wins_for_unmatched_non_relative_imports() {
     assert_eq!(modules.len(), 1, "expected exactly one entry module");
 
     let source_theme = fs::canonicalize(src.join("helpers/theme.bst")).expect("canonical source");
-    let library_theme = fs::canonicalize(lib.join("helpers/theme.bst")).expect("canonical library");
+    let _library_theme =
+        fs::canonicalize(lib.join("helpers/theme.bst")).expect("canonical library");
     let discovered_paths = modules[0]
         .input_files
         .iter()
@@ -582,10 +525,6 @@ fn entry_root_fallback_wins_for_unmatched_non_relative_imports() {
     assert!(
         discovered_paths.contains(&source_theme),
         "unmatched non-relative imports should fall back to the entry root"
-    );
-    assert!(
-        !discovered_paths.contains(&library_theme),
-        "configured root folders should not be searched unless the first import segment matches them"
     );
 
     fs::remove_dir_all(&root).expect("should remove temp root");
@@ -640,100 +579,6 @@ fn discover_all_modules_finds_multiple_hash_entries_per_root() {
     assert!(entry_names.contains("#page.bst"));
     assert!(entry_names.contains("#layout.bst"));
     assert!(entry_names.contains("#lib.bst"));
-
-    fs::remove_dir_all(&root).expect("should remove temp root");
-}
-
-#[test]
-fn explicit_root_folder_imports_resolve_from_project_root() {
-    let root = temp_dir("explicit_root_folder");
-    let src = root.join("src");
-    let lib = root.join("lib");
-    fs::create_dir_all(&src).expect("should create src root");
-    fs::create_dir_all(&lib).expect("should create lib root");
-
-    fs::write(
-        root.join(settings::CONFIG_FILE_NAME),
-        "#entry_root = \"src\"\n#root_folders = { @lib }\n",
-    )
-    .expect("should write config");
-    fs::write(
-        src.join("#page.bst"),
-        "import @lib/html {center}\n#[center: ok]\n",
-    )
-    .expect("should write page");
-    fs::write(
-        lib.join("html.bst"),
-        "#center String = [$insert(\"style\"):text-align: center;]\n",
-    )
-    .expect("should write root-folder helper");
-
-    let mut config = Config::new(root.clone());
-    let style_directives = test_style_directives();
-    parse_project_config_for_test(
-        &mut config,
-        &root.join(settings::CONFIG_FILE_NAME),
-        &style_directives,
-    )
-    .expect("config parse");
-    let resolver = configured_resolver(&config);
-
-    let modules = discover_modules_for_test(&config, &resolver, &style_directives)
-        .expect("module discovery should pass");
-    let discovered_paths = modules[0]
-        .input_files
-        .iter()
-        .map(|file| file.source_path.clone())
-        .collect::<HashSet<_>>();
-
-    assert!(
-        discovered_paths.contains(&fs::canonicalize(lib.join("html.bst")).expect("canonical lib")),
-        "explicit root-folder imports should resolve from the project root"
-    );
-
-    fs::remove_dir_all(&root).expect("should remove temp root");
-}
-
-#[test]
-fn rejects_entry_root_folder_that_conflicts_with_root_folder_name() {
-    let root = temp_dir("root_folder_collision");
-    let src = root.join("src");
-    fs::create_dir_all(src.join("lib")).expect("should create conflicting src/lib");
-
-    fs::write(
-        root.join(settings::CONFIG_FILE_NAME),
-        "#entry_root = \"src\"\n#root_folders = { @lib }\n",
-    )
-    .expect("should write config");
-    fs::write(src.join("#page.bst"), "import @lib/html {center}\n").expect("should write page");
-
-    let mut config = Config::new(root.clone());
-    let style_directives = test_style_directives();
-    parse_project_config_for_test(
-        &mut config,
-        &root.join(settings::CONFIG_FILE_NAME),
-        &style_directives,
-    )
-    .expect("config parse");
-    let resolver = configured_resolver(&config);
-
-    let error = match discover_modules_for_test(&config, &resolver, &style_directives) {
-        Ok(_) => panic!("conflicting src/lib folder should fail"),
-        Err(error) => error,
-    };
-
-    assert!(
-        error.msg.contains("unreachable"),
-        "unexpected error message: {}",
-        error.msg
-    );
-    assert!(
-        error
-            .metadata
-            .get(&crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion)
-            .is_some_and(|suggestion| suggestion.contains("Rename")),
-        "expected rename suggestion metadata: {error:?}"
-    );
 
     fs::remove_dir_all(&root).expect("should remove temp root");
 }

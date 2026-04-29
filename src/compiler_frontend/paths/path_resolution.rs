@@ -5,10 +5,10 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::libraries::SourceLibraryRegistry;
 use crate::projects::settings::{BEANSTALK_FILE_EXTENSION, Config};
 use crate::return_file_error;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::fs;
-use std::path::{Component, Path, PathBuf};
+use std::path::{Path, PathBuf};
 
 // ---------------------------------------------------------------------------
 // Compile-time path value types
@@ -26,7 +26,9 @@ pub enum CompileTimePathKind {
 pub enum CompileTimePathBase {
     /// Resolved relative to the importing file (`./` or `../`).
     RelativeToFile,
-    /// First segment matched a configured `#root_folders` entry.
+    /// Deprecated: first segment matched a configured `#root_folders` entry.
+    /// Kept for path-format compatibility until Phase 3C decides whether non-import
+    /// path literals still need this base.
     ProjectRootFolder,
     /// First segment matched a source library prefix.
     SourceLibraryRoot,
@@ -77,13 +79,12 @@ pub struct CompileTimePaths {
     pub paths: Vec<CompileTimePath>,
 }
 
-/// WHAT: resolves project-aware import paths using the configured entry root and explicit root folders.
+/// WHAT: resolves project-aware import paths using the configured entry root and source libraries.
 /// WHY: Stage 0 discovery and later frontend import normalization must use identical path rules.
 #[derive(Clone, Debug)]
 pub(crate) struct ProjectPathResolver {
     project_root: PathBuf,
     entry_root: PathBuf,
-    root_folder_names: HashSet<String>,
     source_library_roots: HashMap<String, PathBuf>,
     /// Maps library prefix to the canonical path of its `#mod.bst` facade file, if present.
     facade_files: HashMap<String, PathBuf>,
@@ -95,7 +96,6 @@ impl ProjectPathResolver {
     pub(crate) fn new(
         project_root: PathBuf,
         entry_root: PathBuf,
-        root_folders: &[PathBuf],
         source_libraries: &SourceLibraryRegistry,
     ) -> Result<Self, CompilerError> {
         let mut source_library_roots = HashMap::new();
@@ -120,7 +120,6 @@ impl ProjectPathResolver {
         Ok(Self {
             project_root,
             entry_root,
-            root_folder_names: collect_root_folder_names(root_folders)?,
             source_library_roots,
             facade_files,
         })
@@ -151,23 +150,6 @@ impl ProjectPathResolver {
     ) -> Result<PathBuf, CompilerError> {
         if let Ok(relative_to_entry_root) = canonical_file.strip_prefix(&self.entry_root) {
             return Ok(relative_to_entry_root.to_path_buf());
-        }
-
-        let mut sorted_root_folders = self
-            .root_folder_names
-            .iter()
-            .map(String::as_str)
-            .collect::<Vec<_>>();
-        sorted_root_folders.sort_unstable();
-
-        for root_folder_name in sorted_root_folders {
-            let root_folder_path = self.project_root.join(root_folder_name);
-            if canonical_file.starts_with(&root_folder_path)
-                && let Ok(relative_to_project_root) =
-                    canonical_file.strip_prefix(&self.project_root)
-            {
-                return Ok(relative_to_project_root.to_path_buf());
-            }
         }
 
         if let Ok(relative_to_project_root) = canonical_file.strip_prefix(&self.project_root) {
@@ -299,85 +281,12 @@ impl ProjectPathResolver {
         Err(CompilerError::file_error(
             importer_file,
             format!(
-                "Could not resolve import '{}'. Non-relative imports first match configured '#root_folders' from the project root and otherwise fall back to the entry root '{}'.",
+                "Could not resolve import '{}'. Non-relative imports match source library prefixes or fall back to the entry root '{}'.",
                 import_path.to_portable_string(string_table),
                 self.entry_root.display()
             ),
             string_table,
         ))
-    }
-
-    /// WHAT: rejects entry-root folders that can never be reached through non-relative imports.
-    /// WHY: configured root folders win before the entry-root fallback, so matching source folder names become dead paths.
-    pub(crate) fn validate_entry_root_collisions(
-        &self,
-        string_table: &mut StringTable,
-    ) -> Result<(), CompilerError> {
-        let entries = fs::read_dir(&self.entry_root).map_err(|error| {
-            CompilerError::file_error(
-                &self.entry_root,
-                format!(
-                    "Failed to read configured entry root '{}' while validating '#root_folders': {error}",
-                    self.entry_root.display()
-                ),
-                string_table,
-            )
-        })?;
-
-        for entry in entries {
-            let entry = entry.map_err(|error| {
-                CompilerError::file_error(
-                    &self.entry_root,
-                    format!("Failed to read entry-root directory entry: {error}"),
-                    string_table,
-                )
-            })?;
-            let path = entry.path();
-
-            if !path.is_dir() {
-                continue;
-            }
-
-            let Some(name) = path.file_name().and_then(|value| value.to_str()) else {
-                continue;
-            };
-
-            if !self.root_folder_names.contains(name) {
-                continue;
-            }
-
-            let unreachable_path = self.entry_root.join(name);
-            return_file_error!(
-                string_table,
-                &unreachable_path,
-                format!(
-                    "The source folder '{}' is unreachable because '{}' is also configured in '#root_folders'.",
-                    unreachable_path.display(),
-                    name
-                ),
-                {
-                    CompilationStage => String::from("Project Structure"),
-                    PrimarySuggestion => String::from("Rename the folder inside '#entry_root' to a different name so imports can reach it through the entry-root fallback."),
-                    AlternativeSuggestion => String::from("If that folder should be the explicit project-root import target instead, rename the '#root_folders' entry to a different top-level name."),
-                }
-            );
-        }
-
-        Ok(())
-    }
-
-    /// WHAT: returns whether the import path starts with a configured explicit root folder.
-    /// WHY: explicit project-root imports should never fall through to the entry-root default.
-    pub(crate) fn matches_root_folder(
-        &self,
-        import_path: &InternedPath,
-        string_table: &StringTable,
-    ) -> bool {
-        import_path
-            .as_components()
-            .first()
-            .map(|component| string_table.resolve(*component))
-            .is_some_and(|segment| self.root_folder_names.contains(segment))
     }
 
     /// WHAT: returns whether the import path starts with a registered source library prefix.
@@ -467,11 +376,6 @@ impl ProjectPathResolver {
                 CompileTimePathBase::RelativeToFile,
                 importer_dir.to_path_buf(),
             ))
-        } else if self.matches_root_folder(path, string_table) {
-            Ok((
-                CompileTimePathBase::ProjectRootFolder,
-                self.project_root.clone(),
-            ))
         } else if let Some(library_root) = self.matches_source_library_prefix(path, string_table) {
             Ok((CompileTimePathBase::SourceLibraryRoot, library_root))
         } else {
@@ -535,41 +439,6 @@ pub(crate) fn resolve_project_entry_root(config: &Config) -> PathBuf {
         config.entry_root.clone()
     } else {
         config.entry_dir.join(&config.entry_root)
-    }
-}
-
-fn collect_root_folder_names(root_folders: &[PathBuf]) -> Result<HashSet<String>, CompilerError> {
-    let mut names = HashSet::with_capacity(root_folders.len());
-
-    for root_folder in root_folders {
-        let name = extract_root_folder_name(root_folder)?;
-        names.insert(name);
-    }
-
-    Ok(names)
-}
-
-fn extract_root_folder_name(root_folder: &Path) -> Result<String, CompilerError> {
-    let mut components = root_folder.components();
-    let Some(first) = components.next() else {
-        return Err(CompilerError::compiler_error(
-            "Configured '#root_folders' entry cannot be empty.",
-        ));
-    };
-
-    if components.next().is_some() {
-        return Err(CompilerError::compiler_error(format!(
-            "Configured '#root_folders' entry '{}' must be a single top-level folder name.",
-            root_folder.display()
-        )));
-    }
-
-    match first {
-        Component::Normal(name) => Ok(name.to_string_lossy().to_string()),
-        _ => Err(CompilerError::compiler_error(format!(
-            "Configured '#root_folders' entry '{}' must be a relative top-level folder name.",
-            root_folder.display()
-        ))),
     }
 }
 

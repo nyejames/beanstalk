@@ -769,7 +769,7 @@ Example:
 # entry_root = "src"
 # dev_folder = "dev"
 # output_folder = "release"
-# root_folders = { @lib, @assets }
+# library_folders = { @lib, @packages }
 ```
 
 **Import syntax:**
@@ -835,9 +835,9 @@ Other files contribute declarations that must be imported explicitly by symbol.
 - Relative child imports such as `@./x` resolve from the importing file's directory.
 - Parent-directory imports with `..` are not supported.
 - Imports cannot escape module/library/project boundaries.
-- Non-relative imports whose first segment matches `#root_folders` resolve from the project root.
+- Non-relative imports whose first segment matches a source library prefix resolve from the corresponding library root.
 - Other non-relative imports resolve from the configured module entry root.
-- Config-defined library folders and builder-provided source library roots expose their prefix directly. `/lib` is the default project convention, not a hardcoded semantic rule.
+- Config-defined library folders are scan roots; each direct child directory becomes an import prefix. `/lib` is the default scan folder when `#library_folders` is omitted.
 - Grouped imports expand into multiple individual symbol imports.
 - Circular imports are detected and cause compilation errors
 

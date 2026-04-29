@@ -789,8 +789,8 @@ path = "config_deprecated_src_key_rejected"
 tags = ["integration","config","diagnostics"]
 
 [[case]]
-id = "config_libraries_rejected"
-path = "config_libraries_rejected"
+id = "config_libraries_replaced_by_library_folders_rejected"
+path = "config_libraries_replaced_by_library_folders_rejected"
 tags = ["integration","config","diagnostics"]
 
 [[case]]
@@ -804,13 +804,8 @@ path = "config_multi_error"
 tags = ["integration","config","diagnostics"]
 
 [[case]]
-id = "config_root_folders_absolute_path_rejected"
-path = "config_root_folders_absolute_path_rejected"
-tags = ["integration","config","diagnostics"]
-
-[[case]]
-id = "config_root_folders_nested_path_rejected"
-path = "config_root_folders_nested_path_rejected"
+id = "config_root_folders_replaced_by_library_folders_rejected"
+path = "config_root_folders_replaced_by_library_folders_rejected"
 tags = ["integration","config","diagnostics"]
 
 [[case]]
@@ -1141,11 +1136,6 @@ tags = ["integration","html","diagnostics"]
 [[case]]
 id = "html_missing_homepage_reports_config_error"
 path = "html_missing_homepage_reports_config_error"
-tags = ["integration","html","diagnostics"]
-
-[[case]]
-id = "html_tracked_asset_directory_error"
-path = "html_tracked_asset_directory_error"
 tags = ["integration","html","diagnostics"]
 
 [[case]]

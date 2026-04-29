@@ -103,12 +103,7 @@ pub(super) fn build_project_path_resolver(
         return Err(CompilerMessages::from_error_ref(error, string_table));
     }
 
-    match ProjectPathResolver::new(
-        project_root,
-        entry_root,
-        &config.root_folders,
-        &merged_libraries,
-    ) {
+    match ProjectPathResolver::new(project_root, entry_root, &merged_libraries) {
         Ok(resolver) => {
             // Validate that every source library root has a #mod.bst facade file.
             for (prefix, root) in resolver.source_library_roots() {
@@ -291,8 +286,6 @@ pub(crate) fn discover_all_modules_in_project(
             }
         );
     }
-
-    project_path_resolver.validate_entry_root_collisions(string_table)?;
 
     let entry_points = discover_root_entry_files(project_path_resolver.entry_root(), string_table)?;
     if entry_points.is_empty() {

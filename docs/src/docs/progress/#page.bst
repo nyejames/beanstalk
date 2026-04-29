@@ -225,7 +225,7 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
         [data:
             [: Paths and imports]
             [: Supported]
-            [: Broad import syntax, relative child path, root folder, circular dependency, multi-file module, single-symbol aliases, grouped aliases, nested grouped aliases, collision, and file-local coverage.]
+            [: Broad import syntax, relative child path, entry root fallback, source library prefix, circular dependency, multi-file module, single-symbol aliases, grouped aliases, nested grouped aliases, collision, and file-local coverage.]
             [: Frontend / HTML builder]
             [: Path rendering is golden-sensitive. Keep normalized output and platform-stable diagnostics covered. Single-symbol source import aliases, grouped source import aliases, and nested grouped source import aliases are supported. Aliases are file-local and not re-exported. Alias collisions are hard errors across same-file declarations, source imports, external imports, type aliases, prelude symbols, and builtins. Alias case mismatches warn. Grouped import aliases reject group-level trailing aliases, invalid local alias names, and duplicate alias syntax with structured diagnostics. Parent-directory imports with `..` are not supported, and imports must stay within allowed module/library/project roots.]
         ]
@@ -301,7 +301,7 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
             [: Partial]
             [: Targeted coverage for config-defined source library root resolution, prefix collision detection, and `#mod.bst` facade enforcement.]
             [: Frontend / HTML]
-            [: Source libraries and regular modules share the same visibility model. Project-local library folders are configured through [codesnippet:#library_folders] (default convention: `/lib` when omitted) and are merged with builder-provided source library roots through `LibrarySet`. Missing default folders are ignored, but explicitly configured missing folders are rejected as config errors. Prefix collisions between builder-provided and project-local libraries produce hard errors. Modules that export outside themselves must do so through `#mod.bst`; outside importers cannot bypass the facade. `#mod.bst` is facade-only: private top-level declarations, top-level runtime statements, and runtime templates are rejected.]
+            [: Source libraries and regular modules share the same visibility model. [codesnippet:#library_folders] defines project-local source-library scan folders; each direct child directory of a configured scan folder becomes an import prefix. The configured scan folder name itself is not an import prefix. `/lib` is the default scan folder when [codesnippet:#library_folders] is omitted. Missing default scan folders are ignored; explicitly configured missing scan folders are config errors. [codesnippet:#root_folders] has been replaced by [codesnippet:#library_folders] and is rejected with a migration diagnostic. Prefix collisions between builder-provided and project-local libraries produce hard errors. Modules that export outside themselves must do so through `#mod.bst`; outside importers cannot bypass the facade. `#mod.bst` is facade-only: private top-level declarations, top-level runtime statements, and runtime templates are rejected.]
         ]
 
         [data:

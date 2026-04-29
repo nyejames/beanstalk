@@ -17,40 +17,27 @@ struct TestHarness {
 }
 
 impl TestHarness {
-    fn new(root_folders: &[&str]) -> Self {
-        Self::with_source_libraries(
-            root_folders,
-            &crate::libraries::SourceLibraryRegistry::default(),
-        )
+    fn new() -> Self {
+        Self::with_source_libraries(&crate::libraries::SourceLibraryRegistry::default())
     }
 
-    fn with_source_libraries(
-        root_folders: &[&str],
-        source_libraries: &crate::libraries::SourceLibraryRegistry,
-    ) -> Self {
+    fn with_source_libraries(source_libraries: &crate::libraries::SourceLibraryRegistry) -> Self {
         let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
         let project_root = temp_dir.path().to_path_buf();
         let entry_root = project_root.join("src");
 
         // Create entry root and some fixtures.
         fs::create_dir_all(&entry_root).unwrap();
-        fs::create_dir_all(project_root.join("assets/images")).unwrap();
-        fs::create_dir_all(project_root.join("src/pages")).unwrap();
+        fs::create_dir_all(entry_root.join("assets/images")).unwrap();
+        fs::create_dir_all(entry_root.join("pages")).unwrap();
         fs::create_dir_all(project_root.join("docs")).unwrap();
-        fs::write(project_root.join("assets/images/logo.png"), b"").unwrap();
-        fs::write(project_root.join("src/pages/about.bst"), b"").unwrap();
-        fs::write(project_root.join("src/index.bst"), b"").unwrap();
+        fs::write(entry_root.join("assets/images/logo.png"), b"").unwrap();
+        fs::write(entry_root.join("pages/about.bst"), b"").unwrap();
+        fs::write(entry_root.join("index.bst"), b"").unwrap();
         fs::write(project_root.join("docs/readme.txt"), b"").unwrap();
 
-        let root_folder_paths: Vec<PathBuf> = root_folders.iter().map(PathBuf::from).collect();
-
-        let resolver = ProjectPathResolver::new(
-            project_root.clone(),
-            entry_root,
-            &root_folder_paths,
-            source_libraries,
-        )
-        .expect("resolver creation should succeed");
+        let resolver = ProjectPathResolver::new(project_root.clone(), entry_root, source_libraries)
+            .expect("resolver creation should succeed");
 
         TestHarness {
             project_root,
@@ -79,7 +66,7 @@ impl TestHarness {
 
 #[test]
 fn relative_file_resolves_from_importer_directory() {
-    let mut h = TestHarness::new(&["assets"]);
+    let mut h = TestHarness::new();
     let path = h.make_path(&[".", "pages", "about.bst"]);
     let importer = h.importer();
 
@@ -99,7 +86,7 @@ fn relative_file_resolves_from_importer_directory() {
 
 #[test]
 fn relative_directory_resolves_and_classifies_as_directory() {
-    let mut h = TestHarness::new(&["assets"]);
+    let mut h = TestHarness::new();
     let path = h.make_path(&[".", "pages"]);
     let importer = h.importer();
 
@@ -113,36 +100,12 @@ fn relative_directory_resolves_and_classifies_as_directory() {
 }
 
 // -----------------------------------------------------------------------
-// Root folder resolution
-// -----------------------------------------------------------------------
-
-#[test]
-fn root_folder_file_resolves_from_project_root() {
-    let mut h = TestHarness::new(&["assets"]);
-    let path = h.make_path(&["assets", "images", "logo.png"]);
-    let importer = h.importer();
-
-    let result = h
-        .resolver
-        .resolve_compile_time_path(&path, &importer, &mut h.string_table)
-        .expect("root folder file should resolve");
-
-    assert_eq!(result.base, CompileTimePathBase::ProjectRootFolder);
-    assert_eq!(result.kind, CompileTimePathKind::File);
-    assert!(result.filesystem_path.ends_with("assets/images/logo.png"));
-
-    // Public path should preserve the root folder segment.
-    let public = result.public_path.to_portable_string(&h.string_table);
-    assert_eq!(public, "assets/images/logo.png");
-}
-
-// -----------------------------------------------------------------------
 // Entry root fallback resolution
 // -----------------------------------------------------------------------
 
 #[test]
 fn entry_root_file_resolves_through_fallback() {
-    let mut h = TestHarness::new(&["assets"]);
+    let mut h = TestHarness::new();
     let path = h.make_path(&["pages", "about.bst"]);
     let importer = h.importer();
 
@@ -161,8 +124,8 @@ fn entry_root_file_resolves_through_fallback() {
 
 #[test]
 fn non_existent_target_is_rejected() {
-    let mut h = TestHarness::new(&["assets"]);
-    let path = h.make_path(&["assets", "does_not_exist.png"]);
+    let mut h = TestHarness::new();
+    let path = h.make_path(&["pages", "does_not_exist.bst"]);
     let importer = h.importer();
 
     let err = h
@@ -179,7 +142,7 @@ fn non_existent_target_is_rejected() {
 
 #[test]
 fn path_escaping_project_root_is_rejected() {
-    let mut h = TestHarness::new(&["assets"]);
+    let mut h = TestHarness::new();
     // From src/index.bst, going ../../.. escapes the project root.
     let path = h.make_path(&[".", "..", "..", "..", "escape.txt"]);
     let importer = h.importer();
@@ -197,8 +160,8 @@ fn path_escaping_project_root_is_rejected() {
 // -----------------------------------------------------------------------
 
 #[test]
-fn root_folder_directory_classifies_correctly() {
-    let mut h = TestHarness::new(&["assets"]);
+fn entry_root_directory_classifies_correctly() {
+    let mut h = TestHarness::new();
     let path = h.make_path(&["assets", "images"]);
     let importer = h.importer();
 
@@ -216,7 +179,7 @@ fn root_folder_directory_classifies_correctly() {
 
 #[test]
 fn relative_path_public_path_keeps_dot_prefix() {
-    let mut h = TestHarness::new(&["assets"]);
+    let mut h = TestHarness::new();
     let path = h.make_path(&[".", "pages", "about.bst"]);
     let importer = h.importer();
 
@@ -235,7 +198,7 @@ fn relative_path_public_path_keeps_dot_prefix() {
 
 #[test]
 fn resolve_compile_time_paths_resolves_multiple_paths() {
-    let mut h = TestHarness::new(&["assets"]);
+    let mut h = TestHarness::new();
     let path_a = h.make_path(&["assets", "images", "logo.png"]);
     let path_b = h.make_path(&[".", "pages", "about.bst"]);
     let importer = h.importer();
@@ -246,7 +209,7 @@ fn resolve_compile_time_paths_resolves_multiple_paths() {
         .expect("multi-path resolution should succeed");
 
     assert_eq!(result.paths.len(), 2);
-    assert_eq!(result.paths[0].base, CompileTimePathBase::ProjectRootFolder);
+    assert_eq!(result.paths[0].base, CompileTimePathBase::EntryRoot);
     assert_eq!(result.paths[0].kind, CompileTimePathKind::File);
     assert_eq!(result.paths[1].base, CompileTimePathBase::RelativeToFile);
     assert_eq!(result.paths[1].kind, CompileTimePathKind::File);
@@ -254,9 +217,9 @@ fn resolve_compile_time_paths_resolves_multiple_paths() {
 
 #[test]
 fn resolve_compile_time_paths_fails_if_any_path_missing() {
-    let mut h = TestHarness::new(&["assets"]);
+    let mut h = TestHarness::new();
     let good = h.make_path(&["assets", "images", "logo.png"]);
-    let bad = h.make_path(&["assets", "nonexistent.txt"]);
+    let bad = h.make_path(&["pages", "nonexistent.txt"]);
     let importer = h.importer();
 
     let err = h
@@ -269,7 +232,7 @@ fn resolve_compile_time_paths_fails_if_any_path_missing() {
 
 #[test]
 fn empty_path_resolves_as_entry_root_public_directory() {
-    let mut h = TestHarness::new(&["assets"]);
+    let mut h = TestHarness::new();
     let path = InternedPath::new();
     let importer = h.importer();
 
@@ -299,13 +262,9 @@ fn source_library_import_resolves_to_library_root() {
     let mut source_libraries = crate::libraries::SourceLibraryRegistry::new();
     source_libraries.register_filesystem_root("helper", library_root.clone());
 
-    let resolver = ProjectPathResolver::new(
-        project_root.clone(),
-        entry_root.clone(),
-        &[],
-        &source_libraries,
-    )
-    .expect("resolver creation should succeed");
+    let resolver =
+        ProjectPathResolver::new(project_root.clone(), entry_root.clone(), &source_libraries)
+            .expect("resolver creation should succeed");
 
     let mut string_table = StringTable::new();
     let mut path = InternedPath::new();
@@ -343,13 +302,9 @@ fn source_library_prefix_takes_priority_over_entry_root() {
     let mut source_libraries = crate::libraries::SourceLibraryRegistry::new();
     source_libraries.register_filesystem_root("helper", library_root.clone());
 
-    let resolver = ProjectPathResolver::new(
-        project_root.clone(),
-        entry_root.clone(),
-        &[],
-        &source_libraries,
-    )
-    .expect("resolver creation should succeed");
+    let resolver =
+        ProjectPathResolver::new(project_root.clone(), entry_root.clone(), &source_libraries)
+            .expect("resolver creation should succeed");
 
     let mut string_table = StringTable::new();
     let mut path = InternedPath::new();
@@ -385,7 +340,7 @@ fn canonicalized_source_library_file_resolves_to_library_prefixed_logical_path()
     let mut source_libraries = crate::libraries::SourceLibraryRegistry::new();
     source_libraries.register_filesystem_root("html", library_root.clone());
 
-    let resolver = ProjectPathResolver::new(project_root, entry_root, &[], &source_libraries)
+    let resolver = ProjectPathResolver::new(project_root, entry_root, &source_libraries)
         .expect("resolver creation should succeed");
 
     let canonical_root = fs::canonicalize(&library_root).expect("should canonicalize library root");

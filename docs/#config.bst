@@ -12,7 +12,4 @@
 # origin = "/beanstalk"
 # html_lang = "en"
 # html_title_postfix = " | Beanstalk"
-# root_folders = {
-    @lib,
-    @assets,
-}
+

@@ -59,7 +59,6 @@ pub(crate) fn compile_single_file_frontend(
     let project_path_resolver = match ProjectPathResolver::new(
         source_root.clone(),
         source_root.clone(),
-        &config.root_folders,
         &libraries.source_libraries,
     ) {
         Ok(resolver) => resolver,

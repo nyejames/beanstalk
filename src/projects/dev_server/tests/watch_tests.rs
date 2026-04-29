@@ -68,7 +68,7 @@ fn detects_modified_file_fingerprints() {
 }
 
 #[test]
-fn directory_scope_watches_config_entry_root_and_root_folders() {
+fn directory_scope_watches_config_entry_root_and_library_folders() {
     let root = temp_dir("directory_scope");
     let output_dir = root.join("dev");
     fs::create_dir_all(root.join("src")).expect("should create src dir");
@@ -77,7 +77,7 @@ fn directory_scope_watches_config_entry_root_and_root_folders() {
 
     let mut config = Config::new(root.clone());
     config.entry_root = PathBuf::from("src");
-    config.root_folders = vec![PathBuf::from("assets")];
+    config.library_folders = vec![PathBuf::from("assets")];
 
     let scope = WatchScope::derive(&root, Some(&config), &output_dir);
 

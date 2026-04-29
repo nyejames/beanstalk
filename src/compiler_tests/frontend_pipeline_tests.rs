@@ -70,7 +70,6 @@ impl FrontendProject {
         let resolver = ProjectPathResolver::new(
             canonical_project_root.clone(),
             canonical_entry_root,
-            &[],
             &crate::libraries::SourceLibraryRegistry::default(),
         )
         .expect("project path resolver should build");

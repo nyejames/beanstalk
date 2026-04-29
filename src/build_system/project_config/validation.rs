@@ -75,32 +75,33 @@ fn apply_config_constants_from_headers(
         let mut value_index = 0usize;
         skip_newlines(&initializer_tokens, &mut value_index);
 
-        // Deprecated key: '#libraries' was renamed to '#root_folders'.
+        // Deprecated key: '#libraries' was renamed to '#library_folders'.
         if key == "libraries" {
             let mut error = CompilerError::new(
-                "Config key '#libraries' has been replaced. Use '#root_folders' instead.",
+                "Config key '#libraries' has been replaced. Use '#library_folders' instead.",
                 header.name_location.clone(),
                 ErrorType::Config,
             );
             error.metadata.insert(
                 ErrorMetaDataKey::PrimarySuggestion,
-                "Rename '#libraries' to '#root_folders' in your config file".to_string(),
+                "Rename '#libraries' to '#library_folders' in your config file".to_string(),
             );
             errors.push(error);
             continue;
         }
 
-        // Special handling: '#root_folders' accepts a single path or a `{ ... }` block.
+        // Replaced key: '#root_folders' has been replaced by '#library_folders'.
         if key == "root_folders" {
-            match parse_root_folders_value(
-                &initializer_tokens,
-                &mut value_index,
-                string_table,
-                config_path,
-            ) {
-                Ok(root_folders) => config.root_folders = root_folders,
-                Err(mut folder_errors) => errors.append(&mut folder_errors),
-            }
+            let mut error = CompilerError::new(
+                "Config key '#root_folders' has been replaced. Use '#library_folders' instead.",
+                header.name_location.clone(),
+                ErrorType::Config,
+            );
+            error.metadata.insert(
+                ErrorMetaDataKey::PrimarySuggestion,
+                "Rename '#root_folders' to '#library_folders'. Configured library folders are scan roots; each direct child folder becomes an import prefix.".to_string(),
+            );
+            errors.push(error);
             continue;
         }
 
@@ -169,174 +170,6 @@ fn apply_config_constants_from_headers(
 
     if errors.is_empty() {
         Ok(())
-    } else {
-        Err(errors)
-    }
-}
-
-/// Parse the value of a `#root_folders` declaration.
-///
-/// Accepts either a single path token or a `{ path, path, ... }` block. Validates each path entry
-/// and deduplicates the resulting list.
-fn parse_root_folders_value(
-    tokens: &[Token],
-    index: &mut usize,
-    string_table: &StringTable,
-    config_path: &Path,
-) -> Result<Vec<PathBuf>, Vec<CompilerError>> {
-    let mut root_folders = Vec::new();
-    let mut errors = Vec::new();
-
-    let Some(start_token) = tokens.get(*index) else {
-        return Ok(root_folders);
-    };
-
-    if matches!(start_token.kind, TokenKind::OpenCurly) {
-        *index += 1;
-        while let Some(token) = tokens.get(*index) {
-            match &token.kind {
-                TokenKind::CloseCurly => {
-                    *index += 1;
-                    break;
-                }
-                TokenKind::Path(items) => {
-                    for item in items {
-                        if item.alias.is_some() {
-                            return Err(vec![CompilerError::new(
-                                "Path aliases are only valid in import clauses.".to_string(),
-                                token.location.clone(),
-                                ErrorType::Config,
-                            )]);
-                        }
-                        match validate_root_folder_path(
-                            PathBuf::from(item.path.to_string(string_table)),
-                            token,
-                        ) {
-                            Ok(validated_path) => root_folders.push(validated_path),
-                            Err(error) => errors.push(error),
-                        }
-                    }
-                }
-                TokenKind::StringSliceLiteral(value) | TokenKind::RawStringLiteral(value) => {
-                    match validate_root_folder_path(
-                        PathBuf::from(string_table.resolve(*value)),
-                        token,
-                    ) {
-                        Ok(validated_path) => root_folders.push(validated_path),
-                        Err(error) => errors.push(error),
-                    }
-                }
-                TokenKind::Symbol(value) => {
-                    match validate_root_folder_path(
-                        PathBuf::from(string_table.resolve(*value)),
-                        token,
-                    ) {
-                        Ok(validated_path) => root_folders.push(validated_path),
-                        Err(error) => errors.push(error),
-                    }
-                }
-                TokenKind::Comma | TokenKind::Newline => {}
-                TokenKind::Eof => {
-                    let mut error = CompilerError::new(
-                        "Unterminated '#root_folders' block. Missing closing '}'.",
-                        token.location.clone(),
-                        ErrorType::Config,
-                    );
-                    error.metadata.insert(
-                        ErrorMetaDataKey::PrimarySuggestion,
-                        "Add '}' to close the '#root_folders' block".to_string(),
-                    );
-                    errors.push(error);
-                    break;
-                }
-                _ => {
-                    let mut error = CompilerError::new(
-                        "Unsupported value in '#root_folders' block.",
-                        token.location.clone(),
-                        ErrorType::Config,
-                    );
-                    error.metadata.insert(
-                        ErrorMetaDataKey::PrimarySuggestion,
-                        "Use folder names like '@lib' or strings like \"@lib\"".to_string(),
-                    );
-                    errors.push(error);
-                }
-            }
-            *index += 1;
-        }
-        dedupe_paths(&mut root_folders);
-
-        if !errors.is_empty() {
-            return Err(errors);
-        }
-        return Ok(root_folders);
-    }
-
-    match &start_token.kind {
-        TokenKind::Path(items) => {
-            for item in items {
-                if item.alias.is_some() {
-                    return Err(vec![CompilerError::new(
-                        "Path aliases are only valid in import clauses.".to_string(),
-                        start_token.location.clone(),
-                        ErrorType::Config,
-                    )]);
-                }
-                match validate_root_folder_path(
-                    PathBuf::from(item.path.to_string(string_table)),
-                    start_token,
-                ) {
-                    Ok(validated_path) => root_folders.push(validated_path),
-                    Err(error) => errors.push(error),
-                }
-            }
-        }
-        TokenKind::StringSliceLiteral(value) | TokenKind::RawStringLiteral(value) => {
-            match validate_root_folder_path(
-                PathBuf::from(string_table.resolve(*value)),
-                start_token,
-            ) {
-                Ok(validated_path) => root_folders.push(validated_path),
-                Err(error) => errors.push(error),
-            }
-        }
-        TokenKind::Symbol(value) => {
-            match validate_root_folder_path(
-                PathBuf::from(string_table.resolve(*value)),
-                start_token,
-            ) {
-                Ok(validated_path) => root_folders.push(validated_path),
-                Err(error) => errors.push(error),
-            }
-        }
-        _ => {
-            let mut error = CompilerError::new(
-                "Unsupported '#root_folders' value. Use a path, string, or '{ ... }' block.",
-                start_token.location.clone(),
-                ErrorType::Config,
-            );
-            error.metadata.insert(
-                ErrorMetaDataKey::PrimarySuggestion,
-                "Use '#root_folders = @lib' or '#root_folders = { @lib, @utils }'".to_string(),
-            );
-            errors.push(error);
-        }
-    }
-
-    if root_folders.is_empty() && errors.is_empty() {
-        let mut error_string_table = string_table.clone();
-        errors.push(CompilerError::file_error(
-            config_path,
-            "Expected at least one root folder in '#root_folders'.",
-            &mut error_string_table,
-        ));
-    }
-
-    *index += 1;
-    dedupe_paths(&mut root_folders);
-
-    if errors.is_empty() {
-        Ok(root_folders)
     } else {
         Err(errors)
     }
@@ -554,76 +387,6 @@ fn reject_duplicate_folder_entries(
     Err(vec![error])
 }
 
-/// Validate one `#root_folders` entry and normalize it to the stored path form.
-///
-/// WHY: only single top-level project folders are legal explicit import roots. Nested or absolute
-/// paths would undermine the project-relative import model.
-fn validate_root_folder_path(
-    root_folder: PathBuf,
-    token: &Token,
-) -> Result<PathBuf, CompilerError> {
-    if root_folder.as_os_str().is_empty() {
-        let mut error = CompilerError::new(
-            "Invalid '#root_folders' entry. Root folders cannot be empty.",
-            token.location.clone(),
-            ErrorType::Config,
-        );
-        error.metadata.insert(
-            ErrorMetaDataKey::PrimarySuggestion,
-            "Provide a folder name like '@lib' or '@utils'".to_string(),
-        );
-        return Err(error);
-    }
-
-    if root_folder.is_absolute() || root_folder.as_os_str().to_string_lossy().starts_with('/') {
-        let mut error = CompilerError::new(
-            format!(
-                "Invalid '#root_folders' entry '{}'. Root folders must be relative to the project root.",
-                root_folder.display()
-            ),
-            token.location.clone(),
-            ErrorType::Config,
-        );
-        error.metadata.insert(
-            ErrorMetaDataKey::PrimarySuggestion,
-            "Use a relative folder name like '@lib' instead of an absolute path".to_string(),
-        );
-        return Err(error);
-    }
-
-    let mut components = root_folder.components();
-    let Some(first) = components.next() else {
-        let mut error = CompilerError::new(
-            "Invalid '#root_folders' entry. Root folders cannot be empty.",
-            token.location.clone(),
-            ErrorType::Config,
-        );
-        error.metadata.insert(
-            ErrorMetaDataKey::PrimarySuggestion,
-            "Provide a folder name like '@lib' or '@utils'".to_string(),
-        );
-        return Err(error);
-    };
-
-    if !matches!(first, std::path::Component::Normal(_)) || components.next().is_some() {
-        let mut error = CompilerError::new(
-            format!(
-                "Invalid '#root_folders' entry '{}'. Root folders must be a single top-level folder name such as '@lib'.",
-                root_folder.display()
-            ),
-            token.location.clone(),
-            ErrorType::Config,
-        );
-        error.metadata.insert(
-            ErrorMetaDataKey::PrimarySuggestion,
-            "Use a single folder name like '@lib', not a nested path like '@lib/utils'".to_string(),
-        );
-        return Err(error);
-    }
-
-    Ok(root_folder)
-}
-
 /// Validate one `#library_folders` entry and normalize it to the stored path form.
 ///
 /// WHY: project-local source library folder discovery should stay project-relative and explicit.
@@ -809,9 +572,4 @@ fn skip_newlines(tokens: &[Token], index: &mut usize) {
         }
         *index += 1;
     }
-}
-
-fn dedupe_paths(paths: &mut Vec<PathBuf>) {
-    let mut seen = HashSet::new();
-    paths.retain(|path| seen.insert(path.clone()));
 }
