@@ -30,12 +30,6 @@ Its currently recommended to manually install the compiler from one of the tagge
 bean --version
 ```
 
-Expected output:
-
-```text
-bean 0.1.4
-```
-
 ### Create a project
 
 ```bash
