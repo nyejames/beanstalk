@@ -45,6 +45,7 @@ pub const MINIMUM_LIKELY_DECLARATIONS: usize = 10; // (Maybe) How many symbols t
 /// - `#dev_folder`: Output directory for development builds (default: "dev")
 /// - `#output_folder`: Output directory for release builds (default: "release")
 /// - `#root_folders`: Top-level project folders for explicit imports (default: [])
+/// - `#library_folders`: Top-level folders scanned for project-local source libraries (default: ["lib"])
 /// - `#project_name` or `#name`: The project name
 /// - `#version`: The project version (default: "0.1.0")
 /// - `#author`: The project author
@@ -62,6 +63,10 @@ pub struct Config {
     pub release_folder: PathBuf,
     /// Top-level project folders that non-relative imports can target explicitly
     pub root_folders: Vec<PathBuf>,
+    /// Top-level project folders scanned for project-local source libraries.
+    pub library_folders: Vec<PathBuf>,
+    /// Whether `#library_folders` was explicitly configured in `#config.bst`.
+    pub has_explicit_library_folders: bool,
     pub version: String,
     pub author: String,
     pub license: String,
@@ -81,6 +86,8 @@ impl Config {
             release_folder: PathBuf::from("release"),
 
             root_folders: Vec::new(), // Explicitly-visible top-level project folders for imports and future path validation
+            library_folders: vec![PathBuf::from("lib")], // Default convention for project-local source libraries
+            has_explicit_library_folders: false,
             project_name: String::new(),
             version: String::from("0.1.0"),
             author: String::new(),
@@ -144,6 +151,8 @@ impl Default for Config {
             dev_folder: PathBuf::from("dev"),
             release_folder: PathBuf::from("release"),
             root_folders: Vec::new(),
+            library_folders: vec![PathBuf::from("lib")],
+            has_explicit_library_folders: false,
             project_name: String::from("html_project"),
             version: String::from("0.1.0"),
             author: String::new(),

@@ -301,7 +301,7 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
             [: Partial]
             [: Targeted coverage for config-defined source library root resolution, prefix collision detection, and `#mod.bst` facade enforcement.]
             [: Frontend / HTML]
-            [: Source libraries and regular modules share the same visibility model. Config-defined project library folders (default convention: `/lib`) and builder-provided source library roots are plumbed through `LibrarySet`. Prefix collisions between builder-provided and project-local libraries produce a hard config error. Modules that export outside themselves must do so through `#mod.bst`; outside importers cannot bypass the facade. `#mod.bst` is facade-only: private top-level declarations, top-level runtime statements, and runtime templates are rejected.]
+            [: Source libraries and regular modules share the same visibility model. Project-local library folders are configured through [codesnippet:#library_folders] (default convention: `/lib` when omitted) and are merged with builder-provided source library roots through `LibrarySet`. Missing default folders are ignored, but explicitly configured missing folders are rejected as config errors. Prefix collisions between builder-provided and project-local libraries produce hard errors. Modules that export outside themselves must do so through `#mod.bst`; outside importers cannot bypass the facade. `#mod.bst` is facade-only: private top-level declarations, top-level runtime statements, and runtime templates are rejected.]
         ]
 
         [data:
@@ -317,7 +317,7 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
             [: Partial]
             [: Targeted coverage for config-defined project library folders, import resolution, and facade gating.]
             [: Frontend / HTML]
-            [: Project-local source libraries are discovered from config-defined library folders (default convention: `/lib`). Imports resolve through the library prefix (for example, `/lib/helper` as `@helper`). Public cross-module access goes through `#mod.bst`; bypassing implementation files from outside the module is rejected.]
+            [: Project-local source libraries are discovered from [codesnippet:#library_folders] (default convention: `/lib` when not configured). Imports resolve through the library prefix (for example, `/lib/helper` as `@helper` or `/packages/helper` as `@helper`). Public cross-module access goes through `#mod.bst`; bypassing implementation files from outside the module is rejected.]
         ]
 
         [data:

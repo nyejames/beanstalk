@@ -7,7 +7,9 @@
 use super::reachable_file_discovery::discover_reachable_files;
 use super::source_loading::extract_source_code;
 use crate::build_system::build::InputFile;
-use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
+use crate::compiler_frontend::compiler_errors::{
+    CompilerError, CompilerMessages, ErrorMetaDataKey, ErrorType,
+};
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::paths::path_resolution::{
     ProjectPathResolver, resolve_project_entry_root,
@@ -19,7 +21,7 @@ use crate::libraries::SourceLibraryRegistry;
 use crate::projects::settings;
 use crate::projects::settings::{BEANSTALK_FILE_EXTENSION, Config};
 use crate::return_file_error;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -73,21 +75,8 @@ pub(super) fn build_project_path_resolver(
         }
     };
 
-    // Discover project-local source library roots from `/lib` under the project root.
-    let mut project_local_libraries = SourceLibraryRegistry::new();
-    let lib_dir = project_root.join("lib");
-    if lib_dir.is_dir()
-        && let Ok(entries) = fs::read_dir(&lib_dir)
-    {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir()
-                && let Some(name) = path.file_name().and_then(|n| n.to_str())
-            {
-                project_local_libraries.register_filesystem_root(name, path.clone());
-            }
-        }
-    }
+    let project_local_libraries =
+        discover_project_local_source_libraries(config, &project_root, string_table)?;
 
     // Check for prefix collisions between builder-provided and project-local libraries.
     let mut merged_libraries = builder_source_libraries.clone();
@@ -96,17 +85,20 @@ pub(super) fn build_project_path_resolver(
         let mut error = CompilerError::file_error(
             &project_root,
             format!(
-                "Project-local libraries in '/lib' collide with builder-provided libraries: {collision_list}"
+                "Project-local source libraries collide with builder-provided libraries: {collision_list}"
             ),
             string_table,
         );
         error.new_metadata_entry(
-            crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::CompilationStage,
+            ErrorMetaDataKey::CompilationStage,
             String::from("Project Structure"),
         );
         error.new_metadata_entry(
-            crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
-            String::from("Remove the conflicting '/lib' directory or rename it so the builder-provided library can be used."),
+            ErrorMetaDataKey::PrimarySuggestion,
+            format!(
+                "Rename or remove the conflicting project-local library prefix, or update '#library_folders' (currently: {}).",
+                format_library_folder_list(&config.library_folders)
+            ),
         );
         return Err(CompilerMessages::from_error_ref(error, string_table));
     }
@@ -130,12 +122,12 @@ pub(super) fn build_project_path_resolver(
                         string_table,
                     );
                     error.new_metadata_entry(
-                        crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::CompilationStage,
+                        ErrorMetaDataKey::CompilationStage,
                         String::from("Project Structure"),
                     );
                     error.new_metadata_entry(
-                        crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
-                        String::from("Create a #mod.bst file in the library root that exports the public symbols with '#'."),
+                        ErrorMetaDataKey::PrimarySuggestion,
+                        String::from("Create a #mod.bst file in the library root that exports the public symbols with '#'."), 
                     );
                     return Err(CompilerMessages::from_error_ref(error, string_table));
                 }
@@ -144,6 +136,137 @@ pub(super) fn build_project_path_resolver(
         }
         Err(error) => Err(CompilerMessages::from_error_ref(error, string_table)),
     }
+}
+
+/// Discover project-local source libraries from configured `#library_folders`.
+///
+/// WHAT: scans each configured top-level folder under the project root and registers one source
+/// library root per direct child directory.
+/// WHY: project-local library discovery must follow config rather than hardcoding `/lib`.
+fn discover_project_local_source_libraries(
+    config: &Config,
+    project_root: &Path,
+    string_table: &mut StringTable,
+) -> Result<SourceLibraryRegistry, CompilerMessages> {
+    let mut discovered_libraries = SourceLibraryRegistry::new();
+    let mut discovered_prefixes: HashMap<String, PathBuf> = HashMap::new();
+
+    for configured_folder in &config.library_folders {
+        let folder_path = project_root.join(configured_folder);
+        if !folder_path.exists() {
+            if config.has_explicit_library_folders {
+                let mut error = CompilerError::file_error(
+                    &folder_path,
+                    format!(
+                        "Configured library folder '{}' does not exist.",
+                        configured_folder.display()
+                    ),
+                    string_table,
+                )
+                .with_error_type(ErrorType::Config);
+                error.new_metadata_entry(
+                    ErrorMetaDataKey::CompilationStage,
+                    String::from("Project Structure"),
+                );
+                error.new_metadata_entry(
+                    ErrorMetaDataKey::PrimarySuggestion,
+                    "Create the folder or remove it from '#library_folders'.".to_string(),
+                );
+                return Err(CompilerMessages::from_error_ref(error, string_table));
+            }
+            continue;
+        }
+
+        if !folder_path.is_dir() {
+            let mut error = CompilerError::file_error(
+                &folder_path,
+                format!(
+                    "Configured library folder '{}' is not a directory.",
+                    configured_folder.display()
+                ),
+                string_table,
+            )
+            .with_error_type(ErrorType::Config);
+            error.new_metadata_entry(
+                ErrorMetaDataKey::CompilationStage,
+                String::from("Project Structure"),
+            );
+            error.new_metadata_entry(
+                ErrorMetaDataKey::PrimarySuggestion,
+                "Point '#library_folders' to top-level directories.".to_string(),
+            );
+            return Err(CompilerMessages::from_error_ref(error, string_table));
+        }
+
+        let entries = fs::read_dir(&folder_path).map_err(|error| {
+            CompilerMessages::from_error_ref(
+                CompilerError::file_error(
+                    &folder_path,
+                    format!("Failed to read configured library folder: {error}"),
+                    string_table,
+                ),
+                string_table,
+            )
+        })?;
+
+        for entry in entries {
+            let entry = entry.map_err(|error| {
+                CompilerMessages::from_error_ref(
+                    CompilerError::file_error(
+                        &folder_path,
+                        format!("Failed to read library folder entry: {error}"),
+                        string_table,
+                    ),
+                    string_table,
+                )
+            })?;
+            let library_root = entry.path();
+            if !library_root.is_dir() {
+                continue;
+            }
+
+            let Some(prefix) = library_root.file_name().and_then(|value| value.to_str()) else {
+                continue;
+            };
+            let prefix = prefix.to_string();
+
+            if let Some(previous_root) = discovered_prefixes.get(&prefix) {
+                let mut error = CompilerError::file_error(
+                    &library_root,
+                    format!(
+                        "Configured library folder collision: source library prefix '@{prefix}' is defined by both '{}' and '{}'.",
+                        previous_root.display(),
+                        library_root.display()
+                    ),
+                    string_table,
+                )
+                .with_error_type(ErrorType::Config);
+                error.new_metadata_entry(
+                    ErrorMetaDataKey::CompilationStage,
+                    String::from("Project Structure"),
+                );
+                error.new_metadata_entry(
+                    ErrorMetaDataKey::PrimarySuggestion,
+                    "Rename one of the colliding source-library directories so each '@prefix' is unique.".to_string(),
+                );
+                return Err(CompilerMessages::from_error_ref(error, string_table));
+            }
+
+            discovered_prefixes.insert(prefix.clone(), library_root.clone());
+            discovered_libraries.register_filesystem_root(prefix, library_root);
+        }
+    }
+
+    Ok(discovered_libraries)
+}
+
+fn format_library_folder_list(library_folders: &[PathBuf]) -> String {
+    let mut folders = library_folders
+        .iter()
+        .map(|folder| folder.display().to_string())
+        .collect::<Vec<_>>();
+    folders.sort();
+    folders.join(", ")
 }
 
 pub(crate) fn discover_all_modules_in_project(

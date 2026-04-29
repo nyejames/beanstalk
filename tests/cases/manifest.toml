@@ -2986,6 +2986,51 @@ path = "source_lib_project_local"
 tags = ["integration", "source-libraries", "imports"]
 
 [[case]]
+id = "config_library_folder_default_lib_success"
+path = "config_library_folder_default_lib_success"
+tags = ["integration", "config", "libraries", "imports"]
+
+[[case]]
+id = "config_custom_library_folder_success"
+path = "config_custom_library_folder_success"
+tags = ["integration", "config", "libraries", "imports"]
+
+[[case]]
+id = "config_multiple_library_folders_success"
+path = "config_multiple_library_folders_success"
+tags = ["integration", "config", "libraries", "imports"]
+
+[[case]]
+id = "config_library_folder_missing_rejected"
+path = "config_library_folder_missing_rejected"
+tags = ["integration", "config", "libraries", "diagnostics"]
+
+[[case]]
+id = "config_library_folder_absolute_path_rejected"
+path = "config_library_folder_absolute_path_rejected"
+tags = ["integration", "config", "libraries", "diagnostics"]
+
+[[case]]
+id = "config_library_folder_dotdot_rejected"
+path = "config_library_folder_dotdot_rejected"
+tags = ["integration", "config", "libraries", "diagnostics"]
+
+[[case]]
+id = "config_library_folder_duplicate_rejected"
+path = "config_library_folder_duplicate_rejected"
+tags = ["integration", "config", "libraries", "diagnostics"]
+
+[[case]]
+id = "config_library_folder_builder_collision_rejected"
+path = "config_library_folder_builder_collision_rejected"
+tags = ["integration", "config", "libraries", "builder-libraries", "diagnostics"]
+
+[[case]]
+id = "custom_library_import_resolves_through_mod"
+path = "custom_library_import_resolves_through_mod"
+tags = ["integration", "config", "libraries", "imports", "facades"]
+
+[[case]]
 id = "source_lib_and_external_package"
 path = "source_lib_and_external_package"
 tags = ["integration", "source-libraries", "imports", "external-packages"]

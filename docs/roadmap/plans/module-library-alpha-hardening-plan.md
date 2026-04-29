@@ -313,6 +313,8 @@ hash_import_outside_mod_rejected
 
 Make library discovery follow config-defined library folders instead of treating `/lib` as a fixed semantic root.
 
+NOTE: THis has been mostly implemented but needs full checking and is currently doubling up what the "root_folders" config setting was doing before the code for "root_folders" in the config should be entierly replaced by this (not implemented alongside it)
+
 ### Why this phase exists
 
 The intended design is that `/lib` is the default for new projects, but library folders come from config. Hardcoding `/lib` makes the system less general and makes docs misleading.

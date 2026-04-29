@@ -1,0 +1,7 @@
+entry = "."
+
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+error_type = "Config"
+message_contains = ["must be relative to the project root"]

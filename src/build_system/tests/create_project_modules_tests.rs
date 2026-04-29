@@ -82,7 +82,7 @@ fn parses_config_constant_declarations() {
 
     fs::write(
         &config_path,
-        "#entry_root = \"src\"\n#dev_folder = \"dev\"\n#output_folder = \"release\"\n#name = \"docs\"\n#version = \"1.2.3\"\n#project = \"html\"\n#page_url_style = \"trailing_slash\"\n#redirect_index_html = true\n#root_folders = { @lib, \"vendor\" }\n#custom_key = \"custom_value\"\n",
+        "#entry_root = \"src\"\n#dev_folder = \"dev\"\n#output_folder = \"release\"\n#name = \"docs\"\n#version = \"1.2.3\"\n#project = \"html\"\n#page_url_style = \"trailing_slash\"\n#redirect_index_html = true\n#root_folders = { @lib, \"vendor\" }\n#library_folders = { @lib, @packages }\n#custom_key = \"custom_value\"\n",
     )
     .expect("should write config");
 
@@ -112,6 +112,14 @@ fn parses_config_constant_declarations() {
     assert_eq!(
         config.root_folders,
         vec![PathBuf::from("lib"), PathBuf::from("vendor")]
+    );
+    assert_eq!(
+        config.library_folders,
+        vec![PathBuf::from("lib"), PathBuf::from("packages")]
+    );
+    assert!(
+        config.has_explicit_library_folders,
+        "library_folders should be marked as explicitly configured"
     );
 
     fs::remove_dir_all(&root).expect("should remove temp root");
@@ -220,6 +228,90 @@ fn rejects_invalid_root_folder_entries() {
     let error = &messages.errors[0];
     assert!(
         error.msg.contains("single top-level folder name"),
+        "unexpected error message: {}",
+        error.msg
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn rejects_library_folder_absolute_path_entry() {
+    let root = temp_dir("invalid_library_folders_absolute");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(&config_path, "#library_folders = { \"/absolute/lib\" }\n")
+        .expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect_err("config should fail");
+
+    assert!(
+        !messages.errors.is_empty(),
+        "should have at least one error"
+    );
+    let error = &messages.errors[0];
+    assert!(
+        error.msg.contains("relative to the project root"),
+        "unexpected error message: {}",
+        error.msg
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn rejects_library_folder_parent_directory_entry() {
+    let root = temp_dir("invalid_library_folders_dotdot");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(&config_path, "#library_folders = { \"../lib\" }\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect_err("config should fail");
+
+    assert!(
+        !messages.errors.is_empty(),
+        "should have at least one error"
+    );
+    let error = &messages.errors[0];
+    assert!(
+        error
+            .msg
+            .contains("Parent-directory segments ('..') are not allowed"),
+        "unexpected error message: {}",
+        error.msg
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn rejects_duplicate_library_folder_entries() {
+    let root = temp_dir("duplicate_library_folders");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(&config_path, "#library_folders = { @lib, @lib }\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect_err("config should fail");
+
+    assert!(
+        !messages.errors.is_empty(),
+        "should have at least one error"
+    );
+    let error = &messages.errors[0];
+    assert!(
+        error.msg.contains("Duplicate '#library_folders' entries"),
         "unexpected error message: {}",
         error.msg
     );
@@ -763,6 +855,148 @@ fn builder_provided_and_project_local_library_collision_is_error() {
         error_text.contains("collide") || error_text.contains("html"),
         "error should mention collision: {error_text}"
     );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn configured_library_folder_is_discovered_as_source_library_root() {
+    let root = temp_dir("project_local_custom_library_folder");
+    fs::create_dir_all(&root).expect("should create root dir");
+    fs::create_dir_all(root.join("packages/helper")).expect("should create packages/helper");
+    fs::create_dir_all(root.join("src")).expect("should create src");
+    fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
+    fs::write(root.join("packages/helper/#mod.bst"), "#foo = 1\n").expect("should write facade");
+    fs::write(root.join("packages/helper/utils.bst"), "#bar = 2\n").expect("should write lib file");
+    fs::write(
+        root.join("#config.bst"),
+        "#library_folders = { @packages }\n",
+    )
+    .expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+
+    let mut string_table = StringTable::new();
+    let resolver = super::module_discovery::build_project_path_resolver(
+        &config,
+        &crate::libraries::SourceLibraryRegistry::default(),
+        &mut string_table,
+    )
+    .expect("resolver should build");
+
+    let mut path = crate::compiler_frontend::interned_path::InternedPath::new();
+    path.push_str("helper", &mut string_table);
+    path.push_str("utils", &mut string_table);
+
+    let importer = root.join("src/#page.bst");
+    let resolved = resolver
+        .resolve_import_to_file(&path, &importer, &mut string_table)
+        .expect("should resolve source library import");
+
+    assert_eq!(
+        resolved,
+        fs::canonicalize(root.join("packages/helper/utils.bst")).unwrap(),
+        "should resolve to configured library folder"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn missing_explicit_library_folder_is_error() {
+    let root = temp_dir("missing_explicit_library_folder");
+    fs::create_dir_all(root.join("src")).expect("should create src");
+    fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
+    fs::write(
+        root.join("#config.bst"),
+        "#library_folders = { @packages }\n",
+    )
+    .expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+
+    let mut string_table = StringTable::new();
+    let result = super::module_discovery::build_project_path_resolver(
+        &config,
+        &crate::libraries::SourceLibraryRegistry::default(),
+        &mut string_table,
+    );
+
+    assert!(
+        result.is_err(),
+        "missing explicitly configured library folder should fail"
+    );
+    let messages = result.expect_err("checked above");
+    assert!(
+        messages.errors[0]
+            .msg
+            .contains("Configured library folder 'packages' does not exist"),
+        "unexpected error message: {}",
+        messages.errors[0].msg
+    );
+    assert_eq!(messages.errors[0].error_type, ErrorType::Config);
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn duplicate_library_prefixes_across_configured_folders_are_rejected() {
+    let root = temp_dir("duplicate_library_prefixes");
+    fs::create_dir_all(root.join("lib/helper")).expect("should create lib/helper");
+    fs::create_dir_all(root.join("vendor/helper")).expect("should create vendor/helper");
+    fs::create_dir_all(root.join("src")).expect("should create src");
+    fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
+    fs::write(root.join("lib/helper/#mod.bst"), "#foo = 1\n").expect("should write facade");
+    fs::write(root.join("vendor/helper/#mod.bst"), "#bar = 2\n").expect("should write facade");
+    fs::write(
+        root.join("#config.bst"),
+        "#library_folders = { @lib, @vendor }\n",
+    )
+    .expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+
+    let mut string_table = StringTable::new();
+    let result = super::module_discovery::build_project_path_resolver(
+        &config,
+        &crate::libraries::SourceLibraryRegistry::default(),
+        &mut string_table,
+    );
+
+    assert!(
+        result.is_err(),
+        "same source-library prefix discovered from two configured folders should fail"
+    );
+    let messages = result.expect_err("checked above");
+    assert!(
+        messages.errors[0]
+            .msg
+            .contains("Configured library folder collision"),
+        "unexpected error message: {}",
+        messages.errors[0].msg
+    );
+    assert_eq!(messages.errors[0].error_type, ErrorType::Config);
 
     fs::remove_dir_all(&root).expect("should remove temp root");
 }
