@@ -158,6 +158,16 @@ pub(super) fn parse_headers_in_file(
                             &mut build_context,
                         )?;
 
+                        if context.file_role == FileRole::ModuleFacade && !header.exported {
+                            crate::return_rule_error!(
+                                "Library facade files (#mod.bst) cannot contain private top-level declarations.",
+                                header.name_location.clone(), {
+                                    CompilationStage => "Header Parsing",
+                                    PrimarySuggestion => "Add `#` to export it, move it to an implementation file, or remove it from `#mod.bst`.",
+                                }
+                            );
+                        }
+
                         match header.kind {
                             HeaderKind::StartFunction => {
                                 start_function_body.push(current_token);
@@ -192,7 +202,7 @@ pub(super) fn parse_headers_in_file(
                             "`#import` can only be used in `#mod.bst` to re-export symbols from a library facade.",
                             current_location, {
                                 CompilationStage => "Header Parsing",
-                                PrimarySuggestion => "Move this `#import` into a `#mod.bst` file, or use `import` for local bindings",
+                                PrimarySuggestion => "Use `import` for local imports, or move the re-export into `#mod.bst`.",
                             }
                         );
                     }
@@ -382,6 +392,11 @@ pub(super) fn parse_headers_in_file(
             } else {
                 "Non-entry files cannot contain top-level executable statements. Move this code into a named function or into the entry file."
             };
+            let suggestion = if context.file_role == FileRole::ModuleFacade {
+                "Move runtime entry code to a build-system entry file such as `#page.bst`."
+            } else {
+                "Wrap this code in a named function declaration"
+            };
             crate::return_rule_error!(
                 msg,
                 start_function_body
@@ -390,7 +405,7 @@ pub(super) fn parse_headers_in_file(
                     .map(|t| t.location.clone())
                     .unwrap_or_default(), {
                     CompilationStage => "Header Parsing",
-                    PrimarySuggestion => "Wrap this code in a named function declaration",
+                    PrimarySuggestion => suggestion,
                 }
             );
         }

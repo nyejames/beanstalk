@@ -301,7 +301,7 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
             [: Partial]
             [: Targeted coverage for config-defined source library root resolution, prefix collision detection, and `#mod.bst` facade enforcement.]
             [: Frontend / HTML]
-            [: Source libraries and regular modules share the same visibility model. Config-defined project library folders (default convention: `/lib`) and builder-provided source library roots are plumbed through `LibrarySet`. Prefix collisions between builder-provided and project-local libraries produce a hard config error. Modules that export outside themselves must do so through `#mod.bst`; outside importers cannot bypass the facade.]
+            [: Source libraries and regular modules share the same visibility model. Config-defined project library folders (default convention: `/lib`) and builder-provided source library roots are plumbed through `LibrarySet`. Prefix collisions between builder-provided and project-local libraries produce a hard config error. Modules that export outside themselves must do so through `#mod.bst`; outside importers cannot bypass the facade. `#mod.bst` is facade-only: private top-level declarations, top-level runtime statements, and runtime templates are rejected.]
         ]
 
         [data:

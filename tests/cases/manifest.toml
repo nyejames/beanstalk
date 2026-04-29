@@ -3021,8 +3021,23 @@ path = "source_lib_facade_runtime_stmt"
 tags = ["integration", "source-libraries", "facades", "diagnostics"]
 
 [[case]]
+id = "source_lib_facade_runtime_template"
+path = "source_lib_facade_runtime_template"
+tags = ["integration", "source-libraries", "facades", "diagnostics"]
+
+[[case]]
 id = "source_lib_facade_missing"
 path = "source_lib_facade_missing"
+tags = ["integration", "source-libraries", "facades", "diagnostics"]
+
+[[case]]
+id = "source_lib_facade_private_decl_const"
+path = "source_lib_facade_private_decl_const"
+tags = ["integration", "source-libraries", "facades", "diagnostics"]
+
+[[case]]
+id = "source_lib_facade_private_decl_function"
+path = "source_lib_facade_private_decl_function"
 tags = ["integration", "source-libraries", "facades", "diagnostics"]
 
 [[case]]

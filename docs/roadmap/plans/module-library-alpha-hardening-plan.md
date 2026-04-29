@@ -244,30 +244,30 @@ Exact file names may differ. Inspect the current tree before editing.
 
 ### Behavior to implement or verify
 
-- [ ] A directory with one or more `#*.bst` files is treated as a module root.
-- [ ] `#mod.bst` is optional for non-exporting module roots such as page-only modules.
-- [ ] A module that exports outside itself must expose those exports through `#mod.bst`.
-- [ ] `#mod.bst` allows:
+- [x] A directory with one or more `#*.bst` files is treated as a module root.
+- [x] `#mod.bst` is optional for non-exporting module roots such as page-only modules.
+- [x] A module that exports outside itself must expose those exports through `#mod.bst`.
+- [x] `#mod.bst` allows:
   - `#import` re-exports
   - normal public top-level declarations
-- [ ] `#mod.bst` rejects:
+- [x] `#mod.bst` rejects:
   - private top-level declarations
   - top-level runtime statements
   - runtime templates/start code
   - body-like code not attached to a public declaration
-- [ ] `#mod.bst` does not create a start function.
-- [ ] A non-entry implementation file outside `#mod.bst` may still contain normal top-level declarations according to existing module rules.
-- [ ] Private declarations inside normal module implementation files remain private to the module.
+- [x] `#mod.bst` does not create a start function.
+- [x] A non-entry implementation file outside `#mod.bst` may still contain normal top-level declarations according to existing module rules.
+- [x] Private declarations inside normal module implementation files remain private to the module.
 
 ### Diagnostics to add or improve
 
-- [ ] `#mod.bst` contains private declaration.
+- [x] `#mod.bst` contains private declaration.
   - Suggestion: “Add `#` to export it, move it to an implementation file, or remove it from `#mod.bst`.”
-- [ ] `#mod.bst` contains top-level runtime code.
+- [x] `#mod.bst` contains top-level runtime code.
   - Suggestion: “Move runtime entry code to a build-system entry file such as `#page.bst`.”
-- [ ] `#import` used outside `#mod.bst`.
+- [x] `#import` used outside `#mod.bst`.
   - Suggestion: “Use `import` for local imports, or move the re-export into `#mod.bst`.”
-- [ ] Multiple invalid items in `#mod.bst` should aggregate diagnostics where practical.
+- [x] Multiple invalid items in `#mod.bst` should aggregate diagnostics where practical.
 
 ### Integration tests to add
 
@@ -289,14 +289,14 @@ hash_import_outside_mod_rejected
 
 ### Audit / style-guide review
 
-- [ ] No user-input `panic!`, `todo!`, `.unwrap()`, or `.expect()` paths.
-- [ ] Diagnostics use structured compiler errors with source locations.
-- [ ] Keep build-system discovery separate from AST semantic validation.
-- [ ] Do not create duplicate module-root detection logic if an existing discovery helper owns it.
+- [x] No user-input `panic!`, `todo!`, `.unwrap()`, or `.expect()` paths.
+- [x] Diagnostics use structured compiler errors with source locations.
+- [x] Keep build-system discovery separate from AST semantic validation.
+- [x] Do not create duplicate module-root detection logic if an existing discovery helper owns it.
 
 ### Validation
 
-- [ ] Run `just validate`.
+- [x] Run `just validate`.
 
 ### Acceptance criteria
 
