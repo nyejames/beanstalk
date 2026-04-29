@@ -45,25 +45,25 @@ import @styles/docs {navbar, title, section, styled_table, header, data, codeblo
         ]
 
         [data:
-            [: [codesnippet:bean new html] ]
+            [: [codesnippet:bean new html .] ]
             [: Creates a minimal HTML project scaffold.]
-            [: Currently prompts for a project path and project name. More project options are planned.]
+            [: If path is omitted, bean shows the current directory and asks for confirmation before scaffolding there. It then asks for a project name.]
         ]
 
         [data:
-            [: [codesnippet:bean check path] ]
+            [: [codesnippet:bean check .] ]
             [: Runs project discovery, frontend compilation, type checking, HIR lowering, and borrow validation without writing build artifacts.]
             [: Add [codesnippet:--terse] for compact one-line diagnostics.]
         ]
 
         [data:
-            [: [codesnippet:bean dev path] ]
+            [: [codesnippet:bean dev .] ]
             [: Builds the project, starts a local dev server, watches files, and reloads the browser when sources change.]
             [: This is the main day-to-day command for working on HTML projects.]
         ]
 
         [data:
-            [: [codesnippet:bean build path] ]
+            [: [codesnippet:bean build .] ]
             [: Builds the project and writes output files.]
             [: Without [codesnippet:--release], directory projects write to the configured dev output folder. With [codesnippet:--release], they write to the configured release output folder.]
         ]
@@ -130,13 +130,15 @@ import @styles/docs {navbar, title, section, styled_table, header, data, codeblo
     Start a new project:
 
     [codeblock, $code("bash"):
-        bean new html
+        bean new html .
     ]
 
-    The command asks for:
+    If you omit the path, bean asks for confirmation in the current directory before continuing.
+    The command then asks for:
 
     [codeblock, $code("text"):
-        Enter project path:
+        No project path specified. Current directory: /your/path
+        Create the new HTML project in this directory? [y/N]:
         Project name:
     ]
 

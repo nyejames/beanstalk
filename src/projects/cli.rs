@@ -49,24 +49,33 @@ enum Command {
 
 pub fn start_cli() {
     let compiler_args: Vec<String> = env::args().collect();
+    let cli_args = &compiler_args[1..];
 
-    // TODO: strip flags from args before passing to subcommands?
-    // Allows flags in any order.
-    let flags = get_flags(&compiler_args);
-
-    if flags.contains(&Flag::Version) {
-        println!("bean {}", env!("CARGO_PKG_VERSION"));
-        return;
-
-    // TODO: Should eventually be unrestricted so no specified directory = current directory,
-    // but for now require a command to avoid accidentally running build/dev in the wrong place.
-    // An explicit prompt checking the user wants to run the command in the current directory could be a good safety measure before allowing that.
-    } else if compiler_args.len() < 2 {
+    if cli_args.is_empty() {
         print_help(true);
         return;
     }
 
-    let command = match get_command(&compiler_args[1..]) {
+    if cli_args[0].starts_with("--") || cli_args[0].starts_with('-') {
+        if cli_args
+            .iter()
+            .all(|arg| arg.starts_with("--") || arg.starts_with('-'))
+        {
+            let standalone_flags = get_flags(cli_args);
+            if standalone_flags.contains(&Flag::Version) {
+                println!("bean {}", env!("CARGO_PKG_VERSION"));
+            } else {
+                print_help(true);
+            }
+            return;
+        }
+
+        say!("Flags must come after a command, unless used on their own.");
+        print_help(true);
+        return;
+    }
+
+    let command = match get_command(cli_args) {
         Ok(command) => command,
         Err(e) => {
             say!(e);
@@ -75,12 +84,30 @@ pub fn start_cli() {
         }
     };
 
+    let flags = get_flags(&cli_args[1..]);
+
     match command {
         Command::Help => {
             print_help(true);
         }
 
         Command::NewHTMLProject(path) => {
+            let project_path = if path.is_empty() {
+                match confirm_new_html_in_current_directory() {
+                    Ok(true) => path,
+                    Ok(false) => {
+                        say!("Cancelled project creation.");
+                        return;
+                    }
+                    Err(error) => {
+                        say!(error);
+                        return;
+                    }
+                }
+            } else {
+                path
+            };
+
             let args = match prompt_user_for_input("Project name: ") {
                 Ok(args) => args,
                 Err(error) => {
@@ -95,7 +122,8 @@ pub fn start_cli() {
                 None => "",
             };
 
-            match new_html_project::create_html_project_template(path, project_name, flags) {
+            match new_html_project::create_html_project_template(project_path, project_name, flags)
+            {
                 Ok(_) => {
                     say!("Creating new HTML project...");
                 }
@@ -204,37 +232,9 @@ fn get_command(args: &[String]) -> Result<Command, String> {
     match command {
         Some("help") => Ok(Command::Help),
 
-        Some("new") => {
-            // Check which type of project it is
-            match args.get(1).map(String::as_str) {
-                Some("html") => {
-                    let dir = prompt_user_for_input("Enter project path: ")?;
+        Some("new") => parse_new_command(args),
 
-                    if dir.len() == 1 {
-                        let dir = dir[0].to_string();
-                        Ok(Command::NewHTMLProject(dir))
-                    } else {
-                        // use the current directory
-                        Ok(Command::NewHTMLProject(String::new()))
-                    }
-                }
-                _ => {
-                    Err("Invalid project type - currently only 'html' is supported (try 'cargo run new html')".to_string())
-                }
-            }
-        }
-
-        Some("build") => {
-            // For now, the backend is always JS
-            // Eventually, if the Wasm backend is done,
-            // using JS will be a flag that will switch it to that backend
-            match args.get(1) {
-                Some(path) => Ok(Command::Build(path.to_string())),
-
-                // Return no path (will work from whatever dir the user is inside)
-                _ => Ok(Command::Build(String::new())),
-            }
-        }
+        Some("build") => parse_build_command(args),
 
         Some("check") => parse_check_command(args),
 
@@ -262,6 +262,75 @@ fn get_flags(args: &[String]) -> Vec<Flag> {
     }
 
     flags
+}
+
+fn parse_new_command(args: &[String]) -> Result<Command, String> {
+    match args.get(1).map(String::as_str) {
+        Some("html") => {
+            let mut path = String::new();
+            let mut index = 2usize;
+
+            while let Some(arg) = args.get(index) {
+                match arg.as_str() {
+                    "--release" | "--hide-warnings" | "--hide-timers" | "--show-warnings"
+                    | "--html-wasm" => {
+                        index += 1;
+                    }
+                    _ if arg.starts_with("--") => {
+                        return Err(format!(
+                            "Unknown new flag: '{arg}'. Supported shared flags are --release, --hide-warnings, --hide-timers, and --html-wasm."
+                        ));
+                    }
+                    _ => {
+                        if path.is_empty() {
+                            path = arg.to_owned();
+                            index += 1;
+                        } else {
+                            return Err(String::from(
+                                "New html command accepts at most one path argument.",
+                            ));
+                        }
+                    }
+                }
+            }
+
+            Ok(Command::NewHTMLProject(path))
+        }
+        _ => {
+            Err("Invalid project type - currently only 'html' is supported (try 'cargo run -- new html')".to_string())
+        }
+    }
+}
+
+fn parse_build_command(args: &[String]) -> Result<Command, String> {
+    let mut path = String::new();
+    let mut index = 1usize;
+
+    while let Some(arg) = args.get(index) {
+        match arg.as_str() {
+            "--release" | "--hide-warnings" | "--hide-timers" | "--show-warnings"
+            | "--html-wasm" => {
+                index += 1;
+            }
+            _ if arg.starts_with("--") => {
+                return Err(format!(
+                    "Unknown build flag: '{arg}'. Supported build flags are --release, --hide-warnings, --hide-timers, and --html-wasm."
+                ));
+            }
+            _ => {
+                if path.is_empty() {
+                    path = arg.to_owned();
+                    index += 1;
+                } else {
+                    return Err(String::from(
+                        "Build command accepts at most one path argument.",
+                    ));
+                }
+            }
+        }
+    }
+
+    Ok(Command::Build(path))
 }
 
 fn parse_tests_command(args: &[String]) -> Result<Command, String> {
@@ -434,6 +503,21 @@ fn prompt_user_for_input(msg: &str) -> Result<Vec<String>, String> {
     Ok(args)
 }
 
+fn confirm_new_html_in_current_directory() -> Result<bool, String> {
+    let current_directory = env::current_dir()
+        .map_err(|error| format!("Failed to resolve current directory: {error}"))?;
+    say!(
+        "No project path specified. Current directory: ",
+        current_directory.display()
+    );
+    let answer = prompt_user_for_input("Create the new HTML project in this directory? [y/N]: ")?;
+    let Some(first_answer) = answer.first() else {
+        return Ok(false);
+    };
+    let normalized = first_answer.to_ascii_lowercase();
+    Ok(matches!(normalized.as_str(), "y" | "yes"))
+}
+
 fn print_help(commands_only: bool) {
     if !commands_only {
         say!(Bright Black "------------------------------------");
@@ -444,9 +528,10 @@ fn print_help(commands_only: bool) {
     say!(Green Bold "Beanstalk", Reset " is version ", Blue Bold env!("CARGO_PKG_VERSION"));
 
     say!(Green Bold "\nCommands:");
-    say!("  build <path>      - Builds a project");
+    say!("  build [path]      - Builds a project");
     say!("  check [path]      - Runs frontend-only diagnostics (no artifacts)");
-    say!("  dev <path>        - Runs the hot reloading dev server");
+    say!("  dev [path]        - Runs the hot reloading dev server");
+    say!("  new html [path]   - Creates a minimal HTML project scaffold");
     say!("  tests [--backend <id>] - Runs the integration test suite");
 
     say!(Green Bold "\nFlags:");

@@ -21,6 +21,38 @@ fn dev_command_uses_default_options() {
 }
 
 #[test]
+fn build_command_uses_current_directory_when_path_is_missing() {
+    let command = get_command(&args(&["build"])).expect("build command should parse");
+    assert_eq!(command, Command::Build(String::new()));
+}
+
+#[test]
+fn build_command_supports_mixed_path_and_flag_ordering() {
+    let command =
+        get_command(&args(&["build", "--release", "main.bst"])).expect("command should parse");
+    assert_eq!(command, Command::Build(String::from("main.bst")));
+}
+
+#[test]
+fn build_command_rejects_unknown_flags() {
+    let error =
+        get_command(&args(&["build", "--wat"])).expect_err("unknown build flag should fail");
+    assert!(error.contains("Unknown build flag"));
+}
+
+#[test]
+fn new_html_command_uses_current_directory_when_path_is_missing() {
+    let command = get_command(&args(&["new", "html"])).expect("new html command should parse");
+    assert_eq!(command, Command::NewHTMLProject(String::new()));
+}
+
+#[test]
+fn new_html_command_parses_project_path() {
+    let command = get_command(&args(&["new", "html", "site"])).expect("new html should parse");
+    assert_eq!(command, Command::NewHTMLProject(String::from("site")));
+}
+
+#[test]
 fn dev_command_parses_custom_host_port_and_poll_interval() {
     let command = get_command(&args(&[
         "dev",
@@ -102,6 +134,13 @@ fn dev_command_supports_path_and_flag_ordering() {
             },
         }
     );
+}
+
+#[test]
+fn new_html_command_rejects_multiple_paths() {
+    let error = get_command(&args(&["new", "html", "a", "b"]))
+        .expect_err("multiple new html paths should fail");
+    assert!(error.contains("at most one path"));
 }
 
 #[test]
