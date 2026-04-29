@@ -1,0 +1,16 @@
+entry = "."
+
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["core_random value=", " count="]
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = [
+    "function __bs_random_float(",
+    "function __bs_random_int(",
+    "__bs_random_float()",
+    "__bs_random_int(1, 3)",
+]

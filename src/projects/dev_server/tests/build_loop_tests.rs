@@ -190,7 +190,7 @@ impl BackendBuilder for InvalidOutputWarningBuilder {
     }
 
     fn libraries(&self) -> LibrarySet {
-        LibrarySet::with_core_packages()
+        LibrarySet::with_mandatory_core()
     }
 
     fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec> {

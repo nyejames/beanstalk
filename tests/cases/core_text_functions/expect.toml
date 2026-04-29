@@ -1,0 +1,25 @@
+entry = "."
+
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["core_text len=3 empty=true has=true prefix=true suffix=true"]
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = [
+    "function __bs_text_length(",
+    "function __bs_text_is_empty(",
+    "function __bs_text_contains(",
+    "function __bs_text_starts_with(",
+    "function __bs_text_ends_with(",
+    "__bs_text_length(\"abc\")",
+    "__bs_text_contains(__bs_read(",
+]
+
+[backends.html_wasm]
+mode = "failure"
+warnings = "forbid"
+error_type = "LirTransformation"
+message_contains = ["Wasm backend does not yet support host function 'length'"]

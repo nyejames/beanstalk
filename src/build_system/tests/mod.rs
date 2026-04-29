@@ -128,7 +128,7 @@ impl BackendBuilder for WarningBuilder {
     }
 
     fn libraries(&self) -> LibrarySet {
-        LibrarySet::with_core_packages()
+        LibrarySet::with_mandatory_core()
     }
 
     fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec> {
@@ -169,7 +169,7 @@ impl BackendBuilder for ValidationTrackingBuilder {
     }
 
     fn libraries(&self) -> LibrarySet {
-        LibrarySet::with_core_packages()
+        LibrarySet::with_mandatory_core()
     }
 
     fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec> {
@@ -203,7 +203,7 @@ impl BackendBuilder for FailingValidationBuilder {
     }
 
     fn libraries(&self) -> LibrarySet {
-        LibrarySet::with_core_packages()
+        LibrarySet::with_mandatory_core()
     }
 
     fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec> {
@@ -241,7 +241,7 @@ impl BackendBuilder for NoDirectiveBuilder {
     }
 
     fn libraries(&self) -> LibrarySet {
-        LibrarySet::with_core_packages()
+        LibrarySet::with_mandatory_core()
     }
 
     fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec> {
@@ -291,7 +291,7 @@ impl BackendBuilder for MultiModuleDiagnosticBuilder {
     }
 
     fn libraries(&self) -> LibrarySet {
-        LibrarySet::with_core_packages()
+        LibrarySet::with_mandatory_core()
     }
 
     fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec> {

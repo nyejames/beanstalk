@@ -1,0 +1,5 @@
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+error_type = "Type"
+message_contains = ["Host function 'random_int'", "Expected 'Int'", "found 'String'"]

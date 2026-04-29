@@ -23,7 +23,7 @@ fn single_file_compiles_minimal_bst() {
         &mut config,
         &[],
         &style_directives,
-        &LibrarySet::with_core_packages(),
+        &LibrarySet::with_mandatory_core(),
         &mut string_table,
     );
 
@@ -52,7 +52,7 @@ fn single_file_rejects_wrong_extension() {
         &mut config,
         &[],
         &style_directives,
-        &LibrarySet::with_core_packages(),
+        &LibrarySet::with_mandatory_core(),
         &mut string_table,
     );
 
@@ -82,7 +82,7 @@ fn single_file_rejects_missing_file() {
         &mut config,
         &[],
         &style_directives,
-        &LibrarySet::with_core_packages(),
+        &LibrarySet::with_mandatory_core(),
         &mut string_table,
     );
 
@@ -90,6 +90,50 @@ fn single_file_rejects_missing_file() {
     assert!(
         !result.err().expect("checked above").errors.is_empty(),
         "expected at least one error"
+    );
+
+    fs::remove_dir_all(&dir).expect("should remove temp dir");
+}
+
+#[test]
+fn single_file_rejects_optional_core_package_not_exposed_by_builder() {
+    let dir = temp_dir("single_file_optional_core_not_exposed");
+    fs::create_dir_all(&dir).expect("should create temp dir");
+    let bst_path = dir.join("test.bst");
+    fs::write(
+        &bst_path,
+        "import @core/text {length}\nvalue = length(\"abc\")\n",
+    )
+    .expect("should write .bst");
+
+    let mut config = Config::new(bst_path);
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let mut string_table = StringTable::new();
+
+    let result = compile_project_frontend(
+        &mut config,
+        &[],
+        &style_directives,
+        &LibrarySet::with_mandatory_core(),
+        &mut string_table,
+    );
+
+    assert!(
+        result.is_err(),
+        "optional core package should require builder opt-in"
+    );
+    let messages = result.err().expect("checked above");
+    let error = messages.errors.first().expect("expected one error");
+    assert_eq!(
+        error.error_type,
+        crate::compiler_frontend::compiler_errors::ErrorType::Rule
+    );
+    assert!(
+        error
+            .msg
+            .contains("Core package '@core/text' is not supported by this builder"),
+        "unexpected error: {}",
+        error.msg
     );
 
     fs::remove_dir_all(&dir).expect("should remove temp dir");
@@ -112,7 +156,7 @@ fn directory_project_compiles_single_entry_module() {
         &mut config,
         &[],
         &style_directives,
-        &LibrarySet::with_core_packages(),
+        &LibrarySet::with_mandatory_core(),
         &mut string_table,
     );
 
@@ -145,7 +189,7 @@ fn directory_project_discovers_multiple_entry_modules() {
         &mut config,
         &[],
         &style_directives,
-        &LibrarySet::with_core_packages(),
+        &LibrarySet::with_mandatory_core(),
         &mut string_table,
     );
 
@@ -188,7 +232,7 @@ fn directory_project_rejects_missing_entry_root() {
         &mut config,
         &[],
         &style_directives,
-        &LibrarySet::with_core_packages(),
+        &LibrarySet::with_mandatory_core(),
         &mut string_table,
     );
 

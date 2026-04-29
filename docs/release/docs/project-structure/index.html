@@ -321,7 +321,10 @@ body {
     ">src</span></li><li>module entry files named like <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">#page.bst</span></li><li>normal <span style="
+    ">#page.bst</span></li><li>module API boundaries defined by <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#mod.bst</span></li><li>normal <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">.bst</span> files that provide declarations for module entries</li><li>builder-owned output folders such as <span style="
@@ -330,9 +333,18 @@ body {
     ">dev</span> and <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">release</span></li></ul><p>At this stage of development, this is the only supported project structure to rely on. The rules are deliberately narrow so the compiler, dev server, and HTML builder can stay predictable while the language is still evolving.</p></section>
+    ">release</span></li></ul><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#mod.bst</span>  = module API / visibility boundary</p><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#page.bst</span> = HTML builder entry/configuration convention</p><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#config.bst</span>   = build/project configuration convention</p><p>At this stage of development, this is the only supported project structure to rely on. The rules are deliberately narrow so the compiler, dev server, and HTML builder can stay predictable while the language is still evolving.</p></section>
     <section class="container"><h1>The modular build system</h1><p>The Beanstalk compiler frontend is shared by every project builder. It discovers modules, parses files, type checks code, lowers to HIR, and runs borrow validation. A project builder then decides how those compiled modules become real output files.</p><p>The current user-facing project builder is the HTML project builder. It consumes each compiled module and emits one HTML page per module entry file.</p><p>This split matters because Beanstalk is not designed as a single hard-coded web compiler. The same frontend can later feed other builders, such as a Wasm module builder, a documentation builder, or project-specific tooling.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
-            
+        
     <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
          <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Layer</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Responsibility</th> 
     </tr>
@@ -385,7 +397,7 @@ body {
         <span class='bst-code-operator'>@</span>assets,
     <span class='bst-code-parenthesis'>}</span>
     </code></pre><p>Important settings:</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
-            
+        
     <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
          <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Setting</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Meaning</th> 
     </tr>
@@ -498,7 +510,7 @@ body {
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">#*.bst</span> files as module entries. The project builder decides what those entries mean.</p><p>The HTML project builder currently treats them as page entries. The file name and folder decide the output route.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
-            
+        
     <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
          <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Entry file</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> HTML output path</th> 
     </tr>
@@ -557,7 +569,7 @@ body {
         font-family: var(--bst-font-family-monospace);
     ">#name.bst</span> files become named routes under the same folder.</p></section>
     <section class="container"><h1>Top-level templates in page entries</h1><p>Top-level templates are special. In the HTML project builder, direct top-level templates in a module entry file become page fragments.</p><p>There are two forms:</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
-            
+        
     <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
          <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Form</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Meaning</th> 
     </tr>
@@ -613,7 +625,7 @@ body {
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">#</span> prefix on top-level declarations controls module visibility.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
-            
+        
     <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
          <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Declaration kind</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Meaning of #</th> 
     </tr>
@@ -732,19 +744,13 @@ body {
     ">#root_folders</span> from the project root.</li><li>If no root folder matches, the import resolves from <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">#entry_root</span>.</li></ul><p>For the docs project, <span style="
+    ">#entry_root</span>.</li></ul><p>Builder-provided and project-local source libraries expose their prefix directly. That means <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">#root_folders</span> includes <span style="
+    ">import @html ...</span> resolves through the HTML builder&#39;s <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">@lib</span> and <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@assets</span>. That means <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">import @lib/html ...</span> resolves through the project root, while <span style="
+    ">@html</span> library, while <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">import @styles/docs ...</span> resolves through <span style="
@@ -778,8 +784,9 @@ body {
     │   │   └── progress<span class='bst-code-operator'>/</span><span class='bst-code-operator'>#</span>page.bst
     │   └── styles<span class='bst-code-operator'>/</span>
     │       └── docs.bst
-    ├── <span class='bst-code-operator'>@</span>lib<span class='bst-code-operator'>/</span>
-    │   └── html.bst
+    ├── lib<span class='bst-code-operator'>/</span>
+    │   └── local_helpers<span class='bst-code-operator'>/</span>
+    │       └── <span class='bst-code-operator'>#</span>mod.bst
     ├── <span class='bst-code-operator'>@</span>assets<span class='bst-code-operator'>/</span>
     │   └── ...
     ├── dev<span class='bst-code-operator'>/</span>
@@ -796,10 +803,16 @@ body {
     ">styles/docs.bst</span> is a normal source file imported by pages.</li><li><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">@lib</span> and <span style="
+    ">@html</span> is provided by the HTML builder.</li><li><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">@assets</span> are project-root import folders configured by <span style="
+    ">lib/local_helpers/#mod.bst</span> would expose a project-local <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">@local_helpers</span> source library.</li><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">@assets</span> is a project-root import folder configured by <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">#root_folders</span>.</li><li><span style="
@@ -810,7 +823,7 @@ body {
         font-family: var(--bst-font-family-monospace);
     ">release/</span> are output folders, not source folders.</li></ul></section>
     <section class="container"><h1>Output files</h1><p>The build command compiles the project, then writes the builder&#39;s output files under the selected output root.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
-            
+        
     <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
          <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Build mode</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Output root</th> 
     </tr>
@@ -855,25 +868,81 @@ body {
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">page.wasm</span></li></ul><p>The HTML builder owns stale-output cleanup for generated HTML artifacts. Generated output folders should be treated as build artifacts, not source.</p></section>
-    <section class="container"><h1>Future extension points</h1><p>The <span style="
+    <section class="container"><h1>Library modules</h1><p>Source libraries are normal <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">#file.bst</span> module-entry convention is intentionally extensible. Future builders and commands can attach special meaning to new <span style="
+    ">.bst</span> source roots with an explicit facade file. Project-local libraries live under <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">#</span> file names without changing the basic project shape.</p><h2>#mod.bst library modules</h2><p>A future <span style="
+    ">lib/<name></span> and import as <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">#mod.bst</span> file can act as the visibility gate for a library module. Instead of every <span style="
+    ">@<name></span> without spelling <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">#*.bst</span> file being a page, <span style="
+    ">lib</span> in source. Builders can also provide source libraries virtually. The HTML builder provides <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">#mod.bst</span> would define what the module exports to other modules.</p><p>This would make module boundaries explicit and would fit future parallel compilation:</p><ul><li>compile each module independently</li><li>expose only declarations exported from <span style="
+    ">@html</span>.</p><h2>#mod.bst library modules</h2><p><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">#mod.bst</span></li><li>emit either final Wasm exports or intermediate module metadata</li><li>allow other modules to depend on that stable export surface</li></ul><h2>#test.bst test modules</h2><p>A future <span style="
+    ">#mod.bst</span> is the visibility gate for a source library module.</p><p>It defines what other modules can import from that library.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    lib<span class='bst-code-operator'>/</span>ui<span class='bst-code-operator'>/</span>
+    ├── <span class='bst-code-operator'>#</span>mod.bst
+    ├── button.bst
+    └── layout.bst
+    </code></pre><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-comment'>-- lib/ui/#mod.bst</span>
+    <span class='bst-code-operator'>#</span>import <span class='bst-code-operator'>@</span>.<span class='bst-code-operator'>/</span>button<span class='bst-code-operator'>/</span>button
+    <span class='bst-code-operator'>#</span>import <span class='bst-code-operator'>@</span>.<span class='bst-code-operator'>/</span>layout <span class='bst-code-parenthesis'>{</span>page <span class='bst-code-keyword'>as</span> ui_page<span class='bst-code-parenthesis'>}</span>
+    </code></pre><p>Rules:</p><ul><li>external importers can only see symbols exported by <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#mod.bst</span></li><li>internal implementation files are not public unless re-exported by the facade</li><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#mod.bst</span> is not shared implementation code; sibling files do not see its declarations automatically</li><li>runtime top-level statements and runtime top-level templates are invalid in <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#mod.bst</span></li><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#import</span> is valid only in <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#mod.bst</span>, re-exports import-style paths, supports aliases, and does not create local bindings</li></ul><h2>Core and builder libraries</h2><p>Every builder provides the core prelude surface. Optional core libraries require explicit imports and builder support:</p><ul><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">@core/math</span></li><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">@core/text</span></li><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">@core/random</span></li><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">@core/time</span></li></ul><p>The HTML builder also provides <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">@html</span>. Builder libraries are not core libraries; other builders may expose different library roots.</p><p>Deferred library features include package versions, remote fetching, lockfiles, source-library HIR caching, namespace imports, wildcard imports, seeded random, full date/time APIs, and automatic docs extraction from <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#mod.bst</span>.</p><h1>Future extension points</h1><h2>#test.bst test modules</h2><p>A future <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">#test.bst</span> file can hold project tests. Normal builds would ignore it. A planned test command could discover and run those files, similar to how <span style="

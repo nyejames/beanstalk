@@ -7,6 +7,7 @@ mod emitter;
 mod js_expr;
 mod js_function;
 mod js_statement;
+mod libraries;
 mod runtime;
 mod symbols;
 mod utils;

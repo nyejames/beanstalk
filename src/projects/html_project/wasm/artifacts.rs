@@ -115,8 +115,9 @@ pub(crate) fn compile_html_module_wasm(
     let (entry_fragment_html, slot_ids) =
         render_entry_fragments(input.const_fragments, input.entry_runtime_fragment_count);
 
-    let build_plan = build_html_wasm_plan(input.hir_module, slot_ids)
+    let mut build_plan = build_html_wasm_plan(input.hir_module, slot_ids)
         .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
+    build_plan.wasm_request.external_package_registry = input.external_package_registry.clone();
 
     let wasm_result = lower_hir_to_wasm_module(
         input.hir_module,

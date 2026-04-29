@@ -36,7 +36,7 @@ impl BackendBuilder for NoopBuilder {
     }
 
     fn libraries(&self) -> LibrarySet {
-        LibrarySet::with_core_packages()
+        LibrarySet::with_mandatory_core()
     }
 
     fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec> {
@@ -66,7 +66,7 @@ impl BackendBuilder for ConflictingDirectiveBuilder {
     }
 
     fn libraries(&self) -> LibrarySet {
-        LibrarySet::with_core_packages()
+        LibrarySet::with_mandatory_core()
     }
 
     fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec> {

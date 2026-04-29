@@ -4,6 +4,7 @@
 //! WHY: keeping one explicit request object preserves stage separation and makes option growth
 //! predictable as phase-3 HTML integration and richer Wasm features are added.
 
+use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::hir::ids::FunctionId;
 use rustc_hash::FxHashMap;
 
@@ -20,6 +21,12 @@ pub(crate) struct WasmBackendRequest {
     pub emit_options: WasmEmitOptions,
     /// Optional debug dumps aligned with existing compiler debug workflow.
     pub debug_flags: WasmDebugFlags,
+    /// External package metadata visible to this builder.
+    ///
+    /// WHAT: lets Wasm lowering name unsupported host calls accurately.
+    /// WHY: dynamic external package IDs are synthetic today, so diagnostics need registry
+    /// metadata to avoid reporting only `<synthetic>`.
+    pub external_package_registry: ExternalPackageRegistry,
 }
 
 #[derive(Debug, Clone, Default)]

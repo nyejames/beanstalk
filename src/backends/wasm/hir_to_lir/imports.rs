@@ -21,7 +21,7 @@ pub(crate) fn register_required_host_imports(
                 ..
             } = &statement.kind
             {
-                let host_function = resolve_host_function_id(*id)?;
+                let host_function = resolve_host_function_id(context, *id)?;
                 ensure_host_import(context, host_function);
             }
         }
@@ -43,19 +43,29 @@ pub(crate) fn resolve_host_call_import(
         ));
     };
 
-    let host_function = resolve_host_function_id(*id)?;
+    let host_function = resolve_host_function_id(context, *id)?;
     Ok(ensure_host_import(context, host_function))
 }
 
-fn resolve_host_function_id(id: ExternalFunctionId) -> Result<WasmHostFunction, CompilerError> {
+fn resolve_host_function_id(
+    context: &WasmLirLoweringContext<'_>,
+    id: ExternalFunctionId,
+) -> Result<WasmHostFunction, CompilerError> {
     // WHAT: map a host function id to its Wasm backend import identity.
     // WHY: ensures only explicitly supported host calls are lowered.
     match id {
         ExternalFunctionId::Io => Ok(WasmHostFunction::LogString),
-        _ => Err(lir_transformation_error(format!(
-            "Wasm backend does not yet support host function '{}'",
-            id.name()
-        ))),
+        _ => {
+            let function_name = context
+                .request
+                .external_package_registry
+                .get_function_by_id(id)
+                .map(|function| function.name)
+                .unwrap_or_else(|| id.name());
+            Err(lir_transformation_error(format!(
+                "Wasm backend does not yet support host function '{function_name}'"
+            )))
+        }
     }
 }
 

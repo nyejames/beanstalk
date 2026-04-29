@@ -44,12 +44,17 @@ pub trait BackendBuilder {
     /// Project-specific frontend style directives.
     fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec>;
 
-    /// Builder-provided external platform packages.
-    fn external_packages(&self) -> ExternalPackageRegistry;
+    /// Builder-provided external packages and source libraries.
+    fn libraries(&self) -> LibrarySet;
 }
 
 pub struct ProjectBuilder {
     pub backend: Box<dyn BackendBuilder + Send>,
+}
+
+pub struct LibrarySet {
+    pub external_packages: ExternalPackageRegistry,
+    pub source_libraries: SourceLibraryRegistry,
 }
 ```
 
@@ -70,7 +75,7 @@ Frontend style directives:
 - Tokenizer and template parsing use the same merged registry and reject unknown directives strictly
 
 External platform packages:
-- Provided by project builders through `BackendBuilder::external_packages()`
+- Provided by project builders through `BackendBuilder::libraries().external_packages`
 - Virtual packages are not source files but use the normal import syntax
 - External symbols are registered by package scope. The same symbol name may exist in multiple packages.
 - Import binding resolves a concrete `(package, symbol)` pair into an `ExternalSymbolId`, then stores that ID in `visible_external_symbols`
@@ -78,6 +83,20 @@ External platform packages:
 - External expression/type resolution must go through `ScopeContext` visibility lookup
 - Prelude symbols such as `io` and `IO` are added to external visibility, not source declaration visibility
 - Backends map stable `ExternalFunctionId` values to their own lowering keys (JS runtime names, Wasm imports, Rust host bindings)
+
+Library categories:
+- Core prelude libraries: every builder must provide the prelude surface. `io`, `IO`, and compiler-owned error symbols are bare names.
+- Optional core libraries: builders opt into packages such as `@core/math`, `@core/text`, `@core/random`, and `@core/time`.
+- Builder libraries: builder-specific source libraries such as the HTML builder's `@html`.
+- Project-local source libraries: project `/lib/<name>` directories exposed as `@<name>`.
+- External packages: Rust-side metadata for virtual packages implemented by a backend.
+
+Source libraries:
+- Source libraries are normal `.bst` files exposed through library roots.
+- Configured or builder-provided library roots expose their prefix directly; `/lib/html` imports as `@html`, not `@lib/html`.
+- Every source library module must expose its public surface through `#mod.bst`.
+- External importers cannot bypass a library facade and import private implementation files directly.
+- `#import @...` is valid only inside `#mod.bst` and re-exports imported symbols without creating local bindings.
 
 Project builders do **not**:
 - Parse files

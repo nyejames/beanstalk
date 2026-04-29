@@ -146,6 +146,8 @@ import @blog_styles {section, divider}
 ;
 ```
 
+`@html` is provided by the HTML builder. Project-local libraries can live under `/lib` and import through their exposed prefix.
+
 The HTML build system will generate an HTML page from this code:
 
 ```haskell

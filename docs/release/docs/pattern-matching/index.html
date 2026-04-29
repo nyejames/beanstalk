@@ -347,7 +347,7 @@ body {
         case <span class='bst-code-struct'>Busy</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> label <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;busy&quot;</span>
         case <span class='bst-code-struct'>Offline</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> label <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;offline&quot;</span>
     ;
-    </code></pre><p>    Payload variants use constructor-like patterns with the original field names.     Captured bindings are available in the arm body and in guards.     Captures may be renamed with `as` when the arm-local name should differ from the payload field name.</p><pre style="
+    </code></pre><p>    Payload variants can be matched by writing the variant name followed by its payload field names in parentheses.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
         border-radius: 5px;
@@ -371,7 +371,7 @@ body {
         case <span class='bst-code-struct'>Err</span><span class='bst-code-parenthesis'>(</span>message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span>message<span class='bst-code-parenthesis'>)</span>
         case <span class='bst-code-struct'>Pending</span><span class='bst-code-parenthesis'>(</span>retry_count, message <span class='bst-code-keyword'>as</span> pending_message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span>pending_message<span class='bst-code-parenthesis'>)</span>
     ;
-    </code></pre><p>    Capture originals must exactly match the declared payload field names.     For example, `case Err(message as error_text)` binds the payload field `message` to the local name `error_text`.</p><p>    Exhaustiveness is tag-level: `case Err(message)` covers all `Err` values regardless of payload content.</p><p>    Negated patterns and general capture/tagged patterns such as `case Item |value| =&gt;` are deferred for Alpha.     Beanstalk does not use wildcard `case _ =&gt;` arms; use `else =&gt;` for fallback behavior.</p></section>
+    </code></pre><p>    The names before `as` must match the declared payload fields. The optional name after `as` is the arm-local binding.</p><p>    Capture originals must exactly match the declared payload field names.     For example, `case Err(message as error_text)` binds the payload field `message` to the local name `error_text`.</p><p>    Exhaustiveness is tag-level: `case Err(message)` covers all `Err` values regardless of payload content.</p><p>    Fallback match arms use `else =&gt;`, not a `case` pattern.</p></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

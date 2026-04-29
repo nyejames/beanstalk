@@ -31,7 +31,7 @@ pub use definitions::*;
 pub use ids::*;
 pub use registry::*;
 
-/// Builds the builtin external package registry used by normal frontend compilation.
+/// Builds the mandatory external package registry used by normal frontend compilation.
 ///
 /// WHAT: calls each package-specific registration helper in order to produce a fully
 /// populated `ExternalPackageRegistry`.
@@ -44,7 +44,6 @@ pub fn build_builtin_registry() -> ExternalPackageRegistry {
     crate::libraries::core::register_core_io_package(&mut registry);
     crate::libraries::core::register_core_collections_package(&mut registry);
     crate::libraries::core::register_core_error_package(&mut registry);
-    crate::libraries::core::register_core_math_package(&mut registry);
     crate::libraries::core::register_core_prelude(&mut registry);
     registry
 }

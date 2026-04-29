@@ -54,7 +54,8 @@ impl HtmlProjectBuilder {
 
 impl BackendBuilder for HtmlProjectBuilder {
     fn libraries(&self) -> LibrarySet {
-        let mut libraries = LibrarySet::with_core_packages();
+        let mut libraries = LibrarySet::with_mandatory_core();
+        libraries.expose_html_core_libraries();
 
         let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
         let html_lib_root =

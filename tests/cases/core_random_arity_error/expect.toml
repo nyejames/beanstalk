@@ -1,0 +1,5 @@
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+error_type = "Type"
+message_contains = ["Host function 'random_float'", "expects 0 argument(s)", "extra positional arguments"]

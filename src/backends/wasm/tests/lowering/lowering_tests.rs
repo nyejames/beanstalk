@@ -824,6 +824,7 @@ fn synthesizes_export_wrappers_with_stable_names() {
             show_wasm_exports: true,
             ..Default::default()
         },
+        external_package_registry: Default::default(),
     };
 
     let result = lower_hir_to_wasm_lir(&module, &default_borrow_facts(), &request, &string_table)

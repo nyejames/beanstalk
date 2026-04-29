@@ -14,8 +14,13 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
     - a project root with a [codesnippet:#config.bst] file
     - an entry root, usually [codesnippet:src]
     - module entry files named like [codesnippet:#page.bst]
+    - module API boundaries defined by [codesnippet:#mod.bst]
     - normal [codesnippet:.bst] files that provide declarations for module entries
     - builder-owned output folders such as [codesnippet:dev] and [codesnippet:release]
+
+    [codesnippet:#mod.bst]  = module API / visibility boundary
+    [codesnippet:#page.bst] = HTML builder entry/configuration convention
+    [codesnippet:#config.bst]   = build/project configuration convention
 
     At this stage of development, this is the only supported project structure to rely on.
     The rules are deliberately narrow so the compiler, dev server, and HTML builder can stay predictable while the language is still evolving.
@@ -343,8 +348,8 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
     - Non-relative imports first check configured [codesnippet:#root_folders] from the project root.
     - If no root folder matches, the import resolves from [codesnippet:#entry_root].
 
-    For the docs project, [codesnippet:#root_folders] includes [codesnippet:@lib] and [codesnippet:@assets].
-    That means [codesnippet:import @html ...] resolves through the builder-provided library, while [codesnippet:import @styles/docs ...] resolves through [codesnippet:docs/src/styles/docs.bst].
+    Builder-provided and project-local source libraries expose their prefix directly.
+    That means [codesnippet:import @html ...] resolves through the HTML builder's [codesnippet:@html] library, while [codesnippet:import @styles/docs ...] resolves through [codesnippet:docs/src/styles/docs.bst].
 ]
 
 #[section, $markdown:
@@ -373,8 +378,9 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
         │   │   └── progress/#page.bst
         │   └── styles/
         │       └── docs.bst
-        ├── @lib/
-        │   └── html.bst
+        ├── lib/
+        │   └── local_helpers/
+        │       └── #mod.bst
         ├── @assets/
         │   └── ...
         ├── dev/
@@ -386,7 +392,9 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
     - [codesnippet:src/] contains page entries and ordinary source files.
     - [codesnippet:#page.bst] files define HTML pages.
     - [codesnippet:styles/docs.bst] is a normal source file imported by pages.
-    - [codesnippet:@lib] and [codesnippet:@assets] are project-root import folders configured by [codesnippet:#root_folders].
+    - [codesnippet:@html] is provided by the HTML builder.
+    - [codesnippet:lib/local_helpers/#mod.bst] would expose a project-local [codesnippet:@local_helpers] source library.
+    - [codesnippet:@assets] is a project-root import folder configured by [codesnippet:#root_folders].
     - [codesnippet:dev/] and [codesnippet:release/] are output folders, not source folders.
 ]
 
@@ -423,22 +431,52 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
 ]
 
 #[section, $markdown:
-    # Future extension points
+    # Library modules
 
-    The [codesnippet:#file.bst] module-entry convention is intentionally extensible.
-    Future builders and commands can attach special meaning to new [codesnippet:#] file names without changing the basic project shape.
+    Source libraries are normal [codesnippet:.bst] source roots with an explicit facade file.
+    Project-local libraries live under [codesnippet:lib/<name>] and import as [codesnippet:@<name>] without spelling [codesnippet:lib] in source.
+    Builders can also provide source libraries virtually. The HTML builder provides [codesnippet:@html].
 
     ## #mod.bst library modules
 
-    A future [codesnippet:#mod.bst] file can act as the visibility gate for a library module.
-    Instead of every [codesnippet:#*.bst] file being a page, [codesnippet:#mod.bst] would define what the module exports to other modules.
+    [codesnippet:#mod.bst] is the visibility gate for a source library module.
+    It defines what other modules can import from that library.
 
-    This would make module boundaries explicit and would fit future parallel compilation:
+    [codeblock, $code("txt"):
+        lib/ui/
+        ├── #mod.bst
+        ├── button.bst
+        └── layout.bst
+    ]
 
-    - compile each module independently
-    - expose only declarations exported from [codesnippet:#mod.bst]
-    - emit either final Wasm exports or intermediate module metadata
-    - allow other modules to depend on that stable export surface
+    [codeblock, $code("bst"):
+        -- lib/ui/#mod.bst
+        #import @./button/button
+        #import @./layout {page as ui_page}
+    ]
+
+    Rules:
+
+    - external importers can only see symbols exported by [codesnippet:#mod.bst]
+    - internal implementation files are not public unless re-exported by the facade
+    - [codesnippet:#mod.bst] is not shared implementation code; sibling files do not see its declarations automatically
+    - runtime top-level statements and runtime top-level templates are invalid in [codesnippet:#mod.bst]
+    - [codesnippet:#import] is valid only in [codesnippet:#mod.bst], re-exports import-style paths, supports aliases, and does not create local bindings
+
+    ## Core and builder libraries
+
+    Every builder provides the core prelude surface. Optional core libraries require explicit imports and builder support:
+
+    - [codesnippet:@core/math]
+    - [codesnippet:@core/text]
+    - [codesnippet:@core/random]
+    - [codesnippet:@core/time]
+
+    The HTML builder also provides [codesnippet:@html]. Builder libraries are not core libraries; other builders may expose different library roots.
+
+    Deferred library features include package versions, remote fetching, lockfiles, source-library HIR caching, namespace imports, wildcard imports, seeded random, full date/time APIs, and automatic docs extraction from [codesnippet:#mod.bst].
+
+    # Future extension points
 
     ## #test.bst test modules
 

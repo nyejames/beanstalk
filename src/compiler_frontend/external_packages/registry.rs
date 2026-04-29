@@ -440,6 +440,45 @@ impl ExternalPackageRegistry {
         false
     }
 
+    /// Returns a known optional package path when an import targets a package this builder
+    /// did not expose.
+    ///
+    /// WHAT: recognizes compiler-known optional core package prefixes before path resolution falls
+    /// back to filesystem imports.
+    /// WHY: `@core/text` missing from a builder is a library-surface error, not a confusing
+    /// missing source file.
+    pub fn unsupported_known_package_import(
+        &self,
+        import_path: &crate::compiler_frontend::interned_path::InternedPath,
+        string_table: &crate::compiler_frontend::symbols::string_interning::StringTable,
+    ) -> Option<&'static str> {
+        let components = import_path.as_components();
+        for package_path in crate::libraries::core::OPTIONAL_CORE_PACKAGE_PATHS {
+            if self.has_package(package_path) {
+                continue;
+            }
+
+            let package_components = package_path
+                .strip_prefix('@')
+                .unwrap_or(package_path)
+                .split('/')
+                .collect::<Vec<_>>();
+            if components.len() < package_components.len() {
+                continue;
+            }
+
+            let matches_prefix = package_components
+                .iter()
+                .enumerate()
+                .all(|(index, expected)| string_table.resolve(components[index]) == *expected);
+            if matches_prefix {
+                return Some(*package_path);
+            }
+        }
+
+        None
+    }
+
     // ------------------------------------------------------------------
     // Prelude
     // ------------------------------------------------------------------

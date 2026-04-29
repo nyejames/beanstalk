@@ -829,8 +829,52 @@ Other files contribute declarations that must be imported explicitly by symbol.
 - Relative imports (`@./x` / `@..`) resolve from the importing file's directory
 - Non-relative imports whose first segment matches `#root_folders` resolve from the project root
 - Other non-relative imports resolve from the configured module entry root
+- Project-local source libraries under `/lib/<name>` and builder-provided source libraries expose their prefix directly. For example, `/lib/html` imports as `@html`, not `@lib/html`
 - Grouped imports expand into multiple individual symbol imports.
 - Circular imports are detected and cause compilation errors
+
+### Libraries and `#mod.bst`
+
+Beanstalk has several library categories:
+
+- Core prelude libraries: every builder must provide `@core/prelude`; its exported prelude surface is available as bare names.
+- Core libraries: optional builder-provided packages such as `@core/math`, `@core/text`, `@core/random`, and `@core/time`.
+- Builder libraries: builder-owned libraries such as the HTML builder's `@html`.
+- Project libraries: project-local source libraries under `/lib`.
+- External packages: virtual packages implemented by backend metadata rather than `.bst` source files.
+
+Core libraries require explicit imports unless they are part of the prelude. A builder that does not expose a core package rejects imports from that package with an unsupported-by-builder diagnostic.
+
+Source libraries are normal Beanstalk source files behind a library root. A source library module must expose its public surface through `#mod.bst`.
+
+```text
+lib/
+  ui/
+    #mod.bst
+    button.bst
+```
+
+```beanstalk
+import @ui {button}
+```
+
+External code can import only the facade exports from `#mod.bst`. Internal implementation files are private unless the facade exports their symbols. `#mod.bst` is not a shared implementation file; sibling files do not see its declarations automatically. Runtime top-level code and runtime top-level templates are invalid in `#mod.bst`. Import visibility is owned by `#mod.bst` only.
+
+Facade files can re-export imported symbols:
+
+```beanstalk
+#import @./button/button
+#import @./layout/page as page
+#import @core/math {sin, PI}
+```
+
+`#import` is valid only in `#mod.bst`. It accepts import-style paths, can alias exports, and does not create a local binding. Use `#` on declarations to export declarations written in the facade itself.
+
+Only #mod.bst creates a public module surface.
+
+#page.bst may import from files in the same directory/module, but it does not export those declarations unless #mod.bst does.
+
+#config.bst may affect build behavior, but it does not create language-visible imports.
 
 ### External platform package imports
 
@@ -845,11 +889,27 @@ io("hello")
 value = sine(1.0)
 ```
 
-Some symbols may be imported automatically by the builder prelude. For normal builds, `io()` and `IO` are available without explicit imports.
+Some symbols may be imported automatically by the builder prelude. For normal builds, `io()`, `IO`, and compiler-owned error symbols (`Error`, `ErrorKind`, `ErrorLocation`, `StackFrame`) are available without explicit imports.
+
+Initial optional core packages:
+
+- `@core/math`: constants `PI`, `TAU`, `E`, and Float math helpers.
+- `@core/text`: `length`, `is_empty`, `contains`, `starts_with`, `ends_with`.
+- `@core/random`: `random_float`, `random_int`. `random_int(min, max)` currently defines the tested range for `min <= value <= max`; seeded random and `min > max` runtime validation are deferred.
+- `@core/time`: `now_millis`, `now_seconds`. Date objects, timezones, formatting, durations, and monotonic clocks are deferred.
 
 External types are opaque. They can be passed, returned, and used by external functions, but cannot be constructed with struct syntax or field-accessed by Beanstalk code.
 
 Prelude external symbols do not override source declarations or explicit imports. Explicit external imports must not collide with already visible source symbols in the same file. External aliases follow the same file-local, collision, and case-convention rules as source import aliases.
+
+Deferred library-system features:
+
+- package manager, package versions, remote fetching, lockfiles, and override/shadowing rules
+- source-library HIR caching
+- user-authored external binding files
+- wildcard imports and namespace imports
+- automatic docs/API extraction from `#mod.bst`
+- seeded random, full date/time/timezone APIs, and Wasm implementations for non-math core packages
 
 ### Hash (`#`) semantics
 At top level, `#` changes behavior by declaration kind:

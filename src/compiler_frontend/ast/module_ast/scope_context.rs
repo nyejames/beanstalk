@@ -62,6 +62,7 @@ fn external_abi_matches_datatype(abi_type: &ExternalAbiType, data_type: &DataTyp
         (ExternalAbiType::Inferred, _)
             | (ExternalAbiType::I32, DataType::Int)
             | (ExternalAbiType::F64, DataType::Float)
+            | (ExternalAbiType::Bool, DataType::Bool)
             | (ExternalAbiType::Utf8Str, DataType::StringSlice)
             | (ExternalAbiType::Handle, DataType::External { .. })
     )

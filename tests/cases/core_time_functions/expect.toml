@@ -1,0 +1,16 @@
+entry = "."
+
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["core_time millis=", " seconds="]
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = [
+    "function __bs_time_now_millis(",
+    "function __bs_time_now_seconds(",
+    "__bs_time_now_millis()",
+    "__bs_time_now_seconds()",
+]

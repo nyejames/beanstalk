@@ -7,7 +7,9 @@
 use super::import_scanning::extract_import_paths;
 use super::source_loading::extract_source_code;
 use crate::build_system::build::InputFile;
-use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
+use crate::compiler_frontend::compiler_errors::{
+    CompilerError, CompilerMessages, ErrorMetaDataKey, ErrorType,
+};
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
@@ -98,6 +100,15 @@ pub(super) fn discover_reachable_files(
             if external_packages.is_virtual_package_import(import_path, string_table) {
                 continue;
             }
+            if let Some(package_path) =
+                external_packages.unsupported_known_package_import(import_path, string_table)
+            {
+                return Err(unsupported_builder_package_error(
+                    &canonical_file,
+                    package_path,
+                    string_table,
+                ));
+            }
             let resolved = project_path_resolver.resolve_import_to_file_with_facade_fallback(
                 import_path,
                 &canonical_file,
@@ -110,4 +121,26 @@ pub(super) fn discover_reachable_files(
     }
 
     Ok(reachable.into_iter().collect())
+}
+
+fn unsupported_builder_package_error(
+    importer: &Path,
+    package_path: &str,
+    string_table: &mut StringTable,
+) -> CompilerError {
+    let mut error = CompilerError::file_error(
+        importer,
+        format!("Core package '{package_path}' is not supported by this builder."),
+        string_table,
+    )
+    .with_error_type(ErrorType::Rule);
+    error.metadata.insert(
+        ErrorMetaDataKey::CompilationStage,
+        "Project Structure".to_owned(),
+    );
+    error.metadata.insert(
+        ErrorMetaDataKey::PrimarySuggestion,
+        "Use a builder that exposes this core package or remove the import.".to_owned(),
+    );
+    error
 }

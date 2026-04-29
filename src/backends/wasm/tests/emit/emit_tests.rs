@@ -378,6 +378,7 @@ fn request_with_helper_exports() -> WasmBackendRequest {
             show_wasm_validation: true,
             ..Default::default()
         },
+        external_package_registry: Default::default(),
     }
 }
 

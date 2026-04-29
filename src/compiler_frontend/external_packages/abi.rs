@@ -13,6 +13,7 @@ use crate::compiler_frontend::datatypes::DataType;
 pub enum ExternalAbiType {
     I32,
     F64,
+    Bool,
     Utf8Str,
     Void,
     /// Opaque handle to an external type (lowers to `i32` in Wasm, object reference in JS).
@@ -28,6 +29,7 @@ impl ExternalAbiType {
         match self {
             ExternalAbiType::I32 => Some(DataType::Int),
             ExternalAbiType::F64 => Some(DataType::Float),
+            ExternalAbiType::Bool => Some(DataType::Bool),
             ExternalAbiType::Utf8Str => Some(DataType::StringSlice),
             ExternalAbiType::Void => None,
             ExternalAbiType::Handle => None,

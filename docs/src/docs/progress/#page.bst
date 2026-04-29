@@ -233,13 +233,13 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
         [data:
             [: External platform packages]
             [: Partial]
-            [: Broad package-scoped import and visibility coverage, with targeted external constant, Float/F64 ABI, core/math, prelude, duplicate-name, non-imported-symbol, and alias diagnostics.]
+            [: Broad package-scoped import and visibility coverage, with targeted external constant, Float/F64 ABI, core libraries, prelude, duplicate-name, non-imported-symbol, and alias diagnostics.]
             [: Frontend / JS]
             [: Functions, opaque types, and compile-time external constants are supported through Rust-side registry metadata. [$markdown:
                 - User-authored external binding files are not supported. Alpha external packages are Rust-side builder/compiler metadata.
                 - External constants are implemented for scalar compile-time values and lower through expression parsing as ordinary literals.
-                - External ABI metadata includes [codesnippet:F64], which enables a proper Float-based [codesnippet:@core/math] package.
-                - Explicit imports are required for non-prelude external packages. [codesnippet:io] and [codesnippet:IO] remain the only current prelude symbols.
+                - External ABI metadata includes [codesnippet:F64], [codesnippet:I32], [codesnippet:Bool], and [codesnippet:Utf8Str] for the current core package skeletons.
+                - Explicit imports are required for non-prelude external packages. [codesnippet:io] and [codesnippet:IO] are registered as external prelude symbols; builtin error symbols are compiler-owned bare names.
                 - External function aliases, external constant aliases, and external opaque type aliases are supported. Grouped external aliases are supported.
                 - Prelude collision rejection is enforced: explicit imports cannot shadow prelude names.
                 - External receiver methods are not a recommended expansion surface yet. Prefer free functions until external methods are keyed by nominal receiver type rather than broad ABI metadata.
@@ -270,6 +270,30 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
                 - JS helpers are emitted only when the matching external function is referenced.
                 - Wasm support for this package remains deferred/experimental.
             ]]
+        ]
+
+        [data:
+            [: Core text package]
+            [: Partial]
+            [: Targeted runtime, JS helper, type-error, unsupported-builder, and Wasm-unsupported coverage.]
+            [: JS / HTML]
+            [: [codesnippet:@core/text] exposes [codesnippet:length], [codesnippet:is_empty], [codesnippet:contains], [codesnippet:starts_with], and [codesnippet:ends_with]. It is JS-backed, explicit-import only, and optional by builder. Wasm support is deferred.]
+        ]
+
+        [data:
+            [: Core random package]
+            [: Partial]
+            [: Targeted import, JS helper, runtime smoke, arity, and type-error coverage.]
+            [: JS / HTML]
+            [: [codesnippet:@core/random] exposes [codesnippet:random_float()] and [codesnippet:random_int(min, max)]. [codesnippet:random_int] is intended for the inclusive range [codesnippet:min <= value <= max] when [codesnippet:min <= max]. Seeded random and [codesnippet:min > max] runtime diagnostics are deferred.]
+        ]
+
+        [data:
+            [: Core time package]
+            [: Partial]
+            [: Targeted import, JS helper, runtime smoke, and arity-error coverage.]
+            [: JS / HTML]
+            [: [codesnippet:@core/time] exposes [codesnippet:now_millis()] and [codesnippet:now_seconds()]. Full date/time/timezone objects, formatting, durations, and monotonic clocks are deferred. Wasm support is deferred.]
         ]
 
         [data:

@@ -1,16 +1,12 @@
-//! Math runtime helpers for the JavaScript backend.
+//! JavaScript helpers for `@core/math`.
 //!
 //! WHAT: wraps JavaScript `Math` methods for `@core/math` external functions.
-//! WHY: keeps backend lowering names stable while mapping to the host environment.
+//! WHY: helper names are stable backend lowering targets, while JS host calls stay isolated here.
 
 use crate::backends::js::JsEmitter;
 
 impl<'hir> JsEmitter<'hir> {
-    /// Emits JS runtime helpers for referenced `@core/math` external functions.
-    ///
-    /// WHAT: only emits helpers for math functions actually called in the module.
-    /// WHY: avoids polluting output with unused runtime code.
-    pub(crate) fn emit_runtime_math_helpers(&mut self) {
+    pub(crate) fn emit_core_math_helpers(&mut self) {
         let helpers: &[(&str, &str)] = &[
             (
                 "__bs_math_sin",
@@ -86,15 +82,6 @@ impl<'hir> JsEmitter<'hir> {
             ),
         ];
 
-        for (js_name, body) in helpers {
-            if self.referenced_external_functions.iter().any(|id| {
-                self.config.external_package_registry
-                    .get_function_by_id(*id)
-                    .and_then(|def| def.lowerings.js.as_ref())
-                    .is_some_and(|lowering| matches!(lowering, crate::compiler_frontend::external_packages::ExternalJsLowering::RuntimeFunction(name) if name == js_name))
-            }) {
-                self.emit_line(body);
-            }
-        }
+        self.emit_referenced_core_helpers(helpers);
     }
 }

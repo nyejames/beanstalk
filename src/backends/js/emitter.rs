@@ -90,7 +90,7 @@ impl<'hir> JsEmitter<'hir> {
             self.emit_function(function)?;
         }
 
-        self.emit_runtime_math_helpers();
+        self.emit_core_library_helpers();
 
         if self.config.auto_invoke_start {
             let Some(start_name) = self

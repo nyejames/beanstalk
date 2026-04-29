@@ -317,7 +317,7 @@ body {
         font-family: var(--bst-font-family-monospace);
     ">tests/cases/manifest.toml</span> when changing language features.</p><h2>Alpha target</h2><p>The supported Alpha target is:</p><ul><li>frontend parsing and diagnostics</li><li>typed AST construction</li><li>HIR lowering</li><li>borrow validation</li><li>JavaScript backend</li><li>HTML project builder</li><li>docs-style static site generation</li></ul><p>A policy for the repo is all tests must pass before each commit. So all tests on all platforms can be assumed to be green for the current state of the compiler unless specifically noted here.</p></section>
     <section class="container"><h1>Status legend</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
-            
+        
     <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
          <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Status</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Meaning</th> 
     </tr>
@@ -345,7 +345,7 @@ body {
         </tr>
         
     </table><h1>Coverage legend</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
-            
+        
     <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
          <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Coverage</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Meaning</th> 
     </tr>
@@ -374,7 +374,7 @@ body {
         
     </table></section>
     <section class="container"><h1>Core Alpha surface</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
-            
+        
     <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
          <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Surface</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Status</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Coverage</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Runtime target</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Watch points</th> 
     </tr>
@@ -553,28 +553,42 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;"> External platform packages</td>
      <td style="padding: 0.2em 0.5em;"> Partial</td>
-     <td style="padding: 0.2em 0.5em;"> Broad package-scoped import and visibility coverage, with targeted external constant, Float/F64 ABI, std/math, prelude, duplicate-name, non-imported-symbol, and alias diagnostics.</td>
+     <td style="padding: 0.2em 0.5em;"> Broad package-scoped import and visibility coverage, with targeted external constant, Float/F64 ABI, core libraries, prelude, duplicate-name, non-imported-symbol, and alias diagnostics.</td>
      <td style="padding: 0.2em 0.5em;"> Frontend / JS</td>
      <td style="padding: 0.2em 0.5em;"> Functions, opaque types, and compile-time external constants are supported through Rust-side registry metadata. <ul><li>User-authored external binding files are not supported. Alpha external packages are Rust-side builder/compiler metadata.</li><li>External constants are implemented for scalar compile-time values and lower through expression parsing as ordinary literals.</li><li>External ABI metadata includes <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">F64</span>, which enables a proper Float-based <span style="
+    ">F64</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">@std/math</span> package.</li><li>Explicit imports are required for non-prelude external packages. <span style="
+    ">I32</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Bool</span>, and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Utf8Str</span> for the current core package skeletons.</li><li>Explicit imports are required for non-prelude external packages. <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">io</span> and <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">IO</span> remain the only current prelude symbols.</li><li>External function aliases, external constant aliases, and external opaque type aliases are supported. Grouped external aliases are supported.</li><li>Prelude collision rejection is enforced: explicit imports cannot shadow prelude names.</li><li>External receiver methods are not a recommended expansion surface yet. Prefer free functions until external methods are keyed by nominal receiver type rather than broad ABI metadata.</li><li>JS lowering now resolves external runtime names through per-function lowering metadata in the registry.</li><li><span style="
+    ">IO</span> are registered as external prelude symbols; builtin error symbols are compiler-owned bare names.</li><li>External function aliases, external constant aliases, and external opaque type aliases are supported. Grouped external aliases are supported.</li><li>Prelude collision rejection is enforced: explicit imports cannot shadow prelude names.</li><li>External receiver methods are not a recommended expansion surface yet. Prefer free functions until external methods are keyed by nominal receiver type rather than broad ABI metadata.</li><li>JS lowering now resolves external runtime names through per-function lowering metadata in the registry.</li><li><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">InlineExpression</span> JS lowering metadata exists but is not implemented yet.</li><li>Wasm lowering for external packages is experimental and should not be counted as Alpha support.</li></ul></td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Standard math package</td>
+             <td style="padding: 0.2em 0.5em;"> Core prelude libraries</td>
+     <td style="padding: 0.2em 0.5em;"> Supported</td>
+     <td style="padding: 0.2em 0.5em;"> Targeted coverage for prelude symbol registration and collision rejection.</td>
+     <td style="padding: 0.2em 0.5em;"> Frontend / JS</td>
+     <td style="padding: 0.2em 0.5em;"> Every builder must provide `@core/prelude`. `io` and `IO` are registered as bare prelude symbols. Prelude collision rejection is enforced: explicit imports cannot shadow prelude names.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Core math package</td>
      <td style="padding: 0.2em 0.5em;"> Supported</td>
      <td style="padding: 0.2em 0.5em;"> Targeted success and diagnostic coverage for direct, grouped, and aliased imports; aliased constants such as <span style="
         color: #c444aff9;
@@ -587,7 +601,7 @@ body {
      <td style="padding: 0.2em 0.5em;"> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">@std/math</span> exposes <span style="
+    ">@core/math</span> exposes <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">PI</span>, <span style="
@@ -659,7 +673,103 @@ body {
     ">Float</span>.</li><li>The package is not prelude-imported. Users must explicitly import the required symbols from <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">@std/math</span>.</li><li>Direct imports, grouped imports, and aliased imports are all supported.</li><li>JS helpers are emitted only when the matching external function is referenced.</li><li>Wasm support for this package remains deferred/experimental.</li></ul></td>
+    ">@core/math</span>.</li><li>Direct imports, grouped imports, and aliased imports are all supported.</li><li>JS helpers are emitted only when the matching external function is referenced.</li><li>Wasm support for this package remains deferred/experimental.</li></ul></td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Core text package</td>
+     <td style="padding: 0.2em 0.5em;"> Partial</td>
+     <td style="padding: 0.2em 0.5em;"> Targeted runtime, JS helper, type-error, unsupported-builder, and Wasm-unsupported coverage.</td>
+     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">@core/text</span> exposes <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">length</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">is_empty</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">contains</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">starts_with</span>, and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">ends_with</span>. It is JS-backed, explicit-import only, and optional by builder. Wasm support is deferred.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Core random package</td>
+     <td style="padding: 0.2em 0.5em;"> Partial</td>
+     <td style="padding: 0.2em 0.5em;"> Targeted import, JS helper, runtime smoke, arity, and type-error coverage.</td>
+     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">@core/random</span> exposes <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">random_float()</span> and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">random_int(min, max)</span>. <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">random_int</span> is intended for the inclusive range <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">min <= value <= max</span> when <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">min <= max</span>. Seeded random and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">min > max</span> runtime diagnostics are deferred.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Core time package</td>
+     <td style="padding: 0.2em 0.5em;"> Partial</td>
+     <td style="padding: 0.2em 0.5em;"> Targeted import, JS helper, runtime smoke, and arity-error coverage.</td>
+     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">@core/time</span> exposes <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">now_millis()</span> and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">now_seconds()</span>. Full date/time/timezone objects, formatting, durations, and monotonic clocks are deferred. Wasm support is deferred.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Source library roots</td>
+     <td style="padding: 0.2em 0.5em;"> Partial</td>
+     <td style="padding: 0.2em 0.5em;"> Targeted coverage for filesystem-based source library root resolution, prefix collision detection, and `#mod.bst` facade enforcement.</td>
+     <td style="padding: 0.2em 0.5em;"> Frontend / HTML</td>
+     <td style="padding: 0.2em 0.5em;"> Project-local libraries under `/lib` are discovered automatically and resolve through the path resolver. Builder-provided source library roots are plumbed through `LibrarySet`. Prefix collisions between builder-provided and project-local libraries produce a hard config error. Every source library root must contain a `#mod.bst` facade file. Cross-library imports are gated through the facade: external importers can only import symbols explicitly exported by `#mod.bst`.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Builder-provided source libraries</td>
+     <td style="padding: 0.2em 0.5em;"> Partial</td>
+     <td style="padding: 0.2em 0.5em;"> Targeted coverage for builder-provided source library root registration and HTML builder library.</td>
+     <td style="padding: 0.2em 0.5em;"> Frontend / HTML</td>
+     <td style="padding: 0.2em 0.5em;"> Builders expose source libraries through `LibrarySet.source_libraries`. The HTML builder provides `@html` as a default source library with basic HTML tag helpers and formatting utilities. Other builders may provide their own libraries. Prefix collisions between builder-provided and project-local libraries produce a hard config error.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Project-local libraries</td>
+     <td style="padding: 0.2em 0.5em;"> Partial</td>
+     <td style="padding: 0.2em 0.5em;"> Targeted coverage for `/lib` auto-discovery, import resolution, and facade gating.</td>
+     <td style="padding: 0.2em 0.5em;"> Frontend / HTML</td>
+     <td style="padding: 0.2em 0.5em;"> A `/lib` directory at the project root is scanned for subdirectories, each treated as a source library prefix. Imports like `@helper/utils` resolve to `lib/helper/utils.bst`. Every library must declare a `#mod.bst` facade that exports its public surface with `#`. Cross-library imports bypassing the facade are rejected.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -710,7 +820,7 @@ body {
         
     </table></section>
     <section class="container"><h1>Compiler-owned / standard external builtin surfaces</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
-            
+        
     <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
          <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Surface</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Status</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Coverage</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Runtime target</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Watch points</th> 
     </tr>
@@ -789,7 +899,7 @@ body {
         
     </table></section>
     <section class="container"><h1>Experimental surfaces</h1><p>These are useful and may have tests, but they are not part of the Alpha stability contract.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
-            
+        
     <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
          <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Surface</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Status</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Current role</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Alpha rule</th> 
     </tr>
@@ -815,7 +925,7 @@ body {
         
     </table></section>
     <section class="container"><h1>Deferred or reserved surfaces</h1><p>These are intentionally not counted as supported Alpha features. If syntax exists, it should fail with a structured diagnostic rather than panic or lower incorrectly.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
-            
+        
     <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
          <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Surface</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Status</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Canonical diagnostic direction</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Notes</th> 
     </tr>
@@ -1184,9 +1294,23 @@ body {
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;"> Import re-exports</td>
+     <td style="padding: 0.2em 0.5em;"> Supported</td>
+     <td style="padding: 0.2em 0.5em;"> Targeted coverage for single, aliased, grouped, nested grouped, external function, external type, duplicate, collision, no-local-binding, and invalid-location diagnostics.</td>
+     <td style="padding: 0.2em 0.5em;"> `#import @...` is valid only in `#mod.bst` source-library facades. It re-exports source or external package symbols through the facade export map without creating a local binding in `#mod.bst` or sibling implementation files. Namespace and wildcard imports remain deferred.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Source-library HIR caching</td>
      <td style="padding: 0.2em 0.5em;"> Deferred</td>
-     <td style="padding: 0.2em 0.5em;"> Direct re-export syntax is not supported; aliases remain file-local.</td>
-     <td style="padding: 0.2em 0.5em;"> Public type aliases can target imported aliases, but that creates a new exported type alias declaration, not import alias re-export.</td>
+     <td style="padding: 0.2em 0.5em;"> No precompiled source-library cache.</td>
+     <td style="padding: 0.2em 0.5em;"> Source libraries are compiled from `.bst` source each build. HIR caching is deferred until the library system is stable.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Package manager</td>
+     <td style="padding: 0.2em 0.5em;"> Deferred</td>
+     <td style="padding: 0.2em 0.5em;"> No package manager, remote registries, or dependency resolution.</td>
+     <td style="padding: 0.2em 0.5em;"> The library system plan explicitly defers package management, versioning, lockfiles, and remote fetching.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
