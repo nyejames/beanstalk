@@ -22,44 +22,7 @@
 `bean` is the main project tool for creating, checking, building, and running Beanstalk projects.
 It is a cli tool bundled with the compiler and build system.
 
-#### macOS and Linux
-
-```bash
-curl -fsSL https://raw.githubusercontent.com/nyejames/beanstalk/main/install.sh | sh
-````
-
-This installs `bean` into:
-
-```bash
-~/.local/bin
-```
-
-Make sure this directory is in your `PATH`:
-
-```bash
-export PATH="$PATH:$HOME/.local/bin"
-```
-
-To install somewhere else:
-
-```bash
-BIN_DIR="$HOME/bin" curl -fsSL https://raw.githubusercontent.com/nyejames/beanstalk/main/install.sh | sh
-```
-
-#### Windows
-
-In PowerShell:
-
-```powershell
-irm https://raw.githubusercontent.com/nyejames/beanstalk/main/install.ps1 | iex
-```
-
-To add `bean` to your user `PATH` automatically:
-
-```powershell
-$script = irm https://raw.githubusercontent.com/nyejames/beanstalk/main/install.ps1
-Invoke-Expression "$script -AddToPath"
-```
+Its currently recommended to manually install the compiler from one of the tagged release files. Installation scripts will be fully available once the project is in Beta.
 
 ### Check the installation
 
