@@ -26,10 +26,6 @@ pub enum CompileTimePathKind {
 pub enum CompileTimePathBase {
     /// Resolved relative to the importing file (`./` or `../`).
     RelativeToFile,
-    /// Deprecated: first segment matched a configured `#root_folders` entry.
-    /// Kept for path-format compatibility until Phase 3C decides whether non-import
-    /// path literals still need this base.
-    ProjectRootFolder,
     /// First segment matched a source library prefix.
     SourceLibraryRoot,
     /// Fell through to the configured `#entry_root`.
@@ -181,7 +177,7 @@ impl ProjectPathResolver {
     }
 
     /// WHAT: resolves one import path to a concrete `.bst` source file on disk.
-    /// WHY: Stage 0 must follow the same root-folder rules the frontend uses later.
+    /// WHY: Stage 0 must follow the same import resolution rules the frontend uses later.
     pub(crate) fn resolve_import_to_file(
         &self,
         import_path: &InternedPath,
@@ -542,14 +538,12 @@ fn build_public_path(
         // Relative paths keep their original form as the public path.
         CompileTimePathBase::RelativeToFile => source_path.clone(),
 
-        // Root-folder and entry-root paths keep the visible segments.
-        // For root-folder paths the first segment is the folder name itself
+        // Source-library and entry-root paths keep the visible segments.
+        // For source-library paths the first segment is the library prefix
         // which must be preserved. For entry-root paths, all segments are
         // visible. In both cases the source path already contains the
         // correct visible segments, so we can reuse it directly.
-        CompileTimePathBase::ProjectRootFolder
-        | CompileTimePathBase::SourceLibraryRoot
-        | CompileTimePathBase::EntryRoot => {
+        CompileTimePathBase::SourceLibraryRoot | CompileTimePathBase::EntryRoot => {
             // Strip leading `.` or `..` (should not be present for non-relative,
             // but guard defensively).
             let components = source_path.as_components();

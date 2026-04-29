@@ -33,7 +33,7 @@ pub struct RenderedPathUsage {
     pub filesystem_path: PathBuf,
     /// Public-facing resolved path before builder-owned emission policy.
     pub public_path: InternedPath,
-    /// Resolution base (`RelativeToFile`, `ProjectRootFolder`, or `EntryRoot`).
+    /// Resolution base (`RelativeToFile`, `SourceLibraryRoot`, or `EntryRoot`).
     pub base: CompileTimePathBase,
     /// Whether the resolved target is a file or directory.
     pub kind: CompileTimePathKind,

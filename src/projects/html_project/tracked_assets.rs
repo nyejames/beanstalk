@@ -162,13 +162,6 @@ fn plan_one_tracked_asset(
     string_table: &mut StringTable,
 ) -> Result<Option<HtmlTrackedAsset>, CompilerMessages> {
     if usage.kind == CompileTimePathKind::Directory {
-        if directory_usage_requires_tracked_asset_error(module, usage, string_table) {
-            return Err(CompilerMessages::from_error(
-                directory_asset_error(module, usage, string_table),
-                string_table.clone(),
-            ));
-        }
-
         return Ok(None);
     }
 
@@ -211,25 +204,6 @@ fn plan_one_tracked_asset(
     }))
 }
 
-/// Decide whether a rendered directory usage should stay a plain link or fail as a tracked asset.
-///
-/// WHAT: keeps general directory links such as `@/` and `@./subdir` renderable without emission.
-/// WHY: tracked assets are file-only in v1, but the legacy `@assets/...` directory lane would
-/// imply recursive copying behavior and must still fail instead of silently doing nothing.
-fn directory_usage_requires_tracked_asset_error(
-    _module: &Module,
-    usage: &RenderedPathUsage,
-    string_table: &StringTable,
-) -> bool {
-    usage.base == CompileTimePathBase::ProjectRootFolder
-        && usage
-            .public_path
-            .as_components()
-            .first()
-            .map(|segment| string_table.resolve(*segment) == "assets")
-            .unwrap_or(false)
-}
-
 fn derive_emitted_output_path(
     _module: &Module,
     usage: &RenderedPathUsage,
@@ -237,9 +211,9 @@ fn derive_emitted_output_path(
     string_table: &StringTable,
 ) -> Result<(PathBuf, HtmlTrackedAssetReferenceKind), CompilerMessages> {
     let emitted_output_path = match usage.base {
-        CompileTimePathBase::ProjectRootFolder
-        | CompileTimePathBase::SourceLibraryRoot
-        | CompileTimePathBase::EntryRoot => usage.public_path.to_path_buf(string_table),
+        CompileTimePathBase::SourceLibraryRoot | CompileTimePathBase::EntryRoot => {
+            usage.public_path.to_path_buf(string_table)
+        }
         CompileTimePathBase::RelativeToFile => {
             let mut emitted_output_path = html_output_path
                 .parent()
@@ -273,26 +247,12 @@ fn derive_emitted_output_path(
 
     let reference_kind = match usage.base {
         CompileTimePathBase::RelativeToFile => HtmlTrackedAssetReferenceKind::RelativeToPage,
-        CompileTimePathBase::ProjectRootFolder
-        | CompileTimePathBase::SourceLibraryRoot
-        | CompileTimePathBase::EntryRoot => HtmlTrackedAssetReferenceKind::SiteRelative,
+        CompileTimePathBase::SourceLibraryRoot | CompileTimePathBase::EntryRoot => {
+            HtmlTrackedAssetReferenceKind::SiteRelative
+        }
     };
 
     Ok((emitted_output_path, reference_kind))
-}
-
-fn directory_asset_error(
-    _module: &Module,
-    usage: &RenderedPathUsage,
-    string_table: &StringTable,
-) -> CompilerError {
-    CompilerError::new_rule_error(
-        format!(
-            "Rendered directory path '{}' cannot be emitted as an HTML tracked asset. Tracked assets are file-only in this pass.",
-            usage.source_path.to_portable_string(string_table)
-        ),
-        usage.render_location.clone(),
-    )
 }
 
 fn conflicting_asset_output_error(

@@ -31,11 +31,11 @@ fn make_path(
 }
 
 #[test]
-fn root_folder_file_with_default_origin() {
+fn entry_root_file_with_default_origin() {
     let mut st = StringTable::new();
     let path = make_path(
         &["assets", "images", "logo.png"],
-        CompileTimePathBase::ProjectRootFolder,
+        CompileTimePathBase::EntryRoot,
         CompileTimePathKind::File,
         &mut st,
     );
@@ -48,11 +48,11 @@ fn root_folder_file_with_default_origin() {
 }
 
 #[test]
-fn root_folder_file_with_custom_origin() {
+fn entry_root_file_with_custom_origin() {
     let mut st = StringTable::new();
     let path = make_path(
         &["assets", "images", "logo.png"],
-        CompileTimePathBase::ProjectRootFolder,
+        CompileTimePathBase::EntryRoot,
         CompileTimePathKind::File,
         &mut st,
     );
@@ -181,13 +181,13 @@ fn format_multiple_paths_joins_with_comma() {
     let mut st = StringTable::new();
     let path_a = make_path(
         &["assets", "logo.png"],
-        CompileTimePathBase::ProjectRootFolder,
+        CompileTimePathBase::EntryRoot,
         CompileTimePathKind::File,
         &mut st,
     );
     let path_b = make_path(
         &["assets", "style.css"],
-        CompileTimePathBase::ProjectRootFolder,
+        CompileTimePathBase::EntryRoot,
         CompileTimePathKind::File,
         &mut st,
     );
@@ -225,7 +225,7 @@ fn format_multiple_paths_with_mixed_bases_and_origin() {
     let mut st = StringTable::new();
     let root_path = make_path(
         &["assets", "logo.png"],
-        CompileTimePathBase::ProjectRootFolder,
+        CompileTimePathBase::EntryRoot,
         CompileTimePathKind::File,
         &mut st,
     );

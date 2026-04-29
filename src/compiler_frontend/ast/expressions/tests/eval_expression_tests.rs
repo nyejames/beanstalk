@@ -53,7 +53,7 @@ fn ordinary_expression_rejects_path_string_concatenation() {
             source_path: asset_path.clone(),
             filesystem_path: std::env::temp_dir().join("beanstalk_eval_expression_logo.png"),
             public_path: asset_path.clone(),
-            base: CompileTimePathBase::ProjectRootFolder,
+            base: CompileTimePathBase::EntryRoot,
             kind: CompileTimePathKind::File,
         }],
     };

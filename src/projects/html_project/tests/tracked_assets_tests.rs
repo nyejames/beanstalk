@@ -12,8 +12,8 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 #[test]
-fn root_folder_asset_emits_site_relative_output_path() {
-    let root = temp_dir("tracked_assets_root_folder");
+fn entry_root_asset_emits_site_relative_output_path() {
+    let root = temp_dir("tracked_assets_entry_root");
     fs::create_dir_all(root.join("assets")).expect("should create assets dir");
     fs::write(root.join("assets/logo.png"), [1_u8, 2, 3]).expect("should write asset");
 
@@ -25,7 +25,7 @@ fn root_folder_asset_emits_site_relative_output_path() {
             source_path_components: &["assets", "logo.png"],
             public_path_components: &["assets", "logo.png"],
             filesystem_path: root.join("assets/logo.png"),
-            base: CompileTimePathBase::ProjectRootFolder,
+            base: CompileTimePathBase::EntryRoot,
             kind: CompileTimePathKind::File,
             source_file_scope_components: &["#page.bst"],
             line_number: 1,
@@ -139,7 +139,7 @@ fn duplicate_same_source_and_output_dedupes_within_module() {
             source_path_components: &["assets", "logo.png"],
             public_path_components: &["assets", "logo.png"],
             filesystem_path: root.join("assets/logo.png"),
-            base: CompileTimePathBase::ProjectRootFolder,
+            base: CompileTimePathBase::EntryRoot,
             kind: CompileTimePathKind::File,
             source_file_scope_components: &["#page.bst"],
             line_number: 1,
@@ -152,37 +152,6 @@ fn duplicate_same_source_and_output_dedupes_within_module() {
         .expect("planning succeeds");
 
     assert_eq!(planned.assets.len(), 1);
-
-    fs::remove_dir_all(&root).expect("should remove temp dir");
-}
-
-#[test]
-fn directory_usage_is_rejected() {
-    let root = temp_dir("tracked_assets_directory");
-    fs::create_dir_all(root.join("assets/icons")).expect("should create asset dir");
-
-    let mut string_table = StringTable::new();
-    let mut module = create_test_module(root.join("#page.bst"), &mut string_table);
-    module.hir.rendered_path_usages.push(rendered_path_usage(
-        &mut string_table,
-        RenderedPathUsageInput {
-            source_path_components: &["assets", "icons"],
-            public_path_components: &["assets", "icons"],
-            filesystem_path: root.join("assets/icons"),
-            base: CompileTimePathBase::ProjectRootFolder,
-            kind: CompileTimePathKind::Directory,
-            source_file_scope_components: &["#page.bst"],
-            line_number: 4,
-        },
-    ));
-
-    let error = plan_module_tracked_assets(&module, Path::new("index.html"), &mut string_table)
-        .expect_err("directory assets should fail");
-
-    assert!(
-        error.errors[0].msg.contains("file-only"),
-        "expected file-only tracked-asset error"
-    );
 
     fs::remove_dir_all(&root).expect("should remove temp dir");
 }
@@ -267,7 +236,7 @@ fn large_asset_warning_dedupes_to_first_render_location() {
             source_path_components: &["assets", "video.mp4"],
             public_path_components: &["assets", "video.mp4"],
             filesystem_path: root.join("assets/video.mp4"),
-            base: CompileTimePathBase::ProjectRootFolder,
+            base: CompileTimePathBase::EntryRoot,
             kind: CompileTimePathKind::File,
             source_file_scope_components: &["#page.bst"],
             line_number: 2,
@@ -279,7 +248,7 @@ fn large_asset_warning_dedupes_to_first_render_location() {
             source_path_components: &["assets", "video.mp4"],
             public_path_components: &["assets", "video.mp4"],
             filesystem_path: root.join("assets/video.mp4"),
-            base: CompileTimePathBase::ProjectRootFolder,
+            base: CompileTimePathBase::EntryRoot,
             kind: CompileTimePathKind::File,
             source_file_scope_components: &["#page.bst"],
             line_number: 8,
@@ -315,7 +284,7 @@ fn emit_tracked_assets_reads_source_bytes_into_binary_outputs() {
             source_path_components: &["assets", "logo.png"],
             public_path_components: &["assets", "logo.png"],
             filesystem_path: root.join("assets/logo.png"),
-            base: CompileTimePathBase::ProjectRootFolder,
+            base: CompileTimePathBase::EntryRoot,
             kind: CompileTimePathKind::File,
             source_file_scope_components: &["#page.bst"],
             line_number: 1,
