@@ -335,7 +335,7 @@ fn lowers_struct_module_constant_into_record_with_ordered_fields() {
             assert_eq!(second_field_name, "y");
             assert!(matches!(fields[1].value, HirConstValue::Int(99)));
         }
-        other => panic!("expected record constant, got {:?}", other),
+        other => panic!("expected record constant, got {other:?}"),
     }
 }
 

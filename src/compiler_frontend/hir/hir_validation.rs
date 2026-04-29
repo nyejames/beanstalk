@@ -863,8 +863,7 @@ impl<'a> HirValidator<'a> {
                         if *variant_index > 1 {
                             return Err(self.error_with_hir(
                                 format!(
-                                    "VariantConstruct(Option) variant index {} out of range (valid: 0..=1)",
-                                    variant_index
+                                    "VariantConstruct(Option) variant index {variant_index} out of range (valid: 0..=1)"
                                 ),
                                 anchor,
                             ));
@@ -884,8 +883,7 @@ impl<'a> HirValidator<'a> {
                         if *variant_index > 1 {
                             return Err(self.error_with_hir(
                                 format!(
-                                    "VariantConstruct(Result) variant index {} out of range (valid: 0..=1)",
-                                    variant_index
+                                    "VariantConstruct(Result) variant index {variant_index} out of range (valid: 0..=1)"
                                 ),
                                 anchor,
                             ));

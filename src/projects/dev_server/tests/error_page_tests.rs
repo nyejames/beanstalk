@@ -98,7 +98,7 @@ fn compiler_error_page_links_to_project_relative_resolved_source_path() {
 
     assert!(page.contains("color-scheme: dark"));
     assert!(page.contains("guide.bst<"));
-    println!("EXPECTED! {}", expected_href);
+    println!("EXPECTED! {expected_href}");
     assert!(page.contains(&format!("href=\"{expected_href}\"")));
     assert!(page.contains("line 2, col 5"));
     assert!(!page.contains("Stage: Function Signature Parsing"));

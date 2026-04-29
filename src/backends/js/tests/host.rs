@@ -87,11 +87,11 @@ fn host_io_reads_the_underlying_value_before_logging() {
 
     let assign_index = output
         .source
-        .find(&format!("__bs_assign_value({}, \"hello\");", message_name))
+        .find(&format!("__bs_assign_value({message_name}, \"hello\");"))
         .expect("expected local assignment to store the string value");
     let log_index = output
         .source
-        .find(&format!("__bs_io(__bs_read({}));", message_name))
+        .find(&format!("__bs_io(__bs_read({message_name}));"))
         .expect("expected host io call to read from the local binding");
 
     assert!(
@@ -145,7 +145,7 @@ fn auto_invokes_start_function_when_enabled() {
     .expect("JS lowering should succeed");
     let start_name = expected_dev_function_name("start_main", 0);
 
-    assert!(output.source.contains(&format!("{}();", start_name)));
+    assert!(output.source.contains(&format!("{start_name}();")));
 }
 
 // ---------------------------------------------------------------------------

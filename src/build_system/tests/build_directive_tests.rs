@@ -86,6 +86,7 @@ fn frontend_builtin_directives_work_without_builder_registered_project_directive
 #[test]
 fn html_project_directives_are_available_under_html_builder() {
     let root = temp_dir("directive_boundary_registered");
+
     fs::create_dir_all(&root).expect("should create temp root");
 
     for (directive_name, source, expected_html_fragment) in [

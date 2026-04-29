@@ -243,20 +243,17 @@ impl<'hir> JsEmitter<'hir> {
             HirVariantCarrier::Choice { choice_id } => {
                 let choice = self.hir.choices.get(choice_id.0 as usize).ok_or_else(|| {
                     CompilerError::compiler_error(format!(
-                        "JavaScript backend: invalid ChoiceId {:?} in VariantPayloadGet",
-                        choice_id
+                        "JavaScript backend: invalid ChoiceId {choice_id:?} in VariantPayloadGet"
                     ))
                 })?;
                 let variant = choice.variants.get(variant_index).ok_or_else(|| {
                     CompilerError::compiler_error(format!(
-                        "JavaScript backend: invalid variant index {variant_index} for choice {:?}",
-                        choice_id
+                        "JavaScript backend: invalid variant index {variant_index} for choice {choice_id:?}"
                     ))
                 })?;
                 let field = variant.fields.get(field_index).ok_or_else(|| {
                     CompilerError::compiler_error(format!(
-                        "JavaScript backend: invalid field index {field_index} for variant {variant_index} of choice {:?}",
-                        choice_id
+                        "JavaScript backend: invalid field index {field_index} for variant {variant_index} of choice {choice_id:?}"
                     ))
                 })?;
                 escape_js_string(self.string_table.resolve(field.name))

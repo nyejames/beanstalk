@@ -67,7 +67,7 @@ fn local_slot_assignment_emits_assign_value() {
     assert!(
         output
             .source
-            .contains(&format!("__bs_assign_value({}, 42);", count_name)),
+            .contains(&format!("__bs_assign_value({count_name}, 42);")),
         "assigning an integer to a local must emit __bs_assign_value"
     );
 }
@@ -118,7 +118,7 @@ fn function_parameters_emit_param_binding() {
     assert!(
         output
             .source
-            .contains(&format!("{} = __bs_param_binding({});", arg_name, arg_name)),
+            .contains(&format!("{arg_name} = __bs_param_binding({arg_name});")),
         "function parameters must be normalised through __bs_param_binding"
     );
 }
@@ -196,10 +196,9 @@ fn borrow_assignment_emits_assign_borrow() {
     let source_name = expected_dev_local_name("source", 0);
 
     assert!(
-        output.source.contains(&format!(
-            "__bs_assign_borrow({}, {})",
-            alias_name, source_name
-        )),
+        output
+            .source
+            .contains(&format!("__bs_assign_borrow({alias_name}, {source_name})")),
         "Load assignment to a fresh local must emit __bs_assign_borrow"
     );
 }
@@ -292,7 +291,7 @@ fn alias_local_read_emits_bs_read() {
     assert!(
         output
             .source
-            .contains(&format!("__bs_io(__bs_read({}))", alias_name)),
+            .contains(&format!("__bs_io(__bs_read({alias_name}))")),
         "reading an alias local in a host call must go through __bs_read"
     );
 }
@@ -358,13 +357,13 @@ fn alias_only_local_assignment_emits_write() {
     assert!(
         output
             .source
-            .contains(&format!("__bs_write({}, 42)", target_name)),
+            .contains(&format!("__bs_write({target_name}, 42)")),
         "alias-only local assignment must emit __bs_write, not __bs_assign_value"
     );
     assert!(
         !output
             .source
-            .contains(&format!("__bs_assign_value({}", target_name)),
+            .contains(&format!("__bs_assign_value({target_name}")),
         "alias-only local must not use __bs_assign_value"
     );
 }
@@ -441,8 +440,7 @@ fn field_place_emits_bs_field() {
 
     assert!(
         output.source.contains(&format!(
-            "__bs_write(__bs_field({}, \"{}\"), 42)",
-            struct_name, field_name
+            "__bs_write(__bs_field({struct_name}, \"{field_name}\"), 42)"
         )),
         "field assignment must route through __bs_field and __bs_write"
     );
@@ -503,7 +501,7 @@ fn index_place_emits_bs_index() {
     assert!(
         output
             .source
-            .contains(&format!("__bs_write(__bs_index({}, 0), 42)", array_name)),
+            .contains(&format!("__bs_write(__bs_index({array_name}, 0), 42)")),
         "index assignment must route through __bs_index and __bs_write"
     );
 }
@@ -584,8 +582,7 @@ fn computed_place_read_composes_with_bs_read() {
 
     assert!(
         output.source.contains(&format!(
-            "__bs_read(__bs_field({}, \"{}\"))",
-            struct_name, field_name
+            "__bs_read(__bs_field({struct_name}, \"{field_name}\"))"
         )),
         "field Load must compose __bs_read around __bs_field"
     );

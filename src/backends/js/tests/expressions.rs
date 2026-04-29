@@ -197,7 +197,7 @@ fn explicit_copy_emits_clone_value_wrapped_read() {
     assert!(
         output
             .source
-            .contains(&format!("__bs_clone_value(__bs_read({}))", src_name)),
+            .contains(&format!("__bs_clone_value(__bs_read({src_name}))")),
         "Copy expression must emit __bs_clone_value(__bs_read(src))"
     );
 }

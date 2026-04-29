@@ -982,7 +982,6 @@ fn external_type_resolves_in_type_annotation() {
     let error_texts: Vec<&str> = messages.errors.iter().map(|e| e.msg.as_str()).collect();
     assert!(
         !error_texts.iter().any(|msg| msg.contains("Unknown type")),
-        "'IO' should resolve as a known external type, not produce 'Unknown type'. Got: {:?}",
-        error_texts
+        "'IO' should resolve as a known external type, not produce 'Unknown type'. Got: {error_texts:?}"
     );
 }

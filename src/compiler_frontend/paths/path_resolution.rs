@@ -102,7 +102,8 @@ impl ProjectPathResolver {
         for root in source_libraries.iter() {
             // Currently only filesystem roots are supported; embedded roots will be added later.
             let crate::libraries::ProvidedSourceRoot::Filesystem(path) = &root.root;
-            source_library_roots.insert(root.import_prefix.clone(), path.clone());
+            let canonical_root = fs::canonicalize(path).unwrap_or_else(|_| path.clone());
+            source_library_roots.insert(root.import_prefix.clone(), canonical_root);
         }
 
         // Discover facade files (`#mod.bst`) in each source library root.

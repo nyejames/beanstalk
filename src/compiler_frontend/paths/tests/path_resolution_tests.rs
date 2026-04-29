@@ -367,3 +367,39 @@ fn source_library_prefix_takes_priority_over_entry_root() {
         fs::canonicalize(library_root.join("utils.bst")).unwrap()
     );
 }
+
+#[cfg(windows)]
+#[test]
+fn canonicalized_source_library_file_resolves_to_library_prefixed_logical_path() {
+    let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
+    let project_root = temp_dir.path().to_path_buf();
+    let entry_root = project_root.join("src");
+    let library_root = project_root.join("lib/html");
+
+    fs::create_dir_all(&entry_root).unwrap();
+    fs::create_dir_all(&library_root).unwrap();
+    fs::write(library_root.join("#mod.bst"), b"").unwrap();
+    fs::write(library_root.join("helpers.bst"), b"").unwrap();
+    fs::write(entry_root.join("index.bst"), b"").unwrap();
+
+    let mut source_libraries = crate::libraries::SourceLibraryRegistry::new();
+    source_libraries.register_filesystem_root("html", library_root.clone());
+
+    let resolver = ProjectPathResolver::new(project_root, entry_root, &[], &source_libraries)
+        .expect("resolver creation should succeed");
+
+    let canonical_root = fs::canonicalize(&library_root).expect("should canonicalize library root");
+    assert_eq!(
+        resolver.source_library_roots().get("html"),
+        Some(&canonical_root)
+    );
+
+    let canonical_file = fs::canonicalize(library_root.join("helpers.bst"))
+        .expect("should canonicalize source library file");
+    let mut string_table = StringTable::new();
+    let logical_path = resolver
+        .logical_path_for_canonical_file(&canonical_file, &mut string_table)
+        .expect("canonical source library file should resolve");
+
+    assert_eq!(logical_path, PathBuf::from("html").join("helpers.bst"));
+}

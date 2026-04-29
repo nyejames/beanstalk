@@ -1491,7 +1491,7 @@ fn nominal_struct_identity_uses_field_parent_path() {
             assert_eq!(fields.len(), 1);
             assert_eq!(fields[0].0, FieldId(3));
         }
-        other => panic!("expected StructConstruct, got {:?}", other),
+        other => panic!("expected StructConstruct, got {other:?}"),
     }
 }
 
@@ -1610,7 +1610,7 @@ fn field_access_uses_base_struct_identity_not_global_leaf_lookup() {
 
     match place {
         HirPlace::Field { field, .. } => assert_eq!(field, FieldId(100)),
-        other => panic!("expected field place, got {:?}", other),
+        other => panic!("expected field place, got {other:?}"),
     }
 }
 
@@ -1705,7 +1705,7 @@ fn field_access_from_module_constant_base_materializes_temp_place() {
             assert_eq!(field, FieldId(200));
             assert!(matches!(*base, HirPlace::Local(_)));
         }
-        other => panic!("expected field load expression, got {:?}", other),
+        other => panic!("expected field load expression, got {other:?}"),
     }
 }
 

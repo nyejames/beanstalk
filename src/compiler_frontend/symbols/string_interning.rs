@@ -30,7 +30,7 @@ impl StringIdRemap {
 /// The StringTable uses a dual-mapping approach for optimal performance:
 /// - Vec<Box<str>> for O(1) ID→string resolution with minimal overhead
 /// - FxHashMap<&str, StringId> for O(1) string→ID lookup during interning
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct StringTable {
     /// Primary storage: ID → String mapping for fast resolution
     /// Using Box<str> instead of String saves 8 bytes per entry (no capacity field)
@@ -48,6 +48,27 @@ pub struct StringTable {
 impl Default for StringTable {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+impl Clone for StringTable {
+    fn clone(&self) -> Self {
+        let strings = self.strings.clone();
+        let mut string_to_id =
+            FxHashMap::with_capacity_and_hasher(strings.len(), Default::default());
+
+        for (index, string) in strings.iter().enumerate() {
+            string_to_id.insert(
+                Self::static_str_key(string.as_ref()),
+                StringId(index as u32),
+            );
+        }
+
+        Self {
+            strings,
+            string_to_id,
+            next_id: self.next_id,
+        }
     }
 }
 
@@ -102,8 +123,7 @@ impl StringTable {
         // 1. We never remove strings from the table
         // 2. We never reallocate the Box<str> (it's heap-allocated with stable address)
         // 3. The StringTable itself lives for the entire compilation
-        let static_ref: &'static str =
-            unsafe { std::mem::transmute::<&str, &'static str>(boxed.as_ref()) };
+        let static_ref = Self::static_str_key(boxed.as_ref());
 
         // Insert into reverse lookup (uses the static ref as key - no allocation!)
         self.string_to_id.insert(static_ref, new_id);
@@ -154,8 +174,7 @@ impl StringTable {
         let boxed: Box<str> = s.into_boxed_str();
 
         // SAFETY: Same reasoning as intern_new
-        let static_ref: &'static str =
-            unsafe { std::mem::transmute::<&str, &'static str>(boxed.as_ref()) };
+        let static_ref = Self::static_str_key(boxed.as_ref());
 
         self.string_to_id.insert(static_ref, new_id);
         self.strings.push(boxed);
@@ -187,5 +206,12 @@ impl StringTable {
             debug_assert_eq!(old_id.0 as usize, old_to_new.len() - 1);
         }
         StringIdRemap { old_to_new }
+    }
+
+    #[inline]
+    fn static_str_key(value: &str) -> &'static str {
+        // SAFETY: callers only pass strings owned by a `StringTable` and the
+        // returned reference is stored in the same table's reverse lookup map.
+        unsafe { std::mem::transmute::<&str, &'static str>(value) }
     }
 }

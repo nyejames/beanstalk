@@ -1,4 +1,4 @@
-set shell := ["bash", "-eu", "-o", "pipefail", "-c"]
+set windows-shell := ["powershell", "-NoLogo", "-NoProfile", "-Command"]
 
 validate:
     @echo "format"

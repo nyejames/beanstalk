@@ -155,10 +155,7 @@ fn report_visible_name_collision(
     string_table: &StringTable,
 ) -> CompilerError {
     let name = string_table.resolve(local_name);
-    let mut msg = format!(
-        "Import name collision: '{}' is already visible in this file.",
-        name
-    );
+    let mut msg = format!("Import name collision: '{name}' is already visible in this file.");
     if previous.location.is_some() {
         msg.push_str(" Choose a different alias or rename the existing declaration.");
     }
@@ -203,8 +200,7 @@ fn check_alias_case_warning(
             .unwrap_or_else(|| path_location.clone());
         warnings.push(CompilerWarning::new(
             &format!(
-                "Import alias '{}' uses different leading-name case than imported symbol '{}'.",
-                alias_str, symbol_str
+                "Import alias '{alias_str}' uses different leading-name case than imported symbol '{symbol_str}'."
             ),
             location,
             WarningKind::ImportAliasCaseMismatch,

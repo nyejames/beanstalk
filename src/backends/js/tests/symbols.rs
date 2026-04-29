@@ -19,7 +19,7 @@ fn reserved_word_function_name_gets_underscore_prefix() {
     let expected_name = expected_dev_function_name("for", 0);
 
     assert!(
-        source.contains(&format!("function {}(", expected_name)),
+        source.contains(&format!("function {expected_name}(")),
         "reserved identifiers should still lower to deterministic id-based names"
     );
 }
@@ -32,7 +32,7 @@ fn invalid_identifier_chars_are_replaced_with_underscore() {
     let expected_name = expected_dev_function_name("foo-bar", 0);
 
     assert!(
-        source.contains(&format!("function {}(", expected_name)),
+        source.contains(&format!("function {expected_name}(")),
         "hyphens in identifiers must be replaced with underscores"
     );
 }

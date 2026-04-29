@@ -60,3 +60,21 @@ fn non_renderable_expression_kind_returns_none() {
     let result = fold_expression_kind_to_string(&ExpressionKind::Runtime(vec![]), &table);
     assert!(result.is_none());
 }
+
+#[test]
+fn cloned_string_table_retains_lookups_after_original_table_is_dropped() {
+    let (hello_id, world_id, mut clone) = {
+        let mut table = StringTable::new();
+        let hello_id = table.intern("hello");
+        let world_id = table.intern("world");
+
+        let clone = table.clone();
+        assert_eq!(clone.resolve(hello_id), "hello");
+        assert_eq!(clone.resolve(world_id), "world");
+
+        (hello_id, world_id, clone)
+    };
+
+    assert_eq!(clone.intern("hello"), hello_id);
+    assert_eq!(clone.intern("world"), world_id);
+}

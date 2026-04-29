@@ -519,10 +519,7 @@ impl<'a> HirDisplayContext<'a> {
                         .collect();
                     format!(", fields=[{}]", rendered.join(", "))
                 };
-                format!(
-                    "variant_construct({}, tag={}){}",
-                    carrier_label, variant_index, fields_str
-                )
+                format!("variant_construct({carrier_label}, tag={variant_index}){fields_str}")
             }
             HirExpressionKind::VariantPayloadGet {
                 carrier,

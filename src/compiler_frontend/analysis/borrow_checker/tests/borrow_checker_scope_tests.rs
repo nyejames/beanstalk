@@ -247,12 +247,12 @@ fn dead_local_access_reports_borrow_error() {
             else_block,
             ..
         } => (*then_block, *else_block),
-        other => panic!("expected if terminator, found {:?}", other),
+        other => panic!("expected if terminator, found {other:?}"),
     };
 
     let merge_block = match &hir.blocks[then_block.0 as usize].terminator {
         crate::compiler_frontend::hir::terminators::HirTerminator::Jump { target, .. } => *target,
-        other => panic!("expected then jump, found {:?}", other),
+        other => panic!("expected then jump, found {other:?}"),
     };
 
     let then_local = hir.blocks[then_block.0 as usize]
