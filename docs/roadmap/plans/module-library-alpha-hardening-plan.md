@@ -154,40 +154,40 @@ If this is not documented clearly, later diagnostics and tests will look arbitra
 
 ### Implementation steps
 
-- [ ] Add a clear section to `docs/language-overview.md` explaining:
+- [x] Add a clear section to `docs/language-overview.md` explaining:
   - what makes a directory a module root
   - how `#mod.bst` defines exported API
   - how other `#` files such as `#page.bst` can coexist with `#mod.bst`
   - that a module without `#mod.bst` exports nothing
   - that top-level runtime/start code belongs to build-system entry files, not `#mod.bst`
-- [ ] Clarify that `#mod.bst` may contain:
+- [x] Clarify that `#mod.bst` may contain:
   - `#import` re-exports
   - exported constants
   - exported functions
   - exported types/choices/type aliases
-- [ ] Clarify that `#mod.bst` may not contain:
+- [x] Clarify that `#mod.bst` may not contain:
   - private declarations
   - top-level runtime statements
   - runtime templates/start-function code
-- [ ] Clarify same-module private access:
+- [x] Clarify same-module private access:
   - files inside the same module may import/use private implementation files according to normal internal module rules
   - outside modules must import through the module facade
-- [ ] Clarify submodule visibility:
+- [x] Clarify submodule visibility:
   - modules can contain submodules
   - submodule exports are visible upward only according to explicit module facade rules
   - outside modules cannot bypass intermediate facades
-- [ ] Clarify library roots:
+- [x] Clarify library roots:
   - config-defined library folders are scanned
   - `/lib` is a default convention, not a hardcoded semantic rule
-- [ ] Clarify import path restrictions:
+- [x] Clarify import path restrictions:
   - no `..` imports
   - no escape from module/library/project boundaries
   - imports should use config-defined roots, core/standard roots, or sibling/child module structure
-- [ ] Update `docs/compiler-design-overview.md` Stage 0 language to match the final model:
+- [x] Update `docs/compiler-design-overview.md` Stage 0 language to match the final model:
   - project structure discovers module roots and config-defined library folders
   - source libraries do not have a separate visibility model
   - module export surfaces are derived from `#mod.bst`
-- [ ] Update `docs/src/docs/progress/#page.bst` rows for:
+- [x] Update `docs/src/docs/progress/#page.bst` rows for:
   - Paths and imports
   - Source library roots
   - Builder-provided source libraries
@@ -200,14 +200,14 @@ No compiler behavior tests are required in this phase unless doc examples are co
 
 ### Audit / style-guide review
 
-- [ ] Check that terminology uses **module**, **module root**, **library folder**, and **source library** consistently.
-- [ ] Remove language implying that source libraries are a distinct semantic system.
-- [ ] Ensure docs distinguish `#mod.bst` from `#page.bst`.
-- [ ] Ensure deferred features are marked as deferred explicitly.
+- [x] Check that terminology uses **module**, **module root**, **library folder**, and **source library** consistently.
+- [x] Remove language implying that source libraries are a distinct semantic system.
+- [x] Ensure docs distinguish `#mod.bst` from `#page.bst`.
+- [x] Ensure deferred features are marked as deferred explicitly.
 
 ### Validation
 
-- [ ] Run `just validate`.
+- [x] Run `just validate`.
 
 ### Acceptance criteria
 

@@ -88,12 +88,12 @@ Library categories:
 - Core prelude libraries: every builder must provide the prelude surface. `io`, `IO`, and compiler-owned error symbols are bare names.
 - Optional core libraries: builders opt into packages such as `@core/math`, `@core/text`, `@core/random`, and `@core/time`.
 - Builder libraries: builder-specific source libraries such as the HTML builder's `@html`.
-- Project-local source libraries: project `/lib/<name>` directories exposed as `@<name>`.
+- Project-local source libraries: modules discovered through config-defined library folders (default convention: `/lib`).
 - External packages: Rust-side metadata for virtual packages implemented by a backend.
 
 Source libraries:
-- Source libraries are normal `.bst` files exposed through library roots.
-- Configured or builder-provided library roots expose their prefix directly; `/lib/html` imports as `@html`, not `@lib/html`.
+- Source libraries are normal modules discovered through library roots; they do not use a separate visibility system.
+- Config-defined or builder-provided library roots expose their prefix directly; `/lib/html` imports as `@html`, not `@lib/html`.
 - Every source library module must expose its public surface through `#mod.bst`.
 - External importers cannot bypass a library facade and import private implementation files directly.
 - `#import @...` is valid only inside `#mod.bst` and re-exports imported symbols without creating local bindings.
@@ -189,10 +189,11 @@ Virtual package imports are recognized during reachable-file discovery and are n
 - Provides a unified configuration map for all build systems
 
 **`#*` Files and Modules**
-- Any file whose name starts with `#` defines a **module root**
-- Any directory containing a `#*` file is treated as a separate module
+- Any directory containing one or more `#*.bst` files (excluding `#config.bst`) is treated as a module root.
+- Build-system entry files and `#mod.bst` can coexist in the same module root.
 - The exact name of the file (e.g. `#page`, `#layout`, `#lib`) is preserved and interpreted by the build system
 - The project builder can be aware of multiple `#` files per root, but they can only exist at the root of a module
+- Module export surfaces are derived from `#mod.bst`. A module root without `#mod.bst` exports nothing outside itself.
 
 ### Stage 1: Tokenization (`src/compiler_frontend/tokenizer/lexer.rs`)
 Converts raw source code into structured tokens with location information.

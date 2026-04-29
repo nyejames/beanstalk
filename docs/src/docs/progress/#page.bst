@@ -225,9 +225,9 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
         [data:
             [: Paths and imports]
             [: Supported]
-            [: Broad import syntax, relative path, root folder, circular dependency, multi-file module, single-symbol aliases, grouped aliases, nested grouped aliases, collision, and file-local coverage.]
+            [: Broad import syntax, relative child path, root folder, circular dependency, multi-file module, single-symbol aliases, grouped aliases, nested grouped aliases, collision, and file-local coverage.]
             [: Frontend / HTML builder]
-            [: Path rendering is golden-sensitive. Keep normalized output and platform-stable diagnostics covered. Single-symbol source import aliases, grouped source import aliases, and nested grouped source import aliases are supported. Aliases are file-local and not re-exported. Alias collisions are hard errors across same-file declarations, source imports, external imports, type aliases, prelude symbols, and builtins. Alias case mismatches warn. Grouped import aliases reject group-level trailing aliases, invalid local alias names, and duplicate alias syntax with structured diagnostics.]
+            [: Path rendering is golden-sensitive. Keep normalized output and platform-stable diagnostics covered. Single-symbol source import aliases, grouped source import aliases, and nested grouped source import aliases are supported. Aliases are file-local and not re-exported. Alias collisions are hard errors across same-file declarations, source imports, external imports, type aliases, prelude symbols, and builtins. Alias case mismatches warn. Grouped import aliases reject group-level trailing aliases, invalid local alias names, and duplicate alias syntax with structured diagnostics. Parent-directory imports with `..` are not supported, and imports must stay within allowed module/library/project roots.]
         ]
 
         [data:
@@ -299,9 +299,9 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
         [data:
             [: Source library roots]
             [: Partial]
-            [: Targeted coverage for filesystem-based source library root resolution, prefix collision detection, and `#mod.bst` facade enforcement.]
+            [: Targeted coverage for config-defined source library root resolution, prefix collision detection, and `#mod.bst` facade enforcement.]
             [: Frontend / HTML]
-            [: Project-local libraries under `/lib` are discovered automatically and resolve through the path resolver. Builder-provided source library roots are plumbed through `LibrarySet`. Prefix collisions between builder-provided and project-local libraries produce a hard config error. Every source library root must contain a `#mod.bst` facade file. Cross-library imports are gated through the facade: external importers can only import symbols explicitly exported by `#mod.bst`.]
+            [: Source libraries and regular modules share the same visibility model. Config-defined project library folders (default convention: `/lib`) and builder-provided source library roots are plumbed through `LibrarySet`. Prefix collisions between builder-provided and project-local libraries produce a hard config error. Modules that export outside themselves must do so through `#mod.bst`; outside importers cannot bypass the facade.]
         ]
 
         [data:
@@ -309,15 +309,15 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
             [: Partial]
             [: Targeted coverage for builder-provided source library root registration and HTML builder library.]
             [: Frontend / HTML]
-            [: Builders expose source libraries through `LibrarySet.source_libraries`. The HTML builder provides `@html` as a default source library with basic HTML tag helpers and formatting utilities. Other builders may provide their own libraries. Prefix collisions between builder-provided and project-local libraries produce a hard config error.]
+            [: Builders expose source libraries through `LibrarySet.source_libraries`. The HTML builder provides `@html` as a default source library with basic HTML tag helpers and formatting utilities. These libraries follow the same module visibility/facade rules as project modules. Prefix collisions between builder-provided and project-local libraries produce a hard config error.]
         ]
 
         [data:
             [: Project-local libraries]
             [: Partial]
-            [: Targeted coverage for `/lib` auto-discovery, import resolution, and facade gating.]
+            [: Targeted coverage for config-defined project library folders, import resolution, and facade gating.]
             [: Frontend / HTML]
-            [: A `/lib` directory at the project root is scanned for subdirectories, each treated as a source library prefix. Imports like `@helper/utils` resolve to `lib/helper/utils.bst`. Every library must declare a `#mod.bst` facade that exports its public surface with `#`. Cross-library imports bypassing the facade are rejected.]
+            [: Project-local source libraries are discovered from config-defined library folders (default convention: `/lib`). Imports resolve through the library prefix (for example, `/lib/helper` as `@helper`). Public cross-module access goes through `#mod.bst`; bypassing implementation files from outside the module is rejected.]
         ]
 
         [data:
@@ -552,7 +552,7 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
             [: Import re-exports]
             [: Supported]
             [: Targeted coverage for single, aliased, grouped, nested grouped, external function, external type, duplicate, collision, no-local-binding, and invalid-location diagnostics.]
-            [: `#import @...` is valid only in `#mod.bst` source-library facades. It re-exports source or external package symbols through the facade export map without creating a local binding in `#mod.bst` or sibling implementation files. Namespace and wildcard imports remain deferred.]
+            [: `#import @...` is valid only in `#mod.bst` module facades (including source libraries). It re-exports source or external package symbols through the facade export map without creating a local binding in `#mod.bst` or sibling implementation files. Grouped imports and per-symbol aliases are supported; wildcard and namespace imports remain deferred.]
         ]
 
         [data:

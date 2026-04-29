@@ -756,9 +756,9 @@ value LocalId = 1
 ```
 
 ## Module System and Imports
-A module is multiple Beanstalk files compiled together into a single output. Each module will have its own entry point.
+A module is a directory-scoped unit of Beanstalk source files compiled together into a single output. A directory is treated as a module root when it contains one or more `#*.bst` files (excluding `#config.bst`).
 
-A project is one or more of these modules together with libraries and sometimes other file types that is all compiled together into a more complex output.
+A project is one or more of these modules together with libraries and sometimes other file types compiled into a larger output.
 
 At the root of every project is a `#config.bst` file.
 `#config.bst` uses normal Beanstalk declaration syntax. Stage 0 reads top-level constant declarations from it.
@@ -804,6 +804,12 @@ Import rules:
 - Grouped imports cannot use a trailing group-level alias. Alias individual entries instead:
   `import @components { render as render_component }`.
 
+### Module roots, entry files, and facades
+- A module root may contain multiple `#*.bst` files with different build-system roles (for example `#page.bst` and `#mod.bst`).
+- Build-system entry files such as `#page.bst` own top-level runtime/start code.
+- `#mod.bst` is the only outward-facing export surface for a module.
+- A module root without `#mod.bst` exports nothing outside itself.
+
 **Entry files and implicit start functions:**
 - The module entry file has an implicit `start` function containing its top-level runtime code.
 - Only the entry file executes top-level runtime code automatically.
@@ -826,26 +832,30 @@ Only the entry file's top-level runtime code executes automatically.
 Other files contribute declarations that must be imported explicitly by symbol.
 
 **Import resolution rules:**
-- Relative imports (`@./x` / `@..`) resolve from the importing file's directory
-- Non-relative imports whose first segment matches `#root_folders` resolve from the project root
-- Other non-relative imports resolve from the configured module entry root
-- Project-local source libraries under `/lib/<name>` and builder-provided source libraries expose their prefix directly. For example, `/lib/html` imports as `@html`, not `@lib/html`
+- Relative child imports such as `@./x` resolve from the importing file's directory.
+- Parent-directory imports with `..` are not supported.
+- Imports cannot escape module/library/project boundaries.
+- Non-relative imports whose first segment matches `#root_folders` resolve from the project root.
+- Other non-relative imports resolve from the configured module entry root.
+- Config-defined library folders and builder-provided source library roots expose their prefix directly. `/lib` is the default project convention, not a hardcoded semantic rule.
 - Grouped imports expand into multiple individual symbol imports.
 - Circular imports are detected and cause compilation errors
 
 ### Libraries and `#mod.bst`
+
+Libraries and regular modules share the same visibility model. A source library is a normal module discovered through a library root.
 
 Beanstalk has several library categories:
 
 - Core prelude libraries: every builder must provide `@core/prelude`; its exported prelude surface is available as bare names.
 - Core libraries: optional builder-provided packages such as `@core/math`, `@core/text`, `@core/random`, and `@core/time`.
 - Builder libraries: builder-owned libraries such as the HTML builder's `@html`.
-- Project libraries: project-local source libraries under `/lib`.
+- Project libraries: project-local source libraries discovered through config-defined library folders (default convention: `/lib`).
 - External packages: virtual packages implemented by backend metadata rather than `.bst` source files.
 
 Core libraries require explicit imports unless they are part of the prelude. A builder that does not expose a core package rejects imports from that package with an unsupported-by-builder diagnostic.
 
-Source libraries are normal Beanstalk source files behind a library root. A source library module must expose its public surface through `#mod.bst`.
+Source libraries are normal Beanstalk source files behind a library root. A source library module that exports outside itself must expose its public surface through `#mod.bst`.
 
 ```text
 lib/
@@ -858,7 +868,19 @@ lib/
 import @ui {button}
 ```
 
-External code can import only the facade exports from `#mod.bst`. Internal implementation files are private unless the facade exports their symbols. `#mod.bst` is not a shared implementation file; sibling files do not see its declarations automatically. Runtime top-level code and runtime top-level templates are invalid in `#mod.bst`. Import visibility is owned by `#mod.bst` only.
+`#mod.bst` is an API facade, not a runtime entry or shared implementation file.
+- `#mod.bst` may contain:
+  - `#import` re-exports
+  - exported declarations written with `#` (constants, functions, types/choices, type aliases)
+- `#mod.bst` may not contain:
+  - private declarations
+  - top-level runtime statements
+  - runtime templates/start-function code
+
+Access and visibility rules:
+- Files inside the same module may import and use private implementation files according to normal internal module rules.
+- Outside modules must import through the module facade surface exposed by `#mod.bst`.
+- Modules may contain submodules, but outside modules cannot bypass intermediate facades. Visibility flows through explicit facade exports.
 
 Facade files can re-export imported symbols:
 
@@ -868,13 +890,13 @@ Facade files can re-export imported symbols:
 #import @core/math {sin, PI}
 ```
 
-`#import` is valid only in `#mod.bst`. It accepts import-style paths, can alias exports, and does not create a local binding. Use `#` on declarations to export declarations written in the facade itself.
+`#import` is valid only in `#mod.bst`. It accepts import-style paths (including grouped and per-symbol aliases), can alias exports, and does not create a local binding. Use `#` on declarations to export declarations written in the facade itself.
 
-Only #mod.bst creates a public module surface.
+Only `#mod.bst` creates a public module surface.
 
-#page.bst may import from files in the same directory/module, but it does not export those declarations unless #mod.bst does.
+`#page.bst` may import from files in the same directory/module, but it does not export those declarations unless `#mod.bst` does.
 
-#config.bst may affect build behavior, but it does not create language-visible imports.
+`#config.bst` may affect build behavior, but it does not create language-visible imports.
 
 ### External platform package imports
 

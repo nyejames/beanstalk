@@ -369,16 +369,16 @@ body {
              <td style="padding: 0.2em 0.5em;"> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">bean new html</span> </td>
+    ">bean new html .</span> </td>
      <td style="padding: 0.2em 0.5em;"> Creates a minimal HTML project scaffold.</td>
-     <td style="padding: 0.2em 0.5em;"> Currently prompts for a project path and project name. More project options are planned.</td>
+     <td style="padding: 0.2em 0.5em;"> If path is omitted, bean shows the current directory and asks for confirmation before scaffolding there. It then asks for a project name.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;"> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">bean check path</span> </td>
+    ">bean check .</span> </td>
      <td style="padding: 0.2em 0.5em;"> Runs project discovery, frontend compilation, type checking, HIR lowering, and borrow validation without writing build artifacts.</td>
      <td style="padding: 0.2em 0.5em;"> Add <span style="
         color: #c444aff9;
@@ -390,7 +390,7 @@ body {
              <td style="padding: 0.2em 0.5em;"> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">bean dev path</span> </td>
+    ">bean dev .</span> </td>
      <td style="padding: 0.2em 0.5em;"> Builds the project, starts a local dev server, watches files, and reloads the browser when sources change.</td>
      <td style="padding: 0.2em 0.5em;"> This is the main day-to-day command for working on HTML projects.</td>
         </tr>
@@ -399,7 +399,7 @@ body {
              <td style="padding: 0.2em 0.5em;"> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">bean build path</span> </td>
+    ">bean build .</span> </td>
      <td style="padding: 0.2em 0.5em;"> Builds the project and writes output files.</td>
      <td style="padding: 0.2em 0.5em;"> Without <span style="
         color: #c444aff9;
@@ -524,8 +524,8 @@ body {
         white-space: pre; 
         overflow-x: auto;
     "><code class='codeblock'>
-    bean new html
-    </code></pre><p>The command asks for:</p><pre style="
+    bean new html .
+    </code></pre><p>If you omit the path, bean asks for confirmation in the current directory before continuing. The command then asks for:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
         border-radius: 5px;
@@ -533,7 +533,8 @@ body {
         white-space: pre; 
         overflow-x: auto;
     "><code class='codeblock'>
-    <span class='bst-code-struct'>Enter</span> project path<span class='bst-code-operator'>:</span>
+    <span class='bst-code-struct'>No</span> project path specified. <span class='bst-code-struct'>Current</span> directory<span class='bst-code-operator'>:</span> <span class='bst-code-operator'>/</span>your<span class='bst-code-operator'>/</span>path
+    <span class='bst-code-struct'>Create</span> the new <span class='bst-code-struct'>HTML</span> project in this directory<span class='bst-code-operator'>?</span> <span class='bst-code-parenthesis'>[</span>y<span class='bst-code-operator'>/</span><span class='bst-code-struct'>N</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-operator'>:</span>
     <span class='bst-code-struct'>Project</span> name<span class='bst-code-operator'>:</span>
     </code></pre><p>After the project exists, add an entry page if the scaffold has not created one yet:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
