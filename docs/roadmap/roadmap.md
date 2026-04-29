@@ -9,9 +9,6 @@ Use the language surface integration matrix as a reference for what is currently
 ---
 
 # Plans / Notes / TODOS
-- Library system: `docs/roadmap/plans/core-and-builder-library-implementation-plan.md`
-  - Deferred: package manager, library versions, remote fetching, dependency lockfiles, library override/shadowing, source-library HIR caching, user-authored external binding files, namespace/wildcard imports, seeded random, full date/time/timezone APIs, and Wasm support for non-math core packages.
-
 - Pattern matching hardening: 
 Finish coverage and diagnostics for the supported Alpha pattern surface; keep general capture/tagged patterns, nested payload patterns and negated patterns
 

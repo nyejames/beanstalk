@@ -14,3 +14,9 @@ must_contain = [
     "__bs_time_now_millis()",
     "__bs_time_now_seconds()",
 ]
+
+[backends.html_wasm]
+mode = "failure"
+warnings = "forbid"
+error_type = "LirTransformation"
+message_contains = ["Wasm backend does not yet support host function 'now_millis'"]

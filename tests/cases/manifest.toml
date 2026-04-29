@@ -3133,7 +3133,7 @@ tags = ["integration", "language", "external-packages", "core-libraries", "diagn
 [[case]]
 id = "core_random_functions"
 path = "core_random_functions"
-tags = ["integration", "language", "external-packages", "core-libraries", "js"]
+tags = ["integration", "language", "external-packages", "core-libraries", "js", "wasm", "diagnostics"]
 
 [[case]]
 id = "core_random_type_error"
@@ -3148,7 +3148,7 @@ tags = ["integration", "language", "external-packages", "core-libraries", "diagn
 [[case]]
 id = "core_time_functions"
 path = "core_time_functions"
-tags = ["integration", "language", "external-packages", "core-libraries", "js"]
+tags = ["integration", "language", "external-packages", "core-libraries", "js", "wasm", "diagnostics"]
 
 [[case]]
 id = "core_time_arity_error"

@@ -51,7 +51,11 @@ impl SourceLibraryRegistry {
     /// Merge another registry into this one, returning collision errors.
     pub fn merge(&mut self, other: &SourceLibraryRegistry) -> Result<(), Vec<String>> {
         let mut collisions = Vec::new();
-        for (prefix, root) in &other.roots {
+        let mut incoming_roots = other.roots.iter().collect::<Vec<_>>();
+        // Keep multi-collision diagnostics stable across HashMap iteration order.
+        incoming_roots.sort_by_key(|(prefix, _)| *prefix);
+
+        for (prefix, root) in incoming_roots {
             if self.roots.contains_key(prefix) {
                 collisions.push(prefix.clone());
             } else {

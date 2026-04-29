@@ -283,7 +283,7 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
         [data:
             [: Core random package]
             [: Partial]
-            [: Targeted import, JS helper, runtime smoke, arity, and type-error coverage.]
+            [: Targeted import, JS helper, runtime smoke, arity, type-error, and Wasm-unsupported coverage.]
             [: JS / HTML]
             [: [codesnippet:@core/random] exposes [codesnippet:random_float()] and [codesnippet:random_int(min, max)]. [codesnippet:random_int] is intended for the inclusive range [codesnippet:min <= value <= max] when [codesnippet:min <= max]. Seeded random and [codesnippet:min > max] runtime diagnostics are deferred.]
         ]
@@ -291,7 +291,7 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
         [data:
             [: Core time package]
             [: Partial]
-            [: Targeted import, JS helper, runtime smoke, and arity-error coverage.]
+            [: Targeted import, JS helper, runtime smoke, arity-error, and Wasm-unsupported coverage.]
             [: JS / HTML]
             [: [codesnippet:@core/time] exposes [codesnippet:now_millis()] and [codesnippet:now_seconds()]. Full date/time/timezone objects, formatting, durations, and monotonic clocks are deferred. Wasm support is deferred.]
         ]
