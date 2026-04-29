@@ -103,6 +103,60 @@ pub(super) fn build_project_path_resolver(
         return Err(CompilerMessages::from_error_ref(error, string_table));
     }
 
+    // Check for collisions between entry-root top-level folders and source-library prefixes.
+    let entry_dir_entries = fs::read_dir(&entry_root).map_err(|error| {
+        CompilerMessages::from_error_ref(
+            CompilerError::file_error(
+                &entry_root,
+                format!(
+                    "Failed to read entry root while checking for library prefix collisions: {error}"
+                ),
+                string_table,
+            ),
+            string_table,
+        )
+    })?;
+
+    for entry in entry_dir_entries {
+        let entry = entry.map_err(|error| {
+            CompilerMessages::from_error_ref(
+                CompilerError::file_error(
+                    &entry_root,
+                    format!(
+                        "Failed to read entry root directory entry while checking for library prefix collisions: {error}"
+                    ),
+                    string_table,
+                ),
+                string_table,
+            )
+        })?;
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        if let Some(folder_name) = path.file_name().and_then(|name| name.to_str())
+            && merged_libraries.has_prefix(folder_name)
+        {
+            let mut error = CompilerError::file_error(
+                &path,
+                format!(
+                    "Entry-root folder '{folder_name}' collides with source-library prefix '@{folder_name}'. Ambiguous imports are disallowed."
+                ),
+                string_table,
+            )
+            .with_error_type(ErrorType::Config);
+            error.new_metadata_entry(
+                ErrorMetaDataKey::CompilationStage,
+                String::from("Project Structure"),
+            );
+            error.new_metadata_entry(
+                ErrorMetaDataKey::PrimarySuggestion,
+                "Rename the entry-root folder or the source-library directory so they do not share the same name.".to_string(),
+            );
+            return Err(CompilerMessages::from_error_ref(error, string_table));
+        }
+    }
+
     match ProjectPathResolver::new(project_root, entry_root, &merged_libraries) {
         Ok(resolver) => {
             // Validate that every source library root has a #mod.bst facade file.

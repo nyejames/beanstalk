@@ -121,6 +121,46 @@ fn parses_config_constant_declarations() {
 }
 
 #[test]
+fn library_prefix_collision_with_entry_root_folder_rejected() {
+    let root = temp_dir("entry_root_lib_collision");
+    fs::create_dir_all(root.join("src/helper")).expect("should create src/helper");
+    fs::create_dir_all(root.join("lib/helper")).expect("should create lib/helper");
+    fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
+    fs::write(root.join("lib/helper/#mod.bst"), "#foo = 1\n").expect("should write facade");
+    fs::write(root.join("#config.bst"), "#entry_root = \"src\"\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+
+    let mut string_table = StringTable::new();
+    let result = super::module_discovery::build_project_path_resolver(
+        &config,
+        &crate::libraries::SourceLibraryRegistry::default(),
+        &mut string_table,
+    );
+
+    assert!(
+        result.is_err(),
+        "entry-root folder colliding with source-library prefix should fail"
+    );
+    let messages = result.expect_err("checked above");
+    let error_text = &messages.errors[0].msg;
+    assert!(
+        error_text.contains("collides") || error_text.contains("Ambiguous"),
+        "error should mention collision or ambiguity: {error_text}"
+    );
+    assert_eq!(messages.errors[0].error_type, ErrorType::Config);
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
 fn rejects_legacy_config_assignment_syntax() {
     let root = temp_dir("config_invalid_assignment");
     fs::create_dir_all(&root).expect("should create root dir");
@@ -733,7 +773,7 @@ fn project_local_lib_directory_is_discovered_as_source_library_root() {
 }
 
 #[test]
-fn builder_provided_and_project_local_library_collision_is_error() {
+fn library_prefix_collision_with_builder_library_rejected() {
     let root = temp_dir("lib_collision");
     fs::create_dir_all(&root).expect("should create root dir");
     fs::create_dir_all(root.join("lib/html")).expect("should create lib/html");
@@ -863,7 +903,7 @@ fn missing_explicit_library_folder_is_error() {
 }
 
 #[test]
-fn duplicate_library_prefixes_across_configured_folders_are_rejected() {
+fn library_prefix_collision_across_scan_roots_rejected() {
     let root = temp_dir("duplicate_library_prefixes");
     fs::create_dir_all(root.join("lib/helper")).expect("should create lib/helper");
     fs::create_dir_all(root.join("vendor/helper")).expect("should create vendor/helper");
