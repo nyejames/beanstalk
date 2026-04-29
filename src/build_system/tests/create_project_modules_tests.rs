@@ -288,6 +288,70 @@ fn rejects_duplicate_library_folder_entries() {
 }
 
 #[test]
+fn rejects_nested_library_folder_entry() {
+    let root = temp_dir("invalid_library_folders_nested");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(&config_path, "#library_folders = { @lib/helpers }\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect_err("config should fail");
+
+    assert!(
+        !messages.errors.is_empty(),
+        "should have at least one error"
+    );
+    let error = &messages.errors[0];
+    assert!(
+        error.msg.contains("single top-level folder name"),
+        "unexpected error message: {}",
+        error.msg
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn missing_default_library_folder_is_ignored() {
+    let root = temp_dir("missing_default_lib_ignored");
+    fs::create_dir_all(root.join("src")).expect("should create src");
+    fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
+    fs::write(root.join("#config.bst"), "#entry_root = \"src\"\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+
+    assert!(
+        !config.has_explicit_library_folders,
+        "default library folders should not be marked explicit"
+    );
+
+    let mut string_table = StringTable::new();
+    let resolver = super::module_discovery::build_project_path_resolver(
+        &config,
+        &crate::libraries::SourceLibraryRegistry::default(),
+        &mut string_table,
+    )
+    .expect("resolver should build even when default /lib is missing");
+
+    assert!(
+        resolver.source_library_roots().is_empty(),
+        "no source libraries should be discovered when default /lib is missing"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
 fn malformed_import_syntax_keeps_precise_location_during_module_discovery() {
     let root = temp_dir("malformed_import_location");
     let src = root.join("src");

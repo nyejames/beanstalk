@@ -3016,6 +3016,16 @@ path = "config_library_folder_builder_collision_rejected"
 tags = ["integration", "config", "libraries", "builder-libraries", "diagnostics"]
 
 [[case]]
+id = "config_library_folder_missing_default_ignored"
+path = "config_library_folder_missing_default_ignored"
+tags = ["integration", "config", "libraries"]
+
+[[case]]
+id = "config_library_folder_nested_path_rejected"
+path = "config_library_folder_nested_path_rejected"
+tags = ["integration", "config", "libraries", "diagnostics"]
+
+[[case]]
 id = "custom_library_import_resolves_through_mod"
 path = "custom_library_import_resolves_through_mod"
 tags = ["integration", "config", "libraries", "imports", "facades"]

@@ -200,42 +200,6 @@ fn parse_library_folders_value(
                     *index += 1;
                     break;
                 }
-                TokenKind::Path(items) => {
-                    for item in items {
-                        if item.alias.is_some() {
-                            return Err(vec![CompilerError::new(
-                                "Path aliases are only valid in import clauses.".to_string(),
-                                token.location.clone(),
-                                ErrorType::Config,
-                            )]);
-                        }
-                        match validate_library_folder_path(
-                            PathBuf::from(item.path.to_string(string_table)),
-                            token,
-                        ) {
-                            Ok(validated_path) => library_folders.push(validated_path),
-                            Err(error) => errors.push(error),
-                        }
-                    }
-                }
-                TokenKind::StringSliceLiteral(value) | TokenKind::RawStringLiteral(value) => {
-                    match validate_library_folder_path(
-                        PathBuf::from(string_table.resolve(*value)),
-                        token,
-                    ) {
-                        Ok(validated_path) => library_folders.push(validated_path),
-                        Err(error) => errors.push(error),
-                    }
-                }
-                TokenKind::Symbol(value) => {
-                    match validate_library_folder_path(
-                        PathBuf::from(string_table.resolve(*value)),
-                        token,
-                    ) {
-                        Ok(validated_path) => library_folders.push(validated_path),
-                        Err(error) => errors.push(error),
-                    }
-                }
                 TokenKind::Comma | TokenKind::Newline => {}
                 TokenKind::Eof => {
                     let mut error = CompilerError::new(
@@ -251,16 +215,13 @@ fn parse_library_folders_value(
                     break;
                 }
                 _ => {
-                    let mut error = CompilerError::new(
-                        "Unsupported value in '#library_folders' block.",
-                        token.location.clone(),
-                        ErrorType::Config,
-                    );
-                    error.metadata.insert(
-                        ErrorMetaDataKey::PrimarySuggestion,
-                        "Use folder names like '@lib' or strings like \"lib\"".to_string(),
-                    );
-                    errors.push(error);
+                    if let Err(mut entry_errors) = try_push_library_folder_from_token(
+                        token,
+                        string_table,
+                        &mut library_folders,
+                    ) {
+                        errors.append(&mut entry_errors);
+                    }
                 }
             }
             *index += 1;
@@ -278,56 +239,10 @@ fn parse_library_folders_value(
         return Ok(library_folders);
     }
 
-    match &start_token.kind {
-        TokenKind::Path(items) => {
-            for item in items {
-                if item.alias.is_some() {
-                    return Err(vec![CompilerError::new(
-                        "Path aliases are only valid in import clauses.".to_string(),
-                        start_token.location.clone(),
-                        ErrorType::Config,
-                    )]);
-                }
-                match validate_library_folder_path(
-                    PathBuf::from(item.path.to_string(string_table)),
-                    start_token,
-                ) {
-                    Ok(validated_path) => library_folders.push(validated_path),
-                    Err(error) => errors.push(error),
-                }
-            }
-        }
-        TokenKind::StringSliceLiteral(value) | TokenKind::RawStringLiteral(value) => {
-            match validate_library_folder_path(
-                PathBuf::from(string_table.resolve(*value)),
-                start_token,
-            ) {
-                Ok(validated_path) => library_folders.push(validated_path),
-                Err(error) => errors.push(error),
-            }
-        }
-        TokenKind::Symbol(value) => {
-            match validate_library_folder_path(
-                PathBuf::from(string_table.resolve(*value)),
-                start_token,
-            ) {
-                Ok(validated_path) => library_folders.push(validated_path),
-                Err(error) => errors.push(error),
-            }
-        }
-        _ => {
-            let mut error = CompilerError::new(
-                "Unsupported '#library_folders' value. Use a path, string, or '{ ... }' block.",
-                start_token.location.clone(),
-                ErrorType::Config,
-            );
-            error.metadata.insert(
-                ErrorMetaDataKey::PrimarySuggestion,
-                "Use '#library_folders = @lib' or '#library_folders = { @lib, @vendor }'"
-                    .to_string(),
-            );
-            errors.push(error);
-        }
+    if let Err(mut entry_errors) =
+        try_push_library_folder_from_token(start_token, string_table, &mut library_folders)
+    {
+        errors.append(&mut entry_errors);
     }
 
     if library_folders.is_empty() && errors.is_empty() {
@@ -348,6 +263,73 @@ fn parse_library_folders_value(
 
     if errors.is_empty() {
         Ok(library_folders)
+    } else {
+        Err(errors)
+    }
+}
+
+/// Attempt to parse one or more folder paths from a single config token and append them to
+/// `library_folders`.
+///
+/// WHAT: centralises the token-to-path conversion for `#library_folders` so both `{ ... }` block
+/// and single-value syntax share one validation path.
+/// WHY: eliminates the duplicated Path/String/Symbol match arms that previously existed in both
+/// the block loop and the single-value branch.
+fn try_push_library_folder_from_token(
+    token: &Token,
+    string_table: &StringTable,
+    library_folders: &mut Vec<PathBuf>,
+) -> Result<(), Vec<CompilerError>> {
+    let mut errors = Vec::new();
+
+    match &token.kind {
+        TokenKind::Path(items) => {
+            for item in items {
+                if item.alias.is_some() {
+                    errors.push(CompilerError::new(
+                        "Path aliases are only valid in import clauses.".to_string(),
+                        token.location.clone(),
+                        ErrorType::Config,
+                    ));
+                    continue;
+                }
+                match validate_library_folder_path(
+                    PathBuf::from(item.path.to_string(string_table)),
+                    token,
+                ) {
+                    Ok(validated_path) => library_folders.push(validated_path),
+                    Err(error) => errors.push(error),
+                }
+            }
+        }
+        TokenKind::StringSliceLiteral(value) | TokenKind::RawStringLiteral(value) => {
+            match validate_library_folder_path(PathBuf::from(string_table.resolve(*value)), token) {
+                Ok(validated_path) => library_folders.push(validated_path),
+                Err(error) => errors.push(error),
+            }
+        }
+        TokenKind::Symbol(value) => {
+            match validate_library_folder_path(PathBuf::from(string_table.resolve(*value)), token) {
+                Ok(validated_path) => library_folders.push(validated_path),
+                Err(error) => errors.push(error),
+            }
+        }
+        _ => {
+            let mut error = CompilerError::new(
+                "Unsupported value in '#library_folders'. Use a path, string, or '{ ... }' block.",
+                token.location.clone(),
+                ErrorType::Config,
+            );
+            error.metadata.insert(
+                ErrorMetaDataKey::PrimarySuggestion,
+                "Use folder names like '@lib' or strings like \"lib\"".to_string(),
+            );
+            errors.push(error);
+        }
+    }
+
+    if errors.is_empty() {
+        Ok(())
     } else {
         Err(errors)
     }
