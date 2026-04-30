@@ -252,6 +252,20 @@ pub(crate) fn parse_symbol_statement(
     }
 
     if let Some((func_id, host_func_call)) = context.lookup_visible_external_function(id) {
+        if token_stream.peek_next_token() == Some(&TokenKind::TypeParameterBracket) {
+            return_rule_error!(
+                format!(
+                    "'{}' is a prelude/external function and cannot be redeclared.",
+                    string_table.resolve(id)
+                ),
+                token_stream.current_location(),
+                {
+                    CompilationStage => "AST Construction",
+                    PrimarySuggestion => "Choose a different name for this declaration",
+                }
+            );
+        }
+
         token_stream.advance();
         let host_call = parse_external_function_call(
             token_stream,

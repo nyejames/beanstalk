@@ -3226,6 +3226,26 @@ path = "core_text_type_error"
 tags = ["integration", "language", "external-packages", "core-libraries", "diagnostics"]
 
 [[case]]
+id = "core_text_arity_error"
+path = "core_text_arity_error"
+tags = ["integration", "language", "external-packages", "core-libraries", "diagnostics"]
+
+[[case]]
+id = "core_text_edge_cases"
+path = "core_text_edge_cases"
+tags = ["integration", "language", "external-packages", "core-libraries", "js", "wasm"]
+
+[[case]]
+id = "prelude_name_declaration_rejected"
+path = "prelude_name_declaration_rejected"
+tags = ["integration", "language", "diagnostics"]
+
+[[case]]
+id = "prelude_name_body_declaration_rejected"
+path = "prelude_name_body_declaration_rejected"
+tags = ["integration", "language", "diagnostics"]
+
+[[case]]
 id = "core_random_functions"
 path = "core_random_functions"
 tags = ["integration", "language", "external-packages", "core-libraries", "js", "wasm", "diagnostics"]

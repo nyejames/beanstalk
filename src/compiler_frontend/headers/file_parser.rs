@@ -181,6 +181,25 @@ pub(super) fn parse_headers_in_file(
                         next_statement_exported = false;
                     };
                 } else {
+                    if next_statement_exported
+                        && starts_duplicate_top_level_header_declaration(
+                            token_stream,
+                            next_statement_exported,
+                        )
+                    {
+                        crate::return_rule_error!(
+                            format!(
+                                "'{}' is a prelude symbol and cannot be redeclared.",
+                                context.string_table.resolve(name_id)
+                            ),
+                            token_stream.current_location(),
+                            {
+                                CompilationStage => "Header Parsing",
+                                PrimarySuggestion => "Choose a different name for this declaration",
+                            }
+                        );
+                    }
+
                     start_function_body.push(current_token);
                     if next_statement_exported {
                         next_statement_exported = false;

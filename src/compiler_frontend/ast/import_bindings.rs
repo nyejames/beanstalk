@@ -976,40 +976,27 @@ pub(crate) fn resolve_re_exports(
                 target,
             };
 
-            match facade_key {
-                FacadeKey::Library(ref prefix) => {
-                    let exports = module_symbols
-                        .facade_exports
-                        .entry(prefix.clone())
-                        .or_default();
-                    if exports.iter().any(|e| e.export_name == export_name) {
-                        return Err(CompilerError::new_rule_error(
-                            format!(
-                                "Duplicate export name '{}' in module facade. Each exported name must be unique.",
-                                string_table.resolve(export_name)
-                            ),
-                            re_export.location.clone(),
-                        ));
-                    }
-                    exports.insert(entry);
-                }
-                FacadeKey::ModuleRoot(ref root) => {
-                    let exports = module_symbols
-                        .module_root_facade_exports
-                        .entry(root.clone())
-                        .or_default();
-                    if exports.iter().any(|e| e.export_name == export_name) {
-                        return Err(CompilerError::new_rule_error(
-                            format!(
-                                "Duplicate export name '{}' in module facade. Each exported name must be unique.",
-                                string_table.resolve(export_name)
-                            ),
-                            re_export.location.clone(),
-                        ));
-                    }
-                    exports.insert(entry);
-                }
+            let exports = match facade_key {
+                FacadeKey::Library(ref prefix) => module_symbols
+                    .facade_exports
+                    .entry(prefix.clone())
+                    .or_default(),
+                FacadeKey::ModuleRoot(ref root) => module_symbols
+                    .module_root_facade_exports
+                    .entry(root.clone())
+                    .or_default(),
+            };
+
+            if exports.iter().any(|e| e.export_name == export_name) {
+                return Err(CompilerError::new_rule_error(
+                    format!(
+                        "Duplicate export name '{}' in module facade. Each exported name must be unique.",
+                        string_table.resolve(export_name)
+                    ),
+                    re_export.location.clone(),
+                ));
             }
+            exports.insert(entry);
         }
     }
 
