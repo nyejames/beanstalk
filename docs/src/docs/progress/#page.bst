@@ -246,6 +246,7 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
                 - JS lowering now resolves external runtime names through per-function lowering metadata in the registry.
                 - [codesnippet:InlineExpression] JS lowering metadata exists but is not implemented yet.
                 - Wasm lowering for external packages is experimental and should not be counted as Alpha support.
+                - Unsupported external package imports for the active backend are rejected with structured [codesnippet:Rule] diagnostics before backend lowering, not during LIR transformation.
             ]]
         ]
 
@@ -268,7 +269,7 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
                 - The package is not prelude-imported. Users must explicitly import the required symbols from [codesnippet:@core/math].
                 - Direct imports, grouped imports, and aliased imports are all supported.
                 - JS helpers are emitted only when the matching external function is referenced.
-                - Wasm support for this package remains deferred/experimental.
+                - Wasm support for this package remains deferred/experimental. Imports used in HTML-Wasm builds fail with a structured [codesnippet:Rule] diagnostic before backend lowering.
             ]]
         ]
 
@@ -277,7 +278,7 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
             [: Partial]
             [: Targeted runtime, JS helper, type-error, unsupported-builder, and Wasm-unsupported coverage.]
             [: JS / HTML]
-            [: [codesnippet:@core/text] exposes [codesnippet:length], [codesnippet:is_empty], [codesnippet:contains], [codesnippet:starts_with], and [codesnippet:ends_with]. It is JS-backed, explicit-import only, and optional by builder. Wasm support is deferred.]
+            [: [codesnippet:@core/text] exposes [codesnippet:length], [codesnippet:is_empty], [codesnippet:contains], [codesnippet:starts_with], and [codesnippet:ends_with]. It is JS-backed, explicit-import only, and optional by builder. Wasm support is deferred; HTML-Wasm builds fail with a structured [codesnippet:Rule] diagnostic before backend lowering.]
         ]
 
         [data:
@@ -285,7 +286,7 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
             [: Partial]
             [: Targeted import, JS helper, runtime smoke, arity, type-error, and Wasm-unsupported coverage.]
             [: JS / HTML]
-            [: [codesnippet:@core/random] exposes [codesnippet:random_float()] and [codesnippet:random_int(min, max)]. [codesnippet:random_int] is intended for the inclusive range [codesnippet:min <= value <= max] when [codesnippet:min <= max]. Seeded random and [codesnippet:min > max] runtime diagnostics are deferred.]
+            [: [codesnippet:@core/random] exposes [codesnippet:random_float()] and [codesnippet:random_int(min, max)]. [codesnippet:random_int] is intended for the inclusive range [codesnippet:min <= value <= max] when [codesnippet:min <= max]. Seeded random and [codesnippet:min > max] runtime diagnostics are deferred. Wasm support is deferred; HTML-Wasm builds fail with a structured [codesnippet:Rule] diagnostic before backend lowering.]
         ]
 
         [data:
@@ -293,7 +294,7 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
             [: Partial]
             [: Targeted import, JS helper, runtime smoke, arity-error, and Wasm-unsupported coverage.]
             [: JS / HTML]
-            [: [codesnippet:@core/time] exposes [codesnippet:now_millis()] and [codesnippet:now_seconds()]. Full date/time/timezone objects, formatting, durations, and monotonic clocks are deferred. Wasm support is deferred.]
+            [: [codesnippet:@core/time] exposes [codesnippet:now_millis()] and [codesnippet:now_seconds()]. Full date/time/timezone objects, formatting, durations, and monotonic clocks are deferred. Wasm support is deferred; HTML-Wasm builds fail with a structured [codesnippet:Rule] diagnostic before backend lowering.]
         ]
 
         [data:

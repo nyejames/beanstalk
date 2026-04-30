@@ -38,6 +38,13 @@ pub struct ExternalPackageRegistry {
     type_ids_by_package_symbol: HashMap<ExternalPackageSymbolKey, ExternalTypeId>,
     /// Package-scoped constant lookup: (package_path, symbol_name) -> ExternalConstantId.
     constant_ids_by_package_symbol: HashMap<ExternalPackageSymbolKey, ExternalConstantId>,
+    /// Reverse lookup: function ID -> package path.
+    ///
+    /// WHAT: tracks which package each external function belongs to so diagnostics can name
+    /// the package when a backend does not support a function.
+    /// WHY: `ExternalFunctionDef` does not store its package path; this map keeps the
+    /// registry as the single owner of package membership.
+    function_package_by_id: HashMap<ExternalFunctionId, &'static str>,
     /// Prelude symbols that are auto-imported into every module.
     /// Bare-name lookup is only valid for the prelude.
     prelude_symbols_by_name: HashMap<&'static str, ExternalSymbolId>,
@@ -108,6 +115,7 @@ impl ExternalPackageRegistry {
         package.functions.insert(function.name, function.clone());
         self.functions_by_id.insert(id, function);
         self.function_ids_by_package_symbol.insert(key, id);
+        self.function_package_by_id.insert(id, package_path);
         Ok(())
     }
 
@@ -270,6 +278,7 @@ impl ExternalPackageRegistry {
             },
             id,
         );
+        self.function_package_by_id.insert(id, "@test/default");
         Ok(id)
     }
 
@@ -407,6 +416,14 @@ impl ExternalPackageRegistry {
     /// Returns true if the registry contains a package with the given path.
     pub fn has_package(&self, path: &str) -> bool {
         self.packages.contains_key(path)
+    }
+
+    /// Returns the package path that owns the given external function ID.
+    ///
+    /// WHAT: reverse lookup from stable function ID to its declaring package.
+    /// WHY: diagnostics need to name the package when a backend does not support a function.
+    pub fn resolve_function_package(&self, id: ExternalFunctionId) -> Option<&'static str> {
+        self.function_package_by_id.get(&id).copied()
     }
 
     /// Checks whether an import path should be treated as a virtual package import

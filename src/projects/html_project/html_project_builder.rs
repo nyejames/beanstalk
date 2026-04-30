@@ -2,6 +2,9 @@
 //
 // WHAT: coordinates module output-path resolution, homepage checks, and backend selection.
 // WHY: project builders own artifact assembly policy while compiler backends stay generic.
+use crate::backends::external_package_validation::{
+    BackendTarget, validate_hir_external_package_support,
+};
 use crate::build_system::build::{BackendBuilder, CleanupPolicy, Module, OutputFile, Project};
 use crate::build_system::utils::file_error_messages;
 use crate::compiler_frontend::Flag;
@@ -238,6 +241,22 @@ impl HtmlProjectBuilder {
         string_table: &mut StringTable,
     ) -> Result<CompiledHtmlModuleArtifacts, CompilerMessages> {
         let libraries = self.libraries();
+
+        // Validate that every external function call in the HIR has lowering metadata for the
+        // target backend. WHY: fail early with a structured Rule error at the call site rather
+        // than a vague backend-internal error during lowering.
+        let backend_target = if wasm_enabled {
+            BackendTarget::Wasm
+        } else {
+            BackendTarget::Js
+        };
+        validate_hir_external_package_support(
+            &module.hir,
+            &libraries.external_packages,
+            backend_target,
+        )
+        .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
+
         let compile_input = HtmlModuleCompileInput {
             hir_module: &module.hir,
             const_fragments: &module.const_top_level_fragments,

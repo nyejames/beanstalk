@@ -18,5 +18,5 @@ must_contain = [
 [backends.html_wasm]
 mode = "failure"
 warnings = "forbid"
-error_type = "LirTransformation"
-message_contains = ["Wasm backend does not yet support host function 'now_millis'"]
+error_type = "Rule"
+message_contains = ["External function 'now_millis' from package '@core/time' is not supported by the Wasm backend."]

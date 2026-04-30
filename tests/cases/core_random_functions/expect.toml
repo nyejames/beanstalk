@@ -18,5 +18,5 @@ must_contain = [
 [backends.html_wasm]
 mode = "failure"
 warnings = "forbid"
-error_type = "LirTransformation"
-message_contains = ["Wasm backend does not yet support host function 'random_float'"]
+error_type = "Rule"
+message_contains = ["External function 'random_float' from package '@core/random' is not supported by the Wasm backend."]
