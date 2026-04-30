@@ -91,11 +91,12 @@ pub fn start_cli() {
             match crate::projects::html_project::new_html_project::create_html_project_template(
                 options,
             ) {
-                Ok(_) => {
-                    say!("Creating new HTML project...");
+                Ok(_) => {}
+                Err(e) if e == "Cancelled project creation." => {
+                    println!("{e}");
                 }
                 Err(e) => {
-                    say!("Error creating project:  ", e);
+                    println!("{e}");
                 }
             }
         }

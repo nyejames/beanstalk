@@ -2,18 +2,19 @@
 //!
 //! WHAT: Performs preflight conflict checks and actual directory/file creation.
 //! WHY: Separates IO side effects from command parsing and user prompting.
-//!
-//! Note: Template content will be replaced by `templates.rs` in Phase 5.
 
-use std::{fs, path::Path};
+use std::fs;
+use std::path::{Path, PathBuf};
 
-use crate::projects::html_project::new_html_project::prompt::Prompt;
-use crate::projects::html_project::new_html_project::target::ResolvedProjectTarget;
+use crate::projects::html_project::new_html_project::{
+    CreateProjectReport, prompt::Prompt, target::ResolvedProjectTarget, templates,
+};
 
 const CONFIG_FILE: &str = "#config.bst";
 const PAGE_FILE: &str = "src/#page.bst";
 const DEV_MANIFEST: &str = "dev/.beanstalk_manifest";
 const RELEASE_MANIFEST: &str = "release/.beanstalk_manifest";
+const GITIGNORE_FILE: &str = ".gitignore";
 
 /// Relative paths of all scaffold-owned files.
 const SCAFFOLD_OWNED_FILES: &[&str] = &[CONFIG_FILE, PAGE_FILE, DEV_MANIFEST, RELEASE_MANIFEST];
@@ -88,48 +89,194 @@ fn find_scaffold_conflicts(project_dir: &Path) -> Vec<&'static str> {
         .collect()
 }
 
-/// Legacy scaffold write path.
+/// Write the complete scaffold to disk.
 ///
-/// Creates directories and writes a minimal `#config.bst` plus `dev/` and `release/`.
-/// Returns the fully resolved project directory path.
-///
-/// Phase 3: now receives a pre-resolved path from `target.rs` instead of doing
-/// its own validation.
-pub(crate) fn write_legacy_scaffold(project_dir: &Path, project_name: &str) -> Result<(), String> {
-    let name = if project_name.is_empty() {
-        "Beanstalk Project"
-    } else {
-        project_name
-    };
+/// WHAT: creates directories, writes scaffold-owned files, and handles `.gitignore`
+/// creation or append after confirming with the user.
+/// WHY: this is the single IO entry point for the scaffold; all file writes are
+/// ordered and tracked so the caller can report exactly what happened.
+pub(crate) fn write_scaffold(
+    target: &ResolvedProjectTarget,
+    force: bool,
+    prompt: &mut impl Prompt,
+) -> Result<CreateProjectReport, String> {
+    let project_dir = &target.project_dir;
 
-    fs::create_dir_all(project_dir).map_err(|e| e.to_string())?;
-
-    let config_content = format!(
-        "#project_name = \"{name}\"\n\
-         #entry_root = \"src\"\n\
-         #dev_folder = \"dev\"\n\
-         #output_folder = \"release\"\n\
-         #page_url_style = \"trailing_slash\"\n\
-         #redirect_index_html = true\n\
-         #name = \"html_project\"\n\
-         #version = \"0.1.0\"\n\
-         #author = \"\"\n\
-         #license = \"MIT\"\n"
-    );
-    fs::write(project_dir.join(CONFIG_FILE), config_content).map_err(|e| e.to_string())?;
-
-    for dir in SCAFFOLD_DIRECTORIES {
-        fs::create_dir_all(project_dir.join(dir)).map_err(|e| e.to_string())?;
+    // 1. Create missing directories (including the project dir itself).
+    if !project_dir.exists() {
+        fs::create_dir_all(project_dir).map_err(|e| {
+            format!(
+                "Project creation failed while creating directory {}: {e}.",
+                project_dir.display()
+            )
+        })?;
     }
 
-    println!("Project created at: {:?}", &project_dir);
+    let mut created: Vec<PathBuf> = Vec::new();
+    let mut replaced: Vec<PathBuf> = Vec::new();
 
-    Ok(())
+    for dir in SCAFFOLD_DIRECTORIES {
+        let dir_path = project_dir.join(dir);
+        if !dir_path.exists() {
+            fs::create_dir_all(&dir_path).map_err(|e| {
+                format!(
+                    "Project creation failed while creating directory {}: {e}.",
+                    dir_path.display()
+                )
+            })?;
+            created.push(PathBuf::from(dir));
+        }
+    }
+
+    // Helper to write a scaffold-owned file and track its disposition.
+    let mut write_scaffold_file = |relative: &str, content: &str| -> Result<(), String> {
+        let path = project_dir.join(relative);
+        let existed = path.exists();
+        fs::write(&path, content).map_err(|e| {
+            format!(
+                "Project creation failed while writing {relative}: {e}.\n\
+                 Some scaffold directories may already have been created. \
+                 No existing files were overwritten unless --force was confirmed."
+            )
+        })?;
+        if existed && force {
+            replaced.push(PathBuf::from(relative));
+        } else {
+            created.push(PathBuf::from(relative));
+        }
+        Ok(())
+    };
+
+    // 2. Config file.
+    write_scaffold_file(
+        CONFIG_FILE,
+        &templates::config_template(&target.project_name),
+    )?;
+
+    // 3. Starter page.
+    write_scaffold_file(PAGE_FILE, templates::page_template())?;
+
+    // 4. Dev manifest.
+    write_scaffold_file(DEV_MANIFEST, templates::manifest_template())?;
+
+    // 5. Release manifest.
+    write_scaffold_file(RELEASE_MANIFEST, templates::manifest_template())?;
+
+    // 6. .gitignore (handled separately — never overwritten).
+    let gitignore = handle_gitignore(project_dir, prompt)?;
+
+    if let Some(path) = gitignore.created {
+        created.push(path);
+    }
+
+    Ok(CreateProjectReport {
+        project_path: project_dir.clone(),
+        project_name: target.project_name.clone(),
+        created,
+        updated: gitignore.updated.into_iter().collect(),
+        skipped: gitignore.skipped.into_iter().collect(),
+        replaced,
+    })
+}
+
+/// Result of handling `.gitignore` during scaffold creation.
+struct GitignoreResult {
+    created: Option<PathBuf>,
+    updated: Option<PathBuf>,
+    skipped: Option<PathBuf>,
+}
+
+/// Handle `.gitignore` creation or append.
+///
+/// Returns a `GitignoreResult` where at most one field is Some.
+fn handle_gitignore(
+    project_dir: &Path,
+    prompt: &mut impl Prompt,
+) -> Result<GitignoreResult, String> {
+    let gitignore_path = project_dir.join(GITIGNORE_FILE);
+
+    if !gitignore_path.exists() {
+        let should_create =
+            prompt.confirm("Add a .gitignore with Beanstalk defaults? [Y/n]: ", true)?;
+        if should_create {
+            fs::write(&gitignore_path, templates::gitignore_template()).map_err(|e| {
+                format!(
+                    "Project creation failed while writing .gitignore: {e}.\n\
+                     Some scaffold directories may already have been created. \
+                     No existing files were overwritten unless --force was confirmed."
+                )
+            })?;
+            return Ok(GitignoreResult {
+                created: Some(PathBuf::from(GITIGNORE_FILE)),
+                updated: None,
+                skipped: None,
+            });
+        }
+        return Ok(GitignoreResult {
+            created: None,
+            updated: None,
+            skipped: Some(PathBuf::from(GITIGNORE_FILE)),
+        });
+    }
+
+    // Existing .gitignore — check whether it already contains the Beanstalk block.
+    let existing = fs::read_to_string(&gitignore_path).map_err(|e| {
+        format!(
+            "Project creation failed while reading existing .gitignore: {e}.\n\
+             Some scaffold directories may already have been created. \
+             No existing files were overwritten unless --force was confirmed."
+        )
+    })?;
+
+    if existing_contains_dev_block(&existing) {
+        return Ok(GitignoreResult {
+            created: None,
+            updated: None,
+            skipped: Some(PathBuf::from(GITIGNORE_FILE)),
+        });
+    }
+
+    let should_append = prompt.confirm(
+        ".gitignore already exists.\nAdd missing Beanstalk defaults to it? [Y/n]: ",
+        true,
+    )?;
+    if should_append {
+        let mut appended = existing;
+        if !appended.ends_with('\n') {
+            appended.push('\n');
+        }
+        appended.push_str(templates::gitignore_append_block());
+        fs::write(&gitignore_path, appended).map_err(|e| {
+            format!(
+                "Project creation failed while appending to .gitignore: {e}.\n\
+                 Some scaffold directories may already have been created. \
+                 No existing files were overwritten unless --force was confirmed."
+            )
+        })?;
+        return Ok(GitignoreResult {
+            created: None,
+            updated: Some(PathBuf::from(GITIGNORE_FILE)),
+            skipped: None,
+        });
+    }
+
+    Ok(GitignoreResult {
+        created: None,
+        updated: None,
+        skipped: Some(PathBuf::from(GITIGNORE_FILE)),
+    })
+}
+
+/// Check whether an existing `.gitignore` already contains the `/dev` Beanstalk rule.
+fn existing_contains_dev_block(content: &str) -> bool {
+    content.lines().any(|line| line.trim() == "/dev")
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{SCAFFOLD_DIRECTORIES, find_scaffold_conflicts, run_preflight_checks};
+    use super::{
+        SCAFFOLD_DIRECTORIES, find_scaffold_conflicts, run_preflight_checks, write_scaffold,
+    };
     use crate::projects::html_project::new_html_project::prompt::ScriptedPrompt;
     use crate::projects::html_project::new_html_project::target::ResolvedProjectTarget;
     use crate::projects::html_project::new_html_project::{
@@ -328,16 +475,340 @@ mod tests {
             raw_path: Some(project_dir.to_string_lossy().to_string()),
             force: true,
         };
-        let mut prompt =
-            ScriptedPrompt::new(vec![String::from("1"), String::from(""), String::from("y")]);
+        let mut prompt = ScriptedPrompt::new(vec![
+            String::from("1"),
+            String::from(""),
+            String::from("y"),
+            String::from("n"),
+        ]);
 
         let result = create_html_project_template_with_prompt(options, &mut prompt);
         assert!(result.is_ok(), "expected success, got: {result:?}");
 
         let config_content = fs::read_to_string(project_dir.join("#config.bst")).unwrap();
-        assert!(config_content.contains("project_name"));
+        assert!(config_content.contains("# name = "));
 
         let user_content = fs::read_to_string(project_dir.join("user-file.txt")).unwrap();
         assert_eq!(user_content, "keep me");
+    }
+
+    // Phase 5 scaffold write tests
+
+    #[test]
+    fn creates_full_default_scaffold_in_empty_temp_dir() {
+        let temp = tempfile::tempdir().unwrap();
+        let project_dir = temp.path().join("project");
+        let target = ResolvedProjectTarget {
+            project_dir: project_dir.clone(),
+            project_name: String::from("My Project"),
+            missing_directories: vec![project_dir.clone()],
+            target_existed: false,
+            target_was_non_empty: false,
+        };
+        let mut prompt = ScriptedPrompt::new(vec![String::from("y")]);
+
+        let report = write_scaffold(&target, false, &mut prompt).unwrap();
+
+        assert!(project_dir.join("#config.bst").exists());
+        assert!(project_dir.join("src/#page.bst").exists());
+        assert!(project_dir.join("lib").exists());
+        assert!(project_dir.join("dev/.beanstalk_manifest").exists());
+        assert!(project_dir.join("release/.beanstalk_manifest").exists());
+        assert!(project_dir.join(".gitignore").exists());
+
+        assert!(report.created.contains(&PathBuf::from("#config.bst")));
+        assert!(report.created.contains(&PathBuf::from("src/#page.bst")));
+        assert!(report.created.contains(&PathBuf::from("lib")));
+        assert!(
+            report
+                .created
+                .contains(&PathBuf::from("dev/.beanstalk_manifest"))
+        );
+        assert!(
+            report
+                .created
+                .contains(&PathBuf::from("release/.beanstalk_manifest"))
+        );
+        assert!(report.created.contains(&PathBuf::from(".gitignore")));
+    }
+
+    #[test]
+    fn generated_config_exactly_matches_expected_content() {
+        let temp = tempfile::tempdir().unwrap();
+        let project_dir = temp.path().join("project");
+        let target = ResolvedProjectTarget {
+            project_dir: project_dir.clone(),
+            project_name: String::from("Test Site"),
+            missing_directories: vec![project_dir.clone()],
+            target_existed: false,
+            target_was_non_empty: false,
+        };
+        let mut prompt = ScriptedPrompt::new(vec![String::from("y")]);
+
+        write_scaffold(&target, false, &mut prompt).unwrap();
+
+        let content = fs::read_to_string(project_dir.join("#config.bst")).unwrap();
+        assert_eq!(content, super::templates::config_template("Test Site"));
+    }
+
+    #[test]
+    fn generated_page_exactly_matches_expected_content() {
+        let temp = tempfile::tempdir().unwrap();
+        let project_dir = temp.path().join("project");
+        let target = ResolvedProjectTarget {
+            project_dir: project_dir.clone(),
+            project_name: String::from("Test Site"),
+            missing_directories: vec![project_dir.clone()],
+            target_existed: false,
+            target_was_non_empty: false,
+        };
+        let mut prompt = ScriptedPrompt::new(vec![String::from("y")]);
+
+        write_scaffold(&target, false, &mut prompt).unwrap();
+
+        let content = fs::read_to_string(project_dir.join("src/#page.bst")).unwrap();
+        assert_eq!(content, super::templates::page_template());
+    }
+
+    #[test]
+    fn manifests_are_generated_under_dev_and_release() {
+        let temp = tempfile::tempdir().unwrap();
+        let project_dir = temp.path().join("project");
+        let target = ResolvedProjectTarget {
+            project_dir: project_dir.clone(),
+            project_name: String::from("Test Site"),
+            missing_directories: vec![project_dir.clone()],
+            target_existed: false,
+            target_was_non_empty: false,
+        };
+        let mut prompt = ScriptedPrompt::new(vec![String::from("y")]);
+
+        write_scaffold(&target, false, &mut prompt).unwrap();
+
+        let dev_manifest = fs::read_to_string(project_dir.join("dev/.beanstalk_manifest")).unwrap();
+        let release_manifest =
+            fs::read_to_string(project_dir.join("release/.beanstalk_manifest")).unwrap();
+        assert_eq!(dev_manifest, super::templates::manifest_template());
+        assert_eq!(release_manifest, super::templates::manifest_template());
+    }
+
+    #[test]
+    fn lib_is_created_and_empty() {
+        let temp = tempfile::tempdir().unwrap();
+        let project_dir = temp.path().join("project");
+        let target = ResolvedProjectTarget {
+            project_dir: project_dir.clone(),
+            project_name: String::from("Test Site"),
+            missing_directories: vec![project_dir.clone()],
+            target_existed: false,
+            target_was_non_empty: false,
+        };
+        let mut prompt = ScriptedPrompt::new(vec![String::from("y")]);
+
+        write_scaffold(&target, false, &mut prompt).unwrap();
+
+        let lib = project_dir.join("lib");
+        assert!(lib.is_dir());
+        let mut entries = fs::read_dir(&lib).unwrap();
+        assert!(entries.next().is_none());
+    }
+
+    #[test]
+    fn gitignore_is_created_by_default() {
+        let temp = tempfile::tempdir().unwrap();
+        let project_dir = temp.path().join("project");
+        let target = ResolvedProjectTarget {
+            project_dir: project_dir.clone(),
+            project_name: String::from("Test Site"),
+            missing_directories: vec![project_dir.clone()],
+            target_existed: false,
+            target_was_non_empty: false,
+        };
+        let mut prompt = ScriptedPrompt::new(vec![String::from("y")]);
+
+        let report = write_scaffold(&target, false, &mut prompt).unwrap();
+
+        let content = fs::read_to_string(project_dir.join(".gitignore")).unwrap();
+        assert_eq!(content, super::templates::gitignore_template());
+        assert!(report.created.contains(&PathBuf::from(".gitignore")));
+    }
+
+    #[test]
+    fn existing_gitignore_gets_append_block_when_confirmed() {
+        let temp = tempfile::tempdir().unwrap();
+        let project_dir = temp.path().join("project");
+        fs::create_dir(&project_dir).unwrap();
+        fs::write(project_dir.join(".gitignore"), "node_modules/\n").unwrap();
+
+        let target = ResolvedProjectTarget {
+            project_dir: project_dir.clone(),
+            project_name: String::from("Test Site"),
+            missing_directories: Vec::new(),
+            target_existed: true,
+            target_was_non_empty: true,
+        };
+        let mut prompt = ScriptedPrompt::new(vec![String::from("y")]);
+
+        let report = write_scaffold(&target, false, &mut prompt).unwrap();
+
+        let content = fs::read_to_string(project_dir.join(".gitignore")).unwrap();
+        assert!(content.contains("node_modules/"));
+        assert!(content.contains("# Beanstalk"));
+        assert!(content.contains("/dev"));
+        assert!(report.updated.contains(&PathBuf::from(".gitignore")));
+    }
+
+    #[test]
+    fn existing_gitignore_is_unchanged_when_declined() {
+        let temp = tempfile::tempdir().unwrap();
+        let project_dir = temp.path().join("project");
+        fs::create_dir(&project_dir).unwrap();
+        fs::write(project_dir.join(".gitignore"), "node_modules/\n").unwrap();
+
+        let target = ResolvedProjectTarget {
+            project_dir: project_dir.clone(),
+            project_name: String::from("Test Site"),
+            missing_directories: Vec::new(),
+            target_existed: true,
+            target_was_non_empty: true,
+        };
+        let mut prompt = ScriptedPrompt::new(vec![String::from("n")]);
+
+        let report = write_scaffold(&target, false, &mut prompt).unwrap();
+
+        let content = fs::read_to_string(project_dir.join(".gitignore")).unwrap();
+        assert_eq!(content, "node_modules/\n");
+        assert!(report.skipped.contains(&PathBuf::from(".gitignore")));
+    }
+
+    #[test]
+    fn existing_gitignore_with_dev_is_not_duplicated() {
+        let temp = tempfile::tempdir().unwrap();
+        let project_dir = temp.path().join("project");
+        fs::create_dir(&project_dir).unwrap();
+        fs::write(project_dir.join(".gitignore"), "/dev\n").unwrap();
+
+        let target = ResolvedProjectTarget {
+            project_dir: project_dir.clone(),
+            project_name: String::from("Test Site"),
+            missing_directories: Vec::new(),
+            target_existed: true,
+            target_was_non_empty: true,
+        };
+        let mut prompt = ScriptedPrompt::new(Vec::new());
+
+        let report = write_scaffold(&target, false, &mut prompt).unwrap();
+
+        let content = fs::read_to_string(project_dir.join(".gitignore")).unwrap();
+        assert_eq!(content, "/dev\n");
+        assert!(report.skipped.contains(&PathBuf::from(".gitignore")));
+    }
+
+    #[test]
+    fn project_name_is_escaped_in_config() {
+        let temp = tempfile::tempdir().unwrap();
+        let project_dir = temp.path().join("project");
+        let target = ResolvedProjectTarget {
+            project_dir: project_dir.clone(),
+            project_name: String::from(r#"Say "hello"\back"#),
+            missing_directories: vec![project_dir.clone()],
+            target_existed: false,
+            target_was_non_empty: false,
+        };
+        let mut prompt = ScriptedPrompt::new(vec![String::from("y")]);
+
+        write_scaffold(&target, false, &mut prompt).unwrap();
+
+        let content = fs::read_to_string(project_dir.join("#config.bst")).unwrap();
+        assert!(content.contains(r#"# name = "Say \"hello\"\\back""#));
+    }
+
+    #[test]
+    fn force_replaces_scaffold_owned_files_only() {
+        let temp = tempfile::tempdir().unwrap();
+        let project_dir = temp.path().join("project");
+        fs::create_dir(&project_dir).unwrap();
+        fs::create_dir(project_dir.join("src")).unwrap();
+        fs::create_dir(project_dir.join("dev")).unwrap();
+        fs::create_dir(project_dir.join("release")).unwrap();
+        fs::write(project_dir.join("#config.bst"), b"old config").unwrap();
+        fs::write(project_dir.join("src/#page.bst"), b"old page").unwrap();
+        fs::write(project_dir.join("dev/.beanstalk_manifest"), b"old manifest").unwrap();
+        fs::write(
+            project_dir.join("release/.beanstalk_manifest"),
+            b"old manifest",
+        )
+        .unwrap();
+        fs::write(project_dir.join("user-file.txt"), b"keep me").unwrap();
+
+        let target = ResolvedProjectTarget {
+            project_dir: project_dir.clone(),
+            project_name: String::from("Test Site"),
+            missing_directories: Vec::new(),
+            target_existed: true,
+            target_was_non_empty: true,
+        };
+        let mut prompt = ScriptedPrompt::new(vec![String::from("y"), String::from("y")]);
+
+        let report = write_scaffold(&target, true, &mut prompt).unwrap();
+
+        assert!(report.replaced.contains(&PathBuf::from("#config.bst")));
+        assert!(report.replaced.contains(&PathBuf::from("src/#page.bst")));
+        assert!(
+            report
+                .replaced
+                .contains(&PathBuf::from("dev/.beanstalk_manifest"))
+        );
+        assert!(
+            report
+                .replaced
+                .contains(&PathBuf::from("release/.beanstalk_manifest"))
+        );
+
+        let user_content = fs::read_to_string(project_dir.join("user-file.txt")).unwrap();
+        assert_eq!(user_content, "keep me");
+    }
+
+    #[test]
+    fn gitignore_never_overwritten_even_with_force() {
+        let temp = tempfile::tempdir().unwrap();
+        let project_dir = temp.path().join("project");
+        fs::create_dir(&project_dir).unwrap();
+        fs::write(project_dir.join(".gitignore"), b"custom\n").unwrap();
+
+        let target = ResolvedProjectTarget {
+            project_dir: project_dir.clone(),
+            project_name: String::from("Test Site"),
+            missing_directories: Vec::new(),
+            target_existed: true,
+            target_was_non_empty: true,
+        };
+        let mut prompt = ScriptedPrompt::new(vec![String::from("n")]);
+
+        let report = write_scaffold(&target, true, &mut prompt).unwrap();
+
+        let content = fs::read_to_string(project_dir.join(".gitignore")).unwrap();
+        assert_eq!(content, "custom\n");
+        assert!(report.skipped.contains(&PathBuf::from(".gitignore")));
+    }
+
+    #[test]
+    fn write_failure_returns_precise_error() {
+        let temp = tempfile::tempdir().unwrap();
+        let project_dir = temp.path().join("project");
+        let target = ResolvedProjectTarget {
+            project_dir: project_dir.clone(),
+            project_name: String::from("Test Site"),
+            missing_directories: vec![project_dir.clone()],
+            target_existed: false,
+            target_was_non_empty: false,
+        };
+        let mut prompt = ScriptedPrompt::new(vec![String::from("y")]);
+
+        // Create a file where the project directory should be to force create_dir_all to fail.
+        fs::write(&project_dir, b"").unwrap();
+
+        let error = write_scaffold(&target, false, &mut prompt).unwrap_err();
+        assert!(error.contains("Project creation failed"));
     }
 }
