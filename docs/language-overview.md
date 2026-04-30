@@ -765,7 +765,7 @@ if Status::Ready is Status::Busy:
 ;
 ```
 
-Comparing choices of different types is always rejected. Direct payload field access outside pattern matching remains deferred.
+Payload fields are immutable after construction. Direct payload field access and payload field mutation outside pattern matching remain deferred.
 
 ## Type aliases
 Type aliases give another name to an existing type at compile-time.

@@ -474,6 +474,11 @@ path = "choice_payload_equality_same_payload_true"
 tags = ["integration","language","choices","equality","js-backend"]
 
 [[case]]
+id = "choice_payload_structural_equality_does_not_allow_access"
+path = "choice_payload_structural_equality_does_not_allow_access"
+tags = ["integration","language","choices","equality","js-backend"]
+
+[[case]]
 id = "choice_payload_equality_different_payload_false"
 path = "choice_payload_equality_different_payload_false"
 tags = ["integration","language","choices","equality","js-backend"]
@@ -526,6 +531,11 @@ tags = ["integration","diagnostics","choices","equality"]
 [[case]]
 id = "choice_payload_direct_field_access_deferred"
 path = "choice_payload_direct_field_access_deferred"
+tags = ["integration","diagnostics","choices"]
+
+[[case]]
+id = "choice_payload_field_mutation_rejected"
+path = "choice_payload_field_mutation_rejected"
 tags = ["integration","diagnostics","choices"]
 
 [[case]]
