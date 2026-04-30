@@ -765,6 +765,16 @@ if Status::Ready is Status::Busy:
 ;
 ```
 
+Constructed payload choices can be compared directly in equality expressions:
+
+```beanstalk
+Result :: Ok, Err | message String |;
+
+if Result::Err("bad") is Result::Err("bad"):
+    io("equal")
+;
+```
+
 Payload fields are immutable after construction. Direct payload field access and payload field mutation outside pattern matching remain deferred.
 
 ## Type aliases

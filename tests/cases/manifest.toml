@@ -254,6 +254,16 @@ path = "choice_payload_constructor_named_success"
 tags = ["integration","language","choices"]
 
 [[case]]
+id = "choice_equality_positional_constructor_success"
+path = "choice_equality_positional_constructor_success"
+tags = ["integration","language","choices","equality","js-backend"]
+
+[[case]]
+id = "choice_equality_named_constructor_success"
+path = "choice_equality_named_constructor_success"
+tags = ["integration","language","choices","equality","js-backend"]
+
+[[case]]
 id = "choice_payload_constructor_mixed_success"
 path = "choice_payload_constructor_mixed_success"
 tags = ["integration","language","choices"]
@@ -429,6 +439,16 @@ path = "choice_payload_constructor_type_mismatch_rejected"
 tags = ["integration","diagnostics","choices"]
 
 [[case]]
+id = "choice_equality_constructor_wrong_arity_rejected"
+path = "choice_equality_constructor_wrong_arity_rejected"
+tags = ["integration","diagnostics","choices","equality"]
+
+[[case]]
+id = "choice_equality_constructor_wrong_field_rejected"
+path = "choice_equality_constructor_wrong_field_rejected"
+tags = ["integration","diagnostics","choices","equality"]
+
+[[case]]
 id = "choice_payload_constructor_without_args_rejected"
 path = "choice_payload_constructor_without_args_rejected"
 tags = ["integration","diagnostics","choices"]
@@ -457,6 +477,21 @@ tags = ["integration","language","choices","equality"]
 id = "choice_unit_equality_imported_variant_success"
 path = "choice_unit_equality_imported_variant_success"
 tags = ["integration","language","choices","equality","imports"]
+
+[[case]]
+id = "choice_equality_imported_constructor_success"
+path = "choice_equality_imported_constructor_success"
+tags = ["integration","language","choices","equality","imports","js-backend"]
+
+[[case]]
+id = "choice_equality_aliased_constructor_success"
+path = "choice_equality_aliased_constructor_success"
+tags = ["integration","language","choices","equality","imports","js-backend"]
+
+[[case]]
+id = "choice_equality_reexported_constructor_success_or_deferred"
+path = "choice_equality_reexported_constructor_success_or_deferred"
+tags = ["integration","language","choices","equality","imports","js-backend"]
 
 [[case]]
 id = "choice_unit_equality_aliased_import_success"
