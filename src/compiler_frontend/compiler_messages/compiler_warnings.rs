@@ -40,4 +40,5 @@ pub enum WarningKind {
     LargeTrackedAsset,
     IdentifierNamingConvention,
     ImportAliasCaseMismatch,
+    UnreachableMatchArm,
 }

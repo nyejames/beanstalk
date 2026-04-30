@@ -1,5 +1,6 @@
 [backends.html]
 mode = "failure"
-warnings = "forbid"
+warnings = "exact"
+warning_count = 1
 error_type = "Rule"
 message_contains = ["captured"]

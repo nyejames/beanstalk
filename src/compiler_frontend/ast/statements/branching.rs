@@ -9,7 +9,7 @@
 use crate::compiler_frontend::ast::ast_nodes::{
     AstNode, Declaration, MatchExhaustiveness, NodeKind,
 };
-use crate::compiler_frontend::ast::expressions::expression::Expression;
+use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::parse_expression::{
     create_expression, create_expression_until,
 };
@@ -23,7 +23,7 @@ use crate::compiler_frontend::ast::statements::match_patterns::{
 };
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::compiler_warnings::CompilerWarning;
+use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::deferred_feature_diagnostics::deferred_feature_rule_error;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
@@ -37,6 +37,32 @@ struct ParsedCaseArm {
     /// Tracks which choice variant this arm consumes so duplicates can be rejected early.
     matched_choice_variant: Option<StringId>,
     pattern_location: SourceLocation,
+}
+
+/// Hashable key for comparing literal match patterns.
+///
+/// WHAT: extracts the normalized value from an `ExpressionKind` so duplicate literal
+/// arms can be detected without requiring `PartialEq` on the full `Expression` type.
+/// WHY: keeps the comparison local to the match parser and avoids adding derived
+/// equality to the entire expression hierarchy.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+enum LiteralPatternKey {
+    Int(i64),
+    Float(u64), // stored as to_bits for hashable equality
+    StringSlice(StringId),
+    Bool(bool),
+    Char(char),
+}
+
+fn extract_literal_key(expr: &Expression) -> Option<LiteralPatternKey> {
+    match &expr.kind {
+        ExpressionKind::Int(v) => Some(LiteralPatternKey::Int(*v)),
+        ExpressionKind::Float(v) => Some(LiteralPatternKey::Float(v.to_bits())),
+        ExpressionKind::StringSlice(id) => Some(LiteralPatternKey::StringSlice(*id)),
+        ExpressionKind::Bool(v) => Some(LiteralPatternKey::Bool(*v)),
+        ExpressionKind::Char(v) => Some(LiteralPatternKey::Char(*v)),
+        _ => None,
+    }
 }
 
 fn peek_next_non_newline_token(token_stream: &FileTokens) -> Option<&Token> {
@@ -159,6 +185,10 @@ fn create_match_node(
     let mut match_arm_indent: Option<i32> = None;
     // Choice exhaustiveness/duplication checks rely on the set of consumed variant names.
     let mut matched_choice_variants: FxHashSet<StringId> = FxHashSet::default();
+    // Tracks literal patterns already seen so duplicate literal arms can be warned.
+    let mut matched_literal_patterns: FxHashSet<LiteralPatternKey> = FxHashSet::default();
+    // Once an unconditional capture pattern is seen, all later arms are unreachable.
+    let mut seen_unconditional_capture = false;
 
     loop {
         token_stream.skip_newlines();
@@ -228,6 +258,14 @@ fn create_match_node(
                 }
                 seen_else = true;
 
+                if seen_unconditional_capture {
+                    warnings.push(CompilerWarning::new(
+                        "This pattern arm is unreachable because an earlier arm already matches this case.",
+                        token_stream.current_location(),
+                        WarningKind::UnreachableMatchArm,
+                    ));
+                }
+
                 else_block = Some(parse_else_arm(
                     token_stream,
                     &match_context,
@@ -240,17 +278,6 @@ fn create_match_node(
                 match_arm_indent
                     .get_or_insert(token_stream.current_location().start_pos.char_column);
 
-                if seen_else {
-                    return_rule_error!(
-                        "Match arms cannot appear after an 'else =>' arm",
-                        token_stream.current_location(),
-                        {
-                            CompilationStage => "Match Statement Parsing",
-                            PrimarySuggestion => "Move this arm before the else arm",
-                        }
-                    )
-                }
-
                 let parsed_case = parse_case_arm(
                     &subject,
                     token_stream,
@@ -259,20 +286,45 @@ fn create_match_node(
                     string_table,
                 )?;
 
-                if let Some(variant_name) = parsed_case.matched_choice_variant
-                    && !matched_choice_variants.insert(variant_name)
-                {
-                    return_rule_error!(
-                        format!(
-                            "Duplicate match arm for choice variant '{}'. Each variant can only be matched once.",
-                            string_table.resolve(variant_name)
-                        ),
-                        parsed_case.pattern_location,
-                        {
-                            CompilationStage => "Match Statement Parsing",
-                            PrimarySuggestion => "Remove duplicate variant arms or merge their logic into one arm",
-                        }
-                    );
+                if seen_else {
+                    warnings.push(CompilerWarning::new(
+                        "This pattern arm is unreachable because 'else =>' must be the final arm.",
+                        parsed_case.pattern_location.clone(),
+                        WarningKind::UnreachableMatchArm,
+                    ));
+                } else if seen_unconditional_capture {
+                    warnings.push(CompilerWarning::new(
+                        "This pattern arm is unreachable because an earlier arm already matches this case.",
+                        parsed_case.pattern_location.clone(),
+                        WarningKind::UnreachableMatchArm,
+                    ));
+                } else {
+                    if let Some(variant_name) = parsed_case.matched_choice_variant
+                        && !matched_choice_variants.insert(variant_name)
+                    {
+                        warnings.push(CompilerWarning::new(
+                            "This pattern arm is unreachable because an earlier arm already matches this case.",
+                            parsed_case.pattern_location.clone(),
+                            WarningKind::UnreachableMatchArm,
+                        ));
+                    }
+
+                    if let MatchPattern::Literal(expr) = &parsed_case.arm.pattern
+                        && let Some(key) = extract_literal_key(expr)
+                        && !matched_literal_patterns.insert(key)
+                    {
+                        warnings.push(CompilerWarning::new(
+                            "This pattern arm is unreachable because an earlier arm already matches this case.",
+                            parsed_case.pattern_location.clone(),
+                            WarningKind::UnreachableMatchArm,
+                        ));
+                    }
+
+                    if matches!(parsed_case.arm.pattern, MatchPattern::Capture { .. })
+                        && parsed_case.arm.guard.is_none()
+                    {
+                        seen_unconditional_capture = true;
+                    }
                 }
 
                 has_guarded_arms |= parsed_case.arm.guard.is_some();

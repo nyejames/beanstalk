@@ -155,7 +155,7 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
             [: Partial]
             [: Broad literal, choice-match, and payload-capture coverage, including exhaustiveness and diagnostics.]
             [: JS / HTML]
-            [: Literal patterns, choice variant patterns (including payload captures with `field as local_name` aliases), relational ordered-scalar patterns including strings, guards, else arms, and general capture patterns are supported. Wildcard patterns using '_' are permanently rejected; use else => instead. Nested choice payload patterns remain deferred. `as` in non-choice match patterns is rejected with a structured diagnostic.]
+            [: Literal patterns, choice variant patterns (including payload captures with `field as local_name` aliases), relational ordered-scalar patterns including strings, guards, else arms, and general capture patterns are supported. Wildcard patterns using '_' are permanently rejected; use else => instead. Nested choice payload patterns remain deferred. `as` in non-choice match patterns is rejected with a structured diagnostic. Unreachable arms (after else, after unconditional capture, duplicate literals, and duplicate unit choice variants) are warned.]
         ]
 
         [data:
@@ -629,7 +629,7 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
         [data:
             [: General capture / tagged match patterns]
             [: Supported]
-            [: [codesnippet:pattern_capture_binds_scrutinee_success]]
+            [: [codesnippet:pattern_capture_binds_scrutinee_success], [codesnippet:pattern_capture_before_else_makes_else_unreachable_warning], [codesnippet:pattern_capture_after_literal_warning_or_reachable], [codesnippet:pattern_unreachable_after_capture_warning]]
             [: General capture patterns (for example `case captured =>`) are supported for non-choice scrutinees. Choice payload capture patterns with `field as local_name` aliases are also supported. Nested payload patterns and `|...|` tagged patterns remain deferred.]
         ]
 

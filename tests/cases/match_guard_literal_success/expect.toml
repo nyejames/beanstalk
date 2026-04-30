@@ -2,7 +2,8 @@ entry = "."
 
 [backends.html]
 mode = "success"
-warnings = "forbid"
+warnings = "exact"
+warning_count = 1
 rendered_output_contains = ["match_guard_literal_success result=allowed"]
 
 [[backends.html.artifact_assertions]]

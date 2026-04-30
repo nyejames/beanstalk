@@ -1,4 +1,5 @@
 [backends.html]
 mode = "success"
-warnings = "forbid"
+warnings = "exact"
+warning_count = 1
 rendered_output_contains = ["pattern_capture_guard_success result=big"]

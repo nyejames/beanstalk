@@ -1,0 +1,5 @@
+[backends.html]
+mode = "success"
+warnings = "exact"
+warning_count = 3
+rendered_output_contains = ["pattern_unreachable_after_capture_warning result=hello"]

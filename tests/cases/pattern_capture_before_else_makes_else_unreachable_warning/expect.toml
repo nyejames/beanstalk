@@ -1,4 +1,5 @@
 [backends.html]
 mode = "success"
-warnings = "forbid"
+warnings = "exact"
+warning_count = 1
 rendered_output_contains = ["pattern_capture_before_else_makes_else_unreachable_warning result=hello"]
