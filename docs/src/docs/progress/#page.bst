@@ -551,7 +551,7 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
         [data:
             [: Import re-exports]
             [: Supported]
-            [: Targeted coverage for single, aliased, grouped, nested grouped, external function, external type, duplicate, collision, no-local-binding, and invalid-location diagnostics.]
+            [: Targeted coverage for single, aliased, grouped, nested grouped, cross-library, external function, external type, duplicate, collision, no-local-binding, and invalid-location diagnostics.]
             [: `#import @...` is valid only in `#mod.bst` module facades (including source libraries). It re-exports source or external package symbols through the facade export map without creating a local binding in `#mod.bst` or sibling implementation files. Grouped imports and per-symbol aliases are supported; wildcard and namespace imports remain deferred.]
         ]
 

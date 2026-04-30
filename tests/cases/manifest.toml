@@ -3156,6 +3156,26 @@ path = "source_lib_reexport_no_local_binding"
 tags = ["integration", "language", "imports", "facade", "diagnostics"]
 
 [[case]]
+id = "source_lib_reexport_cross_library_single"
+path = "source_lib_reexport_cross_library_single"
+tags = ["integration", "language", "imports", "facade", "source-libraries"]
+
+[[case]]
+id = "source_lib_reexport_cross_library_alias"
+path = "source_lib_reexport_cross_library_alias"
+tags = ["integration", "language", "imports", "facade", "source-libraries"]
+
+[[case]]
+id = "source_lib_reexport_cross_library_not_exported"
+path = "source_lib_reexport_cross_library_not_exported"
+tags = ["integration", "language", "imports", "facade", "source-libraries", "diagnostics"]
+
+[[case]]
+id = "source_lib_reexport_grouped_alias"
+path = "source_lib_reexport_grouped_alias"
+tags = ["integration", "language", "imports", "facade"]
+
+[[case]]
 id = "source_lib_facade_direct_mod_external_rejected"
 path = "source_lib_facade_direct_mod_external_rejected"
 tags = ["integration", "source-libraries", "facades", "imports", "diagnostics"]

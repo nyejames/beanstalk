@@ -234,12 +234,12 @@ fn reject_direct_mod_file_import(
 /// bypass it to import internal implementation symbols.
 fn try_resolve_facade_import(
     importer_file: &InternedPath,
-    import: &FileImport,
+    header_path: &InternedPath,
     facade_exports: &FxHashMap<String, FxHashSet<FacadeExportEntry>>,
     file_library_membership: &FxHashMap<InternedPath, String>,
     string_table: &StringTable,
 ) -> Option<FacadeImportResolution> {
-    let components = import.header_path.as_components();
+    let components = header_path.as_components();
     if components.is_empty() {
         return None;
     }
@@ -254,7 +254,7 @@ fn try_resolve_facade_import(
     }
 
     // External import — look up the symbol name in the facade exports.
-    let symbol_name = import.header_path.name()?;
+    let symbol_name = header_path.name()?;
     let exports = facade_exports.get(library_prefix)?;
     for entry in exports {
         if entry.export_name == symbol_name {
@@ -475,7 +475,7 @@ pub(crate) fn resolve_file_import_bindings(
             //      External importers cannot bypass the facade to import internal symbols.
             if let Some(facade_result) = try_resolve_facade_import(
                 &source_file,
-                &import,
+                &import.header_path,
                 facade_exports,
                 file_library_membership,
                 string_table,
@@ -654,15 +654,44 @@ pub(crate) fn resolve_re_exports(
         };
 
         for re_export in re_exports {
-            let resolved = resolve_single_import_target(
+            let target = if let Some(facade_result) = try_resolve_facade_import(
+                &source_file,
                 &re_export.header_path,
-                &re_export.location,
-                &module_symbols.module_file_paths,
-                &importable_symbol_paths,
-                &module_symbols.importable_symbol_exported,
-                external_package_registry,
+                &module_symbols.facade_exports,
+                &module_symbols.file_library_membership,
                 string_table,
-            )?;
+            ) {
+                match facade_result {
+                    FacadeImportResolution::Source(path) => FacadeExportTarget::Source(path),
+                    FacadeImportResolution::External(id) => FacadeExportTarget::External(id),
+                    FacadeImportResolution::NotExported {
+                        library_prefix: target_prefix,
+                    } => {
+                        return Err(CompilerError::new_rule_error(
+                            format!(
+                                "Cannot re-export '{}' from '@{target_prefix}' because it is not exported by the library's #mod.bst facade. Library modules expose symbols only through their facade.",
+                                re_export.header_path.to_portable_string(string_table)
+                            ),
+                            re_export.location.clone(),
+                        ));
+                    }
+                }
+            } else {
+                let resolved = resolve_single_import_target(
+                    &re_export.header_path,
+                    &re_export.location,
+                    &module_symbols.module_file_paths,
+                    &importable_symbol_paths,
+                    &module_symbols.importable_symbol_exported,
+                    external_package_registry,
+                    string_table,
+                )?;
+
+                match resolved {
+                    ResolvedImportTarget::Source(path) => FacadeExportTarget::Source(path),
+                    ResolvedImportTarget::External(id) => FacadeExportTarget::External(id),
+                }
+            };
 
             let Some(symbol_name) = re_export.header_path.name() else {
                 return Err(CompilerError::new_rule_error(
@@ -682,11 +711,6 @@ pub(crate) fn resolve_re_exports(
                     &mut warnings,
                 );
             }
-
-            let target = match resolved {
-                ResolvedImportTarget::Source(path) => FacadeExportTarget::Source(path),
-                ResolvedImportTarget::External(id) => FacadeExportTarget::External(id),
-            };
 
             let entry = FacadeExportEntry {
                 export_name,
