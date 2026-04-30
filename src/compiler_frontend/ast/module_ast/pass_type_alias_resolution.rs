@@ -12,7 +12,9 @@
 
 use crate::compiler_frontend::ast::import_bindings::FileImportBindings;
 use crate::compiler_frontend::ast::module_ast::build_state::AstBuildState;
-use crate::compiler_frontend::compiler_errors::CompilerMessages;
+use crate::compiler_frontend::compiler_errors::{
+    CompilerError, CompilerMessages, ErrorMetaDataKey,
+};
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::declaration_syntax::type_syntax::resolve_named_types_in_data_type;
 use crate::compiler_frontend::external_packages::ExternalSymbolId;
@@ -87,6 +89,35 @@ impl<'a> AstBuildState<'a> {
                 string_table,
             )
             .map_err(|error| self.error_messages(error, string_table))?;
+
+            // Reject aliases to external opaque types for Alpha.
+            // WHAT: external types are opaque and cannot be aliased by user code.
+            // WHY: aliases to opaque types would let user code pretend it owns a nominal type
+            //     that it cannot construct or field-access, leading to confusing semantics.
+            if let DataType::External { type_id } = &resolved_target {
+                let type_name = self
+                    .external_package_registry
+                    .get_type_by_id(*type_id)
+                    .map(|def| def.name.to_string())
+                    .unwrap_or_else(|| "external".to_string());
+                let mut metadata = std::collections::HashMap::new();
+                metadata.insert(
+                    ErrorMetaDataKey::CompilationStage,
+                    "AST Construction".to_string(),
+                );
+                metadata.insert(
+                    ErrorMetaDataKey::PrimarySuggestion,
+                    "Use the external type directly instead of creating a type alias".to_string(),
+                );
+                let error = CompilerError::new_rule_error_with_metadata(
+                    format!(
+                        "Cannot create a type alias for external type '{type_name}'. External types are opaque and cannot be aliased."
+                    ),
+                    header.name_location.clone(),
+                    metadata,
+                );
+                return Err(self.error_messages(error, string_table));
+            }
 
             self.resolved_type_aliases_by_path
                 .insert(alias_path.to_owned(), resolved_target);

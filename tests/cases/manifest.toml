@@ -2625,6 +2625,11 @@ path = "external_type_construction_rejected"
 tags = ["integration", "language", "external-packages"]
 
 [[case]]
+id = "external_type_field_access_rejected"
+path = "external_type_field_access_rejected"
+tags = ["integration", "language", "external-packages", "diagnostics"]
+
+[[case]]
 id = "external_package_import_alias"
 path = "external_package_import_alias"
 tags = ["integration", "language", "external-packages", "aliases"]

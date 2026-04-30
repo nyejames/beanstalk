@@ -1,3 +1,7 @@
+entry = "."
+
 [backends.html]
-mode = "success"
+mode = "failure"
 warnings = "forbid"
+error_type = "Rule"
+message_contains = ["Cannot create a type alias for external type", "IO"]

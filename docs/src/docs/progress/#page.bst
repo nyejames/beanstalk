@@ -185,9 +185,9 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
         [data:
             [: Type aliases]
             [: Supported]
-            [: Broad alias declaration, collection/option/import/external target, visibility, cycle, duplicate, value-misuse, constructor-misuse, and import-alias interaction coverage.]
+            [: Broad alias declaration, collection/option/import target, visibility, cycle, duplicate, value-misuse, constructor-misuse, and import-alias interaction coverage.]
             [: Frontend-owned]
-            [: Type aliases are transparent and annotation-only. Imported aliases are file-local; exporting an imported type under a public name requires declaring a real exported type alias.]
+            [: Type aliases are transparent and annotation-only. Imported aliases are file-local; exporting an imported type under a public name requires declaring a real exported type alias. Aliases to external opaque types are rejected with structured diagnostics.]
         ]
 
         [data:
@@ -240,7 +240,7 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
                 - External constants are implemented for scalar compile-time values and lower through expression parsing as ordinary literals.
                 - External ABI metadata includes [codesnippet:F64], [codesnippet:I32], [codesnippet:Bool], and [codesnippet:Utf8Str] for the current core package skeletons.
                 - Explicit imports are required for non-prelude external packages. [codesnippet:io] and [codesnippet:IO] are registered as external prelude symbols; builtin error symbols are compiler-owned bare names.
-                - External function aliases, external constant aliases, and external opaque type aliases are supported. Grouped external aliases are supported.
+                - External function aliases and external constant aliases are supported. External opaque type aliases are rejected with structured diagnostics. Grouped external aliases are supported.
                 - Prelude collision rejection is enforced: explicit imports cannot shadow prelude names.
                 - External receiver methods are not a recommended expansion surface yet. Prefer free functions until external methods are keyed by nominal receiver type rather than broad ABI metadata.
                 - JS lowering now resolves external runtime names through per-function lowering metadata in the registry.

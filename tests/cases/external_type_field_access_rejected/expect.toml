@@ -4,4 +4,4 @@ entry = "."
 mode = "failure"
 warnings = "forbid"
 error_type = "Rule"
-message_contains = ["Cannot create a type alias for external type", "IO"]
+message_contains = ["Property or method 'something' not found for external type"]
