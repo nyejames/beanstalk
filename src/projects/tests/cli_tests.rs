@@ -3,6 +3,7 @@
 use super::{Command, get_command, integration_tests_exit_code};
 use crate::compiler_tests::integration_test_runner::IntegrationRunSummary;
 use crate::projects::dev_server::DevServerOptions;
+use crate::projects::html_project::new_html_project::NewHtmlProjectOptions;
 
 fn args(values: &[&str]) -> Vec<String> {
     values.iter().map(|value| value.to_string()).collect()
@@ -43,13 +44,25 @@ fn build_command_rejects_unknown_flags() {
 #[test]
 fn new_html_command_uses_current_directory_when_path_is_missing() {
     let command = get_command(&args(&["new", "html"])).expect("new html command should parse");
-    assert_eq!(command, Command::NewHTMLProject(String::new()));
+    assert_eq!(
+        command,
+        Command::NewHTMLProject(NewHtmlProjectOptions {
+            raw_path: None,
+            force: false,
+        })
+    );
 }
 
 #[test]
 fn new_html_command_parses_project_path() {
     let command = get_command(&args(&["new", "html", "site"])).expect("new html should parse");
-    assert_eq!(command, Command::NewHTMLProject(String::from("site")));
+    assert_eq!(
+        command,
+        Command::NewHTMLProject(NewHtmlProjectOptions {
+            raw_path: Some(String::from("site")),
+            force: false,
+        })
+    );
 }
 
 #[test]
@@ -141,6 +154,45 @@ fn new_html_command_rejects_multiple_paths() {
     let error = get_command(&args(&["new", "html", "a", "b"]))
         .expect_err("multiple new html paths should fail");
     assert!(error.contains("at most one path"));
+}
+
+#[test]
+fn new_html_command_parses_force_flag_after_path() {
+    let command =
+        get_command(&args(&["new", "html", "site", "--force"])).expect("command should parse");
+    assert_eq!(
+        command,
+        Command::NewHTMLProject(NewHtmlProjectOptions {
+            raw_path: Some(String::from("site")),
+            force: true,
+        })
+    );
+}
+
+#[test]
+fn new_html_command_parses_force_flag_before_path() {
+    let command =
+        get_command(&args(&["new", "html", "--force", "site"])).expect("command should parse");
+    assert_eq!(
+        command,
+        Command::NewHTMLProject(NewHtmlProjectOptions {
+            raw_path: Some(String::from("site")),
+            force: true,
+        })
+    );
+}
+
+#[test]
+fn new_html_command_rejects_unknown_flags() {
+    let error =
+        get_command(&args(&["new", "html", "--yes"])).expect_err("unknown flag should fail");
+    assert!(error.contains("Unknown new flag"));
+}
+
+#[test]
+fn build_command_rejects_force_flag() {
+    let error = get_command(&args(&["build", "--force"])).expect_err("build --force should fail");
+    assert!(error.contains("Unknown build flag"));
 }
 
 #[test]

@@ -14,18 +14,14 @@ use crate::compiler_tests::integration_test_runner::{
 use crate::projects::check::{self, CheckOptions};
 use crate::projects::dev_server::{self, DevServerOptions};
 use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;
-use crate::projects::html_project::new_html_project;
+use crate::projects::html_project::new_html_project::NewHtmlProjectOptions;
 use saying::say;
 use std::time::Instant;
-use std::{
-    env,
-    io::{self, Write},
-    process,
-};
+use std::{env, process};
 
 #[derive(Debug, PartialEq, Eq)]
 enum Command {
-    NewHTMLProject(String), // Creates a new HTML project template
+    NewHTMLProject(NewHtmlProjectOptions), // Creates a new HTML project template
 
     Build(String), // Builds a file or project
 
@@ -91,39 +87,10 @@ pub fn start_cli() {
             print_help(true);
         }
 
-        Command::NewHTMLProject(path) => {
-            let project_path = if path.is_empty() {
-                match confirm_new_html_in_current_directory() {
-                    Ok(true) => path,
-                    Ok(false) => {
-                        say!("Cancelled project creation.");
-                        return;
-                    }
-                    Err(error) => {
-                        say!(error);
-                        return;
-                    }
-                }
-            } else {
-                path
-            };
-
-            let args = match prompt_user_for_input("Project name: ") {
-                Ok(args) => args,
-                Err(error) => {
-                    say!(error);
-                    return;
-                }
-            };
-            let name_args = args.first();
-
-            let project_name = match name_args {
-                Some(name) => name,
-                None => "",
-            };
-
-            match new_html_project::create_html_project_template(project_path, project_name, flags)
-            {
+        Command::NewHTMLProject(options) => {
+            match crate::projects::html_project::new_html_project::create_html_project_template(
+                options,
+            ) {
                 Ok(_) => {
                     say!("Creating new HTML project...");
                 }
@@ -267,23 +234,28 @@ fn get_flags(args: &[String]) -> Vec<Flag> {
 fn parse_new_command(args: &[String]) -> Result<Command, String> {
     match args.get(1).map(String::as_str) {
         Some("html") => {
-            let mut path = String::new();
+            let mut raw_path = None;
+            let mut force = false;
             let mut index = 2usize;
 
             while let Some(arg) = args.get(index) {
                 match arg.as_str() {
+                    "--force" => {
+                        force = true;
+                        index += 1;
+                    }
                     "--release" | "--hide-warnings" | "--hide-timers" | "--show-warnings"
                     | "--html-wasm" => {
                         index += 1;
                     }
                     _ if arg.starts_with("--") => {
                         return Err(format!(
-                            "Unknown new flag: '{arg}'. Supported shared flags are --release, --hide-warnings, --hide-timers, and --html-wasm."
+                            "Unknown new flag: '{arg}'. Supported flags are --force."
                         ));
                     }
                     _ => {
-                        if path.is_empty() {
-                            path = arg.to_owned();
+                        if raw_path.is_none() {
+                            raw_path = Some(arg.to_owned());
                             index += 1;
                         } else {
                             return Err(String::from(
@@ -294,7 +266,7 @@ fn parse_new_command(args: &[String]) -> Result<Command, String> {
                 }
             }
 
-            Ok(Command::NewHTMLProject(path))
+            Ok(Command::NewHTMLProject(NewHtmlProjectOptions { raw_path, force }))
         }
         _ => {
             Err("Invalid project type - currently only 'html' is supported (try 'cargo run -- new html')".to_string())
@@ -489,35 +461,6 @@ fn parse_dev_command(args: &[String]) -> Result<Command, String> {
     Ok(Command::Dev { path, options })
 }
 
-fn prompt_user_for_input(msg: &str) -> Result<Vec<String>, String> {
-    let mut input = String::new();
-    print!("{msg}");
-    io::stdout()
-        .flush()
-        .map_err(|error| format!("Failed to flush the prompt to stdout: {error}"))?;
-    io::stdin()
-        .read_line(&mut input)
-        .map_err(|error| format!("Failed to read input from stdin: {error}"))?;
-    let args: Vec<String> = input.split_whitespace().map(String::from).collect();
-
-    Ok(args)
-}
-
-fn confirm_new_html_in_current_directory() -> Result<bool, String> {
-    let current_directory = env::current_dir()
-        .map_err(|error| format!("Failed to resolve current directory: {error}"))?;
-    say!(
-        "No project path specified. Current directory: ",
-        current_directory.display()
-    );
-    let answer = prompt_user_for_input("Create the new HTML project in this directory? [y/N]: ")?;
-    let Some(first_answer) = answer.first() else {
-        return Ok(false);
-    };
-    let normalized = first_answer.to_ascii_lowercase();
-    Ok(matches!(normalized.as_str(), "y" | "yes"))
-}
-
 fn print_help(commands_only: bool) {
     if !commands_only {
         say!(Bright Black "------------------------------------");
@@ -531,7 +474,7 @@ fn print_help(commands_only: bool) {
     say!("  build [path]      - Builds a project");
     say!("  check [path]      - Runs frontend-only diagnostics (no artifacts)");
     say!("  dev [path]        - Runs the hot reloading dev server");
-    say!("  new html [path]   - Creates a minimal HTML project scaffold");
+    say!("  new html [path] [--force] - Creates an HTML project scaffold");
     say!("  tests [--backend <id>] - Runs the integration test suite");
 
     say!(Green Bold "\nFlags:");
