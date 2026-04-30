@@ -705,6 +705,11 @@ impl<'a> HirValidator<'a> {
                     ));
                 }
             }
+
+            HirPattern::Capture => {
+                // Capture patterns have no extra invariants beyond the local
+                // registration performed during lowering.
+            }
         }
 
         Ok(())

@@ -941,3 +941,107 @@ fn lowers_choice_match_arms_to_hir_choice_variant_patterns() {
         "exhaustive choice matches should not synthesize wildcard fallback arms"
     );
 }
+
+/// Verifies that `MatchPattern::Capture` lowers to `HirPattern::Capture` and
+/// produces a capture local assignment inside the arm block.
+///
+/// WHY: capture patterns are a distinct pattern kind; HIR must represent them
+/// explicitly so backends emit the correct unconditional branch.
+#[test]
+fn lowers_capture_pattern_to_hir_capture_with_assignment() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let x = super::symbol("x", &mut string_table);
+    let capture_name = string_table.intern("captured");
+    let capture_path = InternedPath::from_single_str("captured", &mut string_table);
+
+    let match_node = node(
+        NodeKind::Match {
+            scrutinee: Expression::reference(
+                x.clone(),
+                DataType::Int,
+                test_location(2),
+                ValueMode::ImmutableReference,
+            ),
+            arms: vec![MatchArm {
+                pattern: MatchPattern::Capture {
+                    name: capture_name,
+                    binding_path: capture_path.clone(),
+                    location: test_location(3),
+                },
+                guard: None,
+                body: vec![node(
+                    NodeKind::Rvalue(Expression::int(
+                        1,
+                        test_location(3),
+                        ValueMode::ImmutableOwned,
+                    )),
+                    test_location(3),
+                )],
+            }],
+            default: Some(vec![node(
+                NodeKind::Rvalue(Expression::int(
+                    2,
+                    test_location(4),
+                    ValueMode::ImmutableOwned,
+                )),
+                test_location(4),
+            )]),
+            exhaustiveness: MatchExhaustiveness::HasDefault,
+        },
+        test_location(2),
+    );
+
+    let start_fn = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![param(x, DataType::Int, false, test_location(1))],
+            returns: vec![],
+        },
+        vec![match_node],
+        test_location(1),
+    );
+
+    let ast = build_ast(vec![start_fn], entry_path);
+    let module = lower_ast(ast, &mut string_table).expect("HIR lowering should succeed");
+
+    let start = &module.functions[module.start_function.0 as usize];
+    let entry_block = &module.blocks[start.entry.0 as usize];
+
+    let arms = match &entry_block.terminator {
+        HirTerminator::Match { arms, .. } => arms,
+        _ => panic!("expected match terminator"),
+    };
+
+    assert_eq!(
+        arms.len(),
+        2,
+        "should have capture arm + default wildcard arm"
+    );
+
+    assert!(
+        matches!(arms[0].pattern, HirPattern::Capture),
+        "first arm should be Capture pattern"
+    );
+
+    assert!(
+        matches!(arms[1].pattern, HirPattern::Wildcard),
+        "default arm should be Wildcard pattern"
+    );
+
+    // Verify the capture arm block contains an assignment statement.
+    let capture_block = &module.blocks[arms[0].body.0 as usize];
+    let has_capture_assignment = capture_block.statements.iter().any(|stmt| {
+        matches!(
+            &stmt.kind,
+            crate::compiler_frontend::hir::statements::HirStatementKind::Assign {
+                target: crate::compiler_frontend::hir::places::HirPlace::Local(_),
+                value: _,
+            }
+        )
+    });
+    assert!(
+        has_capture_assignment,
+        "capture arm block should contain an assignment of the scrutinee to the capture local"
+    );
+}

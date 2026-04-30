@@ -155,7 +155,7 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
             [: Partial]
             [: Broad literal, choice-match, and payload-capture coverage, including exhaustiveness and diagnostics.]
             [: JS / HTML]
-            [: Literal patterns, choice variant patterns (including payload captures with `field as local_name` aliases), relational ordered-scalar patterns including strings, guards, and else are supported. Wildcard patterns using '_' are permanently rejected; use else => instead. General capture/tagged patterns and nested payload patterns remain deferred. `as` in non-choice match patterns is rejected with a structured diagnostic.]
+            [: Literal patterns, choice variant patterns (including payload captures with `field as local_name` aliases), relational ordered-scalar patterns including strings, guards, else arms, and general capture patterns are supported. Wildcard patterns using '_' are permanently rejected; use else => instead. Nested choice payload patterns remain deferred. `as` in non-choice match patterns is rejected with a structured diagnostic.]
         ]
 
         [data:
@@ -628,9 +628,9 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
 
         [data:
             [: General capture / tagged match patterns]
-            [: Deferred]
-            [: [codesnippet:diagnostic_match_deferred_capture_pattern]]
-            [: Choice payload capture patterns are now supported. General capture/tagged patterns and rename captures remain deferred.]
+            [: Supported]
+            [: [codesnippet:pattern_capture_binds_scrutinee_success]]
+            [: General capture patterns (for example `case captured =>`) are supported for non-choice scrutinees. Choice payload capture patterns with `field as local_name` aliases are also supported. Nested payload patterns and `|...|` tagged patterns remain deferred.]
         ]
 
         [data:

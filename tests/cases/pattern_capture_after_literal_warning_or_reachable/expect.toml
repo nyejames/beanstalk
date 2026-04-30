@@ -1,0 +1,4 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["pattern_capture_after_literal_warning_or_reachable result=hello"]

@@ -65,6 +65,16 @@ pub enum MatchPattern {
         captures: Vec<ChoicePayloadCapture>,
         location: SourceLocation,
     },
+
+    /// General capture pattern that binds the entire scrutinee value.
+    ///
+    /// WHAT: a bare symbol in pattern position that is not a known constructor
+    /// becomes a capture binding visible only in the arm guard and body.
+    Capture {
+        name: StringId,
+        binding_path: InternedPath,
+        location: SourceLocation,
+    },
 }
 
 impl MatchPattern {
@@ -73,7 +83,8 @@ impl MatchPattern {
             MatchPattern::Literal(expression) => &expression.location,
             MatchPattern::Wildcard { location }
             | MatchPattern::Relational { location, .. }
-            | MatchPattern::ChoiceVariant { location, .. } => location,
+            | MatchPattern::ChoiceVariant { location, .. }
+            | MatchPattern::Capture { location, .. } => location,
         }
     }
 
@@ -81,6 +92,14 @@ impl MatchPattern {
     pub fn choice_captures(&self) -> Option<&[ChoicePayloadCapture]> {
         match self {
             MatchPattern::ChoiceVariant { captures, .. } => Some(captures),
+            _ => None,
+        }
+    }
+
+    /// Return the binding path if this is a general capture pattern.
+    pub fn capture_binding_path(&self) -> Option<&InternedPath> {
+        match self {
+            MatchPattern::Capture { binding_path, .. } => Some(binding_path),
             _ => None,
         }
     }

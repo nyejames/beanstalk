@@ -42,49 +42,76 @@ impl<'a> HirBuilder<'a> {
         scrutinee_ast: &Expression,
         location: &SourceLocation,
     ) -> Result<Vec<LocalId>, CompilerError> {
-        let MatchPattern::ChoiceVariant {
-            nominal_path,
-            captures,
-            ..
-        } = &arm.pattern
-        else {
-            return Ok(Vec::new());
-        };
+        match &arm.pattern {
+            MatchPattern::ChoiceVariant {
+                nominal_path,
+                captures,
+                ..
+            } => {
+                if captures.is_empty() {
+                    return Ok(Vec::new());
+                }
 
-        if captures.is_empty() {
-            return Ok(Vec::new());
+                self.ensure_choice_capture_scrutinee(scrutinee_ast, location)?;
+                let _choice_id = self.resolve_choice_id(nominal_path, location)?;
+                let region = self.current_region_or_error(location)?;
+
+                let mut local_ids = Vec::with_capacity(captures.len());
+                for capture in captures {
+                    let field_ty =
+                        self.lower_capture_field_type(&capture.field_type, &capture.location)?;
+                    let local_id = self.allocate_local_id();
+                    let block_id = self.current_block_id_or_error(&capture.location)?;
+
+                    self.register_local_in_block(
+                        block_id,
+                        HirLocal {
+                            id: local_id,
+                            ty: field_ty,
+                            mutable: false,
+                            region,
+                            source_info: Some(capture.location.clone()),
+                        },
+                        &capture.location,
+                    )?;
+
+                    self.locals_by_name
+                        .insert(capture.binding_path.clone(), local_id);
+                    self.side_table
+                        .bind_local_name(local_id, capture.binding_path.clone());
+                    local_ids.push(local_id);
+                }
+
+                Ok(local_ids)
+            }
+
+            MatchPattern::Capture { binding_path, .. } => {
+                let ty = self.lower_data_type(&scrutinee_ast.data_type, location)?;
+                let region = self.current_region_or_error(location)?;
+                let local_id = self.allocate_local_id();
+                let block_id = self.current_block_id_or_error(location)?;
+
+                self.register_local_in_block(
+                    block_id,
+                    HirLocal {
+                        id: local_id,
+                        ty,
+                        mutable: false,
+                        region,
+                        source_info: Some(location.clone()),
+                    },
+                    location,
+                )?;
+
+                self.locals_by_name.insert(binding_path.clone(), local_id);
+                self.side_table
+                    .bind_local_name(local_id, binding_path.clone());
+
+                Ok(vec![local_id])
+            }
+
+            _ => Ok(Vec::new()),
         }
-
-        self.ensure_choice_capture_scrutinee(scrutinee_ast, location)?;
-        let _choice_id = self.resolve_choice_id(nominal_path, location)?;
-        let region = self.current_region_or_error(location)?;
-
-        let mut local_ids = Vec::with_capacity(captures.len());
-        for capture in captures {
-            let field_ty = self.lower_capture_field_type(&capture.field_type, &capture.location)?;
-            let local_id = self.allocate_local_id();
-            let block_id = self.current_block_id_or_error(&capture.location)?;
-
-            self.register_local_in_block(
-                block_id,
-                HirLocal {
-                    id: local_id,
-                    ty: field_ty,
-                    mutable: false,
-                    region,
-                    source_info: Some(capture.location.clone()),
-                },
-                &capture.location,
-            )?;
-
-            self.locals_by_name
-                .insert(capture.binding_path.clone(), local_id);
-            self.side_table
-                .bind_local_name(local_id, capture.binding_path.clone());
-            local_ids.push(local_id);
-        }
-
-        Ok(local_ids)
     }
 
     /// Replace guard reads of capture locals with direct payload reads from the scrutinee.
@@ -108,6 +135,21 @@ impl<'a> HirBuilder<'a> {
         Ok(substitute_local_expressions(guard, &substitutions))
     }
 
+    /// Replace a single capture local read in a guard with the scrutinee expression.
+    ///
+    /// WHAT: for general capture patterns, the guard evaluates before the arm block runs,
+    /// so any reference to the capture binding must be rewritten to the scrutinee value.
+    pub(super) fn substitute_guard_capture_with_scrutinee(
+        &self,
+        guard: &HirExpression,
+        capture_local: LocalId,
+        scrutinee_hir: &HirExpression,
+    ) -> HirExpression {
+        let mut substitutions = FxHashMap::default();
+        substitutions.insert(capture_local, scrutinee_hir.clone());
+        substitute_local_expressions(guard, &substitutions)
+    }
+
     /// Emit `Assign` statements that materialize choice payload captures at arm entry.
     pub(super) fn emit_match_arm_capture_assignments(
         &mut self,
@@ -117,42 +159,61 @@ impl<'a> HirBuilder<'a> {
         scrutinee_ast: &Expression,
         location: &SourceLocation,
     ) -> Result<(), CompilerError> {
-        let MatchPattern::ChoiceVariant { tag, captures, .. } = &arm.pattern else {
-            return Ok(());
-        };
+        match &arm.pattern {
+            MatchPattern::ChoiceVariant { tag, captures, .. } => {
+                let context =
+                    self.match_capture_context(arm, scrutinee_ast, scrutinee_hir, location)?;
 
-        let context = self.match_capture_context(arm, scrutinee_ast, scrutinee_hir, location)?;
+                if captures.is_empty() {
+                    return Ok(());
+                }
 
-        if captures.is_empty() {
-            return Ok(());
+                debug_assert_eq!(
+                    captures.len(),
+                    capture_locals.len(),
+                    "capture count must match registered local count"
+                );
+
+                for (capture, &local_id) in captures.iter().zip(capture_locals.iter()) {
+                    let field_ty =
+                        self.lower_capture_field_type(&capture.field_type, &capture.location)?;
+                    let payload_get = self.make_capture_payload_get(
+                        &context,
+                        *tag,
+                        capture.field_index,
+                        field_ty,
+                        &capture.location,
+                    );
+
+                    self.emit_statement_kind(
+                        HirStatementKind::Assign {
+                            target: HirPlace::Local(local_id),
+                            value: payload_get,
+                        },
+                        &capture.location,
+                    )?;
+                }
+
+                Ok(())
+            }
+
+            MatchPattern::Capture { .. } => {
+                if capture_locals.is_empty() {
+                    return Ok(());
+                }
+                let local_id = capture_locals[0];
+                self.emit_statement_kind(
+                    HirStatementKind::Assign {
+                        target: HirPlace::Local(local_id),
+                        value: scrutinee_hir.clone(),
+                    },
+                    location,
+                )?;
+                Ok(())
+            }
+
+            _ => Ok(()),
         }
-
-        debug_assert_eq!(
-            captures.len(),
-            capture_locals.len(),
-            "capture count must match registered local count"
-        );
-
-        for (capture, &local_id) in captures.iter().zip(capture_locals.iter()) {
-            let field_ty = self.lower_capture_field_type(&capture.field_type, &capture.location)?;
-            let payload_get = self.make_capture_payload_get(
-                &context,
-                *tag,
-                capture.field_index,
-                field_ty,
-                &capture.location,
-            );
-
-            self.emit_statement_kind(
-                HirStatementKind::Assign {
-                    target: HirPlace::Local(local_id),
-                    value: payload_get,
-                },
-                &capture.location,
-            )?;
-        }
-
-        Ok(())
     }
 
     /// Lower an arm body while capture names resolve to that arm's local IDs.
@@ -279,15 +340,21 @@ fn arm_capture_bindings(
     arm: &MatchArm,
     capture_locals: &[LocalId],
 ) -> Vec<(InternedPath, LocalId)> {
-    let MatchPattern::ChoiceVariant { captures, .. } = &arm.pattern else {
-        return Vec::new();
-    };
-
-    captures
-        .iter()
-        .zip(capture_locals.iter())
-        .map(|(capture, &local_id)| (capture.binding_path.clone(), local_id))
-        .collect()
+    match &arm.pattern {
+        MatchPattern::ChoiceVariant { captures, .. } => captures
+            .iter()
+            .zip(capture_locals.iter())
+            .map(|(capture, &local_id)| (capture.binding_path.clone(), local_id))
+            .collect(),
+        MatchPattern::Capture { binding_path, .. } => {
+            if let Some(&local_id) = capture_locals.first() {
+                vec![(binding_path.clone(), local_id)]
+            } else {
+                Vec::new()
+            }
+        }
+        _ => Vec::new(),
+    }
 }
 
 fn substitute_local_expressions(

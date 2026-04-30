@@ -1,0 +1,4 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["pattern_capture_binds_scrutinee_success result=hello"]

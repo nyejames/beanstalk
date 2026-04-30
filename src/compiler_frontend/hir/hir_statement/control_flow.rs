@@ -269,22 +269,19 @@ impl<'a> HirBuilder<'a> {
         };
         let mut merge_block = None;
 
-        // Register capture locals before lowering guards so guard expressions can reference them.
+        // Register capture locals and lower each arm's pattern/guard together.
         // WHY: guards are lowered into HirExpression here, but evaluated at runtime in the parent
-        // block context. Capture locals are function-scoped in JS, so registering them early lets
-        // variable reference lowering resolve capture names.
+        // block context. Capture locals must be in `locals_by_name` during guard lowering so
+        // variable references resolve. Registering per-arm prevents later arms from overwriting
+        // earlier capture bindings before their guards are lowered.
         let mut arm_capture_locals: Vec<Vec<LocalId>> = Vec::with_capacity(arms.len());
+        let mut hir_arms = Vec::with_capacity(arms.len() + 1);
         for (index, arm) in arms.iter().enumerate() {
             let arm_block = arm_blocks[index];
             self.set_current_block(arm_block, location)?;
             let locals = self.register_match_arm_capture_locals(arm, scrutinee, location)?;
             arm_capture_locals.push(locals);
-        }
 
-        let mut hir_arms = Vec::with_capacity(arms.len() + 1);
-        for (index, arm) in arms.iter().enumerate() {
-            let arm_block = arm_blocks[index];
-            self.set_current_block(arm_block, location)?;
             let lowered_pattern = self.lower_match_pattern(&arm.pattern, &scrutinee.data_type)?;
             let lowered_guard = match &arm.guard {
                 Some(guard) => {
@@ -299,6 +296,17 @@ impl<'a> HirBuilder<'a> {
                                 &scrutinee_value,
                                 location,
                             )?)
+                        } else {
+                            Some(guard_expr)
+                        }
+                    } else if let MatchPattern::Capture { .. } = &arm.pattern {
+                        if !arm_capture_locals[index].is_empty() {
+                            let capture_local = arm_capture_locals[index][0];
+                            Some(self.substitute_guard_capture_with_scrutinee(
+                                &guard_expr,
+                                capture_local,
+                                &scrutinee_value,
+                            ))
                         } else {
                             Some(guard_expr)
                         }
@@ -456,6 +464,8 @@ impl<'a> HirBuilder<'a> {
             }
 
             MatchPattern::Wildcard { .. } => Ok(HirPattern::Wildcard),
+
+            MatchPattern::Capture { .. } => Ok(HirPattern::Capture),
 
             MatchPattern::Relational { op, value, .. } => {
                 let lowered_value = self.lower_match_literal_pattern(value)?;

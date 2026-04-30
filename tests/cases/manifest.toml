@@ -3499,3 +3499,43 @@ tags = ["integration", "imports", "module-privacy", "diagnostics"]
 id = "module_boundary_submodule_facade_allowed"
 path = "module_boundary_submodule_facade_allowed"
 tags = ["integration", "imports", "module-privacy"]
+
+[[case]]
+id = "pattern_capture_binds_scrutinee_success"
+path = "pattern_capture_binds_scrutinee_success"
+tags = ["integration", "language", "pattern-matching"]
+
+[[case]]
+id = "pattern_capture_arm_scope_only"
+path = "pattern_capture_arm_scope_only"
+tags = ["integration", "language", "pattern-matching"]
+
+[[case]]
+id = "pattern_capture_guard_success"
+path = "pattern_capture_guard_success"
+tags = ["integration", "language", "pattern-matching"]
+
+[[case]]
+id = "pattern_capture_immutable_binding"
+path = "pattern_capture_immutable_binding"
+tags = ["integration", "language", "pattern-matching", "diagnostics"]
+
+[[case]]
+id = "pattern_capture_rejects_underscore"
+path = "pattern_capture_rejects_underscore"
+tags = ["integration", "language", "pattern-matching", "diagnostics"]
+
+[[case]]
+id = "pattern_capture_name_collision_rejected"
+path = "pattern_capture_name_collision_rejected"
+tags = ["integration", "language", "pattern-matching", "diagnostics"]
+
+[[case]]
+id = "pattern_capture_after_literal_warning_or_reachable"
+path = "pattern_capture_after_literal_warning_or_reachable"
+tags = ["integration", "language", "pattern-matching"]
+
+[[case]]
+id = "pattern_capture_before_else_makes_else_unreachable_warning"
+path = "pattern_capture_before_else_makes_else_unreachable_warning"
+tags = ["integration", "language", "pattern-matching"]

@@ -34,4 +34,9 @@ pub enum HirPattern {
         choice_id: ChoiceId,
         variant_index: usize,
     },
+    /// General capture pattern that matches unconditionally.
+    ///
+    /// WHAT: marks an arm that binds the entire scrutinee value.
+    /// The local assignment is emitted separately inside the arm block.
+    Capture,
 }

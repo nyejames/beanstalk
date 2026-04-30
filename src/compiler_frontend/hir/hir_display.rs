@@ -590,6 +590,7 @@ impl<'a> HirDisplayContext<'a> {
                     self.render_expression(value)
                 )
             }
+            HirPattern::Capture => "capture".to_owned(),
             HirPattern::ChoiceVariant {
                 choice_id,
                 variant_index,

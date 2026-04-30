@@ -445,9 +445,24 @@ fn parse_case_arm(
                 (pattern, matched_choice_variant, pattern_location, arm_scope)
             }
             subject_type => {
-                let pattern = parse_non_choice_pattern(token_stream, subject_type, string_table)?;
-                let location = pattern.location().to_owned();
-                (pattern, None, location, match_context.clone())
+                if let TokenKind::Symbol(name) = token_stream.current_token_kind() {
+                    let name = *name;
+                    let location = token_stream.current_location();
+                    token_stream.advance();
+                    let (arm_scope, pattern) = build_arm_scope_with_capture(
+                        match_context,
+                        name,
+                        &location,
+                        &subject.data_type,
+                        string_table,
+                    )?;
+                    (pattern, None, location.clone(), arm_scope)
+                } else {
+                    let pattern =
+                        parse_non_choice_pattern(token_stream, subject_type, string_table)?;
+                    let location = pattern.location().to_owned();
+                    (pattern, None, location, match_context.clone())
+                }
             }
         };
 
@@ -599,6 +614,62 @@ fn build_arm_scope_with_choice_captures(
             location: parsed.location,
         },
     ))
+}
+
+/// Build a capture arm scope and pattern with a resolved binding path.
+///
+/// WHAT: clones the parent match context and adds a `Declaration` entry for the
+/// general capture binding so the arm guard and body can reference the scrutinee value.
+/// WHY: capture patterns must be scoped to a single arm and participate in normal
+/// no-shadowing rules.
+///
+/// Validates:
+/// - No capture name shadows an existing visible local (Beanstalk no-shadowing rule).
+fn build_arm_scope_with_capture(
+    match_context: &ScopeContext,
+    capture_name: StringId,
+    capture_location: &SourceLocation,
+    capture_type: &DataType,
+    string_table: &mut StringTable,
+) -> Result<(ScopeContext, MatchPattern), CompilerError> {
+    let mut arm_scope = match_context.clone();
+
+    if let Some(_existing) = arm_scope.get_reference(&capture_name) {
+        return_rule_error!(
+            format!(
+                "Capture binding '{}' shadows an existing variable. Beanstalk does not allow shadowing.",
+                string_table.resolve(capture_name)
+            ),
+            capture_location.clone(),
+            {
+                CompilationStage => "Match Statement Parsing",
+                PrimarySuggestion => "Rename the capture or the outer variable to avoid collision",
+            }
+        );
+    }
+
+    let binding_name_str = string_table.resolve(capture_name).to_owned();
+    let binding_path = arm_scope.scope.join_str(&binding_name_str, string_table);
+
+    let declaration = Declaration {
+        id: binding_path.clone(),
+        value: Expression::new(
+            crate::compiler_frontend::ast::expressions::expression::ExpressionKind::NoValue,
+            capture_location.clone(),
+            capture_type.clone(),
+            crate::compiler_frontend::value_mode::ValueMode::ImmutableOwned,
+        ),
+    };
+
+    arm_scope.add_var(declaration);
+
+    let pattern = MatchPattern::Capture {
+        name: capture_name,
+        binding_path,
+        location: capture_location.clone(),
+    };
+
+    Ok((arm_scope, pattern))
 }
 
 /// Verify that a match statement covers all possible values.

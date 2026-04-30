@@ -285,7 +285,9 @@ fn normalize_control_flow_templates(
                             string_table,
                         )?;
                     }
-                    MatchPattern::Wildcard { .. } | MatchPattern::ChoiceVariant { .. } => {}
+                    MatchPattern::Wildcard { .. }
+                    | MatchPattern::ChoiceVariant { .. }
+                    | MatchPattern::Capture { .. } => {}
                 }
                 if let Some(guard) = &mut arm.guard {
                     normalize_expression_templates(
