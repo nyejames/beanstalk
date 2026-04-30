@@ -440,7 +440,7 @@ body {
      <td style="padding: 0.2em 0.5em;"> Supported</td>
      <td style="padding: 0.2em 0.5em;"> Broad parser, declaration, constructor, match, import, assignment, return, JS carrier-shape, payload coverage, unit equality, and payload structural equality coverage.</td>
      <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
-     <td style="padding: 0.2em 0.5em;"> Unit variants use `Choice::Variant`. Empty constructor calls are invalid. Record-body payload declarations are parsed and type-checked. Payload constructors support positional and named arguments. Payload match extraction uses constructor-like patterns with original field names or `field as local_name` aliases. Const choice values are supported for unit and payload variants. Payload shorthand is rejected. Structural equality compares variant identity and payload fields recursively when every payload field supports equality. Unsupported payload field types and different choice types are rejected with specific diagnostics. Payload fields are immutable. Generic choices, recursive choices, and direct payload field access remain deferred. Choices, Options, and Results share a unified HIR variant construction representation while retaining distinct semantic type kinds.</td>
+     <td style="padding: 0.2em 0.5em;"> Unit variants, payload variants, constructor calls, imports, assignment, return, JS carrier shape, payload matching, and structural equality are supported. Structural equality compares variant identity and payload fields recursively when every payload field supports equality. Payload fields are immutable. Payload shorthand, generic choices, recursive choices, nested payload patterns, direct payload field access, and variant defaults remain deferred or rejected with diagnostics.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -1418,14 +1418,41 @@ body {
     ">choice_equality_different_choice_types_rejected</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
+    ">choice_diagnostic_choice_vs_non_choice_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
     ">choice_equality_payload_unsupported_struct_rejected</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">choice_equality_payload_unsupported_collection_rejected</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">choice_equality_payload_unsupported_external_rejected</span></td>
-     <td style="padding: 0.2em 0.5em;"> Structural equality is supported for unit and payload choices in type checking and JS lowering. Payload fields are compared recursively when all fields support equality. Unsupported payload field types and different choice types are rejected with specific diagnostics.</td>
+    ">choice_equality_payload_unsupported_external_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_payload_structural_equality_does_not_allow_access</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_equality_positional_constructor_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_equality_named_constructor_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_equality_imported_constructor_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_equality_aliased_constructor_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_equality_reexported_constructor_success_or_deferred</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_equality_constructor_wrong_arity_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">choice_equality_constructor_wrong_field_rejected</span></td>
+     <td style="padding: 0.2em 0.5em;"> Structural equality is supported for unit and payload choices in type checking and JS lowering. Payload fields are compared recursively when all fields support equality. Unsupported payload field types, different choice types, and choice-vs-non-choice comparisons are rejected with specific diagnostics.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">

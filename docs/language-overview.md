@@ -731,6 +731,14 @@ io(value.double()) -- 42
 
 Choices are nominal tagged unions. Each variant is either a unit variant or a record payload variant.
 
+### Unit choice declaration
+
+```beanstalk
+Status :: Ready, Busy;
+```
+
+### Payload choice declaration
+
 ```beanstalk
 Result ::
     Ok,
@@ -738,14 +746,21 @@ Result ::
 ;
 ```
 
+### Constructors
+
 Unit variants are constructed with `Choice::Variant`. Payload variants are constructed with `Choice::Variant(...)` using positional or named arguments.
 
 ```beanstalk
 success = Result::Ok
+
+-- Positional constructor
 failure = Result::Err("bad request", 400)
+
+-- Named constructor
+named = Result::Err(message = "bad request", code = 400)
 ```
 
-### Structural equality contract
+### Structural equality
 
 Two choice values are structurally equal when they share the same choice type, the same variant, and every payload field is equal in declaration order. Choice equality is only supported when **every** payload field type across **all** variants supports structural equality.
 
@@ -757,6 +772,8 @@ Supported payload field types for structural equality:
 Unsupported field types reject the comparison with a diagnostic:
 - Structs, collections, functions, external opaque types, and templates do not support structural equality.
 
+Unit variants compare by variant identity:
+
 ```beanstalk
 Status :: Ready, Busy;
 
@@ -765,7 +782,7 @@ if Status::Ready is Status::Busy:
 ;
 ```
 
-Constructed payload choices can be compared directly in equality expressions:
+Constructed payload choices can be compared directly:
 
 ```beanstalk
 Result :: Ok, Err | message String |;
@@ -775,7 +792,9 @@ if Result::Err("bad") is Result::Err("bad"):
 ;
 ```
 
-Payload fields are immutable after construction. Direct payload field access and payload field mutation outside pattern matching remain deferred.
+### Payload immutability
+
+Payload fields are immutable after construction. Direct payload field access is deferred and produces a diagnostic suggesting pattern matching. Payload field mutation is rejected with an immutability diagnostic.
 
 ## Type aliases
 Type aliases give another name to an existing type at compile-time.

@@ -10,6 +10,7 @@ Use the language surface integration matrix as a reference for what is currently
 
 # Plans / Notes / TODOS
 - Choices structural equality: `docs/roadmap/plans/choices-structural-equality-plan.md`
+- new project cli tool improvement: `docs/roadmap/plans/bean-new-command-hardening-plan.md`
 - Pattern matching hardening: `docs/roadmap/plans/pattern-matching-hardening-plan.md`
 - Review of Error and Option syntax sugar for result types, handling and hardening.
 - full traits implementation
