@@ -9,10 +9,9 @@ Use the language surface integration matrix as a reference for what is currently
 ---
 
 # Plans / Notes / TODOS
-- Module library hardening: `docs/roadmap/plans/module-library-alpha-hardening-plan.md`
 - Choices structural equality: `docs/roadmap/plans/choices-structural-equality-plan.md`
 - Pattern matching hardening: `docs/roadmap/plans/pattern-matching-hardening-plan.md`
-
+- Review of Error and Option syntax sugar for result types, handling and hardening.
 - full traits implementation
 - Closures
 - Hash Maps

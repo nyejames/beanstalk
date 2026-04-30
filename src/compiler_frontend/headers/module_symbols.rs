@@ -47,7 +47,7 @@ pub enum FacadeExportTarget {
     External(ExternalSymbolId),
 }
 
-/// One exported symbol in a library's `#mod.bst` facade.
+/// One exported symbol in a module facade.
 ///
 /// WHAT: records the name that external importers use and the resolved target.
 /// WHY: re-export aliases can expose a symbol under a different name than its canonical path.
@@ -97,7 +97,7 @@ pub(crate) struct ModuleSymbols {
     pub(crate) resolved_struct_fields_by_path: FxHashMap<InternedPath, Vec<Declaration>>,
     pub(crate) struct_source_by_path: FxHashMap<InternedPath, InternedPath>,
 
-    // Facade data: maps library import prefix to exported symbol entries from its #mod.bst.
+    // Facade data: maps source-library import prefix to exported module-facade entries.
     // Each entry records the export name (which may differ from the target path name via alias)
     // and the resolved target (source symbol path or external symbol id).
     pub(crate) facade_exports: FxHashMap<String, FxHashSet<FacadeExportEntry>>,

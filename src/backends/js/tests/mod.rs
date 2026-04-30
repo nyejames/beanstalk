@@ -11,6 +11,7 @@ mod choices;
 mod control_flow;
 mod expressions;
 mod host;
+mod inline_expressions;
 mod prelude;
 mod receiver_methods;
 mod results;

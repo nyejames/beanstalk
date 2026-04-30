@@ -3051,6 +3051,11 @@ path = "source_lib_and_external_package"
 tags = ["integration", "source-libraries", "imports", "external-packages"]
 
 [[case]]
+id = "source_lib_import_dotdot_rejected"
+path = "source_lib_import_dotdot_rejected"
+tags = ["integration", "source-libraries", "imports", "paths", "diagnostics"]
+
+[[case]]
 id = "source_lib_facade"
 path = "source_lib_facade"
 tags = ["integration", "source-libraries", "facades", "imports"]

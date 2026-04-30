@@ -304,7 +304,7 @@ import @styles/docs {navbar, title, section, styled_table, header, data, codeblo
         [data:
             [: Missing File or Directory]
             [: The project references a file, directory, import path, or output path that cannot be resolved.]
-            [: Check spelling, relative paths, root folders, and project config.]
+            [: Check spelling, relative paths, [codesnippet:#entry_root], [codesnippet:#library_folders], and project config.]
         ]
 
         [data:

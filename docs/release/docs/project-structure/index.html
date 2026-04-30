@@ -728,16 +728,13 @@ body {
 
     <span class='bst-code-comment'>-- Relative import from the current file&#39;s folder</span>
     import <span class='bst-code-operator'>@</span>.<span class='bst-code-operator'>/</span>shared<span class='bst-code-operator'>/</span>title<span class='bst-code-operator'>/</span>render_title
-
-    <span class='bst-code-comment'>-- Parent-folder relative import</span>
-    import <span class='bst-code-operator'>@</span>..<span class='bst-code-operator'>/</span>components<span class='bst-code-operator'>/</span>card <span class='bst-code-parenthesis'>{</span><span class='bst-code-struct'>CardData,</span> render_card<span class='bst-code-parenthesis'>}</span>
     </code></pre><p>Path resolution is project-aware:</p><ul><li><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">@./</span> and <span style="
+    ">@./</span> resolves relative to the importing file.</li><li>Parent-directory imports with <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">@../</span> resolve relative to the importing file.</li><li>Non-relative imports whose first segment matches a source library prefix resolve from the corresponding library root.</li><li>Other non-relative imports resolve from <span style="
+    ">..</span> are not supported.</li><li>Non-relative imports whose first segment matches a source library prefix resolve from the corresponding library root.</li><li>Other non-relative imports resolve from <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">#entry_root</span>.</li></ul><p>Builder-provided and project-local source libraries expose their prefix directly. That means <span style="
@@ -861,7 +858,7 @@ body {
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">page.wasm</span></li></ul><p>The HTML builder owns stale-output cleanup for generated HTML artifacts. Generated output folders should be treated as build artifacts, not source.</p></section>
-    <section class="container"><h1>Library modules</h1><p>Source libraries are normal <span style="
+    <section class="container"><h1>Module facades and source libraries</h1><p>Source libraries are normal <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">.bst</span> source roots with an explicit facade file. Project-local libraries live under <span style="
@@ -876,10 +873,10 @@ body {
     ">lib</span> in source. Builders can also provide source libraries virtually. The HTML builder provides <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">@html</span>.</p><h2>#mod.bst library modules</h2><p><span style="
+    ">@html</span>. Source libraries and regular modules share the same facade-based visibility model.</p><h2>#mod.bst module facades</h2><p><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">#mod.bst</span> is the visibility gate for a source library module.</p><p>It defines what other modules can import from that library.</p><pre style="
+    ">#mod.bst</span> is the visibility gate for a module root.</p><p>It defines what outside modules can import from that module.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
         border-radius: 5px;
@@ -902,7 +899,7 @@ body {
     <span class='bst-code-comment'>-- lib/ui/#mod.bst</span>
     <span class='bst-code-operator'>#</span>import <span class='bst-code-operator'>@</span>.<span class='bst-code-operator'>/</span>button<span class='bst-code-operator'>/</span>button
     <span class='bst-code-operator'>#</span>import <span class='bst-code-operator'>@</span>.<span class='bst-code-operator'>/</span>layout <span class='bst-code-parenthesis'>{</span>page <span class='bst-code-keyword'>as</span> ui_page<span class='bst-code-parenthesis'>}</span>
-    </code></pre><p>Rules:</p><ul><li>external importers can only see symbols exported by <span style="
+    </code></pre><p>Rules:</p><ul><li>outside importers can only see symbols exported by <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">#mod.bst</span></li><li>internal implementation files are not public unless re-exported by the facade</li><li><span style="

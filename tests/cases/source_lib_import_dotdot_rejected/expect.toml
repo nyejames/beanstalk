@@ -1,0 +1,7 @@
+entry = "."
+
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+error_type = "Syntax"
+message_contains = ["Invalid path component '..'"]

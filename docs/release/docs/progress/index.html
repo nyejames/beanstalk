@@ -547,7 +547,7 @@ body {
      <td style="padding: 0.2em 0.5em;"> Supported</td>
      <td style="padding: 0.2em 0.5em;"> Broad import syntax, relative child path, entry root fallback, source library prefix, circular dependency, multi-file module, single-symbol aliases, grouped aliases, nested grouped aliases, collision, and file-local coverage.</td>
      <td style="padding: 0.2em 0.5em;"> Frontend / HTML builder</td>
-     <td style="padding: 0.2em 0.5em;"> Path rendering is golden-sensitive. Keep normalized output and platform-stable diagnostics covered. Single-symbol source import aliases, grouped source import aliases, and nested grouped source import aliases are supported. Aliases are file-local and not re-exported. Alias collisions are hard errors across same-file declarations, source imports, external imports, type aliases, prelude symbols, and builtins. Alias case mismatches warn. Grouped import aliases reject group-level trailing aliases, invalid local alias names, and duplicate alias syntax with structured diagnostics. Parent-directory imports with `..` are not supported, and imports must stay within allowed module/library/project roots.</td>
+     <td style="padding: 0.2em 0.5em;"> Path rendering is golden-sensitive. Keep normalized output and platform-stable diagnostics covered. Single-symbol source import aliases, grouped source import aliases, and nested grouped source import aliases are supported. Aliases are file-local and not re-exported. Alias and visible-name collisions are hard errors across same-file declarations, source imports, external imports, type aliases, prelude symbols, builtins, and re-export public names. Prelude and external symbols cannot be redeclared as user functions or variables at top level or in body scope. Alias case mismatches warn. Grouped import aliases reject group-level trailing aliases, invalid local alias names, and duplicate alias syntax with structured diagnostics. Parent-directory imports with `..` are not supported, and imports must stay within allowed module/library/project roots.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -573,7 +573,7 @@ body {
     ">io</span> and <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">IO</span> are registered as external prelude symbols; builtin error symbols are compiler-owned bare names.</li><li>External function aliases and external constant aliases are supported. External opaque type aliases are rejected with structured diagnostics. Grouped external aliases are supported.</li><li>Prelude collision rejection is enforced: explicit imports cannot shadow prelude names.</li><li>External receiver methods are not a recommended expansion surface yet. Prefer free functions until external methods are keyed by nominal receiver type rather than broad ABI metadata.</li><li>JS lowering now resolves external runtime names through per-function lowering metadata in the registry.</li><li><span style="
+    ">IO</span> are registered as external prelude symbols; builtin error symbols are compiler-owned bare names.</li><li>External function aliases and external constant aliases are supported. External opaque type aliases are rejected with structured diagnostics. Grouped external aliases are supported.</li><li>Prelude collision rejection is enforced: explicit imports cannot shadow prelude names, and prelude symbols cannot be redeclared as user declarations.</li><li>External receiver methods are not a recommended expansion surface yet. Prefer free functions until external methods are keyed by nominal receiver type rather than broad ABI metadata.</li><li>JS lowering now resolves external runtime names through per-function lowering metadata in the registry.</li><li><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">InlineExpression</span> JS lowering is implemented for pure expression external functions. Arguments are substituted positionally using `#0`, `#1`, ... placeholders; duplicate placeholders are rejected. No runtime helper is emitted for inline-only functions.</li><li>Wasm lowering for external packages is experimental and should not be counted as Alpha support.</li><li>Unsupported external package imports for the active backend are rejected with structured <span style="
@@ -587,7 +587,7 @@ body {
      <td style="padding: 0.2em 0.5em;"> Supported</td>
      <td style="padding: 0.2em 0.5em;"> Targeted coverage for prelude symbol registration and collision rejection.</td>
      <td style="padding: 0.2em 0.5em;"> Frontend / JS</td>
-     <td style="padding: 0.2em 0.5em;"> Every builder must provide `@core/prelude`. `io` and `IO` are registered as bare prelude symbols. Prelude collision rejection is enforced: explicit imports cannot shadow prelude names.</td>
+     <td style="padding: 0.2em 0.5em;"> Every builder must provide `@core/prelude`. `io` and `IO` are registered as bare prelude symbols. Prelude collision rejection is enforced: explicit imports cannot shadow prelude names, and prelude symbols cannot be redeclared as user declarations.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -685,7 +685,7 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;"> Core text package</td>
      <td style="padding: 0.2em 0.5em;"> Partial</td>
-     <td style="padding: 0.2em 0.5em;"> Targeted runtime, JS helper, type-error, unsupported-builder, and Wasm-unsupported coverage.</td>
+     <td style="padding: 0.2em 0.5em;"> Targeted runtime, JS helper, arity, type-error, edge-case, unsupported-builder, and Wasm-unsupported coverage.</td>
      <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
      <td style="padding: 0.2em 0.5em;"> <span style="
         color: #c444aff9;
@@ -705,7 +705,13 @@ body {
     ">starts_with</span>, and <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">ends_with</span>. It is JS-backed, explicit-import only, and optional by builder. Wasm support is deferred; HTML-Wasm builds fail with a structured <span style="
+    ">ends_with</span>. It is JS-backed, explicit-import only, and optional by builder. <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">length</span> returns backend-defined string length (JS UTF-16 code units for the JS backend). <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">is_empty</span> is true only for the exactly empty string. Empty needle/prefix/suffix behavior follows backend-defined JS semantics. Receiver-method forms remain deferred. Wasm support is deferred; HTML-Wasm builds fail with a structured <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">Rule</span> diagnostic before backend lowering.</td>

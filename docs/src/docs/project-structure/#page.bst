@@ -336,14 +336,12 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
 
         -- Relative import from the current file's folder
         import @./shared/title/render_title
-
-        -- Parent-folder relative import
-        import @../components/card {CardData, render_card}
     ]
 
     Path resolution is project-aware:
 
-    - [codesnippet:@./] and [codesnippet:@../] resolve relative to the importing file.
+    - [codesnippet:@./] resolves relative to the importing file.
+    - Parent-directory imports with [codesnippet:..] are not supported.
     - Non-relative imports whose first segment matches a source library prefix resolve from the corresponding library root.
     - Other non-relative imports resolve from [codesnippet:#entry_root].
 
@@ -430,16 +428,17 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
 ]
 
 #[section, $markdown:
-    # Library modules
+    # Module facades and source libraries
 
     Source libraries are normal [codesnippet:.bst] source roots with an explicit facade file.
     Project-local libraries live under [codesnippet:lib/<name>] and import as [codesnippet:@<name>] without spelling [codesnippet:lib] in source.
     Builders can also provide source libraries virtually. The HTML builder provides [codesnippet:@html].
+    Source libraries and regular modules share the same facade-based visibility model.
 
-    ## #mod.bst library modules
+    ## #mod.bst module facades
 
-    [codesnippet:#mod.bst] is the visibility gate for a source library module.
-    It defines what other modules can import from that library.
+    [codesnippet:#mod.bst] is the visibility gate for a module root.
+    It defines what outside modules can import from that module.
 
     [codeblock, $code("txt"):
         lib/ui/
@@ -456,7 +455,7 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
 
     Rules:
 
-    - external importers can only see symbols exported by [codesnippet:#mod.bst]
+    - outside importers can only see symbols exported by [codesnippet:#mod.bst]
     - internal implementation files are not public unless re-exported by the facade
     - [codesnippet:#mod.bst] is not shared implementation code; sibling files do not see its declarations automatically
     - runtime top-level statements and runtime top-level templates are invalid in [codesnippet:#mod.bst]

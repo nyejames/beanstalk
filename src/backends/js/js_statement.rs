@@ -468,13 +468,16 @@ impl<'hir> JsEmitter<'hir> {
                 }
 
                 if has_wildcard_fallback {
-                    let wildcard_arm = arms.last().expect("checked above");
-                    self.emit_line("else {");
-                    self.with_indent(|emitter| {
-                        emitter
-                            .emit_line(&format!("{state_identifier} = {};", wildcard_arm.body.0));
-                    });
-                    self.emit_line("}");
+                    if let Some(wildcard_arm) = arms.last() {
+                        self.emit_line("else {");
+                        self.with_indent(|emitter| {
+                            emitter.emit_line(&format!(
+                                "{state_identifier} = {};",
+                                wildcard_arm.body.0
+                            ));
+                        });
+                        self.emit_line("}");
+                    }
                 } else {
                     self.emit_line("else {");
                     self.with_indent(|emitter| {
@@ -543,22 +546,73 @@ impl<'hir> JsEmitter<'hir> {
 /// lowered argument string.
 /// WHY: inline expressions are raw JS snippets; arguments are spliced in positionally so the
 /// backend emits a single expression instead of a helper call.
-fn substitute_inline_expression(template: &str, args: &[String]) -> Result<String, CompilerError> {
-    let mut result = template.to_owned();
-    for (index, arg) in args.iter().enumerate() {
-        let placeholder = format!("#{index}");
-        let occurrences = result.matches(&placeholder).count();
-        if occurrences == 0 {
-            return Err(CompilerError::compiler_error(format!(
-                "JavaScript backend: inline expression template is missing placeholder '{placeholder}'"
-            )));
+pub(super) fn substitute_inline_expression(
+    template: &str,
+    args: &[String],
+) -> Result<String, CompilerError> {
+    let mut result = String::new();
+    let mut seen_placeholders = vec![0usize; args.len()];
+    let mut last_copied_byte = 0usize;
+    let mut chars = template.char_indices().peekable();
+
+    while let Some((start_byte, character)) = chars.next() {
+        if character != '#' {
+            continue;
         }
-        if occurrences > 1 {
+
+        let digit_start_byte = start_byte + character.len_utf8();
+        let mut digit_end_byte = digit_start_byte;
+        while let Some(&(next_byte, next_character)) = chars.peek() {
+            if !next_character.is_ascii_digit() {
+                break;
+            }
+
+            digit_end_byte = next_byte + next_character.len_utf8();
+            chars.next();
+        }
+
+        if digit_end_byte == digit_start_byte {
+            continue;
+        }
+
+        let placeholder = &template[start_byte..digit_end_byte];
+        let argument_index = template[digit_start_byte..digit_end_byte]
+            .parse::<usize>()
+            .map_err(|_| {
+                CompilerError::compiler_error(format!(
+                    "JavaScript backend: inline expression template contains invalid placeholder '{placeholder}'"
+                ))
+            })?;
+
+        let Some(argument) = args.get(argument_index) else {
+            return Err(CompilerError::compiler_error(format!(
+                "JavaScript backend: inline expression template contains placeholder '{placeholder}' but only {} argument(s) were provided.",
+                args.len()
+            )));
+        };
+
+        seen_placeholders[argument_index] += 1;
+        if seen_placeholders[argument_index] > 1 {
             return Err(CompilerError::compiler_error(format!(
                 "JavaScript backend: inline expression template contains duplicate placeholder '{placeholder}'. Each argument must be referenced at most once."
             )));
         }
-        result = result.replace(&placeholder, arg);
+
+        result.push_str(&template[last_copied_byte..start_byte]);
+        result.push_str(argument);
+        last_copied_byte = digit_end_byte;
     }
+
+    result.push_str(&template[last_copied_byte..]);
+
+    for (index, count) in seen_placeholders.iter().enumerate() {
+        if *count == 0 {
+            let placeholder = format!("#{index}");
+            return Err(CompilerError::compiler_error(format!(
+                "JavaScript backend: inline expression template is missing placeholder '{placeholder}'"
+            )));
+        }
+    }
+
     Ok(result)
 }

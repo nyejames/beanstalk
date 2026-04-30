@@ -917,7 +917,7 @@ Initial optional core packages:
 
 - `@core/math`: constants `PI`, `TAU`, `E`, and Float math helpers.
 - `@core/text`: `length`, `is_empty`, `contains`, `starts_with`, `ends_with`.
-- `@core/random`: `random_float`, `random_int`. `random_int(min, max)` currently defines the tested range for `min <= value <= max`; seeded random and `min > max` runtime validation are deferred.
+- `@core/random`: `random_float`, `random_int`. `random_int(min, max)` is inclusive at both ends and swaps bounds when `min > max`; seeded random is deferred.
 - `@core/time`: `now_millis`, `now_seconds`. Date objects, timezones, formatting, durations, and monotonic clocks are deferred.
 
 External types are opaque. They can be passed, returned, and used by external functions, but cannot be constructed with struct syntax or field-accessed by Beanstalk code.

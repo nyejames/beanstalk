@@ -27,6 +27,7 @@ Always follow the style guide by default.
 - Panic paths are only acceptable for proven internal invariants that indicate a compiler bug.
 - Beanstalk is pre-alpha. Do not preserve old APIs through compatibility wrappers, forwarding shims, parallel structs, or duplicated legacy entry points.
 - When an API shape changes, thread the new shape through the compiler and remove the old one.
+- Do not edit HTML artefacts produced by the compiler directly inside `docs/release`. Use `cargo run build docs --release` to rebuild the output artefacts properly.
 
 ## Duplication and abstraction policy
 

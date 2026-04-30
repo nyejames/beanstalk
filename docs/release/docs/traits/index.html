@@ -1,0 +1,842 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <title>Traits in Beanstalk | Beanstalk</title>
+    <meta name="description" content="Design draft for nominal, explicit, statically resolved traits in Beanstalk.">
+    <style>
+/*!
+  BS CSS CORE (absolute basics CSS reset)
+  This is inspired by Pico.css, but is an even more minimal reset.
+
+  Actual style systems are intended to be built on top of this easily.
+*/
+
+:root {
+  color-scheme: light dark;
+
+  --bst-font-size: 100%;
+
+  --bst-font-family-emoji: "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --bst-font-family-sans-serif: system-ui, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, Helvetica, Arial, "Helvetica Neue", sans-serif, var(--bst-font-family-emoji);
+  --bst-font-family-monospace: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace, var(--bst-font-family-emoji);
+  --bst-font-family: var(--bst-font-family-sans-serif);
+
+  --bst-line-height: 1.5;
+  --bst-font-weight: 400;
+  --bst-font-size: 100%;
+  --bst-text-underline-offset: 0.1rem;
+  --bst-border-radius: 0.25rem;
+  --bst-border-width: 0.0625rem;
+  --bst-outline-width: 0.125rem;
+  --bst-transition: 0.2s ease-in-out;
+
+  --bst-spacing: 1rem;
+  --bst-spacing-small: 0.5rem;
+
+  /* Code block colours */
+  --comment-dark: #838c86;
+  --comment-light: #759061;
+  --keyword-dark: #ea943e;
+  --keyword-light: #ad590e;
+  --string-dark: #4fba11;
+  --string-light: #007130;
+  --number-dark: #96b5ed;
+  --number-light: #073f85;
+  --operator-dark: #9ec1ff;
+  --operator-light: #2b476a;
+  --struct-dark: #a17fbd;
+  --struct-light: #ac2187;
+  --type-dark: #54c5d3;
+  --type-light: #0d8db3;
+  --parenthesis-dark: #bcac52;
+  --parenthesis-light: #ad7e0d;
+}
+
+/* where: is used here for less specificity, allowing easier overriding */
+:where(:root) {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  -moz-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  font-weight: var(--bst-font-weight);
+  font-size: var(--bst-font-size);
+  line-height: var(--bst-line-height);
+  font-family: var(--bst-font-family);
+  text-underline-offset: var(--bst-text-underline-offset);
+  text-rendering: optimizeLegibility;
+  overflow-wrap: break-word;
+  -moz-tab-size: 4;
+  -o-tab-size: 4;
+  tab-size: 4;
+
+}
+
+@media (min-width: 576px) {
+  :root {
+    --bst-font-size: 106.25%;
+  }
+}
+@media (min-width: 768px) {
+  :root {
+    --bst-font-size: 112.5%;
+  }
+}
+@media (min-width: 1024px) {
+  :root {
+    --bst-font-size: 118.75%;
+  }
+}
+@media (min-width: 1280px) {
+  :root {
+    --bst-font-size: 125%;
+  }
+}
+@media (min-width: 1536px) {
+  :root {
+    --bst-font-size: 131.25%;
+  }
+}
+
+body {
+  width: 100%;
+  margin: 0;
+}
+
+/* Code Style */
+.codeblock {
+  color: #222222;
+  color: light-dark(#222222, #ddd);
+  font-family: var(--bst-font-family-monospace);
+  white-space: break-spaces;
+  tab-size: 4;
+}
+.bs-code-comment,
+.bst-code-comment {
+  color: var(--comment-light);
+  color:light-dark(var(--comment-light), var(--comment-dark))
+}
+.bs-code-keyword,
+.bst-code-keyword {
+  color: var(--keyword-light);
+  color:light-dark( var(--keyword-light), var(--keyword-dark))
+}
+.bs-code-string,
+.bst-code-string {
+  color: var(--string-light);
+  color:light-dark( var(--string-light), var(--string-dark))
+}
+.bs-code-number,
+.bst-code-number {
+  color: var(--number-light);
+  color:light-dark( var(--number-light), var(--number-dark))
+}
+.bs-code-operator,
+.bst-code-operator {
+  color: var(--operator-light);
+  color:light-dark( var(--operator-light), var(--operator-dark))
+}
+.bs-code-struct,
+.bst-code-struct {
+  color: var(--struct-light);
+  color:light-dark( var(--struct-light), var(--struct-dark))
+}
+.bs-code-type,
+.bst-code-type {
+  color: var(--type-light);
+  color:light-dark( var(--type-light), var(--type-dark))
+}
+.bs-code-parenthesis,
+.bst-code-parenthesis {
+  color: var(--parenthesis-light);
+  color:light-dark( var(--parenthesis-light), var(--parenthesis-dark))
+}
+
+/* BASIC CSS RESET STUFF */
+
+/**
+ * Document
+ * Content-box & Responsive typography
+*/
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  background-repeat: no-repeat;
+}
+
+::before,
+::after {
+  text-decoration: inherit;
+  vertical-align: inherit;
+}
+    </style>
+    <style>body {
+        background-color: light-dark(hsl(125, 67%, 97%), hsl(203, 68%, 8%));
+    }
+
+    a {
+        color: light-dark(hsl(111, 96%, 26%), hsl(235, 87%, 67%));
+    }
+
+    .container {
+        width: 100%;
+        margin-right: auto;
+        margin-left: auto;
+        padding-right: var(--bst-spacing-small);
+        padding-left: var(--bst-spacing-small);
+    }
+
+    @media (min-width: 576px) {
+        .container {
+            max-width: 510px;
+            padding-right: var(--bst-spacing);
+            padding-left: var(--bst-spacing);
+            padding-bottom: var(--bst-spacing);
+        }
+    }
+
+    @media (min-width: 768px) {
+        .container {
+            max-width: 700px;
+        }
+    }
+
+    @media (min-width: 1024px) {
+        .container {
+            max-width: 950px;
+        }
+    }
+
+    @media (min-width: 1280px) {
+        .container {
+            max-width: 1200px;
+        }
+    }
+
+    @media (min-width: 1536px) {
+        .container {
+            max-width: 1450px;
+        }
+    }
+
+    .bst-nav-1 {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom-color: grey;
+        border-bottom-style: solid;
+        border-bottom-width: 1px;
+        padding: 0rem 2rem 0rem 2rem;
+    }</style>
+
+  </head>
+  <body style="">
+    <nav class="bst-nav-1" aria-label="Primary">
+        <a
+            href="/beanstalk/"
+            style="
+                display: flex;
+                align-items: center;
+                gap: 0.6rem;
+                padding: 0.9rem 0;
+                color: light-dark(var(--bst-text-lightmode), var(--bst-text-darkmode));
+                text-decoration: none;
+                font-weight: 700;
+                letter-spacing: 0.04rem;
+            "
+        >
+            <span
+                aria-hidden="true"
+                style="
+                    font-family: var(--bst-font-family-emoji);
+                    font-size: 1.4rem;
+                    line-height: 1;
+                "
+            >🌱</span>
+
+            <span>Beanstalk</span>
+        </a>
+
+        <div
+            style="
+                display: flex;
+                align-items: center;
+                gap: 1rem;
+            "
+        >
+            <a
+                href="/beanstalk/docs/"
+                style="
+                    color: light-dark(var(--bst-text-lightmode), var(--bst-text-darkmode));
+                    text-decoration: none;
+                    font-weight: 500;
+                    padding: 0.35rem 0;
+                "
+            >
+                Docs
+            </a>
+
+            <a
+                href="https://github.com/nyejames/beanstalk"
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Beanstalk GitHub repository"
+                style="
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: light-dark(var(--bst-text-lightmode), var(--bst-text-darkmode));
+                    padding: 0.35rem 0;
+                "
+            >
+                <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 16 16"
+                    width="22"
+                    height="22"
+                    fill="currentColor"
+                    aria-hidden="true"
+                >
+                    <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38
+                    0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52
+                    -.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07
+                    -1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21
+                    2.2.82a7.65 7.65 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82
+                    1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2
+                    0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
+                </svg>
+            </a>
+        </div>
+    </nav>
+     <h1 style="font-size: 2em;text-align: center;"> TRAITS IN BEANSTALK</h1>
+    <section class="container"><p><strong>Design draft:</strong> This page is a future-facing design document for language and compiler planning. It is not final user-facing documentation, and the syntax, semantics, and implementation details may change before this feature is implemented.</p><p>Traits define a named behavioural contract for a type.</p><p>They are intended to be simple, explicit, and cheap for the compiler to resolve.</p><p>Beanstalk traits are designed to support static method resolution by default without pushing the language toward Rust-level trait-system complexity or runtime interface-object semantics.</p><p>Current compiler status:</p><ul><li>traits are deferred for Alpha</li><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">must</span> is reserved</li><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">This</span> is reserved</li><li>both reserved tokens should reject with structured diagnostics when used incorrectly</li></ul><p>This page is a design reference, not current compiler support.</p></section>
+    <section class="container"><h1>Design goals</h1><p>Traits in Beanstalk are designed to:</p><ul><li>Keep traits nominal and explicit</li><li>Keep method lookup statically resolved by default</li><li>Avoid implicit structural conformance</li><li>Avoid runtime trait objects in v1</li><li>Preserve compile speed</li><li>Keep the implementation tractable</li><li>Leave room for later generic constraints and optional optimisations</li></ul><p>Trait names should be fully capitalised.</p><p>Traits are the only planned language construct that uses this naming convention.</p><p>This makes trait contracts visually distinct from types, choices, structs, functions, and variables.</p></section>
+    <section class="container"><h1>Non-goals for v1</h1><p>Traits are not intended to be:</p><ul><li>runtime interface objects</li><li>implicit duck typing</li><li>inheritance</li><li>a full Rust-style trait solver</li><li>a source of large compile-time or code-size blowups</li></ul><p>The first version should stay intentionally narrow.</p><p>The goal is a small trait system that fits Beanstalk&#39;s receiver method model, not a maximal abstraction system.</p></section>
+    <section class="container"><h1>Syntax</h1><p>Trait declarations use <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">must</span>.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>DRAWABLE</span> must<span class='bst-code-operator'>:</span>
+        draw <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This,</span> surface <span class='bst-code-struct'>Surface</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>String;</span>
+        bounds <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Rect,</span> <span class='bst-code-struct'>Bool;</span>
+    ;
+    </code></pre><p>This reads as:</p><p>&gt; Any type claiming to satisfy <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">DRAWABLE</span> must provide these methods.</p><p>A trait declaration contains required method signatures.</p><p>It does not provide fields, storage, or default behavior in v1.</p></section>
+    <section class="container"><h1>The This placeholder</h1><p>Inside a trait declaration, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">This</span> refers to the concrete implementing type.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>RESIZABLE</span> must<span class='bst-code-operator'>:</span>
+        resize <span class='bst-code-operator'>|</span><span class='bst-code-operator'>~</span><span class='bst-code-struct'>This,</span> width <span class='bst-code-struct'>Int,</span> height <span class='bst-code-type'>Int</span><span class='bst-code-operator'>|</span>;
+    ;
+    </code></pre><p>Rules:</p><ul><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">This</span> means an immutable receiver requirement</li><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">~This</span> means a mutable receiver requirement</li><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">This</span> is trait-local syntax</li><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">This</span> does not name a real user-defined type</li><li>trait signatures describe required methods only</li><li>trait signatures do not provide storage or fields</li></ul><p>This keeps trait method requirements aligned with Beanstalk&#39;s receiver-based method model.</p><p>It also avoids pretending that a trait signature has a literal <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">this</span> parameter name.</p></section>
+    <section class="container"><h1>Semantics</h1><p>Traits are intended to follow a small set of rules.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+        
+    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Rule</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Meaning</th> 
+    </tr>
+
+            
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Nominal </td>
+     <td style="padding: 0.2em 0.5em;"> A type satisfies a trait only through an explicit implementation. </td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Explicit </td>
+     <td style="padding: 0.2em 0.5em;"> Conformance is declared deliberately. It is never inferred from matching method shapes. </td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Statically resolved by default </td>
+     <td style="padding: 0.2em 0.5em;"> Concrete receiver calls resolve directly to known methods. </td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> No runtime trait objects in v1 </td>
+     <td style="padding: 0.2em 0.5em;"> Traits do not imply boxed dynamic values, vtables, or subtype-style object polymorphism. </td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> No implicit structural matching </td>
+     <td style="padding: 0.2em 0.5em;"> Similar method signatures alone do not make two types interchangeable. </td>
+        </tr>
+        
+    </table><p>This fits Beanstalk better than Go-style interfaces or TypeScript-style structural interfaces.</p></section>
+    <section class="container"><h1>Implementation model</h1><p>The exact implementation syntax can be finalised separately.</p><p>The model should remain:</p><ul><li>explicit</li><li>nominal</li><li>local and readable</li><li>checked against the declared trait surface</li></ul><p>The compiler should verify that every required method exists with the correct:</p><ul><li>receiver mutability</li><li>parameter types</li><li>return signature</li></ul><p>A type should not satisfy a trait accidentally.</p><p>Conformance should be something the programmer writes deliberately and the compiler verifies directly.</p></section>
+    <section class="container"><h1>Concrete dispatch</h1><p>When the receiver type is known, trait methods should resolve directly at compile time.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    shape.draw<span class='bst-code-parenthesis'>(</span>surface<span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>If <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">shape</span> is known to be a <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Circle</span>, this should lower directly to the concrete <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Circle</span> method implementation.</p><p>This keeps ordinary method calls cheap and predictable.</p><p>Traits should not add dynamic dispatch overhead to concrete calls.</p></section>
+    <section class="container"><h1>Generic trait-bounded code</h1><p>If trait-bounded generics are added, Beanstalk should prefer a shared-body strategy by default rather than mandatory monomorphization.</p><p>That means a generic function can be compiled once and receive trait method information through an internal witness or dictionary-style mechanism.</p><p>This trades some runtime performance for:</p><ul><li>more stable compile times</li><li>less duplicated generated code</li><li>smaller code size</li><li>a simpler backend model</li></ul><p>Selective monomorphization can still be added later as a release-build optimisation.</p><p>It should not define the semantic model of traits.</p></section>
+    <section class="container"><h1>Why avoid a Rust-style trait system?</h1><p>Rust-style trait systems become expensive mostly when several powerful features stack together:</p><ul><li>heavy monomorphization</li><li>deep trait solving</li><li>blanket implementations</li><li>specialization</li><li>associated types</li><li>overlapping or highly generic trait relationships</li></ul><p>Beanstalk should avoid this in the first trait design.</p><p>The first version should solve one problem well:</p><p>&gt; A type can explicitly promise that it provides a named set of methods, and the compiler can check that promise.</p></section>
+    <section class="container"><h1>Recommended v1 scope</h1><p>The first implementation should include:</p><ul><li>trait declarations with <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">must</span></li><li>explicit implementations</li><li>required methods only</li><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">This</span> and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">~This</span> receiver requirements</li><li>static resolution for concrete calls</li><li>structured diagnostics for unsupported or invalid trait usage</li></ul><p>Traits should not initially include:</p><ul><li>runtime trait objects</li><li>default methods</li><li>trait inheritance</li><li>blanket implementations</li><li>specialization</li><li>associated types</li><li>implicit conformance</li></ul><p>Default methods can be added later if they still fit the language cleanly.</p></section>
+    <section class="container"><h1>Diagnostics</h1><p>Unsupported trait syntax or partially implemented trait features should produce intentional, structured diagnostics.</p><p>Useful diagnostic cases include:</p><ul><li>trait declared correctly, but full implementation is not yet supported</li><li>invalid <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">This</span> usage outside trait declarations</li><li>missing required method in a trait implementation</li><li>wrong receiver mutability</li><li>method parameter mismatch</li><li>method return signature mismatch</li><li>trait name not using the fully capitalised convention</li></ul><p>Traits should never fail through parser ambiguity or accidental fallback into unrelated constructs.</p></section>
+    <section class="container"><h1>Invalid This usage</h1><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">This</span> is valid only inside trait declarations.</p><p>Invalid:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    value <span class='bst-code-struct'>This</span> <span class='bst-code-operator'>=</span> something
+
+    function <span class='bst-code-operator'>|</span>input <span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        io<span class='bst-code-parenthesis'>(</span>input<span class='bst-code-parenthesis'>)</span>
+    ;
+    </code></pre><p>The compiler should reject this clearly.</p><p>Example diagnostic direction:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-string'>&#39;This&#39;</span> is only valid inside trait declarations.
+    <span class='bst-code-struct'>Use</span> a concrete type name here.
+    </code></pre></section>
+    <section class="container"><h1>Receiver mutability</h1><p>Trait method requirements must distinguish immutable and mutable receivers.</p><p>Immutable receiver requirement:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>DISPLAY</span> must<span class='bst-code-operator'>:</span>
+        display <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>String;</span>
+    ;
+    </code></pre><p>Mutable receiver requirement:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>RESETTABLE</span> must<span class='bst-code-operator'>:</span>
+        reset <span class='bst-code-operator'>|</span><span class='bst-code-operator'>~</span><span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span>;
+    ;
+    </code></pre><p>A method that only accepts <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">This</span> should not satisfy a <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">~This</span> requirement.</p><p>A method that requires <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">~This</span> should not satisfy an immutable <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">This</span> requirement.</p><p>Receiver access is part of the contract.</p></section>
+    <section class="container"><h1>Relationship to methods</h1><p>Traits should build on Beanstalk&#39;s existing receiver method model.</p><p>Regular methods are already top-level functions with a receiver-style first parameter.</p><p>Example concrete method:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>Circle</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
+        radius <span class='bst-code-struct'>Float,</span>
+    <span class='bst-code-operator'>|</span>
+
+    draw <span class='bst-code-operator'>|</span>this <span class='bst-code-struct'>Circle,</span> surface <span class='bst-code-struct'>Surface</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Drawing</span> circle<span class='bst-code-parenthesis'>]</span>
+    ;
+    </code></pre><p>A trait requirement describes the required shape without naming a concrete type:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>DRAWABLE</span> must<span class='bst-code-operator'>:</span>
+        draw <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This,</span> surface <span class='bst-code-struct'>Surface</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>String;</span>
+    ;
+    </code></pre><p>The concrete method and the trait requirement should line up by receiver type, parameter list, and return list.</p></section>
+    <section class="container"><h1>Design tradeoffs</h1><p>This design deliberately chooses:</p><ul><li>simpler rules over maximal flexibility</li><li>explicit conformance over implicit convenience</li><li>predictable compile times over aggressive zero-cost abstraction by default</li><li>a narrow feature slice now so the language can grow without syntax churn later</li></ul><p>This matches Beanstalk&#39;s broader design priorities:</p><ul><li>readability first</li><li>strong, intentional syntax</li><li>static correctness</li><li>implementation tractability</li><li>room for future optimisation without changing source semantics</li></ul></section>
+    <section class="container"><h1>Deferred features</h1><p>These features should be deferred until the core trait model is stable:</p><ul><li>runtime trait objects</li><li>default method bodies</li><li>trait inheritance</li><li>associated types</li><li>specialization</li><li>blanket implementations</li><li>conditional implementations</li><li>negative implementations</li><li>structural conformance</li><li>automatic deriving</li><li>dynamic dispatch syntax</li></ul><p>These are powerful features, but adding them too early would make traits a compiler complexity trap.</p><p>The first version should stay deliberately boring.</p></section>
+    <section class="container"><h1>Summary</h1><p>Traits in Beanstalk are behavioural contracts written with <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">must</span>.</p><p>They are intended to be:</p><ul><li>nominal</li><li>explicit</li><li>statically resolved by default</li><li>non-structural</li><li>non-object-based in v1</li></ul><p>The core syntax is:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>DRAWABLE</span> must<span class='bst-code-operator'>:</span>
+        draw <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This,</span> surface <span class='bst-code-struct'>Surface</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>String;</span>
+    ;
+    </code></pre><p>The core rule is:</p><p>&gt; A trait is a named promise that a type provides a required method surface.</p><p>This keeps traits aligned with Beanstalk&#39;s existing method model while avoiding the complexity and compile-time cost of a more ambitious trait system too early.</p></section>
+    <script>
+    function __bs_is_ref(value) {
+    return value !== null && typeof value === "object" && value.__bs_ref === true;
+    }
+
+    function __bs_binding(value) {
+    return { __bs_ref: true, __bs_kind: "binding", __bs_mode: "slot", __bs_slot: { value }, __bs_target: null };
+    }
+
+    function __bs_param_binding(value) {
+    if (!__bs_is_ref(value)) {
+    return __bs_binding(value);
+    }
+    if (value.__bs_kind === "binding") {
+    return value;
+    }
+    const binding = __bs_binding(undefined);
+    binding.__bs_mode = "alias";
+    binding.__bs_target = value;
+    return binding;
+    }
+
+    function __bs_resolve(ref) {
+    while (ref.__bs_kind === "binding" && ref.__bs_mode === "alias") {
+    ref = ref.__bs_target;
+    }
+    return ref;
+    }
+
+    function __bs_read(ref) {
+    const resolved = __bs_resolve(ref);
+    return resolved.__bs_kind === "binding" ? resolved.__bs_slot.value : resolved.__bs_get();
+    }
+
+    function __bs_write(ref, value) {
+    const resolved = __bs_resolve(ref);
+    if (resolved.__bs_kind === "binding") {
+    resolved.__bs_slot.value = value;
+    } else {
+    resolved.__bs_set(value);
+    }
+    return value;
+    }
+
+    function __bs_assign_borrow(binding, ref) {
+    if (binding.__bs_mode === "alias") {
+    return __bs_write(binding, __bs_read(ref));
+    }
+    binding.__bs_mode = "alias";
+    binding.__bs_target = ref;
+    return binding;
+    }
+
+    function __bs_assign_value(binding, value) {
+    if (binding.__bs_mode === "alias") {
+    return __bs_write(binding, value);
+    }
+    binding.__bs_mode = "slot";
+    binding.__bs_target = null;
+    binding.__bs_slot.value = value;
+    return binding;
+    }
+
+    function __bs_field(baseRef, field) {
+    return {
+    __bs_ref: true,
+    __bs_kind: "computed",
+    __bs_get() {
+    return __bs_read(baseRef)[field];
+    },
+    __bs_set(value) {
+    __bs_read(baseRef)[field] = value;
+    }
+    };
+    }
+
+    function __bs_index(baseRef, index) {
+    return {
+    __bs_ref: true,
+    __bs_kind: "computed",
+    __bs_get() {
+    return __bs_read(baseRef)[index];
+    },
+    __bs_set(value) {
+    __bs_read(baseRef)[index] = value;
+    }
+    };
+    }
+
+    function __bs_clone_value(value) {
+    if (Array.isArray(value)) {
+    return value.map(__bs_clone_value);
+    }
+    if (value !== null && typeof value === "object") {
+    const result = {};
+    for (const key of Object.keys(value)) {
+    result[key] = __bs_clone_value(value[key]);
+    }
+    return result;
+    }
+    return value;
+    }
+
+    function __bs_error_normalize_file(file) {
+    if (typeof file !== "string") {
+    return "";
+    }
+    if (file.startsWith("/")) {
+    const parts = file.split(/[\\/]/).filter(Boolean);
+    return parts.length > 0 ? parts[parts.length - 1] : file;
+    }
+    if (/^[A-Za-z]:[\\/]/.test(file)) {
+    const parts = file.split(/[\\/]/).filter(Boolean);
+    return parts.length > 0 ? parts[parts.length - 1] : file;
+    }
+    return file;
+    }
+
+    function __bs_make_error(kind, code, message, location, trace) {
+    return {
+    kind,
+    code,
+    message,
+    location: location ?? null,
+    trace: trace ?? null
+    };
+    }
+
+    function __bs_error_with_location(error, location) {
+    return __bs_make_error(error.kind, error.code, error.message, location, error.trace);
+    }
+
+    function __bs_error_push_trace(error, frame) {
+    const nextTrace = error.trace ? error.trace.concat([frame]) : [frame];
+    return __bs_make_error(error.kind, error.code, error.message, error.location, nextTrace);
+    }
+
+    function __bs_error_bubble(error, file, line, column, functionName) {
+    const safeFunction = typeof functionName === "string" && functionName.length > 0 ? functionName : "<unknown>";
+    const location = {
+    file: __bs_error_normalize_file(file),
+    line,
+    column,
+    function: safeFunction === "<unknown>" ? null : safeFunction
+    };
+    const frame = { function: safeFunction, location };
+    const nextLocation = error.location ?? location;
+    const located = __bs_error_with_location(error, nextLocation);
+    return __bs_error_push_trace(located, frame);
+    }
+
+    function __bs_result_propagate(result) {
+    if (result && result.tag === "ok") {
+    return result.value;
+    }
+    if (result && result.tag === "err") {
+    throw { __bs_result_propagate: true, value: result.value };
+    }
+    throw new Error("Expected internal Result carrier during propagation");
+    }
+
+    function __bs_result_fallback(result, fallback) {
+    if (result && result.tag === "ok") {
+    return result.value;
+    }
+    if (result && result.tag === "err") {
+    return fallback();
+    }
+    throw new Error("Expected internal Result carrier during fallback handling");
+    }
+
+    function __bs_collection_get(collection, index) {
+    if (!Array.isArray(collection)) {
+    const err = __bs_make_error("InvalidArgument", "collection.expected_ordered_collection", "Collection get(...) expects an ordered collection", null, null);
+    return { tag: "err", value: err };
+    }
+    if (!Number.isInteger(index) || index < 0 || index >= collection.length) {
+    const err = __bs_make_error("OutOfBounds", "collection.index_out_of_bounds", "Collection index out of bounds", null, null);
+    return { tag: "err", value: err };
+    }
+    return { tag: "ok", value: collection[index] };
+    }
+
+    function __bs_collection_push(collection, value) {
+    if (!Array.isArray(collection)) {
+    const err = __bs_make_error("InvalidArgument", "collection.expected_ordered_collection", "Collection push(...) expects an ordered collection", null, null);
+    return { tag: "err", value: err };
+    }
+    collection.push(value);
+    return { tag: "ok", value: null };
+    }
+
+    function __bs_collection_remove(collection, index) {
+    if (!Array.isArray(collection)) {
+    const err = __bs_make_error("InvalidArgument", "collection.expected_ordered_collection", "Collection remove(...) expects an ordered collection", null, null);
+    return { tag: "err", value: err };
+    }
+    if (!Number.isInteger(index) || index < 0 || index >= collection.length) {
+    const err = __bs_make_error("OutOfBounds", "collection.index_out_of_bounds", "Collection index out of bounds", null, null);
+    return { tag: "err", value: err };
+    }
+    collection.splice(index, 1);
+    return { tag: "ok", value: null };
+    }
+
+    function __bs_collection_length(collection) {
+    if (!Array.isArray(collection)) {
+    const err = __bs_make_error("InvalidArgument", "collection.expected_ordered_collection", "Collection length() expects an ordered collection", null, null);
+    return { tag: "err", value: err };
+    }
+    return { tag: "ok", value: collection.length };
+    }
+
+    function __bs_value_to_string(value) {
+    if (value === undefined || value === null) {
+    return "";
+    }
+    return String(value);
+    }
+
+    function __bs_io(value) {
+    console.log(__bs_value_to_string(value));
+    }
+
+    function __bs_normalize_numeric_text(value) {
+    return value.trim().replace(/_/g, "");
+    }
+
+    function __bs_cast_int(value) {
+    if (typeof value === "number") {
+    if (!Number.isFinite(value) || !Number.isSafeInteger(value)) {
+    return { tag: "err", value: __bs_make_error("Parse", "int.parse_out_of_range", "Int value is out of supported range", null, null) };
+    }
+    if (Number.isInteger(value)) {
+    return { tag: "ok", value };
+    }
+    return { tag: "err", value: __bs_make_error("Parse", "int.parse_invalid_format", "Float value is not an exact integer", null, null) };
+    }
+    if (typeof value === "string") {
+    const normalized = __bs_normalize_numeric_text(value);
+    if (/^[+-]?[0-9]+$/.test(normalized)) {
+    const parsed = Number.parseInt(normalized, 10);
+    if (!Number.isSafeInteger(parsed)) {
+    return { tag: "err", value: __bs_make_error("Parse", "int.parse_out_of_range", "Int value is out of supported range", null, null) };
+    }
+    return { tag: "ok", value: parsed };
+    }
+    if (/^[+-]?[0-9]+\.[0-9]+$/.test(normalized)) {
+    const parsed = Number.parseFloat(normalized);
+    if (Number.isInteger(parsed) && Number.isSafeInteger(parsed)) {
+    return { tag: "ok", value: parsed };
+    }
+    }
+    return { tag: "err", value: __bs_make_error("Parse", "int.parse_invalid_format", "Cannot parse Int from text", null, null) };
+    }
+    return { tag: "err", value: __bs_make_error("Parse", "int.parse_invalid_format", "Int(...) only accepts Int, Float, or string values", null, null) };
+    }
+
+    function __bs_cast_float(value) {
+    if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+    return { tag: "err", value: __bs_make_error("Parse", "float.parse_out_of_range", "Float value is out of supported range", null, null) };
+    }
+    return { tag: "ok", value };
+    }
+    if (typeof value === "string") {
+    const normalized = __bs_normalize_numeric_text(value);
+    if (/^[+-]?[0-9]+$/.test(normalized) || /^[+-]?[0-9]+\.[0-9]+$/.test(normalized)) {
+    const parsed = Number.parseFloat(normalized);
+    if (!Number.isFinite(parsed)) {
+    return { tag: "err", value: __bs_make_error("Parse", "float.parse_out_of_range", "Float value is out of supported range", null, null) };
+    }
+    return { tag: "ok", value: parsed };
+    }
+    return { tag: "err", value: __bs_make_error("Parse", "float.parse_invalid_format", "Cannot parse Float from text", null, null) };
+    }
+    return { tag: "err", value: __bs_make_error("Parse", "float.parse_invalid_format", "Float(...) only accepts Int, Float, or string values", null, null) };
+    }
+
+    function b_fn0() {
+    let b_l0 = __bs_binding(undefined);
+
+    __bs_assign_value(b_l0, []);
+    return __bs_read(b_l0);
+    }
+
+    </script>
+    <script>
+    (function () {
+      if (typeof b_fn0 === "function") b_fn0();
+    })();
+    </script>
+  </body>
+</html>

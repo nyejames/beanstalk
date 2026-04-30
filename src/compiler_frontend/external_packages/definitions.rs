@@ -21,7 +21,7 @@ pub struct ExternalFunctionLowerings {
 pub enum ExternalJsLowering {
     /// Emit a call to a named JS runtime helper function.
     RuntimeFunction(&'static str),
-    /// Emit an inline JS expression (not used yet, reserved for future optimization).
+    /// Emit an inline JS expression by substituting lowered arguments into a template.
     InlineExpression(&'static str),
 }
 

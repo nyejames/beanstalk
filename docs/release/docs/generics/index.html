@@ -1,0 +1,1114 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <title>Generics in Beanstalk | Beanstalk</title>
+    <meta name="description" content="Design draft for a small, explicit, keyword-based generics system in Beanstalk.">
+    <style>
+/*!
+  BS CSS CORE (absolute basics CSS reset)
+  This is inspired by Pico.css, but is an even more minimal reset.
+
+  Actual style systems are intended to be built on top of this easily.
+*/
+
+:root {
+  color-scheme: light dark;
+
+  --bst-font-size: 100%;
+
+  --bst-font-family-emoji: "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --bst-font-family-sans-serif: system-ui, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, Helvetica, Arial, "Helvetica Neue", sans-serif, var(--bst-font-family-emoji);
+  --bst-font-family-monospace: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace, var(--bst-font-family-emoji);
+  --bst-font-family: var(--bst-font-family-sans-serif);
+
+  --bst-line-height: 1.5;
+  --bst-font-weight: 400;
+  --bst-font-size: 100%;
+  --bst-text-underline-offset: 0.1rem;
+  --bst-border-radius: 0.25rem;
+  --bst-border-width: 0.0625rem;
+  --bst-outline-width: 0.125rem;
+  --bst-transition: 0.2s ease-in-out;
+
+  --bst-spacing: 1rem;
+  --bst-spacing-small: 0.5rem;
+
+  /* Code block colours */
+  --comment-dark: #838c86;
+  --comment-light: #759061;
+  --keyword-dark: #ea943e;
+  --keyword-light: #ad590e;
+  --string-dark: #4fba11;
+  --string-light: #007130;
+  --number-dark: #96b5ed;
+  --number-light: #073f85;
+  --operator-dark: #9ec1ff;
+  --operator-light: #2b476a;
+  --struct-dark: #a17fbd;
+  --struct-light: #ac2187;
+  --type-dark: #54c5d3;
+  --type-light: #0d8db3;
+  --parenthesis-dark: #bcac52;
+  --parenthesis-light: #ad7e0d;
+}
+
+/* where: is used here for less specificity, allowing easier overriding */
+:where(:root) {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  -moz-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  font-weight: var(--bst-font-weight);
+  font-size: var(--bst-font-size);
+  line-height: var(--bst-line-height);
+  font-family: var(--bst-font-family);
+  text-underline-offset: var(--bst-text-underline-offset);
+  text-rendering: optimizeLegibility;
+  overflow-wrap: break-word;
+  -moz-tab-size: 4;
+  -o-tab-size: 4;
+  tab-size: 4;
+
+}
+
+@media (min-width: 576px) {
+  :root {
+    --bst-font-size: 106.25%;
+  }
+}
+@media (min-width: 768px) {
+  :root {
+    --bst-font-size: 112.5%;
+  }
+}
+@media (min-width: 1024px) {
+  :root {
+    --bst-font-size: 118.75%;
+  }
+}
+@media (min-width: 1280px) {
+  :root {
+    --bst-font-size: 125%;
+  }
+}
+@media (min-width: 1536px) {
+  :root {
+    --bst-font-size: 131.25%;
+  }
+}
+
+body {
+  width: 100%;
+  margin: 0;
+}
+
+/* Code Style */
+.codeblock {
+  color: #222222;
+  color: light-dark(#222222, #ddd);
+  font-family: var(--bst-font-family-monospace);
+  white-space: break-spaces;
+  tab-size: 4;
+}
+.bs-code-comment,
+.bst-code-comment {
+  color: var(--comment-light);
+  color:light-dark(var(--comment-light), var(--comment-dark))
+}
+.bs-code-keyword,
+.bst-code-keyword {
+  color: var(--keyword-light);
+  color:light-dark( var(--keyword-light), var(--keyword-dark))
+}
+.bs-code-string,
+.bst-code-string {
+  color: var(--string-light);
+  color:light-dark( var(--string-light), var(--string-dark))
+}
+.bs-code-number,
+.bst-code-number {
+  color: var(--number-light);
+  color:light-dark( var(--number-light), var(--number-dark))
+}
+.bs-code-operator,
+.bst-code-operator {
+  color: var(--operator-light);
+  color:light-dark( var(--operator-light), var(--operator-dark))
+}
+.bs-code-struct,
+.bst-code-struct {
+  color: var(--struct-light);
+  color:light-dark( var(--struct-light), var(--struct-dark))
+}
+.bs-code-type,
+.bst-code-type {
+  color: var(--type-light);
+  color:light-dark( var(--type-light), var(--type-dark))
+}
+.bs-code-parenthesis,
+.bst-code-parenthesis {
+  color: var(--parenthesis-light);
+  color:light-dark( var(--parenthesis-light), var(--parenthesis-dark))
+}
+
+/* BASIC CSS RESET STUFF */
+
+/**
+ * Document
+ * Content-box & Responsive typography
+*/
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  background-repeat: no-repeat;
+}
+
+::before,
+::after {
+  text-decoration: inherit;
+  vertical-align: inherit;
+}
+    </style>
+    <style>body {
+        background-color: light-dark(hsl(125, 67%, 97%), hsl(203, 68%, 8%));
+    }
+
+    a {
+        color: light-dark(hsl(111, 96%, 26%), hsl(235, 87%, 67%));
+    }
+
+    .container {
+        width: 100%;
+        margin-right: auto;
+        margin-left: auto;
+        padding-right: var(--bst-spacing-small);
+        padding-left: var(--bst-spacing-small);
+    }
+
+    @media (min-width: 576px) {
+        .container {
+            max-width: 510px;
+            padding-right: var(--bst-spacing);
+            padding-left: var(--bst-spacing);
+            padding-bottom: var(--bst-spacing);
+        }
+    }
+
+    @media (min-width: 768px) {
+        .container {
+            max-width: 700px;
+        }
+    }
+
+    @media (min-width: 1024px) {
+        .container {
+            max-width: 950px;
+        }
+    }
+
+    @media (min-width: 1280px) {
+        .container {
+            max-width: 1200px;
+        }
+    }
+
+    @media (min-width: 1536px) {
+        .container {
+            max-width: 1450px;
+        }
+    }
+
+    .bst-nav-1 {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom-color: grey;
+        border-bottom-style: solid;
+        border-bottom-width: 1px;
+        padding: 0rem 2rem 0rem 2rem;
+    }</style>
+
+  </head>
+  <body style="">
+    <nav class="bst-nav-1" aria-label="Primary">
+        <a
+            href="/beanstalk/"
+            style="
+                display: flex;
+                align-items: center;
+                gap: 0.6rem;
+                padding: 0.9rem 0;
+                color: light-dark(var(--bst-text-lightmode), var(--bst-text-darkmode));
+                text-decoration: none;
+                font-weight: 700;
+                letter-spacing: 0.04rem;
+            "
+        >
+            <span
+                aria-hidden="true"
+                style="
+                    font-family: var(--bst-font-family-emoji);
+                    font-size: 1.4rem;
+                    line-height: 1;
+                "
+            >🌱</span>
+
+            <span>Beanstalk</span>
+        </a>
+
+        <div
+            style="
+                display: flex;
+                align-items: center;
+                gap: 1rem;
+            "
+        >
+            <a
+                href="/beanstalk/docs/"
+                style="
+                    color: light-dark(var(--bst-text-lightmode), var(--bst-text-darkmode));
+                    text-decoration: none;
+                    font-weight: 500;
+                    padding: 0.35rem 0;
+                "
+            >
+                Docs
+            </a>
+
+            <a
+                href="https://github.com/nyejames/beanstalk"
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Beanstalk GitHub repository"
+                style="
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: light-dark(var(--bst-text-lightmode), var(--bst-text-darkmode));
+                    padding: 0.35rem 0;
+                "
+            >
+                <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 16 16"
+                    width="22"
+                    height="22"
+                    fill="currentColor"
+                    aria-hidden="true"
+                >
+                    <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38
+                    0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52
+                    -.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07
+                    -1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21
+                    2.2.82a7.65 7.65 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82
+                    1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2
+                    0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
+                </svg>
+            </a>
+        </div>
+    </nav>
+     <h1 style="font-size: 2em;text-align: center;"> GENERICS IN BEANSTALK</h1>
+    <section class="container"><p><strong>Design draft:</strong> This page is a future-facing design document for language and compiler planning. It is not final user-facing documentation, and the syntax, semantics, and implementation details may change before this feature is implemented.</p><p>Beanstalk should support a small, explicit, keyword-based generics system.</p><p>The initial design should focus on:</p><ul><li>generic functions</li><li>generic structs</li><li>generic choices</li><li>type inference where obvious</li><li>trait-constrained generic parameters later</li></ul><p>The design should not attempt to match Rust, C++, or TypeScript in power or complexity.</p><p>The goal is to add the useful part of generics without undermining Beanstalk&#39;s existing design principles around readability, explicitness, compile speed, and syntax consistency.</p></section>
+    <section class="container"><h1>Status</h1><p>Generics are a draft design for future alpha-stage implementation.</p><p>The recommended direction is:</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+        
+    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Concept</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Syntax</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Meaning</th> 
+    </tr>
+
+            
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Generic parameter declaration </td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">type</span> </td>
+     <td style="padding: 0.2em 0.5em;"> Introduces one or more type parameters. </td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Generic argument application </td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">of</span> </td>
+     <td style="padding: 0.2em 0.5em;"> Applies concrete type arguments to a generic type. </td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Function inference </td>
+     <td style="padding: 0.2em 0.5em;"> inferred from call arguments </td>
+     <td style="padding: 0.2em 0.5em;"> Generic function calls should usually not need explicit type arguments. </td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Future constraints </td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">where</span> or inline constraint syntax </td>
+     <td style="padding: 0.2em 0.5em;"> Deferred until traits are more settled. </td>
+        </tr>
+        
+    </table></section>
+    <section class="container"><h1>Why generics are needed</h1><p>Traits and type unions are useful, but they do not replace generics.</p><p>They solve different problems:</p><ul><li>traits describe required behaviour</li><li>type unions describe a closed set of possible concrete types</li><li>generics describe a type relationship where concrete types are chosen by the caller and preserved through the API</li></ul><p>That last category is the important gap.</p><p>Generics are needed for cases such as:</p><ul><li>returning the same type that was passed in</li><li>expressing that two parameters must be the same concrete type</li><li>reusable typed containers such as <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Box</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Option</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Result</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Array</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Map</span>, or <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Set</span></li><li>reusable algorithms that preserve strong static typing</li><li>avoiding code duplication across many concrete types</li><li>avoiding weaker &quot;accept anything&quot; APIs that lose type precision</li></ul><p>Without generics, Beanstalk would eventually be pushed toward poor alternatives:</p><ul><li>compiler-owned special cases for too many library patterns</li><li>duplicated implementations for many concrete types</li><li>weaker typing in reusable APIs</li></ul></section>
+    <section class="container"><h1>Design goals</h1><p>The generic system should follow the existing language style.</p><p>Goals:</p><ul><li>Keep syntax readable and keyword-based</li><li>Avoid punctuation-heavy or symbolic syntax</li><li>Preserve the one-concept-one-signal direction of the language</li><li>Keep generic declaration and generic application visually distinct</li><li>Support strong type inference where it is obvious and predictable</li><li>Keep implementation tractable in the frontend and type checker</li><li>Leave room for trait constraints later without forcing a redesign</li><li>Avoid introducing runtime generic machinery as a semantic requirement</li></ul><p>Generics should feel like authored Beanstalk syntax, not imported punctuation from another language.</p></section>
+    <section class="container"><h1>Non-goals for the initial version</h1><p>The first implementation should not include:</p><ul><li>higher-kinded types</li><li>const generics</li><li>specialization</li><li>lifetime parameters</li><li>generic associated types</li><li>advanced trait solving</li><li>complex implicit inference rules</li><li>dynamic generic reification as a language feature</li></ul><p>The initial version should solve ordinary generic functions, structs, and choices well.</p><p>Anything that pushes Beanstalk toward Rust-level generic complexity should be deferred.</p></section>
+    <section class="container"><h1>Core syntax decision</h1><p>The recommended syntax is:</p><ul><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">type</span> for declaring generic parameters</li><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">of</span> for applying generic arguments</li></ul><p>This gives Beanstalk a clean and readable generic system without reusing symbols that already carry strong meaning elsewhere in the language.</p><p>Example declaration:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    identity type <span class='bst-code-struct'>T</span> <span class='bst-code-operator'>|</span>value <span class='bst-code-struct'>T</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>T</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> value
+    ;
+    </code></pre><p>Example type application:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    value <span class='bst-code-struct'>Box</span> of <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Box</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>42</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre></section>
+    <section class="container"><h1>Generic function declarations</h1><p>Generic parameters are declared directly after the function name using <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">type</span>.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    identity type <span class='bst-code-struct'>T</span> <span class='bst-code-operator'>|</span>value <span class='bst-code-struct'>T</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>T</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> value
+    ;
+    </code></pre><p>Multiple generic parameters are comma-separated:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    pair_first type <span class='bst-code-struct'>A,</span> <span class='bst-code-struct'>B</span> <span class='bst-code-operator'>|</span>left <span class='bst-code-struct'>A,</span> right <span class='bst-code-struct'>B</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>A</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> left
+    ;
+    </code></pre><p>In these examples:</p><ul><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">T</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">A</span>, and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">B</span> are type parameters</li><li>the type parameters are scoped to the function declaration</li><li>the caller chooses the concrete types through use</li><li>the function body is checked against the generic relationship</li></ul></section>
+    <section class="container"><h1>Generic structs</h1><p>Structs can declare generic parameters after the struct name.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>Box</span> type <span class='bst-code-struct'>T</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
+        value <span class='bst-code-struct'>T,</span>
+    <span class='bst-code-operator'>|</span>
+    </code></pre><p>Multiple parameters follow the same pattern:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>Pair</span> type <span class='bst-code-struct'>A,</span> <span class='bst-code-struct'>B</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
+        left <span class='bst-code-struct'>A,</span>
+        right <span class='bst-code-struct'>B,</span>
+    <span class='bst-code-operator'>|</span>
+    </code></pre><p>Generic structs are useful for containers and reusable data shapes where the stored type should remain precise.</p></section>
+    <section class="container"><h1>Generic choices</h1><p>Choices can also be generic.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>Option</span> type <span class='bst-code-struct'>T</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-struct'>Some</span> <span class='bst-code-struct'>T,</span>
+        <span class='bst-code-struct'>None,</span>
+    ;
+    </code></pre><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>Result</span> type <span class='bst-code-struct'>T,</span> <span class='bst-code-struct'>E</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-struct'>Ok</span> <span class='bst-code-struct'>T,</span>
+        <span class='bst-code-struct'>Err</span> <span class='bst-code-struct'>E,</span>
+    ;
+    </code></pre><p>Generic choices are the natural basis for reusable option-like and result-like APIs.</p><p>They let the language describe a stable shape while preserving the concrete payload types.</p></section>
+    <section class="container"><h1>Generic type application</h1><p>Generic arguments are applied with <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">of</span>.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    value <span class='bst-code-struct'>Box</span> of <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Box</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>42</span><span class='bst-code-parenthesis'>)</span>
+    result <span class='bst-code-struct'>Result</span> of <span class='bst-code-struct'>String,</span> <span class='bst-code-struct'>Error</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Result.Ok</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;hello&quot;</span><span class='bst-code-parenthesis'>)</span>
+    maybe_name <span class='bst-code-struct'>Option</span> of <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Option.Some</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Nye&quot;</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>This gives Beanstalk a readable type-application form that scales cleanly:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>Array</span> of <span class='bst-code-type'>String</span>
+    <span class='bst-code-struct'>Map</span> of <span class='bst-code-struct'>String,</span> <span class='bst-code-type'>Int</span>
+    <span class='bst-code-struct'>Result</span> of <span class='bst-code-struct'>Page,</span> <span class='bst-code-struct'>Error</span>
+    <span class='bst-code-struct'>Signal</span> of <span class='bst-code-struct'>User</span>
+    </code></pre><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">of</span> should be used in type positions.</p><p>It should not imply runtime generic objects or dynamic type reification.</p></section>
+    <section class="container"><h1>Function calls and inference</h1><p>Generic functions should rely on type inference by default.</p><p>Common code should look like ordinary function calls:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    identity type <span class='bst-code-struct'>T</span> <span class='bst-code-operator'>|</span>value <span class='bst-code-struct'>T</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>T</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> value
+    ;
+
+    number <span class='bst-code-operator'>=</span> identity<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>42</span><span class='bst-code-parenthesis'>)</span>
+    text <span class='bst-code-operator'>=</span> identity<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;hello&quot;</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>The compiler infers:</p><ul><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">T</span> is <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Int</span> for <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">identity(42)</span></li><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">T</span> is <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">String</span> for <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">identity("\hello"\)</span></li></ul><p>This keeps generic functions lightweight in normal code.</p></section>
+    <section class="container"><h1>Explicit generic function application</h1><p>Explicit generic function application may be supported later if needed.</p><p>Possible future syntax:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    value <span class='bst-code-operator'>=</span> identity of <span class='bst-code-type'>Int</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>42</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>This does not need to be required in the first implementation.</p><p>Recommended alpha approach:</p><ul><li>support generic functions</li><li>infer generic arguments from value arguments where possible</li><li>support explicit <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">of</span> in type positions immediately</li><li>defer explicit generic call-site application unless implementation pressure makes it necessary</li></ul><p>This keeps the first implementation smaller and avoids settling parser edge cases too early.</p></section>
+    <section class="container"><h1>Why this syntax fits Beanstalk</h1><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">type</span> and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">of</span> fit Beanstalk for several reasons.</p><h2>It is readable</h2><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">identity type T</span> and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Box of Int</span> are easy to read.</p><p>They look like Beanstalk syntax rather than imported generic punctuation.</p><h2>It preserves syntax ownership</h2><p>Beanstalk already assigns strong meaning to its punctuation and keywords.</p><p>Keyword-based generics avoid overloading symbols that already have a stable role.</p><h2>It avoids angle bracket problems</h2><p>Classic angle-bracket generics are intentionally avoided.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>Box</span><span class='bst-code-operator'>&lt;</span><span class='bst-code-type'>Int</span><span class='bst-code-operator'>&gt;</span>
+    identity<span class='bst-code-operator'>&lt;</span><span class='bst-code-type'>Int</span><span class='bst-code-operator'>&gt;</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>42</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>This style is rejected because it:</p><ul><li>conflicts with Beanstalk&#39;s syntax philosophy</li><li>introduces punctuation-heavy parsing</li><li>creates nested readability issues</li><li>creates pressure around future type-grammar extensions</li><li>risks ambiguity in comparison-heavy contexts</li></ul><h2>It scales across declaration kinds</h2><p>The same declaration pattern works for:</p><ul><li>functions</li><li>structs</li><li>choices</li></ul><p>That consistency matters.</p></section>
+    <section class="container"><h1>Future constraint syntax</h1><p>By using <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">type</span> only for parameter introduction and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">of</span> only for application, future constraints can be added as a separate clause.</p><p>Possible direction:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    sort type <span class='bst-code-struct'>T</span> <span class='bst-code-operator'>|</span>items <span class='bst-code-parenthesis'>{</span><span class='bst-code-struct'>T</span><span class='bst-code-parenthesis'>}</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-struct'>T</span><span class='bst-code-parenthesis'>}</span>
+    where <span class='bst-code-struct'>T</span> is <span class='bst-code-struct'>ORDERED</span><span class='bst-code-operator'>:</span>
+        ...
+    ;
+    </code></pre><p>Another possible direction:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    sort type <span class='bst-code-struct'>T</span> is <span class='bst-code-struct'>ORDERED</span> <span class='bst-code-operator'>|</span>items <span class='bst-code-parenthesis'>{</span><span class='bst-code-struct'>T</span><span class='bst-code-parenthesis'>}</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-struct'>T</span><span class='bst-code-parenthesis'>}</span><span class='bst-code-operator'>:</span>
+        ...
+    ;
+    </code></pre><p>This should remain undecided until trait design is more settled.</p><p>The important point is that generics should leave a clean place for trait constraints later.</p></section>
+    <section class="container"><h1>Why traits are not enough</h1><p>Traits answer:</p><p>&gt; What behaviour must this type support?</p><p>Example direction:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    sort type <span class='bst-code-struct'>T</span> <span class='bst-code-operator'>|</span>items <span class='bst-code-parenthesis'>{</span><span class='bst-code-struct'>T</span><span class='bst-code-parenthesis'>}</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-struct'>T</span><span class='bst-code-parenthesis'>}</span>
+    where <span class='bst-code-struct'>T</span> is <span class='bst-code-struct'>ORDERED</span><span class='bst-code-operator'>:</span>
+        ...
+    ;
+    </code></pre><p>The trait constraint describes required behaviour.</p><p>The generic parameter still matters because it preserves the actual concrete type through the API.</p><p>Without <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">T</span>, the function cannot express that the output collection contains the same concrete item type as the input collection.</p></section>
+    <section class="container"><h1>Why type unions are not enough</h1><p>Type unions answer:</p><p>&gt; Which closed set of concrete types is accepted here?</p><p>That is useful for intentionally closed APIs.</p><p>But unions do not express:</p><ul><li>the output is the same concrete type as the input</li><li>both parameters must be the same concrete type</li><li>a container stores some caller-chosen type <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">T</span></li></ul><p>That is the core role of generics.</p><p>Generics preserve type relationships.</p></section>
+    <section class="container"><h1>Implementation principles</h1><p>The generic system should stay aligned with Beanstalk&#39;s broader compiler direction.</p><p>Important principles:</p><ul><li>Generics should be primarily a frontend type-system feature</li><li>Generics should not force a large semantic rewrite of borrowing or ownership</li><li>Static resolution should remain the default direction</li><li>Generics should not require runtime interface-object semantics</li><li>Generics should not become a large meta-programming system</li></ul><p>Beanstalk already emphasizes readability, strong static typing, compile speed, and backend flexibility.</p><p>The generic system should reinforce those goals rather than complicate them.</p></section>
+    <section class="container"><h1>Declaration rules</h1><p>Recommended initial declaration rules:</p><ul><li>Generic parameters are introduced with <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">type</span></li><li>Multiple parameters are comma-separated</li><li>Generic parameters are scoped to the declaration they belong to</li><li>Generic parameter names follow normal type-style naming conventions</li><li>Generic parameters may be used in parameter types, return types, fields, and choice payloads</li><li>Generic parameters should not leak outside their declaration scope</li></ul><p>Invalid use should produce direct diagnostics rather than falling through into unresolved type errors.</p></section>
+    <section class="container"><h1>Use-site rules</h1><p>Recommended initial use-site rules:</p><ul><li>Generic type application uses <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">of</span></li><li>Multiple generic arguments are comma-separated</li><li>Generic type application is valid in normal type positions</li><li>Generic type application must provide the correct number of arguments</li><li>Generic arguments must resolve to types</li><li>Nested generic types should remain readable and unambiguous</li></ul><p>Example:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    users <span class='bst-code-parenthesis'>{</span><span class='bst-code-struct'>User</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>
+    pages <span class='bst-code-struct'>Result</span> of <span class='bst-code-parenthesis'>{</span><span class='bst-code-struct'>Page</span><span class='bst-code-parenthesis'>}</span>, <span class='bst-code-struct'>Error</span> <span class='bst-code-operator'>=</span> load_pages<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>!</span>
+    cache <span class='bst-code-struct'>Map</span> of <span class='bst-code-struct'>String,</span> <span class='bst-code-struct'>User</span> <span class='bst-code-operator'>=</span> create_cache<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre></section>
+    <section class="container"><h1>Inference rules</h1><p>Generic function calls should infer arguments from normal value arguments where possible.</p><p>Inference should remain predictable and conservative.</p><p>If inference fails, the compiler should emit a clear diagnostic.</p><p>Example:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    identity type <span class='bst-code-struct'>T</span> <span class='bst-code-operator'>|</span>value <span class='bst-code-struct'>T</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>T</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> value
+    ;
+
+    value <span class='bst-code-operator'>=</span> identity<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>42</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>The compiler can infer <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">T</span> from the argument <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">42</span>.</p><p>If a type parameter cannot be inferred from arguments or context, the compiler should reject the call and explain which type parameter is unknown.</p></section>
+    <section class="container"><h1>Diagnostics</h1><p>Diagnostics should be explicit and structured.</p><p>Likely user-facing failures include:</p><ul><li>wrong number of generic arguments</li><li>generic argument provided where none is expected</li><li>missing generic arguments in a type position where they are required</li><li>inference failure for a generic function call</li><li>use of a non-type symbol where a type argument is expected</li><li>use of constraint syntax before it is implemented</li><li>generic parameter name collision</li><li>generic parameter declared but never usable in the signature</li></ul><p>Generics touch type checking heavily.</p><p>Bad generic code should produce specific messages, not vague type mismatch cascades.</p></section>
+    <section class="container"><h1>Identity function example</h1><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    identity type <span class='bst-code-struct'>T</span> <span class='bst-code-operator'>|</span>value <span class='bst-code-struct'>T</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>T</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> value
+    ;
+
+    x <span class='bst-code-operator'>=</span> identity<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>42</span><span class='bst-code-parenthesis'>)</span>
+    y <span class='bst-code-operator'>=</span> identity<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;hello&quot;</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>This preserves the input type.</p><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">x</span> is inferred as <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Int</span>.</p><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">y</span> is inferred as <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">String</span>.</p></section>
+    <section class="container"><h1>Generic struct example</h1><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>Box</span> type <span class='bst-code-struct'>T</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
+        value <span class='bst-code-struct'>T,</span>
+    <span class='bst-code-operator'>|</span>
+
+    number_box <span class='bst-code-struct'>Box</span> of <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Box</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>42</span><span class='bst-code-parenthesis'>)</span>
+    text_box <span class='bst-code-struct'>Box</span> of <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Box</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> hello <span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Box of Int</span> and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Box of String</span> share the same generic declaration but preserve different concrete value types.</p></section>
+    <section class="container"><h1>Generic choice example</h1><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>Result</span> type <span class='bst-code-struct'>T,</span> <span class='bst-code-struct'>E</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-struct'>Ok</span> <span class='bst-code-struct'>T,</span>
+        <span class='bst-code-struct'>Err</span> <span class='bst-code-struct'>E,</span>
+    ;
+
+    parse_name <span class='bst-code-operator'>|</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Result</span> of <span class='bst-code-struct'>String,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> <span class='bst-code-struct'>Result.Ok</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Nye&quot;</span><span class='bst-code-parenthesis'>)</span>
+    ;
+    </code></pre><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Result</span> describes the shape.</p><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Result of String, Error</span> describes a concrete use of that shape.</p></section>
+    <section class="container"><h1>Relationship-preserving API example</h1><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    first type <span class='bst-code-struct'>T</span> <span class='bst-code-operator'>|</span>items <span class='bst-code-parenthesis'>{</span><span class='bst-code-struct'>T</span><span class='bst-code-parenthesis'>}</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>T</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> items.get<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>0</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>!</span>
+    ;
+    </code></pre><p>This is exactly the kind of API that traits or unions do not express cleanly by themselves.</p><p>The function says:</p><ul><li>the input is a collection of <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">T</span></li><li>the return value is the same <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">T</span></li><li>the caller chooses the concrete <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">T</span></li></ul><p>That relationship is the point of generics.</p></section>
+    <section class="container"><h1>Syntax alternatives considered</h1><h2>Angle brackets</h2><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>Box</span><span class='bst-code-operator'>&lt;</span><span class='bst-code-type'>Int</span><span class='bst-code-operator'>&gt;</span>
+    identity<span class='bst-code-operator'>&lt;</span><span class='bst-code-type'>Int</span><span class='bst-code-operator'>&gt;</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>42</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>Rejected.</p><p>Reasons:</p><ul><li>does not fit Beanstalk&#39;s syntax philosophy</li><li>visually noisier</li><li>creates future grammar pressure</li><li>weakens syntax ownership</li></ul><h2>Symbol-based forms</h2><p>Symbol-heavy generic syntax is rejected for now.</p><p>Reasons:</p><ul><li>cryptic</li><li>visually dense</li><li>hard to scale cleanly</li><li>easy to regret later</li></ul><h2>Type parameters as normal parameters</h2><p>Example direction:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    identity <span class='bst-code-operator'>|</span><span class='bst-code-struct'>T</span> <span class='bst-code-struct'>Type,</span> value <span class='bst-code-struct'>T</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>T</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> value
+    ;
+    </code></pre><p>Rejected for now.</p><p>Reasons:</p><ul><li>blurs value parameters and type parameters too much</li><li>makes generic parameters feel like runtime arguments</li><li>is less clean across structs and choices</li><li>introduces more magic into parameter parsing</li></ul></section>
+    <section class="container"><h1>Future extension points</h1><p>The syntax is designed to leave room for later features.</p><p>Possible future additions:</p><ul><li>trait constraints</li><li>generic methods where appropriate</li><li>explicit generic call-site application</li><li>standard library generic containers</li><li>compiler diagnostics tailored for inference and constraints</li></ul><p>Possible future constraint direction:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    contains type <span class='bst-code-struct'>T</span> <span class='bst-code-operator'>|</span>items <span class='bst-code-parenthesis'>{</span><span class='bst-code-struct'>T</span><span class='bst-code-parenthesis'>}</span>, value <span class='bst-code-struct'>T</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Bool</span>
+    where <span class='bst-code-struct'>T</span> is <span class='bst-code-struct'>EQUALS</span><span class='bst-code-operator'>:</span>
+        ...
+    ;
+    </code></pre><p>Constraint syntax should be designed later, once the trait model is more stable.</p></section>
+    <section class="container"><h1>Recommended alpha scope</h1><p>The initial implementation should stay narrow.</p><p>Include:</p><ul><li>generic functions</li><li>generic structs</li><li>generic choices</li><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">type</span> declaration syntax</li><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">of</span> type application syntax</li><li>simple predictable inference for function calls</li></ul><p>Defer:</p><ul><li>advanced constraints</li><li>explicit generic call-site application unless necessary</li><li>advanced inference</li><li>generic methods if they complicate the implementation</li><li>any feature that pushes Beanstalk toward Rust-level generic complexity</li></ul><p>This is enough to unlock most useful generic APIs without turning generics into a compiler complexity trap.</p></section>
+    <section class="container"><h1>Summary</h1><p>Beanstalk should adopt a minimal, keyword-based generic system built around:</p><ul><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">type</span> for generic parameter declaration</li><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">of</span> for generic argument application</li></ul><p>This direction is:</p><ul><li>readable</li><li>consistent</li><li>future-friendly</li><li>easy to teach</li><li>aligned with Beanstalk&#39;s syntax philosophy</li><li>restrained enough for an alpha-stage implementation</li></ul><p>The core rule is:</p><p>&gt; Beanstalk should support the useful 80% of generics without inheriting the full complexity of larger generic systems.</p></section>
+    <script>
+    function __bs_is_ref(value) {
+    return value !== null && typeof value === "object" && value.__bs_ref === true;
+    }
+
+    function __bs_binding(value) {
+    return { __bs_ref: true, __bs_kind: "binding", __bs_mode: "slot", __bs_slot: { value }, __bs_target: null };
+    }
+
+    function __bs_param_binding(value) {
+    if (!__bs_is_ref(value)) {
+    return __bs_binding(value);
+    }
+    if (value.__bs_kind === "binding") {
+    return value;
+    }
+    const binding = __bs_binding(undefined);
+    binding.__bs_mode = "alias";
+    binding.__bs_target = value;
+    return binding;
+    }
+
+    function __bs_resolve(ref) {
+    while (ref.__bs_kind === "binding" && ref.__bs_mode === "alias") {
+    ref = ref.__bs_target;
+    }
+    return ref;
+    }
+
+    function __bs_read(ref) {
+    const resolved = __bs_resolve(ref);
+    return resolved.__bs_kind === "binding" ? resolved.__bs_slot.value : resolved.__bs_get();
+    }
+
+    function __bs_write(ref, value) {
+    const resolved = __bs_resolve(ref);
+    if (resolved.__bs_kind === "binding") {
+    resolved.__bs_slot.value = value;
+    } else {
+    resolved.__bs_set(value);
+    }
+    return value;
+    }
+
+    function __bs_assign_borrow(binding, ref) {
+    if (binding.__bs_mode === "alias") {
+    return __bs_write(binding, __bs_read(ref));
+    }
+    binding.__bs_mode = "alias";
+    binding.__bs_target = ref;
+    return binding;
+    }
+
+    function __bs_assign_value(binding, value) {
+    if (binding.__bs_mode === "alias") {
+    return __bs_write(binding, value);
+    }
+    binding.__bs_mode = "slot";
+    binding.__bs_target = null;
+    binding.__bs_slot.value = value;
+    return binding;
+    }
+
+    function __bs_field(baseRef, field) {
+    return {
+    __bs_ref: true,
+    __bs_kind: "computed",
+    __bs_get() {
+    return __bs_read(baseRef)[field];
+    },
+    __bs_set(value) {
+    __bs_read(baseRef)[field] = value;
+    }
+    };
+    }
+
+    function __bs_index(baseRef, index) {
+    return {
+    __bs_ref: true,
+    __bs_kind: "computed",
+    __bs_get() {
+    return __bs_read(baseRef)[index];
+    },
+    __bs_set(value) {
+    __bs_read(baseRef)[index] = value;
+    }
+    };
+    }
+
+    function __bs_clone_value(value) {
+    if (Array.isArray(value)) {
+    return value.map(__bs_clone_value);
+    }
+    if (value !== null && typeof value === "object") {
+    const result = {};
+    for (const key of Object.keys(value)) {
+    result[key] = __bs_clone_value(value[key]);
+    }
+    return result;
+    }
+    return value;
+    }
+
+    function __bs_error_normalize_file(file) {
+    if (typeof file !== "string") {
+    return "";
+    }
+    if (file.startsWith("/")) {
+    const parts = file.split(/[\\/]/).filter(Boolean);
+    return parts.length > 0 ? parts[parts.length - 1] : file;
+    }
+    if (/^[A-Za-z]:[\\/]/.test(file)) {
+    const parts = file.split(/[\\/]/).filter(Boolean);
+    return parts.length > 0 ? parts[parts.length - 1] : file;
+    }
+    return file;
+    }
+
+    function __bs_make_error(kind, code, message, location, trace) {
+    return {
+    kind,
+    code,
+    message,
+    location: location ?? null,
+    trace: trace ?? null
+    };
+    }
+
+    function __bs_error_with_location(error, location) {
+    return __bs_make_error(error.kind, error.code, error.message, location, error.trace);
+    }
+
+    function __bs_error_push_trace(error, frame) {
+    const nextTrace = error.trace ? error.trace.concat([frame]) : [frame];
+    return __bs_make_error(error.kind, error.code, error.message, error.location, nextTrace);
+    }
+
+    function __bs_error_bubble(error, file, line, column, functionName) {
+    const safeFunction = typeof functionName === "string" && functionName.length > 0 ? functionName : "<unknown>";
+    const location = {
+    file: __bs_error_normalize_file(file),
+    line,
+    column,
+    function: safeFunction === "<unknown>" ? null : safeFunction
+    };
+    const frame = { function: safeFunction, location };
+    const nextLocation = error.location ?? location;
+    const located = __bs_error_with_location(error, nextLocation);
+    return __bs_error_push_trace(located, frame);
+    }
+
+    function __bs_result_propagate(result) {
+    if (result && result.tag === "ok") {
+    return result.value;
+    }
+    if (result && result.tag === "err") {
+    throw { __bs_result_propagate: true, value: result.value };
+    }
+    throw new Error("Expected internal Result carrier during propagation");
+    }
+
+    function __bs_result_fallback(result, fallback) {
+    if (result && result.tag === "ok") {
+    return result.value;
+    }
+    if (result && result.tag === "err") {
+    return fallback();
+    }
+    throw new Error("Expected internal Result carrier during fallback handling");
+    }
+
+    function __bs_collection_get(collection, index) {
+    if (!Array.isArray(collection)) {
+    const err = __bs_make_error("InvalidArgument", "collection.expected_ordered_collection", "Collection get(...) expects an ordered collection", null, null);
+    return { tag: "err", value: err };
+    }
+    if (!Number.isInteger(index) || index < 0 || index >= collection.length) {
+    const err = __bs_make_error("OutOfBounds", "collection.index_out_of_bounds", "Collection index out of bounds", null, null);
+    return { tag: "err", value: err };
+    }
+    return { tag: "ok", value: collection[index] };
+    }
+
+    function __bs_collection_push(collection, value) {
+    if (!Array.isArray(collection)) {
+    const err = __bs_make_error("InvalidArgument", "collection.expected_ordered_collection", "Collection push(...) expects an ordered collection", null, null);
+    return { tag: "err", value: err };
+    }
+    collection.push(value);
+    return { tag: "ok", value: null };
+    }
+
+    function __bs_collection_remove(collection, index) {
+    if (!Array.isArray(collection)) {
+    const err = __bs_make_error("InvalidArgument", "collection.expected_ordered_collection", "Collection remove(...) expects an ordered collection", null, null);
+    return { tag: "err", value: err };
+    }
+    if (!Number.isInteger(index) || index < 0 || index >= collection.length) {
+    const err = __bs_make_error("OutOfBounds", "collection.index_out_of_bounds", "Collection index out of bounds", null, null);
+    return { tag: "err", value: err };
+    }
+    collection.splice(index, 1);
+    return { tag: "ok", value: null };
+    }
+
+    function __bs_collection_length(collection) {
+    if (!Array.isArray(collection)) {
+    const err = __bs_make_error("InvalidArgument", "collection.expected_ordered_collection", "Collection length() expects an ordered collection", null, null);
+    return { tag: "err", value: err };
+    }
+    return { tag: "ok", value: collection.length };
+    }
+
+    function __bs_value_to_string(value) {
+    if (value === undefined || value === null) {
+    return "";
+    }
+    return String(value);
+    }
+
+    function __bs_io(value) {
+    console.log(__bs_value_to_string(value));
+    }
+
+    function __bs_normalize_numeric_text(value) {
+    return value.trim().replace(/_/g, "");
+    }
+
+    function __bs_cast_int(value) {
+    if (typeof value === "number") {
+    if (!Number.isFinite(value) || !Number.isSafeInteger(value)) {
+    return { tag: "err", value: __bs_make_error("Parse", "int.parse_out_of_range", "Int value is out of supported range", null, null) };
+    }
+    if (Number.isInteger(value)) {
+    return { tag: "ok", value };
+    }
+    return { tag: "err", value: __bs_make_error("Parse", "int.parse_invalid_format", "Float value is not an exact integer", null, null) };
+    }
+    if (typeof value === "string") {
+    const normalized = __bs_normalize_numeric_text(value);
+    if (/^[+-]?[0-9]+$/.test(normalized)) {
+    const parsed = Number.parseInt(normalized, 10);
+    if (!Number.isSafeInteger(parsed)) {
+    return { tag: "err", value: __bs_make_error("Parse", "int.parse_out_of_range", "Int value is out of supported range", null, null) };
+    }
+    return { tag: "ok", value: parsed };
+    }
+    if (/^[+-]?[0-9]+\.[0-9]+$/.test(normalized)) {
+    const parsed = Number.parseFloat(normalized);
+    if (Number.isInteger(parsed) && Number.isSafeInteger(parsed)) {
+    return { tag: "ok", value: parsed };
+    }
+    }
+    return { tag: "err", value: __bs_make_error("Parse", "int.parse_invalid_format", "Cannot parse Int from text", null, null) };
+    }
+    return { tag: "err", value: __bs_make_error("Parse", "int.parse_invalid_format", "Int(...) only accepts Int, Float, or string values", null, null) };
+    }
+
+    function __bs_cast_float(value) {
+    if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+    return { tag: "err", value: __bs_make_error("Parse", "float.parse_out_of_range", "Float value is out of supported range", null, null) };
+    }
+    return { tag: "ok", value };
+    }
+    if (typeof value === "string") {
+    const normalized = __bs_normalize_numeric_text(value);
+    if (/^[+-]?[0-9]+$/.test(normalized) || /^[+-]?[0-9]+\.[0-9]+$/.test(normalized)) {
+    const parsed = Number.parseFloat(normalized);
+    if (!Number.isFinite(parsed)) {
+    return { tag: "err", value: __bs_make_error("Parse", "float.parse_out_of_range", "Float value is out of supported range", null, null) };
+    }
+    return { tag: "ok", value: parsed };
+    }
+    return { tag: "err", value: __bs_make_error("Parse", "float.parse_invalid_format", "Cannot parse Float from text", null, null) };
+    }
+    return { tag: "err", value: __bs_make_error("Parse", "float.parse_invalid_format", "Float(...) only accepts Int, Float, or string values", null, null) };
+    }
+
+    function b_fn0() {
+    let b_l0 = __bs_binding(undefined);
+
+    __bs_assign_value(b_l0, []);
+    return __bs_read(b_l0);
+    }
+
+    </script>
+    <script>
+    (function () {
+      if (typeof b_fn0 === "function") b_fn0();
+    })();
+    </script>
+  </body>
+</html>

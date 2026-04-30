@@ -226,11 +226,11 @@ fn reject_direct_mod_file_import(
     ))
 }
 
-/// Attempts to resolve a cross-library import through the target library's `#mod.bst` facade.
+/// Attempts to resolve a cross-library import through the target module facade.
 ///
 /// WHAT: when an import path starts with a library prefix and the importer is outside that
 /// library, the symbol must be exported by the module facade.
-/// WHY: library modules expose symbols only through their facade; external importers cannot
+/// WHY: source-library modules expose symbols only through their facade; external importers cannot
 /// bypass it to import internal implementation symbols.
 fn try_resolve_facade_import(
     importer_file: &InternedPath,
@@ -375,8 +375,7 @@ fn check_module_boundary(
     }
 
     // Different module roots: must go through facade.
-    if module_root_facade_exports.contains_key(target_root) {
-        let facade_exports = module_root_facade_exports.get(target_root).unwrap();
+    if let Some(facade_exports) = module_root_facade_exports.get(target_root) {
         if let Some(symbol_name) = symbol_path.name() {
             let exported = facade_exports.iter().any(|e| e.export_name == symbol_name);
             if exported {
@@ -484,6 +483,57 @@ fn register_source_import_binding(
             .visible_source_bindings
             .insert(local_name, symbol_path.to_owned());
     }
+
+    Ok(())
+}
+
+/// Registers a resolved external package import into the visible-name registry.
+///
+/// WHAT: records the file-local spelling for a concrete external symbol id.
+/// WHY: facade re-exports and direct external imports should share alias warnings and
+/// collision behavior instead of maintaining separate registration branches.
+fn register_external_import_binding(
+    import: &FileImport,
+    symbol_id: ExternalSymbolId,
+    registry: &mut VisibleNameRegistry,
+    bindings: &mut FileImportBindings,
+    string_table: &StringTable,
+    warnings: &mut Vec<CompilerWarning>,
+) -> Result<(), CompilerError> {
+    let Some(symbol_name) = import.header_path.name() else {
+        return Err(CompilerError::new_rule_error(
+            "External import path is missing a symbol name.",
+            import.location.clone(),
+        ));
+    };
+
+    let local_name = import.alias.unwrap_or(symbol_name);
+
+    registry.register(
+        local_name,
+        VisibleNameBinding {
+            kind: VisibleNameKind::ExternalImport,
+            canonical_path: Some(import.header_path.clone()),
+            external_symbol_id: Some(symbol_id),
+            location: Some(import.location.clone()),
+        },
+        string_table,
+    )?;
+
+    if import.alias.is_some() {
+        check_alias_case_warning(
+            &import.alias_location,
+            &import.path_location,
+            local_name,
+            symbol_name,
+            string_table,
+            warnings,
+        );
+    }
+
+    bindings
+        .visible_external_symbols
+        .insert(local_name, symbol_id);
 
     Ok(())
 }
@@ -605,7 +655,7 @@ pub(crate) fn resolve_file_import_bindings(
             reject_direct_mod_file_import(&import.header_path, &import.location, string_table)?;
 
             // Facade import resolution for cross-library imports.
-            // WHY: library modules expose symbols only through their #mod.bst facade.
+            // WHY: source-library modules expose symbols only through their module facade.
             //      External importers cannot bypass the facade to import internal symbols.
             if let Some(facade_result) = try_resolve_facade_import(
                 &source_file,
@@ -630,45 +680,20 @@ pub(crate) fn resolve_file_import_bindings(
                         continue;
                     }
                     FacadeImportResolution::External(symbol_id) => {
-                        let Some(symbol_name) = import.header_path.name() else {
-                            return Err(CompilerError::new_rule_error(
-                                "External import path is missing a symbol name.",
-                                import.location.clone(),
-                            ));
-                        };
-                        let local_name = import.alias.unwrap_or(symbol_name);
-
-                        registry.register(
-                            local_name,
-                            VisibleNameBinding {
-                                kind: VisibleNameKind::ExternalImport,
-                                canonical_path: Some(import.header_path.clone()),
-                                external_symbol_id: Some(symbol_id),
-                                location: Some(import.location.clone()),
-                            },
+                        register_external_import_binding(
+                            &import,
+                            symbol_id,
+                            &mut registry,
+                            &mut bindings,
                             string_table,
+                            &mut warnings,
                         )?;
-
-                        if import.alias.is_some() {
-                            check_alias_case_warning(
-                                &import.alias_location,
-                                &import.path_location,
-                                local_name,
-                                symbol_name,
-                                string_table,
-                                &mut warnings,
-                            );
-                        }
-
-                        bindings
-                            .visible_external_symbols
-                            .insert(local_name, symbol_id);
                         continue;
                     }
                     FacadeImportResolution::NotExported { library_prefix } => {
                         return Err(CompilerError::new_rule_error(
                             format!(
-                                "Cannot import '{}' from '@{library_prefix}' because it is not exported by the library's #mod.bst facade. Library modules expose symbols only through their facade.",
+                                "Cannot import '{}' from '@{library_prefix}' because it is not exported by the source library module facade. Source-library modules expose symbols only through #mod.bst.",
                                 import.header_path.to_portable_string(string_table)
                             ),
                             import.location,
@@ -704,39 +729,14 @@ pub(crate) fn resolve_file_import_bindings(
                         continue;
                     }
                     FacadeImportResolution::External(symbol_id) => {
-                        let Some(symbol_name) = import.header_path.name() else {
-                            return Err(CompilerError::new_rule_error(
-                                "External import path is missing a symbol name.",
-                                import.location.clone(),
-                            ));
-                        };
-                        let local_name = import.alias.unwrap_or(symbol_name);
-
-                        registry.register(
-                            local_name,
-                            VisibleNameBinding {
-                                kind: VisibleNameKind::ExternalImport,
-                                canonical_path: Some(import.header_path.clone()),
-                                external_symbol_id: Some(symbol_id),
-                                location: Some(import.location.clone()),
-                            },
+                        register_external_import_binding(
+                            &import,
+                            symbol_id,
+                            &mut registry,
+                            &mut bindings,
                             string_table,
+                            &mut warnings,
                         )?;
-
-                        if import.alias.is_some() {
-                            check_alias_case_warning(
-                                &import.alias_location,
-                                &import.path_location,
-                                local_name,
-                                symbol_name,
-                                string_table,
-                                &mut warnings,
-                            );
-                        }
-
-                        bindings
-                            .visible_external_symbols
-                            .insert(local_name, symbol_id);
                         continue;
                     }
                     FacadeImportResolution::NotExported { library_prefix } => {
@@ -762,8 +762,8 @@ pub(crate) fn resolve_file_import_bindings(
                 string_table,
             )? {
                 ResolvedImportTarget::Source(symbol_path) => {
-                    // NEW: enforce module boundary for imports that resolve to existing files
-                    // in a different module root.
+                    // Enforce facade boundaries when a normal file import resolves into another
+                    // module root.
                     if let Some(target_file) = canonical_source_by_symbol_path.get(&symbol_path) {
                         check_module_boundary(
                             &source_file,
@@ -789,39 +789,14 @@ pub(crate) fn resolve_file_import_bindings(
                     )?;
                 }
                 ResolvedImportTarget::External(symbol_id) => {
-                    let Some(symbol_name) = import.header_path.name() else {
-                        return Err(CompilerError::new_rule_error(
-                            "External import path is missing a symbol name.",
-                            import.location.clone(),
-                        ));
-                    };
-                    let local_name = import.alias.unwrap_or(symbol_name);
-
-                    registry.register(
-                        local_name,
-                        VisibleNameBinding {
-                            kind: VisibleNameKind::ExternalImport,
-                            canonical_path: Some(import.header_path.clone()),
-                            external_symbol_id: Some(symbol_id),
-                            location: Some(import.location.clone()),
-                        },
+                    register_external_import_binding(
+                        &import,
+                        symbol_id,
+                        &mut registry,
+                        &mut bindings,
                         string_table,
+                        &mut warnings,
                     )?;
-
-                    if import.alias.is_some() {
-                        check_alias_case_warning(
-                            &import.alias_location,
-                            &import.path_location,
-                            local_name,
-                            symbol_name,
-                            string_table,
-                            &mut warnings,
-                        );
-                    }
-
-                    bindings
-                        .visible_external_symbols
-                        .insert(local_name, symbol_id);
                 }
             }
         }
@@ -905,7 +880,7 @@ pub(crate) fn resolve_re_exports(
                     } => {
                         return Err(CompilerError::new_rule_error(
                             format!(
-                                "Cannot re-export '{}' from '@{target_prefix}' because it is not exported by the library's #mod.bst facade. Library modules expose symbols only through their facade.",
+                                "Cannot re-export '{}' from '@{target_prefix}' because it is not exported by the source library module facade. Source-library modules expose symbols only through #mod.bst.",
                                 re_export.header_path.to_portable_string(string_table)
                             ),
                             re_export.location.clone(),
@@ -923,7 +898,8 @@ pub(crate) fn resolve_re_exports(
                     string_table,
                 )?;
 
-                // NEW: enforce module boundary for re-exports that target another module root.
+                // Re-exports that target another module root must still respect that module's
+                // facade surface.
                 if let ResolvedImportTarget::Source(ref symbol_path) = resolved
                     && let Some(target_file) = module_symbols
                         .canonical_source_by_symbol_path

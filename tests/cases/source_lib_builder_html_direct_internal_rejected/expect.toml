@@ -4,4 +4,4 @@ entry = "."
 mode = "failure"
 warnings = "forbid"
 error_type = "Rule"
-message_contains = ["not exported by the library's #mod.bst facade"]
+message_contains = ["not exported by the source library module facade"]
