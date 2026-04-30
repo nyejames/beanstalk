@@ -507,6 +507,30 @@ if value is:
 ;
 ```
 
+Relational string pattern example:
+
+```beanstalk
+name ~= "alice"
+
+if name is:
+    case < "m" => io("before m in alphabet")
+    else => io("m or after")
+;
+```
+
+Capture pattern example:
+
+```beanstalk
+value ~= 42
+
+if value is:
+    case captured => io(captured.to_string())
+    else => io("fallback")
+;
+```
+
+Nested choice payload patterns (for example matching inside a payload field) are deferred. Use `else =>` or simple payload captures for choice values instead.
+
 Choice default example:
 
 ```beanstalk

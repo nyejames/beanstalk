@@ -3528,84 +3528,89 @@ tags = ["integration", "imports", "module-privacy"]
 [[case]]
 id = "pattern_capture_binds_scrutinee_success"
 path = "pattern_capture_binds_scrutinee_success"
-tags = ["integration", "language", "pattern-matching"]
+tags = ["integration","language","pattern-matching"]
 
 [[case]]
 id = "pattern_capture_arm_scope_only"
 path = "pattern_capture_arm_scope_only"
-tags = ["integration", "language", "pattern-matching"]
+tags = ["integration","language","pattern-matching"]
 
 [[case]]
 id = "pattern_capture_guard_success"
 path = "pattern_capture_guard_success"
-tags = ["integration", "language", "pattern-matching"]
+tags = ["integration","language","pattern-matching"]
 
 [[case]]
 id = "pattern_capture_immutable_binding"
 path = "pattern_capture_immutable_binding"
-tags = ["integration", "language", "pattern-matching", "diagnostics"]
+tags = ["integration","language","pattern-matching","diagnostics"]
 
 [[case]]
 id = "pattern_capture_rejects_underscore"
 path = "pattern_capture_rejects_underscore"
-tags = ["integration", "language", "pattern-matching", "diagnostics"]
+tags = ["integration","language","pattern-matching","diagnostics"]
 
 [[case]]
 id = "pattern_capture_name_collision_rejected"
 path = "pattern_capture_name_collision_rejected"
-tags = ["integration", "language", "pattern-matching", "diagnostics"]
+tags = ["integration","language","pattern-matching","diagnostics"]
 
 [[case]]
 id = "pattern_capture_after_literal_warning_or_reachable"
 path = "pattern_capture_after_literal_warning_or_reachable"
-tags = ["integration", "language", "pattern-matching"]
+tags = ["integration","language","pattern-matching"]
 
 [[case]]
 id = "pattern_capture_before_else_makes_else_unreachable_warning"
 path = "pattern_capture_before_else_makes_else_unreachable_warning"
-tags = ["integration", "language", "pattern-matching"]
+tags = ["integration","language","pattern-matching"]
 
 [[case]]
 id = "pattern_duplicate_literal_warning"
 path = "pattern_duplicate_literal_warning"
-tags = ["integration", "language", "pattern-matching", "diagnostics"]
+tags = ["integration","language","pattern-matching","diagnostics","warnings"]
 
 [[case]]
 id = "pattern_duplicate_unit_choice_variant_warning"
 path = "pattern_duplicate_unit_choice_variant_warning"
-tags = ["integration", "language", "pattern-matching", "diagnostics", "choices"]
+tags = ["integration","language","pattern-matching","diagnostics","warnings","choices"]
 
 [[case]]
 id = "pattern_unreachable_after_else_warning"
 path = "pattern_unreachable_after_else_warning"
-tags = ["integration", "language", "pattern-matching", "diagnostics"]
+tags = ["integration","language","pattern-matching","diagnostics","warnings"]
 
 [[case]]
 id = "pattern_unreachable_after_capture_warning"
 path = "pattern_unreachable_after_capture_warning"
-tags = ["integration", "language", "pattern-matching", "diagnostics"]
+tags = ["integration","language","pattern-matching","diagnostics","warnings"]
 
 [[case]]
 id = "pattern_unreachable_combined_warning"
 path = "pattern_unreachable_combined_warning"
-tags = ["integration", "language", "pattern-matching", "diagnostics"]
+tags = ["integration","language","pattern-matching","diagnostics","warnings"]
 
 [[case]]
 id = "pattern_capture_whole_choice_value_success"
 path = "pattern_capture_whole_choice_value_success"
-tags = ["integration", "language", "pattern-matching", "choices"]
+tags = ["integration","language","pattern-matching","choices"]
 
 [[case]]
 id = "pattern_choice_payload_existing_capture_alias_success"
 path = "pattern_choice_payload_existing_capture_alias_success"
-tags = ["integration", "language", "pattern-matching", "choices"]
+tags = ["integration","language","pattern-matching","choices"]
 
 [[case]]
 id = "pattern_nested_choice_payload_pattern_rejected"
 path = "pattern_nested_choice_payload_pattern_rejected"
-tags = ["integration", "diagnostics", "pattern-matching", "choices"]
+tags = ["integration","diagnostics","pattern-matching","choices"]
 
 [[case]]
 id = "pattern_capture_does_not_enable_nested_payload"
 path = "pattern_capture_does_not_enable_nested_payload"
-tags = ["integration", "diagnostics", "pattern-matching", "choices"]
+tags = ["integration","diagnostics","pattern-matching","choices"]
+
+[[case]]
+id = "pattern_relational_overlap_no_warning"
+path = "pattern_relational_overlap_no_warning"
+tags = ["integration","language","pattern-matching","js-backend"]
