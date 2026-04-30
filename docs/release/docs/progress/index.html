@@ -448,7 +448,7 @@ body {
      <td style="padding: 0.2em 0.5em;"> Partial</td>
      <td style="padding: 0.2em 0.5em;"> Broad literal, choice-match, and payload-capture coverage, including exhaustiveness and diagnostics.</td>
      <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
-     <td style="padding: 0.2em 0.5em;"> Literal patterns, choice variant patterns (including payload captures with `field as local_name` aliases), relational ordered-scalar patterns, guards, and else are supported. Wildcard in case arms is not supported—use else => instead. General capture/tagged patterns and nested payload patterns remain deferred. `as` in non-choice match patterns is rejected with a structured diagnostic.</td>
+     <td style="padding: 0.2em 0.5em;"> Literal patterns, choice variant patterns, payload extraction, relational patterns including strings, guards, else arms, and general capture patterns are supported. Wildcard patterns using '_' are permanently rejected; use else => instead. Obvious unreachable arms warn. Full relational overlap analysis and nested choice payload patterns remain deferred.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -1497,12 +1497,27 @@ body {
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;"> General capture / tagged match patterns</td>
-     <td style="padding: 0.2em 0.5em;"> Deferred</td>
+     <td style="padding: 0.2em 0.5em;"> Supported</td>
      <td style="padding: 0.2em 0.5em;"> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">diagnostic_match_deferred_capture_pattern</span></td>
-     <td style="padding: 0.2em 0.5em;"> Choice payload capture patterns are now supported. General capture/tagged patterns and rename captures remain deferred.</td>
+    ">pattern_capture_binds_scrutinee_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">pattern_capture_before_else_makes_else_unreachable_warning</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">pattern_capture_after_literal_warning_or_reachable</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">pattern_unreachable_after_capture_warning</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">pattern_capture_whole_choice_value_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">pattern_choice_payload_existing_capture_alias_success</span></td>
+     <td style="padding: 0.2em 0.5em;"> General capture patterns (for example `case captured =>`) are supported for both choice and non-choice scrutinees. Choice payload capture patterns with `field as local_name` aliases are also supported. Nested payload patterns and `|...|` tagged patterns remain deferred.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">

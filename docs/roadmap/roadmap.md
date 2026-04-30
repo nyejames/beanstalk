@@ -9,7 +9,6 @@ Use the language surface integration matrix as a reference for what is currently
 ---
 
 # Plans / Notes / TODOS
-- Pattern matching hardening: `docs/roadmap/plans/pattern-matching-hardening-plan.md`
 - Review of Error and Option syntax sugar for result types, handling and hardening.
 - full traits implementation
 - Closures

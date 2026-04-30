@@ -369,9 +369,18 @@ body {
              <td style="padding: 0.2em 0.5em;"> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">bean new html .</span> </td>
-     <td style="padding: 0.2em 0.5em;"> Creates a minimal HTML project scaffold.</td>
-     <td style="padding: 0.2em 0.5em;"> If path is omitted, bean shows the current directory and asks for confirmation before scaffolding there. It then asks for a project name.</td>
+    ">bean new html</span> </td>
+     <td style="padding: 0.2em 0.5em;"> Creates a complete HTML project scaffold.</td>
+     <td style="padding: 0.2em 0.5em;"> Accepts an optional path and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">--force</span>. If path is omitted, bean shows the current directory and asks for confirmation before scaffolding there. It then asks for a project name, a .gitignore choice, and creates the full default scaffold including <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">src/#page.bst</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">lib/</span>, output manifests, and an optional .gitignore.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -492,6 +501,18 @@ body {
              <td style="padding: 0.2em 0.5em;"> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
+    ">--force</span> </td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">new html</span> only</td>
+     <td style="padding: 0.2em 0.5em;"> Allows replacing existing scaffold-owned files after a confirmation warning. Never overwrites .gitignore or unrelated files.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
     ">--host</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
@@ -516,7 +537,7 @@ body {
         </tr>
         
     </table></section>
-    <section class="container"><h1>Create a new HTML project</h1><p>The current project scaffold is intentionally small. It creates the project config and output folders, then you can add a page entry file. The HTML project builder itself has more rules than this page needs to cover; see <a href="../html-project-builder">the HTML project builder guide</a> for page layout, routing, assets, fragments, and generated output details.</p><p>Start a new project:</p><pre style="
+    <section class="container"><h1>Create a new HTML project</h1><p>The scaffold creates a complete default project including config, a starter page, library folder, output folders with build manifests, and an optional .gitignore. The HTML project builder itself has more rules than this page needs to cover; see <a href="../html-project-builder">the HTML project builder guide</a> for page layout, routing, assets, fragments, and generated output details.</p><p>Start a new project:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
         border-radius: 5px;
@@ -524,8 +545,10 @@ body {
         white-space: pre; 
         overflow-x: auto;
     "><code class='codeblock'>
-    bean new html .
-    </code></pre><p>If you omit the path, bean asks for confirmation in the current directory before continuing. The command then asks for:</p><pre style="
+    bean new html
+    bean new html my<span class='bst-code-operator'>-</span>site
+    bean new html <span class='bst-code-operator'>~</span><span class='bst-code-operator'>/</span>projects<span class='bst-code-operator'>/</span>my<span class='bst-code-operator'>-</span>site
+    </code></pre><p>If you omit the path, bean asks for confirmation in the current directory:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
         border-radius: 5px;
@@ -534,9 +557,8 @@ body {
         overflow-x: auto;
     "><code class='codeblock'>
     <span class='bst-code-struct'>No</span> project path specified. <span class='bst-code-struct'>Current</span> directory<span class='bst-code-operator'>:</span> <span class='bst-code-operator'>/</span>your<span class='bst-code-operator'>/</span>path
-    <span class='bst-code-struct'>Create</span> the new <span class='bst-code-struct'>HTML</span> project in this directory<span class='bst-code-operator'>?</span> <span class='bst-code-parenthesis'>[</span>y<span class='bst-code-operator'>/</span><span class='bst-code-struct'>N</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-operator'>:</span>
-    <span class='bst-code-struct'>Project</span> name<span class='bst-code-operator'>:</span>
-    </code></pre><p>After the project exists, add an entry page if the scaffold has not created one yet:</p><pre style="
+    <span class='bst-code-struct'>Create</span> the new <span class='bst-code-struct'>HTML</span> project in this directory<span class='bst-code-operator'>?</span> y<span class='bst-code-operator'>/</span><span class='bst-code-struct'>N</span><span class='bst-code-operator'>:</span>
+    </code></pre><p>If the target directory already exists, you are given three choices:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
         border-radius: 5px;
@@ -544,25 +566,16 @@ body {
         white-space: pre; 
         overflow-x: auto;
     "><code class='codeblock'>
-    cd path<span class='bst-code-operator'>/</span>to<span class='bst-code-operator'>/</span>your<span class='bst-code-operator'>-</span>project
-    mkdir <span class='bst-code-operator'>-</span>p src
-    nano src<span class='bst-code-operator'>/</span><span class='bst-code-comment'>#page.bst</span>
-    </code></pre><p>A minimal first page can be:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12); 
-        padding-left: 1em; 
-        border-radius: 5px;
-        max-width: 100%; 
-        white-space: pre; 
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-operator'>#</span> page_title <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Hello Beanstalk&quot;</span>
+    <span class='bst-code-struct'>Target</span> directory already exists<span class='bst-code-operator'>:</span>
+    <span class='bst-code-operator'>/</span>path<span class='bst-code-operator'>/</span>to<span class='bst-code-operator'>/</span>target
 
-    <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>markdown<span class='bst-code-operator'>:</span>
-        <span class='bst-code-operator'>#</span> <span class='bst-code-struct'>Hello</span> from <span class='bst-code-struct'>Beanstalk</span>
+    <span class='bst-code-struct'>What</span> do you want to do<span class='bst-code-operator'>?</span>
+      <span class='bst-code-number'>1.</span> <span class='bst-code-struct'>Create</span> the project inside this directory
+      <span class='bst-code-number'>2.</span> <span class='bst-code-struct'>Create</span> a new child folder for the project inside this directory
+      <span class='bst-code-number'>3.</span> <span class='bst-code-struct'>Cancel</span>
 
-        <span class='bst-code-struct'>Edit</span> this file and save <span class='bst-code-keyword'>to</span> trigger hot reload.
-    <span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>Then check it:</p><pre style="
+    <span class='bst-code-struct'>Choose</span> <span class='bst-code-number'>1</span><span class='bst-code-operator'>/</span><span class='bst-code-number'>2</span><span class='bst-code-operator'>/</span><span class='bst-code-number'>3</span><span class='bst-code-operator'>:</span>
+    </code></pre><p>If the path contains directories that do not exist, bean asks before creating them:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
         border-radius: 5px;
@@ -570,7 +583,78 @@ body {
         white-space: pre; 
         overflow-x: auto;
     "><code class='codeblock'>
+    <span class='bst-code-struct'>The</span> project target contains directories that do not exist<span class='bst-code-operator'>:</span>
+    <span class='bst-code-operator'>/</span>path<span class='bst-code-operator'>/</span>to<span class='bst-code-operator'>/</span>new<span class='bst-code-operator'>/</span>site
+
+    <span class='bst-code-struct'>Create</span> the missing directories and scaffold the project there<span class='bst-code-operator'>?</span> y<span class='bst-code-operator'>/</span><span class='bst-code-struct'>N</span><span class='bst-code-operator'>:</span>
+    </code></pre><p>After the final directory is chosen, bean asks for the project name:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>Project</span> name <span class='bst-code-parenthesis'>(</span>press <span class='bst-code-struct'>Enter</span> to use project directory name<span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>:</span>
+    </code></pre><p>Then it asks whether to add a .gitignore with Beanstalk defaults:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>Add</span> a .gitignore with <span class='bst-code-struct'>Beanstalk</span> defaults<span class='bst-code-operator'>?</span> <span class='bst-code-struct'>Y</span><span class='bst-code-operator'>/</span>n<span class='bst-code-operator'>:</span>
+    </code></pre><p>If .gitignore already exists, bean asks whether to append missing defaults instead of overwriting.</p><h2>Generated project structure</h2><p>A scaffolded project looks like this:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    project<span class='bst-code-operator'>-</span>root<span class='bst-code-operator'>/</span>
+    ├── <span class='bst-code-operator'>#</span>config.bst
+    ├── src<span class='bst-code-operator'>/</span>
+    │   └── <span class='bst-code-operator'>#</span>page.bst
+    ├── lib<span class='bst-code-operator'>/</span>
+    ├── dev<span class='bst-code-operator'>/</span>
+    │   └── .beanstalk_manifest
+    ├── release<span class='bst-code-operator'>/</span>
+    │   └── .beanstalk_manifest
+    └── .gitignore
+    </code></pre><ul><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">lib/</span> is created empty by default for project-local source libraries.</li><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">dev/</span> and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">release/</span> are output folders.</li><li>.beanstalk_manifest files are build-system metadata for safe stale-output cleanup.</li><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">src/#page.bst</span> is the default HTML page entry with a starter page.</li></ul><h2>Using --force</h2><p>--force allows replacing scaffold-owned files when they already exist:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    bean new html my<span class='bst-code-operator'>-</span>site <span class='bst-code-operator'>-</span><span class='bst-code-operator'>-</span>force
+    </code></pre><p>It still asks for a second confirmation and never overwrites .gitignore or unrelated files.</p><p>After creation, check and run the project:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    cd my<span class='bst-code-operator'>-</span>site
     bean check .
+    bean dev .
     </code></pre></section>
     <section class="container"><h1>Run the dev server</h1><p><span style="
         color: #c444aff9;

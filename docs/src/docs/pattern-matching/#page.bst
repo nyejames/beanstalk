@@ -33,7 +33,7 @@ import @styles/docs {navbar, title, section, palette, styled_table, codeblock, t
     Exhaustive choice matches do not need a fallback arm when every variant is covered.
 
     [codeblock, $code("bst"):
-        #Status :: Ready, Busy, Offline;
+        # Status :: Ready, Busy, Offline;
 
         current Status = Status::Busy
         label ~= "unknown"

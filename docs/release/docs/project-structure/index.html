@@ -479,6 +479,40 @@ body {
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">#library_folders</span> shape how the project is searched and how imports resolve.</p></section>
+    <section class="container"><h1>Default project scaffold</h1><p>The <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">bean new html</span> command generates a complete default project:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    project<span class='bst-code-operator'>-</span>root<span class='bst-code-operator'>/</span>
+    ├── <span class='bst-code-operator'>#</span>config.bst
+    ├── src<span class='bst-code-operator'>/</span>
+    │   └── <span class='bst-code-operator'>#</span>page.bst
+    ├── lib<span class='bst-code-operator'>/</span>
+    ├── dev<span class='bst-code-operator'>/</span>
+    │   └── .beanstalk_manifest
+    ├── release<span class='bst-code-operator'>/</span>
+    │   └── .beanstalk_manifest
+    └── .gitignore
+    </code></pre><p>Clarifications:</p><ul><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">lib/</span> is created empty by default. It is the conventional place for project-local source libraries.</li><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">dev/</span> and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">release/</span> are output folders, not source folders.</li><li>.beanstalk_manifest files are build-system metadata used for safe stale-output cleanup.</li><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">src/#page.bst</span> is the default HTML page entry and includes a starter page.</li></ul></section>
     <section class="container"><h1>Module entry files</h1><p>A module entry file is a Beanstalk file whose file name starts with <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
