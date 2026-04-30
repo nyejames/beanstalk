@@ -42,6 +42,8 @@ pub(crate) struct JsEmitter<'hir> {
     /// Used to conditionally emit runtime helpers.
     pub(crate) referenced_external_functions:
         HashSet<crate::compiler_frontend::external_packages::ExternalFunctionId>,
+    /// Whether choice equality was lowered, requiring the runtime helper.
+    pub(crate) used_choice_equality: bool,
 }
 
 impl<'hir> JsEmitter<'hir> {
@@ -72,6 +74,7 @@ impl<'hir> JsEmitter<'hir> {
             used_identifiers: HashSet::new(),
             temp_counter: 0,
             referenced_external_functions: HashSet::new(),
+            used_choice_equality: false,
         }
     }
 
@@ -91,6 +94,10 @@ impl<'hir> JsEmitter<'hir> {
         }
 
         self.emit_core_library_helpers();
+
+        if self.used_choice_equality {
+            self.emit_runtime_choice_helpers();
+        }
 
         if self.config.auto_invoke_start {
             let Some(start_name) = self

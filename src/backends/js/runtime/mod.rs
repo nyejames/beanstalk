@@ -15,6 +15,7 @@
 mod aliasing;
 mod bindings;
 mod casts;
+mod choices;
 mod cloning;
 mod collections;
 mod errors;
@@ -42,6 +43,7 @@ impl<'hir> JsEmitter<'hir> {
     ///   collection helpers      — guarded get/push/remove/length for ordered collections
     ///   string helpers          — value-to-string conversion and IO output
     ///   cast helpers            — numeric and string casting with Result-typed errors
+    ///   choice helpers          — structural equality for nominal choice carriers
     ///
     /// All groups use JS `function` declarations, which are hoisted by the JS engine.
     /// Ordering here is for readability only; correctness does not depend on it.

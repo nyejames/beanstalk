@@ -385,7 +385,7 @@ body {
         case <span class='bst-code-struct'>Err</span><span class='bst-code-parenthesis'>(</span>message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span>message<span class='bst-code-parenthesis'>)</span>
         case <span class='bst-code-struct'>Pending</span><span class='bst-code-parenthesis'>(</span>retry_count, message <span class='bst-code-keyword'>as</span> pending_message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span>pending_message<span class='bst-code-parenthesis'>)</span>
     ;
-    </code></pre><h2>Invalid syntax</h2><p>    Unit variants are values, not constructor calls.</p><pre style="
+    </code></pre><p>    Choice equality is deferred until structural equality is implemented.     Use pattern matching to branch on variants and compare extracted payload fields inside the matching arm.</p><h2>Invalid syntax</h2><p>    Unit variants are values, not constructor calls.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
         border-radius: 5px;
@@ -405,7 +405,7 @@ body {
     "><code class='codeblock'>
     <span class='bst-code-comment'>-- Invalid: shorthand payload declaration</span>
     <span class='bst-code-struct'>Response</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Err</span> <span class='bst-code-struct'>String,</span> <span class='bst-code-struct'>Success;</span>
-    </code></pre><h2>Deferred features</h2><ul><li>Direct payload field access (e.g. `response.message`).</li><li>Generic choice declarations.</li><li>Recursive choice declarations.</li><li>Payload structural equality.</li><li>Nested payload patterns and nested exhaustiveness.</li></ul></section>
+    </code></pre><h2>Deferred features</h2><ul><li>Direct payload field access (e.g. `response.message`).</li><li>Generic choice declarations.</li><li>Recursive choice declarations.</li><li>Unit and payload choice equality.</li><li>Nested payload patterns and nested exhaustiveness.</li></ul></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

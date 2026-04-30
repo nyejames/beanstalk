@@ -213,7 +213,6 @@ impl DataType {
     /// Supported types:
     /// - Scalar types: Bool, Int, Float, Char, StringSlice
     /// - Choices whose payload fields all support structural equality
-    /// - Option and Result when their inner types support equality
     /// - References to supported types
     ///
     /// Rejected types:
@@ -257,12 +256,9 @@ impl DataType {
                 supported
             }
 
-            DataType::Option(inner) => inner.supports_structural_equality_with_visited(visited),
-
-            DataType::Result { ok, err } => {
-                ok.supports_structural_equality_with_visited(visited)
-                    && err.supports_structural_equality_with_visited(visited)
-            }
+            // Options and Results do not yet have frontend equality support.
+            // Defer them until dedicated Option/Result comparison lowering is implemented.
+            DataType::Option(_) | DataType::Result { .. } => false,
 
             _ => false,
         }

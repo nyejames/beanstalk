@@ -313,12 +313,13 @@ impl<'hir> JsEmitter<'hir> {
         let right = self.lower_expr(right)?;
 
         if is_choice_equality {
-            let tag_op = match operator {
-                HirBinOp::Eq => "===",
-                HirBinOp::Ne => "!==",
+            self.used_choice_equality = true;
+            let eq_expr = format!("__bs_choice_eq({left}, {right})");
+            return match operator {
+                HirBinOp::Eq => Ok(eq_expr),
+                HirBinOp::Ne => Ok(format!("(!{eq_expr})")),
                 _ => unreachable!(),
             };
-            return Ok(format!("({left}.tag {tag_op} {right}.tag)"));
         }
 
         let js_operator = match operator {

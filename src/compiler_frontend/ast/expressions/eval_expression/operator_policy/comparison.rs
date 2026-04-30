@@ -11,7 +11,6 @@ use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariantPayload;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::return_rule_error;
 use crate::return_type_error;
 
 pub(super) fn is_comparison_operator(op: &Operator) -> bool {
@@ -86,22 +85,8 @@ pub(super) fn resolve_comparison_operator_type(
                 }
 
                 // Phase 2: unit choice equality is supported.
-                // Phase 3 will implement payload structural equality.
-                let has_payload = variants
-                    .iter()
-                    .any(|v| matches!(v.payload, ChoiceVariantPayload::Record { .. }));
-
-                if has_payload {
-                    return_rule_error!(
-                        "Choice equality is deferred. Use pattern matching and compare variants or payload fields inside match arms.",
-                        location.clone(),
-                        {
-                            CompilationStage => "Expression Evaluation",
-                            PrimarySuggestion => "Use 'if value is: case Variant => ...' or payload captures such as 'case Variant(field) => ...'",
-                        }
-                    )
-                }
-
+                // Phase 3: payload structural equality is supported when all payload fields
+                // support structural equality (verified above).
                 Ok(DataType::Bool)
             }
             _ => invalid_comparison_types(lhs, rhs, op, location, string_table),

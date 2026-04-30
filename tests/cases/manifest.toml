@@ -469,9 +469,34 @@ path = "choice_unit_equality_in_function_return"
 tags = ["integration","language","choices","equality"]
 
 [[case]]
-id = "choice_payload_structural_equality_deferred"
-path = "choice_payload_structural_equality_deferred"
-tags = ["integration","diagnostics","choices","equality"]
+id = "choice_payload_equality_same_payload_true"
+path = "choice_payload_equality_same_payload_true"
+tags = ["integration","language","choices","equality","js-backend"]
+
+[[case]]
+id = "choice_payload_equality_different_payload_false"
+path = "choice_payload_equality_different_payload_false"
+tags = ["integration","language","choices","equality","js-backend"]
+
+[[case]]
+id = "choice_payload_equality_unit_vs_payload_false"
+path = "choice_payload_equality_unit_vs_payload_false"
+tags = ["integration","language","choices","equality","js-backend"]
+
+[[case]]
+id = "choice_payload_equality_same_choice_different_variants_false"
+path = "choice_payload_equality_same_choice_different_variants_false"
+tags = ["integration","language","choices","equality","js-backend"]
+
+[[case]]
+id = "choice_payload_equality_nested_choice_true"
+path = "choice_payload_equality_nested_choice_true"
+tags = ["integration","language","choices","equality","js-backend"]
+
+[[case]]
+id = "choice_payload_equality_nested_choice_false"
+path = "choice_payload_equality_nested_choice_false"
+tags = ["integration","language","choices","equality","js-backend"]
 
 [[case]]
 id = "choice_equality_different_choice_types_rejected"
