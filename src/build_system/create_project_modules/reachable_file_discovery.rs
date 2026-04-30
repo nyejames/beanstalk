@@ -69,7 +69,7 @@ pub(super) fn discover_reachable_files(
     let mut queue = VecDeque::new();
     queue.push_back(entry_point.to_path_buf());
 
-    // Seed all module facade files so re-exports are resolvable.
+    // Seed all source library facade files so re-exports are resolvable.
     // WHY: imports may directly resolve to a target file (bypassing the facade fallback),
     // but the facade still needs to be compiled so its re-export map can be built.
     for facade_path in project_path_resolver.facade_files().values() {
@@ -114,6 +114,21 @@ pub(super) fn discover_reachable_files(
                 &canonical_file,
                 string_table,
             )?;
+
+            // Ensure target module root facades are compiled for cross-module imports.
+            // WHY: when an import resolves to an implementation file in another module root,
+            //      the facade must be available so AST can validate boundary enforcement.
+            if let Some(importer_root) = project_path_resolver.module_root_for_file(&canonical_file)
+                && let Some(target_root) = project_path_resolver.module_root_for_file(&resolved)
+                && importer_root != target_root
+                && let Some(facade_path) = project_path_resolver
+                    .module_root_facades()
+                    .get(&target_root)
+                && !reachable.contains(facade_path)
+            {
+                queue.push_back(facade_path.clone());
+            }
+
             if !reachable.contains(&resolved) {
                 queue.push_back(resolved);
             }

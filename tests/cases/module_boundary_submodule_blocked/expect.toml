@@ -1,0 +1,13 @@
+entry = "."
+
+[backends.html]
+mode = "failure"
+error_type = "Rule"
+warnings = "forbid"
+message_contains = ["not exported by the module's #mod.bst facade"]
+
+[backends.html_wasm]
+mode = "failure"
+error_type = "Rule"
+warnings = "forbid"
+message_contains = ["not exported by the module's #mod.bst facade"]

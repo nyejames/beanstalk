@@ -106,6 +106,15 @@ pub(crate) struct ModuleSymbols {
     // Re-export clauses collected from each source file during header parsing.
     // Only `#mod.bst` files should contain entries; others are rejected during parsing.
     pub(crate) file_re_exports_by_source: FxHashMap<InternedPath, Vec<FileReExport>>,
+
+    // Module root membership for entry-root files (not source libraries).
+    // Maps file path (logical or canonical) to its module root path.
+    pub(crate) file_module_membership: FxHashMap<InternedPath, InternedPath>,
+    // Facade exports for entry-root module roots, keyed by module root path.
+    pub(crate) module_root_facade_exports: FxHashMap<InternedPath, FxHashSet<FacadeExportEntry>>,
+    // Module root prefixes relative to the entry root, sorted longest first.
+    // Used for intercepting cross-module imports before file resolution.
+    pub(crate) module_root_prefixes: Vec<(InternedPath, InternedPath)>,
 }
 
 impl ModuleSymbols {
@@ -127,6 +136,9 @@ impl ModuleSymbols {
             facade_exports: FxHashMap::default(),
             file_library_membership: FxHashMap::default(),
             file_re_exports_by_source: FxHashMap::default(),
+            file_module_membership: FxHashMap::default(),
+            module_root_facade_exports: FxHashMap::default(),
+            module_root_prefixes: Vec::new(),
         }
     }
 

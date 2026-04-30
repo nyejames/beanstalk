@@ -5,7 +5,7 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::libraries::SourceLibraryRegistry;
 use crate::projects::settings::{BEANSTALK_FILE_EXTENSION, Config};
 use crate::return_file_error;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::ffi::OsStr;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -84,6 +84,12 @@ pub(crate) struct ProjectPathResolver {
     source_library_roots: HashMap<String, PathBuf>,
     /// Maps library prefix to the canonical path of its `#mod.bst` facade file, if present.
     facade_files: HashMap<String, PathBuf>,
+    /// Module roots discovered under the entry root (directories containing `#*.bst`).
+    /// Sorted deepest-first so `module_root_for_file` finds the nearest ancestor.
+    module_roots: Vec<PathBuf>,
+    module_roots_set: HashSet<PathBuf>,
+    /// Maps module root path to its `#mod.bst` facade file path, if present.
+    module_root_facades: HashMap<PathBuf, PathBuf>,
 }
 
 impl ProjectPathResolver {
@@ -113,12 +119,78 @@ impl ProjectPathResolver {
             }
         }
 
+        let (module_roots, module_roots_set, module_root_facades) =
+            Self::discover_module_roots(&entry_root);
+
         Ok(Self {
             project_root,
             entry_root,
             source_library_roots,
             facade_files,
+            module_roots,
+            module_roots_set,
+            module_root_facades,
         })
+    }
+
+    /// WHAT: discovers all module roots under the entry root.
+    /// WHY: only directories with a `#mod.bst` facade define a module boundary.
+    ///      Entry files such as `#page.bst` do not create separate source modules.
+    fn discover_module_roots(
+        entry_root: &Path,
+    ) -> (Vec<PathBuf>, HashSet<PathBuf>, HashMap<PathBuf, PathBuf>) {
+        let mut module_roots = Vec::new();
+        let mut module_roots_set = HashSet::new();
+        let mut module_root_facades = HashMap::new();
+
+        let mut queue = VecDeque::new();
+        queue.push_back(entry_root.to_path_buf());
+
+        while let Some(dir) = queue.pop_front() {
+            let entries = match fs::read_dir(&dir) {
+                Ok(e) => e,
+                Err(_) => continue,
+            };
+
+            let mut has_mod_bst = false;
+            let mut mod_file = None;
+            let mut subdirs = Vec::new();
+
+            for entry in entries.flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    subdirs.push(path);
+                } else if path.extension().and_then(|e| e.to_str()) == Some("bst")
+                    && let Some(name) = path.file_name().and_then(|n| n.to_str())
+                    && name == MOD_FILE_NAME
+                {
+                    has_mod_bst = true;
+                    mod_file = fs::canonicalize(&path).ok();
+                }
+            }
+
+            if has_mod_bst {
+                let canonical_dir = fs::canonicalize(&dir).unwrap_or_else(|_| dir.clone());
+                module_roots.push(canonical_dir.clone());
+                module_roots_set.insert(canonical_dir.clone());
+                if let Some(mod_path) = mod_file {
+                    module_root_facades.insert(canonical_dir, mod_path);
+                }
+            }
+
+            for subdir in subdirs {
+                queue.push_back(subdir);
+            }
+        }
+
+        // Sort deepest first so nearest-ancestor lookup works.
+        module_roots.sort_by(|a, b| {
+            let depth_a = a.components().count();
+            let depth_b = b.components().count();
+            depth_b.cmp(&depth_a)
+        });
+
+        (module_roots, module_roots_set, module_root_facades)
     }
 
     /// WHAT: exposes the canonical entry root for module discovery and diagnostics.
@@ -135,6 +207,25 @@ impl ProjectPathResolver {
     /// WHAT: returns the map of discovered facade files.
     pub(crate) fn facade_files(&self) -> &HashMap<String, PathBuf> {
         &self.facade_files
+    }
+
+    pub(crate) fn module_root_facades(&self) -> &HashMap<PathBuf, PathBuf> {
+        &self.module_root_facades
+    }
+
+    pub(crate) fn module_roots(&self) -> &[PathBuf] {
+        &self.module_roots
+    }
+
+    /// WHAT: returns the module root that contains the given file.
+    /// WHY: nearest-ancestor lookup determines which module a file belongs to.
+    pub(crate) fn module_root_for_file(&self, file: &Path) -> Option<PathBuf> {
+        for root in &self.module_roots {
+            if file.starts_with(root) {
+                return Some(root.clone());
+            }
+        }
+        None
     }
 
     /// WHAT: derive a portable logical source path from a canonical filesystem file path.
@@ -204,6 +295,12 @@ impl ProjectPathResolver {
             Err(original_error) => {
                 if let Some(facade_file) = self.resolve_facade_fallback(import_path, string_table) {
                     Ok(facade_file)
+                } else if let Some(facade_file) = self.resolve_module_root_facade_fallback(
+                    import_path,
+                    importer_file,
+                    string_table,
+                ) {
+                    Ok(facade_file)
                 } else {
                     Err(original_error)
                 }
@@ -221,6 +318,41 @@ impl ProjectPathResolver {
         let first_component = import_path.as_components().first()?;
         let prefix = string_table.resolve(*first_component);
         self.facade_files.get(prefix).cloned()
+    }
+
+    /// WHAT: checks whether an import path targets a regular module root with a facade,
+    /// and if so, returns the facade file path.
+    /// WHY: regular module roots (under the entry root) also use `#mod.bst` as their
+    ///      outward-facing export surface, and missing files should fall back to the facade.
+    fn resolve_module_root_facade_fallback(
+        &self,
+        import_path: &InternedPath,
+        importer_file: &Path,
+        string_table: &mut StringTable,
+    ) -> Option<PathBuf> {
+        let (_, filesystem_base) = self
+            .resolve_path_base(import_path, importer_file, string_table)
+            .ok()?;
+
+        let normalized = join_and_normalize_path(&filesystem_base, import_path, string_table);
+
+        // Walk up from the parent of the candidate file to find the nearest module root.
+        let mut current = normalized.parent()?.to_path_buf();
+        loop {
+            if self.module_roots_set.contains(&current) {
+                // Only fallback if the target module root is different from the importer's.
+                let importer_root = self.module_root_for_file(importer_file);
+                if importer_root.as_ref() != Some(&current) {
+                    return self.module_root_facades.get(&current).cloned();
+                }
+                return None;
+            }
+            if !current.pop() {
+                break;
+            }
+        }
+
+        None
     }
 
     /// WHAT: resolves one import path to both a typed compile-time path and a canonical file path.

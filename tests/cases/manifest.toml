@@ -3244,3 +3244,33 @@ tags = ["integration", "imports", "external-packages"]
 id = "import_path_separator_normalized_diagnostic"
 path = "import_path_separator_normalized_diagnostic"
 tags = ["integration", "imports"]
+
+[[case]]
+id = "module_boundary_same_module_allowed"
+path = "module_boundary_same_module_allowed"
+tags = ["integration", "imports", "module-privacy"]
+
+[[case]]
+id = "module_boundary_cross_module_blocked"
+path = "module_boundary_cross_module_blocked"
+tags = ["integration", "imports", "module-privacy", "diagnostics"]
+
+[[case]]
+id = "module_boundary_cross_module_facade_allowed"
+path = "module_boundary_cross_module_facade_allowed"
+tags = ["integration", "imports", "module-privacy"]
+
+[[case]]
+id = "module_boundary_no_facade_no_api"
+path = "module_boundary_no_facade_no_api"
+tags = ["integration", "imports", "module-privacy"]
+
+[[case]]
+id = "module_boundary_submodule_blocked"
+path = "module_boundary_submodule_blocked"
+tags = ["integration", "imports", "module-privacy", "diagnostics"]
+
+[[case]]
+id = "module_boundary_submodule_facade_allowed"
+path = "module_boundary_submodule_facade_allowed"
+tags = ["integration", "imports", "module-privacy"]

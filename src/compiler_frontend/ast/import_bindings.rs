@@ -273,6 +273,136 @@ fn try_resolve_facade_import(
     })
 }
 
+/// Attempts to resolve a cross-module-root import through the target module's `#mod.bst` facade.
+///
+/// WHAT: when an import path targets a regular module root under the entry root and the importer
+/// is outside that module, the symbol must be exported by the module facade.
+/// WHY: regular module roots use the same facade semantics as source libraries for cross-module
+///      visibility.
+fn try_resolve_module_root_facade_import(
+    importer_file: &InternedPath,
+    header_path: &InternedPath,
+    module_root_facade_exports: &FxHashMap<InternedPath, FxHashSet<FacadeExportEntry>>,
+    file_module_membership: &FxHashMap<InternedPath, InternedPath>,
+    module_root_prefixes: &[(InternedPath, InternedPath)],
+    string_table: &StringTable,
+) -> Option<FacadeImportResolution> {
+    if module_root_prefixes.is_empty() {
+        return None;
+    }
+
+    // Build the effective path to match against module root prefixes.
+    // For entry-root imports, this is just the header path.
+    // For relative imports, prepend the importer's parent directory.
+    let components = header_path.as_components();
+    if components.is_empty() {
+        return None;
+    }
+
+    let is_relative = string_table.resolve(components[0]) == ".";
+    let effective_path = if is_relative {
+        if let Some(importer_dir) = importer_file.parent() {
+            let mut combined = importer_dir.as_components().to_vec();
+            // Skip the leading "." component.
+            combined.extend_from_slice(&components[1..]);
+            InternedPath::from_components(combined)
+        } else {
+            header_path.clone()
+        }
+    } else {
+        header_path.clone()
+    };
+
+    // Find the longest matching module root prefix.
+    for (prefix, module_root) in module_root_prefixes {
+        if effective_path.starts_with(prefix) {
+            // Internal imports within the same module root use normal resolution.
+            let importer_root = file_module_membership.get(importer_file);
+            if importer_root == Some(module_root) {
+                return None;
+            }
+
+            // External import — look up the symbol name in the facade exports.
+            let symbol_name = header_path.name()?;
+            let exports = module_root_facade_exports.get(module_root)?;
+            for entry in exports {
+                if entry.export_name == symbol_name {
+                    match &entry.target {
+                        FacadeExportTarget::Source(path) => {
+                            return Some(FacadeImportResolution::Source(path.clone()));
+                        }
+                        FacadeExportTarget::External(id) => {
+                            return Some(FacadeImportResolution::External(*id));
+                        }
+                    }
+                }
+            }
+            return Some(FacadeImportResolution::NotExported {
+                library_prefix: prefix.to_portable_string(string_table),
+            });
+        }
+    }
+
+    None
+}
+
+/// Enforces module-private boundaries for cross-module-root imports.
+///
+/// WHAT: after an import resolves to a concrete source file, if the importer and target are in
+/// different module roots, the symbol must be exported by the target module's facade.
+/// WHY: `#` exports are visible across files in the same module, but not automatically visible
+///      to files in other modules.
+fn check_module_boundary(
+    importer_file: &InternedPath,
+    target_file: &InternedPath,
+    symbol_path: &InternedPath,
+    import: &FileImport,
+    file_module_membership: &FxHashMap<InternedPath, InternedPath>,
+    module_root_facade_exports: &FxHashMap<InternedPath, FxHashSet<FacadeExportEntry>>,
+    string_table: &StringTable,
+) -> Result<(), CompilerError> {
+    let importer_root = file_module_membership.get(importer_file);
+    let target_root = file_module_membership.get(target_file);
+
+    // Skip if either file has no module root membership (e.g., source libraries handled separately).
+    let (Some(importer_root), Some(target_root)) = (importer_root, target_root) else {
+        return Ok(());
+    };
+
+    // Same module root: no boundary.
+    if importer_root == target_root {
+        return Ok(());
+    }
+
+    // Different module roots: must go through facade.
+    if module_root_facade_exports.contains_key(target_root) {
+        let facade_exports = module_root_facade_exports.get(target_root).unwrap();
+        if let Some(symbol_name) = symbol_path.name() {
+            let exported = facade_exports.iter().any(|e| e.export_name == symbol_name);
+            if exported {
+                return Ok(());
+            }
+        }
+
+        return Err(CompilerError::new_rule_error(
+            format!(
+                "Cannot import '{}' because it is not exported by the module's #mod.bst facade. Modules expose symbols only through their facade.",
+                symbol_path.to_portable_string(string_table),
+            ),
+            import.location.clone(),
+        ));
+    }
+
+    // Target module has no facade.
+    Err(CompilerError::new_rule_error(
+        format!(
+            "Cannot import '{}' because the module has no #mod.bst facade. A module without a facade has no outward public API.",
+            symbol_path.to_portable_string(string_table),
+        ),
+        import.location.clone(),
+    ))
+}
+
 /// Registers a resolved source import into the visible-name registry and per-file bindings.
 ///
 /// WHAT: shared logic for registering a source import once its canonical symbol path is known.
@@ -369,6 +499,10 @@ pub(crate) fn resolve_file_import_bindings(
     external_package_registry: &ExternalPackageRegistry,
     facade_exports: &FxHashMap<String, FxHashSet<FacadeExportEntry>>,
     file_library_membership: &FxHashMap<InternedPath, String>,
+    file_module_membership: &FxHashMap<InternedPath, InternedPath>,
+    module_root_facade_exports: &FxHashMap<InternedPath, FxHashSet<FacadeExportEntry>>,
+    module_root_prefixes: &[(InternedPath, InternedPath)],
+    canonical_source_by_symbol_path: &FxHashMap<InternedPath, InternedPath>,
     string_table: &mut StringTable,
 ) -> Result<
     (
@@ -543,6 +677,80 @@ pub(crate) fn resolve_file_import_bindings(
                 }
             }
 
+            // Facade import resolution for cross-module-root imports.
+            // WHY: regular module roots under the entry root also expose symbols only through
+            //      their #mod.bst facade; external importers cannot bypass it.
+            if let Some(facade_result) = try_resolve_module_root_facade_import(
+                &source_file,
+                &import.header_path,
+                module_root_facade_exports,
+                file_module_membership,
+                module_root_prefixes,
+                string_table,
+            ) {
+                match facade_result {
+                    FacadeImportResolution::Source(symbol_path) => {
+                        register_source_import_binding(
+                            &import,
+                            &symbol_path,
+                            importable_symbol_exported,
+                            false,
+                            type_alias_paths,
+                            &mut registry,
+                            &mut bindings,
+                            string_table,
+                            &mut warnings,
+                        )?;
+                        continue;
+                    }
+                    FacadeImportResolution::External(symbol_id) => {
+                        let Some(symbol_name) = import.header_path.name() else {
+                            return Err(CompilerError::new_rule_error(
+                                "External import path is missing a symbol name.",
+                                import.location.clone(),
+                            ));
+                        };
+                        let local_name = import.alias.unwrap_or(symbol_name);
+
+                        registry.register(
+                            local_name,
+                            VisibleNameBinding {
+                                kind: VisibleNameKind::ExternalImport,
+                                canonical_path: Some(import.header_path.clone()),
+                                external_symbol_id: Some(symbol_id),
+                                location: Some(import.location.clone()),
+                            },
+                            string_table,
+                        )?;
+
+                        if import.alias.is_some() {
+                            check_alias_case_warning(
+                                &import.alias_location,
+                                &import.path_location,
+                                local_name,
+                                symbol_name,
+                                string_table,
+                                &mut warnings,
+                            );
+                        }
+
+                        bindings
+                            .visible_external_symbols
+                            .insert(local_name, symbol_id);
+                        continue;
+                    }
+                    FacadeImportResolution::NotExported { library_prefix } => {
+                        return Err(CompilerError::new_rule_error(
+                            format!(
+                                "Cannot import '{}' from module '{library_prefix}' because it is not exported by the module's #mod.bst facade. Modules expose symbols only through their facade.",
+                                import.header_path.to_portable_string(string_table)
+                            ),
+                            import.location,
+                        ));
+                    }
+                }
+            }
+
             // Resolve the import target using shared resolution logic.
             match resolve_single_import_target(
                 &import.header_path,
@@ -554,6 +762,20 @@ pub(crate) fn resolve_file_import_bindings(
                 string_table,
             )? {
                 ResolvedImportTarget::Source(symbol_path) => {
+                    // NEW: enforce module boundary for imports that resolve to existing files
+                    // in a different module root.
+                    if let Some(target_file) = canonical_source_by_symbol_path.get(&symbol_path) {
+                        check_module_boundary(
+                            &source_file,
+                            target_file,
+                            &symbol_path,
+                            &import,
+                            file_module_membership,
+                            module_root_facade_exports,
+                            string_table,
+                        )?;
+                    }
+
                     register_source_import_binding(
                         &import,
                         &symbol_path,
@@ -649,7 +871,21 @@ pub(crate) fn resolve_re_exports(
         .collect::<FxHashSet<_>>();
 
     for (source_file, re_exports) in re_exports_by_source {
-        let Some(library_prefix) = module_symbols.file_library_membership.get(&source_file) else {
+        // Determine which facade this source file belongs to.
+        let facade_key = if let Some(library_prefix) =
+            module_symbols.file_library_membership.get(&source_file)
+        {
+            FacadeKey::Library(library_prefix.clone())
+        } else if let Some(module_root) = module_symbols.file_module_membership.get(&source_file) {
+            if module_symbols
+                .module_root_facade_exports
+                .contains_key(module_root)
+            {
+                FacadeKey::ModuleRoot(module_root.clone())
+            } else {
+                continue;
+            }
+        } else {
             continue;
         };
 
@@ -687,6 +923,29 @@ pub(crate) fn resolve_re_exports(
                     string_table,
                 )?;
 
+                // NEW: enforce module boundary for re-exports that target another module root.
+                if let ResolvedImportTarget::Source(ref symbol_path) = resolved
+                    && let Some(target_file) = module_symbols
+                        .canonical_source_by_symbol_path
+                        .get(symbol_path)
+                {
+                    check_module_boundary(
+                        &source_file,
+                        target_file,
+                        symbol_path,
+                        &FileImport {
+                            header_path: re_export.header_path.clone(),
+                            alias: re_export.alias,
+                            alias_location: re_export.alias_location.clone(),
+                            path_location: re_export.path_location.clone(),
+                            location: re_export.location.clone(),
+                        },
+                        &module_symbols.file_module_membership,
+                        &module_symbols.module_root_facade_exports,
+                        string_table,
+                    )?;
+                }
+
                 match resolved {
                     ResolvedImportTarget::Source(path) => FacadeExportTarget::Source(path),
                     ResolvedImportTarget::External(id) => FacadeExportTarget::External(id),
@@ -717,26 +976,49 @@ pub(crate) fn resolve_re_exports(
                 target,
             };
 
-            let exports = module_symbols
-                .facade_exports
-                .entry(library_prefix.clone())
-                .or_default();
-
-            if exports.iter().any(|e| e.export_name == export_name) {
-                return Err(CompilerError::new_rule_error(
-                    format!(
-                        "Duplicate export name '{}' in module facade. Each exported name must be unique.",
-                        string_table.resolve(export_name)
-                    ),
-                    re_export.location.clone(),
-                ));
+            match facade_key {
+                FacadeKey::Library(ref prefix) => {
+                    let exports = module_symbols
+                        .facade_exports
+                        .entry(prefix.clone())
+                        .or_default();
+                    if exports.iter().any(|e| e.export_name == export_name) {
+                        return Err(CompilerError::new_rule_error(
+                            format!(
+                                "Duplicate export name '{}' in module facade. Each exported name must be unique.",
+                                string_table.resolve(export_name)
+                            ),
+                            re_export.location.clone(),
+                        ));
+                    }
+                    exports.insert(entry);
+                }
+                FacadeKey::ModuleRoot(ref root) => {
+                    let exports = module_symbols
+                        .module_root_facade_exports
+                        .entry(root.clone())
+                        .or_default();
+                    if exports.iter().any(|e| e.export_name == export_name) {
+                        return Err(CompilerError::new_rule_error(
+                            format!(
+                                "Duplicate export name '{}' in module facade. Each exported name must be unique.",
+                                string_table.resolve(export_name)
+                            ),
+                            re_export.location.clone(),
+                        ));
+                    }
+                    exports.insert(entry);
+                }
             }
-
-            exports.insert(entry);
         }
     }
 
     Ok(warnings)
+}
+
+enum FacadeKey {
+    Library(String),
+    ModuleRoot(InternedPath),
 }
 
 /// WHAT: Carries all mutable/immutable context needed to parse one constant header.

@@ -1,0 +1,3 @@
+#greet || -> String:
+    return "hello"
+;

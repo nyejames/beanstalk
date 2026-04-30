@@ -37,6 +37,10 @@ impl<'a> AstBuildState<'a> {
             self.external_package_registry,
             &self.module_symbols.facade_exports,
             &self.module_symbols.file_library_membership,
+            &self.module_symbols.file_module_membership,
+            &self.module_symbols.module_root_facade_exports,
+            &self.module_symbols.module_root_prefixes,
+            &self.module_symbols.canonical_source_by_symbol_path,
             string_table,
         )
         .map_err(|error| self.error_messages(error, string_table))?;

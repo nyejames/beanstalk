@@ -1,0 +1,3 @@
+#thing || -> String:
+    return "secret"
+;

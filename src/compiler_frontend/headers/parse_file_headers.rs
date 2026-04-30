@@ -118,18 +118,19 @@ pub fn parse_headers(
     })
 }
 
-/// Build facade export maps and file library membership from parsed headers and the path resolver.
+/// Build facade export maps and file library/module membership from parsed headers and the path resolver.
 ///
-/// WHAT: scans each source library root's `#mod.bst` for exported symbols, and records which
-/// source files belong to which library.
-/// WHY: AST import binding needs this data to enforce the facade gate for cross-library imports.
+/// WHAT: scans each source library root's and regular module root's `#mod.bst` for exported symbols,
+/// and records which source files belong to which library or module root.
+/// WHY: AST import binding needs this data to enforce the facade gate for cross-library and
+///      cross-module imports.
 fn build_facade_data(
     module_symbols: &mut ModuleSymbols,
     headers: &[Header],
     resolver: &ProjectPathResolver,
     string_table: &mut StringTable,
 ) -> Result<(), CompilerError> {
-    // Build facade export maps from #mod.bst headers.
+    // Build facade export maps from source library #mod.bst headers.
     for (prefix, facade_file) in resolver.facade_files() {
         let mod_file_logical =
             resolver.logical_path_for_canonical_file(facade_file, string_table)?;
@@ -166,6 +167,65 @@ fn build_facade_data(
                         .insert(header.source_file.clone(), prefix.clone());
                     break;
                 }
+            }
+        }
+    }
+
+    // Build module root facade exports and file membership for entry-root modules.
+    let mut module_root_prefixes: Vec<(InternedPath, InternedPath)> = Vec::new();
+
+    for module_root in resolver.module_roots() {
+        let root_interned = InternedPath::from_path_buf(module_root, string_table);
+
+        // Ensure every module root with a facade has an entry in the map,
+        // even if the export set is empty.
+        if resolver.module_root_facades().contains_key(module_root) {
+            module_symbols
+                .module_root_facade_exports
+                .entry(root_interned.clone())
+                .or_default();
+        }
+
+        // Build prefix relative to entry root for import-path interception.
+        if let Ok(relative) = module_root.strip_prefix(resolver.entry_root()) {
+            let prefix_interned = InternedPath::from_path_buf(relative, string_table);
+            module_root_prefixes.push((prefix_interned, root_interned));
+        }
+    }
+
+    // Sort longest prefix first so nested module roots match before their parents.
+    module_root_prefixes.sort_by_key(|(b, _)| std::cmp::Reverse(b.len()));
+    module_symbols.module_root_prefixes = module_root_prefixes;
+
+    for header in headers {
+        if let Some(canonical_path) = &header.tokens.canonical_os_path
+            && let Some(module_root) = resolver.module_root_for_file(canonical_path)
+        {
+            let module_root_interned = InternedPath::from_path_buf(&module_root, string_table);
+            let logical = header.source_file.clone();
+            let canonical = header.canonical_source_file(string_table);
+
+            module_symbols
+                .file_module_membership
+                .insert(logical, module_root_interned.clone());
+            module_symbols
+                .file_module_membership
+                .insert(canonical, module_root_interned.clone());
+
+            // If this file is a module root facade, build its export map.
+            if let Some(facade_file) = resolver.module_root_facades().get(&module_root)
+                && canonical_path == facade_file
+                && header.exported
+                && let Some(export_name) = header.tokens.src_path.name()
+            {
+                let exports = module_symbols
+                    .module_root_facade_exports
+                    .entry(module_root_interned)
+                    .or_default();
+                exports.insert(FacadeExportEntry {
+                    export_name,
+                    target: FacadeExportTarget::Source(header.tokens.src_path.clone()),
+                });
             }
         }
     }
