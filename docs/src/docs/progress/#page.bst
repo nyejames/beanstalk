@@ -147,7 +147,7 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
             [: Supported]
             [: Broad parser, declaration, constructor, match, import, assignment, return, JS carrier-shape, and payload coverage.]
             [: JS / HTML]
-            [: Unit variants use `Choice::Variant`. Empty constructor calls are invalid. Record-body payload declarations are parsed and type-checked. Payload constructors support positional and named arguments. Payload match extraction uses constructor-like patterns with original field names or `field as local_name` aliases. Const choice values are supported for unit and payload variants. Payload shorthand is rejected. Unit and payload choice equality are deferred until the structural-equality phases. Generic choices, recursive choices, and direct payload field access remain deferred. Choices, Options, and Results share a unified HIR variant construction representation while retaining distinct semantic type kinds.]
+            [: Unit variants use `Choice::Variant`. Empty constructor calls are invalid. Record-body payload declarations are parsed and type-checked. Payload constructors support positional and named arguments. Payload match extraction uses constructor-like patterns with original field names or `field as local_name` aliases. Const choice values are supported for unit and payload variants. Payload shorthand is rejected. Structural equality contract is defined: unsupported payload field types are rejected with diagnostics. Unit and payload choice equality remain deferred until Phases 2-4. Generic choices, recursive choices, and direct payload field access remain deferred. Choices, Options, and Results share a unified HIR variant construction representation while retaining distinct semantic type kinds.]
         ]
 
         [data:
@@ -593,9 +593,9 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
 
         [data:
             [: Choice equality]
-            [: Rejected / Reserved]
-            [: [codesnippet:choice_unit_equality_deferred], [codesnippet:choice_payload_structural_equality_deferred]]
-            [: Unit and payload choice equality are deferred until the structural-equality phases. Use pattern matching and compare variants or fields inside match arms.]
+            [: Partial]
+            [: [codesnippet:choice_unit_equality_deferred], [codesnippet:choice_payload_structural_equality_deferred], [codesnippet:choice_equality_different_choice_types_rejected], [codesnippet:choice_equality_payload_unsupported_struct_rejected], [codesnippet:choice_equality_payload_unsupported_collection_rejected], [codesnippet:choice_equality_payload_unsupported_external_rejected]]
+            [: Structural equality contract is defined. Unsupported payload field types and different choice types are rejected with specific diagnostics. Unit and payload structural equality type-checking and JS lowering remain deferred.]
         ]
 
         [data:

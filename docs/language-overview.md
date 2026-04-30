@@ -727,6 +727,46 @@ value = 21
 io(value.double()) -- 42
 ```
 
+## Choices
+
+Choices are nominal tagged unions. Each variant is either a unit variant or a record payload variant.
+
+```beanstalk
+Result ::
+    Ok,
+    Err | message String, code Int |,
+;
+```
+
+Unit variants are constructed with `Choice::Variant`. Payload variants are constructed with `Choice::Variant(...)` using positional or named arguments.
+
+```beanstalk
+success = Result::Ok
+failure = Result::Err("bad request", 400)
+```
+
+### Structural equality contract
+
+Two choice values are structurally equal when they share the same choice type, the same variant, and every payload field is equal in declaration order. Choice equality is only supported when **every** payload field type across **all** variants supports structural equality.
+
+Supported payload field types for structural equality:
+- `Int`, `Float`, `Bool`, `Char`, `String`
+- Other choices whose payload fields all support equality
+- `Option` and `Result` when their inner types support equality
+
+Unsupported field types reject the comparison with a diagnostic:
+- Structs, collections, functions, external opaque types, and templates do not support structural equality.
+
+```beanstalk
+Status :: Ready, Busy;
+
+if Status::Ready is Status::Busy:
+    io("never true")
+;
+```
+
+Comparing choices of different types is always rejected. Direct payload field access outside pattern matching remains deferred.
+
 ## Type aliases
 Type aliases give another name to an existing type at compile-time.
 They can target built-in types, structs, choices, options, collections, imported types, and external package types.

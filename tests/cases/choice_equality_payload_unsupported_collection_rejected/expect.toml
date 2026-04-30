@@ -1,0 +1,7 @@
+entry = "."
+
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+error_type = "Type"
+message_contains = ["Choice payload equality is not supported because field 'items' has type 'Int Collection', which does not support equality"]

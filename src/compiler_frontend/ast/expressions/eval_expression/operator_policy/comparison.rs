@@ -1,12 +1,18 @@
 //! Comparison operator typing policy.
+//!
+//! WHAT: decides the result type of comparison operators and rejects invalid operand combinations.
+//! WHY: structural equality rules for choices, scalar ordering, and mixed numeric comparisons
+//! must be enforced consistently before backend lowering.
 
 use super::diagnostics::invalid_comparison_types;
 use super::shared::is_mixed_int_float;
 use crate::compiler_frontend::ast::expressions::expression::Operator;
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
 use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariantPayload;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::return_rule_error;
+use crate::return_type_error;
 
 pub(super) fn is_comparison_operator(op: &Operator) -> bool {
     matches!(
@@ -49,7 +55,37 @@ pub(super) fn resolve_comparison_operator_type(
                 | Operator::GreaterThan
                 | Operator::GreaterThanOrEqual,
             ) => Ok(DataType::Bool),
-            (DataType::Choices { .. }, Operator::Equality | Operator::NotEqual) => {
+            (DataType::Choices { variants, .. }, Operator::Equality | Operator::NotEqual) => {
+                // Phase 1: define the structural equality contract by checking payload fields.
+                // If any payload field type does not support structural equality, emit a
+                // specific diagnostic so the user knows why the comparison is rejected.
+                for variant in variants {
+                    if let ChoiceVariantPayload::Record { fields } = &variant.payload {
+                        for field in fields {
+                            if !field.value.data_type.supports_structural_equality() {
+                                let field_name = field
+                                    .id
+                                    .name_str(string_table)
+                                    .unwrap_or("<unknown>")
+                                    .to_owned();
+                                let field_type =
+                                    field.value.data_type.display_with_table(string_table);
+                                return_type_error!(
+                                    format!(
+                                        "Choice payload equality is not supported because field '{field_name}' has type '{field_type}', which does not support equality."
+                                    ),
+                                    location.clone(),
+                                    {
+                                        CompilationStage => "Expression Evaluation",
+                                        PrimarySuggestion => "Use pattern matching and compare fields individually, or use a type that supports equality",
+                                    }
+                                );
+                            }
+                        }
+                    }
+                }
+                // All payload fields support equality, but full choice equality remains
+                // deferred until Phase 2 (unit) and Phase 3 (payload) implementation.
                 return_rule_error!(
                     "Choice equality is deferred. Use pattern matching and compare variants or payload fields inside match arms.",
                     location.clone(),
@@ -65,6 +101,20 @@ pub(super) fn resolve_comparison_operator_type(
 
     if is_mixed_int_float(lhs, rhs) {
         return Ok(DataType::Bool);
+    }
+
+    // Two choice values of different nominal types are never comparable.
+    if let (DataType::Choices { .. }, DataType::Choices { .. }) = (lhs, rhs) {
+        let left_name = lhs.display_with_table(string_table);
+        let right_name = rhs.display_with_table(string_table);
+        return_type_error!(
+            format!("Cannot compare choices of different types: '{left_name}' and '{right_name}'."),
+            location.clone(),
+            {
+                CompilationStage => "Expression Evaluation",
+                PrimarySuggestion => "Compare values of the same choice type, or use pattern matching to compare variants",
+            }
+        );
     }
 
     invalid_comparison_types(lhs, rhs, op, location, string_table)

@@ -15,6 +15,7 @@ use crate::compiler_frontend::external_packages::ExternalTypeId;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_resolution::CompileTimePathKind;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
+use rustc_hash::FxHashSet;
 
 /// Type-level distinction for compile-time path values.
 ///
@@ -201,6 +202,70 @@ impl DataType {
 
     pub fn is_textual_cast_input(&self) -> bool {
         matches!(self, DataType::StringSlice | DataType::Template)
+    }
+
+    /// Returns true if values of this type can be compared with structural equality.
+    ///
+    /// WHAT: Recursively checks whether the type and all nested types support `is` / `is not`.
+    /// WHY: Choice structural equality requires every payload field type to also support
+    /// structural equality. This helper encodes the Alpha contract conservatively.
+    ///
+    /// Supported types:
+    /// - Scalar types: Bool, Int, Float, Char, StringSlice
+    /// - Choices whose payload fields all support structural equality
+    /// - Option and Result when their inner types support equality
+    /// - References to supported types
+    ///
+    /// Rejected types:
+    /// - Structs, Collections, Functions, External opaque types, Templates
+    /// - Recursive choices (cycle-safe via visited set)
+    pub fn supports_structural_equality(&self) -> bool {
+        self.supports_structural_equality_with_visited(&mut FxHashSet::default())
+    }
+
+    fn supports_structural_equality_with_visited(
+        &self,
+        visited: &mut FxHashSet<InternedPath>,
+    ) -> bool {
+        match self {
+            DataType::Bool
+            | DataType::Int
+            | DataType::Float
+            | DataType::Char
+            | DataType::StringSlice => true,
+
+            DataType::Reference(inner) => inner.supports_structural_equality_with_visited(visited),
+
+            DataType::Choices {
+                nominal_path,
+                variants,
+            } => {
+                if !visited.insert(nominal_path.clone()) {
+                    // Cycle detected: recursive choice equality is not supported.
+                    return false;
+                }
+                let supported = variants.iter().all(|variant| match &variant.payload {
+                    ChoiceVariantPayload::Unit => true,
+                    ChoiceVariantPayload::Record { fields } => fields.iter().all(|field| {
+                        field
+                            .value
+                            .data_type
+                            .supports_structural_equality_with_visited(visited)
+                    }),
+                });
+                visited.remove(nominal_path);
+                supported
+            }
+
+            DataType::Option(inner) => inner.supports_structural_equality_with_visited(visited),
+
+            DataType::Result { ok, err } => {
+                ok.supports_structural_equality_with_visited(visited)
+                    && err.supports_structural_equality_with_visited(visited)
+            }
+
+            _ => false,
+        }
     }
 
     /// Display the DataType with proper string resolution for interned strings.
@@ -408,6 +473,7 @@ impl PartialEq for DataType {
 #[cfg(test)]
 mod tests {
     use super::DataType;
+    use crate::compiler_frontend::ast::ast_nodes::Declaration;
     use crate::compiler_frontend::declaration_syntax::choice::{
         ChoiceVariant, ChoiceVariantPayload,
     };
@@ -451,5 +517,100 @@ mod tests {
             status_a, other,
             "different nominal paths should make choices unequal even with identical variants"
         );
+    }
+
+    #[test]
+    fn scalar_types_support_structural_equality() {
+        assert!(DataType::Int.supports_structural_equality());
+        assert!(DataType::Float.supports_structural_equality());
+        assert!(DataType::Bool.supports_structural_equality());
+        assert!(DataType::Char.supports_structural_equality());
+        assert!(DataType::StringSlice.supports_structural_equality());
+    }
+
+    #[test]
+    fn unsupported_types_do_not_support_structural_equality() {
+        assert!(
+            !DataType::Struct {
+                nominal_path: InternedPath::new(),
+                fields: vec![],
+                const_record: false,
+            }
+            .supports_structural_equality()
+        );
+        assert!(!DataType::Collection(Box::new(DataType::Int)).supports_structural_equality());
+        assert!(
+            !DataType::External {
+                type_id: crate::compiler_frontend::external_packages::ExternalTypeId(0)
+            }
+            .supports_structural_equality()
+        );
+    }
+
+    #[test]
+    fn unit_choice_supports_structural_equality() {
+        let mut table = StringTable::new();
+        let path = InternedPath::from_single_str("Status", &mut table);
+        let status = DataType::Choices {
+            nominal_path: path,
+            variants: vec![ChoiceVariant {
+                id: table.intern("Ready"),
+                payload: ChoiceVariantPayload::Unit,
+                location: Default::default(),
+            }],
+        };
+        assert!(status.supports_structural_equality());
+    }
+
+    #[test]
+    fn payload_choice_supports_structural_equality_when_fields_do() {
+        let mut table = StringTable::new();
+        let path = InternedPath::from_single_str("Response", &mut table);
+        let response = DataType::Choices {
+            nominal_path: path,
+            variants: vec![ChoiceVariant {
+                id: table.intern("Err"),
+                payload: ChoiceVariantPayload::Record {
+                    fields: vec![Declaration {
+                        id: InternedPath::from_single_str("message", &mut table),
+                        value: crate::compiler_frontend::ast::expressions::expression::Expression {
+                            kind: crate::compiler_frontend::ast::expressions::expression::ExpressionKind::NoValue,
+                            data_type: DataType::StringSlice,
+                            value_mode: crate::compiler_frontend::value_mode::ValueMode::ImmutableOwned,
+                            location: Default::default(),
+                            contains_regular_division: false,
+                        },
+                    }],
+                },
+                location: Default::default(),
+            }],
+        };
+        assert!(response.supports_structural_equality());
+    }
+
+    #[test]
+    fn payload_choice_rejects_structural_equality_when_fields_do_not() {
+        let mut table = StringTable::new();
+        let path = InternedPath::from_single_str("Response", &mut table);
+        let response = DataType::Choices {
+            nominal_path: path,
+            variants: vec![ChoiceVariant {
+                id: table.intern("Err"),
+                payload: ChoiceVariantPayload::Record {
+                    fields: vec![Declaration {
+                        id: InternedPath::from_single_str("items", &mut table),
+                        value: crate::compiler_frontend::ast::expressions::expression::Expression {
+                            kind: crate::compiler_frontend::ast::expressions::expression::ExpressionKind::NoValue,
+                            data_type: DataType::Collection(Box::new(DataType::Int)),
+                            value_mode: crate::compiler_frontend::value_mode::ValueMode::ImmutableOwned,
+                            location: Default::default(),
+                            contains_regular_division: false,
+                        },
+                    }],
+                },
+                location: Default::default(),
+            }],
+        };
+        assert!(!response.supports_structural_equality());
     }
 }
