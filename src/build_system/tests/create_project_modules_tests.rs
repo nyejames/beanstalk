@@ -525,11 +525,10 @@ fn discover_modules_uses_reachable_files_only() {
 }
 
 #[test]
-fn discover_modules_resolves_relative_imports_with_dot_segments() {
+fn discover_modules_resolves_relative_child_imports() {
     let root = temp_dir("relative_imports");
     let src = root.join("src");
     fs::create_dir_all(src.join("components")).expect("should create components folder");
-    fs::create_dir_all(src.join("shared")).expect("should create shared folder");
 
     fs::write(
         root.join(settings::CONFIG_FILE_NAME),
@@ -543,10 +542,10 @@ fn discover_modules_resolves_relative_imports_with_dot_segments() {
     .expect("should write page");
     fs::write(
         src.join("components/widget.bst"),
-        "import @../shared/common\nio(\"widget\")\n",
+        "import @./common\nio(\"widget\")\n",
     )
     .expect("should write widget file");
-    fs::write(src.join("shared/common.bst"), "io(\"common\")\n").expect("should write common");
+    fs::write(src.join("components/common.bst"), "io(\"common\")\n").expect("should write common");
 
     let mut config = Config::new(root.clone());
     let style_directives = test_style_directives();

@@ -454,70 +454,44 @@ body {
         return { tag: "err", value: __bs_make_error("Parse", "float.parse_invalid_format", "Float(...) only accepts Int, Float, or string values", null, null) };
     }
 
-    function bst_content_text_fn0() {
+    function bst_widget_status_fn0() {
         
-        return "content reached";
+        return "widget loaded";
     }
 
-    function bst_widget_status_fn1() {
-        let bst___hir_tmp_0_l3 = __bs_binding(undefined);
+    function bst_start_fn1() {
+        let bst___hir_tmp_0_l0 = __bs_binding(undefined);
         let bst___hir_tmp_1_l4 = __bs_binding(undefined);
         let bst___hir_tmp_2_l5 = __bs_binding(undefined);
-        
-        __bs_assign_value(bst___hir_tmp_0_l3, bst_content_text_fn0());
-        __bs_assign_value(bst___hir_tmp_1_l4, bst___template_fn_1_fn4(bst___hir_tmp_0_l3));
-        __bs_assign_value(bst___hir_tmp_2_l5, bst___template_fn_0_fn3(__bs_binding("widget loaded "), bst___hir_tmp_1_l4));
-        return __bs_clone_value(__bs_read(bst___hir_tmp_2_l5));
-    }
-
-    function bst_start_fn2() {
         let bst___hir_tmp_3_l6 = __bs_binding(undefined);
-        let bst___hir_tmp_4_l10 = __bs_binding(undefined);
-        let bst___hir_tmp_5_l11 = __bs_binding(undefined);
-        let bst___hir_tmp_6_l12 = __bs_binding(undefined);
         
-        __bs_assign_value(bst___hir_tmp_3_l6, []);
-        __bs_assign_value(bst___hir_tmp_4_l10, bst_widget_status_fn1());
-        __bs_assign_value(bst___hir_tmp_5_l11, bst___template_fn_3_fn6(bst___hir_tmp_4_l10));
-        __bs_assign_value(bst___hir_tmp_6_l12, bst___template_fn_2_fn5(__bs_binding("relative imports ok "), bst___hir_tmp_5_l11));
-        __bs_read(bst___hir_tmp_3_l6).push(__bs_read(bst___hir_tmp_6_l12));
-        return __bs_read(bst___hir_tmp_3_l6);
+        __bs_assign_value(bst___hir_tmp_0_l0, []);
+        __bs_assign_value(bst___hir_tmp_1_l4, bst_widget_status_fn0());
+        __bs_assign_value(bst___hir_tmp_2_l5, bst___template_fn_1_fn3(bst___hir_tmp_1_l4));
+        __bs_assign_value(bst___hir_tmp_3_l6, bst___template_fn_0_fn2(__bs_binding("backslash separator ok "), bst___hir_tmp_2_l5));
+        __bs_read(bst___hir_tmp_0_l0).push(__bs_read(bst___hir_tmp_3_l6));
+        return __bs_read(bst___hir_tmp_0_l0);
     }
 
-    function bst___template_fn_0_fn3(bst_chunk_0_l0, bst_chunk_1_l1) {
+    function bst___template_fn_0_fn2(bst_chunk_0_l1, bst_chunk_1_l2) {
         
-        bst_chunk_0_l0 = __bs_param_binding(bst_chunk_0_l0);
-        bst_chunk_1_l1 = __bs_param_binding(bst_chunk_1_l1);
+        bst_chunk_0_l1 = __bs_param_binding(bst_chunk_0_l1);
+        bst_chunk_1_l2 = __bs_param_binding(bst_chunk_1_l2);
         
-        return (("" + __bs_read(bst_chunk_0_l0)) + __bs_read(bst_chunk_1_l1));
+        return (("" + __bs_read(bst_chunk_0_l1)) + __bs_read(bst_chunk_1_l2));
     }
 
-    function bst___template_fn_1_fn4(bst_chunk_0_l2) {
+    function bst___template_fn_1_fn3(bst_chunk_0_l3) {
         
-        bst_chunk_0_l2 = __bs_param_binding(bst_chunk_0_l2);
+        bst_chunk_0_l3 = __bs_param_binding(bst_chunk_0_l3);
         
-        return ("" + __bs_read(bst_chunk_0_l2));
-    }
-
-    function bst___template_fn_2_fn5(bst_chunk_0_l7, bst_chunk_1_l8) {
-        
-        bst_chunk_0_l7 = __bs_param_binding(bst_chunk_0_l7);
-        bst_chunk_1_l8 = __bs_param_binding(bst_chunk_1_l8);
-        
-        return (("" + __bs_read(bst_chunk_0_l7)) + __bs_read(bst_chunk_1_l8));
-    }
-
-    function bst___template_fn_3_fn6(bst_chunk_0_l9) {
-        
-        bst_chunk_0_l9 = __bs_param_binding(bst_chunk_0_l9);
-        
-        return ("" + __bs_read(bst_chunk_0_l9));
+        return ("" + __bs_read(bst_chunk_0_l3));
     }
 
     </script>
     <script>
     (function () {
-      var bst_frags = bst_start_fn2();
+      var bst_frags = bst_start_fn1();
       var bst_slots = [
         "bst-slot-0",
       ];

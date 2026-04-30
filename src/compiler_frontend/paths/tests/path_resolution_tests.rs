@@ -438,7 +438,7 @@ fn library_direct_child_is_import_prefix() {
 }
 
 #[test]
-fn entry_root_import_still_works_until_phase_4() {
+fn entry_root_import_fallback_success() {
     let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
     let project_root = temp_dir.path().to_path_buf();
     let entry_root = project_root.join("src");
@@ -511,4 +511,153 @@ fn source_library_prefix_wins_consistently() {
         result.1,
         fs::canonicalize(library_root.join("utils.bst")).unwrap()
     );
+}
+
+// -----------------------------------------------------------------------
+// Phase 4 — Import path restriction and canonicalization hardening
+// -----------------------------------------------------------------------
+
+#[test]
+fn import_dotdot_rejected() {
+    let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
+    let project_root = temp_dir.path().to_path_buf();
+    let entry_root = project_root.join("src");
+
+    fs::create_dir_all(&entry_root).unwrap();
+    fs::write(entry_root.join("index.bst"), b"").unwrap();
+
+    let source_libraries = crate::libraries::SourceLibraryRegistry::new();
+    let resolver =
+        ProjectPathResolver::new(project_root.clone(), entry_root.clone(), &source_libraries)
+            .expect("resolver creation should succeed");
+
+    let mut string_table = StringTable::new();
+    let mut path = InternedPath::new();
+    path.push_str("..", &mut string_table);
+    path.push_str("shared", &mut string_table);
+    path.push_str("math", &mut string_table);
+
+    let importer = entry_root.join("index.bst");
+    let err = resolver
+        .resolve_import_as_compile_time_path(&path, &importer, &mut string_table)
+        .expect_err("'..' in imports should be rejected");
+
+    assert!(
+        err.msg.contains("'..' are not supported"),
+        "expected '..' rejection, got: {}",
+        err.msg
+    );
+}
+
+#[test]
+fn import_escape_project_root_rejected() {
+    let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
+    let project_root = temp_dir.path().to_path_buf();
+    let entry_root = project_root.join("src");
+
+    fs::create_dir_all(&entry_root).unwrap();
+    fs::write(entry_root.join("index.bst"), b"").unwrap();
+
+    let source_libraries = crate::libraries::SourceLibraryRegistry::new();
+    let resolver =
+        ProjectPathResolver::new(project_root.clone(), entry_root.clone(), &source_libraries)
+            .expect("resolver creation should succeed");
+
+    let mut string_table = StringTable::new();
+    let mut path = InternedPath::new();
+    path.push_str(".", &mut string_table);
+    path.push_str("..", &mut string_table);
+    path.push_str("..", &mut string_table);
+    path.push_str("escape", &mut string_table);
+
+    let importer = entry_root.join("index.bst");
+    let err = resolver
+        .resolve_import_as_compile_time_path(&path, &importer, &mut string_table)
+        .expect_err("import escaping project root should be rejected");
+
+    assert!(
+        err.msg.contains("'..' are not supported"),
+        "expected '..' rejection, got: {}",
+        err.msg
+    );
+}
+
+#[test]
+fn import_escape_library_root_rejected() {
+    let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
+    let project_root = temp_dir.path().to_path_buf();
+    let entry_root = project_root.join("src");
+    let library_root = project_root.join("lib/helper");
+
+    fs::create_dir_all(&entry_root).unwrap();
+    fs::create_dir_all(&library_root).unwrap();
+    fs::write(entry_root.join("index.bst"), b"").unwrap();
+
+    let mut source_libraries = crate::libraries::SourceLibraryRegistry::new();
+    source_libraries.register_filesystem_root("helper", library_root.clone());
+
+    let resolver =
+        ProjectPathResolver::new(project_root.clone(), entry_root.clone(), &source_libraries)
+            .expect("resolver creation should succeed");
+
+    let mut string_table = StringTable::new();
+    let mut path = InternedPath::new();
+    path.push_str("helper", &mut string_table);
+    path.push_str("..", &mut string_table);
+    path.push_str("escape", &mut string_table);
+
+    let importer = entry_root.join("index.bst");
+    let err = resolver
+        .resolve_import_as_compile_time_path(&path, &importer, &mut string_table)
+        .expect_err("import escaping library root should be rejected");
+
+    assert!(
+        err.msg.contains("'..' are not supported"),
+        "expected '..' rejection, got: {}",
+        err.msg
+    );
+}
+
+#[test]
+fn import_case_sensitive_symbol_mismatch_rejected() {
+    let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
+    let project_root = temp_dir.path().to_path_buf();
+    let entry_root = project_root.join("src");
+
+    fs::create_dir_all(&entry_root).unwrap();
+    fs::create_dir_all(entry_root.join("pages")).unwrap();
+    fs::write(entry_root.join("pages/about.bst"), b"").unwrap();
+    fs::write(entry_root.join("index.bst"), b"").unwrap();
+
+    let source_libraries = crate::libraries::SourceLibraryRegistry::new();
+    let resolver =
+        ProjectPathResolver::new(project_root.clone(), entry_root.clone(), &source_libraries)
+            .expect("resolver creation should succeed");
+
+    let mut string_table = StringTable::new();
+    let mut path = InternedPath::new();
+    path.push_str("pages", &mut string_table);
+    path.push_str("About", &mut string_table);
+
+    let importer = entry_root.join("index.bst");
+    let result = resolver.resolve_import_as_compile_time_path(&path, &importer, &mut string_table);
+
+    #[cfg(target_os = "macos")]
+    {
+        let err = result.expect_err("case mismatch should be rejected on macOS");
+        assert!(
+            err.msg.contains("case mismatch"),
+            "expected case mismatch error, got: {}",
+            err.msg
+        );
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        // On case-sensitive filesystems the file simply won't be found.
+        assert!(
+            result.is_err(),
+            "case mismatch should fail on case-sensitive filesystems"
+        );
+    }
 }

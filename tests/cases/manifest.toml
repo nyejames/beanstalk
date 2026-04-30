@@ -3214,3 +3214,13 @@ tags = ["integration", "language", "external-packages", "core-libraries", "js", 
 id = "core_time_arity_error"
 path = "core_time_arity_error"
 tags = ["integration", "language", "external-packages", "core-libraries", "diagnostics"]
+
+[[case]]
+id = "import_core_package_skips_filesystem_resolution"
+path = "import_core_package_skips_filesystem_resolution"
+tags = ["integration", "imports", "external-packages"]
+
+[[case]]
+id = "import_path_separator_normalized_diagnostic"
+path = "import_path_separator_normalized_diagnostic"
+tags = ["integration", "imports"]

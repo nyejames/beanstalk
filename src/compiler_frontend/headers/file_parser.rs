@@ -217,6 +217,7 @@ pub(super) fn parse_headers_in_file(
                         let normalized_path = normalize_import_dependency_path(
                             &item.path,
                             &token_stream.src_path,
+                            &item.path_location,
                             context.string_table,
                         )?;
 
@@ -242,6 +243,7 @@ pub(super) fn parse_headers_in_file(
                         let normalized_path = normalize_import_dependency_path(
                             &item.path,
                             &token_stream.src_path,
+                            &item.path_location,
                             context.string_table,
                         )?;
 
@@ -492,6 +494,7 @@ fn discover_visible_constant_placeholders(
                 let normalized = normalize_import_dependency_path(
                     &item.path,
                     &token_stream.src_path,
+                    &item.path_location,
                     string_table,
                 )?;
                 if normalized.name().is_some() {

@@ -233,6 +233,21 @@ impl ProjectPathResolver {
         importer_file: &Path,
         string_table: &mut StringTable,
     ) -> Result<(CompileTimePath, PathBuf), CompilerError> {
+        if import_contains_dotdot(import_path, string_table) {
+            return_file_error!(
+                string_table,
+                importer_file,
+                format!(
+                    "Import paths containing '..' are not supported: '{}'",
+                    import_path.to_portable_string(string_table),
+                ),
+                {
+                    CompilationStage => String::from("Project Structure"),
+                    PrimarySuggestion => String::from("Use a direct path without parent-directory references."),
+                }
+            );
+        }
+
         let (base_kind, filesystem_base) =
             self.resolve_path_base(import_path, importer_file, string_table)?;
 
@@ -250,9 +265,10 @@ impl ProjectPathResolver {
             join_and_normalize_path(&filesystem_base, import_path, string_table)
         };
 
-        for candidate in candidate_import_files(&normalized, import_path.len()) {
+        let candidates = candidate_import_files(&normalized, import_path.len());
+        for (candidate_index, candidate) in candidates.iter().enumerate() {
             if candidate.is_file() {
-                let canonical = fs::canonicalize(&candidate).map_err(|error| {
+                let canonical = fs::canonicalize(candidate).map_err(|error| {
                     CompilerError::file_error(
                         importer_file,
                         format!(
@@ -262,6 +278,25 @@ impl ProjectPathResolver {
                         string_table,
                     )
                 })?;
+
+                self.validate_import_boundary(
+                    &canonical,
+                    &base_kind,
+                    &filesystem_base,
+                    import_path,
+                    importer_file,
+                    string_table,
+                )?;
+                validate_import_case_sensitivity(
+                    import_path,
+                    &base_kind,
+                    &filesystem_base,
+                    &canonical,
+                    candidate_index == 1,
+                    importer_file,
+                    string_table,
+                )?;
+
                 let public_path = build_public_path(import_path, &base_kind, string_table);
                 let ct_path = CompileTimePath {
                     source_path: import_path.clone(),
@@ -422,6 +457,140 @@ impl ProjectPathResolver {
 
         Ok(())
     }
+
+    /// WHAT: rejects import paths that escape their resolved base directory.
+    /// WHY: imports must stay within the project root (relative/entry) or library root.
+    fn validate_import_boundary(
+        &self,
+        canonical_file: &Path,
+        base_kind: &CompileTimePathBase,
+        filesystem_base: &Path,
+        import_path: &InternedPath,
+        importer_file: &Path,
+        string_table: &mut StringTable,
+    ) -> Result<(), CompilerError> {
+        let canonical_base =
+            fs::canonicalize(filesystem_base).unwrap_or_else(|_| filesystem_base.to_path_buf());
+
+        if !canonical_file.starts_with(&canonical_base) {
+            let message = match base_kind {
+                CompileTimePathBase::SourceLibraryRoot => {
+                    format!(
+                        "Import escapes the source library root and is not allowed: '{}'",
+                        import_path.to_portable_string(string_table),
+                    )
+                }
+                _ => {
+                    format!(
+                        "Import escapes the project root and is not allowed: '{}'",
+                        import_path.to_portable_string(string_table),
+                    )
+                }
+            };
+
+            return_file_error!(
+                string_table,
+                importer_file,
+                message,
+                {
+                    CompilationStage => String::from("Project Structure"),
+                    PrimarySuggestion => String::from("Use a path inside the project or library root."),
+                }
+            );
+        }
+
+        Ok(())
+    }
+}
+
+/// WHAT: checks whether an import path contains any `..` components.
+/// WHY: parent-directory traversal is not supported in Beanstalk imports.
+fn import_contains_dotdot(import_path: &InternedPath, string_table: &StringTable) -> bool {
+    import_path
+        .as_components()
+        .iter()
+        .any(|component| string_table.resolve(*component) == "..")
+}
+
+/// WHAT: validates that the import path casing matches the on-disk filesystem casing.
+/// WHY: import paths are logically case-sensitive even on case-insensitive filesystems.
+fn validate_import_case_sensitivity(
+    import_path: &InternedPath,
+    base_kind: &CompileTimePathBase,
+    filesystem_base: &Path,
+    canonical_file: &Path,
+    is_parent_fallback: bool,
+    importer_file: &Path,
+    string_table: &mut StringTable,
+) -> Result<(), CompilerError> {
+    let canonical_base =
+        fs::canonicalize(filesystem_base).unwrap_or_else(|_| filesystem_base.to_path_buf());
+    let relative_canonical = match canonical_file.strip_prefix(&canonical_base) {
+        Ok(r) => r,
+        Err(_) => return Ok(()),
+    };
+
+    let relative_canonical = relative_canonical.with_extension("");
+    let canonical_components: Vec<&str> = relative_canonical
+        .components()
+        .filter_map(|c| match c {
+            std::path::Component::Normal(s) => s.to_str(),
+            _ => None,
+        })
+        .collect();
+
+    let user_components: Vec<&str> = match base_kind {
+        CompileTimePathBase::SourceLibraryRoot => import_path
+            .as_components()
+            .iter()
+            .skip(1)
+            .map(|c| string_table.resolve(*c))
+            .collect(),
+        CompileTimePathBase::RelativeToFile => import_path
+            .as_components()
+            .iter()
+            .skip_while(|c| string_table.resolve(**c) == ".")
+            .map(|c| string_table.resolve(*c))
+            .collect(),
+        CompileTimePathBase::EntryRoot => import_path
+            .as_components()
+            .iter()
+            .map(|c| string_table.resolve(*c))
+            .collect(),
+    };
+
+    let user_file_components = if is_parent_fallback {
+        if user_components.len() < 2 {
+            return Ok(());
+        }
+        &user_components[..user_components.len() - 1]
+    } else {
+        &user_components[..]
+    };
+
+    if user_file_components.len() != canonical_components.len() {
+        return Ok(());
+    }
+
+    for (user, canonical) in user_file_components.iter().zip(canonical_components.iter()) {
+        if *user != *canonical {
+            return_file_error!(
+                string_table,
+                importer_file,
+                format!(
+                    "Import path case mismatch: '{}' should be '{}'.",
+                    user,
+                    canonical,
+                ),
+                {
+                    CompilationStage => String::from("Project Structure"),
+                    PrimarySuggestion => format!("Use '{}' instead of '{}'.", canonical, user),
+                }
+            );
+        }
+    }
+
+    Ok(())
 }
 
 /// WHAT: resolves the directory configured as the project entry root.

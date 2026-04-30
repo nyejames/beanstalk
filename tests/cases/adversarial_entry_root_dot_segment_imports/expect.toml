@@ -1,5 +1,7 @@
 entry = "."
 
 [backends.html]
-mode = "success"
+mode = "failure"
 warnings = "forbid"
+error_type = "File"
+message_contains = ["'..' are not supported"]
