@@ -17,6 +17,7 @@ use std::path::PathBuf;
 
 /// Report of what the scaffold operation created, updated, skipped, or replaced.
 // Phase 6 will read these fields for summary output.
+#[derive(Debug)]
 #[allow(dead_code)]
 pub struct CreateProjectReport {
     pub project_path: PathBuf,
@@ -37,6 +38,7 @@ pub fn create_html_project_template(options: NewHtmlProjectOptions) -> Result<()
 /// Create a new HTML project with an injected prompt implementation.
 ///
 /// Phase 3: target resolution and interactive placement are implemented.
+/// Phase 4: preflight conflict detection and `--force` handling are implemented.
 /// Phase 5 will replace the legacy scaffold write with full template rendering.
 pub fn create_html_project_template_with_prompt(
     options: NewHtmlProjectOptions,
@@ -47,10 +49,12 @@ pub fn create_html_project_template_with_prompt(
 
     let resolved = target::resolve_project_target(options.raw_path, &current_dir, prompt)?;
 
-    let full_path = scaffold::write_legacy_scaffold(resolved.project_dir, &resolved.project_name)?;
+    scaffold::run_preflight_checks(&resolved, options.force, prompt)?;
+
+    scaffold::write_legacy_scaffold(&resolved.project_dir, &resolved.project_name)?;
 
     Ok(CreateProjectReport {
-        project_path: full_path,
+        project_path: resolved.project_dir,
         project_name: resolved.project_name,
         created: Vec::new(),
         updated: Vec::new(),
