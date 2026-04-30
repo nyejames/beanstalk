@@ -264,6 +264,23 @@ pub(super) fn parse_identifier_or_call(
     if let Some((_const_id, const_def)) = context.lookup_visible_external_constant(id) {
         token_stream.advance();
         let location = token_stream.current_location();
+
+        if context.kind.is_constant_context() && !const_def.value.is_scalar() {
+            let variable_name = string_table.resolve(id).to_owned();
+            return_rule_error!(
+                format!(
+                    "External constant '{}' is not a scalar value and cannot be used in a constant context.",
+                    variable_name
+                ),
+                location,
+                {
+                    VariableName => variable_name,
+                    CompilationStage => "Expression Parsing",
+                    PrimarySuggestion => "Only scalar external constants (Int, Float, Bool) are supported in constant declarations and const templates",
+                }
+            );
+        }
+
         let value_mode = ValueMode::ImmutableOwned;
         let const_expr = match const_def.value {
             crate::compiler_frontend::external_packages::ExternalConstantValue::Float(value) => {

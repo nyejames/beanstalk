@@ -237,7 +237,7 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
             [: Frontend / JS]
             [: Functions, opaque types, and compile-time external constants are supported through Rust-side registry metadata. [$markdown:
                 - User-authored external binding files are not supported. Alpha external packages are Rust-side builder/compiler metadata.
-                - External constants are implemented for scalar compile-time values and lower through expression parsing as ordinary literals.
+                - External constants are implemented for scalar compile-time values (Int, Float, Bool) and lower through expression parsing as ordinary literals. Non-scalar external constants are rejected in constant contexts.
                 - External ABI metadata includes [codesnippet:F64], [codesnippet:I32], [codesnippet:Bool], and [codesnippet:Utf8Str] for the current core package skeletons.
                 - Explicit imports are required for non-prelude external packages. [codesnippet:io] and [codesnippet:IO] are registered as external prelude symbols; builtin error symbols are compiler-owned bare names.
                 - External function aliases and external constant aliases are supported. External opaque type aliases are rejected with structured diagnostics. Grouped external aliases are supported.
@@ -286,7 +286,7 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
             [: Partial]
             [: Targeted import, JS helper, runtime smoke, arity, type-error, and Wasm-unsupported coverage.]
             [: JS / HTML]
-            [: [codesnippet:@core/random] exposes [codesnippet:random_float()] and [codesnippet:random_int(min, max)]. [codesnippet:random_int] is intended for the inclusive range [codesnippet:min <= value <= max] when [codesnippet:min <= max]. Seeded random and [codesnippet:min > max] runtime diagnostics are deferred. Wasm support is deferred; HTML-Wasm builds fail with a structured [codesnippet:Rule] diagnostic before backend lowering.]
+            [: [codesnippet:@core/random] exposes [codesnippet:random_float()] and [codesnippet:random_int(min, max)]. [codesnippet:random_float()] returns a value in the half-open range 0.0 to 1.0. [codesnippet:random_int(min, max)] is inclusive at both ends. When [codesnippet:min > max] the bounds are swapped automatically; when [codesnippet:min == max] the result is that value. Seeded random remains deferred. Wasm support is deferred; HTML-Wasm builds fail with a structured [codesnippet:Rule] diagnostic before backend lowering.]
         ]
 
         [data:

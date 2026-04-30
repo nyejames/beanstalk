@@ -9,14 +9,16 @@ Use the language surface integration matrix as a reference for what is currently
 ---
 
 # Plans / Notes / TODOS
-- Pattern matching hardening: 
-Finish coverage and diagnostics for the supported Alpha pattern surface; keep general capture/tagged patterns, nested payload patterns and negated patterns
+- Module library hardening: `docs/roadmap/plans/module-library-alpha-hardening-plan.md`
+- Choices structural equality: `docs/roadmap/plans/choices-structural-equality-plan.md`
+- Pattern matching hardening: `docs/roadmap/plans/pattern-matching-hardening-plan.md`
 
 - full traits implementation
 - Closures
 - Hash Maps
 - Compile time arbitary precision aritmetic + Decimals Type support
 - Move to more specific explicit type declarations for numbers (I32, I64, F32, F64) - JS backend just makes all an F64 and accepts the precision loss, more for future Wasm backend
+- External non-scalar constant design: string slices, collections, and opaque-type external constants in const contexts are rejected for Alpha. Design compile-time representation and validation before enabling.
 
 ## Wasm
 

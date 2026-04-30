@@ -9,7 +9,7 @@ impl<'hir> JsEmitter<'hir> {
     pub(crate) fn emit_core_random_helpers(&mut self) {
         let helpers: &[(&str, &str)] = &[(
             "__bs_random_int",
-            "function __bs_random_int(min, max) { return Math.floor(Math.random() * (max - min + 1)) + min; }",
+            "function __bs_random_int(min, max) { if (min > max) { var t = min; min = max; max = t; } if (min === max) return min; return Math.floor(Math.random() * (max - min + 1)) + min; }",
         )];
 
         self.emit_referenced_core_helpers(helpers);

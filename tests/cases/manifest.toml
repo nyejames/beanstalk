@@ -2680,6 +2680,11 @@ path = "external_import_constant_alias_success"
 tags = ["integration", "language", "aliases", "external"]
 
 [[case]]
+id = "external_non_scalar_constant_rejected"
+path = "external_non_scalar_constant_rejected"
+tags = ["integration", "diagnostics", "external", "constants"]
+
+[[case]]
 id = "external_import_alias_collision_with_source_rejected"
 path = "external_import_alias_collision_with_source_rejected"
 tags = ["integration", "language", "aliases", "external", "diagnostics"]
@@ -3224,6 +3229,11 @@ tags = ["integration", "language", "external-packages", "core-libraries", "diagn
 id = "core_random_functions"
 path = "core_random_functions"
 tags = ["integration", "language", "external-packages", "core-libraries", "js", "wasm", "diagnostics"]
+
+[[case]]
+id = "core_random_int_edge_cases"
+path = "core_random_int_edge_cases"
+tags = ["integration", "language", "external-packages", "core-libraries", "js", "wasm"]
 
 [[case]]
 id = "core_random_type_error"

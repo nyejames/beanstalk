@@ -1,0 +1,7 @@
+entry = "."
+
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+error_type = "Rule"
+message_contains = ["External constant 'TEST_NON_SCALAR_CONST' is not a scalar value and cannot be used in a constant context"]

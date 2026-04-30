@@ -1,0 +1,21 @@
+entry = "."
+
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["same=5"]
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = [
+    "function __bs_random_int(min, max) { if (min > max) { var t = min; min = max; max = t; } if (min === max) return min; return Math.floor(Math.random() * (max - min + 1)) + min; }",
+    "__bs_random_int(5, 5)",
+    "__bs_random_int(10, 1)",
+]
+
+[backends.html_wasm]
+mode = "failure"
+warnings = "forbid"
+error_type = "Rule"
+message_contains = ["External function 'random_int' from package '@core/random' is not supported by the Wasm backend."]

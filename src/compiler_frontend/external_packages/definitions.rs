@@ -96,6 +96,13 @@ pub enum ExternalConstantValue {
     Bool(bool),
 }
 
+impl ExternalConstantValue {
+    /// Returns true for scalar values that are valid in const contexts.
+    pub fn is_scalar(self) -> bool {
+        matches!(self, Self::Float(_) | Self::Int(_) | Self::Bool(_))
+    }
+}
+
 /// Definition of a single external constant exposed by a virtual package.
 #[derive(Debug, Clone)]
 pub struct ExternalConstantDef {

@@ -478,9 +478,9 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;"> Type aliases</td>
      <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> Broad alias declaration, collection/option/import/external target, visibility, cycle, duplicate, value-misuse, constructor-misuse, and import-alias interaction coverage.</td>
+     <td style="padding: 0.2em 0.5em;"> Broad alias declaration, collection/option/import target, visibility, cycle, duplicate, value-misuse, constructor-misuse, and import-alias interaction coverage.</td>
      <td style="padding: 0.2em 0.5em;"> Frontend-owned</td>
-     <td style="padding: 0.2em 0.5em;"> Type aliases are transparent and annotation-only. Imported aliases are file-local; exporting an imported type under a public name requires declaring a real exported type alias.</td>
+     <td style="padding: 0.2em 0.5em;"> Type aliases are transparent and annotation-only. Imported aliases are file-local; exporting an imported type under a public name requires declaring a real exported type alias. Aliases to external opaque types are rejected with structured diagnostics.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -555,7 +555,7 @@ body {
      <td style="padding: 0.2em 0.5em;"> Partial</td>
      <td style="padding: 0.2em 0.5em;"> Broad package-scoped import and visibility coverage, with targeted external constant, Float/F64 ABI, core libraries, prelude, duplicate-name, non-imported-symbol, and alias diagnostics.</td>
      <td style="padding: 0.2em 0.5em;"> Frontend / JS</td>
-     <td style="padding: 0.2em 0.5em;"> Functions, opaque types, and compile-time external constants are supported through Rust-side registry metadata. <ul><li>User-authored external binding files are not supported. Alpha external packages are Rust-side builder/compiler metadata.</li><li>External constants are implemented for scalar compile-time values and lower through expression parsing as ordinary literals.</li><li>External ABI metadata includes <span style="
+     <td style="padding: 0.2em 0.5em;"> Functions, opaque types, and compile-time external constants are supported through Rust-side registry metadata. <ul><li>User-authored external binding files are not supported. Alpha external packages are Rust-side builder/compiler metadata.</li><li>External constants are implemented for scalar compile-time values (Int, Float, Bool) and lower through expression parsing as ordinary literals. Non-scalar external constants are rejected in constant contexts.</li><li>External ABI metadata includes <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">F64</span>, <span style="
@@ -573,10 +573,13 @@ body {
     ">io</span> and <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">IO</span> are registered as external prelude symbols; builtin error symbols are compiler-owned bare names.</li><li>External function aliases, external constant aliases, and external opaque type aliases are supported. Grouped external aliases are supported.</li><li>Prelude collision rejection is enforced: explicit imports cannot shadow prelude names.</li><li>External receiver methods are not a recommended expansion surface yet. Prefer free functions until external methods are keyed by nominal receiver type rather than broad ABI metadata.</li><li>JS lowering now resolves external runtime names through per-function lowering metadata in the registry.</li><li><span style="
+    ">IO</span> are registered as external prelude symbols; builtin error symbols are compiler-owned bare names.</li><li>External function aliases and external constant aliases are supported. External opaque type aliases are rejected with structured diagnostics. Grouped external aliases are supported.</li><li>Prelude collision rejection is enforced: explicit imports cannot shadow prelude names.</li><li>External receiver methods are not a recommended expansion surface yet. Prefer free functions until external methods are keyed by nominal receiver type rather than broad ABI metadata.</li><li>JS lowering now resolves external runtime names through per-function lowering metadata in the registry.</li><li><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">InlineExpression</span> JS lowering metadata exists but is not implemented yet.</li><li>Wasm lowering for external packages is experimental and should not be counted as Alpha support.</li></ul></td>
+    ">InlineExpression</span> JS lowering is implemented for pure expression external functions. Arguments are substituted positionally using `#0`, `#1`, ... placeholders; duplicate placeholders are rejected. No runtime helper is emitted for inline-only functions.</li><li>Wasm lowering for external packages is experimental and should not be counted as Alpha support.</li><li>Unsupported external package imports for the active backend are rejected with structured <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Rule</span> diagnostics before backend lowering, not during LIR transformation.</li></ul></td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -673,7 +676,10 @@ body {
     ">Float</span>.</li><li>The package is not prelude-imported. Users must explicitly import the required symbols from <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">@core/math</span>.</li><li>Direct imports, grouped imports, and aliased imports are all supported.</li><li>JS helpers are emitted only when the matching external function is referenced.</li><li>Wasm support for this package remains deferred/experimental.</li></ul></td>
+    ">@core/math</span>.</li><li>Direct imports, grouped imports, and aliased imports are all supported.</li><li>JS helpers are emitted only when the matching external function is referenced.</li><li>Wasm support for this package remains deferred/experimental. Imports used in HTML-Wasm builds fail with a structured <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Rule</span> diagnostic before backend lowering.</li></ul></td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -699,7 +705,10 @@ body {
     ">starts_with</span>, and <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">ends_with</span>. It is JS-backed, explicit-import only, and optional by builder. Wasm support is deferred.</td>
+    ">ends_with</span>. It is JS-backed, explicit-import only, and optional by builder. Wasm support is deferred; HTML-Wasm builds fail with a structured <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Rule</span> diagnostic before backend lowering.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -719,16 +728,19 @@ body {
     ">random_int(min, max)</span>. <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">random_int</span> is intended for the inclusive range <span style="
+    ">random_float()</span> returns a value in the half-open range 0.0 to 1.0. <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">min <= value <= max</span> when <span style="
+    ">random_int(min, max)</span> is inclusive at both ends. When <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">min <= max</span>. Seeded random and <span style="
+    ">min > max</span> the bounds are swapped automatically; when <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">min > max</span> runtime diagnostics are deferred.</td>
+    ">min == max</span> the result is that value. Seeded random remains deferred. Wasm support is deferred; HTML-Wasm builds fail with a structured <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Rule</span> diagnostic before backend lowering.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -745,7 +757,10 @@ body {
     ">now_millis()</span> and <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">now_seconds()</span>. Full date/time/timezone objects, formatting, durations, and monotonic clocks are deferred. Wasm support is deferred.</td>
+    ">now_seconds()</span>. Full date/time/timezone objects, formatting, durations, and monotonic clocks are deferred. Wasm support is deferred; HTML-Wasm builds fail with a structured <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Rule</span> diagnostic before backend lowering.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -765,7 +780,7 @@ body {
     ">#root_folders</span> has been replaced by <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">#library_folders</span> and is rejected with a migration diagnostic. Prefix collisions between builder-provided and project-local libraries produce hard errors. Modules that export outside themselves must do so through `#mod.bst`; outside importers cannot bypass the facade. `#mod.bst` is facade-only: private top-level declarations, top-level runtime statements, and runtime templates are rejected.</td>
+    ">#library_folders</span> and is rejected with a migration diagnostic. Prefix collisions between builder-provided and project-local libraries produce hard errors. All module roots enforce facade boundaries: modules that export outside themselves must do so through `#mod.bst`; outside importers cannot bypass the facade. `#mod.bst` is facade-only: private top-level declarations, top-level runtime statements, and runtime templates are rejected.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -784,7 +799,7 @@ body {
      <td style="padding: 0.2em 0.5em;"> Project-local source libraries are discovered from <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">#library_folders</span> (default convention: `/lib` when not configured). Imports resolve through the library prefix (for example, `/lib/helper` as `@helper` or `/packages/helper` as `@helper`). Public cross-module access goes through `#mod.bst`; bypassing implementation files from outside the module is rejected.</td>
+    ">#library_folders</span> (default convention: `/lib` when not configured). Imports resolve through the library prefix (for example, `/lib/helper` as `@helper` or `/packages/helper` as `@helper`). Public cross-module access goes through `#mod.bst`; bypassing implementation files from outside the module is rejected. Module boundary enforcement applies to all module roots, not only project-local libraries.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -1310,7 +1325,7 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;"> Import re-exports</td>
      <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> Targeted coverage for single, aliased, grouped, nested grouped, external function, external type, duplicate, collision, no-local-binding, and invalid-location diagnostics.</td>
+     <td style="padding: 0.2em 0.5em;"> Targeted coverage for single, aliased, grouped, nested grouped, cross-library, external function, external type, duplicate, collision, no-local-binding, and invalid-location diagnostics.</td>
      <td style="padding: 0.2em 0.5em;"> `#import @...` is valid only in `#mod.bst` module facades (including source libraries). It re-exports source or external package symbols through the facade export map without creating a local binding in `#mod.bst` or sibling implementation files. Grouped imports and per-symbol aliases are supported; wildcard and namespace imports remain deferred.</td>
         </tr>
 

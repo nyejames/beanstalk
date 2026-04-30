@@ -615,23 +615,31 @@ Implement JS `InlineExpression` lowering metadata for external package functions
 
 ## Phase 10 — External constant policy
 
+### Status
+
+Implemented.
+
 ### Summary
 
 Document and enforce current external constant limits.
 
 ### Behavior to implement
 
-- [ ] External scalar constants continue to work in const contexts.
-- [ ] External non-scalar constants are rejected.
-- [ ] Add roadmap item for external non-scalar constant design.
+- [x] External scalar constants continue to work in const contexts.
+- [x] External non-scalar constants are rejected.
+- [x] Add roadmap item for external non-scalar constant design.
 
 ### Validation
 
-- [ ] Run `just validate`.
+- [x] Run `just validate`.
 
 ---
 
 ## Phase 11 — Core random runtime contract
+
+### Status
+
+Implemented.
 
 ### Summary
 
@@ -639,15 +647,15 @@ Define and test `@core/random` edge behavior.
 
 ### Behavior to implement
 
-- [ ] `random_float()` returns `[0.0, 1.0)`.
-- [ ] `random_int(min, max)` is inclusive at both ends.
-- [ ] `random_int(min, max)` swaps bounds when `min > max`.
-- [ ] `min == max` returns that value.
-- [ ] seeded random remains deferred.
+- [x] `random_float()` returns `[0.0, 1.0)`.
+- [x] `random_int(min, max)` is inclusive at both ends.
+- [x] `random_int(min, max)` swaps bounds when `min > max`.
+- [x] `min == max` returns that value.
+- [x] seeded random remains deferred.
 
 ### Validation
 
-- [ ] Run `just validate`.
+- [x] Run `just validate`.
 
 ---
 

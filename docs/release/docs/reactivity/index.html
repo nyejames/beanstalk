@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
     <title>Reactivity in Beanstalk Templates | Beanstalk</title>
-    <meta name="description" content="Design draft for explicit, place-based reactivity in Beanstalk templates using the state access mode.">
+    <meta name="description" content="Design draft for explicit, place-based reactivity in Beanstalk templates using reactive type access.">
     <style>
 /*!
   BS CSS CORE (absolute basics CSS reset)
@@ -312,21 +312,7 @@ body {
         </div>
     </nav>
      <h1 style="font-size: 2em;text-align: center;"> REACTIVITY IN BEANSTALK TEMPLATES</h1>
-    <section class="container"><p><strong>Design draft:</strong> This page is a future-facing design document for language and compiler planning. It is not final user-facing documentation, and the syntax, semantics, and implementation details may change before this feature is implemented.</p><p>This document describes the design and semantics of <strong>reactivity in Beanstalk templates</strong>.</p><p>Reactivity in Beanstalk is <strong>explicit</strong>, <strong>place-based</strong>, and built on the existing access-mode model of the language.</p><p>A value does not become reactive when declared. A mutable place becomes reactive only when it is consumed through <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">state</span>.</p></section>
-    <section class="container"><h1>Design goals</h1><p>Reactivity in Beanstalk is designed to:</p><ul><li>Be explicit and predictable</li><li>Keep reactive intent at the point of consumption</li><li>Reuse existing language concepts: places, mutability, access modes, and borrowing</li><li>Avoid declaration-level reactive markers</li><li>Avoid implicit reactive variables</li><li>Enable fine-grained node-level updates without virtual DOM diffing</li><li>Integrate cleanly with Beanstalk&#39;s GC-first memory model</li><li>Keep templates read-only</li></ul><p>Reactivity is not a separate framework layered on top of the language. It is a consequence of explicitly observing mutation.</p></section>
-    <section class="container"><h1>Access modes</h1><p>Beanstalk values are read by default.</p><p>There are three explicit access modes:</p><ul><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">copy place</span> creates an independent copied value</li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">~place</span> requests mutable/exclusive access</li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">state place</span> creates a reactive read subscription</li></ul><p>These access modes are mutually exclusive.</p><pre style="
+    <section class="container"><p><strong>Design draft:</strong> This page is a future-facing design document for language and compiler planning. It is not final user-facing documentation, and the syntax, semantics, and implementation details may change before this feature is implemented.</p><p>This document describes the design and semantics of <strong>reactivity in Beanstalk templates</strong>.</p><p>Reactivity in Beanstalk is <strong>explicit</strong>, <strong>place-based</strong>, and tied to compiler-managed template rendering.</p><p>Reactive values are declared with <strong>reactive type access</strong>:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
         border-radius: 5px;
@@ -334,11 +320,12 @@ body {
         white-space: pre; 
         overflow-x: auto;
     "><code class='codeblock'>
-    value          <span class='bst-code-comment'>-- shared read</span>
-    <span class='bst-code-keyword'>copy</span> value     <span class='bst-code-comment'>-- explicit copy</span>
-    <span class='bst-code-operator'>~</span>value         <span class='bst-code-comment'>-- mutable/exclusive access</span>
-    state value    <span class='bst-code-comment'>-- reactive read subscription</span>
-    </code></pre><p>Invalid combinations:</p><pre style="
+    count <span class='bst-code-operator'>$</span><span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
+    message <span class='bst-code-operator'>$</span><span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Hello</span><span class='bst-code-parenthesis'>]</span>
+    </code></pre><p>Templates subscribe to reactive values with <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">~</span> inside template captures:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
         border-radius: 5px;
@@ -346,15 +333,101 @@ body {
         white-space: pre; 
         overflow-x: auto;
     "><code class='codeblock'>
-    <span class='bst-code-keyword'>copy</span> state value
-    state <span class='bst-code-keyword'>copy</span> value
-    state <span class='bst-code-operator'>~</span>value
-    <span class='bst-code-operator'>~</span>state value
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>~</span>count<span class='bst-code-parenthesis'>]</span>
+    </code></pre><p>Regular code can still read reactive values normally:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    doubled <span class='bst-code-operator'>=</span> count <span class='bst-code-operator'>*</span> <span class='bst-code-number'>2</span>
+    </code></pre></section>
+    <section class="container"><h1>Design goals</h1><p>Reactivity in Beanstalk is designed to:</p><ul><li>Be explicit and predictable</li><li>Keep reactive storage visible at declaration sites</li><li>Keep subscriptions visible inside templates</li><li>Reuse existing language concepts: types, places, mutability, and template captures</li><li>Avoid hidden reactive promotion</li><li>Avoid virtual DOM diffing</li><li>Enable fine-grained node-level updates</li><li>Integrate cleanly with Beanstalk&#39;s GC-first memory model</li><li>Keep templates read-only</li></ul><p>Reactivity is not a separate framework layered on top of the language.</p><p>It is compiler-owned rendering behavior built around stable reactive places.</p></section>
+    <section class="container"><h1>Core idea</h1><p>Reactive values are declared by prefixing the value type with <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">$</span>.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    count <span class='bst-code-operator'>$</span><span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
+    </code></pre><p>This means:</p><ul><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">count</span> has value type <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Int</span></li><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">count</span> is stored as a reactive source</li><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">count</span> has stable identity</li><li>templates can subscribe to <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">count</span> with <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">[~count]</span></li><li>assignment to <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">count</span> invalidates subscribers</li></ul><p>Regular code does not need special syntax to read it:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    count <span class='bst-code-operator'>$</span><span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
+
+    next <span class='bst-code-operator'>=</span> count <span class='bst-code-operator'>+</span> <span class='bst-code-number'>1</span>
+    label <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Count</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>count<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span>
+    </code></pre><p>In a template, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">[count]</span> is a snapshot read.</p><p>In a template, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">[~count]</span> is a reactive subscription.</p></section>
+    <section class="container"><h1>Reactive type access</h1><p>Reactive type access uses <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">$Type</span>.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    count <span class='bst-code-operator'>$</span><span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
+    enabled <span class='bst-code-operator'>$</span><span class='bst-code-type'>Bool</span> <span class='bst-code-operator'>=</span> true
+    message <span class='bst-code-operator'>$</span><span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Hello</span><span class='bst-code-parenthesis'>]</span>
+    </code></pre><p>It works with user-defined types too:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>ReactiveData</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
+        time <span class='bst-code-type'>Int</span>
+    <span class='bst-code-operator'>|</span>
+
+    data <span class='bst-code-operator'>$</span><span class='bst-code-struct'>ReactiveData</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>ReactiveData</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>1</span><span class='bst-code-parenthesis'>)</span>
     </code></pre><p><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">state</span> does not copy a value, move a value, or grant mutable access.</p><p>It creates a read-only subscription to a stable mutable place.</p></section>
-    <section class="container"><h1>Core concept</h1><p>A template may capture values in two important ways:</p><ul><li><strong>Snapshot capture:</strong> the value is read once</li><li><strong>State capture:</strong> the template subscribes to a mutable place and updates when it changes</li></ul><pre style="
+    ">$Type</span> does not create a new user-facing wrapper type.</p><p>This:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
         border-radius: 5px;
@@ -362,33 +435,40 @@ body {
         white-space: pre; 
         overflow-x: auto;
     "><code class='codeblock'>
-    count <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
+    count <span class='bst-code-operator'>$</span><span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
+    </code></pre><p>does not mean <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">count</span> has type <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">State<Int></span>.</p><p>It means <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">count</span> is an <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Int</span> stored in compiler-managed reactive storage.</p></section>
+    <section class="container"><h1>Inferred reactive declarations</h1><p>Reactive declarations can also infer their value type from the initializer.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    count <span class='bst-code-operator'>$</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
+    message <span class='bst-code-operator'>$</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Hello</span><span class='bst-code-parenthesis'>]</span>
 
-    snapshot <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span>count<span class='bst-code-parenthesis'>]</span>
-    reactive <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span>state count<span class='bst-code-parenthesis'>]</span>
+    <span class='bst-code-struct'>ReactiveData</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
+        time <span class='bst-code-type'>Int</span>
+    <span class='bst-code-operator'>|</span>
+
+    data <span class='bst-code-operator'>$</span><span class='bst-code-operator'>=</span> <span class='bst-code-struct'>ReactiveData</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>1</span><span class='bst-code-parenthesis'>)</span>
     </code></pre><p><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">[count]</span> reads the current value of <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">count</span>.</p><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">[state count]</span> subscribes to the mutable place <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">count</span>.</p><p>If <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">count</span> changes later, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">snapshot</span> does not update, but <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">reactive</span> does.</p></section>
-    <section class="container"><h1>Snapshot capture</h1><pre style="
+    ">$=</span> is an inferred reactive declaration.</p><p>It is declaration syntax, not assignment syntax.</p><p>After declaration, reassignment uses normal assignment:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
         border-radius: 5px;
@@ -396,165 +476,10 @@ body {
         white-space: pre; 
         overflow-x: auto;
     "><code class='codeblock'>
-    <span class='bst-code-parenthesis'>[</span>count<span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>Snapshot capture:</p><ul><li>Reads the current value of <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">count</span></li><li>Creates no subscription</li><li>Does not promote <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">count</span> to reactive storage</li><li>Does not update if <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">count</span> changes later</li></ul><p>This is equivalent to reading a value normally in Beanstalk code.</p></section>
-    <section class="container"><h1>State capture</h1><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12); 
-        padding-left: 1em; 
-        border-radius: 5px;
-        max-width: 100%; 
-        white-space: pre; 
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-parenthesis'>[</span>state count<span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>State capture:</p><ul><li>Captures a stable mutable place, not a copied value</li><li>Registers a dependency between the template binding and <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">count</span></li><li>Updates the rendered output when <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">count</span> is mutated</li><li>Does not grant mutation permission to the template</li><li>Promotes <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">count</span> to reactive storage if needed</li></ul><p>State capture is only valid for mutable places.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12); 
-        padding-left: 1em; 
-        border-radius: 5px;
-        max-width: 100%; 
-        white-space: pre; 
-        overflow-x: auto;
-    "><code class='codeblock'>
-    count <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
-    view <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span>state count<span class='bst-code-parenthesis'>]</span> <span class='bst-code-comment'>-- valid</span>
-    </code></pre><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12); 
-        padding-left: 1em; 
-        border-radius: 5px;
-        max-width: 100%; 
-        white-space: pre; 
-        overflow-x: auto;
-    "><code class='codeblock'>
-    count <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
-    view <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span>state count<span class='bst-code-parenthesis'>]</span> <span class='bst-code-comment'>-- invalid</span>
-    </code></pre><p>The second example is invalid because immutable values cannot change, so subscribing to them is meaningless.</p></section>
-    <section class="container"><h1>Example</h1><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12); 
-        padding-left: 1em; 
-        border-radius: 5px;
-        max-width: 100%; 
-        white-space: pre; 
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-operator'>@</span>html<span class='bst-code-operator'>/</span><span class='bst-code-struct'>Basic</span>
+    count <span class='bst-code-operator'>$</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
 
-    count <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
-
-    increment_count <span class='bst-code-operator'>|</span>count <span class='bst-code-operator'>~</span><span class='bst-code-type'>Int</span><span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-        count <span class='bst-code-operator'>+</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
-    ;
-
-    <span class='bst-code-parenthesis'>[</span><span class='bst-code-struct'>Basic.section</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-struct'>Current</span> <span class='bst-code-struct'>Count</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>state count<span class='bst-code-parenthesis'>]</span>
-        <span class='bst-code-struct'>Starting</span> <span class='bst-code-struct'>Count</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>count<span class='bst-code-parenthesis'>]</span>
-
-        <span class='bst-code-parenthesis'>[</span><span class='bst-code-struct'>Basic.button,</span> <span class='bst-code-struct'>Basic.onclick</span><span class='bst-code-parenthesis'>(</span>
-            <span class='bst-code-operator'>|</span><span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span> increment_count<span class='bst-code-parenthesis'>(</span><span class='bst-code-operator'>~</span>count<span class='bst-code-parenthesis'>)</span>
-        <span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>:</span>
-            click me <span class='bst-code-keyword'>to</span> increase the count<span class='bst-code-operator'>!</span>
-        <span class='bst-code-parenthesis'>]</span>
-    <span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>In this example:</p><ul><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Current Count</span> is reactive and updates on every click</li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Starting Count</span> is a snapshot and never changes</li><li>The callback mutates <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">count</span> through explicit mutable access</li><li>Mutating <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">count</span> invalidates render bindings subscribed with <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">state count</span></li></ul><p>The callback is not reactive by itself. It is ordinary Beanstalk code that mutates a value. Reactivity occurs because a template binding explicitly subscribed to that value.</p></section>
-    <section class="container"><h1>What is being captured</h1><p>A state capture does not capture:</p><ul><li>A copied value</li><li>A string output</li><li>A computed expression</li><li>A mutable borrow</li></ul><p>It captures:</p><ul><li>A stable place identity</li><li>A read-only reactive subscription to that place</li></ul><p>This aligns reactivity with Beanstalk&#39;s place-based compiler model.</p><p>The template never owns the mutable access. It only observes changes.</p></section>
-    <section class="container"><h1>Valid state sources</h1><p>Initially, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">state</span> should be limited to simple stable places.</p><p>Valid:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12); 
-        padding-left: 1em; 
-        border-radius: 5px;
-        max-width: 100%; 
-        white-space: pre; 
-        overflow-x: auto;
-    "><code class='codeblock'>
-    count <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
-    view <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span>state count<span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>Invalid:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12); 
-        padding-left: 1em; 
-        border-radius: 5px;
-        max-width: 100%; 
-        white-space: pre; 
-        overflow-x: auto;
-    "><code class='codeblock'>
-    view <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span>state <span class='bst-code-number'>1</span><span class='bst-code-parenthesis'>]</span>
-    view <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span>state get_count<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>]</span>
-    view <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span>state <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Hello</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span>
-    view <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span>state <span class='bst-code-keyword'>copy</span> count<span class='bst-code-parenthesis'>]</span>
-    </code></pre><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">state</span> requires a stable source place.</p><p>Literals, temporary values, copied values, and computed expressions do not have stable mutable identity.</p><p>Future versions may support field paths and collection paths:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12); 
-        padding-left: 1em; 
-        border-radius: 5px;
-        max-width: 100%; 
-        white-space: pre; 
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-parenthesis'>[</span>state user.name<span class='bst-code-parenthesis'>]</span>
-    <span class='bst-code-parenthesis'>[</span>state items.get<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>0</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>!</span><span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>These should be added only after the basic place model is stable.</p></section>
-    <section class="container"><h1>Function boundaries</h1><p>Reactive state must be explicit at both the call site and the function signature.</p><p>A function that wants to observe a parameter reactively must declare that parameter with <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">state</span>.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12); 
-        padding-left: 1em; 
-        border-radius: 5px;
-        max-width: 100%; 
-        white-space: pre; 
-        overflow-x: auto;
-    "><code class='codeblock'>
-    counter_view <span class='bst-code-operator'>|</span>count state <span class='bst-code-type'>Int</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-keyword'>return</span> <span class='bst-code-parenthesis'>[</span>state count<span class='bst-code-parenthesis'>]</span>
-    ;
-    </code></pre><p>The caller must also pass the argument using <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">state</span>.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12); 
-        padding-left: 1em; 
-        border-radius: 5px;
-        max-width: 100%; 
-        white-space: pre; 
-        overflow-x: auto;
-    "><code class='codeblock'>
-    count <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
-    view <span class='bst-code-operator'>=</span> counter_view<span class='bst-code-parenthesis'>(</span>state count<span class='bst-code-parenthesis'>)</span>
+    count <span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
+    count <span class='bst-code-operator'>+</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
     </code></pre><p>This is invalid:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
@@ -563,23 +488,14 @@ body {
         white-space: pre; 
         overflow-x: auto;
     "><code class='codeblock'>
-    view <span class='bst-code-operator'>=</span> counter_view<span class='bst-code-parenthesis'>(</span>count<span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>The callee requested a state-capable parameter, but the caller only provided a shared read.</p><p>This is also invalid:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12); 
-        padding-left: 1em; 
-        border-radius: 5px;
-        max-width: 100%; 
-        white-space: pre; 
-        overflow-x: auto;
-    "><code class='codeblock'>
-    counter_view <span class='bst-code-operator'>|</span>count <span class='bst-code-type'>Int</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-keyword'>return</span> <span class='bst-code-parenthesis'>[</span>state count<span class='bst-code-parenthesis'>]</span>
-    ;
-    </code></pre><p>A normal parameter is not state-capable. The function signature must explicitly request state access.</p></section>
-    <section class="container"><h1>State parameters are read-only</h1><p>A <span style="
+    count <span class='bst-code-operator'>$</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
+
+    count <span class='bst-code-operator'>$</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span> <span class='bst-code-comment'>-- invalid</span>
+    </code></pre><p><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">state</span> parameter can be observed reactively, but it cannot be mutated.</p><pre style="
+    ">$=</span> is only used when declaring a new reactive value.</p></section>
+    <section class="container"><h1>Snapshot vs subscription</h1><p>Templates can read a reactive value in two ways.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
         border-radius: 5px;
@@ -587,10 +503,116 @@ body {
         white-space: pre; 
         overflow-x: auto;
     "><code class='codeblock'>
-    counter_view <span class='bst-code-operator'>|</span>count state <span class='bst-code-type'>Int</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-keyword'>return</span> <span class='bst-code-parenthesis'>[</span>state count<span class='bst-code-parenthesis'>]</span>
+    count <span class='bst-code-operator'>$</span><span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
+
+    snapshot <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span>count<span class='bst-code-parenthesis'>]</span>
+    reactive <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>~</span>count<span class='bst-code-parenthesis'>]</span>
+    </code></pre><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">[count]</span> reads the current value.</p><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">[~count]</span> subscribes to the reactive source.</p><p>If <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">count</span> changes later, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">snapshot</span> does not update, but <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">reactive</span> does.</p><p>This makes snapshot and reactive rendering explicit at the place where the template uses the value.</p></section>
+    <section class="container"><h1>Template subscription</h1><p>Inside templates, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">~reactive_value</span> subscribes to a reactive source.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    count <span class='bst-code-operator'>$</span><span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
+
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>~</span>count<span class='bst-code-parenthesis'>]</span>
+    </code></pre><p>This is only valid for reactive values.</p><p>This is invalid:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    count <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
+
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>~</span>count<span class='bst-code-parenthesis'>]</span>
+    </code></pre><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">count</span> is mutable, but it is not reactive.</p><p>The compiler should produce a clear error:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>Cannot</span> subscribe to <span class='bst-code-string'>&#39;count&#39;</span> because it is not reactive.
+    <span class='bst-code-struct'>Use</span> <span class='bst-code-string'>&#39;[count]&#39;</span> for a snapshot, or declare it with <span class='bst-code-string'>&#39;$Int&#39;</span> or <span class='bst-code-string'>&#39;$=&#39;</span>.
+    </code></pre></section>
+    <section class="container"><h1>Meaning of ~</h1><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">~</span> keeps its normal meaning outside templates.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    increment <span class='bst-code-operator'>|</span>count <span class='bst-code-operator'>~</span><span class='bst-code-type'>Int</span><span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        count <span class='bst-code-operator'>+</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
     ;
-    </code></pre><p>Mutation still requires mutable/exclusive access:</p><pre style="
+
+    count <span class='bst-code-operator'>$</span><span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
+    increment<span class='bst-code-parenthesis'>(</span><span class='bst-code-operator'>~</span>count<span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>Outside templates, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">~count</span> requests mutable/exclusive access.</p><p>Inside templates, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">[~count]</span> subscribes to a reactive value.</p><p>Templates still cannot mutate values.</p><p>The two meanings are context-specific:</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+        
+    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Syntax</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Context</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Meaning</th> 
+    </tr>
+
+            
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">~count</span> </td>
+     <td style="padding: 0.2em 0.5em;"> Normal code / call argument </td>
+     <td style="padding: 0.2em 0.5em;"> Mutable/exclusive access </td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">[~count]</span> </td>
+     <td style="padding: 0.2em 0.5em;"> Template capture </td>
+     <td style="padding: 0.2em 0.5em;"> Reactive read subscription </td>
+        </tr>
+        
+    </table></section>
+    <section class="container"><h1>Reactive declarations imply mutable storage</h1><p>Reactive declarations are mutation-capable by definition.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
         border-radius: 5px;
@@ -598,19 +620,132 @@ body {
         white-space: pre; 
         overflow-x: auto;
     "><code class='codeblock'>
-    increment_count <span class='bst-code-operator'>|</span>count <span class='bst-code-operator'>~</span><span class='bst-code-type'>Int</span><span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+    count <span class='bst-code-operator'>$</span><span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
+
+    count <span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
+    count <span class='bst-code-operator'>+</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
+    </code></pre><p>This is deliberate.</p><p>Reactivity exists to observe changes, so a reactive source must be able to change.</p><p>These forms are invalid because they mix reactive storage syntax with mutable declaration syntax:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    count <span class='bst-code-operator'>$</span><span class='bst-code-type'>Int</span> <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
+    count <span class='bst-code-operator'>~</span><span class='bst-code-operator'>$</span><span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
+    count <span class='bst-code-operator'>$</span><span class='bst-code-operator'>~</span><span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
+    </code></pre><p>Use this instead:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    count <span class='bst-code-operator'>$</span><span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
+    </code></pre></section>
+    <section class="container"><h1>Function boundaries</h1><p>Functions that need a reactive source use reactive type access in the parameter type.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    counter_view <span class='bst-code-operator'>|</span>count <span class='bst-code-operator'>$</span><span class='bst-code-type'>Int</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span>
+            <span class='bst-code-struct'>Current</span> <span class='bst-code-struct'>Count</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>~</span>count<span class='bst-code-parenthesis'>]</span>
+            <span class='bst-code-struct'>Starting</span> <span class='bst-code-struct'>Count</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>count<span class='bst-code-parenthesis'>]</span>
+        <span class='bst-code-parenthesis'>]</span>
+    ;
+    </code></pre><p>The caller passes the value normally:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    count <span class='bst-code-operator'>$</span><span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
+    view <span class='bst-code-operator'>=</span> counter_view<span class='bst-code-parenthesis'>(</span>count<span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>The function signature requests a reactive source.</p><p>The call site does not use <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">~</span>, because <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">~</span> outside templates means mutable access.</p><p>This is invalid:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    count <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
+    view <span class='bst-code-operator'>=</span> counter_view<span class='bst-code-parenthesis'>(</span>count<span class='bst-code-parenthesis'>)</span>
+    </code></pre><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">counter_view</span> requires <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">$Int</span>, but <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">count</span> is a normal mutable <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Int</span>.</p><p>The compiler should produce a clear error:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>Function</span> <span class='bst-code-string'>&#39;counter_view&#39;</span> requires reactive argument <span class='bst-code-string'>&#39;$Int&#39;</span> for parameter <span class='bst-code-string'>&#39;count&#39;</span>.
+    <span class='bst-code-struct'>Declare</span> the argument with <span class='bst-code-string'>&#39;$Int&#39;</span> or <span class='bst-code-string'>&#39;$=&#39;</span> if it should be reactive.
+    </code></pre></section>
+    <section class="container"><h1>Reactive parameters are not mutable parameters</h1><p>A reactive parameter can be subscribed to, but it does not grant mutation permission by itself.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    counter_view <span class='bst-code-operator'>|</span>count <span class='bst-code-operator'>$</span><span class='bst-code-type'>Int</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>~</span>count<span class='bst-code-parenthesis'>]</span>
+    ;
+    </code></pre><p>Mutation still requires a mutable parameter:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    increment <span class='bst-code-operator'>|</span>count <span class='bst-code-operator'>~</span><span class='bst-code-type'>Int</span><span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
         count <span class='bst-code-operator'>+</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
     ;
     </code></pre><p>These are different capabilities:</p><ul><li><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">count state Int</span> is a reactive read subscription</li><li><span style="
+    ">count $Int</span> requires a reactive <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">count ~Int</span> is mutable/exclusive access</li></ul><p>A parameter cannot be both <span style="
+    ">Int</span> source</li><li><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">state</span> and <span style="
+    ">count ~Int</span> requires mutable/exclusive access to an <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Int</span></li></ul><p>A parameter cannot combine <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">$</span> and <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">~</span>.</p><p>Invalid:</p><pre style="
@@ -621,14 +756,15 @@ body {
         white-space: pre; 
         overflow-x: auto;
     "><code class='codeblock'>
-    bad <span class='bst-code-operator'>|</span>count state <span class='bst-code-operator'>~</span><span class='bst-code-type'>Int</span><span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+    bad <span class='bst-code-operator'>|</span>count <span class='bst-code-operator'>~</span><span class='bst-code-operator'>$</span><span class='bst-code-type'>Int</span><span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
         count <span class='bst-code-operator'>+</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
     ;
-    </code></pre><p>State access and mutable access are mutually exclusive.</p></section>
-    <section class="container"><h1>State is not a type</h1><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">state</span> is an access mode, not a user-facing wrapper type.</p><pre style="
+
+    also_bad <span class='bst-code-operator'>|</span>count <span class='bst-code-operator'>$</span><span class='bst-code-operator'>~</span><span class='bst-code-type'>Int</span><span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        count <span class='bst-code-operator'>+</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
+    ;
+    </code></pre></section>
+    <section class="container"><h1>Full example</h1><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
         border-radius: 5px;
@@ -636,24 +772,144 @@ body {
         white-space: pre; 
         overflow-x: auto;
     "><code class='codeblock'>
-    counter_view <span class='bst-code-operator'>|</span>count state <span class='bst-code-type'>Int</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
-    </code></pre><p>This does not mean <span style="
+    <span class='bst-code-operator'>@</span>html<span class='bst-code-operator'>/</span><span class='bst-code-struct'>Basic</span>
+
+    count <span class='bst-code-operator'>$</span><span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
+
+    increment_count <span class='bst-code-operator'>|</span>count <span class='bst-code-operator'>~</span><span class='bst-code-type'>Int</span><span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        count <span class='bst-code-operator'>+</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
+    ;
+
+    counter_view <span class='bst-code-operator'>|</span>count <span class='bst-code-operator'>$</span><span class='bst-code-type'>Int</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span>
+            <span class='bst-code-struct'>Current</span> <span class='bst-code-struct'>Count</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>~</span>count<span class='bst-code-parenthesis'>]</span>
+            <span class='bst-code-struct'>Starting</span> <span class='bst-code-struct'>Count</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>count<span class='bst-code-parenthesis'>]</span>
+        <span class='bst-code-parenthesis'>]</span>
+    ;
+
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-struct'>Basic.section</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-parenthesis'>[</span>counter_view<span class='bst-code-parenthesis'>(</span>count<span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>]</span>
+
+        <span class='bst-code-parenthesis'>[</span><span class='bst-code-struct'>Basic.button,</span> <span class='bst-code-struct'>Basic.onclick</span><span class='bst-code-parenthesis'>(</span>
+            <span class='bst-code-operator'>|</span><span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span> increment_count<span class='bst-code-parenthesis'>(</span><span class='bst-code-operator'>~</span>count<span class='bst-code-parenthesis'>)</span>
+        <span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>:</span>
+            click me <span class='bst-code-keyword'>to</span> increase the count<span class='bst-code-operator'>!</span>
+        <span class='bst-code-parenthesis'>]</span>
+    <span class='bst-code-parenthesis'>]</span>
+    </code></pre><p>In this example:</p><ul><li><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">count</span> has a type like <span style="
+    ">count $Int = 0</span> declares a reactive source</li><li><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">State<Int></span>.</p><p>It means:</p><ul><li><span style="
+    ">[~count]</span> subscribes to that source</li><li><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">count</span> has value type <span style="
+    ">[count]</span> snapshots its current value</li><li><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">Int</span></li><li>The parameter receives reactive subscription-capable access</li><li>The function may use <span style="
+    ">increment_count(~count)</span> mutates it</li><li>mutation invalidates template bindings subscribed to <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">state count</span> inside templates or other state-consuming expressions</li></ul><p>The compiler and backend may lower this to a reactive cell handle internally, but that representation does not leak into the source language.</p></section>
-    <section class="container"><h1>Reactivity and variable declarations</h1><p>Variables are not marked reactive when declared.</p><pre style="
+    ">[count]</span></li></ul><p>The callback is not reactive by itself.</p><p>It is ordinary Beanstalk code that mutates a value. Reactivity occurs because a template binding explicitly subscribed to a reactive source.</p></section>
+    <section class="container"><h1>Compiler directive namespace</h1><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">$</span> should be treated as a compiler-owned marker with different legal forms in different syntax positions.</p><p>Lowercase names are template/style directives:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>markdown<span class='bst-code-operator'>:</span>
+        <span class='bst-code-operator'>#</span> <span class='bst-code-struct'>Title</span>
+    <span class='bst-code-parenthesis'>]</span>
+    </code></pre><p>PascalCase names after <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">$</span> in type position are reactive type access:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    count <span class='bst-code-operator'>$</span><span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
+    data <span class='bst-code-operator'>$</span><span class='bst-code-struct'>ReactiveData</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>ReactiveData</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>1</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">$=</span> is inferred reactive declaration syntax:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    count <span class='bst-code-operator'>$</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
+    </code></pre><p>This relies on Beanstalk&#39;s naming rules:</p><ul><li>types use PascalCase</li><li>variables and functions use snake_case</li><li>template/style directives use lowercase names</li></ul><p>Because these naming conventions are enforced, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">$markdown</span> and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">$Int</span> cannot collide.</p></section>
+    <section class="container"><h1>Invalid directive forms</h1><p>The parser should reject invalid <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">$</span> usage clearly.</p><p>Invalid lowercase directive in type position:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    count <span class='bst-code-operator'>$</span>markdown <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
+    </code></pre><p>Invalid PascalCase type directive in template directive position:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span><span class='bst-code-type'>Int</span><span class='bst-code-operator'>:</span>
+        content
+    <span class='bst-code-parenthesis'>]</span>
+    </code></pre><p>Invalid reactive type without initializer:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    count <span class='bst-code-operator'>$</span><span class='bst-code-type'>Int</span>
+    </code></pre><p>Invalid inferred reactive declaration without initializer:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    count <span class='bst-code-operator'>$</span><span class='bst-code-operator'>=</span>
+    </code></pre><p>Invalid reactive type after the initializer:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    count <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>$</span><span class='bst-code-number'>0</span>
+    count <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span> <span class='bst-code-operator'>$</span><span class='bst-code-type'>Int</span>
+    </code></pre><p>Invalid subscription to a non-reactive value:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
         border-radius: 5px;
@@ -662,13 +918,31 @@ body {
         overflow-x: auto;
     "><code class='codeblock'>
     count <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
-    </code></pre><p>There is no declaration-level <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">state</span> syntax.</p><p>A mutable place becomes reactive only when it is consumed through <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">state</span>.</p><pre style="
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>~</span>count<span class='bst-code-parenthesis'>]</span>
+    </code></pre><p>Invalid subscription to a computed expression:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>~</span><span class='bst-code-parenthesis'>(</span>count <span class='bst-code-operator'>+</span> <span class='bst-code-number'>1</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>]</span>
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>~</span>get_count<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>]</span>
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>~</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Hello</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span>
+    </code></pre><p>Reactive subscriptions require a named reactive source with stable identity.</p></section>
+    <section class="container"><h1>What is being captured</h1><p>A reactive template capture does not capture:</p><ul><li>A copied value</li><li>A string output</li><li>A computed expression</li><li>A mutable borrow</li></ul><p>It captures:</p><ul><li>A stable reactive source identity</li><li>A read-only subscription to that source</li></ul><p>The template never owns mutable access.</p><p>It only observes changes.</p></section>
+    <section class="container"><h1>Valid reactive sources</h1><p>Initially, template subscriptions should be limited to simple reactive places.</p><p>Valid:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    count <span class='bst-code-operator'>$</span><span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
+    view <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>~</span>count<span class='bst-code-parenthesis'>]</span>
+    </code></pre><p>Invalid:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
         border-radius: 5px;
@@ -677,9 +951,12 @@ body {
         overflow-x: auto;
     "><code class='codeblock'>
     count <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
-    view <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span>state count<span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>This avoids:</p><ul><li>Global reactivity flags</li><li>Declaration-level reactive annotations</li><li>Unnecessary runtime overhead</li><li>Multiple ways to create reactive state</li></ul><p>The point of consumption decides whether a place is observed reactively.</p></section>
-    <section class="container"><h1>Assignment semantics</h1><p>When a mutable place has been promoted to reactive storage, assignment updates the same stable source.</p><pre style="
+
+    view <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>~</span>count<span class='bst-code-parenthesis'>]</span>
+    view <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>~</span><span class='bst-code-number'>1</span><span class='bst-code-parenthesis'>]</span>
+    view <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>~</span>get_count<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>]</span>
+    view <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>~</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Hello</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span>
+    </code></pre><p>Future versions may support field paths and collection paths:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
         border-radius: 5px;
@@ -687,17 +964,79 @@ body {
         white-space: pre; 
         overflow-x: auto;
     "><code class='codeblock'>
-    message <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Hello</span><span class='bst-code-parenthesis'>]</span>
-    view <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span>state message<span class='bst-code-parenthesis'>]</span>
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>~</span>user.name<span class='bst-code-parenthesis'>]</span>
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>~</span>items.get<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>0</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>!</span><span class='bst-code-parenthesis'>]</span>
+    </code></pre><p>These should be added only after the basic reactive source model is stable.</p></section>
+    <section class="container"><h1>Assignment semantics</h1><p>Assignment to a reactive value updates the same stable source.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    message <span class='bst-code-operator'>$</span><span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Hello</span><span class='bst-code-parenthesis'>]</span>
+    view <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>~</span>message<span class='bst-code-parenthesis'>]</span>
 
     message <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Goodbye</span><span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>The assignment does not break the subscription.</p><p>It means:</p><ul><li>The same source place still exists</li><li>The value stored in that source changes</li><li>Subscribers to <span style="
+    </code></pre><p>The assignment does not break the subscription.</p><p>It means:</p><ul><li>The same reactive source still exists</li><li>The value stored in that source changes</li><li>Subscribers to <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">state message</span> are invalidated</li><li>Render bindings depending on <span style="
+    ">[message]</span> are invalidated</li><li>Render bindings subscribed with <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">message</span> update</li></ul><p>A reactive source has stable identity. Assignment updates the source value, not the subscription target.</p></section>
+    ">[~message]</span> update</li></ul><p>A reactive source has stable identity.</p><p>Assignment updates the source value, not the subscription target.</p></section>
+    <section class="container"><h1>Regular reads</h1><p>Reactive values can be read as ordinary values.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    count <span class='bst-code-operator'>$</span><span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
+
+    doubled <span class='bst-code-operator'>=</span> count <span class='bst-code-operator'>*</span> <span class='bst-code-number'>2</span>
+    label <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Count</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>count<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span>
+    </code></pre><p>This does not create a subscription.</p><p>A regular read sees the current value.</p><p>A template snapshot captures the current rendered value.</p><p>Only <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">[~count]</span> subscribes.</p></section>
+    <section class="container"><h1>Passing reactive values to ordinary functions</h1><p>A reactive value can be passed to ordinary parameters as a normal value.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    double <span class='bst-code-operator'>|</span>value <span class='bst-code-type'>Int</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Int</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> value <span class='bst-code-operator'>*</span> <span class='bst-code-number'>2</span>
+    ;
+
+    count <span class='bst-code-operator'>$</span><span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
+    result <span class='bst-code-operator'>=</span> double<span class='bst-code-parenthesis'>(</span>count<span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>This is a normal read.</p><p>It does not subscribe <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">double</span> to <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">count</span>.</p><p>A function must explicitly request reactive access with <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">$Int</span> if it needs to subscribe:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    counter_view <span class='bst-code-operator'>|</span>count <span class='bst-code-operator'>$</span><span class='bst-code-type'>Int</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>~</span>count<span class='bst-code-parenthesis'>]</span>
+    ;
+    </code></pre></section>
     <section class="container"><h1>Callbacks and events</h1><p>Callbacks in Beanstalk templates are ordinary closures with normal access rules.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
@@ -709,10 +1048,10 @@ body {
     <span class='bst-code-struct'>Basic.onclick</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-operator'>|</span><span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
         increment_count<span class='bst-code-parenthesis'>(</span><span class='bst-code-operator'>~</span>count<span class='bst-code-parenthesis'>)</span>
     <span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>Key properties:</p><ul><li>Closures capture values using normal language rules</li><li>Mutable access must be explicit</li><li>Callbacks do not create reactivity by themselves</li><li>Reactivity occurs as a result of mutation to a place observed with <span style="
+    </code></pre><p>Key properties:</p><ul><li>Closures capture values using normal language rules</li><li>Mutable access must be explicit</li><li>Callbacks do not create reactivity by themselves</li><li>Reactivity occurs as a result of mutation to a reactive source observed with <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">state</span></li></ul><p>This should remain true even when higher-level event helpers are added.</p></section>
+    ">[~value]</span></li></ul><p>This should remain true even when higher-level event helpers are added.</p></section>
     <section class="container"><h1>Declarative event syntax</h1><p>Higher-level declarative event syntax may be introduced later as sugar:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
@@ -728,7 +1067,7 @@ body {
         click me
     <span class='bst-code-parenthesis'>]</span>
     </code></pre><p>This should lower to ordinary callback passing.</p><p>It must not change the underlying access rules.</p></section>
-    <section class="container"><h1>Reactive sinks</h1><p>State captures may bind to backend render targets such as:</p><ul><li>Text nodes</li><li>Attributes</li><li>Styles</li><li>Future backend-defined node targets</li></ul><p>The HTML backend should lower reactive templates into a node-level render plan.</p><p>There is no virtual DOM diffing step. The backend knows which render targets depend on which state sources and can update those targets directly.</p><p>Example:</p><pre style="
+    <section class="container"><h1>Reactive sinks</h1><p>Reactive captures may bind to backend render targets such as:</p><ul><li>Text nodes</li><li>Attributes</li><li>Styles</li><li>Future backend-defined node targets</li></ul><p>The HTML backend should lower reactive templates into a node-level render plan.</p><p>There is no virtual DOM diffing step.</p><p>The backend knows which render targets depend on which reactive sources and can update those targets directly.</p><p>Example:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
         border-radius: 5px;
@@ -736,10 +1075,10 @@ body {
         white-space: pre; 
         overflow-x: auto;
     "><code class='codeblock'>
-    message <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Hello</span><span class='bst-code-parenthesis'>]</span>
+    message <span class='bst-code-operator'>$</span><span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Hello</span><span class='bst-code-parenthesis'>]</span>
 
     <span class='bst-code-parenthesis'>[</span><span class='bst-code-struct'>Basic.section</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-parenthesis'>[</span>state message<span class='bst-code-parenthesis'>]</span>
+        <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>~</span>message<span class='bst-code-parenthesis'>]</span>
     <span class='bst-code-parenthesis'>]</span>
     </code></pre><p>This can lower to a text-node binding whose contents are updated whenever <span style="
         color: #c444aff9;
@@ -756,11 +1095,11 @@ body {
     name <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Nye&quot;</span>
     count <span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
     enabled <span class='bst-code-operator'>=</span> true
-    </code></pre><p>should produce one update flush, not three separate render passes.</p><p>The scheduler is backend-owned. It is not a user-facing global state system.</p><p>The user-facing rule remains:</p><p>&gt; Mutating a place updates all render bindings that explicitly subscribed to that place with <span style="
+    </code></pre><p>should produce one update flush, not three separate render passes, when those assignments affect reactive sources.</p><p>The scheduler is backend-owned.</p><p>It is not a user-facing global state system.</p><p>The user-facing rule remains:</p><p>&gt; Mutating a reactive source updates all render bindings that explicitly subscribed to that source with <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">state</span>.</p></section>
-    <section class="container"><h1>Render plans</h1><p>Reactive templates should not be implemented as ordinary string rerendering.</p><p>The compiler should produce a render plan that distinguishes:</p><ul><li>Static text</li><li>Snapshot expressions</li><li>State expressions</li><li>Child templates</li><li>Attributes</li><li>Styles</li><li>Backend-specific render targets</li></ul><p>A simplified internal model:</p><pre style="
+    ">~</span> inside templates.</p></section>
+    <section class="container"><h1>Render plans</h1><p>Reactive templates should not be implemented as ordinary string rerendering.</p><p>The compiler should produce a render plan that distinguishes:</p><ul><li>Static text</li><li>Snapshot expressions</li><li>Reactive subscriptions</li><li>Child templates</li><li>Attributes</li><li>Styles</li><li>Backend-specific render targets</li></ul><p>A simplified internal model:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
         border-radius: 5px;
@@ -771,58 +1110,55 @@ body {
     <span class='bst-code-keyword'>enum</span> <span class='bst-code-struct'>TemplateFragment</span> <span class='bst-code-parenthesis'>{</span>
         <span class='bst-code-struct'>StaticText</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-struct'>StringId</span><span class='bst-code-parenthesis'>)</span>,
         <span class='bst-code-struct'>SnapshotExpression</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-struct'>ExpressionId</span><span class='bst-code-parenthesis'>)</span>,
-        <span class='bst-code-struct'>StateExpression</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-struct'>StateCaptureId</span><span class='bst-code-parenthesis'>)</span>,
+        <span class='bst-code-struct'>ReactiveExpression</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-struct'>ReactiveCaptureId</span><span class='bst-code-parenthesis'>)</span>,
         <span class='bst-code-struct'>ChildTemplate</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-struct'>TemplatePlanId</span><span class='bst-code-parenthesis'>)</span>,
     <span class='bst-code-parenthesis'>}</span>
 
-    <span class='bst-code-keyword'>struct</span> <span class='bst-code-struct'>StateCapture</span> <span class='bst-code-parenthesis'>{</span>
-        place<span class='bst-code-operator'>:</span> <span class='bst-code-struct'>PlaceId,</span>
+    <span class='bst-code-keyword'>struct</span> <span class='bst-code-struct'>ReactiveCapture</span> <span class='bst-code-parenthesis'>{</span>
+        source<span class='bst-code-operator'>:</span> <span class='bst-code-struct'>ReactiveSourceId,</span>
         value_type<span class='bst-code-operator'>:</span> <span class='bst-code-struct'>DataType,</span>
         location<span class='bst-code-operator'>:</span> <span class='bst-code-struct'>SourceLocation,</span>
     <span class='bst-code-parenthesis'>}</span>
-    </code></pre><p>The frontend should preserve semantic reactivity in the template representation. The backend decides how to lower it.</p><p>For HTML, this should eventually become node-level DOM update code rather than string replacement where practical.</p></section>
-    <section class="container"><h1>Initial implementation strategy</h1><p>The first implementation should be conservative.</p><h2>Phase 1: State access parsing and validation</h2><p>Add <span style="
+    </code></pre><p>The frontend should preserve semantic reactivity in the template representation.</p><p>The backend decides how to lower it.</p><p>For HTML, this should eventually become node-level DOM update code rather than string replacement where practical.</p></section>
+    <section class="container"><h1>Initial implementation strategy</h1><p>The first implementation should be conservative.</p><h2>Phase 1: Reactive type syntax</h2><p>Add parsing and validation for:</p><ul><li>explicit reactive declarations: <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">state</span> as an access mode.</p><p>Validate that:</p><ul><li><span style="
+    ">count $Int = 0</span></li><li>inferred reactive declarations: <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">state</span> applies only to stable places</li><li><span style="
+    ">count $= 0</span></li><li>reactive parameters: <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">state</span> cannot combine with <span style="
+    ">count $Int</span></li><li>template subscriptions: <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">copy</span> or <span style="
+    ">[~count]</span></li></ul><p>Reject invalid combinations clearly.</p><h2>Phase 2: Reactive source validation</h2><p>Validate that:</p><ul><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">$Type</span> uses a real value type</li><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">$=</span> has an initializer</li><li>reactive declarations are not combined with <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">~=</span></li><li>reactive parameters are not combined with <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">~</span></li><li><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">state</span> requires a mutable source place</li><li><span style="
+    ">[~value]</span> only targets reactive sources</li><li><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">state</span> arguments match <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">state</span> parameters</li><li>normal parameters cannot be consumed with <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">state</span></li><li>templates can only observe <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">state</span> values, never mutate them</li></ul><h2>Phase 2: Runtime reactive cells</h2><p>Promote state-consumed places to reactive storage.</p><p>In GC-backed builds, this can be represented as a heap-managed reactive cell.</p><p>Assignment to a promoted place becomes a cell update plus invalidation.</p><h2>Phase 3: Reactive template plans</h2><p>Extend template render plans to preserve state captures.</p><p>The template system should distinguish:</p><ul><li><span style="
+    ">[~value]</span> is only used with stable places</li><li>templates can observe reactive values, but never mutate them</li></ul><h2>Phase 3: Runtime reactive cells</h2><p>Lower reactive declarations to stable reactive storage.</p><p>In GC-backed builds, this can be represented as a heap-managed reactive cell.</p><p>Assignment to a reactive value becomes a cell update plus invalidation.</p><h2>Phase 4: Reactive template plans</h2><p>Extend template render plans to preserve reactive captures.</p><p>The template system should distinguish:</p><ul><li><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">[count]</span> as snapshot capture</li><li><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">[state count]</span> as reactive state capture</li></ul><h2>Phase 4: HTML backend node updates</h2><p>Lower state captures to node-level update bindings.</p><p>Start with simple targets:</p><ul><li>Text node contents</li><li>Attribute values</li><li>Style values</li></ul><h2>Phase 5: Coarser fallbacks</h2><p>Where direct node updates are too complex, the backend may rerender a bounded template region.</p><p>This should be a fallback, not the core model.</p></section>
-    <section class="container"><h1>Lifetime and scope constraints</h1><p>State subscriptions are not mutable borrows and do not hold exclusive access.</p><p>When a mutable place is consumed through <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">state</span>, the compiler may promote that place to stable heap-managed storage. This allows templates, callbacks, and returned views to safely retain subscriptions where the backend supports it.</p><p>In GC-backed builds, reactive cells can be kept alive by normal GC reachability.</p><p>In future ownership-optimized Wasm builds, the compiler must ensure that reactive cells are not freed while live subscriptions exist.</p><p>The compiler should reject state subscriptions to places that cannot be safely promoted or represented by the target backend.</p></section>
-    <section class="container"><h1>Relationship to borrowing</h1><p>State access is separate from mutable borrowing.</p><pre style="
+    ">[~count]</span> as reactive subscription</li></ul><h2>Phase 5: HTML backend node updates</h2><p>Lower reactive captures to node-level update bindings.</p><p>Start with simple targets:</p><ul><li>Text node contents</li><li>Attribute values</li><li>Style values</li></ul><h2>Phase 6: Coarser fallbacks</h2><p>Where direct node updates are too complex, the backend may rerender a bounded template region.</p><p>This should be a fallback, not the core model.</p></section>
+    <section class="container"><h1>Lifetime and scope constraints</h1><p>Reactive subscriptions are not mutable borrows and do not hold exclusive access.</p><p>Reactive values are already declared as stable reactive sources.</p><p>In GC-backed builds, reactive cells can be kept alive by normal GC reachability.</p><p>In future ownership-optimized Wasm builds, the compiler must ensure that reactive cells are not freed while live subscriptions exist.</p><p>The compiler should reject reactive subscriptions to places that cannot be safely represented by the target backend.</p></section>
+    <section class="container"><h1>Relationship to borrowing</h1><p>Reactive template subscription is separate from mutable borrowing.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
         border-radius: 5px;
@@ -830,9 +1166,9 @@ body {
         white-space: pre; 
         overflow-x: auto;
     "><code class='codeblock'>
-    count <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
+    count <span class='bst-code-operator'>$</span><span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
 
-    view <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span>state count<span class='bst-code-parenthesis'>]</span>
+    view <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>~</span>count<span class='bst-code-parenthesis'>]</span>
     increment_count<span class='bst-code-parenthesis'>(</span><span class='bst-code-operator'>~</span>count<span class='bst-code-parenthesis'>)</span>
     </code></pre><p>The template subscription does not block later mutable access to <span style="
         color: #c444aff9;
@@ -840,14 +1176,14 @@ body {
     ">count</span>, because it is not a mutable borrow.</p><p>The mutation invalidates subscribers.</p><p>This is the intended interaction:</p><ul><li><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">state count</span> observes changes</li><li><span style="
+    ">[~count]</span> observes changes in templates</li><li><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">~count</span> mutates the place</li><li>mutation triggers reactive updates</li></ul><p>The borrow checker should not model <span style="
+    ">~count</span> mutates the place in normal code</li><li>mutation triggers reactive updates</li></ul><p>The borrow checker should not model <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">state count</span> as an active mutable borrow. It should model it as a subscription to a stable place.</p></section>
-    <section class="container"><h1>Structs and fields</h1><p>Field-level state tracking should be deferred.</p><p>Initial reactivity should focus on simple local places.</p><p>Later, this may become valid:</p><pre style="
+    ">[~count]</span> as an active mutable borrow.</p><p>It should model it as a subscription to a stable reactive source.</p></section>
+    <section class="container"><h1>Structs and fields</h1><p>Field-level reactive tracking should be deferred.</p><p>Initial reactivity should focus on simple named reactive sources.</p><p>Later, this may become valid:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
         border-radius: 5px;
@@ -855,15 +1191,21 @@ body {
         white-space: pre; 
         overflow-x: auto;
     "><code class='codeblock'>
-    user <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-struct'>User</span><span class='bst-code-parenthesis'>(</span>name <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Nye&quot;</span>, age <span class='bst-code-operator'>=</span> <span class='bst-code-number'>30</span><span class='bst-code-parenthesis'>)</span>
-    view <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span>state user.name<span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>The first version can use coarse invalidation:</p><ul><li>Any mutation to <span style="
+    <span class='bst-code-struct'>User</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
+        name <span class='bst-code-type'>String</span>
+        age <span class='bst-code-type'>Int</span>
+    <span class='bst-code-operator'>|</span>
+
+    user <span class='bst-code-operator'>$</span><span class='bst-code-struct'>User</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>User</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Nye&quot;</span>, <span class='bst-code-number'>30</span><span class='bst-code-parenthesis'>)</span>
+
+    view <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>~</span>user.name<span class='bst-code-parenthesis'>]</span>
+    </code></pre><p>The first version can use coarse invalidation:</p><ul><li>any mutation to <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">user</span> invalidates state captures of <span style="
+    ">user</span> invalidates subscriptions to <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">user</span></li><li>Field-specific invalidation can be added later</li></ul><p>Fine-grained path tracking should not block the first implementation.</p></section>
+    ">user</span></li><li>field-specific invalidation can be added later</li></ul><p>Fine-grained path tracking should not block the first implementation.</p></section>
     <section class="container"><h1>Collections</h1><p>Reactive collections should also be deferred beyond the basic model.</p><p>A conservative first version may treat a collection as one reactive source.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
@@ -872,27 +1214,27 @@ body {
         white-space: pre; 
         overflow-x: auto;
     "><code class='codeblock'>
-    items <span class='bst-code-operator'>~</span><span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>
+    items <span class='bst-code-operator'>$</span><span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>
 
-    view <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span>state items<span class='bst-code-parenthesis'>]</span>
+    view <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>~</span>items<span class='bst-code-parenthesis'>]</span>
     </code></pre><p>Any mutation to <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">items</span> invalidates the whole binding.</p><p>Later versions may support:</p><ul><li>Item-level subscriptions</li><li>Collection-shape subscriptions</li><li>Keyed loops</li><li>Stable child template identity</li></ul><p>Keyed loop syntax and list diffing should be designed separately.</p></section>
-    <section class="container"><h1>Mutation during render</h1><p>Templates are read-only.</p><p>A template may observe state, but it may not mutate state during rendering.</p><p>This avoids:</p><ul><li>Render loops</li><li>Re-entrant update bugs</li><li>Ordering ambiguity</li><li>Hidden side effects in templates</li></ul><p>Rendering should remain a pure description of output from current values.</p></section>
-    <section class="container"><h1>Summary</h1><p>Reactivity in Beanstalk is:</p><ul><li>Explicit: written with <span style="
+    ">items</span> invalidates the whole binding.</p><p>Later versions may support:</p><ul><li>Item-level subscriptions</li><li>Collection-shape subscriptions</li><li>Keyed loops</li><li>Stable child template identity</li></ul><p>Keyed loop syntax and list diffing should be designed separately.</p><p>The exact syntax for reactive collection types may need special parser treatment because collection types use braces.</p></section>
+    <section class="container"><h1>Mutation during render</h1><p>Templates are read-only.</p><p>A template may observe reactive values, but it may not mutate values during rendering.</p><p>This avoids:</p><ul><li>Render loops</li><li>Re-entrant update bugs</li><li>Ordering ambiguity</li><li>Hidden side effects in templates</li></ul><p>Rendering should remain a pure description of output from current values.</p></section>
+    <section class="container"><h1>Summary</h1><p>Reactivity in Beanstalk is:</p><ul><li>Explicit: reactive sources are declared with <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">state</span></li><li>Place-based: subscriptions target stable mutable places</li><li>Access-mode based: <span style="
+    "> $Type</span> or <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">state</span>, <span style="
+    ">$=</span></li><li>Template-specific: subscriptions are written as <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">copy</span>, and <span style="
+    ">[~value]</span> inside templates</li><li>Place-based: subscriptions target stable reactive sources</li><li>Mutation-driven: updates occur when subscribed reactive sources are mutated</li><li>Read-only from templates: templates can observe but never mutate</li><li>Compiler-owned: <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">~</span> are mutually exclusive</li><li>Mutation-driven: updates occur when subscribed places are mutated</li><li>Read-only from templates: templates can observe but never mutate</li><li>Not declaration-based: variables are not marked reactive where they are declared</li><li>Backend-owned: render plans decide how updates are applied efficiently</li></ul><pre style="
+    ">$</span> marks compiler-managed behavior</li><li>Backend-owned: render plans decide how updates are applied efficiently</li></ul><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
         border-radius: 5px;
@@ -900,10 +1242,10 @@ body {
         white-space: pre; 
         overflow-x: auto;
     "><code class='codeblock'>
-    count <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
+    count <span class='bst-code-operator'>$</span><span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>0</span>
 
     snapshot <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span>count<span class='bst-code-parenthesis'>]</span>
-    reactive <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span>state count<span class='bst-code-parenthesis'>]</span>
+    reactive <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>~</span>count<span class='bst-code-parenthesis'>]</span>
 
     count <span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
     </code></pre><p><span style="
@@ -912,10 +1254,10 @@ body {
     ">snapshot</span> sees the original value.</p><p><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">reactive</span> observes the place and updates.</p><p>The core rule is:</p><p>&gt; Mutating a place updates all render bindings that explicitly subscribed to that place with <span style="
+    ">reactive</span> observes the reactive source and updates.</p><p>The core rule is:</p><p>&gt; Mutating a reactive source updates all render bindings that explicitly subscribed to that source with <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">state</span>.</p></section>
+    ">~</span> inside templates.</p></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

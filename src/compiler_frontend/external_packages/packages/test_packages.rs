@@ -2,9 +2,10 @@
 
 use super::super::abi::{ExternalAbiType, ExternalAccessKind, ExternalReturnAlias};
 use super::super::definitions::{
-    ExternalFunctionDef, ExternalFunctionLowerings, ExternalJsLowering, ExternalPackage,
+    ExternalConstantDef, ExternalConstantValue, ExternalFunctionDef, ExternalFunctionLowerings,
+    ExternalJsLowering, ExternalPackage,
 };
-use super::super::ids::ExternalFunctionId;
+use super::super::ids::{ExternalConstantId, ExternalFunctionId};
 use super::super::registry::ExternalPackageRegistry;
 
 /// Registers test packages `@test/pkg-a` and `@test/pkg-b` with a duplicate
@@ -59,4 +60,16 @@ pub(crate) fn register_test_packages_for_integration(registry: &mut ExternalPack
             },
         )
         .expect("test function registration should not collide");
+
+    registry
+        .register_constant_in_package(
+            "@test/pkg-b",
+            ExternalConstantId(1002),
+            ExternalConstantDef {
+                name: "TEST_NON_SCALAR_CONST",
+                data_type: ExternalAbiType::Utf8Str,
+                value: ExternalConstantValue::StringSlice("test"),
+            },
+        )
+        .expect("test constant registration should not collide");
 }
