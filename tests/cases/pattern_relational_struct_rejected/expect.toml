@@ -2,4 +2,4 @@
 mode = "failure"
 warnings = "forbid"
 error_type = "Rule"
-message_contains = ["Literal match patterns currently support only literal int/float/bool/char/string values"]
+message_contains = ["Relational match patterns are only supported for ordered scalar types"]

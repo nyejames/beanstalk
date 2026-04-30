@@ -5,12 +5,10 @@
 //! WHY: relational patterns share literal parsing but have distinct validation
 //! rules, so they deserve their own submodule.
 
-use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
-use crate::compiler_frontend::type_coercion::compatibility::is_type_compatible;
 use crate::return_rule_error;
 
 use super::literal::parse_literal_pattern;
@@ -34,9 +32,12 @@ pub(super) fn parse_relational_pattern(
     token_stream.advance();
     token_stream.skip_newlines();
 
-    let value = parse_literal_pattern(token_stream, subject_type, string_table)?;
+    // Reject relational patterns on unsupported scrutinee types before attempting
+    // to parse the literal value. This ensures the diagnostic refers to the pattern
+    // category (relational) rather than a literal type mismatch.
+    ensure_relational_subject_type(subject_type, &location, string_table)?;
 
-    ensure_relational_pattern_type(subject_type, &value, &location, string_table)?;
+    let value = parse_literal_pattern(token_stream, subject_type, string_table)?;
 
     Ok(MatchPattern::Relational {
         op,
@@ -45,9 +46,8 @@ pub(super) fn parse_relational_pattern(
     })
 }
 
-fn ensure_relational_pattern_type(
+fn ensure_relational_subject_type(
     subject_type: &DataType,
-    value: &Expression,
     location: &SourceLocation,
     string_table: &StringTable,
 ) -> Result<(), CompilerError> {
@@ -66,23 +66,6 @@ fn ensure_relational_pattern_type(
             {
                 CompilationStage => "Match Statement Parsing",
                 PrimarySuggestion => "Use literal patterns or an 'else =>' arm for this scrutinee type",
-            }
-        );
-    }
-
-    if !is_type_compatible(subject_type, &value.data_type) {
-        return_rule_error!(
-            format!(
-                "Relational match pattern value type '{}' does not match scrutinee type '{}'.",
-                value.data_type.display_with_table(string_table),
-                subject_type.display_with_table(string_table),
-            ),
-            value.location.clone(),
-            {
-                CompilationStage => "Match Statement Parsing",
-                PrimarySuggestion => "Use a literal value that matches the scrutinee type",
-                ExpectedType => subject_type.display_with_table(string_table),
-                FoundType => value.data_type.display_with_table(string_table),
             }
         );
     }

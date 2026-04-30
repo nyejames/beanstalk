@@ -1049,6 +1049,31 @@ path = "pattern_relational_collection_rejected"
 tags = ["integration","diagnostics","pattern-matching","collections"]
 
 [[case]]
+id = "pattern_diagnostic_invalid_relational_type"
+path = "pattern_diagnostic_invalid_relational_type"
+tags = ["integration","diagnostics","pattern-matching"]
+
+[[case]]
+id = "pattern_diagnostic_capture_collision"
+path = "pattern_diagnostic_capture_collision"
+tags = ["integration","diagnostics","pattern-matching"]
+
+[[case]]
+id = "pattern_diagnostic_nested_payload_deferred"
+path = "pattern_diagnostic_nested_payload_deferred"
+tags = ["integration","diagnostics","pattern-matching","choices"]
+
+[[case]]
+id = "pattern_diagnostic_else_not_final_or_warned"
+path = "pattern_diagnostic_else_not_final_or_warned"
+tags = ["integration","diagnostics","pattern-matching","warnings"]
+
+[[case]]
+id = "pattern_diagnostic_wildcard_rejected"
+path = "pattern_diagnostic_wildcard_rejected"
+tags = ["integration","diagnostics","pattern-matching"]
+
+[[case]]
 id = "pattern_wildcard_rejected"
 path = "pattern_wildcard_rejected"
 tags = ["integration","diagnostics","pattern-matching"]
