@@ -483,18 +483,49 @@ fn parse_case_arm(
                 nominal_path,
                 variants,
             } => {
-                let parsed = parse_choice_variant_pattern(
-                    token_stream,
-                    match_context,
-                    nominal_path,
-                    variants,
-                    string_table,
-                )?;
-                let matched_choice_variant = Some(parsed.variant);
-                let pattern_location = parsed.location.clone();
-                let (arm_scope, pattern) =
-                    build_arm_scope_with_choice_captures(match_context, parsed, string_table)?;
-                (pattern, matched_choice_variant, pattern_location, arm_scope)
+                // If the lead token is a bare symbol that is not a known variant name
+                // and is not introducing a qualified variant pattern, treat it as a
+                // general capture pattern that binds the whole choice value.
+                let maybe_capture =
+                    if let TokenKind::Symbol(name) = token_stream.current_token_kind() {
+                        let name = *name;
+                        let is_qualified = token_stream
+                            .tokens
+                            .get(token_stream.index + 1)
+                            .is_some_and(|t| t.kind == TokenKind::DoubleColon);
+                        if !is_qualified && !variants.iter().any(|v| v.id == name) {
+                            Some((name, token_stream.current_location()))
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    };
+
+                if let Some((capture_name, capture_location)) = maybe_capture {
+                    token_stream.advance();
+                    let (arm_scope, pattern) = build_arm_scope_with_capture(
+                        match_context,
+                        capture_name,
+                        &capture_location,
+                        &subject.data_type,
+                        string_table,
+                    )?;
+                    (pattern, None, capture_location.clone(), arm_scope)
+                } else {
+                    let parsed = parse_choice_variant_pattern(
+                        token_stream,
+                        match_context,
+                        nominal_path,
+                        variants,
+                        string_table,
+                    )?;
+                    let matched_choice_variant = Some(parsed.variant);
+                    let pattern_location = parsed.location.clone();
+                    let (arm_scope, pattern) =
+                        build_arm_scope_with_choice_captures(match_context, parsed, string_table)?;
+                    (pattern, matched_choice_variant, pattern_location, arm_scope)
+                }
             }
             subject_type => {
                 if let TokenKind::Symbol(name) = token_stream.current_token_kind() {

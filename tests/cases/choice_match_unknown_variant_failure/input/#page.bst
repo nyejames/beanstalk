@@ -3,6 +3,6 @@
 current Status = Status::Ready
 
 if current is:
-    case Unknown => io("unknown")
+    case Status::Unknown => io("unknown")
     else => io("fallback")
 ;

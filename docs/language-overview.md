@@ -483,6 +483,7 @@ Currently supported patterns:
 - Literal patterns: `case 1 =>`, `case "ok" =>`, `case true =>`
 - Choice variant patterns: `case Ready =>` or `case Status::Ready =>`
 - Choice payload capture patterns: `case Err(message) =>` or `case Pending(retry_count, message) =>`
+- General capture patterns: `case captured =>` binds the whole scrutinee value to `captured`
 - Relational patterns for ordered scalar values: `case < 0 =>`, `case <= 10 =>`, `case > 0 =>`, `case >= 100 =>`
 
 The catch-all default is expressed only through `else =>`. Wildcard patterns (`case _ =>`) are permanently rejected in Beanstalk.

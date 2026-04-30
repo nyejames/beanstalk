@@ -3564,3 +3564,23 @@ tags = ["integration", "language", "pattern-matching", "diagnostics"]
 id = "pattern_unreachable_combined_warning"
 path = "pattern_unreachable_combined_warning"
 tags = ["integration", "language", "pattern-matching", "diagnostics"]
+
+[[case]]
+id = "pattern_capture_whole_choice_value_success"
+path = "pattern_capture_whole_choice_value_success"
+tags = ["integration", "language", "pattern-matching", "choices"]
+
+[[case]]
+id = "pattern_choice_payload_existing_capture_alias_success"
+path = "pattern_choice_payload_existing_capture_alias_success"
+tags = ["integration", "language", "pattern-matching", "choices"]
+
+[[case]]
+id = "pattern_nested_choice_payload_pattern_rejected"
+path = "pattern_nested_choice_payload_pattern_rejected"
+tags = ["integration", "diagnostics", "pattern-matching", "choices"]
+
+[[case]]
+id = "pattern_capture_does_not_enable_nested_payload"
+path = "pattern_capture_does_not_enable_nested_payload"
+tags = ["integration", "diagnostics", "pattern-matching", "choices"]
