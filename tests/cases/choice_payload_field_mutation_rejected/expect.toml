@@ -4,4 +4,4 @@ entry = "."
 mode = "failure"
 warnings = "forbid"
 error_type = "Rule"
-message_contains = ["Choice payload field access is deferred"]
+message_contains = ["Choice payload fields are immutable"]

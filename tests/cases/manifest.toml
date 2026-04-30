@@ -549,6 +549,11 @@ path = "choice_equality_different_choice_types_rejected"
 tags = ["integration","diagnostics","choices","equality"]
 
 [[case]]
+id = "choice_diagnostic_choice_vs_non_choice_rejected"
+path = "choice_diagnostic_choice_vs_non_choice_rejected"
+tags = ["integration","diagnostics","choices","equality"]
+
+[[case]]
 id = "choice_equality_payload_unsupported_struct_rejected"
 path = "choice_equality_payload_unsupported_struct_rejected"
 tags = ["integration","diagnostics","choices","equality"]

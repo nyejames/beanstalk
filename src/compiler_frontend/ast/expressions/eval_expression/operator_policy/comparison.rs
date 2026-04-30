@@ -111,5 +111,28 @@ pub(super) fn resolve_comparison_operator_type(
         );
     }
 
+    // A choice value can only be compared with another value of the same choice type.
+    let exactly_one_is_choice =
+        matches!(lhs, DataType::Choices { .. }) != matches!(rhs, DataType::Choices { .. });
+    if exactly_one_is_choice {
+        let (choice, other) = if matches!(lhs, DataType::Choices { .. }) {
+            (lhs, rhs)
+        } else {
+            (rhs, lhs)
+        };
+        let choice_name = choice.display_with_table(string_table);
+        let other_name = other.display_with_table(string_table);
+        return_type_error!(
+            format!(
+                "Cannot compare choice '{choice_name}' with '{other_name}'. Choices can only be compared with values of the same choice type."
+            ),
+            location.clone(),
+            {
+                CompilationStage => "Expression Evaluation",
+                PrimarySuggestion => "Compare choice values with the same choice type, or use pattern matching to inspect the variant",
+            }
+        );
+    }
+
     invalid_comparison_types(lhs, rhs, op, location, string_table)
 }

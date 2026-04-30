@@ -146,10 +146,21 @@ pub(crate) fn parse_postfix_chain(
         let (message, suggestion) = if matches!(receiver_type, DataType::Choices { .. })
             && token_stream.peek_next_token() != Some(&TokenKind::OpenParenthesis)
         {
-            (
-                "Choice payload field access is deferred. Use pattern matching to extract payload fields.".to_string(),
-                "Use 'if value is: case Variant(field) => ...' to extract payload fields",
-            )
+            let next_token = token_stream.peek_next_token();
+            if next_token
+                .map(|t| t.is_assignment_operator())
+                .unwrap_or(false)
+            {
+                (
+                    "Choice payload fields are immutable. Mutation is not supported.".to_string(),
+                    "Use pattern matching to extract payload fields and create a new choice value instead",
+                )
+            } else {
+                (
+                    "Choice payload field access is deferred. Use pattern matching to extract payload fields.".to_string(),
+                    "Use 'if value is: case Variant(field) => ...' to extract payload fields",
+                )
+            }
         } else if matches!(receiver_type, DataType::External { .. }) {
             (
                 format!(
