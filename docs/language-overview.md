@@ -485,7 +485,7 @@ Currently supported patterns:
 - Choice payload capture patterns: `case Err(message) =>` or `case Pending(retry_count, message) =>`
 - Relational patterns for ordered scalar values: `case < 0 =>`, `case <= 10 =>`, `case > 0 =>`, `case >= 100 =>`
 
-The catch-all default is expressed only through `else =>`. There is no `case _ =>`.
+The catch-all default is expressed only through `else =>`. Wildcard patterns (`case _ =>`) are permanently rejected in Beanstalk.
 
 Capture names in payload patterns must exactly match the declared field names.
 Choice payload captures may be renamed with `as`: `case Err(message as error_text) =>` binds the payload field to a different local name visible only in the guard and body of that arm.

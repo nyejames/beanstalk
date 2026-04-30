@@ -28,7 +28,7 @@ fn reports_stray_comma_in_function_body() {
 }
 
 #[test]
-fn reports_wildcard_match_arms_as_deferred_rule_errors() {
+fn reports_wildcard_match_arms_as_permanent_rule_errors() {
     let error =
         parse_single_file_ast_error("value = 1\nif value is:\n    case _ => io(\"one\")\n;\n");
 
@@ -36,7 +36,7 @@ fn reports_wildcard_match_arms_as_deferred_rule_errors() {
     assert!(
         error
             .msg
-            .contains("Wildcard patterns in 'case' arms are not supported")
+            .contains("Wildcard pattern '_' is not supported in Beanstalk")
     );
     assert_eq!(
         error
@@ -50,7 +50,7 @@ fn reports_wildcard_match_arms_as_deferred_rule_errors() {
             .metadata
             .get(&ErrorMetaDataKey::PrimarySuggestion)
             .map(String::as_str),
-        Some("Replace 'case _ =>' with 'else =>'.")
+        Some("Use 'else =>' for a catch-all arm")
     );
     assert!(error.location.start_pos.char_column > 0);
 }

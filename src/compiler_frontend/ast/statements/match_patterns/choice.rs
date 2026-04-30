@@ -170,6 +170,18 @@ fn parse_choice_pattern_captures(
                 }
 
                 let capture_location = token_stream.current_location();
+
+                if token_stream.current_token_kind() == &TokenKind::Wildcard {
+                    return_rule_error!(
+                        "Wildcard pattern '_' is not supported in Beanstalk. Use 'else =>' for a catch-all arm.",
+                        capture_location,
+                        {
+                            CompilationStage => "Match Statement Parsing",
+                            PrimarySuggestion => "Use 'else =>' for a catch-all arm",
+                        }
+                    );
+                }
+
                 let field_name = match token_stream.current_token_kind() {
                     TokenKind::Symbol(name) => *name,
                     _ => {

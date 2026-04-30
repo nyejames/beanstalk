@@ -13,12 +13,14 @@ pub fn reject_deferred_pattern_lead_token(token_stream: &FileTokens) -> Result<(
     // These forms intentionally fail fast so unsupported syntax never drifts silently.
     match token_stream.current_token_kind() {
         TokenKind::Wildcard => {
-            return Err(deferred_feature_rule_error(
-                "Wildcard patterns in 'case' arms are not supported. Use 'else =>' for a catch-all arm.",
+            return_rule_error!(
+                "Wildcard pattern '_' is not supported in Beanstalk. Use 'else =>' for a catch-all arm.",
                 token_stream.current_location(),
-                "Match Statement Parsing",
-                "Replace 'case _ =>' with 'else =>'.",
-            ));
+                {
+                    CompilationStage => "Match Statement Parsing",
+                    PrimarySuggestion => "Use 'else =>' for a catch-all arm",
+                }
+            );
         }
         TokenKind::Not => {
             return Err(deferred_feature_rule_error(
