@@ -89,6 +89,22 @@ Choices already support unit variants, payload variants, constructor calls, impo
 - [ ] Locate tests for unit equality, payload equality rejection, constructor calls, imports, and payload extraction.
 - [ ] Record current unsupported cases in the plan or commit notes.
 
+### Audit findings to record
+
+- Choice declaration parsing is owned by `src/compiler_frontend/declaration_syntax/choice.rs`.
+- Choice payload field parsing reuses the record-body parser through `SignatureMemberContext::ChoicePayloadField`.
+- Choice type identity and variant metadata are represented in `DataType::Choices`; equality of types is nominal by `InternedPath`.
+- Choice constructor parsing and validation are owned by `src/compiler_frontend/ast/expressions/choice_constructor.rs`.
+- Choice payload argument resolution reuses shared call-argument validation through `expectations_from_choice_payload_fields`.
+- Resolved choice definitions flow from AST to HIR through `AstChoiceDefinition` and `Ast::choice_definitions`.
+- HIR registers choices before body lowering through `HirBuilder::register_choice_id`.
+- Choices, Options, and Results share `HirExpressionKind::VariantConstruct` with distinct `HirVariantCarrier` values.
+- Choice payload match extraction is owned by `src/compiler_frontend/hir/hir_statement/match_captures.rs`.
+- JS choice carriers lower in `src/backends/js/js_expr.rs` as object literals with numeric `tag` and named payload fields.
+- JS choice match conditions compare `.tag` in `src/backends/js/js_statement.rs`.
+- Choice equality is currently rejected in `src/compiler_frontend/ast/expressions/eval_expression/operator_policy/comparison.rs`; this includes unit and payload variants.
+- Current deferred surfaces include unit equality, payload structural equality, generic choices, recursive choices, direct payload field access, nested payload patterns, payload shorthand, and variant defaults.
+
 ### Matrix/docs updates
 
 - [ ] Update matrix only if current wording is inaccurate.

@@ -130,10 +130,10 @@ pub enum HirTypeKind {
         err: TypeId,
     },
 
-    /// Nominal choice type (unit-variant enum).
+    /// Nominal choice type.
     ///
-    /// WHY: unit choices are closed scalar tag sets, not generic unions.
-    /// A dedicated kind preserves nominal identity and prepares for payload variants.
+    /// WHY: choices are closed nominal variant carriers. Payload metadata lives in the
+    /// module choice registry so expressions can keep a compact `ChoiceId`.
     Choice {
         choice_id: crate::compiler_frontend::hir::ids::ChoiceId,
     },

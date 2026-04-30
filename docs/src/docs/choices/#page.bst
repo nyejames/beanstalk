@@ -77,6 +77,9 @@ import @styles/docs {navbar, title, section, codeblock, theme_head}
         ;
     ]
 
+    Choice equality is deferred until structural equality is implemented.
+    Use pattern matching to branch on variants and compare extracted payload fields inside the matching arm.
+
     ## Invalid syntax
     Unit variants are values, not constructor calls.
 
@@ -96,7 +99,7 @@ import @styles/docs {navbar, title, section, codeblock, theme_head}
     - Direct payload field access (e.g. `response.message`).
     - Generic choice declarations.
     - Recursive choice declarations.
-    - Payload structural equality.
+    - Unit and payload choice equality.
     - Nested payload patterns and nested exhaustiveness.
 
 ]

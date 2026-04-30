@@ -51,11 +51,11 @@ pub(super) fn resolve_comparison_operator_type(
             ) => Ok(DataType::Bool),
             (DataType::Choices { .. }, Operator::Equality | Operator::NotEqual) => {
                 return_rule_error!(
-                    "Payload structural equality is deferred. Use pattern matching and compare fields inside the matching arm.",
+                    "Choice equality is deferred. Use pattern matching and compare variants or payload fields inside match arms.",
                     location.clone(),
                     {
                         CompilationStage => "Expression Evaluation",
-                        PrimarySuggestion => "Use 'if value is: case Variant(field) => ...' and compare fields inside the arm",
+                        PrimarySuggestion => "Use 'if value is: case Variant => ...' or payload captures such as 'case Variant(field) => ...'",
                     }
                 )
             }
