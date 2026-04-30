@@ -227,7 +227,7 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
             [: Supported]
             [: Broad import syntax, relative child path, entry root fallback, source library prefix, circular dependency, multi-file module, single-symbol aliases, grouped aliases, nested grouped aliases, collision, and file-local coverage.]
             [: Frontend / HTML builder]
-            [: Path rendering is golden-sensitive. Keep normalized output and platform-stable diagnostics covered. Single-symbol source import aliases, grouped source import aliases, and nested grouped source import aliases are supported. Aliases are file-local and not re-exported. Alias collisions are hard errors across same-file declarations, source imports, external imports, type aliases, prelude symbols, and builtins. Alias case mismatches warn. Grouped import aliases reject group-level trailing aliases, invalid local alias names, and duplicate alias syntax with structured diagnostics. Parent-directory imports with `..` are not supported, and imports must stay within allowed module/library/project roots.]
+            [: Path rendering is golden-sensitive. Keep normalized output and platform-stable diagnostics covered. Single-symbol source import aliases, grouped source import aliases, and nested grouped source import aliases are supported. Aliases are file-local and not re-exported. Alias and visible-name collisions are hard errors across same-file declarations, source imports, external imports, type aliases, prelude symbols, builtins, and re-export public names. Prelude and external symbols cannot be redeclared as user functions or variables at top level or in body scope. Alias case mismatches warn. Grouped import aliases reject group-level trailing aliases, invalid local alias names, and duplicate alias syntax with structured diagnostics. Parent-directory imports with `..` are not supported, and imports must stay within allowed module/library/project roots.]
         ]
 
         [data:
@@ -241,7 +241,7 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
                 - External ABI metadata includes [codesnippet:F64], [codesnippet:I32], [codesnippet:Bool], and [codesnippet:Utf8Str] for the current core package skeletons.
                 - Explicit imports are required for non-prelude external packages. [codesnippet:io] and [codesnippet:IO] are registered as external prelude symbols; builtin error symbols are compiler-owned bare names.
                 - External function aliases and external constant aliases are supported. External opaque type aliases are rejected with structured diagnostics. Grouped external aliases are supported.
-                - Prelude collision rejection is enforced: explicit imports cannot shadow prelude names.
+                - Prelude collision rejection is enforced: explicit imports cannot shadow prelude names, and prelude symbols cannot be redeclared as user declarations.
                 - External receiver methods are not a recommended expansion surface yet. Prefer free functions until external methods are keyed by nominal receiver type rather than broad ABI metadata.
                 - JS lowering now resolves external runtime names through per-function lowering metadata in the registry.
                 - [codesnippet:InlineExpression] JS lowering is implemented for pure expression external functions. Arguments are substituted positionally using `#0`, `#1`, ... placeholders; duplicate placeholders are rejected. No runtime helper is emitted for inline-only functions.
@@ -255,7 +255,7 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
             [: Supported]
             [: Targeted coverage for prelude symbol registration and collision rejection.]
             [: Frontend / JS]
-            [: Every builder must provide `@core/prelude`. `io` and `IO` are registered as bare prelude symbols. Prelude collision rejection is enforced: explicit imports cannot shadow prelude names.]
+            [: Every builder must provide `@core/prelude`. `io` and `IO` are registered as bare prelude symbols. Prelude collision rejection is enforced: explicit imports cannot shadow prelude names, and prelude symbols cannot be redeclared as user declarations.]
         ]
 
         [data:
@@ -276,9 +276,9 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
         [data:
             [: Core text package]
             [: Partial]
-            [: Targeted runtime, JS helper, type-error, unsupported-builder, and Wasm-unsupported coverage.]
+            [: Targeted runtime, JS helper, arity, type-error, edge-case, unsupported-builder, and Wasm-unsupported coverage.]
             [: JS / HTML]
-            [: [codesnippet:@core/text] exposes [codesnippet:length], [codesnippet:is_empty], [codesnippet:contains], [codesnippet:starts_with], and [codesnippet:ends_with]. It is JS-backed, explicit-import only, and optional by builder. Wasm support is deferred; HTML-Wasm builds fail with a structured [codesnippet:Rule] diagnostic before backend lowering.]
+            [: [codesnippet:@core/text] exposes [codesnippet:length], [codesnippet:is_empty], [codesnippet:contains], [codesnippet:starts_with], and [codesnippet:ends_with]. It is JS-backed, explicit-import only, and optional by builder. [codesnippet:length] returns backend-defined string length (JS UTF-16 code units for the JS backend). [codesnippet:is_empty] is true only for the exactly empty string. Empty needle/prefix/suffix behavior follows backend-defined JS semantics. Receiver-method forms remain deferred. Wasm support is deferred; HTML-Wasm builds fail with a structured [codesnippet:Rule] diagnostic before backend lowering.]
         ]
 
         [data:

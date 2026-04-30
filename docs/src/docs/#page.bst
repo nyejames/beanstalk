@@ -37,4 +37,7 @@ import @styles/docs {navbar, title, section, palette, codeblock, theme_head}
     - @./choices (Choices)
     - @./pattern-matching (Pattern Matching)
     - @./aliases (Aliases)
+
+    ### Future Design Drafts
+    - @./reactivity (Reactivity)
 ]
