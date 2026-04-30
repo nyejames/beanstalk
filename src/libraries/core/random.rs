@@ -29,7 +29,7 @@ pub fn register_core_random_package(registry: &mut ExternalPackageRegistry) {
                 receiver_type: None,
                 receiver_access: ExternalAccessKind::Shared,
                 lowerings: ExternalFunctionLowerings {
-                    js: Some(ExternalJsLowering::RuntimeFunction("__bs_random_float")),
+                    js: Some(ExternalJsLowering::InlineExpression("Math.random()")),
                     wasm: None,
                 },
             },

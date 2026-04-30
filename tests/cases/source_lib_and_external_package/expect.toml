@@ -8,7 +8,9 @@ warnings = "forbid"
 path = "index.html"
 kind = "html"
 must_contain = [
-    "function __bs_math_sin(",
-    "__bs_math_sin(",
+    "Math.sin(",
     "10",
+]
+must_not_contain = [
+    "function __bs_math_sin(",
 ]

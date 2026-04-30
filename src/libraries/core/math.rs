@@ -22,45 +22,97 @@ pub fn register_core_math_package(registry: &mut ExternalPackageRegistry) {
 
     let math_functions: &[(
         &'static str,
-        &'static str,
+        ExternalJsLowering,
         Vec<crate::compiler_frontend::external_packages::ExternalParameter>,
     )] = &[
-        ("sin", "__bs_math_sin", vec![math_f64_param("x")]),
-        ("cos", "__bs_math_cos", vec![math_f64_param("x")]),
-        ("tan", "__bs_math_tan", vec![math_f64_param("x")]),
+        (
+            "sin",
+            ExternalJsLowering::InlineExpression("Math.sin(#0)"),
+            vec![math_f64_param("x")],
+        ),
+        (
+            "cos",
+            ExternalJsLowering::InlineExpression("Math.cos(#0)"),
+            vec![math_f64_param("x")],
+        ),
+        (
+            "tan",
+            ExternalJsLowering::InlineExpression("Math.tan(#0)"),
+            vec![math_f64_param("x")],
+        ),
         (
             "atan2",
-            "__bs_math_atan2",
+            ExternalJsLowering::InlineExpression("Math.atan2(#0, #1)"),
             vec![math_f64_param("y"), math_f64_param("x")],
         ),
-        ("log", "__bs_math_log", vec![math_f64_param("x")]),
-        ("log2", "__bs_math_log2", vec![math_f64_param("x")]),
-        ("log10", "__bs_math_log10", vec![math_f64_param("x")]),
-        ("exp", "__bs_math_exp", vec![math_f64_param("x")]),
+        (
+            "log",
+            ExternalJsLowering::InlineExpression("Math.log(#0)"),
+            vec![math_f64_param("x")],
+        ),
+        (
+            "log2",
+            ExternalJsLowering::InlineExpression("Math.log2(#0)"),
+            vec![math_f64_param("x")],
+        ),
+        (
+            "log10",
+            ExternalJsLowering::InlineExpression("Math.log10(#0)"),
+            vec![math_f64_param("x")],
+        ),
+        (
+            "exp",
+            ExternalJsLowering::InlineExpression("Math.exp(#0)"),
+            vec![math_f64_param("x")],
+        ),
         (
             "pow",
-            "__bs_math_pow",
+            ExternalJsLowering::InlineExpression("Math.pow(#0, #1)"),
             vec![math_f64_param("base"), math_f64_param("exponent")],
         ),
-        ("sqrt", "__bs_math_sqrt", vec![math_f64_param("x")]),
-        ("abs", "__bs_math_abs", vec![math_f64_param("x")]),
-        ("floor", "__bs_math_floor", vec![math_f64_param("x")]),
-        ("ceil", "__bs_math_ceil", vec![math_f64_param("x")]),
-        ("round", "__bs_math_round", vec![math_f64_param("x")]),
-        ("trunc", "__bs_math_trunc", vec![math_f64_param("x")]),
+        (
+            "sqrt",
+            ExternalJsLowering::InlineExpression("Math.sqrt(#0)"),
+            vec![math_f64_param("x")],
+        ),
+        (
+            "abs",
+            ExternalJsLowering::InlineExpression("Math.abs(#0)"),
+            vec![math_f64_param("x")],
+        ),
+        (
+            "floor",
+            ExternalJsLowering::InlineExpression("Math.floor(#0)"),
+            vec![math_f64_param("x")],
+        ),
+        (
+            "ceil",
+            ExternalJsLowering::InlineExpression("Math.ceil(#0)"),
+            vec![math_f64_param("x")],
+        ),
+        (
+            "round",
+            ExternalJsLowering::InlineExpression("Math.round(#0)"),
+            vec![math_f64_param("x")],
+        ),
+        (
+            "trunc",
+            ExternalJsLowering::InlineExpression("Math.trunc(#0)"),
+            vec![math_f64_param("x")],
+        ),
         (
             "min",
-            "__bs_math_min",
+            ExternalJsLowering::InlineExpression("Math.min(#0, #1)"),
             vec![math_f64_param("a"), math_f64_param("b")],
         ),
         (
             "max",
-            "__bs_math_max",
+            ExternalJsLowering::InlineExpression("Math.max(#0, #1)"),
             vec![math_f64_param("a"), math_f64_param("b")],
         ),
         (
             "clamp",
-            "__bs_math_clamp",
+            ExternalJsLowering::InlineExpression("Math.min(Math.max(#0, #1), #2)"),
             vec![
                 math_f64_param("x"),
                 math_f64_param("min"),
@@ -69,7 +121,7 @@ pub fn register_core_math_package(registry: &mut ExternalPackageRegistry) {
         ),
     ];
 
-    for (name, js_name, parameters) in math_functions {
+    for (name, js_lowering, parameters) in math_functions {
         registry
             .register_external_function(
                 "@core/math",
@@ -81,7 +133,7 @@ pub fn register_core_math_package(registry: &mut ExternalPackageRegistry) {
                     receiver_type: None,
                     receiver_access: ExternalAccessKind::Shared,
                     lowerings: ExternalFunctionLowerings {
-                        js: Some(ExternalJsLowering::RuntimeFunction(js_name)),
+                        js: Some(js_lowering.clone()),
                         wasm: None,
                     },
                 },

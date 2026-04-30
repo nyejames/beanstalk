@@ -9,10 +9,12 @@ rendered_output_contains = ["core_time millis=", " seconds="]
 path = "index.html"
 kind = "html"
 must_contain = [
-    "function __bs_time_now_millis(",
+    "Date.now()",
     "function __bs_time_now_seconds(",
-    "__bs_time_now_millis()",
     "__bs_time_now_seconds()",
+]
+must_not_contain = [
+    "function __bs_time_now_millis(",
 ]
 
 [backends.html_wasm]

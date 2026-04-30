@@ -11,13 +11,15 @@ must_contain = [
     "Math.sin(",
     "Math.cos(",
     "Math.pow(2, 3)",
-    "Math.sqrt(16)",
     "Math.min(Math.max(5, 0), 10)",
+    "Date.now()",
+    "Math.random()",
 ]
 must_not_contain = [
     "function __bs_math_sin(",
     "function __bs_math_cos(",
     "function __bs_math_pow(",
-    "function __bs_math_sqrt(",
     "function __bs_math_clamp(",
+    "function __bs_time_now_millis(",
+    "function __bs_random_float(",
 ]

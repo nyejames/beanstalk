@@ -2930,6 +2930,11 @@ path = "core_math_basic_functions"
 tags = ["integration", "math", "js-backend"]
 
 [[case]]
+id = "core_inline_expression_lowering"
+path = "core_inline_expression_lowering"
+tags = ["integration", "math", "js-backend", "external-packages"]
+
+[[case]]
 id = "core_math_constants"
 path = "core_math_constants"
 tags = ["integration", "math", "constants"]

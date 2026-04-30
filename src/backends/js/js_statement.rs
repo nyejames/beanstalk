@@ -15,6 +15,15 @@ use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
 use crate::compiler_frontend::hir::terminators::HirTerminator;
 
+/// Result of lowering a call target for the JS backend.
+///
+/// WHAT: distinguishes between a regular function call (emit as `name(args)`) and an inline
+/// expression (emit as a substituted expression template without call wrapping).
+enum LoweredCallTarget {
+    FunctionName(String),
+    InlineExpression { template: String },
+}
+
 impl<'hir> JsEmitter<'hir> {
     pub(crate) fn emit_block_statements(
         &mut self,
@@ -40,7 +49,7 @@ impl<'hir> JsEmitter<'hir> {
                 args,
                 result,
             } => {
-                let target_name = self.lower_call_target(target)?;
+                let lowered_target = self.lower_call_target(target)?;
                 let args = if matches!(target, CallTarget::ExternalFunction(_)) {
                     args.iter()
                         .map(|arg| self.lower_host_call_argument(arg))
@@ -51,7 +60,14 @@ impl<'hir> JsEmitter<'hir> {
                         .collect::<Result<Vec<_>, _>>()?
                 };
 
-                let call = format!("{target_name}({})", args.join(", "));
+                let call = match &lowered_target {
+                    LoweredCallTarget::FunctionName(name) => {
+                        format!("{name}({})", args.join(", "))
+                    }
+                    LoweredCallTarget::InlineExpression { template } => {
+                        substitute_inline_expression(template, &args)?
+                    }
+                };
 
                 // WHAT: collection helpers that are not get return Result carriers at the runtime
                 // level even though the frontend does not surface Result types for them. The backend
@@ -110,11 +126,14 @@ impl<'hir> JsEmitter<'hir> {
         Ok(())
     }
 
-    fn lower_call_target(&mut self, target: &CallTarget) -> Result<String, CompilerError> {
+    fn lower_call_target(
+        &mut self,
+        target: &CallTarget,
+    ) -> Result<LoweredCallTarget, CompilerError> {
         match target {
-            CallTarget::UserFunction(function_id) => {
-                Ok(self.function_name(*function_id)?.to_owned())
-            }
+            CallTarget::UserFunction(function_id) => Ok(LoweredCallTarget::FunctionName(
+                self.function_name(*function_id)?.to_owned(),
+            )),
             CallTarget::ExternalFunction(id) => {
                 self.referenced_external_functions.insert(*id);
                 let function_def = self
@@ -135,13 +154,12 @@ impl<'hir> JsEmitter<'hir> {
                 })?;
                 match lowering {
                     crate::compiler_frontend::external_packages::ExternalJsLowering::RuntimeFunction(name) => {
-                        Ok(name.to_string())
+                        Ok(LoweredCallTarget::FunctionName(name.to_string()))
                     }
-                    crate::compiler_frontend::external_packages::ExternalJsLowering::InlineExpression(_) => {
-                        Err(CompilerError::compiler_error(format!(
-                            "JavaScript backend: InlineExpression lowering not yet implemented for external function '{}'",
-                            id.name()
-                        )))
+                    crate::compiler_frontend::external_packages::ExternalJsLowering::InlineExpression(template) => {
+                        Ok(LoweredCallTarget::InlineExpression {
+                            template: template.to_string(),
+                        })
                     }
                 }
             }
@@ -517,4 +535,30 @@ impl<'hir> JsEmitter<'hir> {
             Ok(pattern_condition)
         }
     }
+}
+
+/// Substitute lowered argument expressions into an inline expression template.
+///
+/// WHAT: replaces positional placeholders `#0`, `#1`, ... in the template with the corresponding
+/// lowered argument string.
+/// WHY: inline expressions are raw JS snippets; arguments are spliced in positionally so the
+/// backend emits a single expression instead of a helper call.
+fn substitute_inline_expression(template: &str, args: &[String]) -> Result<String, CompilerError> {
+    let mut result = template.to_owned();
+    for (index, arg) in args.iter().enumerate() {
+        let placeholder = format!("#{index}");
+        let occurrences = result.matches(&placeholder).count();
+        if occurrences == 0 {
+            return Err(CompilerError::compiler_error(format!(
+                "JavaScript backend: inline expression template is missing placeholder '{placeholder}'"
+            )));
+        }
+        if occurrences > 1 {
+            return Err(CompilerError::compiler_error(format!(
+                "JavaScript backend: inline expression template contains duplicate placeholder '{placeholder}'. Each argument must be referenced at most once."
+            )));
+        }
+        result = result.replace(&placeholder, arg);
+    }
+    Ok(result)
 }

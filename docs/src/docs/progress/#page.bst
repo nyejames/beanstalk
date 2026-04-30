@@ -244,7 +244,7 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
                 - Prelude collision rejection is enforced: explicit imports cannot shadow prelude names.
                 - External receiver methods are not a recommended expansion surface yet. Prefer free functions until external methods are keyed by nominal receiver type rather than broad ABI metadata.
                 - JS lowering now resolves external runtime names through per-function lowering metadata in the registry.
-                - [codesnippet:InlineExpression] JS lowering metadata exists but is not implemented yet.
+                - [codesnippet:InlineExpression] JS lowering is implemented for pure expression external functions. Arguments are substituted positionally using `#0`, `#1`, ... placeholders; duplicate placeholders are rejected. No runtime helper is emitted for inline-only functions.
                 - Wasm lowering for external packages is experimental and should not be counted as Alpha support.
                 - Unsupported external package imports for the active backend are rejected with structured [codesnippet:Rule] diagnostics before backend lowering, not during LIR transformation.
             ]]

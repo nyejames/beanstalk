@@ -17,28 +17,39 @@ pub fn register_core_time_package(registry: &mut ExternalPackageRegistry) {
         .register_package(ExternalPackage::new("@core/time"))
         .expect("builtin package registration should not collide");
 
-    let time_functions: &[(&'static str, &'static str, ExternalAbiType)] = &[
-        ("now_millis", "__bs_time_now_millis", ExternalAbiType::I32),
-        ("now_seconds", "__bs_time_now_seconds", ExternalAbiType::F64),
-    ];
-
-    for (name, js_name, return_type) in time_functions {
-        registry
-            .register_external_function(
-                "@core/time",
-                ExternalFunctionSpec {
-                    name,
-                    parameters: Vec::new(),
-                    return_type: return_type.clone(),
-                    return_alias: ExternalReturnAlias::Fresh,
-                    receiver_type: None,
-                    receiver_access: ExternalAccessKind::Shared,
-                    lowerings: ExternalFunctionLowerings {
-                        js: Some(ExternalJsLowering::RuntimeFunction(js_name)),
-                        wasm: None,
-                    },
+    registry
+        .register_external_function(
+            "@core/time",
+            ExternalFunctionSpec {
+                name: "now_millis",
+                parameters: Vec::new(),
+                return_type: ExternalAbiType::I32,
+                return_alias: ExternalReturnAlias::Fresh,
+                receiver_type: None,
+                receiver_access: ExternalAccessKind::Shared,
+                lowerings: ExternalFunctionLowerings {
+                    js: Some(ExternalJsLowering::InlineExpression("Date.now()")),
+                    wasm: None,
                 },
-            )
-            .expect("builtin time function registration should not collide");
-    }
+            },
+        )
+        .expect("builtin now_millis registration should not collide");
+
+    registry
+        .register_external_function(
+            "@core/time",
+            ExternalFunctionSpec {
+                name: "now_seconds",
+                parameters: Vec::new(),
+                return_type: ExternalAbiType::F64,
+                return_alias: ExternalReturnAlias::Fresh,
+                receiver_type: None,
+                receiver_access: ExternalAccessKind::Shared,
+                lowerings: ExternalFunctionLowerings {
+                    js: Some(ExternalJsLowering::RuntimeFunction("__bs_time_now_seconds")),
+                    wasm: None,
+                },
+            },
+        )
+        .expect("builtin now_seconds registration should not collide");
 }
