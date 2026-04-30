@@ -618,17 +618,25 @@ fn relational_pattern_rejects_bool() {
 }
 
 #[test]
-fn relational_pattern_rejects_string() {
-    let error = parse_single_file_ast_error(
-        "value = \"abc\"\nif value is:\n    case < \"def\" => io(\"bad\")\n    else => io(\"fallback\")\n;\n",
+fn relational_pattern_accepts_string() {
+    let (ast, string_table) = parse_single_file_ast(
+        "value = \"abc\"\nif value is:\n    case < \"def\" => io(\"before\")\n    else => io(\"fallback\")\n;\n",
     );
 
-    assert_eq!(error.error_type, ErrorType::Rule);
+    let body = start_function_body(&ast, &string_table);
+    let NodeKind::Match { arms, .. } = &body[1].kind else {
+        panic!("expected match statement in start body");
+    };
+
+    assert_eq!(arms.len(), 1);
     assert!(
-        error
-            .msg
-            .contains("Relational match patterns are only supported for ordered scalar types"),
-        "{}",
-        error.msg
+        matches!(
+            arms[0].pattern,
+            MatchPattern::Relational {
+                op: RelationalPatternOp::LessThan,
+                ..
+            }
+        ),
+        "string relational pattern should parse successfully"
     );
 }

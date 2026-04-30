@@ -1004,6 +1004,51 @@ path = "diagnostic_match_semicolon_between_arms"
 tags = ["integration","diagnostics"]
 
 [[case]]
+id = "pattern_relational_string_less_success"
+path = "pattern_relational_string_less_success"
+tags = ["integration","language","pattern-matching","js-backend"]
+
+[[case]]
+id = "pattern_relational_string_less_equal_success"
+path = "pattern_relational_string_less_equal_success"
+tags = ["integration","language","pattern-matching","js-backend"]
+
+[[case]]
+id = "pattern_relational_string_greater_success"
+path = "pattern_relational_string_greater_success"
+tags = ["integration","language","pattern-matching","js-backend"]
+
+[[case]]
+id = "pattern_relational_string_greater_equal_success"
+path = "pattern_relational_string_greater_equal_success"
+tags = ["integration","language","pattern-matching","js-backend"]
+
+[[case]]
+id = "pattern_relational_string_mixed_number_rejected"
+path = "pattern_relational_string_mixed_number_rejected"
+tags = ["integration","diagnostics","pattern-matching"]
+
+[[case]]
+id = "pattern_relational_string_bool_rejected"
+path = "pattern_relational_string_bool_rejected"
+tags = ["integration","diagnostics","pattern-matching"]
+
+[[case]]
+id = "pattern_relational_choice_rejected"
+path = "pattern_relational_choice_rejected"
+tags = ["integration","diagnostics","pattern-matching","choices"]
+
+[[case]]
+id = "pattern_relational_struct_rejected"
+path = "pattern_relational_struct_rejected"
+tags = ["integration","diagnostics","pattern-matching"]
+
+[[case]]
+id = "pattern_relational_collection_rejected"
+path = "pattern_relational_collection_rejected"
+tags = ["integration","diagnostics","pattern-matching","collections"]
+
+[[case]]
 id = "pattern_wildcard_rejected"
 path = "pattern_wildcard_rejected"
 tags = ["integration","diagnostics","pattern-matching"]

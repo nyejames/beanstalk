@@ -491,8 +491,9 @@ Capture names in payload patterns must exactly match the declared field names.
 Choice payload captures may be renamed with `as`: `case Err(message as error_text) =>` binds the payload field to a different local name visible only in the guard and body of that arm.
 Exhaustiveness is tag-level: a payload capture arm covers all values of that variant regardless of payload content.
 
-Relational patterns are supported for ordered scalar scrutinees such as `Int`, `Float`, and `Char`.
+Relational patterns are supported for ordered scalar scrutinees such as `Int`, `Float`, `Char`, and `String`.
 The pattern value must be a literal of the same compatible type.
+String ordering is backend-defined for Alpha (JavaScript string comparison for the JS backend).
 
 ```beanstalk
 value ~= 12

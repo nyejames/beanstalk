@@ -717,11 +717,15 @@ impl<'a> HirValidator<'a> {
     ) -> Result<(), CompilerError> {
         if !matches!(
             expression.kind,
-            HirExpressionKind::Int(_) | HirExpressionKind::Float(_) | HirExpressionKind::Char(_)
+            HirExpressionKind::Int(_)
+                | HirExpressionKind::Float(_)
+                | HirExpressionKind::Char(_)
+                | HirExpressionKind::StringLiteral(_)
         ) {
-            return Err(
-                self.error_with_hir("Match relational pattern must be int/float/char", anchor)
-            );
+            return Err(self.error_with_hir(
+                "Match relational pattern must be int/float/char/string",
+                anchor,
+            ));
         }
 
         Ok(())

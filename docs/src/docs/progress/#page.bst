@@ -155,7 +155,7 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
             [: Partial]
             [: Broad literal, choice-match, and payload-capture coverage, including exhaustiveness and diagnostics.]
             [: JS / HTML]
-            [: Literal patterns, choice variant patterns (including payload captures with `field as local_name` aliases), relational ordered-scalar patterns, guards, and else are supported. Wildcard patterns using '_' are permanently rejected; use else => instead. General capture/tagged patterns and nested payload patterns remain deferred. `as` in non-choice match patterns is rejected with a structured diagnostic.]
+            [: Literal patterns, choice variant patterns (including payload captures with `field as local_name` aliases), relational ordered-scalar patterns including strings, guards, and else are supported. Wildcard patterns using '_' are permanently rejected; use else => instead. General capture/tagged patterns and nested payload patterns remain deferred. `as` in non-choice match patterns is rejected with a structured diagnostic.]
         ]
 
         [data:

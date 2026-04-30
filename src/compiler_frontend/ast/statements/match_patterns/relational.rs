@@ -53,13 +53,13 @@ fn ensure_relational_pattern_type(
 ) -> Result<(), CompilerError> {
     let is_ordered_scalar = matches!(
         subject_type,
-        DataType::Int | DataType::Float | DataType::Char
+        DataType::Int | DataType::Float | DataType::Char | DataType::StringSlice
     );
 
     if !is_ordered_scalar {
         return_rule_error!(
             format!(
-                "Relational match patterns are only supported for ordered scalar types (Int, Float, Char), not '{}'.",
+                "Relational match patterns are only supported for ordered scalar types (Int, Float, Char, String), not '{}'.",
                 subject_type.display_with_table(string_table)
             ),
             location.clone(),
