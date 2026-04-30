@@ -45,9 +45,9 @@ import @styles/docs {navbar, title, section, styled_table, header, data, codeblo
         ]
 
         [data:
-            [: [codesnippet:bean new html .] ]
-            [: Creates a minimal HTML project scaffold.]
-            [: If path is omitted, bean shows the current directory and asks for confirmation before scaffolding there. It then asks for a project name.]
+            [: [codesnippet:bean new html] ]
+            [: Creates a complete HTML project scaffold.]
+            [: Accepts an optional path and [codesnippet:--force]. If path is omitted, bean shows the current directory and asks for confirmation before scaffolding there. It then asks for a project name, a .gitignore choice, and creates the full default scaffold including [codesnippet:src/#page.bst], [codesnippet:lib/], output manifests, and an optional .gitignore.]
         ]
 
         [data:
@@ -113,6 +113,12 @@ import @styles/docs {navbar, title, section, styled_table, header, data, codeblo
         ]
 
         [data:
+            [: [codesnippet:--force] ]
+            [: [codesnippet:new html] only]
+            [: Allows replacing existing scaffold-owned files after a confirmation warning. Never overwrites .gitignore or unrelated files.]
+        ]
+
+        [data:
             [: [codesnippet:--host], [codesnippet:--port], [codesnippet:--poll-interval-ms] ]
             [: [codesnippet:dev] only]
             [: Configures the local dev server. Defaults are [codesnippet:127.0.0.1], [codesnippet:6342], and [codesnippet:300].]
@@ -123,49 +129,99 @@ import @styles/docs {navbar, title, section, styled_table, header, data, codeblo
 #[section, $markdown:
     # Create a new HTML project
 
-    The current project scaffold is intentionally small.
-    It creates the project config and output folders, then you can add a page entry file.
+    The scaffold creates a complete default project including config, a starter page, library folder, output folders with build manifests, and an optional .gitignore.
     The HTML project builder itself has more rules than this page needs to cover; see @../html-project-builder (the HTML project builder guide) for page layout, routing, assets, fragments, and generated output details.
 
     Start a new project:
 
     [codeblock, $code("bash"):
-        bean new html .
+        bean new html
+        bean new html my-site
+        bean new html ~/projects/my-site
     ]
 
-    If you omit the path, bean asks for confirmation in the current directory before continuing.
-    The command then asks for:
+    If you omit the path, bean asks for confirmation in the current directory:
 
     [codeblock, $code("text"):
         No project path specified. Current directory: /your/path
-        Create the new HTML project in this directory? [y/N]:
-        Project name:
+        Create the new HTML project in this directory? y/N:
     ]
 
-    After the project exists, add an entry page if the scaffold has not created one yet:
+    If the target directory already exists, you are given three choices:
+
+    [codeblock, $code("text"):
+        Target directory already exists:
+        /path/to/target
+
+        What do you want to do?
+          1. Create the project inside this directory
+          2. Create a new child folder for the project inside this directory
+          3. Cancel
+
+        Choose 1/2/3:
+    ]
+
+    If the path contains directories that do not exist, bean asks before creating them:
+
+    [codeblock, $code("text"):
+        The project target contains directories that do not exist:
+        /path/to/new/site
+
+        Create the missing directories and scaffold the project there? y/N:
+    ]
+
+    After the final directory is chosen, bean asks for the project name:
+
+    [codeblock, $code("text"):
+        Project name (press Enter to use project directory name):
+    ]
+
+    Then it asks whether to add a .gitignore with Beanstalk defaults:
+
+    [codeblock, $code("text"):
+        Add a .gitignore with Beanstalk defaults? Y/n:
+    ]
+
+    If .gitignore already exists, bean asks whether to append missing defaults instead of overwriting.
+
+    ## Generated project structure
+
+    A scaffolded project looks like this:
+
+    [codeblock, $code("text"):
+        project-root/
+        ├── #config.bst
+        ├── src/
+        │   └── #page.bst
+        ├── lib/
+        ├── dev/
+        │   └── .beanstalk_manifest
+        ├── release/
+        │   └── .beanstalk_manifest
+        └── .gitignore
+    ]
+
+    - [codesnippet:lib/] is created empty by default for project-local source libraries.
+    - [codesnippet:dev/] and [codesnippet:release/] are output folders.
+    - .beanstalk_manifest files are build-system metadata for safe stale-output cleanup.
+    - [codesnippet:src/#page.bst] is the default HTML page entry with a starter page.
+
+    ## Using --force
+
+    --force allows replacing scaffold-owned files when they already exist:
 
     [codeblock, $code("bash"):
-        cd path/to/your-project
-        mkdir -p src
-        nano src/#page.bst
+        bean new html my-site --force
     ]
 
-    A minimal first page can be:
+    It still asks for a second confirmation and never overwrites .gitignore or unrelated files.
 
-    [codeblock, $code("bst"):
-        # page_title = "Hello Beanstalk"
-
-        [$markdown:
-            # Hello from Beanstalk
-
-            Edit this file and save to trigger hot reload.
-        ]
-    ]
-
-    Then check it:
+    After creation, check and run the project:
 
     [codeblock, $code("bash"):
+        cd my-site
         bean check .
+        bean dev .
     ]
 ]
 

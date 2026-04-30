@@ -9,7 +9,6 @@ Use the language surface integration matrix as a reference for what is currently
 ---
 
 # Plans / Notes / TODOS
-- new project cli tool improvement: `docs/roadmap/plans/bean-new-command-hardening-plan.md`
 - Pattern matching hardening: `docs/roadmap/plans/pattern-matching-hardening-plan.md`
 - Review of Error and Option syntax sugar for result types, handling and hardening.
 - full traits implementation
@@ -18,6 +17,7 @@ Use the language surface integration matrix as a reference for what is currently
 - Compile time arbitary precision aritmetic + Decimals Type support
 - Move to more specific explicit type declarations for numbers (I32, I64, F32, F64) - JS backend just makes all an F64 and accepts the precision loss, more for future Wasm backend
 - External non-scalar constant design: string slices, collections, and opaque-type external constants in const contexts are rejected for Alpha. Design compile-time representation and validation before enabling.
+- `bean new` follow-ups: non-interactive `--yes`, template selection, project type aliases, richer scaffold presets, and optional package/dev tooling setup.
 
 ## Wasm
 

@@ -126,6 +126,32 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
 ]
 
 #[section, $markdown:
+    # Default project scaffold
+
+    The [codesnippet:bean new html] command generates a complete default project:
+
+    [codeblock, $code("text"):
+        project-root/
+        ├── #config.bst
+        ├── src/
+        │   └── #page.bst
+        ├── lib/
+        ├── dev/
+        │   └── .beanstalk_manifest
+        ├── release/
+        │   └── .beanstalk_manifest
+        └── .gitignore
+    ]
+
+    Clarifications:
+
+    - [codesnippet:lib/] is created empty by default. It is the conventional place for project-local source libraries.
+    - [codesnippet:dev/] and [codesnippet:release/] are output folders, not source folders.
+    - .beanstalk_manifest files are build-system metadata used for safe stale-output cleanup.
+    - [codesnippet:src/#page.bst] is the default HTML page entry and includes a starter page.
+]
+
+#[section, $markdown:
     # Module entry files
 
     A module entry file is a Beanstalk file whose file name starts with [codesnippet:#].
