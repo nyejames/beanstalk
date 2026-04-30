@@ -286,14 +286,40 @@ impl<'hir> JsEmitter<'hir> {
         )
     }
 
+    /// Whether the expression's resolved type is a nominal choice type.
+    ///
+    /// WHY: choice carriers are object literals with a `tag` property, so equality
+    /// must compare tags rather than using reference equality.
+    fn is_choice_type(&self, expression: &HirExpression) -> bool {
+        matches!(
+            self.hir.type_context.get(expression.ty).kind,
+            HirTypeKind::Choice { .. }
+        )
+    }
+
     fn lower_bin_op(
         &mut self,
         left: &HirExpression,
         operator: HirBinOp,
         right: &HirExpression,
     ) -> Result<String, CompilerError> {
+        // Unit choice equality compares variant tags because choice carriers are
+        // object literals ({ tag: N }) and reference equality would be incorrect.
+        let is_choice_equality = matches!(operator, HirBinOp::Eq | HirBinOp::Ne)
+            && self.is_choice_type(left)
+            && self.is_choice_type(right);
+
         let left = self.lower_expr(left)?;
         let right = self.lower_expr(right)?;
+
+        if is_choice_equality {
+            let tag_op = match operator {
+                HirBinOp::Eq => "===",
+                HirBinOp::Ne => "!==",
+                _ => unreachable!(),
+            };
+            return Ok(format!("({left}.tag {tag_op} {right}.tag)"));
+        }
 
         let js_operator = match operator {
             HirBinOp::Add => "+",

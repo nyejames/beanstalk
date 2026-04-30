@@ -451,7 +451,22 @@ tags = ["integration","diagnostics","choices"]
 [[case]]
 id = "choice_unit_equality_deferred"
 path = "choice_unit_equality_deferred"
-tags = ["integration","diagnostics","choices","equality"]
+tags = ["integration","language","choices","equality"]
+
+[[case]]
+id = "choice_unit_equality_imported_variant_success"
+path = "choice_unit_equality_imported_variant_success"
+tags = ["integration","language","choices","equality","imports"]
+
+[[case]]
+id = "choice_unit_equality_aliased_import_success"
+path = "choice_unit_equality_aliased_import_success"
+tags = ["integration","language","choices","equality","imports"]
+
+[[case]]
+id = "choice_unit_equality_in_function_return"
+path = "choice_unit_equality_in_function_return"
+tags = ["integration","language","choices","equality"]
 
 [[case]]
 id = "choice_payload_structural_equality_deferred"

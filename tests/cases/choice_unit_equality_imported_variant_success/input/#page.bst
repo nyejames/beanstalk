@@ -1,8 +1,8 @@
-#Status :: Ready, Busy;
+import @choices/Traffic
 
-a Status = Status::Ready
-b Status = Status::Ready
-c Status = Status::Busy
+a Traffic = Traffic::Red
+b Traffic = Traffic::Red
+c Traffic = Traffic::Green
 
 if a is b:
     io("same=true")

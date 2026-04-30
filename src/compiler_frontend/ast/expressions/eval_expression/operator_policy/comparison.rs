@@ -84,16 +84,25 @@ pub(super) fn resolve_comparison_operator_type(
                         }
                     }
                 }
-                // All payload fields support equality, but full choice equality remains
-                // deferred until Phase 2 (unit) and Phase 3 (payload) implementation.
-                return_rule_error!(
-                    "Choice equality is deferred. Use pattern matching and compare variants or payload fields inside match arms.",
-                    location.clone(),
-                    {
-                        CompilationStage => "Expression Evaluation",
-                        PrimarySuggestion => "Use 'if value is: case Variant => ...' or payload captures such as 'case Variant(field) => ...'",
-                    }
-                )
+
+                // Phase 2: unit choice equality is supported.
+                // Phase 3 will implement payload structural equality.
+                let has_payload = variants
+                    .iter()
+                    .any(|v| matches!(v.payload, ChoiceVariantPayload::Record { .. }));
+
+                if has_payload {
+                    return_rule_error!(
+                        "Choice equality is deferred. Use pattern matching and compare variants or payload fields inside match arms.",
+                        location.clone(),
+                        {
+                            CompilationStage => "Expression Evaluation",
+                            PrimarySuggestion => "Use 'if value is: case Variant => ...' or payload captures such as 'case Variant(field) => ...'",
+                        }
+                    )
+                }
+
+                Ok(DataType::Bool)
             }
             _ => invalid_comparison_types(lhs, rhs, op, location, string_table),
         };
