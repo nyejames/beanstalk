@@ -37,7 +37,6 @@ pub enum CoreStyleDirectiveKind {
     Note,
     Todo,
     Doc,
-    Code,
     Raw,
 }
 
@@ -168,8 +167,7 @@ pub struct StyleDirectiveEffects {
 /// - `Ok(Some(formatter))` to set/replace the active formatter.
 /// - `Ok(None)` to leave formatter untouched (or clear if the caller chooses).
 /// - `Err(message)` for user-facing directive argument/configuration errors.
-pub type StyleDirectiveFormatterFactory =
-    fn(Option<&StyleDirectiveArgumentValue>) -> Result<Option<Formatter>, String>;
+pub type FormatterFactory = fn(Option<&StyleDirectiveArgumentValue>) -> Result<Formatter, String>;
 
 /// Full behavior contract for one handler-based style directive.
 ///
@@ -186,14 +184,14 @@ pub struct StyleDirectiveHandlerSpec {
     /// Template style-state toggles applied when this directive is parsed.
     pub effects: StyleDirectiveEffects,
     /// Optional formatter factory invoked with the parsed optional argument.
-    pub formatter_factory: Option<StyleDirectiveFormatterFactory>,
+    pub formatter_factory: Option<FormatterFactory>,
 }
 
 impl StyleDirectiveHandlerSpec {
     pub fn new(
         argument_type: Option<StyleDirectiveArgumentType>,
         effects: StyleDirectiveEffects,
-        formatter_factory: Option<StyleDirectiveFormatterFactory>,
+        formatter_factory: Option<FormatterFactory>,
     ) -> Self {
         Self {
             argument_type,
@@ -362,18 +360,6 @@ impl StyleDirectiveRegistry {
                         blocks_future_tags: TemplateHeadTag::MEANINGFUL_ITEM,
                     },
                     CoreStyleDirectiveKind::Doc,
-                ),
-                StyleDirectiveSpec::core(
-                    "code",
-                    TemplateBodyMode::Balanced,
-                    TemplateHeadCompatibility {
-                        presence_tags: TemplateHeadTag::MEANINGFUL_ITEM
-                            | TemplateHeadTag::FORMATTER_DIRECTIVE
-                            | TemplateHeadTag::CODE_DIRECTIVE,
-                        required_absent_tags: TemplateHeadTag::empty(),
-                        blocks_future_tags: TemplateHeadTag::FORMATTER_DIRECTIVE,
-                    },
-                    CoreStyleDirectiveKind::Code,
                 ),
                 StyleDirectiveSpec::core(
                     "raw",

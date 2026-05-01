@@ -7,17 +7,39 @@
 use crate::compiler_frontend::ast::templates::template::{
     Formatter, FormatterResult, TemplateFormatter,
 };
-use crate::compiler_frontend::ast::templates::template_head_parser::directive_args::parse_optional_string_literal_argument;
 use crate::compiler_frontend::ast::templates::template_render_plan::{
     FormatterInput, FormatterInputPiece, FormatterOutput, FormatterOutputPiece,
 };
-use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::basic_utility_functions::NumericalParsing;
-use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
+use crate::compiler_frontend::style_directives::StyleDirectiveArgumentValue;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::tokens::FileTokens;
 use std::sync::Arc;
+pub(crate) fn code_formatter_factory(
+    argument: Option<&StyleDirectiveArgumentValue>,
+) -> Result<Formatter, String> {
+    let language = match argument {
+        Some(StyleDirectiveArgumentValue::String(language_name)) => {
+            match CodeLanguage::from_alias(language_name) {
+                Some(language) => language,
+                None => {
+                    return Err(format!(
+                        "Unsupported '$code(...)' language \"{language_name}\". Supported aliases are {}.",
+                        CodeLanguage::supported_aliases()
+                    ));
+                }
+            }
+        }
+        Some(_) => {
+            return Err(
+                "The '$code(...)' directive only accepts an optional string argument, for example '$code(\"rust\")'.".to_string(),
+            );
+        }
+        None => CodeLanguage::Generic,
+    };
+
+    Ok(code_formatter(language))
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum CodeLanguage {
@@ -126,37 +148,6 @@ pub(crate) fn code_formatter(language: CodeLanguage) -> Formatter {
     }
 }
 
-pub(crate) fn configure_code_style(
-    token_stream: &mut FileTokens,
-    template: &mut Template,
-    string_table: &StringTable,
-) -> Result<(), CompilerError> {
-    // `$code` is the generic highlighter, while `$code("...")` narrows the
-    // token rules to one of the built-in language profiles.
-    let language = match parse_optional_string_literal_argument(token_stream) {
-        Ok(Some(language_name)) => {
-            let language_text = string_table.resolve(language_name);
-            CodeLanguage::from_alias(language_text).ok_or_else(|| {
-                CompilerError::new_syntax_error(
-                    format!(
-                        "Unsupported '$code(...)' language \"{language_text}\". Supported aliases are {}.",
-                        CodeLanguage::supported_aliases()
-                    ),
-                    token_stream.current_location(),
-                )
-            })?
-        }
-        Ok(None) => CodeLanguage::Generic,
-        Err(e) => return Err(e),
-    };
-
-    template.apply_style_updates(|style| {
-        style.id = "code";
-        style.formatter = Some(code_formatter(language));
-    });
-    Ok(())
-}
-
 /// Converts raw source code into highlighted HTML markup.
 ///
 /// WHAT:
@@ -181,7 +172,7 @@ pub(crate) fn highlight_code_html(source: &str, language: CodeLanguage) -> Strin
     while index < chars.len() {
         let current = chars[index];
 
-        // Comments are matched before operators so prefixes like `//` and `--`
+        // Comments are matched before operators, so prefixes like `//` and `--`
         // become a single comment run instead of two separate operator tokens.
         if matches_comment_prefix(&chars, index, language.comment_prefix()) {
             flush_word(&mut highlighted, &mut word, language);

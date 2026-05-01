@@ -47,13 +47,12 @@ pub(super) fn apply_handler_style_directive(
     apply_style_directive_effects(template, handler_spec.effects);
 
     if let Some(factory) = handler_spec.formatter_factory {
-        // Frontend parsing/folding always executes formatter factories here. Directive
-        // definition modules own the factory and formatter implementation details.
         let formatter = factory(parsed_argument.value.as_ref()).map_err(|message| {
             CompilerError::new_syntax_error(&message, parsed_argument.error_location)
         })?;
+
         template.apply_style_updates(|style| {
-            style.formatter = formatter.clone();
+            style.formatter = Some(formatter.clone());
         });
     }
 

@@ -72,10 +72,10 @@ pub(crate) fn escape_html_formatter() -> Formatter {
 
 pub(crate) fn escape_html_formatter_factory(
     argument: Option<&StyleDirectiveArgumentValue>,
-) -> Result<Option<Formatter>, String> {
+) -> Result<Formatter, String> {
     if argument.is_some() {
         return Err("'$escape_html' does not accept arguments.".to_string());
     }
 
-    Ok(Some(escape_html_formatter()))
+    Ok(escape_html_formatter())
 }

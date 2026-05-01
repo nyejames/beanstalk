@@ -28,6 +28,8 @@ use crate::projects::settings::Config;
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
+const HTML_SOURCE_LIBRARY_PREFIX: &str = "html";
+
 #[derive(Debug)]
 pub struct HtmlProjectBuilder {
     include_test_packages: bool,
@@ -56,25 +58,6 @@ impl HtmlProjectBuilder {
 }
 
 impl BackendBuilder for HtmlProjectBuilder {
-    fn libraries(&self) -> LibrarySet {
-        let mut libraries = LibrarySet::with_mandatory_core();
-        libraries.expose_html_core_libraries();
-
-        let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-        let html_lib_root =
-            manifest_dir.join("src/projects/html_project/template_libraries/lib/html");
-        libraries
-            .source_libraries
-            .register_filesystem_root("html", html_lib_root);
-
-        if self.include_test_packages {
-            libraries.external_packages = libraries
-                .external_packages
-                .with_test_packages_for_integration();
-        }
-        libraries
-    }
-
     fn build_backend(
         &self,
         modules: Vec<Module>,
@@ -224,6 +207,24 @@ impl BackendBuilder for HtmlProjectBuilder {
 
     fn frontend_style_directives(&self) -> Vec<StyleDirectiveSpec> {
         html_project_style_directives()
+    }
+
+    fn libraries(&self) -> LibrarySet {
+        let mut libraries = LibrarySet::with_mandatory_core();
+        libraries.source_libraries.register_filesystem_root(
+            HTML_SOURCE_LIBRARY_PREFIX,
+            LibrarySet::builtin_source_library_root(HTML_SOURCE_LIBRARY_PREFIX),
+        );
+
+        libraries.expose_html_core_libraries();
+
+        if self.include_test_packages {
+            libraries.external_packages = libraries
+                .external_packages
+                .with_test_packages_for_integration();
+        }
+
+        libraries
     }
 }
 

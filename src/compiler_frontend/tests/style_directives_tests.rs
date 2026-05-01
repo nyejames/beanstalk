@@ -91,7 +91,7 @@ fn frontend_built_ins_have_expected_classification() {
     let built_ins = StyleDirectiveRegistry::built_ins();
 
     for required in [
-        "children", "slot", "insert", "fresh", "doc", "todo", "note", "code", "raw",
+        "children", "slot", "insert", "fresh", "doc", "todo", "note", "raw",
     ] {
         let directive = built_ins
             .find(required)
@@ -165,7 +165,7 @@ fn frontend_built_in_head_compatibility_profiles_match_contract() {
         );
     }
 
-    for formatter_directive in ["markdown", "raw", "code"] {
+    for formatter_directive in ["markdown", "raw"] {
         let directive = built_ins
             .find(formatter_directive)
             .unwrap_or_else(|| panic!("missing '${formatter_directive}' directive"));

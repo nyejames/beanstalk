@@ -1,6 +1,47 @@
 //! Tests for the scaffold prompt abstraction.
 
-use crate::projects::html_project::new_html_project::prompt::{Prompt, ScriptedPrompt};
+use crate::projects::html_project::new_html_project::prompt::Prompt;
+
+/// Test-only prompt that replays scripted responses.
+#[cfg(test)]
+pub struct ScriptedPrompt {
+    pub responses: std::collections::VecDeque<String>,
+    pub messages: Vec<String>,
+}
+
+#[cfg(test)]
+impl ScriptedPrompt {
+    pub fn new(responses: Vec<String>) -> Self {
+        Self {
+            responses: responses.into(),
+            messages: Vec::new(),
+        }
+    }
+}
+
+#[cfg(test)]
+impl Prompt for ScriptedPrompt {
+    fn ask(&mut self, message: &str) -> Result<String, String> {
+        self.messages.push(message.to_owned());
+        self.responses
+            .pop_front()
+            .ok_or_else(|| "ScriptedPrompt ran out of ask responses".to_string())
+    }
+
+    fn confirm(&mut self, message: &str, default: bool) -> Result<bool, String> {
+        self.messages.push(message.to_owned());
+        let response = self
+            .responses
+            .pop_front()
+            .ok_or_else(|| "ScriptedPrompt ran out of confirm responses".to_string())?;
+        let trimmed = response.trim();
+        if trimmed.is_empty() {
+            return Ok(default);
+        }
+        let normalized = trimmed.to_ascii_lowercase();
+        Ok(matches!(normalized.as_str(), "y" | "yes"))
+    }
+}
 
 #[test]
 fn scripted_prompt_replays_ask_responses_in_order() {

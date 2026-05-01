@@ -14,7 +14,6 @@ use super::directive_args::{
     reject_unexpected_directive_arguments,
 };
 use crate::compiler_frontend::ast::ScopeContext;
-use crate::compiler_frontend::ast::templates::styles::code::configure_code_style;
 use crate::compiler_frontend::ast::templates::styles::markdown::markdown_formatter;
 use crate::compiler_frontend::ast::templates::styles::raw::configure_raw_style;
 use crate::compiler_frontend::ast::templates::template::{
@@ -63,10 +62,6 @@ pub(super) fn parse_core_style_directive(
     string_table: &mut StringTable,
 ) -> Result<(), CompilerError> {
     match kind {
-        CoreStyleDirectiveKind::Code => {
-            // Keep directive-local argument parsing in the code style module.
-            configure_code_style(token_stream, template, string_table)?;
-        }
         CoreStyleDirectiveKind::Raw => {
             configure_raw_style(template);
         }

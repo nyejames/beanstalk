@@ -1,10 +1,9 @@
 //! Tests for target path resolution and interactive project placement.
 
+use crate::projects::html_project::new_html_project::prompt_tests::ScriptedPrompt;
+use crate::projects::html_project::new_html_project::target::resolve_project_target;
 use std::fs;
 use std::path::PathBuf;
-
-use crate::projects::html_project::new_html_project::prompt::ScriptedPrompt;
-use crate::projects::html_project::new_html_project::target::resolve_project_target;
 
 #[test]
 fn omitted_path_uses_current_directory_after_confirmation() {

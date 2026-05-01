@@ -6,7 +6,6 @@
 //! WHY:
 //! - Keeps frontend style logic modular and separate from generic template parsing.
 
-pub(crate) mod code;
 pub(crate) mod markdown;
 pub(crate) mod raw;
 pub(crate) mod whitespace;

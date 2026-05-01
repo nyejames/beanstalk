@@ -32,11 +32,11 @@ pub(crate) fn html_validation_formatter() -> Formatter {
 
 pub(crate) fn html_formatter_factory(
     argument: Option<&StyleDirectiveArgumentValue>,
-) -> Result<Option<Formatter>, String> {
+) -> Result<Formatter, String> {
     if argument.is_some() {
         return Err("'$html' does not accept arguments.".to_string());
     }
-    Ok(Some(html_validation_formatter()))
+    Ok(html_validation_formatter())
 }
 
 impl TemplateFormatter for HtmlValidationTemplateFormatter {

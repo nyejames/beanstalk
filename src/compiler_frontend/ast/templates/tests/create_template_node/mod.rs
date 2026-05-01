@@ -22,7 +22,8 @@ use crate::projects::html_project::style_directives::html_project_style_directiv
 use std::rc::Rc;
 
 fn frontend_test_style_directives() -> StyleDirectiveRegistry {
-    StyleDirectiveRegistry::built_ins()
+    StyleDirectiveRegistry::merged(&html_project_style_directives())
+        .expect("HTML style directives should merge with core.")
 }
 
 fn html_project_test_style_directives() -> StyleDirectiveRegistry {
@@ -436,9 +437,7 @@ fn is_default_text_location(location: &SourceLocation) -> bool {
         && location.end_pos == CharPosition::default()
 }
 
-fn is_default_error_location(
-    location: &crate::compiler_frontend::compiler_errors::SourceLocation,
-) -> bool {
+fn is_default_error_location(location: &SourceLocation) -> bool {
     location.scope == InternedPath::new()
         && location.start_pos == CharPosition::default()
         && location.end_pos == CharPosition::default()
@@ -472,7 +471,6 @@ fn render_static_template_fragments(template: &Template, string_table: &StringTa
 
 mod builder_tests;
 mod children_tests;
-mod code_tests;
 mod directive_built_in_tests;
 mod directive_style_tests;
 mod head_tests;

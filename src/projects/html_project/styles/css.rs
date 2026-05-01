@@ -41,7 +41,7 @@ pub(crate) fn css_validation_formatter(mode: CssFormatterMode) -> Formatter {
 
 pub(crate) fn css_formatter_factory(
     argument: Option<&StyleDirectiveArgumentValue>,
-) -> Result<Option<Formatter>, String> {
+) -> Result<Formatter, String> {
     let mode = match argument {
         None => CssFormatterMode::Block,
         Some(StyleDirectiveArgumentValue::String(value)) if value == "inline" => {
@@ -60,7 +60,7 @@ pub(crate) fn css_formatter_factory(
         }
     };
 
-    Ok(Some(css_validation_formatter(mode)))
+    Ok(css_validation_formatter(mode))
 }
 
 impl TemplateFormatter for CssValidationTemplateFormatter {

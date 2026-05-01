@@ -6,6 +6,7 @@
 
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::libraries::source_library_registry::SourceLibraryRegistry;
+use std::path::PathBuf;
 
 /// The complete set of libraries a builder exposes to a project.
 ///
@@ -17,6 +18,8 @@ pub struct LibrarySet {
     pub external_packages: ExternalPackageRegistry,
     pub source_libraries: SourceLibraryRegistry,
 }
+
+const BUILTIN_SOURCE_LIBRARIES_DIR: &str = "libraries";
 
 impl LibrarySet {
     /// Builds a library set with mandatory compiler core packages and no source libraries.
@@ -42,5 +45,11 @@ impl LibrarySet {
         crate::libraries::core::register_core_text_package(&mut self.external_packages);
         crate::libraries::core::register_core_random_package(&mut self.external_packages);
         crate::libraries::core::register_core_time_package(&mut self.external_packages);
+    }
+
+    pub fn builtin_source_library_root(prefix: &str) -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join(BUILTIN_SOURCE_LIBRARIES_DIR)
+            .join(prefix)
     }
 }

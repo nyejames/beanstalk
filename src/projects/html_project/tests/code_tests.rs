@@ -1,7 +1,7 @@
-use crate::compiler_frontend::ast::templates::styles::code::{
+use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::projects::html_project::styles::code::{
     CodeLanguage, code_formatter, highlight_code_html,
 };
-use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 #[test]
 fn generic_code_highlighter_marks_syntax_but_not_keywords() {

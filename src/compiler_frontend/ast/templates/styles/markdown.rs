@@ -184,12 +184,12 @@ pub fn markdown_formatter() -> Formatter {
 
 pub(crate) fn markdown_formatter_factory(
     argument: Option<&StyleDirectiveArgumentValue>,
-) -> Result<Option<Formatter>, String> {
+) -> Result<Formatter, String> {
     if argument.is_some() {
         return Err("'$markdown' does not accept arguments.".to_string());
     }
 
-    Ok(Some(markdown_formatter()))
+    Ok(markdown_formatter())
 }
 
 /// Converts formatter input into newline-delimited markdown lines without flattening anchors.

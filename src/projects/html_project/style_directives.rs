@@ -12,6 +12,7 @@ use crate::compiler_frontend::style_directives::{
     StyleDirectiveSpec, TemplateHeadCompatibility, TemplateHeadTag,
 };
 use crate::compiler_frontend::tokenizer::tokens::TemplateBodyMode;
+use crate::projects::html_project::styles::code::code_formatter_factory;
 use crate::projects::html_project::styles::css::css_formatter_factory;
 use crate::projects::html_project::styles::escape_html::escape_html_formatter_factory;
 use crate::projects::html_project::styles::html::html_formatter_factory;
@@ -56,6 +57,26 @@ pub(crate) fn html_project_style_directives() -> Vec<StyleDirectiveSpec> {
                     ..StyleDirectiveEffects::default()
                 },
                 Some(escape_html_formatter_factory),
+            ),
+        ),
+        StyleDirectiveSpec::handler(
+            "code",
+            TemplateBodyMode::Balanced,
+            TemplateHeadCompatibility {
+                presence_tags: TemplateHeadTag::MEANINGFUL_ITEM
+                    | TemplateHeadTag::FORMATTER_DIRECTIVE
+                    | TemplateHeadTag::CODE_DIRECTIVE,
+                required_absent_tags: TemplateHeadTag::empty(),
+                blocks_future_tags: TemplateHeadTag::FORMATTER_DIRECTIVE,
+            },
+            StyleDirectiveHandlerSpec::new(
+                Some(StyleDirectiveArgumentType::String),
+                StyleDirectiveEffects {
+                    style_id: Some("code"),
+                    suppress_child_templates: Some(true),
+                    ..StyleDirectiveEffects::default()
+                },
+                Some(code_formatter_factory),
             ),
         ),
     ]

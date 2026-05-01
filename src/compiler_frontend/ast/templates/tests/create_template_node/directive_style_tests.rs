@@ -1,9 +1,301 @@
 use super::*;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::ast::templates::template::{
-    CommentDirectiveKind, TemplateSegmentOrigin, TemplateType,
+    CommentDirectiveKind, SlotKey, TemplateSegmentOrigin, TemplateType,
+};
+use crate::compiler_frontend::ast::templates::template_head_parser::directive_args::{
+    parse_optional_parenthesized_expression, parse_optional_slot_target_argument,
+    parse_required_parenthesized_expression, parse_required_slot_name_argument,
+    reject_unexpected_directive_arguments,
 };
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::tokenizer::tokens::TokenizeMode;
+
+fn directive_tokens(source: &str, string_table: &mut StringTable) -> FileTokens {
+    let scope = InternedPath::from_single_str("main.bst/#const_template0", string_table);
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let mut tokens = tokenize(
+        source,
+        &scope,
+        TokenizeMode::Normal,
+        NewlineMode::NormalizeToLf,
+        &style_directives,
+        string_table,
+        None,
+    )
+    .expect("tokenization should succeed");
+
+    tokens.index = tokens
+        .tokens
+        .iter()
+        .position(|token| matches!(token.kind, TokenKind::StyleDirective(_)))
+        .expect("expected a style directive token");
+
+    tokens
+}
+
+fn test_context(scope: InternedPath) -> ScopeContext {
+    let cwd = std::env::temp_dir();
+    let resolver = ProjectPathResolver::new(
+        cwd.clone(),
+        cwd,
+        &crate::libraries::SourceLibraryRegistry::default(),
+    )
+    .expect("test path resolver should be valid");
+    ScopeContext::new(
+        ContextKind::Constant,
+        scope.clone(),
+        Rc::new(TopLevelDeclarationIndex::new(vec![])),
+        ExternalPackageRegistry::default(),
+        vec![],
+    )
+    .with_project_path_resolver(Some(resolver))
+    .with_source_file_scope(scope)
+    .with_path_format_config(PathStringFormatConfig::default())
+}
+
+// ------------------------------------------------------------------------
+// reject_unexpected_directive_arguments
+// ------------------------------------------------------------------------
+
+#[test]
+fn reject_arguments_succeeds_when_no_parens() {
+    let mut string_table = StringTable::new();
+    let tokens = directive_tokens("[$note]", &mut string_table);
+    let result = reject_unexpected_directive_arguments(&tokens, "note");
+    assert!(result.is_ok());
+}
+
+#[test]
+fn reject_arguments_fails_when_parens_present() {
+    let mut string_table = StringTable::new();
+    let tokens = directive_tokens("[$note()]", &mut string_table);
+    let result = reject_unexpected_directive_arguments(&tokens, "note");
+    assert!(result.is_err());
+    assert!(
+        result
+            .unwrap_err()
+            .msg
+            .contains("does not accept arguments")
+    );
+}
+
+// ------------------------------------------------------------------------
+// parse_optional_slot_target_argument
+// ------------------------------------------------------------------------
+
+#[test]
+fn optional_slot_target_no_parens_returns_default() {
+    let mut string_table = StringTable::new();
+    let mut tokens = directive_tokens("[$slot]", &mut string_table);
+    let result = parse_optional_slot_target_argument(&mut tokens);
+    assert_eq!(result.unwrap(), SlotKey::Default);
+}
+
+#[test]
+fn optional_slot_target_named_string() {
+    let mut string_table = StringTable::new();
+    let mut tokens = directive_tokens("[$slot(\"style\")]", &mut string_table);
+    let result = parse_optional_slot_target_argument(&mut tokens);
+    assert!(matches!(result.unwrap(), SlotKey::Named(_)));
+}
+
+#[test]
+fn optional_slot_target_positive_positional() {
+    let mut string_table = StringTable::new();
+    let mut tokens = directive_tokens("[$slot(1)]", &mut string_table);
+    let result = parse_optional_slot_target_argument(&mut tokens);
+    assert_eq!(result.unwrap(), SlotKey::Positional(1));
+}
+
+#[test]
+fn optional_slot_target_zero_errors() {
+    let mut string_table = StringTable::new();
+    let mut tokens = directive_tokens("[$slot(0)]", &mut string_table);
+    let result = parse_optional_slot_target_argument(&mut tokens);
+    assert!(result.is_err());
+    assert!(
+        result
+            .unwrap_err()
+            .msg
+            .contains("Positional slots start at 1")
+    );
+}
+
+#[test]
+fn optional_slot_target_negative_errors() {
+    let mut string_table = StringTable::new();
+    let mut tokens = directive_tokens("[$slot(-1)]", &mut string_table);
+    let result = parse_optional_slot_target_argument(&mut tokens);
+    assert!(result.is_err());
+}
+
+#[test]
+fn optional_slot_target_empty_parens_errors() {
+    let mut string_table = StringTable::new();
+    let mut tokens = directive_tokens("[$slot()]", &mut string_table);
+    let result = parse_optional_slot_target_argument(&mut tokens);
+    assert!(result.is_err());
+    assert!(
+        result
+            .unwrap_err()
+            .msg
+            .contains("cannot use empty parentheses")
+    );
+}
+
+#[test]
+fn optional_slot_target_missing_close_paren_errors() {
+    let mut string_table = StringTable::new();
+    let mut tokens = directive_tokens("[$slot(\"style\"]", &mut string_table);
+    let result = parse_optional_slot_target_argument(&mut tokens);
+    assert!(result.is_err());
+    assert!(result.unwrap_err().msg.contains("Expected ')'"));
+}
+
+// ------------------------------------------------------------------------
+// parse_required_slot_name_argument
+// ------------------------------------------------------------------------
+
+#[test]
+fn required_slot_name_missing_parens_errors() {
+    let mut string_table = StringTable::new();
+    let mut tokens = directive_tokens("[$insert]", &mut string_table);
+    let result = parse_required_slot_name_argument(&mut tokens);
+    assert!(result.is_err());
+    assert!(
+        result
+            .unwrap_err()
+            .msg
+            .contains("requires a quoted named target")
+    );
+}
+
+#[test]
+fn required_slot_name_string_literal_ok() {
+    let mut string_table = StringTable::new();
+    let mut tokens = directive_tokens("[$insert(\"style\")]", &mut string_table);
+    let result = parse_required_slot_name_argument(&mut tokens);
+    assert!(result.is_ok());
+}
+
+#[test]
+fn required_slot_name_positional_rejected() {
+    let mut string_table = StringTable::new();
+    let mut tokens = directive_tokens("[$insert(1)]", &mut string_table);
+    let result = parse_required_slot_name_argument(&mut tokens);
+    assert!(result.is_err());
+    assert!(
+        result
+            .unwrap_err()
+            .msg
+            .contains("only accepts quoted string literal names")
+    );
+}
+
+#[test]
+fn required_slot_name_empty_parens_errors() {
+    let mut string_table = StringTable::new();
+    let mut tokens = directive_tokens("[$insert()]", &mut string_table);
+    let result = parse_required_slot_name_argument(&mut tokens);
+    assert!(result.is_err());
+    assert!(
+        result
+            .unwrap_err()
+            .msg
+            .contains("cannot use empty parentheses")
+    );
+}
+
+#[test]
+fn optional_string_literal_not_a_string_errors() {
+    let mut string_table = StringTable::new();
+    let mut tokens = directive_tokens("[$code(42)]", &mut string_table);
+    let path = tokens.src_path.to_owned();
+    let result = parse_optional_parenthesized_expression(
+        &mut tokens,
+        &test_context(path),
+        &mut string_table,
+    );
+    assert!(result.is_err());
+    assert!(result.unwrap_err().msg.contains("quoted string literal"));
+}
+
+// ------------------------------------------------------------------------
+// parse_optional_parenthesized_expression
+// ------------------------------------------------------------------------
+
+#[test]
+fn optional_expression_no_parens_returns_none() {
+    let mut string_table = StringTable::new();
+    let mut tokens = directive_tokens("[$css]", &mut string_table);
+    let context = test_context(tokens.src_path.to_owned());
+    let result = parse_optional_parenthesized_expression(&mut tokens, &context, &mut string_table);
+    assert!(matches!(result, Ok(None)));
+}
+
+#[test]
+fn optional_expression_with_parens_returns_some() {
+    let mut string_table = StringTable::new();
+    let mut tokens = directive_tokens("[$code(\"wrap\")]", &mut string_table);
+    let context = test_context(tokens.src_path.to_owned());
+    let result = parse_optional_parenthesized_expression(&mut tokens, &context, &mut string_table);
+    assert!(matches!(result, Ok(Some(_))));
+}
+
+#[test]
+fn optional_expression_empty_parens_errors() {
+    let mut string_table = StringTable::new();
+    let mut tokens = directive_tokens("[$code()]", &mut string_table);
+    let context = test_context(tokens.src_path.to_owned());
+    let result = parse_optional_parenthesized_expression(&mut tokens, &context, &mut string_table);
+    assert!(result.is_err());
+}
+
+#[test]
+fn optional_expression_extra_comma_errors() {
+    let mut string_table = StringTable::new();
+    let mut tokens = directive_tokens("[$children(\"a\", \"b\")]", &mut string_table);
+    let context = test_context(tokens.src_path.to_owned());
+    let result = parse_optional_parenthesized_expression(&mut tokens, &context, &mut string_table);
+    assert!(result.is_err());
+    assert!(
+        result
+            .unwrap_err()
+            .msg
+            .contains("do not support multiple values")
+    );
+}
+
+// ------------------------------------------------------------------------
+// parse_required_parenthesized_expression
+// ------------------------------------------------------------------------
+
+#[test]
+fn required_expression_missing_parens_errors() {
+    let mut string_table = StringTable::new();
+    let mut tokens = directive_tokens("[$children]", &mut string_table);
+    let context = test_context(tokens.src_path.to_owned());
+    let result = parse_required_parenthesized_expression(&mut tokens, &context, &mut string_table);
+    assert!(result.is_err());
+    assert!(
+        result
+            .unwrap_err()
+            .msg
+            .contains("requires a parenthesized argument")
+    );
+}
+
+#[test]
+fn required_expression_compile_time_constant_ok() {
+    let mut string_table = StringTable::new();
+    let mut tokens = directive_tokens("[$children(\"wrap\")]", &mut string_table);
+    let context = test_context(tokens.src_path.to_owned());
+    let result = parse_required_parenthesized_expression(&mut tokens, &context, &mut string_table);
+    assert!(result.is_ok());
+    let expr = result.unwrap();
+    assert!(matches!(expr.kind, ExpressionKind::StringSlice(_)));
+}
 
 #[test]
 fn note_and_todo_templates_do_not_render_content() {
