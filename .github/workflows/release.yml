@@ -16,6 +16,7 @@ jobs:
   validate:
     name: Validate before release
     runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     steps:
       - name: Checkout
@@ -32,13 +33,14 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target
           key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Install just
+        timeout-minutes: 10
         run: cargo install just --locked
 
       - name: Run validation
+        timeout-minutes: 30
         run: just validate
 
   build:
@@ -56,7 +58,8 @@ jobs:
             archive: tar.gz
             binary: bean
 
-          - os: macos-13
+          # Build Intel macOS from Apple Silicon to avoid macos-13 runner queue stalls.
+          - os: macos-14
             target: x86_64-apple-darwin
             archive: tar.gz
             binary: bean
@@ -105,11 +108,71 @@ jobs:
           set -euxo pipefail
           cargo build --locked --release --target "${{ matrix.target }}" --verbose
 
+      - name: Smoke test binary
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          HOST_ARCH="$(uname -m)"
+          TARGET="${{ matrix.target }}"
+
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            "target/${TARGET}/release/${BIN_NAME}.exe" --version
+          elif [[ "$TARGET" == "x86_64-apple-darwin" && "$HOST_ARCH" == "arm64" ]]; then
+            echo "Skipping x86_64 macOS smoke test on arm64 host"
+          else
+            "target/${TARGET}/release/${BIN_NAME}" --version
+          fi
+
+      - name: Prepare package directory
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          ARCHIVE_NAME="${BIN_NAME}-${GITHUB_REF_NAME}-${{ matrix.target }}"
+
+          mkdir -p "package/${ARCHIVE_NAME}"
+
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            cp "target/${{ matrix.target }}/release/${BIN_NAME}.exe" "package/${ARCHIVE_NAME}/${BIN_NAME}.exe"
+          else
+            cp "target/${{ matrix.target }}/release/${BIN_NAME}" "package/${ARCHIVE_NAME}/${BIN_NAME}"
+            chmod +x "package/${ARCHIVE_NAME}/${BIN_NAME}"
+          fi
+
+          cp README.md "package/${ARCHIVE_NAME}/"
+          cp LICENSE "package/${ARCHIVE_NAME}/" 2>/dev/null || true
+
+      - name: Create tar.gz package
+        if: matrix.archive == 'tar.gz'
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          ARCHIVE_NAME="${BIN_NAME}-${GITHUB_REF_NAME}-${{ matrix.target }}"
+          tar -czf "${ARCHIVE_NAME}.tar.gz" -C package "${ARCHIVE_NAME}"
+
+      - name: Create zip package
+        if: matrix.archive == 'zip'
+        shell: pwsh
+        run: |
+          $ArchiveName = "${env:BIN_NAME}-${env:GITHUB_REF_NAME}-${{ matrix.target }}"
+          Compress-Archive -Path "package/${ArchiveName}" -DestinationPath "${ArchiveName}.zip"
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.BIN_NAME }}-${{ github.ref_name }}-${{ matrix.target }}
+          path: |
+            *.tar.gz
+            *.zip
+          if-no-files-found: error
 
   publish:
     name: Publish GitHub Release
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     permissions:
       contents: write
