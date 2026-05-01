@@ -5,11 +5,8 @@ use crate::compiler_frontend::style_directives::{
     StyleDirectiveHandlerSpec, StyleDirectiveRegistry, StyleDirectiveSpec,
     TemplateHeadCompatibility,
 };
+use crate::compiler_tests::test_support::frontend_test_style_directives;
 use crate::projects::html_project::style_directives::html_project_style_directives;
-
-fn frontend_test_style_directives() -> StyleDirectiveRegistry {
-    StyleDirectiveRegistry::built_ins()
-}
 
 fn html_project_test_style_directives() -> StyleDirectiveRegistry {
     StyleDirectiveRegistry::merged(&html_project_style_directives())

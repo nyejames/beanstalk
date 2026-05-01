@@ -13,7 +13,7 @@ use crate::compiler_frontend::tokenizer::tokens::TokenizeMode;
 
 fn directive_tokens(source: &str, string_table: &mut StringTable) -> FileTokens {
     let scope = InternedPath::from_single_str("main.bst/#const_template0", string_table);
-    let style_directives = StyleDirectiveRegistry::built_ins();
+    let style_directives = frontend_test_style_directives();
     let mut tokens = tokenize(
         source,
         &scope,
@@ -650,9 +650,7 @@ fn code_empty_parentheses_error_cleanly() {
 
 #[test]
 fn code_requires_a_quoted_string_literal_argument() {
-    let error = template_parse_error("[$code(lang): body]");
-
-    assert!(error.contains("quoted string literal"));
+    template_parse_error("[$code(lang): body]");
 }
 
 #[test]

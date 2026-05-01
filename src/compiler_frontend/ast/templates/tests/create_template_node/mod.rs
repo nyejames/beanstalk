@@ -18,13 +18,9 @@ use crate::compiler_frontend::tokenizer::tokens::{
     CharPosition, FileTokens, SourceLocation, TemplateBodyMode, Token, TokenKind,
 };
 use crate::compiler_frontend::value_mode::ValueMode;
+use crate::compiler_tests::test_support::frontend_test_style_directives;
 use crate::projects::html_project::style_directives::html_project_style_directives;
 use std::rc::Rc;
-
-fn frontend_test_style_directives() -> StyleDirectiveRegistry {
-    StyleDirectiveRegistry::merged(&html_project_style_directives())
-        .expect("HTML style directives should merge with core.")
-}
 
 fn html_project_test_style_directives() -> StyleDirectiveRegistry {
     StyleDirectiveRegistry::merged(&html_project_style_directives())
