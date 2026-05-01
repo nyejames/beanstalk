@@ -209,16 +209,11 @@ fn required_slot_name_empty_parens_errors() {
 
 #[test]
 fn optional_string_literal_not_a_string_errors() {
-    let mut string_table = StringTable::new();
-    let mut tokens = directive_tokens("[$code(42)]", &mut string_table);
-    let path = tokens.src_path.to_owned();
-    let result = parse_optional_parenthesized_expression(
-        &mut tokens,
-        &test_context(path),
-        &mut string_table,
-    );
-    assert!(result.is_err());
-    assert!(result.unwrap_err().msg.contains("quoted string literal"));
+    // After the $code refactor into the HTML project builder, argument type
+    // validation lives in normalize_provided_style_argument_value (called by
+    // apply_handler_style_directive), not in parse_optional_parenthesized_expression.
+    let error = template_parse_error("[$code(42): body]");
+    assert!(error.contains("expects a compile-time string argument"));
 }
 
 // ------------------------------------------------------------------------
@@ -646,11 +641,6 @@ fn code_empty_parentheses_error_cleanly() {
     let error = template_parse_error("[$code(): body]");
 
     assert!(error.contains("cannot be empty"));
-}
-
-#[test]
-fn code_requires_a_quoted_string_literal_argument() {
-    template_parse_error("[$code(lang): body]");
 }
 
 #[test]
