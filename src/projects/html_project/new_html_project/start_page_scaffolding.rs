@@ -37,7 +37,7 @@ pub fn page_template() -> &'static str {
         [$css:
             body {
                 background-color: light-dark(hsl(125, 67%, 97%), hsl(203, 68%, 8%));
-                padding: var(--bst-spacing--small);
+                padding: var(--bst-spacing);
             }
         ]
     </style>
