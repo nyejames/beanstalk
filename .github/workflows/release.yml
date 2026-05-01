@@ -45,6 +45,7 @@ jobs:
     name: Build ${{ matrix.target }}
     needs: validate
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
 
     strategy:
       fail-fast: false
@@ -85,64 +86,25 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target
           key: ${{ runner.os }}-${{ matrix.target }}-cargo-release-${{ hashFiles('**/Cargo.lock') }}
 
+      - name: Print build environment
+        shell: bash
+        run: |
+          set -euxo pipefail
+          uname -a
+          rustc -Vv
+          cargo -V
+          rustup target list --installed
+          xcodebuild -version || true
+
       - name: Build release binary
-        run: cargo build --locked --release --target ${{ matrix.target }}
-
-      - name: Smoke test binary
-        shell: bash
-        run: |
-          if [[ "${{ runner.os }}" == "Windows" ]]; then
-            "target/${{ matrix.target }}/release/${BIN_NAME}.exe" --version
-          else
-            "target/${{ matrix.target }}/release/${BIN_NAME}" --version
-          fi
-
-      - name: Prepare package directory
+        timeout-minutes: 30
         shell: bash
         run: |
           set -euxo pipefail
+          cargo build --locked --release --target "${{ matrix.target }}" --verbose
 
-          ARCHIVE_NAME="${BIN_NAME}-${GITHUB_REF_NAME}-${{ matrix.target }}"
-
-          mkdir -p "package/${ARCHIVE_NAME}"
-
-          if [[ "${{ runner.os }}" == "Windows" ]]; then
-            cp "target/${{ matrix.target }}/release/${BIN_NAME}.exe" "package/${ARCHIVE_NAME}/${BIN_NAME}.exe"
-          else
-            cp "target/${{ matrix.target }}/release/${BIN_NAME}" "package/${ARCHIVE_NAME}/${BIN_NAME}"
-            chmod +x "package/${ARCHIVE_NAME}/${BIN_NAME}"
-          fi
-
-          cp README.md "package/${ARCHIVE_NAME}/"
-          cp LICENSE "package/${ARCHIVE_NAME}/" 2>/dev/null || true
-
-      - name: Create tar.gz package
-        if: matrix.archive == 'tar.gz'
-        shell: bash
-        run: |
-          set -euxo pipefail
-
-          ARCHIVE_NAME="${BIN_NAME}-${GITHUB_REF_NAME}-${{ matrix.target }}"
-          tar -czf "${ARCHIVE_NAME}.tar.gz" -C package "${ARCHIVE_NAME}"
-
-      - name: Create zip package
-        if: matrix.archive == 'zip'
-        shell: pwsh
-        run: |
-          $ArchiveName = "${env:BIN_NAME}-${env:GITHUB_REF_NAME}-${{ matrix.target }}"
-          Compress-Archive -Path "package/${ArchiveName}" -DestinationPath "${ArchiveName}.zip"
-
-      - name: Upload package artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: ${{ env.BIN_NAME }}-${{ github.ref_name }}-${{ matrix.target }}
-          path: |
-            *.tar.gz
-            *.zip
-          if-no-files-found: error
 
   publish:
     name: Publish GitHub Release
