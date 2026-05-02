@@ -10,6 +10,7 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::ast::import_bindings::{
     ConstantHeaderParseContext, FileImportBindings, parse_constant_header_declaration,
 };
+use crate::compiler_frontend::ast::instrumentation::{AstCounter, increment_ast_counter};
 use crate::compiler_frontend::ast::module_ast::scope_context::TopLevelDeclarationIndex;
 use crate::compiler_frontend::ast::type_resolution::{
     build_generic_parameter_scope, collect_type_parameter_ids_from_choice_variants,
@@ -47,7 +48,7 @@ impl<'a> AstBuildState<'a> {
         self.resolve_constant_headers(sorted_headers, file_import_bindings, string_table)?;
         timer_log!(
             constant_resolution_start,
-            "AST/type resolution/constants resolved in: "
+            "AST/environment/constants resolved in: "
         );
         let _ = constant_resolution_start;
 
@@ -144,7 +145,7 @@ impl<'a> AstBuildState<'a> {
         }
         timer_log!(
             struct_fields_resolution_start,
-            "AST/type resolution/struct fields resolved in: "
+            "AST/environment/nominal types/struct fields resolved in: "
         );
         let _ = struct_fields_resolution_start;
 
@@ -245,7 +246,7 @@ impl<'a> AstBuildState<'a> {
         }
         timer_log!(
             choice_resolution_start,
-            "AST/type resolution/choice variants resolved in: "
+            "AST/environment/nominal types/choice variants resolved in: "
         );
         let _ = choice_resolution_start;
 
@@ -254,7 +255,7 @@ impl<'a> AstBuildState<'a> {
             .map_err(|error| self.error_messages(error, string_table))?;
         timer_log!(
             recursive_validation_start,
-            "AST/type resolution/recursive struct validation in: "
+            "AST/environment/nominal types/recursive struct validation in: "
         );
         let _ = recursive_validation_start;
 
@@ -294,6 +295,7 @@ impl<'a> AstBuildState<'a> {
 
             while !pending_headers.is_empty() {
                 total_rounds += 1;
+                increment_ast_counter(AstCounter::ConstantResolutionRounds);
                 total_headers_attempted += pending_headers.len();
 
                 // Reuse one declaration snapshot for deferred attempts in this round.
@@ -302,6 +304,7 @@ impl<'a> AstBuildState<'a> {
                 let mut declarations_snapshot =
                     Rc::new(TopLevelDeclarationIndex::new(self.declarations.clone()));
                 let mut round_snapshot_rebuilds = 1usize;
+                increment_ast_counter(AstCounter::DeclarationSnapshotRebuilds);
                 let mut unresolved_constant_paths = declarations_snapshot
                     .declarations()
                     .iter()
@@ -360,6 +363,7 @@ impl<'a> AstBuildState<'a> {
                             declarations_snapshot =
                                 Rc::new(TopLevelDeclarationIndex::new(self.declarations.clone()));
                             round_snapshot_rebuilds += 1;
+                            increment_ast_counter(AstCounter::DeclarationSnapshotRebuilds);
                             unresolved_constant_paths = declarations_snapshot
                                 .declarations()
                                 .iter()
@@ -405,7 +409,7 @@ impl<'a> AstBuildState<'a> {
 
         timer_log!(
             constants_resolution_start,
-            "AST/type resolution/constants deferred resolution in: "
+            "AST/environment/constants deferred resolution in: "
         );
         let _ = constants_resolution_start;
 

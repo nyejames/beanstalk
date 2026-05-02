@@ -26,6 +26,9 @@
 
 use crate::compiler_frontend::FrontendBuildProfile;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
+use crate::compiler_frontend::ast::instrumentation::{
+    AstCounter, add_ast_counter, increment_ast_counter,
+};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::templates::template_folding::TemplateFoldContext;
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -276,6 +279,8 @@ impl ScopeContext {
         external_package_registry: ExternalPackageRegistry,
         expected_result_types: Vec<DataType>,
     ) -> ScopeContext {
+        increment_ast_counter(AstCounter::ScopeContextsCreated);
+
         ScopeContext {
             kind,
             scope,
@@ -310,6 +315,12 @@ impl ScopeContext {
         kind: ContextKind,
         string_table: &mut StringTable,
     ) -> ScopeContext {
+        increment_ast_counter(AstCounter::ScopeContextsCreated);
+        add_ast_counter(
+            AstCounter::ScopeLocalDeclarationsClonedTotal,
+            self.local_declarations.len(),
+        );
+
         let loop_depth = if matches!(kind, ContextKind::Loop) {
             self.loop_depth + 1
         } else {
@@ -356,6 +367,12 @@ impl ScopeContext {
         signature: FunctionSignature,
         _string_table: &mut StringTable,
     ) -> ScopeContext {
+        increment_ast_counter(AstCounter::ScopeContextsCreated);
+        add_ast_counter(
+            AstCounter::ScopeLocalDeclarationsClonedTotal,
+            self.local_declarations.len(),
+        );
+
         let mut new_context = self.to_owned();
         new_context.kind = ContextKind::Function;
         new_context.expected_result_types = signature.return_data_types();
@@ -375,6 +392,12 @@ impl ScopeContext {
     }
 
     pub fn new_child_expression(&self, expected_result_types: Vec<DataType>) -> ScopeContext {
+        increment_ast_counter(AstCounter::ScopeContextsCreated);
+        add_ast_counter(
+            AstCounter::ScopeLocalDeclarationsClonedTotal,
+            self.local_declarations.len(),
+        );
+
         ScopeContext {
             kind: ContextKind::Expression,
             scope: self.scope.clone(),
@@ -409,6 +432,12 @@ impl ScopeContext {
     /// Constant contexts stay constant so template-head captures can inline
     /// compile-time values. All other contexts parse templates as runtime-capable.
     pub fn new_template_parsing_context(&self) -> ScopeContext {
+        increment_ast_counter(AstCounter::ScopeContextsCreated);
+        add_ast_counter(
+            AstCounter::ScopeLocalDeclarationsClonedTotal,
+            self.local_declarations.len(),
+        );
+
         let template_kind = if self.kind.is_constant_context() {
             self.kind.clone()
         } else {
@@ -451,6 +480,12 @@ impl ScopeContext {
     /// WHY: resolver-less constant contexts are invalid for template folding and
     ///      template-head path coercion.
     pub fn new_constant(scope: InternedPath, parent: &ScopeContext) -> ScopeContext {
+        increment_ast_counter(AstCounter::ScopeContextsCreated);
+        add_ast_counter(
+            AstCounter::ScopeLocalDeclarationsClonedTotal,
+            parent.local_declarations.len(),
+        );
+
         ScopeContext {
             kind: ContextKind::Constant,
             scope,

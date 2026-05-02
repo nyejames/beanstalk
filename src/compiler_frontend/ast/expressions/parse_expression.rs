@@ -11,6 +11,7 @@ use super::parse_expression_dispatch::{
 use crate::ast_log;
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
+use crate::compiler_frontend::ast::instrumentation::{AstCounter, add_ast_counter};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -257,6 +258,13 @@ pub(crate) fn create_expression_until(
             }
         )
     }
+
+    let copied_token_count = end_index.saturating_sub(start_index);
+    add_ast_counter(AstCounter::BoundedExpressionTokenCopies, 1);
+    add_ast_counter(
+        AstCounter::BoundedExpressionTokensCopiedTotal,
+        copied_token_count,
+    );
 
     let mut expression_tokens = token_stream.tokens[start_index..end_index].to_vec();
     expression_tokens.push(Token::new(

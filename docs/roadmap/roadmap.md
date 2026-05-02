@@ -9,7 +9,10 @@ Use the language surface integration matrix as a reference for what is currently
 ---
 
 # Plans / Notes / TODOS
-- AST refactor and optimisation: `docs/memory-management-design.md`
+- AST pipeline restructure and optimisation: `docs/roadmap/plans/beanstalk_ast_pipeline_restructure_optimisation_plan.md`
+- AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisation-benchmark-log.md`
+- Type environment redesign follow-up: `docs/roadmap/plans/type-environment-redesign-plan.md`
+- Template optimisation follow-up: track measured finalization/template bottlenecks in the AST benchmark log before creating a separate plan.
 - Generics (FINISHED PHASE 1 - 3 ONLY): `docs/roadmap/plans/beanstalk-generics-implementation-plan.md`
 - Traits
 - True results / options with generics

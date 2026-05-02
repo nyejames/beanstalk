@@ -22,6 +22,7 @@ use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{
     BuiltinCastKind, Expression, ExpressionKind, Operator, ResultCallHandling, ResultVariant,
 };
+use crate::compiler_frontend::ast::instrumentation::{AstCounter, increment_ast_counter};
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -65,6 +66,7 @@ pub fn constant_fold(
             NodeKind::Rvalue(expr) if !expr.kind.is_foldable()
         ) || !matches!(&node.kind, NodeKind::Rvalue(_) | NodeKind::Operator(_))
     }) {
+        increment_ast_counter(AstCounter::RuntimeRpnCloneCount);
         return Ok(output_stack.to_vec());
     }
 

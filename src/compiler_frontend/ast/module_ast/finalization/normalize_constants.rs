@@ -31,6 +31,7 @@ use super::super::build_state::AstBuildState;
 use super::template_helpers::try_fold_template_to_string;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler_frontend::ast::instrumentation::{AstCounter, increment_ast_counter};
 use crate::compiler_frontend::ast::templates::template::TemplateConstValueKind;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
@@ -100,6 +101,8 @@ impl<'a> AstBuildState<'a> {
         project_path_resolver: &ProjectPathResolver,
         string_table: &mut StringTable,
     ) -> Result<Expression, CompilerError> {
+        increment_ast_counter(AstCounter::ModuleConstantNormalizationExpressionsVisited);
+
         let mut normalized = expression.to_owned();
         normalized.kind = match &expression.kind {
             ExpressionKind::Template(template) => match template.const_value_kind() {

@@ -42,6 +42,7 @@ use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, ResultCallHandling,
 };
+use crate::compiler_frontend::ast::instrumentation::{AstCounter, increment_ast_counter};
 use crate::compiler_frontend::ast::statements::match_patterns::MatchPattern;
 use crate::compiler_frontend::ast::templates::template::TemplateConstValueKind;
 use crate::compiler_frontend::ast::templates::template::{TemplateAtom, TemplateType};
@@ -102,6 +103,8 @@ fn normalize_ast_node_templates(
     project_path_resolver: &ProjectPathResolver,
     string_table: &mut StringTable,
 ) -> Result<(), CompilerError> {
+    increment_ast_counter(AstCounter::TemplateNormalizationNodesVisited);
+
     match &mut node.kind {
         // Control flow nodes
         NodeKind::If(_, _, _)

@@ -39,6 +39,7 @@
 // (expressions, statements, templates, field access, etc.).
 pub(crate) mod ast_nodes;
 mod import_bindings;
+pub(crate) mod instrumentation;
 mod module_ast;
 mod receiver_methods;
 mod type_resolution;
@@ -93,6 +94,7 @@ pub use templates::top_level_templates::AstDocFragmentKind;
 // Imports for the AST entry point and body-parsing helper.
 use crate::compiler_frontend::FrontendBuildProfile;
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
+use crate::compiler_frontend::ast::instrumentation::{log_ast_counters, reset_ast_counters};
 use crate::compiler_frontend::ast::module_ast::build_state::AstBuildState;
 use crate::compiler_frontend::ast::statements::body_dispatch::parse_function_body_statements;
 use crate::compiler_frontend::ast::templates::top_level_templates::AstConstTopLevelFragment;
@@ -178,6 +180,8 @@ impl Ast {
         module_symbols: ModuleSymbols,
         context: AstBuildContext<'_>,
     ) -> Result<Ast, CompilerMessages> {
+        reset_ast_counters();
+
         let AstBuildContext {
             external_package_registry,
             style_directives,
@@ -198,36 +202,50 @@ impl Ast {
             module_symbols,
         );
 
+        let environment_start = Instant::now();
+
         let import_bindings_start = Instant::now();
         let file_import_bindings = state.resolve_import_bindings(string_table)?;
-        timer_log!(import_bindings_start, "AST/import bindings resolved in: ");
+        timer_log!(
+            import_bindings_start,
+            "AST/environment/import bindings resolved in: "
+        );
         let _ = import_bindings_start;
 
         let type_alias_resolution_start = Instant::now();
         state.resolve_type_aliases(&sorted_headers, &file_import_bindings, string_table)?;
         timer_log!(
             type_alias_resolution_start,
-            "AST/type alias resolution completed in: "
+            "AST/environment/type aliases resolved in: "
         );
         let _ = type_alias_resolution_start;
 
         let type_resolution_start = Instant::now();
         state.resolve_types(&sorted_headers, &file_import_bindings, string_table)?;
-        timer_log!(type_resolution_start, "AST/type resolution completed in: ");
+        timer_log!(
+            type_resolution_start,
+            "AST/environment/nominal types completed in: "
+        );
         let _ = type_resolution_start;
 
         let function_signatures_start = Instant::now();
         state.resolve_function_signatures(&sorted_headers, &file_import_bindings, string_table)?;
         timer_log!(
             function_signatures_start,
-            "AST/function signatures resolved in: "
+            "AST/environment/function signatures resolved in: "
         );
         let _ = function_signatures_start;
 
         let receiver_catalog_start = Instant::now();
         let receiver_methods = state.build_receiver_catalog(&sorted_headers, string_table)?;
-        timer_log!(receiver_catalog_start, "AST/receiver catalog built in: ");
+        timer_log!(
+            receiver_catalog_start,
+            "AST/environment/receiver catalog built in: "
+        );
         let _ = receiver_catalog_start;
+
+        timer_log!(environment_start, "AST/build environment completed in: ");
+        let _ = environment_start;
 
         let node_emission_start = Instant::now();
         state.emit_ast_nodes(
@@ -236,13 +254,15 @@ impl Ast {
             &receiver_methods,
             string_table,
         )?;
-        timer_log!(node_emission_start, "AST/node emission completed in: ");
+        timer_log!(node_emission_start, "AST/emit nodes completed in: ");
         let _ = node_emission_start;
 
         let finalization_start = Instant::now();
         let ast = state.finalize(entry_dir, &top_level_const_fragments, string_table)?;
-        timer_log!(finalization_start, "AST/finalization completed in: ");
+        timer_log!(finalization_start, "AST/finalize completed in: ");
         let _ = finalization_start;
+
+        log_ast_counters();
 
         Ok(ast)
     }
