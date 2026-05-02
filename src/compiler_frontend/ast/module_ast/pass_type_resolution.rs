@@ -12,8 +12,10 @@ use crate::compiler_frontend::ast::import_bindings::{
 };
 use crate::compiler_frontend::ast::module_ast::scope_context::TopLevelDeclarationIndex;
 use crate::compiler_frontend::ast::type_resolution::{
-    resolve_choice_variant_payload_types, resolve_struct_field_types,
-    validate_no_recursive_runtime_structs,
+    build_generic_parameter_scope, collect_type_parameter_ids_from_choice_variants,
+    collect_type_parameter_ids_from_declarations, resolve_choice_variant_payload_types,
+    resolve_struct_field_types, validate_generic_parameters_used,
+    validate_no_recursive_generic_type, validate_no_recursive_runtime_structs,
 };
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_errors::ErrorMetaDataKey;
@@ -49,7 +51,11 @@ impl<'a> AstBuildState<'a> {
 
         let struct_fields_resolution_start = Instant::now();
         for header in sorted_headers {
-            let HeaderKind::Struct { fields, .. } = &header.kind else {
+            let HeaderKind::Struct {
+                generic_parameters,
+                fields,
+            } = &header.kind
+            else {
                 continue;
             };
 
@@ -58,6 +64,16 @@ impl<'a> AstBuildState<'a> {
                 .cloned()
                 .unwrap_or_default();
             let source_file_scope = header.canonical_source_file(string_table);
+            let generic_parameter_scope = build_generic_parameter_scope(
+                generic_parameters,
+                &bindings.visible_source_bindings,
+                &bindings.visible_type_aliases,
+                &bindings.visible_external_symbols,
+                &self.declarations,
+                &self.module_symbols.generic_declarations_by_path,
+                string_table,
+            )
+            .map_err(|error| self.error_messages(error, string_table))?;
             let type_resolution_context = TypeResolutionContext {
                 declarations: &self.declarations,
                 visible_declaration_ids: Some(&bindings.visible_symbol_paths),
@@ -65,7 +81,10 @@ impl<'a> AstBuildState<'a> {
                 visible_source_bindings: Some(&bindings.visible_source_bindings),
                 visible_type_aliases: Some(&bindings.visible_type_aliases),
                 resolved_type_aliases: Some(&self.resolved_type_aliases_by_path),
-                generic_parameters: None,
+                generic_declarations_by_path: Some(
+                    &self.module_symbols.generic_declarations_by_path,
+                ),
+                generic_parameters: generic_parameter_scope.as_ref(),
             };
 
             let fields = resolve_struct_field_types(
@@ -78,6 +97,28 @@ impl<'a> AstBuildState<'a> {
 
             self.resolved_struct_fields_by_path
                 .insert(header.tokens.src_path.to_owned(), fields.to_owned());
+
+            let mut used_parameters = FxHashSet::default();
+            collect_type_parameter_ids_from_declarations(&fields, &mut used_parameters);
+            validate_generic_parameters_used(
+                generic_parameters,
+                &used_parameters,
+                &header.tokens.src_path,
+                &header.name_location,
+                string_table,
+            )
+            .map_err(|error| self.error_messages(error, string_table))?;
+
+            for field in &fields {
+                validate_no_recursive_generic_type(
+                    &header.tokens.src_path,
+                    &field.value.data_type,
+                    &field.value.location,
+                    string_table,
+                )
+                .map_err(|error| self.error_messages(error, string_table))?;
+            }
+
             self.struct_source_by_path.insert(
                 header.tokens.src_path.to_owned(),
                 source_file_scope.to_owned(),
@@ -101,7 +142,11 @@ impl<'a> AstBuildState<'a> {
 
         let choice_resolution_start = Instant::now();
         for header in sorted_headers {
-            let HeaderKind::Choice { variants, .. } = &header.kind else {
+            let HeaderKind::Choice {
+                generic_parameters,
+                variants,
+            } = &header.kind
+            else {
                 continue;
             };
 
@@ -109,6 +154,16 @@ impl<'a> AstBuildState<'a> {
                 .get(&header.source_file)
                 .cloned()
                 .unwrap_or_default();
+            let generic_parameter_scope = build_generic_parameter_scope(
+                generic_parameters,
+                &bindings.visible_source_bindings,
+                &bindings.visible_type_aliases,
+                &bindings.visible_external_symbols,
+                &self.declarations,
+                &self.module_symbols.generic_declarations_by_path,
+                string_table,
+            )
+            .map_err(|error| self.error_messages(error, string_table))?;
             let type_resolution_context = TypeResolutionContext {
                 declarations: &self.declarations,
                 visible_declaration_ids: Some(&bindings.visible_symbol_paths),
@@ -116,7 +171,10 @@ impl<'a> AstBuildState<'a> {
                 visible_source_bindings: Some(&bindings.visible_source_bindings),
                 visible_type_aliases: Some(&bindings.visible_type_aliases),
                 resolved_type_aliases: Some(&self.resolved_type_aliases_by_path),
-                generic_parameters: None,
+                generic_declarations_by_path: Some(
+                    &self.module_symbols.generic_declarations_by_path,
+                ),
+                generic_parameters: generic_parameter_scope.as_ref(),
             };
 
             let resolved_variants = resolve_choice_variant_payload_types(
@@ -125,6 +183,37 @@ impl<'a> AstBuildState<'a> {
                 string_table,
             )
             .map_err(|error| self.error_messages(error, string_table))?;
+
+            let mut used_parameters = FxHashSet::default();
+            collect_type_parameter_ids_from_choice_variants(
+                &resolved_variants,
+                &mut used_parameters,
+            );
+            validate_generic_parameters_used(
+                generic_parameters,
+                &used_parameters,
+                &header.tokens.src_path,
+                &header.name_location,
+                string_table,
+            )
+            .map_err(|error| self.error_messages(error, string_table))?;
+
+            for variant in &resolved_variants {
+                if let crate::compiler_frontend::declaration_syntax::choice::ChoiceVariantPayload::Record {
+                    fields,
+                } = &variant.payload
+                {
+                    for field in fields {
+                        validate_no_recursive_generic_type(
+                            &header.tokens.src_path,
+                            &field.value.data_type,
+                            &field.value.location,
+                            string_table,
+                        )
+                        .map_err(|error| self.error_messages(error, string_table))?;
+                    }
+                }
+            }
 
             self.declarations.push(Declaration {
                 id: header.tokens.src_path.to_owned(),
@@ -185,6 +274,8 @@ impl<'a> AstBuildState<'a> {
             let empty_visible_source_bindings = FxHashMap::default();
             let empty_visible_type_aliases = FxHashMap::default();
             let resolved_type_aliases = Rc::new(self.resolved_type_aliases_by_path.clone());
+            let generic_declarations =
+                Rc::new(self.module_symbols.generic_declarations_by_path.clone());
 
             while !pending_headers.is_empty() {
                 total_rounds += 1;
@@ -224,6 +315,7 @@ impl<'a> AstBuildState<'a> {
                         .map(|bindings| &bindings.visible_type_aliases)
                         .unwrap_or(&empty_visible_type_aliases);
                     let resolved_type_aliases = Rc::clone(&resolved_type_aliases);
+                    let generic_declarations_by_path = Rc::clone(&generic_declarations);
 
                     match parse_constant_header_declaration(
                         header,
@@ -234,6 +326,7 @@ impl<'a> AstBuildState<'a> {
                             visible_source_bindings,
                             visible_type_aliases,
                             resolved_type_aliases,
+                            generic_declarations_by_path,
                             external_package_registry: self.external_package_registry,
                             style_directives: self.style_directives,
                             project_path_resolver: self.project_path_resolver.clone(),

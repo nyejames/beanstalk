@@ -339,13 +339,11 @@ fn build_module_symbols(
                     &header.source_file,
                     Some(header.exported && !is_facade_symbol),
                 );
-                module_symbols.generic_declarations_by_path.insert(
-                    header.tokens.src_path.to_owned(),
-                    GenericDeclarationMetadata {
-                        kind: GenericDeclarationKind::Function,
-                        parameters: generic_parameters.to_owned(),
-                        declaration_location: header.name_location.to_owned(),
-                    },
+                register_generic_declaration_metadata(
+                    &mut module_symbols,
+                    header,
+                    generic_parameters,
+                    GenericDeclarationKind::Function,
                 );
             }
             HeaderKind::Struct {
@@ -357,13 +355,11 @@ fn build_module_symbols(
                     &header.source_file,
                     Some(header.exported && !is_facade_symbol),
                 );
-                module_symbols.generic_declarations_by_path.insert(
-                    header.tokens.src_path.to_owned(),
-                    GenericDeclarationMetadata {
-                        kind: GenericDeclarationKind::Struct,
-                        parameters: generic_parameters.to_owned(),
-                        declaration_location: header.name_location.to_owned(),
-                    },
+                register_generic_declaration_metadata(
+                    &mut module_symbols,
+                    header,
+                    generic_parameters,
+                    GenericDeclarationKind::Struct,
                 );
             }
             HeaderKind::Choice {
@@ -375,13 +371,11 @@ fn build_module_symbols(
                     &header.source_file,
                     Some(header.exported && !is_facade_symbol),
                 );
-                module_symbols.generic_declarations_by_path.insert(
-                    header.tokens.src_path.to_owned(),
-                    GenericDeclarationMetadata {
-                        kind: GenericDeclarationKind::Choice,
-                        parameters: generic_parameters.to_owned(),
-                        declaration_location: header.name_location.to_owned(),
-                    },
+                register_generic_declaration_metadata(
+                    &mut module_symbols,
+                    header,
+                    generic_parameters,
+                    GenericDeclarationKind::Choice,
                 );
             }
             HeaderKind::StartFunction => {
@@ -415,13 +409,11 @@ fn build_module_symbols(
                 module_symbols
                     .type_alias_paths
                     .insert(header.tokens.src_path.to_owned());
-                module_symbols.generic_declarations_by_path.insert(
-                    header.tokens.src_path.to_owned(),
-                    GenericDeclarationMetadata {
-                        kind: GenericDeclarationKind::TypeAlias,
-                        parameters: generic_parameters.to_owned(),
-                        declaration_location: header.name_location.to_owned(),
-                    },
+                register_generic_declaration_metadata(
+                    &mut module_symbols,
+                    header,
+                    generic_parameters,
+                    GenericDeclarationKind::TypeAlias,
                 );
             }
             _ => {}
@@ -450,6 +442,26 @@ fn build_module_symbols(
         .extend(builtin_manifest.ast_struct_nodes);
 
     Ok(module_symbols)
+}
+
+fn register_generic_declaration_metadata(
+    module_symbols: &mut ModuleSymbols,
+    header: &Header,
+    generic_parameters: &crate::compiler_frontend::datatypes::generics::GenericParameterList,
+    kind: GenericDeclarationKind,
+) {
+    if generic_parameters.is_empty() {
+        return;
+    }
+
+    module_symbols.generic_declarations_by_path.insert(
+        header.tokens.src_path.to_owned(),
+        GenericDeclarationMetadata {
+            kind,
+            parameters: generic_parameters.to_owned(),
+            declaration_location: header.name_location.to_owned(),
+        },
+    );
 }
 
 #[cfg(test)]

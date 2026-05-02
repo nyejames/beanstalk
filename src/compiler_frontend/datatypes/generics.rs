@@ -3,14 +3,15 @@
 //! WHAT: defines generic parameter metadata, type-identity keys, and substitution helpers.
 //! WHY: generics must use structural compiler data, not stringly-typed placeholders.
 //!
-//! Phase 0 scope:
-//! - No user-visible generic syntax is accepted yet.
-//! - This module provides internal compiler infrastructure only.
-#![allow(dead_code)] // Phase 0 infrastructure is intentionally only partially wired until generic parsing lands.
+//! Phase 1 scope:
+//! - Generic declarations and type applications parse into frontend metadata.
+//! - Executable generic instantiations are still resolved before HIR in later phases.
+#![allow(dead_code)] // Some generic infrastructure is intentionally staged for later solver phases.
 
 use super::DataType;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::statements::functions::FunctionReturn;
+use crate::compiler_frontend::builtins::error_type::is_reserved_builtin_symbol;
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorMetaDataKey};
 use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariantPayload;
 use crate::compiler_frontend::external_packages::ExternalTypeId;
@@ -34,6 +35,22 @@ pub struct GenericParameter {
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct GenericParameterList {
     pub parameters: Vec<GenericParameter>,
+}
+
+impl GenericParameterList {
+    pub(crate) fn is_empty(&self) -> bool {
+        self.parameters.is_empty()
+    }
+
+    pub(crate) fn len(&self) -> usize {
+        self.parameters.len()
+    }
+
+    pub(crate) fn contains_name(&self, name: StringId) -> bool {
+        self.parameters
+            .iter()
+            .any(|parameter| parameter.name == name)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -132,6 +149,18 @@ impl GenericParameterScope {
             }
 
             let parameter_name = string_table.resolve(parameter.name);
+            if is_reserved_generic_parameter_name(parameter_name) {
+                return Err(generic_scope_rule_error(
+                    format!(
+                        "Generic parameter '{}' collides with a builtin type name.",
+                        parameter_name
+                    ),
+                    parameter.location.to_owned(),
+                    compilation_stage,
+                    "Choose a generic parameter name that does not collide with builtin language types",
+                ));
+            }
+
             if !is_generic_parameter_name(parameter_name) {
                 return Err(generic_scope_rule_error(
                     format!(
@@ -186,6 +215,13 @@ fn is_generic_parameter_name(name: &str) -> bool {
     }
 
     is_camel_case_type_name(name)
+}
+
+fn is_reserved_generic_parameter_name(name: &str) -> bool {
+    matches!(
+        name,
+        "Int" | "Float" | "Bool" | "String" | "Char" | "ErrorKind"
+    ) || is_reserved_builtin_symbol(name)
 }
 
 #[derive(Debug, Clone, PartialEq, Default)]

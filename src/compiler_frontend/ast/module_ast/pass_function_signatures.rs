@@ -8,14 +8,20 @@
 use super::build_state::AstBuildState;
 use crate::compiler_frontend::ast::import_bindings::FileImportBindings;
 use crate::compiler_frontend::ast::receiver_methods::build_receiver_method_catalog;
-use crate::compiler_frontend::ast::type_resolution::resolve_function_signature;
+use crate::compiler_frontend::ast::type_resolution::{
+    build_generic_parameter_scope, collect_type_parameter_ids_from_declarations,
+    collect_type_parameter_ids_from_type, resolve_function_signature,
+    validate_generic_parameters_used,
+};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::datatypes::generics::GenericParameterList;
 use crate::compiler_frontend::declaration_syntax::type_syntax::TypeResolutionContext;
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use rustc_hash::FxHashMap;
 use std::rc::Rc;
 
@@ -35,7 +41,11 @@ impl<'a> AstBuildState<'a> {
         let mut resolved_function_count = 0usize;
 
         for header in sorted_headers {
-            let HeaderKind::Function { signature, .. } = &header.kind else {
+            let HeaderKind::Function {
+                generic_parameters,
+                signature,
+            } = &header.kind
+            else {
                 continue;
             };
 
@@ -43,6 +53,24 @@ impl<'a> AstBuildState<'a> {
                 .get(&header.source_file)
                 .cloned()
                 .unwrap_or_default();
+            reject_generic_receiver_method(
+                generic_parameters,
+                signature,
+                &header.name_location,
+                string_table,
+            )
+            .map_err(|error| self.error_messages(error, string_table))?;
+
+            let generic_parameter_scope = build_generic_parameter_scope(
+                generic_parameters,
+                &bindings.visible_source_bindings,
+                &bindings.visible_type_aliases,
+                &bindings.visible_external_symbols,
+                &self.declarations,
+                &self.module_symbols.generic_declarations_by_path,
+                string_table,
+            )
+            .map_err(|error| self.error_messages(error, string_table))?;
             let type_resolution_context = TypeResolutionContext {
                 declarations: &self.declarations,
                 visible_declaration_ids: Some(&bindings.visible_symbol_paths),
@@ -50,12 +78,32 @@ impl<'a> AstBuildState<'a> {
                 visible_source_bindings: Some(&bindings.visible_source_bindings),
                 visible_type_aliases: Some(&bindings.visible_type_aliases),
                 resolved_type_aliases: Some(&self.resolved_type_aliases_by_path),
-                generic_parameters: None,
+                generic_declarations_by_path: Some(
+                    &self.module_symbols.generic_declarations_by_path,
+                ),
+                generic_parameters: generic_parameter_scope.as_ref(),
             };
             let resolved_signature = resolve_function_signature(
                 &header.tokens.src_path,
                 signature,
                 &type_resolution_context,
+                string_table,
+            )
+            .map_err(|error| self.error_messages(error, string_table))?;
+
+            let mut used_parameters = rustc_hash::FxHashSet::default();
+            collect_type_parameter_ids_from_declarations(
+                &resolved_signature.signature.parameters,
+                &mut used_parameters,
+            );
+            for return_slot in &resolved_signature.signature.returns {
+                collect_type_parameter_ids_from_type(return_slot.data_type(), &mut used_parameters);
+            }
+            validate_generic_parameters_used(
+                generic_parameters,
+                &used_parameters,
+                &header.tokens.src_path,
+                &header.name_location,
                 string_table,
             )
             .map_err(|error| self.error_messages(error, string_table))?;
@@ -118,4 +166,28 @@ impl<'a> AstBuildState<'a> {
 
         Ok(Rc::new(catalog))
     }
+}
+
+fn reject_generic_receiver_method(
+    generic_parameters: &GenericParameterList,
+    signature: &crate::compiler_frontend::ast::statements::functions::FunctionSignature,
+    location: &SourceLocation,
+    string_table: &StringTable,
+) -> Result<(), CompilerError> {
+    if generic_parameters.is_empty() {
+        return Ok(());
+    }
+
+    let Some(first_parameter) = signature.parameters.first() else {
+        return Ok(());
+    };
+
+    if first_parameter.id.name_str(string_table) == Some("this") {
+        return Err(CompilerError::new_rule_error(
+            "Generic receiver methods are not supported yet. Use a generic free function instead.",
+            location.to_owned(),
+        ));
+    }
+
+    Ok(())
 }

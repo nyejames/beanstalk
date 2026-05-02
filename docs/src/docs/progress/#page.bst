@@ -587,15 +587,15 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
         [data:
             [: Generic type infrastructure]
             [: Partial]
-            [: Targeted frontend unit coverage for type-identity keys, parameter scopes, substitution, and deferred `type`/`of` diagnostics.]
-            [: Phase 0 lands internal generic-ready type substrate only. User-visible generics remain deferred. `type` and `of` are reserved and rejected with structured diagnostics until generic parsing is implemented.]
+            [: Targeted frontend unit coverage for type-identity keys, parameter scopes, substitution, generic parameter parsing, [codesnippet:of] type applications, arity checks, and Phase 1 diagnostics. Integration coverage includes [codesnippet:generic_choice_declaration_parse_success], [codesnippet:generic_unused_parameter_rejected], [codesnippet:generic_type_wrong_arity_rejected], and [codesnippet:generic_recursive_type_deferred].]
+            [: Phase 1 parses generic function, struct, and choice declarations into frontend metadata, parses concrete [codesnippet:of] type applications, supports aliases to concrete generic applications, and keeps unresolved generic declarations out of executable HIR. Generic calls, constructors, instantiation solving, generic aliases, nested inline generic applications, recursive generic types, and generic receiver methods remain deferred.]
         ]
 
         [data:
             [: Choice generic declarations]
-            [: Deferred]
-            [: [codesnippet:choice_generic_declaration_deferred]]
-            [: Syntax ideas live in [codesnippet:docs/src/docs/generics.md]; do not implement here.]
+            [: Partial]
+            [: [codesnippet:generic_choice_declaration_parse_success], [codesnippet:generic_recursive_type_deferred]]
+            [: Generic choice headers and payload type parameters parse and resolve as frontend metadata. Constructors, matching on generic instances, recursive generic choices, and executable instantiation remain deferred.]
         ]
 
         [data:

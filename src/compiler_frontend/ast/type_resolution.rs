@@ -11,11 +11,17 @@ use crate::compiler_frontend::ast::statements::functions::{
 };
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationIndex};
 use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::datatypes::generics::{
+    GenericBaseType, GenericParameterList, GenericParameterScope, TypeParameterId,
+};
 use crate::compiler_frontend::datatypes::{DataType, ReceiverKey};
 use crate::compiler_frontend::declaration_syntax::type_syntax::{
     TypeResolutionContext, resolve_type,
 };
-use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
+use crate::compiler_frontend::external_packages::{ExternalPackageRegistry, ExternalSymbolId};
+use crate::compiler_frontend::headers::module_symbols::{
+    GenericDeclarationKind, GenericDeclarationMetadata,
+};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
@@ -52,6 +58,239 @@ pub(crate) fn resolve_named_signature_type(
     string_table: &StringTable,
 ) -> Result<DataType, CompilerError> {
     resolve_type(data_type, location, type_resolution_context, string_table)
+}
+
+pub(crate) fn build_generic_parameter_scope(
+    generic_parameters: &GenericParameterList,
+    visible_source_bindings: &FxHashMap<StringId, InternedPath>,
+    visible_type_aliases: &FxHashMap<StringId, InternedPath>,
+    visible_external_symbols: &FxHashMap<StringId, ExternalSymbolId>,
+    declarations: &[Declaration],
+    generic_declarations_by_path: &FxHashMap<InternedPath, GenericDeclarationMetadata>,
+    string_table: &StringTable,
+) -> Result<Option<GenericParameterScope>, CompilerError> {
+    if generic_parameters.is_empty() {
+        return Ok(None);
+    }
+
+    let mut forbidden_names = FxHashSet::default();
+    forbidden_names.extend(visible_type_aliases.keys().copied());
+
+    for (name, symbol_id) in visible_external_symbols {
+        if matches!(symbol_id, ExternalSymbolId::Type(_)) {
+            forbidden_names.insert(*name);
+        }
+    }
+
+    for (name, path) in visible_source_bindings {
+        if path_is_visible_type(path, declarations, generic_declarations_by_path) {
+            forbidden_names.insert(*name);
+        }
+    }
+
+    GenericParameterScope::from_parameter_list(
+        generic_parameters,
+        &forbidden_names,
+        string_table,
+        "AST Construction",
+    )
+    .map(Some)
+}
+
+fn path_is_visible_type(
+    path: &InternedPath,
+    declarations: &[Declaration],
+    generic_declarations_by_path: &FxHashMap<InternedPath, GenericDeclarationMetadata>,
+) -> bool {
+    if let Some(metadata) = generic_declarations_by_path.get(path) {
+        return matches!(
+            metadata.kind,
+            GenericDeclarationKind::Struct
+                | GenericDeclarationKind::Choice
+                | GenericDeclarationKind::TypeAlias
+        );
+    }
+
+    declarations
+        .iter()
+        .rfind(|declaration| declaration.id == *path)
+        .is_some_and(|declaration| {
+            matches!(
+                declaration.value.data_type,
+                DataType::Struct { .. } | DataType::Choices { .. }
+            )
+        })
+}
+
+pub(crate) fn validate_generic_parameters_used(
+    generic_parameters: &GenericParameterList,
+    used_parameters: &FxHashSet<TypeParameterId>,
+    declaration_path: &InternedPath,
+    location: &SourceLocation,
+    string_table: &StringTable,
+) -> Result<(), CompilerError> {
+    for parameter in &generic_parameters.parameters {
+        if !used_parameters.contains(&parameter.id) {
+            let declaration_name = declaration_path
+                .name_str(string_table)
+                .unwrap_or("<declaration>");
+            return_rule_error!(
+                format!(
+                    "Generic parameter '{}' is declared but never used in the public type shape for '{}'.",
+                    string_table.resolve(parameter.name),
+                    declaration_name
+                ),
+                location.to_owned(),
+                {
+                    CompilationStage => "AST Construction",
+                    PrimarySuggestion => "Remove the unused generic parameter or use it in a parameter, return, field, or variant payload type",
+                }
+            );
+        }
+    }
+
+    Ok(())
+}
+
+pub(crate) fn collect_type_parameter_ids_from_type(
+    data_type: &DataType,
+    used_parameters: &mut FxHashSet<TypeParameterId>,
+) {
+    match data_type {
+        DataType::TypeParameter { id, .. } => {
+            used_parameters.insert(*id);
+        }
+        DataType::GenericInstance { arguments, .. } => {
+            for argument in arguments {
+                collect_type_parameter_ids_from_type(argument, used_parameters);
+            }
+        }
+        DataType::Collection(inner) | DataType::Option(inner) | DataType::Reference(inner) => {
+            collect_type_parameter_ids_from_type(inner, used_parameters)
+        }
+        DataType::Result { ok, err } => {
+            collect_type_parameter_ids_from_type(ok, used_parameters);
+            collect_type_parameter_ids_from_type(err, used_parameters);
+        }
+        DataType::Returns(values) => {
+            for value in values {
+                collect_type_parameter_ids_from_type(value, used_parameters);
+            }
+        }
+        DataType::Function(_, signature) => {
+            for parameter in &signature.parameters {
+                collect_type_parameter_ids_from_type(&parameter.value.data_type, used_parameters);
+            }
+            for return_slot in &signature.returns {
+                collect_type_parameter_ids_from_type(return_slot.data_type(), used_parameters);
+            }
+        }
+        DataType::Struct { fields, .. } | DataType::Parameters(fields) => {
+            collect_type_parameter_ids_from_declarations(fields, used_parameters);
+        }
+        DataType::Choices { variants, .. } => {
+            collect_type_parameter_ids_from_choice_variants(variants, used_parameters);
+        }
+        _ => {}
+    }
+}
+
+pub(crate) fn collect_type_parameter_ids_from_declarations(
+    declarations: &[Declaration],
+    used_parameters: &mut FxHashSet<TypeParameterId>,
+) {
+    for declaration in declarations {
+        collect_type_parameter_ids_from_type(&declaration.value.data_type, used_parameters);
+    }
+}
+
+pub(crate) fn collect_type_parameter_ids_from_choice_variants(
+    variants: &[crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant],
+    used_parameters: &mut FxHashSet<TypeParameterId>,
+) {
+    use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariantPayload;
+
+    for variant in variants {
+        if let ChoiceVariantPayload::Record { fields } = &variant.payload {
+            collect_type_parameter_ids_from_declarations(fields, used_parameters);
+        }
+    }
+}
+
+pub(crate) fn validate_no_recursive_generic_type(
+    declaration_path: &InternedPath,
+    data_type: &DataType,
+    location: &SourceLocation,
+    string_table: &StringTable,
+) -> Result<(), CompilerError> {
+    if generic_type_references_nominal_path(data_type, declaration_path) {
+        let declaration_name = declaration_path
+            .name_str(string_table)
+            .unwrap_or("<generic type>");
+        return_rule_error!(
+            format!(
+                "Recursive generic types are not supported yet. Generic type '{declaration_name}' cannot contain itself."
+            ),
+            location.to_owned(),
+            {
+                CompilationStage => "AST Construction",
+                PrimarySuggestion => "Use a non-recursive shape or split the recursive storage behind a future indirection type",
+            }
+        );
+    }
+
+    Ok(())
+}
+
+fn generic_type_references_nominal_path(
+    data_type: &DataType,
+    declaration_path: &InternedPath,
+) -> bool {
+    match data_type {
+        DataType::GenericInstance { base, arguments } => {
+            let base_matches = matches!(
+                base,
+                GenericBaseType::ResolvedNominal(path) if path == declaration_path
+            );
+            base_matches
+                || arguments.iter().any(|argument| {
+                    generic_type_references_nominal_path(argument, declaration_path)
+                })
+        }
+        DataType::Collection(inner) | DataType::Option(inner) | DataType::Reference(inner) => {
+            generic_type_references_nominal_path(inner, declaration_path)
+        }
+        DataType::Result { ok, err } => {
+            generic_type_references_nominal_path(ok, declaration_path)
+                || generic_type_references_nominal_path(err, declaration_path)
+        }
+        DataType::Returns(values) => values
+            .iter()
+            .any(|value| generic_type_references_nominal_path(value, declaration_path)),
+        DataType::Function(_, signature) => {
+            signature.parameters.iter().any(|parameter| {
+                generic_type_references_nominal_path(&parameter.value.data_type, declaration_path)
+            }) || signature.returns.iter().any(|return_slot| {
+                generic_type_references_nominal_path(return_slot.data_type(), declaration_path)
+            })
+        }
+        DataType::Struct { fields, .. } | DataType::Parameters(fields) => {
+            fields.iter().any(|field| {
+                generic_type_references_nominal_path(&field.value.data_type, declaration_path)
+            })
+        }
+        DataType::Choices { variants, .. } => {
+            use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariantPayload;
+
+            variants.iter().any(|variant| match &variant.payload {
+                ChoiceVariantPayload::Unit => false,
+                ChoiceVariantPayload::Record { fields } => fields.iter().any(|field| {
+                    generic_type_references_nominal_path(&field.value.data_type, declaration_path)
+                }),
+            })
+        }
+        _ => false,
+    }
 }
 
 /// Resolve a function signature and extract receiver metadata for method cataloging.

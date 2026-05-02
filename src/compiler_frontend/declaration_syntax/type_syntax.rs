@@ -25,6 +25,9 @@ use crate::compiler_frontend::datatypes::generics::{GenericBaseType, GenericPara
 use crate::compiler_frontend::declaration_syntax::choice::{ChoiceVariant, ChoiceVariantPayload};
 use crate::compiler_frontend::deferred_feature_diagnostics::deferred_feature_rule_error;
 use crate::compiler_frontend::external_packages::ExternalSymbolId;
+use crate::compiler_frontend::headers::module_symbols::{
+    GenericDeclarationKind, GenericDeclarationMetadata,
+};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::reserved_trait_syntax::{
     reserved_trait_keyword_error, reserved_trait_keyword_or_dispatch_mismatch,
@@ -64,8 +67,21 @@ fn parse_required_type(
     token_stream: &mut FileTokens,
     context: TypeAnnotationContext,
 ) -> Result<DataType, CompilerError> {
+    parse_required_type_with_generic_application(token_stream, context, true)
+}
+
+fn parse_required_type_with_generic_application(
+    token_stream: &mut FileTokens,
+    context: TypeAnnotationContext,
+    allow_generic_application: bool,
+) -> Result<DataType, CompilerError> {
     let parsed_atom = parse_type_atom(token_stream, context)?;
-    parse_type_postfixes(token_stream, parsed_atom, context)
+    parse_type_postfixes(
+        token_stream,
+        parsed_atom,
+        context,
+        allow_generic_application,
+    )
 }
 
 fn parse_type_atom(
@@ -190,9 +206,14 @@ fn parse_type_postfixes(
     token_stream: &mut FileTokens,
     parsed_type: DataType,
     context: TypeAnnotationContext,
+    allow_generic_application: bool,
 ) -> Result<DataType, CompilerError> {
-    let with_generic_arguments =
-        parse_generic_arguments_or_defer(token_stream, parsed_type, context)?;
+    let with_generic_arguments = parse_generic_arguments(
+        token_stream,
+        parsed_type,
+        context,
+        allow_generic_application,
+    )?;
     parse_optional_type_suffix(token_stream, with_generic_arguments, context)
 }
 
@@ -205,7 +226,7 @@ fn parse_collection_type(
     let inner_type = if token_stream.current_token_kind() == &TokenKind::CloseCurly {
         DataType::Inferred
     } else {
-        parse_required_type(token_stream, context)?
+        parse_required_type_with_generic_application(token_stream, context, true)?
     };
 
     if token_stream.current_token_kind() != &TokenKind::CloseCurly {
@@ -226,21 +247,137 @@ fn parse_collection_type(
     Ok(DataType::Collection(Box::new(inner_type)))
 }
 
-fn parse_generic_arguments_or_defer(
+fn parse_generic_arguments(
     token_stream: &mut FileTokens,
     parsed_type: DataType,
     context: TypeAnnotationContext,
+    allow_generic_application: bool,
 ) -> Result<DataType, CompilerError> {
     if token_stream.current_token_kind() != &TokenKind::Of {
         return Ok(parsed_type);
     }
 
-    Err(deferred_feature_rule_error(
-        "Generic type applications using `of` are not implemented yet.",
-        token_stream.current_location(),
+    if !allow_generic_application {
+        return Err(nested_generic_application_error(
+            token_stream.current_location(),
+            context,
+        ));
+    }
+
+    let base = match parsed_type {
+        DataType::NamedType(type_name) => GenericBaseType::Named(type_name),
+        _ => {
+            return_syntax_error!(
+                "`of` can only apply generic arguments to a named type.",
+                token_stream.current_location(),
+                {
+                    CompilationStage => compilation_stage(context),
+                    PrimarySuggestion => "Write generic applications as `TypeName of ArgumentType`",
+                }
+            )
+        }
+    };
+
+    token_stream.advance();
+
+    let mut arguments = Vec::new();
+    loop {
+        if generic_argument_list_is_finished(token_stream.current_token_kind()) {
+            if arguments.is_empty() {
+                return_syntax_error!(
+                    "Expected at least one type argument after `of`.",
+                    token_stream.current_location(),
+                    {
+                        CompilationStage => compilation_stage(context),
+                        PrimarySuggestion => "Add a concrete type argument after `of`",
+                    }
+                );
+            }
+            break;
+        }
+
+        arguments.push(parse_generic_type_argument(token_stream, context)?);
+
+        match token_stream.current_token_kind() {
+            TokenKind::Comma => {
+                token_stream.advance();
+                if generic_argument_list_is_finished(token_stream.current_token_kind()) {
+                    return_syntax_error!(
+                        "Expected a type argument after ','.",
+                        token_stream.current_location(),
+                        {
+                            CompilationStage => compilation_stage(context),
+                            PrimarySuggestion => "Remove the trailing comma or add another type argument",
+                        }
+                    );
+                }
+            }
+            token if generic_argument_list_is_finished(token) => break,
+            TokenKind::Of => {
+                return Err(nested_generic_application_error(
+                    token_stream.current_location(),
+                    context,
+                ));
+            }
+            other => {
+                return_syntax_error!(
+                    format!(
+                        "Expected ',' or the end of this type annotation after generic argument, found '{other:?}'.",
+                    ),
+                    token_stream.current_location(),
+                    {
+                        CompilationStage => compilation_stage(context),
+                        PrimarySuggestion => "Separate generic type arguments with commas",
+                    }
+                )
+            }
+        }
+    }
+
+    Ok(DataType::GenericInstance { base, arguments })
+}
+
+fn parse_generic_type_argument(
+    token_stream: &mut FileTokens,
+    context: TypeAnnotationContext,
+) -> Result<DataType, CompilerError> {
+    let parsed_argument = parse_type_atom(token_stream, context)?;
+
+    if token_stream.current_token_kind() == &TokenKind::Of {
+        return Err(nested_generic_application_error(
+            token_stream.current_location(),
+            context,
+        ));
+    }
+
+    Ok(parsed_argument)
+}
+
+fn generic_argument_list_is_finished(token: &TokenKind) -> bool {
+    matches!(
+        token,
+        TokenKind::Assign
+            | TokenKind::Newline
+            | TokenKind::Colon
+            | TokenKind::TypeParameterBracket
+            | TokenKind::CloseCurly
+            | TokenKind::Bang
+            | TokenKind::QuestionMark
+            | TokenKind::Eof
+            | TokenKind::End
+    )
+}
+
+fn nested_generic_application_error(
+    location: SourceLocation,
+    context: TypeAnnotationContext,
+) -> CompilerError {
+    deferred_feature_rule_error(
+        "Nested generic type applications are not supported in a single annotation.",
+        location,
         compilation_stage(context),
-        "Remove `of ...` for now. Generic type applications will be supported in a later generics phase.",
-    ))
+        "Name the inner type with a concrete type alias first.",
+    )
 }
 
 fn parse_optional_type_suffix(
@@ -297,10 +434,10 @@ fn type_keyword_deferred_error(
     context: TypeAnnotationContext,
 ) -> CompilerError {
     deferred_feature_rule_error(
-        "Generic declarations using `type` are reserved but not implemented yet.",
+        "`type` starts a generic declaration and is not valid inside a type annotation.",
         token_stream.current_location(),
         compilation_stage(context),
-        "Remove `type ...` for now. Generic declaration syntax is planned for a later implementation phase.",
+        "Use `type` after a top-level declaration name, for example `Box type T = | ... |`.",
     )
 }
 
@@ -376,22 +513,22 @@ fn of_keyword_error(context: TypeAnnotationContext) -> (&'static str, &'static s
         TypeAnnotationContext::DeclarationTarget => (
             "Unexpected `of` in declaration type position.",
             "Variable Declaration",
-            "Use a supported concrete type for now. Generic type application with `of` is deferred.",
+            "Write generic applications after a base type, for example `Box of String`.",
         ),
         TypeAnnotationContext::SignatureParameter => (
             "Unexpected `of` in parameter type position.",
             "Parameter Type Parsing",
-            "Use a supported concrete parameter type for now. Generic type application with `of` is deferred.",
+            "Write generic applications after a base type, for example `Box of String`.",
         ),
         TypeAnnotationContext::SignatureReturn => (
             "Unexpected `of` in return type position.",
             "Function Signature Parsing",
-            "Use a supported concrete return type for now. Generic type application with `of` is deferred.",
+            "Write generic applications after a base type, for example `Box of String`.",
         ),
         TypeAnnotationContext::TypeAliasTarget => (
             "Unexpected `of` in type alias target.",
             "Type Alias Parsing",
-            "Use a supported concrete alias target for now. Generic type application with `of` is deferred.",
+            "Write generic applications after a base type, for example `Box of String`.",
         ),
     }
 }
@@ -439,6 +576,8 @@ pub(crate) struct TypeResolutionContext<'a> {
     pub visible_source_bindings: Option<&'a FxHashMap<StringId, InternedPath>>,
     pub visible_type_aliases: Option<&'a FxHashMap<StringId, InternedPath>>,
     pub resolved_type_aliases: Option<&'a FxHashMap<InternedPath, DataType>>,
+    pub generic_declarations_by_path:
+        Option<&'a FxHashMap<InternedPath, GenericDeclarationMetadata>>,
     pub generic_parameters: Option<&'a GenericParameterScope>,
 }
 
@@ -452,6 +591,7 @@ impl<'a> TypeResolutionContext<'a> {
             visible_source_bindings: None,
             visible_type_aliases: None,
             resolved_type_aliases: None,
+            generic_declarations_by_path: None,
             generic_parameters: None,
         }
     }
@@ -521,13 +661,15 @@ pub(crate) fn resolve_type(
         }
         DataType::TypeParameter { .. } => Ok(data_type.to_owned()),
         DataType::GenericInstance { base, arguments } => {
+            let resolved_base =
+                resolve_generic_base_type(base, arguments, location, context, string_table)?;
             let mut resolved_arguments = Vec::with_capacity(arguments.len());
             for argument in arguments {
                 resolved_arguments.push(resolve_type(argument, location, context, string_table)?);
             }
 
             Ok(DataType::GenericInstance {
-                base: base.to_owned(),
+                base: resolved_base,
                 arguments: resolved_arguments,
             })
         }
@@ -718,6 +860,7 @@ fn resolve_named_type_from_context(
             canonical_path,
         )
     {
+        reject_bare_generic_type_name(type_name, canonical_path, location, context, string_table)?;
         return Ok(declaration.value.data_type.to_owned());
     }
 
@@ -726,6 +869,7 @@ fn resolve_named_type_from_context(
         context.visible_declaration_ids,
         type_name,
     ) {
+        reject_bare_generic_type_name(type_name, &declaration.id, location, context, string_table)?;
         return Ok(declaration.value.data_type.to_owned());
     }
 
@@ -748,6 +892,199 @@ fn resolve_named_type_from_context(
         ),
         location.to_owned(),
     ))
+}
+
+fn resolve_generic_base_type(
+    base: &GenericBaseType,
+    arguments: &[DataType],
+    location: &SourceLocation,
+    context: &TypeResolutionContext<'_>,
+    string_table: &StringTable,
+) -> Result<GenericBaseType, CompilerError> {
+    match base {
+        GenericBaseType::Named(type_name) => {
+            if let Some(generic_scope) = context.generic_parameters
+                && generic_scope.contains_name(*type_name)
+            {
+                return Err(CompilerError::new_rule_error(
+                    format!(
+                        "Generic parameter '{}' cannot be used as a generic type constructor.",
+                        string_table.resolve(*type_name)
+                    ),
+                    location.to_owned(),
+                ));
+            }
+
+            if let Some(visible_source_bindings) = context.visible_source_bindings
+                && let Some(canonical_path) = visible_source_bindings.get(type_name)
+            {
+                return resolve_generic_base_path(
+                    Some(*type_name),
+                    canonical_path,
+                    arguments,
+                    location,
+                    context,
+                    string_table,
+                );
+            }
+
+            if let Some(declaration) = visible_declaration_by_name(
+                context.declarations,
+                context.visible_declaration_ids,
+                *type_name,
+            ) {
+                return resolve_generic_base_path(
+                    Some(*type_name),
+                    &declaration.id,
+                    arguments,
+                    location,
+                    context,
+                    string_table,
+                );
+            }
+
+            if let Some(visible_aliases) = context.visible_type_aliases
+                && visible_aliases.contains_key(type_name)
+            {
+                return Err(CompilerError::new_rule_error(
+                    format!(
+                        "Type alias '{}' cannot be used as a generic type constructor.",
+                        string_table.resolve(*type_name)
+                    ),
+                    location.to_owned(),
+                ));
+            }
+
+            if let Some(external_symbols) = context.visible_external_symbols
+                && matches!(
+                    external_symbols.get(type_name),
+                    Some(ExternalSymbolId::Type(_))
+                )
+            {
+                return Err(CompilerError::new_rule_error(
+                    format!(
+                        "External type '{}' does not accept generic arguments.",
+                        string_table.resolve(*type_name)
+                    ),
+                    location.to_owned(),
+                ));
+            }
+
+            if builtin_named_type(*type_name, string_table).is_some() {
+                return Err(CompilerError::new_rule_error(
+                    format!(
+                        "Builtin type '{}' does not accept generic arguments.",
+                        string_table.resolve(*type_name)
+                    ),
+                    location.to_owned(),
+                ));
+            }
+
+            Err(CompilerError::new_rule_error(
+                format!(
+                    "Unknown generic type '{}'. Generic type names must be declared before use.",
+                    string_table.resolve(*type_name)
+                ),
+                location.to_owned(),
+            ))
+        }
+        GenericBaseType::ResolvedNominal(path) => resolve_generic_base_path(
+            path.name(),
+            path,
+            arguments,
+            location,
+            context,
+            string_table,
+        ),
+        GenericBaseType::External(type_id) => Err(CompilerError::new_rule_error(
+            format!(
+                "External type '{}' does not accept generic arguments.",
+                type_id.0
+            ),
+            location.to_owned(),
+        )),
+        GenericBaseType::Builtin(_) => Err(CompilerError::new_rule_error(
+            "Builtin generic applications are compiler-owned and cannot be written directly.",
+            location.to_owned(),
+        )),
+    }
+}
+
+fn resolve_generic_base_path(
+    visible_name: Option<StringId>,
+    canonical_path: &InternedPath,
+    arguments: &[DataType],
+    location: &SourceLocation,
+    context: &TypeResolutionContext<'_>,
+    string_table: &StringTable,
+) -> Result<GenericBaseType, CompilerError> {
+    let display_name = visible_name
+        .map(|name| string_table.resolve(name).to_owned())
+        .unwrap_or_else(|| canonical_path.to_string(string_table));
+
+    let Some(metadata) = context
+        .generic_declarations_by_path
+        .and_then(|generic_declarations| generic_declarations.get(canonical_path))
+    else {
+        return Err(CompilerError::new_rule_error(
+            format!("Type '{}' does not accept generic arguments.", display_name),
+            location.to_owned(),
+        ));
+    };
+
+    if !matches!(
+        metadata.kind,
+        GenericDeclarationKind::Struct | GenericDeclarationKind::Choice
+    ) {
+        return Err(CompilerError::new_rule_error(
+            format!("'{}' is not a generic type declaration.", display_name),
+            location.to_owned(),
+        ));
+    }
+
+    let expected = metadata.parameters.len();
+    let actual = arguments.len();
+    if actual != expected {
+        return Err(CompilerError::new_rule_error(
+            format!(
+                "Generic type '{}' expects {expected} type argument(s), but {actual} were provided.",
+                display_name
+            ),
+            location.to_owned(),
+        ));
+    }
+
+    Ok(GenericBaseType::ResolvedNominal(canonical_path.to_owned()))
+}
+
+fn reject_bare_generic_type_name(
+    visible_name: StringId,
+    canonical_path: &InternedPath,
+    location: &SourceLocation,
+    context: &TypeResolutionContext<'_>,
+    string_table: &StringTable,
+) -> Result<(), CompilerError> {
+    let Some(metadata) = context
+        .generic_declarations_by_path
+        .and_then(|generic_declarations| generic_declarations.get(canonical_path))
+    else {
+        return Ok(());
+    };
+
+    if matches!(
+        metadata.kind,
+        GenericDeclarationKind::Struct | GenericDeclarationKind::Choice
+    ) {
+        return Err(CompilerError::new_rule_error(
+            format!(
+                "Generic type '{}' requires type arguments.",
+                string_table.resolve(visible_name)
+            ),
+            location.to_owned(),
+        ));
+    }
+
+    Ok(())
 }
 
 fn resolve_declaration_by_path<'a>(

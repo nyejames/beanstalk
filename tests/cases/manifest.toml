@@ -589,9 +589,24 @@ path = "choice_recursive_direct_declaration_deferred"
 tags = ["integration","diagnostics","choices"]
 
 [[case]]
-id = "choice_generic_declaration_deferred"
-path = "choice_generic_declaration_deferred"
-tags = ["integration","diagnostics","choices"]
+id = "generic_choice_declaration_parse_success"
+path = "generic_choice_declaration_parse_success"
+tags = ["integration","generics","choices"]
+
+[[case]]
+id = "generic_unused_parameter_rejected"
+path = "generic_unused_parameter_rejected"
+tags = ["integration","generics","diagnostics"]
+
+[[case]]
+id = "generic_type_wrong_arity_rejected"
+path = "generic_type_wrong_arity_rejected"
+tags = ["integration","generics","diagnostics"]
+
+[[case]]
+id = "generic_recursive_type_deferred"
+path = "generic_recursive_type_deferred"
+tags = ["integration","generics","diagnostics"]
 
 [[case]]
 id = "choice_variant_default_value_deferred"

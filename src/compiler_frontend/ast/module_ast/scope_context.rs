@@ -35,6 +35,7 @@ use crate::compiler_frontend::external_packages::{
     ExternalFunctionDef, ExternalFunctionId, ExternalPackageRegistry, ExternalSymbolId,
     ExternalTypeId,
 };
+use crate::compiler_frontend::headers::module_symbols::GenericDeclarationMetadata;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
@@ -198,6 +199,11 @@ pub struct ScopeContext {
     /// Shared via Rc to avoid cloning the full table across scope contexts.
     pub resolved_type_aliases: Option<Rc<FxHashMap<InternedPath, DataType>>>,
 
+    /// Generic declaration metadata: canonical path → declaration parameters/kind.
+    /// Shared via Rc because body-local type annotations need the same generic arity checks.
+    pub(crate) generic_declarations_by_path:
+        Option<Rc<FxHashMap<InternedPath, GenericDeclarationMetadata>>>,
+
     // --- Control flow state ---
     pub loop_depth: usize,
 
@@ -278,6 +284,7 @@ impl ScopeContext {
             visible_source_bindings: None,
             visible_type_aliases: None,
             resolved_type_aliases: None,
+            generic_declarations_by_path: None,
             loop_depth: 0,
             build_profile: FrontendBuildProfile::Dev,
             emitted_warnings: Rc::new(RefCell::new(Vec::new())),
@@ -319,6 +326,7 @@ impl ScopeContext {
             visible_source_bindings: self.visible_source_bindings.clone(),
             visible_type_aliases: self.visible_type_aliases.clone(),
             resolved_type_aliases: self.resolved_type_aliases.clone(),
+            generic_declarations_by_path: self.generic_declarations_by_path.clone(),
             style_directives: self.style_directives.clone(),
             loop_depth,
             build_profile: self.build_profile,
@@ -370,6 +378,7 @@ impl ScopeContext {
             visible_source_bindings: self.visible_source_bindings.clone(),
             visible_type_aliases: self.visible_type_aliases.clone(),
             resolved_type_aliases: self.resolved_type_aliases.clone(),
+            generic_declarations_by_path: self.generic_declarations_by_path.clone(),
             style_directives: self.style_directives.clone(),
             loop_depth: self.loop_depth,
             build_profile: self.build_profile,
@@ -407,6 +416,7 @@ impl ScopeContext {
             visible_source_bindings: self.visible_source_bindings.clone(),
             visible_type_aliases: self.visible_type_aliases.clone(),
             resolved_type_aliases: self.resolved_type_aliases.clone(),
+            generic_declarations_by_path: self.generic_declarations_by_path.clone(),
             style_directives: self.style_directives.clone(),
             loop_depth: self.loop_depth,
             build_profile: self.build_profile,
@@ -440,6 +450,7 @@ impl ScopeContext {
             visible_source_bindings: parent.visible_source_bindings.clone(),
             visible_type_aliases: parent.visible_type_aliases.clone(),
             resolved_type_aliases: parent.resolved_type_aliases.clone(),
+            generic_declarations_by_path: parent.generic_declarations_by_path.clone(),
             style_directives: parent.style_directives.clone(),
             loop_depth: parent.loop_depth,
             build_profile: parent.build_profile,
@@ -536,6 +547,14 @@ impl ScopeContext {
         aliases: FxHashMap<InternedPath, DataType>,
     ) -> ScopeContext {
         self.resolved_type_aliases = Some(Rc::new(aliases));
+        self
+    }
+
+    pub(crate) fn with_generic_declarations(
+        mut self,
+        declarations: FxHashMap<InternedPath, GenericDeclarationMetadata>,
+    ) -> ScopeContext {
+        self.generic_declarations_by_path = Some(Rc::new(declarations));
         self
     }
 

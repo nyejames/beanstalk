@@ -224,6 +224,14 @@ impl<'a> AstBuildState<'a> {
             } = &declaration.value.data_type
                 && seen_choice_paths.insert(nominal_path.to_owned())
             {
+                if self
+                    .module_symbols
+                    .generic_declarations_by_path
+                    .contains_key(nominal_path)
+                {
+                    continue;
+                }
+
                 choice_definitions.push(crate::compiler_frontend::ast::AstChoiceDefinition {
                     nominal_path: nominal_path.to_owned(),
                     variants: variants.to_owned(),

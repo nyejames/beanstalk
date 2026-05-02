@@ -9,16 +9,18 @@ use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::generics::GenericParameterList;
-use crate::compiler_frontend::deferred_feature_diagnostics::deferred_feature_rule_error;
 
 use crate::compiler_frontend::declaration_syntax::choice::parse_choice_shell as parse_choice_header_payload;
 use crate::compiler_frontend::declaration_syntax::declaration_shell::{
     DeclarationSyntax, parse_declaration_syntax,
 };
+use crate::compiler_frontend::declaration_syntax::generic_parameters::parse_generic_parameter_list_after_type_keyword;
 use crate::compiler_frontend::declaration_syntax::r#struct::parse_struct_shell;
 use crate::compiler_frontend::declaration_syntax::type_syntax::{
     TypeAnnotationContext, for_each_named_type_in_data_type, parse_type_annotation,
 };
+use crate::compiler_frontend::deferred_feature_diagnostics::deferred_feature_rule_error;
+use crate::compiler_frontend::external_packages::ExternalSymbolId;
 use crate::compiler_frontend::headers::dependency_edges::{
     collect_constant_type_dependencies, collect_named_type_dependency_edge,
 };
@@ -31,6 +33,7 @@ use crate::compiler_frontend::symbols::identifier_policy::{
     IdentifierNamingKind, ensure_not_keyword_shadow_identifier, naming_warning_for_identifier,
 };
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
+use rustc_hash::FxHashSet;
 use std::collections::HashSet;
 use std::rc::Rc;
 
@@ -60,25 +63,26 @@ pub(super) fn create_header(
             "Header declaration path is missing its declaration name.",
         ));
     };
-    let declaration_name_text = context.string_table.resolve(declaration_name);
+    let declaration_name_text = context.string_table.resolve(declaration_name).to_owned();
 
     // Only imported symbols become inter-header dependency edges here.
     let mut dependencies: HashSet<InternedPath> = HashSet::new();
     let mut kind: HeaderKind = HeaderKind::StartFunction;
     let mut body = Vec::new();
+    let generic_parameters = parse_optional_generic_parameters(token_stream, context)?;
     let current_token = token_stream.current_token_kind().to_owned();
 
     match current_token {
         // Function declaration: `name |params| -> return_type : body ;`
         TokenKind::TypeParameterBracket => {
             ensure_not_keyword_shadow_identifier(
-                declaration_name_text,
+                &declaration_name_text,
                 name_location.to_owned(),
                 "Header Parsing",
             )?;
             emit_header_naming_warning(
                 context.warnings,
-                declaration_name_text,
+                &declaration_name_text,
                 name_location.to_owned(),
                 IdentifierNamingKind::ValueLike,
             );
@@ -104,35 +108,29 @@ pub(super) fn create_header(
 
             // Strict edges: parameter + return type references only.
             for param in &signature.parameters {
-                for_each_named_type_in_data_type(&param.value.data_type, &mut |type_name| {
-                    collect_named_type_dependency_edge(
-                        type_name,
-                        context.file_import_entries,
-                        context.source_file,
-                        context.external_package_registry,
-                        context.string_table,
-                        &mut dependencies,
-                    );
-                });
+                collect_type_dependency_edges(
+                    &param.value.data_type,
+                    &generic_parameters,
+                    &full_name,
+                    context,
+                    &mut dependencies,
+                );
             }
 
             for ret in &signature.returns {
-                for_each_named_type_in_data_type(ret.value.data_type(), &mut |type_name| {
-                    collect_named_type_dependency_edge(
-                        type_name,
-                        context.file_import_entries,
-                        context.source_file,
-                        context.external_package_registry,
-                        context.string_table,
-                        &mut dependencies,
-                    );
-                });
+                collect_type_dependency_edges(
+                    ret.value.data_type(),
+                    &generic_parameters,
+                    &full_name,
+                    context,
+                    &mut dependencies,
+                );
             }
 
             capture_function_body_tokens(token_stream, &mut body)?;
 
             kind = HeaderKind::Function {
-                generic_parameters: GenericParameterList::default(),
+                generic_parameters,
                 signature,
             };
         }
@@ -154,22 +152,18 @@ pub(super) fn create_header(
             ));
         }
 
-        TokenKind::Type => {
-            return Err(generic_declaration_deferred_error(token_stream));
-        }
-
         // `=` (Assign): either `name = |fields|` (struct) or `#name = <expr>` (exported constant).
         // Peek ahead: if the next token is `|`, this is a struct definition; otherwise a constant.
         TokenKind::Assign => {
             if let Some(TokenKind::TypeParameterBracket) = token_stream.peek_next_token() {
                 ensure_not_keyword_shadow_identifier(
-                    declaration_name_text,
+                    &declaration_name_text,
                     name_location.to_owned(),
                     "Header Parsing",
                 )?;
                 emit_header_naming_warning(
                     context.warnings,
-                    declaration_name_text,
+                    &declaration_name_text,
                     name_location.to_owned(),
                     IdentifierNamingKind::TypeLike,
                 );
@@ -200,31 +194,28 @@ pub(super) fn create_header(
                 // Collect strict type edges from field types only (no default-expression edges).
                 // WHY: struct field type refs are the only struct edges that constrain sort order.
                 for field in &fields {
-                    for_each_named_type_in_data_type(&field.value.data_type, &mut |type_name| {
-                        collect_named_type_dependency_edge(
-                            type_name,
-                            context.file_import_entries,
-                            context.source_file,
-                            context.external_package_registry,
-                            context.string_table,
-                            &mut dependencies,
-                        );
-                    });
+                    collect_type_dependency_edges(
+                        &field.value.data_type,
+                        &generic_parameters,
+                        &full_name,
+                        context,
+                        &mut dependencies,
+                    );
                 }
 
                 kind = HeaderKind::Struct {
-                    generic_parameters: GenericParameterList::default(),
+                    generic_parameters,
                     fields,
                 };
             } else if exported {
                 ensure_not_keyword_shadow_identifier(
-                    declaration_name_text,
+                    &declaration_name_text,
                     name_location.to_owned(),
                     "Header Parsing",
                 )?;
                 emit_header_naming_warning(
                     context.warnings,
-                    declaration_name_text,
+                    &declaration_name_text,
                     name_location.to_owned(),
                     IdentifierNamingKind::TopLevelConstant,
                 );
@@ -256,13 +247,13 @@ pub(super) fn create_header(
             if exported =>
         {
             ensure_not_keyword_shadow_identifier(
-                declaration_name_text,
+                &declaration_name_text,
                 name_location.to_owned(),
                 "Header Parsing",
             )?;
             emit_header_naming_warning(
                 context.warnings,
-                declaration_name_text,
+                &declaration_name_text,
                 name_location.to_owned(),
                 IdentifierNamingKind::TopLevelConstant,
             );
@@ -282,13 +273,13 @@ pub(super) fn create_header(
         // `::` (DoubleColon): choice/union declaration `name :: VariantA | VariantB | ...`
         TokenKind::DoubleColon => {
             ensure_not_keyword_shadow_identifier(
-                declaration_name_text,
+                &declaration_name_text,
                 name_location.to_owned(),
                 "Header Parsing",
             )?;
             emit_header_naming_warning(
                 context.warnings,
-                declaration_name_text,
+                &declaration_name_text,
                 name_location.to_owned(),
                 IdentifierNamingKind::TypeLike,
             );
@@ -320,39 +311,37 @@ pub(super) fn create_header(
                 } = &variant.payload
                 {
                     for field in fields {
-                        for_each_named_type_in_data_type(
+                        collect_type_dependency_edges(
                             &field.value.data_type,
-                            &mut |type_name| {
-                                collect_named_type_dependency_edge(
-                                    type_name,
-                                    context.file_import_entries,
-                                    context.source_file,
-                                    context.external_package_registry,
-                                    context.string_table,
-                                    &mut dependencies,
-                                );
-                            },
+                            &generic_parameters,
+                            &full_name,
+                            context,
+                            &mut dependencies,
                         );
                     }
                 }
             }
 
             kind = HeaderKind::Choice {
-                generic_parameters: GenericParameterList::default(),
+                generic_parameters,
                 variants: choice_header,
             };
         }
 
         // `as`: type alias declaration `Name as Type`
         TokenKind::As => {
+            if !generic_parameters.is_empty() {
+                return Err(generic_type_alias_deferred_error(token_stream));
+            }
+
             ensure_not_keyword_shadow_identifier(
-                declaration_name_text,
+                &declaration_name_text,
                 name_location.to_owned(),
                 "Header Parsing",
             )?;
             emit_header_naming_warning(
                 context.warnings,
-                declaration_name_text,
+                &declaration_name_text,
                 name_location.to_owned(),
                 IdentifierNamingKind::TypeLike,
             );
@@ -405,6 +394,69 @@ fn emit_header_naming_warning(
     if let Some(warning) = naming_warning_for_identifier(identifier, location, naming_kind) {
         warnings.push(warning);
     }
+}
+
+fn parse_optional_generic_parameters(
+    token_stream: &mut FileTokens,
+    context: &mut HeaderBuildContext<'_>,
+) -> Result<GenericParameterList, CompilerError> {
+    if token_stream.current_token_kind() != &TokenKind::Type {
+        return Ok(GenericParameterList::default());
+    }
+
+    let forbidden_names = generic_parameter_forbidden_names(context);
+    parse_generic_parameter_list_after_type_keyword(
+        token_stream,
+        &forbidden_names,
+        context.string_table,
+    )
+}
+
+fn generic_parameter_forbidden_names(
+    context: &mut HeaderBuildContext<'_>,
+) -> FxHashSet<crate::compiler_frontend::symbols::string_interning::StringId> {
+    let mut forbidden_names = FxHashSet::default();
+
+    for import in context.file_import_entries {
+        if let Some(local_name) = import.alias.or_else(|| import.header_path.name()) {
+            forbidden_names.insert(local_name);
+        }
+    }
+
+    for (prelude_name, symbol_id) in context.external_package_registry.prelude_symbols_by_name() {
+        if matches!(symbol_id, ExternalSymbolId::Type(_)) {
+            forbidden_names.insert(context.string_table.intern(prelude_name));
+        }
+    }
+
+    forbidden_names
+}
+
+fn collect_type_dependency_edges(
+    data_type: &crate::compiler_frontend::datatypes::DataType,
+    generic_parameters: &GenericParameterList,
+    current_header_path: &InternedPath,
+    context: &mut HeaderBuildContext<'_>,
+    dependencies: &mut HashSet<InternedPath>,
+) {
+    for_each_named_type_in_data_type(data_type, &mut |type_name| {
+        if generic_parameters.contains_name(type_name) {
+            return;
+        }
+
+        if context.source_file.append(type_name) == *current_header_path {
+            return;
+        }
+
+        collect_named_type_dependency_edge(
+            type_name,
+            context.file_import_entries,
+            context.source_file,
+            context.external_package_registry,
+            context.string_table,
+            dependencies,
+        );
+    });
 }
 
 // WHAT: collects all tokens that make up a function body (`:` … `;`) into `body`,
@@ -469,39 +521,12 @@ fn capture_function_body_tokens(
     Ok(())
 }
 
-/// Scan ahead up to 20 tokens looking for `DoubleColon` before `End` or `Eof`.
-///
-/// WHAT: heuristic to detect generic choice declarations like `Name type T, E :: ...`.
-/// WHY: without this, non-exported generic choices fall through to start-function body parsing
-/// and produce confusing "unknown variable" errors on the `type` token.
-fn token_stream_contains_doublecolon_within_limit(token_stream: &FileTokens) -> bool {
-    let mut i = token_stream.index;
-    let limit = (i + 20).min(token_stream.tokens.len());
-    while i < limit {
-        match &token_stream.tokens[i].kind {
-            TokenKind::DoubleColon => return true,
-            TokenKind::End | TokenKind::Eof => return false,
-            _ => i += 1,
-        }
-    }
-    false
-}
-
-fn generic_declaration_deferred_error(token_stream: &FileTokens) -> CompilerError {
-    if token_stream_contains_doublecolon_within_limit(token_stream) {
-        return deferred_feature_rule_error(
-            "Generic choice declarations are not supported. See docs/src/docs/generics.md for future-facing design.",
-            token_stream.current_location(),
-            "Header Parsing",
-            "Remove type parameters and declare a non-generic choice",
-        );
-    }
-
+fn generic_type_alias_deferred_error(token_stream: &FileTokens) -> CompilerError {
     deferred_feature_rule_error(
-        "Generic declarations using `type` are reserved but not implemented yet.",
+        "Generic type aliases are not supported yet.",
         token_stream.current_location(),
         "Header Parsing",
-        "Remove `type ...` for now. Generic declarations will be implemented in a later generics phase.",
+        "Use an alias to a fully concrete generic type, such as `StringBox as Box of String`.",
     )
 }
 

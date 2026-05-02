@@ -472,6 +472,8 @@ fn starts_duplicate_top_level_header_declaration(
             token_stream.current_token_kind(),
             // Exported functions still parse like normal `name |...|` declarations.
             TokenKind::TypeParameterBracket
+                // Generic declarations parse as `name type T ...`.
+                | TokenKind::Type
                 // Exported choice declarations parse as `#Name :: ...`.
                 | TokenKind::DoubleColon
                 // Exported type aliases parse as `#Name as ...`.
@@ -482,6 +484,8 @@ fn starts_duplicate_top_level_header_declaration(
     match token_stream.current_token_kind() {
         // `name |...|` starts a function signature.
         TokenKind::TypeParameterBracket => true,
+        // `name type T ...` starts a generic function/struct/choice declaration.
+        TokenKind::Type => true,
         // `name = |...|` starts a struct declaration.
         TokenKind::Assign => matches!(
             token_stream.peek_next_token(),

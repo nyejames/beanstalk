@@ -8,6 +8,7 @@
 
 pub(crate) mod choice;
 pub(crate) mod declaration_shell;
+pub(crate) mod generic_parameters;
 pub(crate) mod record_body;
 pub(crate) mod signature_members;
 pub(crate) mod r#struct;

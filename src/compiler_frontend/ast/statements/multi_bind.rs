@@ -533,6 +533,7 @@ fn resolve_target_explicit_type(
         visible_source_bindings: context.visible_source_bindings.as_ref(),
         visible_type_aliases: context.visible_type_aliases.as_ref(),
         resolved_type_aliases: context.resolved_type_aliases.as_deref(),
+        generic_declarations_by_path: context.generic_declarations_by_path.as_deref(),
         generic_parameters: None,
     };
 

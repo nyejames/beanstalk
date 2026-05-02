@@ -39,7 +39,7 @@ use crate::compiler_frontend::compiler_warnings::{CompilerWarning, WarningKind};
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::external_packages::{ExternalPackageRegistry, ExternalSymbolId};
 use crate::compiler_frontend::headers::module_symbols::{
-    FacadeExportEntry, FacadeExportTarget, ModuleSymbols,
+    FacadeExportEntry, FacadeExportTarget, GenericDeclarationMetadata, ModuleSymbols,
 };
 use crate::compiler_frontend::headers::parse_file_headers::{FileImport, Header, HeaderKind};
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -994,6 +994,7 @@ pub(crate) struct ConstantHeaderParseContext<'a> {
     pub visible_source_bindings: &'a FxHashMap<StringId, InternedPath>,
     pub visible_type_aliases: &'a FxHashMap<StringId, InternedPath>,
     pub resolved_type_aliases: Rc<FxHashMap<InternedPath, DataType>>,
+    pub generic_declarations_by_path: Rc<FxHashMap<InternedPath, GenericDeclarationMetadata>>,
     pub external_package_registry: &'a ExternalPackageRegistry,
     pub style_directives: &'a StyleDirectiveRegistry,
     pub project_path_resolver: Option<ProjectPathResolver>,
@@ -1016,6 +1017,7 @@ pub(crate) fn parse_constant_header_declaration(
         visible_source_bindings,
         visible_type_aliases,
         resolved_type_aliases,
+        generic_declarations_by_path,
         external_package_registry,
         style_directives,
         project_path_resolver,
@@ -1059,6 +1061,7 @@ pub(crate) fn parse_constant_header_declaration(
     .with_visible_source_bindings(visible_source_bindings.to_owned())
     .with_visible_type_aliases(visible_type_aliases.to_owned())
     .with_resolved_type_aliases((*resolved_type_aliases).clone())
+    .with_generic_declarations((*generic_declarations_by_path).clone())
     .with_source_file_scope(source_file_scope);
 
     let declaration_result = resolve_declaration_syntax(

@@ -61,6 +61,8 @@ impl<'a> AstBuildState<'a> {
         let _ = declaration_index_start;
 
         let resolved_type_aliases = Rc::new(self.resolved_type_aliases_by_path.clone());
+        let generic_declarations =
+            Rc::new(self.module_symbols.generic_declarations_by_path.clone());
 
         #[cfg(feature = "detailed_timers")]
         let mut total_function_body_parse_time = Duration::default();
@@ -88,7 +90,13 @@ impl<'a> AstBuildState<'a> {
 
             match header.kind {
                 // --- Functions ---
-                HeaderKind::Function { .. } => {
+                HeaderKind::Function {
+                    generic_parameters, ..
+                } => {
+                    if !generic_parameters.is_empty() {
+                        continue;
+                    }
+
                     let Some(resolved_signature) = self
                         .resolved_function_signatures_by_path
                         .get(&header.tokens.src_path)
@@ -123,6 +131,7 @@ impl<'a> AstBuildState<'a> {
                     .with_visible_source_bindings(bindings.visible_source_bindings.clone())
                     .with_visible_type_aliases(bindings.visible_type_aliases.clone())
                     .with_resolved_type_aliases((*resolved_type_aliases).clone())
+                    .with_generic_declarations((*generic_declarations).clone())
                     .with_project_path_resolver(self.project_path_resolver.clone())
                     .with_path_format_config(self.path_format_config.clone())
                     .with_rendered_path_usage_sink(self.rendered_path_usages.clone())
@@ -193,6 +202,7 @@ impl<'a> AstBuildState<'a> {
                     .with_visible_source_bindings(bindings.visible_source_bindings.clone())
                     .with_visible_type_aliases(bindings.visible_type_aliases.clone())
                     .with_resolved_type_aliases((*resolved_type_aliases).clone())
+                    .with_generic_declarations((*generic_declarations).clone())
                     .with_project_path_resolver(self.project_path_resolver.clone())
                     .with_path_format_config(self.path_format_config.clone())
                     .with_rendered_path_usage_sink(self.rendered_path_usages.clone())
@@ -245,7 +255,13 @@ impl<'a> AstBuildState<'a> {
                 }
 
                 // --- Structs ---
-                HeaderKind::Struct { .. } => {
+                HeaderKind::Struct {
+                    generic_parameters, ..
+                } => {
+                    if !generic_parameters.is_empty() {
+                        continue;
+                    }
+
                     #[cfg(feature = "detailed_timers")]
                     {
                         struct_headers_emitted += 1;
@@ -290,6 +306,7 @@ impl<'a> AstBuildState<'a> {
                     .with_visible_source_bindings(bindings.visible_source_bindings.clone())
                     .with_visible_type_aliases(bindings.visible_type_aliases.clone())
                     .with_resolved_type_aliases((*resolved_type_aliases).clone())
+                    .with_generic_declarations((*generic_declarations).clone())
                     .with_project_path_resolver(self.project_path_resolver.clone())
                     .with_path_format_config(self.path_format_config.clone())
                     .with_rendered_path_usage_sink(self.rendered_path_usages.clone())

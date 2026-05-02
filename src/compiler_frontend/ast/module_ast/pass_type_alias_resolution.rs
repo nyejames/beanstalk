@@ -56,6 +56,9 @@ impl<'a> AstBuildState<'a> {
                     visible_type_aliases: file_bindings
                         .map(|bindings| &bindings.visible_type_aliases),
                     resolved_type_aliases: Some(&self.resolved_type_aliases_by_path),
+                    generic_declarations_by_path: Some(
+                        &self.module_symbols.generic_declarations_by_path,
+                    ),
                     generic_parameters: None,
                 };
 

@@ -306,7 +306,7 @@ fn exported_typed_constant_headers_are_parsed_and_follow_on_constant_stays_heade
 }
 
 #[test]
-fn phase_zero_headers_keep_generic_parameter_lists_empty() {
+fn non_generic_headers_keep_generic_parameter_lists_empty() {
     let headers = parse_single_file_headers(
         "identity |value Int| -> Int:\n\
              return value\n\
@@ -335,12 +335,69 @@ fn phase_zero_headers_keep_generic_parameter_lists_empty() {
             } => {
                 assert!(
                     generic_parameters.parameters.is_empty(),
-                    "phase 0 should keep generic parameter lists empty until generic parsing is implemented"
+                    "non-generic declarations should keep generic parameter lists empty"
                 );
             }
             _ => {}
         }
     }
+}
+
+#[test]
+fn generic_declaration_headers_parse_parameter_lists() {
+    let (headers, string_table) = parse_single_file_headers_with_table(
+        "identity type T |value T| -> T:\n\
+             return value\n\
+         ;\n\
+         Box type Item = |\n\
+             value Item,\n\
+         |\n\
+         ResultShape type OkType, ErrType ::\n\
+             Ok | value OkType |,\n\
+             Err | error ErrType |,\n\
+         ;\n",
+    );
+
+    let mut generic_parameter_counts = Vec::new();
+    for header in &headers.headers {
+        match &header.kind {
+            HeaderKind::Function {
+                generic_parameters, ..
+            }
+            | HeaderKind::Struct {
+                generic_parameters, ..
+            }
+            | HeaderKind::Choice {
+                generic_parameters, ..
+            } => generic_parameter_counts.push(generic_parameters.len()),
+            _ => {}
+        }
+    }
+
+    assert_eq!(generic_parameter_counts, vec![1, 1, 2]);
+    assert_eq!(
+        headers.module_symbols.generic_declarations_by_path.len(),
+        3,
+        "only declarations with generic parameters should be registered as generic declarations"
+    );
+
+    let generic_names = headers
+        .module_symbols
+        .generic_declarations_by_path
+        .values()
+        .flat_map(|metadata| {
+            metadata
+                .parameters
+                .parameters
+                .iter()
+                .map(|parameter| string_table.resolve(parameter.name).to_owned())
+        })
+        .collect::<Vec<_>>();
+
+    assert!(generic_names.contains(&"T".to_owned()));
+    assert!(generic_names.contains(&"Item".to_owned()));
+    assert!(generic_names.contains(&"OkType".to_owned()));
+    assert!(generic_names.contains(&"ErrType".to_owned()));
 }
 
 #[test]
@@ -925,25 +982,23 @@ fn trait_declarations_using_must_are_reserved_during_header_parsing() {
 }
 
 #[test]
-fn generic_declarations_using_type_keyword_are_deferred_during_header_parsing() {
+fn generic_type_aliases_are_deferred_during_header_parsing() {
     let result = parse_single_file_headers_with_entry(
-        "identity type T |value T| -> T:\n\
-             return value\n\
-         ;\n",
+        "Response type T as ResultShape of T, Error\n",
         "src/#page.bst",
         "src/#page.bst",
     );
 
     assert!(
         result.is_err(),
-        "generic declarations using `type` should fail during phase 0"
+        "generic type aliases should fail during phase 1"
     );
     let errors = result.err().expect("expected parse errors");
 
     assert!(errors.iter().any(|error| {
         error
             .msg
-            .contains("Generic declarations using `type` are reserved")
+            .contains("Generic type aliases are not supported yet")
     }));
 }
 

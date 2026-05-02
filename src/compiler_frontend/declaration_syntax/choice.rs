@@ -13,9 +13,9 @@ use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::declaration_syntax::record_body::parse_record_body;
 use crate::compiler_frontend::declaration_syntax::signature_members::SignatureMemberContext;
-use crate::compiler_frontend::declaration_syntax::type_syntax::for_each_named_type_in_data_type;
 use crate::compiler_frontend::deferred_feature_diagnostics::deferred_feature_rule_error;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::reserved_trait_syntax::{
@@ -201,17 +201,13 @@ pub(crate) fn parse_choice_shell(
                                 seen_field_names.insert(field_name, field.value.location.clone());
                             }
 
-                            // Reject direct recursive choice declarations.
-                            let mut is_recursive = false;
-                            for_each_named_type_in_data_type(
+                            // Reject direct non-generic recursive choice declarations.
+                            // Generic recursion is diagnosed after generic applications are
+                            // resolved, so `Tree of T` can receive the generic-specific message.
+                            if contains_non_generic_choice_self_reference(
                                 &field.value.data_type,
-                                &mut |type_name| {
-                                    if Some(type_name) == choice_path.name() {
-                                        is_recursive = true;
-                                    }
-                                },
-                            );
-                            if is_recursive {
+                                choice_path.name(),
+                            ) {
                                 let choice_name = choice_path
                                     .name()
                                     .map(|name| string_table.resolve(name))
@@ -435,4 +431,24 @@ pub(crate) fn parse_choice_shell(
     }
 
     Ok(variants)
+}
+
+fn contains_non_generic_choice_self_reference(
+    data_type: &DataType,
+    choice_name: Option<StringId>,
+) -> bool {
+    match data_type {
+        DataType::NamedType(type_name) => Some(*type_name) == choice_name,
+        DataType::GenericInstance { arguments, .. } => arguments
+            .iter()
+            .any(|argument| contains_non_generic_choice_self_reference(argument, choice_name)),
+        DataType::Collection(inner) | DataType::Option(inner) | DataType::Reference(inner) => {
+            contains_non_generic_choice_self_reference(inner, choice_name)
+        }
+        DataType::Result { ok, err } => {
+            contains_non_generic_choice_self_reference(ok, choice_name)
+                || contains_non_generic_choice_self_reference(err, choice_name)
+        }
+        _ => false,
+    }
 }
