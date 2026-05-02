@@ -9,8 +9,9 @@ Use the language surface integration matrix as a reference for what is currently
 ---
 
 # Plans / Notes / TODOS
-- Review of Error and Option syntax sugar for result types, handling and hardening.
-- full traits implementation
+- Generics: `docs/roadmap/plans/beanstalk-generics-implementation-plan.md`
+- Traits
+- True results / options with generics
 - Closures
 - Hash Maps
 - Compile time arbitary precision aritmetic + Decimals Type support
