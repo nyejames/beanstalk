@@ -25,18 +25,27 @@ Always follow the style guide by default.
 - Maintain clear boundaries between compiler stages. Do not mix frontend, analysis, IR, and backend concerns casually.
 - Avoid user-input panics. Do not introduce `panic!`, `todo!`, or user-data-driven `.unwrap()` / `.expect()` in active compiler paths.
 - Panic paths are only acceptable for proven internal invariants that indicate a compiler bug.
-- Beanstalk is pre-alpha. Do not preserve old APIs through compatibility wrappers, forwarding shims, parallel structs, or duplicated legacy entry points.
+- Beanstalk is pre-release. Do not preserve old APIs through compatibility wrappers, forwarding shims, parallel structs, or duplicated legacy entry points.
 - When an API shape changes, thread the new shape through the compiler and remove the old one.
 - Do not edit HTML artefacts produced by the compiler directly inside `docs/release`. Use `cargo run build docs --release` to rebuild the output artefacts properly.
 
 ## Duplication and abstraction policy
 
-Be strict about avoiding duplicated logic.
+Be strict about avoiding duplicated logic. Prefer extending, consolidating, or replacing the existing owner of the behavior over adding a new module, system, or parallel path.
+
+Only add a new subsystem when the existing ownership is clearly wrong or the new behavior is genuinely separate. If overlapping logic intentionally remains separate, state why.
 
 Before adding a new helper, function, pass, or type:
-- Check whether similar logic already exists nearby or elsewhere in the same stage.
-- Check whether the new logic is actually a variant of an existing responsibility.
-- Prefer extending or consolidating an existing implementation when that keeps ownership and responsibility clear.
+- Check whether similar logic already exists nearby or elsewhere in the same stage
+- Check whether the new logic is actually a variant of an existing responsibility
+- Prefer extending or consolidating an existing implementation when that keeps ownership and responsibility clear
+
+Check for:
+- existing passes, helpers, registries, binders, validators, lowering paths, diagnostics, tests, or docs that already solve part of the problem
+- older systems that should be updated, generalized, expanded, or deleted instead of bypassed
+- near-duplicate logic in adjacent compiler stages or backend paths
+- implementation-shaped tests or fixtures that already cover the behavior
+- legacy codepaths that would become parallel functionality if left in place
 
 When similar code exists in two or more places:
 - Do not leave near-duplicate logic in place without a reason.
@@ -99,6 +108,26 @@ To see the progress and current priority goals of the compiler and language, con
 - Keep new abstractions small, stage-local, and easy to justify.
 - Do not move shared logic upward into a broad common module unless both call sites genuinely depend on the same behavior and ownership is clear.
 
+## Self-audit after each change or completed plan phase
+
+After each completed plan phase, or completed implementation step, perform this audit:
+
+1. Are there opportunities to reduce complexity / indirection or LOC through removing redundancy, repetition, bad patterns or consolidating touched areas?
+
+2. Do any legacy codepaths, functions, types, stale comments, old fixtures, or obsolete scaffolding still exist that can be cleaned up and removed now?
+
+3. Does the code follow the style guide `docs/codebase-style-guide.md` and does it have enough clear comments detailing WHAT and WHY certain code is doing what it’s doing and why it's there? The code should be as readable and maintainable as possible.
+
+4. Is there any noticeable code smells or design drift being subtly added that should be flagged now?
+
+5. What test coverage is missing, redundant (duplicate coverage) or incomplete?
+
+6. Should new modules or files be created to help split up some functionality / features into their own place? Particularly if they are being reimplemented in slightly different ways across the codebase or repeated or existing files/modules are getting to large and broad in terms of the number of concepts they are managing:
+  - If behaviour is shared outside a complex module: split this behaviour out into its own module that can be shared by others.
+  - If behaviour is NOT shared: Prefer deepening the module with submodules
+
+Also check that all the core working rules are respected.
+
 ## Diagnostics and error handling
 
 - Use structured diagnostics, not ad-hoc strings, where the compiler already has established helpers.
@@ -135,7 +164,19 @@ When reviewing, planning, or proposing implementation changes:
 - Flag stage-boundary leaks explicitly.
 
 ## Documentation update policy
-When a language feature changes shape or a new bug/limitation is discovered, always update the language surface matrix: `docs/src/docs/progress/#page.bst`
+The language surface matrix must always be updated as the agent works and adds / changes features or new missing surface / bugs are discovered.
+
+Matrix path: `docs/src/docs/progress/#page.bst`
+
+Update this file when:
+- a language feature is implemented
+- feature support changes
+- a feature is intentionally deferred
+- a new bug or missing surface is discovered
+- behavior becomes partially supported
+- docs/progress status becomes stale due to implementation work
+
+Do not silently leave the matrix outdated.
 
 Do not modify other documentation files unless the user explicitly requests documentation changes, or explicitly approves them after you identify that documentation should be updated.
 
