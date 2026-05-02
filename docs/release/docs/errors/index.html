@@ -318,7 +318,7 @@ body {
     ">Error</span> value through a dedicated error return slot.</p><p>That error slot is marked with <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">!</span>.</p><p>Any call that can return an error must handle it.</p><p>The core rule is:</p><p>&gt; If a function can return an error, the caller must either handle the error or bubble it upward.</p></section>
+    ">!</span>.</p><p>Any call that can return an error must handle it.</p><p>The core rule is:</p><p>&gt; If a function can return an error, the caller must either catch the error or bubble it upward.</p></section>
     <section class="container"><h1>Core syntax</h1><p>Error-returning functions mark one return slot with <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
@@ -356,7 +356,7 @@ body {
     <section class="container"><h1>The Error type</h1><p><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">Error</span> is a builtin language type.</p><p>It is intended to carry structured failure information instead of only a string.</p><p>Conceptually, <span style="
+    ">Error</span> is a builtin language type.</p><p>It carries structured failure information instead of only a string.</p><p>Conceptually, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">Error</span> contains:</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
@@ -468,34 +468,6 @@ body {
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">return!</span></li></ul><p>This keeps success and failure paths explicit.</p></section>
-    <section class="container"><h1>Fallback values</h1><p>Use <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">!</span> followed by a fallback value to recover from an error.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12); 
-        padding-left: 1em; 
-        border-radius: 5px;
-        max-width: 100%; 
-        white-space: pre; 
-        overflow-x: auto;
-    "><code class='codeblock'>
-    value <span class='bst-code-operator'>=</span> parse_number<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;&quot;</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>!</span> <span class='bst-code-number'>0</span>
-    </code></pre><p>If <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">parse_number</span> succeeds, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">value</span> receives the parsed number.</p><p>If <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">parse_number</span> returns an error, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">value</span> receives <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">0</span>.</p><p>The fallback value must match the expected success type.</p></section>
     <section class="container"><h1>Bubbling errors</h1><p>Use a trailing <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
@@ -514,14 +486,23 @@ body {
     </code></pre><p>If <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">parse_number(text)</span> succeeds, execution continues normally.</p><p>If it returns an error, the surrounding function returns that error from its own error slot.</p><p>The surrounding function must also declare a compatible <span style="
+    ">parse_number(text)</span> succeeds, execution continues normally.</p><p>If it returns an error, the surrounding function returns that error from its own error slot.</p><p>The surrounding function must declare a compatible <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">Error!</span> return slot.</p></section>
-    <section class="container"><h1>Named error handlers</h1><p>Use <span style="
+    <section class="container"><h1>Catching errors</h1><p>Use <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">err!</span> to bind the error value inside a handler block.</p><pre style="
+    ">catch</span> to inspect or recover from an error.</p><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">catch</span> has two forms:</p><ul><li>without <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">-></span>, it handles the error and bubbles it upward</li><li>with <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">-></span>, it handles the error and recovers with fallback success values</li></ul><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
         padding-left: 1em; 
         border-radius: 5px;
@@ -529,8 +510,8 @@ body {
         white-space: pre; 
         overflow-x: auto;
     "><code class='codeblock'>
-    recover <span class='bst-code-operator'>|</span>text <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Int</span><span class='bst-code-operator'>:</span>
-        value <span class='bst-code-operator'>=</span> parse_number<span class='bst-code-parenthesis'>(</span>text<span class='bst-code-parenthesis'>)</span> err<span class='bst-code-operator'>!</span> <span class='bst-code-number'>0</span><span class='bst-code-operator'>:</span>
+    wrapper <span class='bst-code-operator'>|</span>text <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Int,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
+        value <span class='bst-code-operator'>=</span> parse_number<span class='bst-code-parenthesis'>(</span>text<span class='bst-code-parenthesis'>)</span> catch <span class='bst-code-operator'>|</span>err<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
             io<span class='bst-code-parenthesis'>(</span>err.message<span class='bst-code-parenthesis'>)</span>
         ;
 
@@ -539,13 +520,131 @@ body {
     </code></pre><p>In this example:</p><ul><li><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">err</span> is the error value</li><li><span style="
+    ">err</span> is the caught error value</li><li>the handler body can inspect or log the error</li><li>if the handler reaches the end, the same error is returned from the surrounding function</li></ul><p>A <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">catch</span> block without <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">-></span> must be inside a function that can return a compatible <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Error!</span>, unless the block exits explicitly with <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">return</span> or <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">return!</span>.</p></section>
+    <section class="container"><h1>Recovering with fallback values</h1><p>Use <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">catch -></span> to recover from an error with fallback success values.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    recover <span class='bst-code-operator'>|</span>text <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Int</span><span class='bst-code-operator'>:</span>
+        value <span class='bst-code-operator'>=</span> parse_number<span class='bst-code-parenthesis'>(</span>text<span class='bst-code-parenthesis'>)</span> catch <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-number'>0</span>
+
+        <span class='bst-code-keyword'>return</span> value
+    ;
+    </code></pre><p>If <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">parse_number(text)</span> succeeds, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">value</span> receives the parsed number.</p><p>If it returns an error, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">value</span> receives <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">0</span>.</p><p>The fallback value must match the expected success type.</p></section>
+    <section class="container"><h1>Recovering with a handler block</h1><p>Use <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">catch |err| -></span> when recovery needs to inspect or log the error.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    recover <span class='bst-code-operator'>|</span>text <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Int</span><span class='bst-code-operator'>:</span>
+        value <span class='bst-code-operator'>=</span> parse_number<span class='bst-code-parenthesis'>(</span>text<span class='bst-code-parenthesis'>)</span> catch <span class='bst-code-operator'>|</span>err<span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-number'>0</span><span class='bst-code-operator'>:</span>
+            io<span class='bst-code-parenthesis'>(</span>err.message<span class='bst-code-parenthesis'>)</span>
+        ;
+
+        <span class='bst-code-keyword'>return</span> value
+    ;
+    </code></pre><p>In this example:</p><ul><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">err</span> is the caught error value</li><li><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">0</span> is the fallback success value</li><li>the handler body can inspect or log the error</li><li>the surrounding function does not need to return <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">Error!</span></li></ul><p>Named handlers are useful when recovery needs more than a simple fallback expression.</p></section>
+    ">Error!</span></li></ul><p>The handler body runs only on the error path.</p><p>The fallback value is used after the handler body completes.</p></section>
+    <section class="container"><h1>Overriding catch behavior</h1><p>A <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">catch</span> block without <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">-></span> automatically bubbles the caught error if the block reaches the end.</p><p>The block can override this by returning explicitly.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    recover <span class='bst-code-operator'>|</span>text <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Int</span><span class='bst-code-operator'>:</span>
+        value <span class='bst-code-operator'>=</span> parse_number<span class='bst-code-parenthesis'>(</span>text<span class='bst-code-parenthesis'>)</span> catch <span class='bst-code-operator'>|</span>err<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+            io<span class='bst-code-parenthesis'>(</span>err.message<span class='bst-code-parenthesis'>)</span>
+            <span class='bst-code-keyword'>return</span> <span class='bst-code-number'>0</span>
+        ;
+
+        <span class='bst-code-keyword'>return</span> value
+    ;
+    </code></pre><p>In this example, the surrounding function returns <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">0</span> from inside the <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">catch</span> block.</p><p>The automatic error bubble does not happen because the block exits explicitly.</p><p>This is useful when the surrounding function does not return <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Error!</span>, but the recovery path needs more control than a fallback expression.</p></section>
+    <section class="container"><h1>Multiple success values</h1><p>Beanstalk supports multiple return values.</p><p>A function can return multiple success values and one error slot.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12); 
+        padding-left: 1em; 
+        border-radius: 5px;
+        max-width: 100%; 
+        white-space: pre; 
+        overflow-x: auto;
+    "><code class='codeblock'>
+    load_user <span class='bst-code-operator'>|</span>id <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>String,</span> <span class='bst-code-struct'>Float,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>if</span> id.is_empty<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>:</span>
+            <span class='bst-code-keyword'>return</span><span class='bst-code-operator'>!</span> <span class='bst-code-struct'>Error</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;User&quot;</span>, <span class='bst-code-string'>&quot;user.empty_id&quot;</span>, <span class='bst-code-string'>&quot;Missing user id&quot;</span><span class='bst-code-parenthesis'>)</span>
+        ;
+
+        <span class='bst-code-keyword'>return</span> <span class='bst-code-string'>&quot;guest&quot;</span>, <span class='bst-code-number'>0.0</span>
+    ;
+
+    name, score <span class='bst-code-operator'>=</span> load_user<span class='bst-code-parenthesis'>(</span>id<span class='bst-code-parenthesis'>)</span> catch <span class='bst-code-operator'>|</span>err<span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-string'>&quot;guest&quot;</span>, <span class='bst-code-number'>0.0</span><span class='bst-code-operator'>:</span>
+        io<span class='bst-code-parenthesis'>(</span>err.message<span class='bst-code-parenthesis'>)</span>
+    ;
+    </code></pre><p>The fallback values must match the success return list.</p><p>If the success path returns two values, the recovery path must provide two fallback values.</p></section>
     <section class="container"><h1>Error handling forms</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
         
     <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
@@ -566,7 +665,7 @@ body {
              <td style="padding: 0.2em 0.5em;"> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">parse_number(text) ! 0</span> </td>
+    ">parse_number(text) catch -> 0</span> </td>
      <td style="padding: 0.2em 0.5em;"> Use <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
@@ -577,11 +676,25 @@ body {
              <td style="padding: 0.2em 0.5em;"> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">parse_number(text) err! 0: ... ;</span> </td>
+    ">parse_number(text) catch |err|: ... ;</span> </td>
      <td style="padding: 0.2em 0.5em;"> Bind the error as <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">err</span>, run a handler block, then use a fallback value. </td>
+    ">err</span>, run a handler block, then bubble the same error. </td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">parse_number(text) catch |err| -> 0: ... ;</span> </td>
+     <td style="padding: 0.2em 0.5em;"> Bind the error as <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">err</span>, run a handler block, then recover with <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">0</span>. </td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -606,9 +719,9 @@ body {
     "><code class='codeblock'>
     my_list <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-number'>1</span>, <span class='bst-code-number'>2</span>, <span class='bst-code-number'>3</span><span class='bst-code-parenthesis'>}</span>
 
-    fallback <span class='bst-code-operator'>=</span> my_list.length<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>!</span> <span class='bst-code-number'>0</span>
+    fallback <span class='bst-code-operator'>=</span> my_list.length<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span> catch <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-number'>0</span>
 
-    value <span class='bst-code-operator'>=</span> my_list.get<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>5</span><span class='bst-code-parenthesis'>)</span> err<span class='bst-code-operator'>!</span> fallback<span class='bst-code-operator'>:</span>
+    value <span class='bst-code-operator'>=</span> my_list.get<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>5</span><span class='bst-code-parenthesis'>)</span> catch <span class='bst-code-operator'>|</span>err<span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> fallback<span class='bst-code-operator'>:</span>
         io<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Index out of bounds error: &quot;</span>, err.message<span class='bst-code-parenthesis'>)</span>
     ;
     </code></pre><p>If the index is out of bounds, the error value is an <span style="
@@ -617,8 +730,8 @@ body {
     ">Error</span> with a <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">message</span> field.</p><p>Collection methods should not silently ignore invalid operations.</p><p>They should produce structured errors that can be handled, bubbled, or recovered from.</p></section>
-    <section class="container"><h1>Strict runtime validation</h1><p>Collection methods should enforce strict runtime validation.</p><p>This includes:</p><ul><li>invalid receivers</li><li>out-of-bounds indices</li><li>invalid mutation targets</li><li>invalid remove operations</li><li>backend-specific runtime failures</li></ul><p>The backend handles propagation automatically for compiler-owned collection methods.</p><p>User code still sees the same error-handling surface:</p><ul><li>recover with a fallback</li><li>recover with a named handler</li><li>bubble the error</li></ul></section>
+    ">message</span> field.</p><p>Collection methods should not silently ignore invalid operations.</p><p>They should produce structured errors that can be caught, bubbled, or recovered from.</p></section>
+    <section class="container"><h1>Strict runtime validation</h1><p>Collection methods should enforce strict runtime validation.</p><p>This includes:</p><ul><li>invalid receivers</li><li>out-of-bounds indices</li><li>invalid mutation targets</li><li>invalid remove operations</li><li>backend-specific runtime failures</li></ul><p>The backend handles propagation automatically for compiler-owned collection methods.</p><p>User code still sees the same error-handling surface:</p><ul><li>recover with a fallback</li><li>recover with a named catch block</li><li>bubble the error</li></ul></section>
     <section class="container"><h1>Options</h1><p>Optional values use <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
@@ -712,7 +825,7 @@ body {
         font-family: var(--bst-font-family-monospace);
     ">Error!</span> </td>
      <td style="padding: 0.2em 0.5em;"> Recoverable failure returned as a value. </td>
-     <td style="padding: 0.2em 0.5em;"> Must handle, recover, or bubble. </td>
+     <td style="padding: 0.2em 0.5em;"> Must catch, recover, or bubble. </td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -755,29 +868,46 @@ body {
         <span class='bst-code-keyword'>return</span> value
     ;
 
-    recover <span class='bst-code-operator'>|</span>text <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Int</span><span class='bst-code-operator'>:</span>
-        value <span class='bst-code-operator'>=</span> parse_number<span class='bst-code-parenthesis'>(</span>text<span class='bst-code-parenthesis'>)</span> err<span class='bst-code-operator'>!</span> <span class='bst-code-number'>0</span><span class='bst-code-operator'>:</span>
+    log_then_bubble <span class='bst-code-operator'>|</span>text <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Int,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
+        value <span class='bst-code-operator'>=</span> parse_number<span class='bst-code-parenthesis'>(</span>text<span class='bst-code-parenthesis'>)</span> catch <span class='bst-code-operator'>|</span>err<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
             io<span class='bst-code-parenthesis'>(</span>err.message<span class='bst-code-parenthesis'>)</span>
         ;
 
         <span class='bst-code-keyword'>return</span> value
     ;
 
-    fallback_value <span class='bst-code-operator'>=</span> parse_number<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;&quot;</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>!</span> <span class='bst-code-number'>0</span>
-    </code></pre><p>This example shows the three core call-site choices:</p><ul><li>bubble with <span style="
+    recover <span class='bst-code-operator'>|</span>text <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Int</span><span class='bst-code-operator'>:</span>
+        value <span class='bst-code-operator'>=</span> parse_number<span class='bst-code-parenthesis'>(</span>text<span class='bst-code-parenthesis'>)</span> catch <span class='bst-code-operator'>|</span>err<span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-number'>0</span><span class='bst-code-operator'>:</span>
+            io<span class='bst-code-parenthesis'>(</span>err.message<span class='bst-code-parenthesis'>)</span>
+        ;
+
+        <span class='bst-code-keyword'>return</span> value
+    ;
+
+    fallback_value <span class='bst-code-operator'>=</span> parse_number<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;&quot;</span><span class='bst-code-parenthesis'>)</span> catch <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-number'>0</span>
+    </code></pre><p>This example shows the core call-site choices:</p><ul><li>bubble with <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">parse_number(text)!</span></li><li>recover with <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">parse_number(text) ! 0</span></li><li>handle and recover with <span style="
+    ">parse_number(text) catch -> 0</span></li><li>catch, inspect, and bubble with <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">err!</span></li></ul></section>
-    <section class="container"><h1>Diagnostics</h1><p>Error handling should produce clear diagnostics.</p><p>Useful diagnostic cases include:</p><ul><li>calling an error-returning function without handling the error</li><li>using <span style="
+    ">catch</span></li><li>catch, inspect, and recover with <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">!</span> in a function with no compatible error return slot</li><li>using a fallback value with the wrong type</li><li>using <span style="
+    ">catch |err| -> 0</span></li></ul></section>
+    <section class="container"><h1>Diagnostics</h1><p>Error handling should produce clear diagnostics.</p><p>Useful diagnostic cases include:</p><ul><li>calling an error-returning function without handling the error</li><li>using trailing <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">!</span> in a function with no compatible error return slot</li><li>using <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">catch</span> without <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">-></span> in a function with no compatible error return slot, unless the block exits explicitly</li><li>using fallback values with the wrong type or wrong count</li><li>using <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">return!</span> in a function that does not return <span style="
@@ -814,10 +944,13 @@ body {
     ">!</span> bubbles an error</li><li><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">! fallback</span> recovers with a fallback value</li><li><span style="
+    ">catch -> fallback</span> recovers with fallback success values</li><li><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">err! fallback:</span> creates a named error handler</li><li>panics should not be used for normal control flow</li></ul><p>The result is explicit, typed, and compiler-checkable error handling.</p></section>
+    ">catch |err|: ... ;</span> catches, handles, and bubbles the same error</li><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">catch |err| -> fallback: ... ;</span> catches, handles, and recovers</li><li>panics should not be used for normal control flow</li></ul><p>The result is explicit, typed, and compiler-checkable error handling.</p></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

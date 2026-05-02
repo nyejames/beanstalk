@@ -22,7 +22,7 @@ import @styles/docs {navbar, title, section, styled_table, header, data, codeblo
 
     The core rule is:
 
-    > If a function can return an error, the caller must either handle the error or bubble it upward.
+    > If a function can return an error, the caller must either catch the error or bubble it upward.
 ]
 
 #[section, $markdown:
@@ -57,7 +57,7 @@ import @styles/docs {navbar, title, section, styled_table, header, data, codeblo
 
     [codesnippet:Error] is a builtin language type.
 
-    It is intended to carry structured failure information instead of only a string.
+    It carries structured failure information instead of only a string.
 
     Conceptually, [codesnippet:Error] contains:
 
@@ -122,22 +122,6 @@ import @styles/docs {navbar, title, section, styled_table, header, data, codeblo
 ]
 
 #[section, $markdown:
-    # Fallback values
-
-    Use [codesnippet:!] followed by a fallback value to recover from an error.
-
-    [codeblock, $code("bst"):
-        value = parse_number("") ! 0
-    ]
-
-    If [codesnippet:parse_number] succeeds, [codesnippet:value] receives the parsed number.
-
-    If [codesnippet:parse_number] returns an error, [codesnippet:value] receives [codesnippet:0].
-
-    The fallback value must match the expected success type.
-]
-
-#[section, $markdown:
     # Bubbling errors
 
     Use a trailing [codesnippet:!] to bubble an error to the surrounding function.
@@ -153,17 +137,22 @@ import @styles/docs {navbar, title, section, styled_table, header, data, codeblo
 
     If it returns an error, the surrounding function returns that error from its own error slot.
 
-    The surrounding function must also declare a compatible [codesnippet:Error!] return slot.
+    The surrounding function must declare a compatible [codesnippet:Error!] return slot.
 ]
 
 #[section, $markdown:
-    # Named error handlers
+    # Catching errors
 
-    Use [codesnippet:err!] to bind the error value inside a handler block.
+    Use [codesnippet:catch] to inspect or recover from an error.
+
+    [codesnippet:catch] has two forms:
+
+    - without [codesnippet:->], it handles the error and bubbles it upward
+    - with [codesnippet:->], it handles the error and recovers with fallback success values
 
     [codeblock, $code("bst"):
-        recover |text String| -> Int:
-            value = parse_number(text) err! 0:
+        wrapper |text String| -> Int, Error!:
+            value = parse_number(text) catch |err|:
                 io(err.message)
             ;
 
@@ -173,12 +162,109 @@ import @styles/docs {navbar, title, section, styled_table, header, data, codeblo
 
     In this example:
 
-    - [codesnippet:err] is the error value
+    - [codesnippet:err] is the caught error value
+    - the handler body can inspect or log the error
+    - if the handler reaches the end, the same error is returned from the surrounding function
+
+    A [codesnippet:catch] block without [codesnippet:->] must be inside a function that can return a compatible [codesnippet:Error!], unless the block exits explicitly with [codesnippet:return] or [codesnippet:return!].
+]
+
+#[section, $markdown:
+    # Recovering with fallback values
+
+    Use [codesnippet:catch ->] to recover from an error with fallback success values.
+
+    [codeblock, $code("bst"):
+        recover |text String| -> Int:
+            value = parse_number(text) catch -> 0
+
+            return value
+        ;
+    ]
+
+    If [codesnippet:parse_number(text)] succeeds, [codesnippet:value] receives the parsed number.
+
+    If it returns an error, [codesnippet:value] receives [codesnippet:0].
+
+    The fallback value must match the expected success type.
+]
+
+#[section, $markdown:
+    # Recovering with a handler block
+
+    Use [codesnippet:catch |err| ->] when recovery needs to inspect or log the error.
+
+    [codeblock, $code("bst"):
+        recover |text String| -> Int:
+            value = parse_number(text) catch |err| -> 0:
+                io(err.message)
+            ;
+
+            return value
+        ;
+    ]
+
+    In this example:
+
+    - [codesnippet:err] is the caught error value
     - [codesnippet:0] is the fallback success value
     - the handler body can inspect or log the error
     - the surrounding function does not need to return [codesnippet:Error!]
 
-    Named handlers are useful when recovery needs more than a simple fallback expression.
+    The handler body runs only on the error path.
+
+    The fallback value is used after the handler body completes.
+]
+
+#[section, $markdown:
+    # Overriding catch behavior
+
+    A [codesnippet:catch] block without [codesnippet:->] automatically bubbles the caught error if the block reaches the end.
+
+    The block can override this by returning explicitly.
+
+    [codeblock, $code("bst"):
+        recover |text String| -> Int:
+            value = parse_number(text) catch |err|:
+                io(err.message)
+                return 0
+            ;
+
+            return value
+        ;
+    ]
+
+    In this example, the surrounding function returns [codesnippet:0] from inside the [codesnippet:catch] block.
+
+    The automatic error bubble does not happen because the block exits explicitly.
+
+    This is useful when the surrounding function does not return [codesnippet:Error!], but the recovery path needs more control than a fallback expression.
+]
+
+#[section, $markdown:
+    # Multiple success values
+
+    Beanstalk supports multiple return values.
+
+    A function can return multiple success values and one error slot.
+
+    [codeblock, $code("bst"):
+        load_user |id String| -> String, Float, Error!:
+            if id.is_empty():
+                return! Error("User", "user.empty_id", "Missing user id")
+            ;
+
+            return "guest", 0.0
+        ;
+
+        name, score = load_user(id) catch |err| -> "guest", 0.0:
+            io(err.message)
+        ;
+    ]
+
+    The fallback values must match the success return list.
+
+    If the success path returns two values, the recovery path must provide two fallback values.
 ]
 
 #[section, $markdown:
@@ -193,13 +279,18 @@ import @styles/docs {navbar, title, section, styled_table, header, data, codeblo
         ]
 
         [data:
-            [: [codesnippet, "parse_number(text) ! 0"] ]
+            [: [codesnippet, "parse_number(text) catch -> 0"] ]
             [: Use [codesnippet:0] as a fallback value if an error is returned. ]
         ]
 
         [data:
-            [: [codesnippet, "parse_number(text) err! 0: ... ;"] ]
-            [: Bind the error as [codesnippet:err], run a handler block, then use a fallback value. ]
+            [: [codesnippet, "parse_number(text) catch |err|: ... ;"] ]
+            [: Bind the error as [codesnippet:err], run a handler block, then bubble the same error. ]
+        ]
+
+        [data:
+            [: [codesnippet, "parse_number(text) catch |err| -> 0: ... ;"] ]
+            [: Bind the error as [codesnippet:err], run a handler block, then recover with [codesnippet:0]. ]
         ]
 
         [data:
@@ -219,9 +310,9 @@ import @styles/docs {navbar, title, section, styled_table, header, data, codeblo
     [codeblock, $code("bst"):
         my_list ~= {1, 2, 3}
 
-        fallback = my_list.length() ! 0
+        fallback = my_list.length() catch -> 0
 
-        value = my_list.get(5) err! fallback:
+        value = my_list.get(5) catch |err| -> fallback:
             io("Index out of bounds error: ", err.message)
         ;
     ]
@@ -230,7 +321,7 @@ import @styles/docs {navbar, title, section, styled_table, header, data, codeblo
 
     Collection methods should not silently ignore invalid operations.
 
-    They should produce structured errors that can be handled, bubbled, or recovered from.
+    They should produce structured errors that can be caught, bubbled, or recovered from.
 ]
 
 #[section, $markdown:
@@ -251,7 +342,7 @@ import @styles/docs {navbar, title, section, styled_table, header, data, codeblo
     User code still sees the same error-handling surface:
 
     - recover with a fallback
-    - recover with a named handler
+    - recover with a named catch block
     - bubble the error
 ]
 
@@ -342,7 +433,7 @@ import @styles/docs {navbar, title, section, styled_table, header, data, codeblo
         [data:
             [: [codesnippet:Error!] ]
             [: Recoverable failure returned as a value. ]
-            [: Must handle, recover, or bubble. ]
+            [: Must catch, recover, or bubble. ]
         ]
 
         [data:
@@ -378,22 +469,31 @@ import @styles/docs {navbar, title, section, styled_table, header, data, codeblo
             return value
         ;
 
-        recover |text String| -> Int:
-            value = parse_number(text) err! 0:
+        log_then_bubble |text String| -> Int, Error!:
+            value = parse_number(text) catch |err|:
                 io(err.message)
             ;
 
             return value
         ;
 
-        fallback_value = parse_number("") ! 0
+        recover |text String| -> Int:
+            value = parse_number(text) catch |err| -> 0:
+                io(err.message)
+            ;
+
+            return value
+        ;
+
+        fallback_value = parse_number("") catch -> 0
     ]
 
-    This example shows the three core call-site choices:
+    This example shows the core call-site choices:
 
     - bubble with [codesnippet, "parse_number(text)!"]
-    - recover with [codesnippet, "parse_number(text) ! 0"]
-    - handle and recover with [codesnippet:err!]
+    - recover with [codesnippet, "parse_number(text) catch -> 0"]
+    - catch, inspect, and bubble with [codesnippet:catch]
+    - catch, inspect, and recover with [codesnippet, "catch |err| -> 0"]
 ]
 
 #[section, $markdown:
@@ -404,8 +504,9 @@ import @styles/docs {navbar, title, section, styled_table, header, data, codeblo
     Useful diagnostic cases include:
 
     - calling an error-returning function without handling the error
-    - using [codesnippet:!] in a function with no compatible error return slot
-    - using a fallback value with the wrong type
+    - using trailing [codesnippet:!] in a function with no compatible error return slot
+    - using [codesnippet:catch] without [codesnippet:->] in a function with no compatible error return slot, unless the block exits explicitly
+    - using fallback values with the wrong type or wrong count
     - using [codesnippet:return!] in a function that does not return [codesnippet:Error!]
     - using [codesnippet:none] without optional type context
     - using [codesnippet:#panic] where only declarations are allowed
@@ -430,8 +531,9 @@ import @styles/docs {navbar, title, section, styled_table, header, data, codeblo
     - error-returning calls must be handled
     - [codesnippet:return!] returns an error
     - trailing [codesnippet:!] bubbles an error
-    - [codesnippet:! fallback] recovers with a fallback value
-    - [codesnippet:err! fallback:] creates a named error handler
+    - [codesnippet:catch -> fallback] recovers with fallback success values
+    - [codesnippet:catch |err|: ... ;] catches, handles, and bubbles the same error
+    - [codesnippet:catch |err| -> fallback: ... ;] catches, handles, and recovers
     - panics should not be used for normal control flow
 
     The result is explicit, typed, and compiler-checkable error handling.

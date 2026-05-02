@@ -226,7 +226,7 @@ value = parse_number(text)!
 Or provide fallback values:
 
 ```beanstalk
-value = parse_number(text) ! 0
+value = parse_number(text) catch -> 0
 ```
 
 Multiple success values use the normal return list and a shared assignment on the caller side:
@@ -239,14 +239,12 @@ pair || -> String, Int:
 name, count = pair()
 ```
 
-Multi-bind is currently intended for multi-return function-call results only. Regular declarations
-remain single-target, and other multi-value expression blocks are not supported yet.
+Multi-bind is currently intended for multi-return function-call results only. Regular declarations remain single-target, and other multi-value expression blocks are not supported yet.
 
-Named handler scopes are supported for explicit error-handling blocks, including fallback values
-when the success path still needs values:
+Named handler scopes are supported for explicit error-handling blocks, including fallback values when the success path still needs values:
 
 ```beanstalk
-name, score = load_user(id) err! "guest", 0.0:
+name, score = load_user(id) catch |err| -> "guest", 0.0:
     io(err.message)
 ;
 ```
@@ -316,7 +314,7 @@ io(message)
 
 -- Print with interpolation using templates
 name = "Alice"
-io([: Hello, [name]!])
+io([: Hello, [name]])
 
 -- Print in functions
 greet |name String|:
@@ -355,22 +353,22 @@ Directive availability is frontend-registry based:
 -- Define a template style
 [
   $markdown,                        
-  $children([: All children start with this prefix! ])    -- Applies only to direct children
+  $children([: All children start with this prefix ])    -- Applies only to direct children
 :
   # Hello
   This template is parsed as markdown.
 
   @example.com (Here is a link!) using this custom markdown flavour.
 
-  [$todo: write some more info!]
+  [$todo: write some more info]
 
-  [: This child is prefixed!]
+  [: This child is prefixed]
 ]
 ```
 
 **Frontend Built-in Style Directives**
 
-- $slot / $insert(..) - See slots below!
+- $slot / $insert(..) - See slots below
 - $fresh              - Opts this child template out of wrappers applied by the immediate parent's `$children(..)` directive
 - $markdown           - Parses the template bodies with a custom flavour of Markdown
 - $code               - Highlights code blocks using the compiler's built-in formatter

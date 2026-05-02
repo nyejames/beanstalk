@@ -274,6 +274,12 @@ Path: `src/compiler_frontend/ast/mod.rs`
 AST consumes sorted headers and header-owned `ModuleSymbols`.
 It resolves and validates semantic information, enforces file-local visibility, parses executable bodies, and emits the typed AST consumed by HIR.
 
+Internally, AST construction is organized around three phase owners:
+
+* `build_ast_environment`: builds file import bindings, resolved declaration metadata, constants, nominal types, function signatures, receiver catalog data, and shared environment side channels.
+* `emit_ast_nodes`: parses function/start/template bodies against the completed environment and emits AST nodes plus const-template output.
+* `finalize_ast`: performs HIR-boundary cleanup, including doc fragment extraction, const top-level fragment assembly, module constant normalization, template normalization, type-boundary validation, builtin AST merging, and final `Ast` construction.
+
 AST owns:
 
 * per-file import visibility
@@ -290,8 +296,8 @@ AST owns:
 * constant folding and const-only validation
 * template composition, compile-time folding, helper elimination, and runtime render-plan preparation
 
-AST should be described by this ownership contract, not by a fixed internal pass count.
-The pass structure is an implementation detail and may change as the stage is simplified.
+AST should be described by this ownership and data-flow contract, not by a fixed internal pass count.
+The internal substeps inside each phase are implementation details and may change as the stage is simplified.
 
 ### Imports and visibility
 
