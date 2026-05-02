@@ -1,11 +1,11 @@
-//! Passes 4–5: function signature resolution and receiver method catalog construction.
+//! Function signature resolution and receiver method catalog construction.
 //!
 //! WHAT: resolves function parameter/return types using the struct declarations from pass 3,
 //! then builds an indexed receiver-method catalog from the resolved signatures.
 //! WHY: late resolution lets signatures reference named struct types; the catalog depends on
 //! resolved signatures and must be built before AST emission in pass 6.
 
-use super::build_state::AstBuildState;
+use super::builder::AstModuleEnvironmentBuilder;
 use crate::compiler_frontend::ast::import_bindings::FileImportBindings;
 use crate::compiler_frontend::ast::receiver_methods::build_receiver_method_catalog;
 use crate::compiler_frontend::ast::type_resolution::{
@@ -29,8 +29,8 @@ use std::rc::Rc;
 
 use crate::compiler_frontend::ast::module_ast::scope_context::ReceiverMethodCatalog;
 
-impl<'a> AstBuildState<'a> {
-    /// Pass 4: Resolve function signatures after struct declarations are available.
+impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
+    /// Resolves function signatures after struct declarations are available.
     /// WHY: late resolution lets signatures use named struct types and receiver syntax
     /// without adding a second nominal-type system just for headers.
     pub(in crate::compiler_frontend::ast) fn resolve_function_signatures(
@@ -149,7 +149,7 @@ impl<'a> AstBuildState<'a> {
         Ok(())
     }
 
-    /// Pass 5: Build the receiver method catalog from resolved function signatures.
+    /// Builds the receiver method catalog from resolved function signatures.
     pub(in crate::compiler_frontend::ast) fn build_receiver_catalog(
         &self,
         sorted_headers: &[Header],

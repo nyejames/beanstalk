@@ -11,7 +11,7 @@
 //! fields and constant type annotations. Self-reference (`A as A`) also creates a self-loop edge.
 
 use crate::compiler_frontend::ast::import_bindings::FileImportBindings;
-use crate::compiler_frontend::ast::module_ast::build_state::AstBuildState;
+use crate::compiler_frontend::ast::module_ast::environment::builder::AstModuleEnvironmentBuilder;
 use crate::compiler_frontend::compiler_errors::{
     CompilerError, CompilerMessages, ErrorMetaDataKey,
 };
@@ -24,7 +24,7 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use rustc_hash::FxHashMap;
 
-impl<'a> AstBuildState<'a> {
+impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
     /// Resolve all type alias targets in sorted-header order.
     ///
     /// WHAT: iterates sorted headers, resolving each `TypeAlias` target against already-resolved
@@ -81,6 +81,7 @@ impl<'a> AstBuildState<'a> {
             //     that it cannot construct or field-access, leading to confusing semantics.
             if let DataType::External { type_id } = &resolved_target {
                 let type_name = self
+                    .context
                     .external_package_registry
                     .get_type_by_id(*type_id)
                     .map(|def| def.name.to_string())

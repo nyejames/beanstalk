@@ -27,7 +27,7 @@
 //! They don't have stable backend-facing value shapes, so HIR must not
 //! receive them as module constants. They are filtered during normalization.
 
-use super::super::build_state::AstBuildState;
+use super::finalizer::AstFinalizer;
 use super::template_helpers::try_fold_template_to_string;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
@@ -39,7 +39,7 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
-impl<'a> AstBuildState<'a> {
+impl AstFinalizer<'_, '_, '_> {
     /// Normalizes module constants for HIR metadata.
     ///
     /// WHAT: Folds compile-time templates in module constants and filters
@@ -52,9 +52,9 @@ impl<'a> AstBuildState<'a> {
         project_path_resolver: &ProjectPathResolver,
         string_table: &mut StringTable,
     ) -> Result<Vec<Declaration>, CompilerError> {
-        let mut normalized_constants = Vec::with_capacity(self.module_constants.len());
+        let mut normalized_constants = Vec::with_capacity(self.environment.module_constants.len());
 
-        for declaration in &self.module_constants {
+        for declaration in &self.environment.module_constants {
             // `$insert(..)` helper constants only exist so AST template composition can
             // splice them into an immediate parent wrapper. They do not have a stable
             // backend-facing value shape, so HIR must not receive them as module consts.
@@ -66,6 +66,7 @@ impl<'a> AstBuildState<'a> {
             }
 
             let source_file_scope = self
+                .environment
                 .module_symbols
                 .canonical_source_by_symbol_path
                 .get(&declaration.id)
@@ -111,7 +112,7 @@ impl<'a> AstBuildState<'a> {
                     let folded = try_fold_template_to_string(
                         template,
                         source_file_scope,
-                        self.path_format_config,
+                        &self.context.path_format_config,
                         project_path_resolver,
                         string_table,
                     )?

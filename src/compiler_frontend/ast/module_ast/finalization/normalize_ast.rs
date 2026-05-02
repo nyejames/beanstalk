@@ -36,7 +36,7 @@
 //! - No escaped helper artifacts (`TemplateType::SlotInsert`)
 //! - No templates requiring formatting
 
-use super::super::build_state::AstBuildState;
+use super::finalizer::AstFinalizer;
 use super::template_helpers::try_fold_template_to_string;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{
@@ -55,7 +55,7 @@ use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::value_mode::ValueMode;
 
-impl<'a> AstBuildState<'a> {
+impl AstFinalizer<'_, '_, '_> {
     /// Normalizes all templates in the AST for HIR consumption.
     ///
     /// WHAT: Traverses all AST nodes and normalizes embedded templates by
@@ -64,14 +64,18 @@ impl<'a> AstBuildState<'a> {
     /// WHY: Ensures HIR receives semantically complete templates without
     /// needing to understand template composition or folding rules.
     pub(crate) fn normalize_ast_templates_for_hir(
-        &mut self,
+        &self,
+        ast: &mut [AstNode],
         project_path_resolver: &ProjectPathResolver,
         string_table: &mut StringTable,
     ) -> Result<(), CompilerError> {
-        let canonical_source_by_symbol_path = &self.module_symbols.canonical_source_by_symbol_path;
-        let path_format_config = self.path_format_config;
+        let canonical_source_by_symbol_path = &self
+            .environment
+            .module_symbols
+            .canonical_source_by_symbol_path;
+        let path_format_config = &self.context.path_format_config;
 
-        for node in &mut self.ast {
+        for node in ast {
             let source_file_scope = canonical_source_by_symbol_path
                 .get(&node.scope)
                 .unwrap_or(&node.location.scope)

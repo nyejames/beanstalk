@@ -1,10 +1,10 @@
-//! Pass 3: type resolution for constants and struct field types.
+//! Type resolution for constants and nominal declarations.
 //!
 //! WHAT: parses constant values and resolves struct field types in dependency order.
 //! WHY: struct defaults can reference constants, so constants must be parsed first;
 //! both use file-scoped visibility gates from pass 2.
 
-use super::build_state::AstBuildState;
+use super::builder::AstModuleEnvironmentBuilder;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::import_bindings::{
@@ -34,8 +34,8 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use std::rc::Rc;
 use std::time::Instant;
 
-impl<'a> AstBuildState<'a> {
-    /// Pass 3: Resolve constants and struct field types in dependency order.
+impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
+    /// Resolves constants and nominal declaration types in dependency order.
     /// WHY: struct defaults require constant-context parsing and import gates, so defaults
     /// can consume constants deterministically.
     pub(in crate::compiler_frontend::ast) fn resolve_types(
@@ -345,11 +345,11 @@ impl<'a> AstBuildState<'a> {
                             visible_type_aliases,
                             resolved_type_aliases,
                             generic_declarations_by_path,
-                            external_package_registry: self.external_package_registry,
-                            style_directives: self.style_directives,
-                            project_path_resolver: self.project_path_resolver.clone(),
-                            path_format_config: self.path_format_config.clone(),
-                            build_profile: self.build_profile,
+                            external_package_registry: self.context.external_package_registry,
+                            style_directives: self.context.style_directives,
+                            project_path_resolver: self.context.project_path_resolver.clone(),
+                            path_format_config: self.context.path_format_config.clone(),
+                            build_profile: self.context.build_profile,
                             warnings: &mut self.warnings,
                             rendered_path_usages: self.rendered_path_usages.clone(),
                             unresolved_constant_paths: &unresolved_constant_paths,

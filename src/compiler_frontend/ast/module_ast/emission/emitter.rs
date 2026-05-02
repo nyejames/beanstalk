@@ -1,4 +1,4 @@
-//! Pass 6: AST node emission.
+//! AST node emission.
 //!
 //! WHAT: iterates sorted headers with full context (resolved signatures, receiver catalog,
 //! per-file visibility) and lowers each header into typed AST nodes.
@@ -10,12 +10,12 @@
 //! Constants and choices are handled in earlier passes; they do not emit nodes here.
 //! Struct node emission reads `resolved_struct_fields_by_path` populated in pass 3.
 
-use super::build_state::AstBuildState;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::function_body_to_ast;
-use crate::compiler_frontend::ast::import_bindings::FileImportBindings;
+use crate::compiler_frontend::ast::module_ast::build_context::AstPhaseContext;
+use crate::compiler_frontend::ast::module_ast::environment::AstModuleEnvironment;
 use crate::compiler_frontend::ast::module_ast::scope_context::{
-    ContextKind, ReceiverMethodCatalog, ScopeContext, TopLevelDeclarationIndex,
+    ContextKind, ScopeContext, TopLevelDeclarationIndex,
 };
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnSlot,
@@ -24,10 +24,13 @@ use crate::compiler_frontend::ast::templates::template::TemplateConstValueKind;
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
+use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
 use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::string_interning::StringId;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::projects::settings;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 use crate::timer_log;
 use rustc_hash::FxHashMap;
@@ -39,30 +42,62 @@ use crate::compiler_frontend::compiler_messages::compiler_dev_logging::log_aggre
 use std::time::Duration;
 use std::time::Instant;
 
-impl<'a> AstBuildState<'a> {
-    /// Pass 6: Emit AST nodes for each header kind (functions, structs, templates).
-    pub(in crate::compiler_frontend::ast) fn emit_ast_nodes(
-        &mut self,
+pub(in crate::compiler_frontend::ast) struct AstEmission {
+    pub(in crate::compiler_frontend::ast) ast: Vec<AstNode>,
+    pub(in crate::compiler_frontend::ast) warnings: Vec<CompilerWarning>,
+    pub(in crate::compiler_frontend::ast) const_templates_by_path:
+        FxHashMap<InternedPath, StringId>,
+}
+
+pub(in crate::compiler_frontend::ast) struct AstEmitter<'context, 'services, 'environment> {
+    context: &'context AstPhaseContext<'services>,
+    environment: &'environment AstModuleEnvironment,
+    ast: Vec<AstNode>,
+    warnings: Vec<CompilerWarning>,
+    const_templates_by_path: FxHashMap<InternedPath, StringId>,
+}
+
+impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environment> {
+    pub(in crate::compiler_frontend::ast) fn new(
+        context: &'context AstPhaseContext<'services>,
+        environment: &'environment AstModuleEnvironment,
+        header_count: usize,
+    ) -> Self {
+        Self {
+            context,
+            environment,
+            ast: Vec::with_capacity(header_count * settings::TOKEN_TO_NODE_RATIO),
+            warnings: environment.warnings.clone(),
+            const_templates_by_path: FxHashMap::default(),
+        }
+    }
+
+    /// Emits AST nodes for each header kind (functions, structs, templates).
+    pub(in crate::compiler_frontend::ast) fn emit(
+        mut self,
         sorted_headers: Vec<Header>,
-        file_import_bindings: &FxHashMap<InternedPath, FileImportBindings>,
-        receiver_methods: &Rc<ReceiverMethodCatalog>,
         string_table: &mut StringTable,
-    ) -> Result<(), CompilerMessages> {
+    ) -> Result<AstEmission, CompilerMessages> {
         // Build the shared top-level declaration store once, after passes 3–4 have
         // fully resolved all declarations. Every function and start body clones only
         // the Rc pointer, not declaration data.
         let declaration_index_start = Instant::now();
-        let top_level_declarations =
-            Rc::new(TopLevelDeclarationIndex::new(self.declarations.clone()));
+        let top_level_declarations = Rc::new(TopLevelDeclarationIndex::new(
+            self.environment.declarations.clone(),
+        ));
         timer_log!(
             declaration_index_start,
             "AST/node emission/top-level declaration index built in: "
         );
         let _ = declaration_index_start;
 
-        let resolved_type_aliases = Rc::new(self.resolved_type_aliases_by_path.clone());
-        let generic_declarations =
-            Rc::new(self.module_symbols.generic_declarations_by_path.clone());
+        let resolved_type_aliases = Rc::new(self.environment.resolved_type_aliases_by_path.clone());
+        let generic_declarations = Rc::new(
+            self.environment
+                .module_symbols
+                .generic_declarations_by_path
+                .clone(),
+        );
 
         #[cfg(feature = "detailed_timers")]
         let mut total_function_body_parse_time = Duration::default();
@@ -82,7 +117,9 @@ impl<'a> AstBuildState<'a> {
         let mut const_templates_emitted = 0usize;
 
         for header in sorted_headers {
-            let bindings = file_import_bindings
+            let bindings = self
+                .environment
+                .file_import_bindings
                 .get(&header.source_file)
                 .cloned()
                 .unwrap_or_default();
@@ -98,6 +135,7 @@ impl<'a> AstBuildState<'a> {
                     }
 
                     let Some(resolved_signature) = self
+                        .environment
                         .resolved_function_signatures_by_path
                         .get(&header.tokens.src_path)
                         .cloned()
@@ -121,11 +159,11 @@ impl<'a> AstBuildState<'a> {
                         ContextKind::Function,
                         header.tokens.src_path.to_owned(),
                         Rc::clone(&top_level_declarations),
-                        self.external_package_registry.clone(),
+                        self.context.external_package_registry.clone(),
                         resolved_signature.signature.return_data_types(),
                     )
-                    .with_style_directives(self.style_directives)
-                    .with_build_profile(self.build_profile)
+                    .with_style_directives(self.context.style_directives)
+                    .with_build_profile(self.context.build_profile)
                     .with_visible_declarations(visible_declarations)
                     .with_visible_external_symbols(bindings.visible_external_symbols.clone())
                     .with_visible_source_bindings(bindings.visible_source_bindings.clone())
@@ -133,15 +171,15 @@ impl<'a> AstBuildState<'a> {
                     .with_resolved_type_aliases((*resolved_type_aliases).clone())
                     .with_generic_declarations((*generic_declarations).clone())
                     .with_resolved_struct_fields_by_path(
-                        self.resolved_struct_fields_by_path.clone(),
+                        self.environment.resolved_struct_fields_by_path.clone(),
                     )
                     .with_generic_nominal_instantiations(
-                        self.generic_nominal_instantiations.clone(),
+                        self.environment.generic_nominal_instantiations.clone(),
                     )
-                    .with_project_path_resolver(self.project_path_resolver.clone())
-                    .with_path_format_config(self.path_format_config.clone())
-                    .with_rendered_path_usage_sink(self.rendered_path_usages.clone())
-                    .with_receiver_methods(receiver_methods.clone())
+                    .with_project_path_resolver(self.context.project_path_resolver.clone())
+                    .with_path_format_config(self.context.path_format_config.clone())
+                    .with_rendered_path_usage_sink(self.environment.rendered_path_usages.clone())
+                    .with_receiver_methods(self.environment.receiver_methods.clone())
                     .with_source_file_scope(source_file_scope.to_owned());
                     context.expected_error_type = resolved_signature
                         .signature
@@ -198,11 +236,11 @@ impl<'a> AstBuildState<'a> {
                         ContextKind::Module,
                         header.tokens.src_path.to_owned(),
                         Rc::clone(&top_level_declarations),
-                        self.external_package_registry.clone(),
+                        self.context.external_package_registry.clone(),
                         vec![],
                     )
-                    .with_style_directives(self.style_directives)
-                    .with_build_profile(self.build_profile)
+                    .with_style_directives(self.context.style_directives)
+                    .with_build_profile(self.context.build_profile)
                     .with_visible_declarations(bindings.visible_symbol_paths.to_owned())
                     .with_visible_external_symbols(bindings.visible_external_symbols.clone())
                     .with_visible_source_bindings(bindings.visible_source_bindings.clone())
@@ -210,15 +248,15 @@ impl<'a> AstBuildState<'a> {
                     .with_resolved_type_aliases((*resolved_type_aliases).clone())
                     .with_generic_declarations((*generic_declarations).clone())
                     .with_resolved_struct_fields_by_path(
-                        self.resolved_struct_fields_by_path.clone(),
+                        self.environment.resolved_struct_fields_by_path.clone(),
                     )
                     .with_generic_nominal_instantiations(
-                        self.generic_nominal_instantiations.clone(),
+                        self.environment.generic_nominal_instantiations.clone(),
                     )
-                    .with_project_path_resolver(self.project_path_resolver.clone())
-                    .with_path_format_config(self.path_format_config.clone())
-                    .with_rendered_path_usage_sink(self.rendered_path_usages.clone())
-                    .with_receiver_methods(receiver_methods.clone())
+                    .with_project_path_resolver(self.context.project_path_resolver.clone())
+                    .with_path_format_config(self.context.path_format_config.clone())
+                    .with_rendered_path_usage_sink(self.environment.rendered_path_usages.clone())
+                    .with_receiver_methods(self.environment.receiver_methods.clone())
                     .with_source_file_scope(source_file_scope.to_owned());
 
                     let mut token_stream = header.tokens;
@@ -279,6 +317,7 @@ impl<'a> AstBuildState<'a> {
                         struct_headers_emitted += 1;
                     }
                     let fields = self
+                        .environment
                         .resolved_struct_fields_by_path
                         .get(&header.tokens.src_path)
                         .cloned()
@@ -308,11 +347,11 @@ impl<'a> AstBuildState<'a> {
                         ContextKind::Constant,
                         template_tokens.src_path.to_owned(),
                         Rc::clone(&top_level_declarations),
-                        self.external_package_registry.clone(),
+                        self.context.external_package_registry.clone(),
                         vec![],
                     )
-                    .with_style_directives(self.style_directives)
-                    .with_build_profile(self.build_profile)
+                    .with_style_directives(self.context.style_directives)
+                    .with_build_profile(self.context.build_profile)
                     .with_visible_declarations(bindings.visible_symbol_paths.to_owned())
                     .with_visible_external_symbols(bindings.visible_external_symbols.clone())
                     .with_visible_source_bindings(bindings.visible_source_bindings.clone())
@@ -320,14 +359,14 @@ impl<'a> AstBuildState<'a> {
                     .with_resolved_type_aliases((*resolved_type_aliases).clone())
                     .with_generic_declarations((*generic_declarations).clone())
                     .with_resolved_struct_fields_by_path(
-                        self.resolved_struct_fields_by_path.clone(),
+                        self.environment.resolved_struct_fields_by_path.clone(),
                     )
                     .with_generic_nominal_instantiations(
-                        self.generic_nominal_instantiations.clone(),
+                        self.environment.generic_nominal_instantiations.clone(),
                     )
-                    .with_project_path_resolver(self.project_path_resolver.clone())
-                    .with_path_format_config(self.path_format_config.clone())
-                    .with_rendered_path_usage_sink(self.rendered_path_usages.clone())
+                    .with_project_path_resolver(self.context.project_path_resolver.clone())
+                    .with_path_format_config(self.context.path_format_config.clone())
+                    .with_rendered_path_usage_sink(self.environment.rendered_path_usages.clone())
                     .with_source_file_scope(source_file_scope);
 
                     #[cfg(feature = "detailed_timers")]
@@ -433,6 +472,14 @@ impl<'a> AstBuildState<'a> {
             );
         }
 
-        Ok(())
+        Ok(AstEmission {
+            ast: self.ast,
+            warnings: self.warnings,
+            const_templates_by_path: self.const_templates_by_path,
+        })
+    }
+
+    fn error_messages(&self, error: CompilerError, string_table: &StringTable) -> CompilerMessages {
+        CompilerMessages::from_error_with_warnings(error, self.warnings.clone(), string_table)
     }
 }

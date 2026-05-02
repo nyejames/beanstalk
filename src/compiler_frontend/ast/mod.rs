@@ -21,21 +21,18 @@
 //! - parsing function bodies and other executable/body-local declarations
 //! - template composition, compile-time folding, and runtime render-plan preparation
 //!
-//! ## Pipeline (6 passes)
+//! ## Pipeline
 //!
-//! 1. `pass_import_bindings` — build per-file visibility gates from header import data
-//! 2. `pass_type_resolution` — resolve constant values and struct field types
-//! 3. `pass_function_signatures` — resolve function parameter/return types
-//! 4. `build_receiver_catalog` — index receiver methods from resolved signatures
-//! 5. `pass_emit_nodes` — lower function/template bodies into typed AST nodes
-//! 6. `finalize` — normalize templates, assemble [`Ast`] output
+//! 1. `build_ast_environment` — build imports, declarations, constants, signatures, and receiver metadata
+//! 2. `emit_ast_nodes` — lower function/start/template bodies into typed AST nodes
+//! 3. `finalize_ast` — normalize templates/constants and assemble [`Ast`] output
 //!
 //! Entry point: [`Ast::new`].
 
 // Internal AST implementation modules.
 //
-// `module_ast` contains the build state, pass methods, and scope-context helpers that
-// implement the 6-pass pipeline. The rest of the AST surface is split by concern
+// `module_ast` contains the environment, emission, finalization, and scope-context helpers that
+// implement the AST pipeline. The rest of the AST surface is split by concern
 // (expressions, statements, templates, field access, etc.).
 pub(crate) mod ast_nodes;
 mod import_bindings;
@@ -87,28 +84,27 @@ pub(crate) mod templates;
 //
 // WHY: the AST module should expose one obvious entry surface. Internal helpers,
 // pass implementations, and parser submodules stay private to `ast/`.
+pub use module_ast::build_context::AstBuildContext;
 pub use module_ast::scope_context::{ContextKind, ScopeContext, TopLevelDeclarationIndex};
 pub use templates::top_level_templates::AstDocFragment;
 pub use templates::top_level_templates::AstDocFragmentKind;
 
 // Imports for the AST entry point and body-parsing helper.
-use crate::compiler_frontend::FrontendBuildProfile;
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
 use crate::compiler_frontend::ast::instrumentation::{log_ast_counters, reset_ast_counters};
-use crate::compiler_frontend::ast::module_ast::build_state::AstBuildState;
+use crate::compiler_frontend::ast::module_ast::build_context::AstPhaseContext;
+use crate::compiler_frontend::ast::module_ast::emission::AstEmitter;
+use crate::compiler_frontend::ast::module_ast::environment::AstModuleEnvironmentBuilder;
+use crate::compiler_frontend::ast::module_ast::finalization::AstFinalizer;
 use crate::compiler_frontend::ast::statements::body_dispatch::parse_function_body_statements;
 use crate::compiler_frontend::ast::templates::top_level_templates::AstConstTopLevelFragment;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
-use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::module_symbols::ModuleSymbols;
 use crate::compiler_frontend::headers::parse_file_headers::{Header, TopLevelConstFragment};
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
-use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
-use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::FileTokens;
 use crate::timer_log;
@@ -151,20 +147,6 @@ pub struct Ast {
     pub choice_definitions: Vec<AstChoiceDefinition>,
 }
 
-/// Shared dependencies/configuration required to build one module AST.
-///
-/// WHAT: groups the long-lived frontend services and per-build settings used across all AST passes.
-/// WHY: `Ast::new` should describe its high-level inputs without a long parameter list.
-pub struct AstBuildContext<'a> {
-    pub external_package_registry: &'a ExternalPackageRegistry,
-    pub style_directives: &'a StyleDirectiveRegistry,
-    pub string_table: &'a mut StringTable,
-    pub entry_dir: InternedPath,
-    pub build_profile: FrontendBuildProfile,
-    pub project_path_resolver: Option<ProjectPathResolver>,
-    pub path_format_config: PathStringFormatConfig,
-}
-
 impl Ast {
     /// Constructs a complete typed AST from sorted headers and a pre-built symbol manifest.
     ///
@@ -182,83 +164,24 @@ impl Ast {
     ) -> Result<Ast, CompilerMessages> {
         reset_ast_counters();
 
-        let AstBuildContext {
-            external_package_registry,
-            style_directives,
-            string_table,
-            entry_dir,
-            build_profile,
-            project_path_resolver,
-            path_format_config,
-        } = context;
+        let header_count = sorted_headers.len();
+        let (phase_context, string_table) = AstPhaseContext::from_build_context(context);
 
-        let mut state = AstBuildState::new(
-            external_package_registry,
-            style_directives,
-            build_profile,
-            &project_path_resolver,
-            &path_format_config,
-            sorted_headers.len(),
-            module_symbols,
-        );
-
-        let environment_start = Instant::now();
-
-        let import_bindings_start = Instant::now();
-        let file_import_bindings = state.resolve_import_bindings(string_table)?;
-        timer_log!(
-            import_bindings_start,
-            "AST/environment/import bindings resolved in: "
-        );
-        let _ = import_bindings_start;
-
-        let type_alias_resolution_start = Instant::now();
-        state.resolve_type_aliases(&sorted_headers, &file_import_bindings, string_table)?;
-        timer_log!(
-            type_alias_resolution_start,
-            "AST/environment/type aliases resolved in: "
-        );
-        let _ = type_alias_resolution_start;
-
-        let type_resolution_start = Instant::now();
-        state.resolve_types(&sorted_headers, &file_import_bindings, string_table)?;
-        timer_log!(
-            type_resolution_start,
-            "AST/environment/nominal types completed in: "
-        );
-        let _ = type_resolution_start;
-
-        let function_signatures_start = Instant::now();
-        state.resolve_function_signatures(&sorted_headers, &file_import_bindings, string_table)?;
-        timer_log!(
-            function_signatures_start,
-            "AST/environment/function signatures resolved in: "
-        );
-        let _ = function_signatures_start;
-
-        let receiver_catalog_start = Instant::now();
-        let receiver_methods = state.build_receiver_catalog(&sorted_headers, string_table)?;
-        timer_log!(
-            receiver_catalog_start,
-            "AST/environment/receiver catalog built in: "
-        );
-        let _ = receiver_catalog_start;
-
-        timer_log!(environment_start, "AST/build environment completed in: ");
-        let _ = environment_start;
+        let environment = AstModuleEnvironmentBuilder::new(&phase_context, module_symbols)
+            .build(&sorted_headers, string_table)?;
 
         let node_emission_start = Instant::now();
-        state.emit_ast_nodes(
-            sorted_headers,
-            &file_import_bindings,
-            &receiver_methods,
-            string_table,
-        )?;
+        let emitted = AstEmitter::new(&phase_context, &environment, header_count)
+            .emit(sorted_headers, string_table)?;
         timer_log!(node_emission_start, "AST/emit nodes completed in: ");
         let _ = node_emission_start;
 
         let finalization_start = Instant::now();
-        let ast = state.finalize(entry_dir, &top_level_const_fragments, string_table)?;
+        let ast = AstFinalizer::new(&phase_context, &environment).finalize(
+            emitted,
+            &top_level_const_fragments,
+            string_table,
+        )?;
         timer_log!(finalization_start, "AST/finalize completed in: ");
         let _ = finalization_start;
 

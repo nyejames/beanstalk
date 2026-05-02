@@ -4,7 +4,7 @@
 //! WHY: AST owns name/type resolution; HIR should only receive concrete semantic types,
 //! with collection generic instances as the one builtin generic exception.
 
-use super::super::build_state::AstBuildState;
+use super::finalizer::AstFinalizer;
 use crate::compiler_frontend::ast::ast_nodes::{
     AstNode, Declaration, LoopBindings, MultiBindTarget, NodeKind,
 };
@@ -22,13 +22,14 @@ use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariantPayload;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
-impl<'a> AstBuildState<'a> {
+impl AstFinalizer<'_, '_, '_> {
     pub(crate) fn validate_no_unresolved_executable_types(
         &self,
+        ast: &[AstNode],
         module_constants: &[Declaration],
         string_table: &StringTable,
     ) -> Result<(), CompilerError> {
-        for node in &self.ast {
+        for node in ast {
             validate_node(node, string_table)?;
         }
 

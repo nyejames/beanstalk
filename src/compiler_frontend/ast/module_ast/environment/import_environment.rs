@@ -1,10 +1,10 @@
-//! Pass 2: import binding resolution.
+//! Import binding resolution for the AST environment.
 //!
 //! WHAT: builds per-source-file import visibility maps and start-function aliases.
 //! WHY: imports are file-scoped rules, but declarations are module-scoped identities;
 //! separating them keeps the declaration table stable while gates vary per file.
 
-use super::build_state::AstBuildState;
+use super::builder::AstModuleEnvironmentBuilder;
 use crate::compiler_frontend::ast::import_bindings::{
     FileImportBindings, resolve_file_import_bindings, resolve_re_exports,
 };
@@ -13,7 +13,7 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use rustc_hash::FxHashMap;
 
-impl<'a> AstBuildState<'a> {
+impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
     /// Build per-source-file import visibility and start-function aliases.
     pub(in crate::compiler_frontend::ast) fn resolve_import_bindings(
         &mut self,
@@ -21,7 +21,7 @@ impl<'a> AstBuildState<'a> {
     ) -> Result<FxHashMap<InternedPath, FileImportBindings>, CompilerMessages> {
         let reexport_warnings = resolve_re_exports(
             &mut self.module_symbols,
-            self.external_package_registry,
+            self.context.external_package_registry,
             string_table,
         )
         .map_err(|error| self.error_messages(error, string_table))?;
@@ -34,7 +34,7 @@ impl<'a> AstBuildState<'a> {
             &self.module_symbols.declared_paths_by_file,
             &self.module_symbols.type_alias_paths,
             &self.module_symbols.builtin_visible_symbol_paths,
-            self.external_package_registry,
+            self.context.external_package_registry,
             &self.module_symbols.facade_exports,
             &self.module_symbols.file_library_membership,
             &self.module_symbols.file_module_membership,

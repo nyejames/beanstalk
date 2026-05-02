@@ -45,7 +45,7 @@ pub struct AstDocFragment {
 /// Collects const top-level fragments from folded template values.
 ///
 /// WHAT: maps each header-parsed const fragment to its folded string value using the
-/// const template path map produced during AST emission (pass_emit_nodes).
+/// const template path map produced during AST emission.
 /// WHY: const fragments are folded during emit; this function gathers the results into
 /// the ordered `AstConstTopLevelFragment` list consumed by HIR/builders.
 pub(crate) fn collect_const_top_level_fragments(

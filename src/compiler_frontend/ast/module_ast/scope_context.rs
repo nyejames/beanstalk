@@ -6,17 +6,16 @@
 //! WHY: passing it as one struct avoids large parameter lists across recursive parsing calls,
 //! and makes clone-to-child easy while keeping shared mutation through `Rc<RefCell<>>`.
 //!
-//! ## Relationship to `AstBuildState`
+//! ## Relationship to AST emission
 //!
-//! `AstBuildState` owns the module-wide accumulation across passes (output vectors, type tables,
-//! the manifest). `ScopeContext` is created fresh for each function/template body in pass 6
-//! ([`pass_emit_nodes`](crate::compiler_frontend::ast::module_ast::pass_emit_nodes)) and owns
-//! only local scope growth (`local_declarations`, `loop_depth`, type expectations).
+//! `AstEmitter` creates `ScopeContext` fresh for each function/template body after the semantic
+//! environment is complete. `ScopeContext` owns only local scope growth (`local_declarations`,
+//! `loop_depth`, type expectations).
 //!
-//! `ScopeContext` receives cloned/copied state from `AstBuildState` (e.g.
+//! `ScopeContext` receives cloned/copied state from the shared environment (e.g.
 //! `Rc<TopLevelDeclarationIndex>` for top-level symbols, `Rc<ReceiverMethodCatalog>` for method
 //! lookup, `ExternalPackageRegistry` clone) so body parsing is self-contained without referencing the mutable
-//! build state directly.
+//! environment builder directly.
 //!
 //! ## External symbol visibility
 //!
