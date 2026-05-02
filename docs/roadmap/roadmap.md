@@ -15,7 +15,8 @@ Use the language surface integration matrix as a reference for what is currently
 - Template optimisation follow-up: track measured finalization/template bottlenecks in the AST benchmark log before creating a separate plan.
 - Generics (FINISHED PHASE 1 - 3 ONLY): `docs/roadmap/plans/beanstalk-generics-implementation-plan.md`
 - Traits
-- True results / options with generics
+- New Result/Error syntax: `docs/roadmap/plans/beanstalk-error-catch-syntax-migration-plan.md`
+- True Results / Options with generics
 - Closures
 - Hash Maps
 - Compile time arbitary precision aritmetic + Decimals Type support
