@@ -624,6 +624,26 @@ path = "generic_choice_match_success"
 tags = ["integration","generics","choices"]
 
 [[case]]
+id = "generic_empty_collection_constructor_ambiguity"
+path = "generic_empty_collection_constructor_ambiguity"
+tags = ["integration","generics","structs"]
+
+[[case]]
+id = "generic_missing_args_rejected"
+path = "generic_missing_args_rejected"
+tags = ["integration","generics","choices"]
+
+[[case]]
+id = "generic_nongeneric_of_rejected"
+path = "generic_nongeneric_of_rejected"
+tags = ["integration","generics","diagnostics"]
+
+[[case]]
+id = "generic_imported_struct_choice_success"
+path = "generic_imported_struct_choice_success"
+tags = ["integration","generics","imports"]
+
+[[case]]
 id = "choice_variant_default_value_deferred"
 path = "choice_variant_default_value_deferred"
 tags = ["integration","diagnostics","choices"]
