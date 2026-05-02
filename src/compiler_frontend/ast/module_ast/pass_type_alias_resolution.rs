@@ -16,8 +16,9 @@ use crate::compiler_frontend::compiler_errors::{
     CompilerError, CompilerMessages, ErrorMetaDataKey,
 };
 use crate::compiler_frontend::datatypes::DataType;
-use crate::compiler_frontend::declaration_syntax::type_syntax::resolve_named_types_in_data_type;
-use crate::compiler_frontend::external_packages::ExternalSymbolId;
+use crate::compiler_frontend::declaration_syntax::type_syntax::{
+    TypeResolutionContext, resolve_type,
+};
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -37,58 +38,35 @@ impl<'a> AstBuildState<'a> {
         string_table: &mut StringTable,
     ) -> Result<(), CompilerMessages> {
         for header in sorted_headers {
-            let HeaderKind::TypeAlias { target } = &header.kind else {
+            let HeaderKind::TypeAlias { target, .. } = &header.kind else {
                 continue;
             };
             let alias_path = &header.tokens.src_path;
 
             let file_bindings = file_import_bindings.get(&header.source_file);
+            let resolved_target = {
+                let type_resolution_context = TypeResolutionContext {
+                    declarations: &self.declarations,
+                    visible_declaration_ids: file_bindings
+                        .map(|bindings| &bindings.visible_symbol_paths),
+                    visible_external_symbols: file_bindings
+                        .map(|bindings| &bindings.visible_external_symbols),
+                    visible_source_bindings: file_bindings
+                        .map(|bindings| &bindings.visible_source_bindings),
+                    visible_type_aliases: file_bindings
+                        .map(|bindings| &bindings.visible_type_aliases),
+                    resolved_type_aliases: Some(&self.resolved_type_aliases_by_path),
+                    generic_parameters: None,
+                };
 
-            let resolved_target = resolve_named_types_in_data_type(
-                target,
-                &header.name_location,
-                &mut |type_name| {
-                    // 1. Check visible type aliases (same-file + imported).
-                    // WHY: pass_import_bindings already adds local aliases to
-                    // visible_type_aliases, so this map covers both same-file and
-                    // imported aliases behind a single visibility gate.
-                    if let Some(bindings) = file_bindings
-                        && let Some(alias_path) = bindings.visible_type_aliases.get(&type_name)
-                        && let Some(resolved_dt) =
-                            self.resolved_type_aliases_by_path.get(alias_path)
-                    {
-                        return Some(resolved_dt.to_owned());
-                    }
-
-                    // 2. Check visible source bindings (structs, choices, builtins).
-                    // WHY: aliases and same-file declarations are in visible_source_bindings;
-                    // visible_symbol_paths is only an access gate, not a name lookup table.
-                    if let Some(bindings) = file_bindings
-                        && let Some(canonical_path) =
-                            bindings.visible_source_bindings.get(&type_name)
-                        && let Some(dt) = self
-                            .declarations
-                            .iter()
-                            .rfind(|d| {
-                                &d.id == canonical_path && !d.is_unresolved_constant_placeholder()
-                            })
-                            .map(|d| d.value.data_type.to_owned())
-                    {
-                        return Some(dt);
-                    }
-
-                    // 3. Check visible external types.
-                    if let Some(bindings) = file_bindings
-                        && let Some(ExternalSymbolId::Type(type_id)) =
-                            bindings.visible_external_symbols.get(&type_name)
-                    {
-                        return Some(DataType::External { type_id: *type_id });
-                    }
-                    None
-                },
-                string_table,
-            )
-            .map_err(|error| self.error_messages(error, string_table))?;
+                resolve_type(
+                    target,
+                    &header.name_location,
+                    &type_resolution_context,
+                    string_table,
+                )
+                .map_err(|error| self.error_messages(error, string_table))?
+            };
 
             // Reject aliases to external opaque types for Alpha.
             // WHAT: external types are opaque and cannot be aliased by user code.

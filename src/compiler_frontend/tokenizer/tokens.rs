@@ -415,6 +415,8 @@ pub enum TokenKind {
     CloseParenthesis, // )
 
     As,
+    Type,
+    Of,
 
     // Can modify types to become variadic parameters.
     // So any number of values can be passed in

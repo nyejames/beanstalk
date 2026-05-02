@@ -585,6 +585,13 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
         ]
 
         [data:
+            [: Generic type infrastructure]
+            [: Partial]
+            [: Targeted frontend unit coverage for type-identity keys, parameter scopes, substitution, and deferred `type`/`of` diagnostics.]
+            [: Phase 0 lands internal generic-ready type substrate only. User-visible generics remain deferred. `type` and `of` are reserved and rejected with structured diagnostics until generic parsing is implemented.]
+        ]
+
+        [data:
             [: Choice generic declarations]
             [: Deferred]
             [: [codesnippet:choice_generic_declaration_deferred]]

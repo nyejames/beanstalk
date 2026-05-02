@@ -22,7 +22,9 @@ use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::declaration_syntax::declaration_shell::{
     BindingTargetSyntax, parse_binding_target_syntax,
 };
-use crate::compiler_frontend::declaration_syntax::type_syntax::resolve_named_types_in_data_type;
+use crate::compiler_frontend::declaration_syntax::type_syntax::{
+    TypeResolutionContext, resolve_type,
+};
 use crate::compiler_frontend::symbols::identifier_policy::{
     IdentifierNamingKind, ensure_not_keyword_shadow_identifier, naming_warning_for_identifier,
 };
@@ -524,21 +526,20 @@ fn resolve_target_explicit_type(
         return Ok(None);
     }
 
-    let resolved_type = resolve_named_types_in_data_type(
+    let type_resolution_context = TypeResolutionContext {
+        declarations: context.top_level_declarations.declarations(),
+        visible_declaration_ids: context.visible_declaration_ids.as_ref(),
+        visible_external_symbols: context.visible_external_symbols.as_ref(),
+        visible_source_bindings: context.visible_source_bindings.as_ref(),
+        visible_type_aliases: context.visible_type_aliases.as_ref(),
+        resolved_type_aliases: context.resolved_type_aliases.as_deref(),
+        generic_parameters: None,
+    };
+
+    let resolved_type = resolve_type(
         &target.type_annotation,
         &target.location,
-        &mut |type_name| {
-            context
-                .get_reference(&type_name)
-                .map(|declaration| declaration.value.data_type.to_owned())
-                .or_else(|| {
-                    context
-                        .lookup_visible_external_type(type_name)
-                        .map(|(type_id, _type_def)| {
-                            crate::compiler_frontend::datatypes::DataType::External { type_id }
-                        })
-                })
-        },
+        &type_resolution_context,
         string_table,
     )?;
 

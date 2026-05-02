@@ -18,6 +18,7 @@ use crate::compiler_frontend::ast::type_resolution::{
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_errors::ErrorMetaDataKey;
 use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::declaration_syntax::type_syntax::TypeResolutionContext;
 use crate::compiler_frontend::value_mode::ValueMode;
 
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
@@ -48,7 +49,7 @@ impl<'a> AstBuildState<'a> {
 
         let struct_fields_resolution_start = Instant::now();
         for header in sorted_headers {
-            let HeaderKind::Struct { fields } = &header.kind else {
+            let HeaderKind::Struct { fields, .. } = &header.kind else {
                 continue;
             };
 
@@ -57,16 +58,20 @@ impl<'a> AstBuildState<'a> {
                 .cloned()
                 .unwrap_or_default();
             let source_file_scope = header.canonical_source_file(string_table);
+            let type_resolution_context = TypeResolutionContext {
+                declarations: &self.declarations,
+                visible_declaration_ids: Some(&bindings.visible_symbol_paths),
+                visible_external_symbols: Some(&bindings.visible_external_symbols),
+                visible_source_bindings: Some(&bindings.visible_source_bindings),
+                visible_type_aliases: Some(&bindings.visible_type_aliases),
+                resolved_type_aliases: Some(&self.resolved_type_aliases_by_path),
+                generic_parameters: None,
+            };
 
             let fields = resolve_struct_field_types(
                 &header.tokens.src_path,
                 fields,
-                &self.declarations,
-                Some(&bindings.visible_symbol_paths),
-                Some(&bindings.visible_external_symbols),
-                Some(&bindings.visible_source_bindings),
-                Some(&bindings.visible_type_aliases),
-                Some(&self.resolved_type_aliases_by_path),
+                &type_resolution_context,
                 string_table,
             )
             .map_err(|error| self.error_messages(error, string_table))?;
@@ -96,7 +101,7 @@ impl<'a> AstBuildState<'a> {
 
         let choice_resolution_start = Instant::now();
         for header in sorted_headers {
-            let HeaderKind::Choice { variants } = &header.kind else {
+            let HeaderKind::Choice { variants, .. } = &header.kind else {
                 continue;
             };
 
@@ -104,15 +109,19 @@ impl<'a> AstBuildState<'a> {
                 .get(&header.source_file)
                 .cloned()
                 .unwrap_or_default();
+            let type_resolution_context = TypeResolutionContext {
+                declarations: &self.declarations,
+                visible_declaration_ids: Some(&bindings.visible_symbol_paths),
+                visible_external_symbols: Some(&bindings.visible_external_symbols),
+                visible_source_bindings: Some(&bindings.visible_source_bindings),
+                visible_type_aliases: Some(&bindings.visible_type_aliases),
+                resolved_type_aliases: Some(&self.resolved_type_aliases_by_path),
+                generic_parameters: None,
+            };
 
             let resolved_variants = resolve_choice_variant_payload_types(
                 variants,
-                &self.declarations,
-                Some(&bindings.visible_symbol_paths),
-                Some(&bindings.visible_external_symbols),
-                Some(&bindings.visible_source_bindings),
-                Some(&bindings.visible_type_aliases),
-                Some(&self.resolved_type_aliases_by_path),
+                &type_resolution_context,
                 string_table,
             )
             .map_err(|error| self.error_messages(error, string_table))?;

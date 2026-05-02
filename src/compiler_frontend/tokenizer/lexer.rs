@@ -590,6 +590,8 @@ pub(crate) fn keyword_or_variable(
             "block" => return_token!(TokenKind::Block, stream),
             "checked" => return_token!(TokenKind::Checked, stream),
             "as" => return_token!(TokenKind::As, stream),
+            "type" => return_token!(TokenKind::Type, stream),
+            "of" => return_token!(TokenKind::Of, stream),
 
             // Traits
             "must" => return_token!(TokenKind::Must, stream),
@@ -814,6 +816,8 @@ pub(crate) fn is_keyword(s: &str) -> bool {
             | "block"
             | "checked"
             | "as"
+            | "type"
+            | "of"
             | "must"
             | "this"
             | "This"

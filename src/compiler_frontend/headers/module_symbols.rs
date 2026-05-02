@@ -27,12 +27,14 @@ use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnSlot,
 };
 use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::datatypes::generics::GenericParameterList;
 use crate::compiler_frontend::declaration_syntax::declaration_shell::DeclarationSyntax;
 use crate::compiler_frontend::external_packages::ExternalSymbolId;
 use crate::compiler_frontend::headers::parse_file_headers::{FileImport, Header, HeaderKind};
 use crate::compiler_frontend::headers::types::FileReExport;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::value_mode::ValueMode;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -55,6 +57,21 @@ pub enum FacadeExportTarget {
 pub struct FacadeExportEntry {
     pub export_name: StringId,
     pub target: FacadeExportTarget,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum GenericDeclarationKind {
+    Function,
+    Struct,
+    Choice,
+    TypeAlias,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct GenericDeclarationMetadata {
+    pub(crate) kind: GenericDeclarationKind,
+    pub(crate) parameters: GenericParameterList,
+    pub(crate) declaration_location: SourceLocation,
 }
 
 /// Header-owned module symbol package.
@@ -90,6 +107,7 @@ pub(crate) struct ModuleSymbols {
     pub(crate) declared_paths_by_file: FxHashMap<InternedPath, FxHashSet<InternedPath>>,
     pub(crate) declared_names_by_file: FxHashMap<InternedPath, FxHashSet<StringId>>,
     pub(crate) type_alias_paths: FxHashSet<InternedPath>,
+    pub(crate) generic_declarations_by_path: FxHashMap<InternedPath, GenericDeclarationMetadata>,
 
     // Builtin data merged during header parsing.
     pub(crate) builtin_visible_symbol_paths: FxHashSet<InternedPath>,
@@ -133,6 +151,7 @@ impl ModuleSymbols {
             resolved_struct_fields_by_path: FxHashMap::default(),
             struct_source_by_path: FxHashMap::default(),
             type_alias_paths: FxHashSet::default(),
+            generic_declarations_by_path: FxHashMap::default(),
             facade_exports: FxHashMap::default(),
             file_library_membership: FxHashMap::default(),
             file_re_exports_by_source: FxHashMap::default(),
@@ -172,7 +191,7 @@ impl ModuleSymbols {
 
 fn declaration_from_header(header: &Header, string_table: &mut StringTable) -> Option<Declaration> {
     match &header.kind {
-        HeaderKind::Function { signature } => Some(Declaration {
+        HeaderKind::Function { signature, .. } => Some(Declaration {
             id: header.tokens.src_path.to_owned(),
             value: Expression::new(
                 ExpressionKind::NoValue,
@@ -186,7 +205,7 @@ fn declaration_from_header(header: &Header, string_table: &mut StringTable) -> O
             declaration,
             &header.name_location,
         )),
-        HeaderKind::Struct { fields } => Some(Declaration {
+        HeaderKind::Struct { fields, .. } => Some(Declaration {
             id: header.tokens.src_path.to_owned(),
             value: Expression::new(
                 ExpressionKind::NoValue,
@@ -195,7 +214,7 @@ fn declaration_from_header(header: &Header, string_table: &mut StringTable) -> O
                 ValueMode::ImmutableReference,
             ),
         }),
-        HeaderKind::Choice { variants } => Some(Declaration {
+        HeaderKind::Choice { variants, .. } => Some(Declaration {
             id: header.tokens.src_path.to_owned(),
             value: Expression::new(
                 ExpressionKind::NoValue,

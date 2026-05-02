@@ -12,6 +12,7 @@ use crate::compiler_frontend::ast::type_resolution::resolve_function_signature;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::declaration_syntax::type_syntax::TypeResolutionContext;
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -34,7 +35,7 @@ impl<'a> AstBuildState<'a> {
         let mut resolved_function_count = 0usize;
 
         for header in sorted_headers {
-            let HeaderKind::Function { signature } = &header.kind else {
+            let HeaderKind::Function { signature, .. } = &header.kind else {
                 continue;
             };
 
@@ -42,15 +43,19 @@ impl<'a> AstBuildState<'a> {
                 .get(&header.source_file)
                 .cloned()
                 .unwrap_or_default();
+            let type_resolution_context = TypeResolutionContext {
+                declarations: &self.declarations,
+                visible_declaration_ids: Some(&bindings.visible_symbol_paths),
+                visible_external_symbols: Some(&bindings.visible_external_symbols),
+                visible_source_bindings: Some(&bindings.visible_source_bindings),
+                visible_type_aliases: Some(&bindings.visible_type_aliases),
+                resolved_type_aliases: Some(&self.resolved_type_aliases_by_path),
+                generic_parameters: None,
+            };
             let resolved_signature = resolve_function_signature(
                 &header.tokens.src_path,
                 signature,
-                &self.declarations,
-                Some(&bindings.visible_symbol_paths),
-                Some(&bindings.visible_external_symbols),
-                Some(&bindings.visible_source_bindings),
-                Some(&bindings.visible_type_aliases),
-                Some(&self.resolved_type_aliases_by_path),
+                &type_resolution_context,
                 string_table,
             )
             .map_err(|error| self.error_messages(error, string_table))?;

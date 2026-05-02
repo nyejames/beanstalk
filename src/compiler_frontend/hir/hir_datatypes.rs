@@ -5,6 +5,9 @@
 // This is the canonical type representation used by HIR.
 // All types are fully resolved and interned.
 // No inference, no AST residue, no surface syntax artifacts.
+// HIR must never receive unresolved generic declarations or type parameters in
+// executable bodies. Generic declaration metadata may exist in frontend stages,
+// but executable HIR always uses concrete `TypeId` references.
 //
 // Types are referenced by TypeId and stored in a TypeContext.
 //

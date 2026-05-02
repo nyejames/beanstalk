@@ -32,6 +32,18 @@ impl<'a> HirBuilder<'a> {
                     self.hir_error_location(location)
                 )
             }
+            DataType::TypeParameter { .. } => {
+                return_hir_transformation_error!(
+                    "Unresolved DataType::TypeParameter reached HIR lowering",
+                    self.hir_error_location(location)
+                )
+            }
+            DataType::GenericInstance { .. } => {
+                return_hir_transformation_error!(
+                    "Unresolved DataType::GenericInstance reached HIR lowering",
+                    self.hir_error_location(location)
+                )
+            }
 
             DataType::Reference(inner) => return self.lower_data_type(inner, location),
 

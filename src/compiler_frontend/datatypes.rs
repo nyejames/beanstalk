@@ -17,6 +17,9 @@ use crate::compiler_frontend::paths::path_resolution::CompileTimePathKind;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use rustc_hash::FxHashSet;
 
+pub(crate) mod generics;
+use generics::{BuiltinGenericType, GenericBaseType, TypeParameterId};
+
 /// Type-level distinction for compile-time path values.
 ///
 /// WHAT: carries file vs directory classification inside the type system.
@@ -61,6 +64,14 @@ pub enum DataType {
     Inferred,
     // AST-only placeholder for nominal types that are resolved once the module declaration set is known.
     NamedType(StringId),
+    TypeParameter {
+        id: TypeParameterId,
+        name: StringId,
+    },
+    GenericInstance {
+        base: GenericBaseType,
+        arguments: Vec<DataType>,
+    },
 
     // Container and composite runtime types.
     Collection(Box<DataType>),
@@ -259,6 +270,7 @@ impl DataType {
             // Options and Results do not yet have frontend equality support.
             // Defer them until dedicated Option/Result comparison lowering is implemented.
             DataType::Option(_) | DataType::Result { .. } => false,
+            DataType::TypeParameter { .. } | DataType::GenericInstance { .. } => false,
 
             _ => false,
         }
@@ -273,6 +285,10 @@ impl DataType {
             }
             DataType::Inferred => "Inferred".to_string(),
             DataType::NamedType(name) => string_table.resolve(*name).to_string(),
+            DataType::TypeParameter { name, .. } => string_table.resolve(*name).to_string(),
+            DataType::GenericInstance { base, arguments } => {
+                display_generic_instance(base, arguments, string_table)
+            }
             DataType::Bool => "Bool".to_string(),
             DataType::StringSlice => "String".to_string(),
             DataType::TemplateWrapper => "String".to_string(),
@@ -282,7 +298,11 @@ impl DataType {
             DataType::Int => "Int".to_string(),
             DataType::Decimal => "Decimal".to_string(),
             DataType::Collection(inner_type) => {
-                format!("{} Collection", inner_type.display_with_table(string_table))
+                if displays_better_in_generic_surface(inner_type) {
+                    format!("{{{}}}", inner_type.display_with_table(string_table))
+                } else {
+                    format!("{} Collection", inner_type.display_with_table(string_table))
+                }
             }
             DataType::Parameters(args) => {
                 let mut arg_str = String::new();
@@ -350,14 +370,27 @@ impl DataType {
             DataType::False => "False".to_string(),
             DataType::Range => "Range".to_string(),
             DataType::Option(inner_type) => {
-                format!("Option({})", inner_type.display_with_table(string_table))
+                if displays_better_in_generic_surface(inner_type) {
+                    format!("{}?", inner_type.display_with_table(string_table))
+                } else {
+                    format!("Option({})", inner_type.display_with_table(string_table))
+                }
             }
             DataType::Result { ok, err } => {
-                format!(
-                    "Result({}, {})",
-                    ok.display_with_table(string_table),
-                    err.display_with_table(string_table)
-                )
+                if displays_better_in_generic_surface(ok) || displays_better_in_generic_surface(err)
+                {
+                    format!(
+                        "Result of {}, {}",
+                        ok.display_with_table(string_table),
+                        err.display_with_table(string_table)
+                    )
+                } else {
+                    format!(
+                        "Result({}, {})",
+                        ok.display_with_table(string_table),
+                        err.display_with_table(string_table)
+                    )
+                }
             }
             DataType::Choices {
                 nominal_path,
@@ -387,11 +420,80 @@ impl DataType {
     }
 }
 
+fn displays_better_in_generic_surface(data_type: &DataType) -> bool {
+    matches!(
+        data_type,
+        DataType::TypeParameter { .. }
+            | DataType::GenericInstance { .. }
+            | DataType::Collection(_)
+            | DataType::Option(_)
+    )
+}
+
+fn display_generic_instance(
+    base: &GenericBaseType,
+    arguments: &[DataType],
+    string_table: &StringTable,
+) -> String {
+    if matches!(
+        base,
+        GenericBaseType::Builtin(BuiltinGenericType::Collection)
+    ) && let [single_argument] = arguments
+    {
+        return format!("{{{}}}", single_argument.display_with_table(string_table));
+    }
+
+    let base_display = display_generic_base(base, string_table);
+    if arguments.is_empty() {
+        return base_display;
+    }
+
+    let arguments_display = arguments
+        .iter()
+        .map(|argument| argument.display_with_table(string_table))
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    format!("{base_display} of {arguments_display}")
+}
+
+fn display_generic_base(base: &GenericBaseType, string_table: &StringTable) -> String {
+    match base {
+        GenericBaseType::Named(name) => string_table.resolve(*name).to_owned(),
+        GenericBaseType::ResolvedNominal(path) => path
+            .name_str(string_table)
+            .unwrap_or("<generic>")
+            .to_owned(),
+        GenericBaseType::External(type_id) => format!("External({})", type_id.0),
+        GenericBaseType::Builtin(BuiltinGenericType::Collection) => String::from("Collection"),
+    }
+}
+
 impl PartialEq for DataType {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
             (DataType::Inferred, DataType::Inferred) => true,
             (DataType::NamedType(a), DataType::NamedType(b)) => a == b,
+            (
+                DataType::TypeParameter {
+                    id: id_a,
+                    name: name_a,
+                },
+                DataType::TypeParameter {
+                    id: id_b,
+                    name: name_b,
+                },
+            ) => id_a == id_b && name_a == name_b,
+            (
+                DataType::GenericInstance {
+                    base: base_a,
+                    arguments: arguments_a,
+                },
+                DataType::GenericInstance {
+                    base: base_b,
+                    arguments: arguments_b,
+                },
+            ) => base_a == base_b && arguments_a == arguments_b,
             (DataType::Reference(a), DataType::Reference(b)) => a == b,
             (DataType::Bool, DataType::Bool) => true,
             (DataType::Range, DataType::Range) => true,

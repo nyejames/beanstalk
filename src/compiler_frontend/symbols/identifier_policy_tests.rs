@@ -11,6 +11,8 @@ fn keyword_shadow_matching_ignores_case_and_leading_underscores() {
     assert_eq!(keyword_shadow_match("checked"), Some("checked"));
     assert_eq!(keyword_shadow_match("Checked"), Some("checked"));
     assert_eq!(keyword_shadow_match("_async"), Some("async"));
+    assert_eq!(keyword_shadow_match("type"), Some("type"));
+    assert_eq!(keyword_shadow_match("_Of"), Some("of"));
     assert_eq!(keyword_shadow_match("this"), Some("this"));
     assert_eq!(keyword_shadow_match("This"), Some("this"));
     assert_eq!(keyword_shadow_match("_This"), Some("this"));

@@ -88,7 +88,7 @@ impl<'a> AstBuildState<'a> {
 
             match header.kind {
                 // --- Functions ---
-                HeaderKind::Function { signature: _ } => {
+                HeaderKind::Function { .. } => {
                     let Some(resolved_signature) = self
                         .resolved_function_signatures_by_path
                         .get(&header.tokens.src_path)

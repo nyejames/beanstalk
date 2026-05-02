@@ -8,6 +8,8 @@ use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
+use crate::compiler_frontend::datatypes::generics::GenericParameterList;
+use crate::compiler_frontend::deferred_feature_diagnostics::deferred_feature_rule_error;
 
 use crate::compiler_frontend::declaration_syntax::choice::parse_choice_shell as parse_choice_header_payload;
 use crate::compiler_frontend::declaration_syntax::declaration_shell::{
@@ -129,7 +131,10 @@ pub(super) fn create_header(
 
             capture_function_body_tokens(token_stream, &mut body)?;
 
-            kind = HeaderKind::Function { signature };
+            kind = HeaderKind::Function {
+                generic_parameters: GenericParameterList::default(),
+                signature,
+            };
         }
 
         // `must` keyword: reserved for future trait implementation syntax.
@@ -147,6 +152,10 @@ pub(super) fn create_header(
                 "Header Parsing",
                 "Use a normal identifier or type name until traits are implemented",
             ));
+        }
+
+        TokenKind::Type => {
+            return Err(generic_declaration_deferred_error(token_stream));
         }
 
         // `=` (Assign): either `name = |fields|` (struct) or `#name = <expr>` (exported constant).
@@ -203,7 +212,10 @@ pub(super) fn create_header(
                     });
                 }
 
-                kind = HeaderKind::Struct { fields };
+                kind = HeaderKind::Struct {
+                    generic_parameters: GenericParameterList::default(),
+                    fields,
+                };
             } else if exported {
                 ensure_not_keyword_shadow_identifier(
                     declaration_name_text,
@@ -243,19 +255,6 @@ pub(super) fn create_header(
         | TokenKind::Symbol(_)
             if exported =>
         {
-            if let TokenKind::Symbol(sym) = token_stream.current_token_kind()
-                && context.string_table.resolve(*sym) == "type"
-            {
-                crate::return_rule_error!(
-                    "Generic choice declarations are not supported. See docs/src/docs/generics.md for future-facing design.",
-                    token_stream.current_location(),
-                    {
-                        CompilationStage => "Header Parsing",
-                        PrimarySuggestion => "Remove type parameters and declare a non-generic choice",
-                    }
-                );
-            }
-
             ensure_not_keyword_shadow_identifier(
                 declaration_name_text,
                 name_location.to_owned(),
@@ -339,6 +338,7 @@ pub(super) fn create_header(
             }
 
             kind = HeaderKind::Choice {
+                generic_parameters: GenericParameterList::default(),
                 variants: choice_header,
             };
         }
@@ -372,24 +372,13 @@ pub(super) fn create_header(
                 );
             });
 
-            kind = HeaderKind::TypeAlias { target };
+            kind = HeaderKind::TypeAlias {
+                generic_parameters: GenericParameterList::default(),
+                target,
+            };
         }
 
-        _ => {
-            if let TokenKind::Symbol(sym) = &current_token
-                && context.string_table.resolve(*sym) == "type"
-                && token_stream_contains_doublecolon_within_limit(token_stream)
-            {
-                crate::return_rule_error!(
-                    "Generic choice declarations are not supported. See docs/src/docs/generics.md for future-facing design.",
-                    token_stream.current_location(),
-                    {
-                        CompilationStage => "Header Parsing",
-                        PrimarySuggestion => "Remove type parameters and declare a non-generic choice",
-                    }
-                );
-            }
-        }
+        _ => {}
     }
 
     let mut header_tokens = FileTokens::new_with_file_id(full_name, token_stream.file_id, body);
@@ -496,6 +485,24 @@ fn token_stream_contains_doublecolon_within_limit(token_stream: &FileTokens) -> 
         }
     }
     false
+}
+
+fn generic_declaration_deferred_error(token_stream: &FileTokens) -> CompilerError {
+    if token_stream_contains_doublecolon_within_limit(token_stream) {
+        return deferred_feature_rule_error(
+            "Generic choice declarations are not supported. See docs/src/docs/generics.md for future-facing design.",
+            token_stream.current_location(),
+            "Header Parsing",
+            "Remove type parameters and declare a non-generic choice",
+        );
+    }
+
+    deferred_feature_rule_error(
+        "Generic declarations using `type` are reserved but not implemented yet.",
+        token_stream.current_location(),
+        "Header Parsing",
+        "Remove `type ...` for now. Generic declarations will be implemented in a later generics phase.",
+    )
 }
 
 fn create_constant_header_payload(

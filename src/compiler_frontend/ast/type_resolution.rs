@@ -12,8 +12,10 @@ use crate::compiler_frontend::ast::statements::functions::{
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationIndex};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::{DataType, ReceiverKey};
-use crate::compiler_frontend::declaration_syntax::type_syntax::resolve_named_types_in_data_type;
-use crate::compiler_frontend::external_packages::{ExternalPackageRegistry, ExternalSymbolId};
+use crate::compiler_frontend::declaration_syntax::type_syntax::{
+    TypeResolutionContext, resolve_type,
+};
+use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
@@ -42,82 +44,27 @@ fn visible_declaration_by_name<'a>(
     })
 }
 
-/// Resolve a declaration type, replacing `NamedType` placeholders recursively.
-/// Falls back to visible type aliases and external package types if no local declaration matches.
-#[allow(clippy::too_many_arguments)]
+/// Resolve a declaration type with the shared type-resolution context.
 pub(crate) fn resolve_named_signature_type(
     data_type: &DataType,
     location: &SourceLocation,
-    declarations: &[Declaration],
-    visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
-    visible_external_symbols: Option<&FxHashMap<StringId, ExternalSymbolId>>,
-    visible_source_bindings: Option<&FxHashMap<StringId, InternedPath>>,
-    visible_type_aliases: Option<&FxHashMap<StringId, InternedPath>>,
-    resolved_type_aliases: Option<&FxHashMap<InternedPath, DataType>>,
+    type_resolution_context: &TypeResolutionContext<'_>,
     string_table: &StringTable,
 ) -> Result<DataType, CompilerError> {
-    resolve_named_types_in_data_type(
-        data_type,
-        location,
-        &mut |type_name| {
-            // 1. Source-visible name → canonical declaration path.
-            // WHY: import aliases like `import @types/Person as Human` must resolve
-            // in signatures and struct fields just as they do in body code.
-            if let Some(bindings) = visible_source_bindings
-                && let Some(canonical_path) = bindings.get(&type_name)
-                && let Some(declaration) = declarations.iter().rfind(|d| {
-                    &d.id == canonical_path
-                        && !d.is_unresolved_constant_placeholder()
-                        && match visible_declaration_ids {
-                            Some(visible) => visible.contains(&d.id),
-                            None => true,
-                        }
-                })
-            {
-                return Some(declaration.value.data_type.to_owned());
-            }
-
-            visible_declaration_by_name(declarations, visible_declaration_ids, type_name)
-                .map(|declaration| declaration.value.data_type.to_owned())
-                .or_else(|| {
-                    visible_type_aliases
-                        .and_then(|map| map.get(&type_name))
-                        .and_then(|alias_path| {
-                            resolved_type_aliases.and_then(|r| r.get(alias_path))
-                        })
-                        .cloned()
-                })
-                .or_else(|| {
-                    visible_external_symbols
-                        .and_then(|map| map.get(&type_name))
-                        .and_then(|symbol_id| match symbol_id {
-                            ExternalSymbolId::Type(type_id) => {
-                                Some(DataType::External { type_id: *type_id })
-                            }
-                            _ => None,
-                        })
-                })
-        },
-        string_table,
-    )
+    resolve_type(data_type, location, type_resolution_context, string_table)
 }
 
 /// Resolve a function signature and extract receiver metadata for method cataloging.
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn resolve_function_signature(
     function_path: &InternedPath,
     signature: &FunctionSignature,
-    declarations: &[Declaration],
-    visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
-    visible_external_symbols: Option<&FxHashMap<StringId, ExternalSymbolId>>,
-    visible_source_bindings: Option<&FxHashMap<StringId, InternedPath>>,
-    visible_type_aliases: Option<&FxHashMap<StringId, InternedPath>>,
-    resolved_type_aliases: Option<&FxHashMap<InternedPath, DataType>>,
+    type_resolution_context: &TypeResolutionContext<'_>,
     string_table: &mut StringTable,
 ) -> Result<ResolvedFunctionSignature, CompilerError> {
     let this_name = string_table.intern("this");
     let function_name = function_path.name_str(string_table).unwrap_or("<function>");
-    let function_location = declarations
+    let function_location = type_resolution_context
+        .declarations
         .iter()
         .find(|declaration| declaration.id == *function_path)
         .map(|declaration| declaration.value.location.clone())
@@ -131,12 +78,7 @@ pub(crate) fn resolve_function_signature(
         resolved_parameter.value.data_type = resolve_named_signature_type(
             &parameter.value.data_type,
             &parameter.value.location,
-            declarations,
-            visible_declaration_ids,
-            visible_external_symbols,
-            visible_source_bindings,
-            visible_type_aliases,
-            resolved_type_aliases,
+            type_resolution_context,
             string_table,
         )?;
 
@@ -201,12 +143,7 @@ pub(crate) fn resolve_function_signature(
                 FunctionReturn::Value(resolve_named_signature_type(
                     data_type,
                     &function_location,
-                    declarations,
-                    visible_declaration_ids,
-                    visible_external_symbols,
-                    visible_source_bindings,
-                    visible_type_aliases,
-                    resolved_type_aliases,
+                    type_resolution_context,
                     string_table,
                 )?)
             }
@@ -218,12 +155,7 @@ pub(crate) fn resolve_function_signature(
                 data_type: resolve_named_signature_type(
                     data_type,
                     &function_location,
-                    declarations,
-                    visible_declaration_ids,
-                    visible_external_symbols,
-                    visible_source_bindings,
-                    visible_type_aliases,
-                    resolved_type_aliases,
+                    type_resolution_context,
                     string_table,
                 )?,
             },
@@ -245,16 +177,10 @@ pub(crate) fn resolve_function_signature(
 }
 
 /// Resolve all declared struct field types against visible declarations.
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn resolve_struct_field_types(
     struct_path: &InternedPath,
     fields: &[Declaration],
-    declarations: &[Declaration],
-    visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
-    visible_external_symbols: Option<&FxHashMap<StringId, ExternalSymbolId>>,
-    visible_source_bindings: Option<&FxHashMap<StringId, InternedPath>>,
-    visible_type_aliases: Option<&FxHashMap<StringId, InternedPath>>,
-    resolved_type_aliases: Option<&FxHashMap<InternedPath, DataType>>,
+    type_resolution_context: &TypeResolutionContext<'_>,
     string_table: &mut StringTable,
 ) -> Result<Vec<Declaration>, CompilerError> {
     // WHAT: resolves field types against the declaration table visible to this struct header.
@@ -267,18 +193,13 @@ pub(crate) fn resolve_struct_field_types(
         resolved_field.value.data_type = resolve_named_signature_type(
             &field.value.data_type,
             &field.value.location,
-            declarations,
-            visible_declaration_ids,
-            visible_external_symbols,
-            visible_source_bindings,
-            visible_type_aliases,
-            resolved_type_aliases,
+            type_resolution_context,
             string_table,
         )?;
         resolved_field.value = inline_visible_constant_references(
             &resolved_field.value,
-            declarations,
-            visible_declaration_ids,
+            type_resolution_context.declarations,
+            type_resolution_context.visible_declaration_ids,
             string_table,
         );
         if !matches!(resolved_field.value.kind, ExpressionKind::NoValue)
@@ -333,15 +254,9 @@ pub(crate) fn resolve_struct_field_types(
 }
 
 /// Resolve choice payload field types, replacing `NamedType` placeholders in record variants.
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn resolve_choice_variant_payload_types(
     variants: &[crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant],
-    declarations: &[Declaration],
-    visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
-    visible_external_symbols: Option<&FxHashMap<StringId, ExternalSymbolId>>,
-    visible_source_bindings: Option<&FxHashMap<StringId, InternedPath>>,
-    visible_type_aliases: Option<&FxHashMap<StringId, InternedPath>>,
-    resolved_type_aliases: Option<&FxHashMap<InternedPath, DataType>>,
+    type_resolution_context: &TypeResolutionContext<'_>,
     string_table: &StringTable,
 ) -> Result<Vec<crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant>, CompilerError>
 {
@@ -360,12 +275,7 @@ pub(crate) fn resolve_choice_variant_payload_types(
                     resolved_field.value.data_type = resolve_named_signature_type(
                         &field.value.data_type,
                         &field.value.location,
-                        declarations,
-                        visible_declaration_ids,
-                        visible_external_symbols,
-                        visible_source_bindings,
-                        visible_type_aliases,
-                        resolved_type_aliases,
+                        type_resolution_context,
                         string_table,
                     )?;
                     resolved_fields.push(resolved_field);
@@ -595,6 +505,15 @@ fn collect_runtime_struct_dependencies(
         }
         DataType::Collection(inner) | DataType::Reference(inner) | DataType::Option(inner) => {
             collect_runtime_struct_dependencies(inner, dependencies)
+        }
+        DataType::Result { ok, err } => {
+            collect_runtime_struct_dependencies(ok, dependencies);
+            collect_runtime_struct_dependencies(err, dependencies);
+        }
+        DataType::GenericInstance { arguments, .. } => {
+            for argument in arguments {
+                collect_runtime_struct_dependencies(argument, dependencies);
+            }
         }
         DataType::Returns(values) => {
             for value in values {

@@ -733,16 +733,6 @@ impl ScopeContext {
         }
     }
 
-    /// Look up a visible type alias by its source-level name.
-    /// Returns the resolved `DataType` if the alias exists and has been resolved.
-    pub(crate) fn lookup_visible_type_alias(&self, name: StringId) -> Option<DataType> {
-        let alias_path = self.visible_type_aliases.as_ref()?.get(&name)?.to_owned();
-        self.resolved_type_aliases
-            .as_ref()
-            .and_then(|table| table.get(&alias_path))
-            .cloned()
-    }
-
     /// Check whether a name is a visible type alias, regardless of whether its target
     /// has been resolved yet.
     ///

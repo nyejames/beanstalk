@@ -10,6 +10,7 @@ use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::datatypes::generics::GenericParameterList;
 use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant;
 use crate::compiler_frontend::declaration_syntax::declaration_shell::DeclarationSyntax;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
@@ -90,18 +91,22 @@ impl Default for HeaderParseOptions {
 #[derive(Clone, Debug)]
 pub enum HeaderKind {
     Function {
+        generic_parameters: GenericParameterList,
         signature: FunctionSignature,
     },
     Constant {
         declaration: DeclarationSyntax,
     },
     Struct {
+        generic_parameters: GenericParameterList,
         fields: Vec<Declaration>,
     },
     Choice {
+        generic_parameters: GenericParameterList,
         variants: Vec<ChoiceVariant>,
     },
     TypeAlias {
+        generic_parameters: GenericParameterList,
         target: DataType,
     },
 

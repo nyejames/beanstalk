@@ -157,7 +157,7 @@ fn first_function_signature(headers: &Headers) -> &FunctionSignature {
         .headers
         .iter()
         .find_map(|header| match &header.kind {
-            HeaderKind::Function { signature } => Some(signature),
+            HeaderKind::Function { signature, .. } => Some(signature),
             _ => None,
         })
         .expect("expected function header")
@@ -303,6 +303,44 @@ fn exported_typed_constant_headers_are_parsed_and_follow_on_constant_stays_heade
         ),
         "follow-on '# test = ...' should remain a constant header"
     );
+}
+
+#[test]
+fn phase_zero_headers_keep_generic_parameter_lists_empty() {
+    let headers = parse_single_file_headers(
+        "identity |value Int| -> Int:\n\
+             return value\n\
+         ;\n\
+         Box = |\n\
+             value Int,\n\
+         |\n\
+         Status :: Ready,\n\
+         ;\n\
+         Alias as Int\n",
+    );
+
+    for header in &headers.headers {
+        match &header.kind {
+            HeaderKind::Function {
+                generic_parameters, ..
+            }
+            | HeaderKind::Struct {
+                generic_parameters, ..
+            }
+            | HeaderKind::Choice {
+                generic_parameters, ..
+            }
+            | HeaderKind::TypeAlias {
+                generic_parameters, ..
+            } => {
+                assert!(
+                    generic_parameters.parameters.is_empty(),
+                    "phase 0 should keep generic parameter lists empty until generic parsing is implemented"
+                );
+            }
+            _ => {}
+        }
+    }
 }
 
 #[test]
@@ -693,7 +731,7 @@ fn choice_headers_parse_unit_variants_in_declaration_order() {
         .find(|header| matches!(header.kind, HeaderKind::Choice { .. }))
         .expect("expected choice header");
 
-    let HeaderKind::Choice { variants } = &choice_header.kind else {
+    let HeaderKind::Choice { variants, .. } = &choice_header.kind else {
         panic!("expected choice metadata");
     };
 
@@ -790,7 +828,7 @@ fn choice_headers_accept_record_payload_variants() {
         .find(|header| matches!(header.kind, HeaderKind::Choice { .. }))
         .expect("expected choice header");
 
-    let HeaderKind::Choice { variants } = &choice_header.kind else {
+    let HeaderKind::Choice { variants, .. } = &choice_header.kind else {
         panic!("expected choice metadata");
     };
 
@@ -883,6 +921,29 @@ fn trait_declarations_using_must_are_reserved_during_header_parsing() {
                 .msg
                 .contains("Trait declarations using 'must' are reserved for traits")
             && error.msg.contains("deferred for Alpha")
+    }));
+}
+
+#[test]
+fn generic_declarations_using_type_keyword_are_deferred_during_header_parsing() {
+    let result = parse_single_file_headers_with_entry(
+        "identity type T |value T| -> T:\n\
+             return value\n\
+         ;\n",
+        "src/#page.bst",
+        "src/#page.bst",
+    );
+
+    assert!(
+        result.is_err(),
+        "generic declarations using `type` should fail during phase 0"
+    );
+    let errors = result.err().expect("expected parse errors");
+
+    assert!(errors.iter().any(|error| {
+        error
+            .msg
+            .contains("Generic declarations using `type` are reserved")
     }));
 }
 

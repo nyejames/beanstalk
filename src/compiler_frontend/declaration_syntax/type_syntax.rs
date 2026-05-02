@@ -1,7 +1,7 @@
 //! Shared frontend type-annotation syntax and named-type resolution helpers.
 //!
 //! WHAT: owns parsing/serialization of explicit type annotations and recursive
-//! resolution of `NamedType` placeholders.
+//! resolution of frontend type placeholders.
 //! WHY: declaration parsing, signature parsing, and AST type-resolution all
 //! used to maintain parallel implementations that drifted in diagnostics and
 //! behavior.
@@ -9,7 +9,7 @@
 //! This module owns:
 //! - token-to-type annotation parsing for declaration/signature contexts
 //! - optional suffix (`?`) annotation rules
-//! - recursive `NamedType` resolution with consistent unknown-type diagnostics
+//! - recursive type resolution with consistent unknown-type diagnostics
 //! - annotation token emission helpers used by header/declaration plumbing
 //!
 //! This module does NOT own:
@@ -17,14 +17,22 @@
 //! - expression typing/coercion policy
 //! - call-site/feature-specific diagnostic framing outside type syntax itself
 
+use crate::compiler_frontend::ast::ast_nodes::Declaration;
+use crate::compiler_frontend::ast::statements::functions::FunctionReturn;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::datatypes::generics::{GenericBaseType, GenericParameterScope};
+use crate::compiler_frontend::declaration_syntax::choice::{ChoiceVariant, ChoiceVariantPayload};
+use crate::compiler_frontend::deferred_feature_diagnostics::deferred_feature_rule_error;
+use crate::compiler_frontend::external_packages::ExternalSymbolId;
+use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::reserved_trait_syntax::{
     reserved_trait_keyword_error, reserved_trait_keyword_or_dispatch_mismatch,
 };
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
 use crate::return_syntax_error;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum TypeAnnotationContext {
@@ -49,35 +57,41 @@ pub(crate) fn parse_type_annotation(
         return Ok(DataType::Inferred);
     }
 
-    // Otherwise, parse the type that must be there
-    let parsed_type = parse_required_type(token_stream, context)?;
-    Ok(parsed_type)
+    parse_required_type(token_stream, context)
 }
 
 fn parse_required_type(
     token_stream: &mut FileTokens,
     context: TypeAnnotationContext,
 ) -> Result<DataType, CompilerError> {
-    let parsed_type = match token_stream.current_token_kind() {
+    let parsed_atom = parse_type_atom(token_stream, context)?;
+    parse_type_postfixes(token_stream, parsed_atom, context)
+}
+
+fn parse_type_atom(
+    token_stream: &mut FileTokens,
+    context: TypeAnnotationContext,
+) -> Result<DataType, CompilerError> {
+    match token_stream.current_token_kind() {
         TokenKind::DatatypeInt => {
             token_stream.advance();
-            DataType::Int
+            Ok(DataType::Int)
         }
         TokenKind::DatatypeFloat => {
             token_stream.advance();
-            DataType::Float
+            Ok(DataType::Float)
         }
         TokenKind::DatatypeBool => {
             token_stream.advance();
-            DataType::Bool
+            Ok(DataType::Bool)
         }
         TokenKind::DatatypeString => {
             token_stream.advance();
-            DataType::StringSlice
+            Ok(DataType::StringSlice)
         }
         TokenKind::DatatypeChar => {
             token_stream.advance();
-            DataType::Char
+            Ok(DataType::Char)
         }
         TokenKind::DatatypeNone => {
             let (message, stage, suggestion) = none_type_annotation_error(context);
@@ -99,14 +113,14 @@ fn parse_required_type(
             )?;
 
             let (stage, suggestion) = reserved_trait_type_annotation_error(context);
-            return Err(reserved_trait_keyword_error(
+            Err(reserved_trait_keyword_error(
                 keyword,
                 token_stream.current_location(),
                 stage,
                 suggestion,
-            ));
+            ))
         }
-        TokenKind::OpenCurly => parse_collection_type(token_stream, context)?,
+        TokenKind::OpenCurly => parse_collection_type(token_stream, context),
         TokenKind::As => {
             let stage = compilation_stage(context);
             return_syntax_error!(
@@ -118,10 +132,12 @@ fn parse_required_type(
                 }
             );
         }
+        TokenKind::Type => Err(type_keyword_deferred_error(token_stream, context)),
+        TokenKind::Of => Err(of_keyword_syntax_error(token_stream, context)),
         TokenKind::Symbol(type_name) => {
             let type_name = *type_name;
             token_stream.advance();
-            DataType::NamedType(type_name)
+            Ok(DataType::NamedType(type_name))
         }
         TokenKind::Colon if matches!(context, TypeAnnotationContext::DeclarationTarget) => {
             return_syntax_error!(
@@ -167,9 +183,17 @@ fn parse_required_type(
                 }
             )
         }
-    };
+    }
+}
 
-    parse_optional_type_suffix(token_stream, parsed_type, context)
+fn parse_type_postfixes(
+    token_stream: &mut FileTokens,
+    parsed_type: DataType,
+    context: TypeAnnotationContext,
+) -> Result<DataType, CompilerError> {
+    let with_generic_arguments =
+        parse_generic_arguments_or_defer(token_stream, parsed_type, context)?;
+    parse_optional_type_suffix(token_stream, with_generic_arguments, context)
 }
 
 fn parse_collection_type(
@@ -200,6 +224,23 @@ fn parse_collection_type(
     token_stream.advance();
 
     Ok(DataType::Collection(Box::new(inner_type)))
+}
+
+fn parse_generic_arguments_or_defer(
+    token_stream: &mut FileTokens,
+    parsed_type: DataType,
+    context: TypeAnnotationContext,
+) -> Result<DataType, CompilerError> {
+    if token_stream.current_token_kind() != &TokenKind::Of {
+        return Ok(parsed_type);
+    }
+
+    Err(deferred_feature_rule_error(
+        "Generic type applications using `of` are not implemented yet.",
+        token_stream.current_location(),
+        compilation_stage(context),
+        "Remove `of ...` for now. Generic type applications will be supported in a later generics phase.",
+    ))
 }
 
 fn parse_optional_type_suffix(
@@ -249,6 +290,35 @@ fn parse_optional_type_suffix(
     }
 
     Ok(DataType::Option(Box::new(parsed_type)))
+}
+
+fn type_keyword_deferred_error(
+    token_stream: &FileTokens,
+    context: TypeAnnotationContext,
+) -> CompilerError {
+    deferred_feature_rule_error(
+        "Generic declarations using `type` are reserved but not implemented yet.",
+        token_stream.current_location(),
+        compilation_stage(context),
+        "Remove `type ...` for now. Generic declaration syntax is planned for a later implementation phase.",
+    )
+}
+
+fn of_keyword_syntax_error(
+    token_stream: &FileTokens,
+    context: TypeAnnotationContext,
+) -> CompilerError {
+    let (message, stage, suggestion) = of_keyword_error(context);
+    let mut error = CompilerError::new_syntax_error(message, token_stream.current_location());
+    error.new_metadata_entry(
+        crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::CompilationStage,
+        stage.to_owned(),
+    );
+    error.new_metadata_entry(
+        crate::compiler_frontend::compiler_errors::ErrorMetaDataKey::PrimarySuggestion,
+        suggestion.to_owned(),
+    );
+    error
 }
 
 fn none_type_annotation_error(
@@ -301,6 +371,31 @@ fn reserved_trait_type_annotation_error(
     }
 }
 
+fn of_keyword_error(context: TypeAnnotationContext) -> (&'static str, &'static str, &'static str) {
+    match context {
+        TypeAnnotationContext::DeclarationTarget => (
+            "Unexpected `of` in declaration type position.",
+            "Variable Declaration",
+            "Use a supported concrete type for now. Generic type application with `of` is deferred.",
+        ),
+        TypeAnnotationContext::SignatureParameter => (
+            "Unexpected `of` in parameter type position.",
+            "Parameter Type Parsing",
+            "Use a supported concrete parameter type for now. Generic type application with `of` is deferred.",
+        ),
+        TypeAnnotationContext::SignatureReturn => (
+            "Unexpected `of` in return type position.",
+            "Function Signature Parsing",
+            "Use a supported concrete return type for now. Generic type application with `of` is deferred.",
+        ),
+        TypeAnnotationContext::TypeAliasTarget => (
+            "Unexpected `of` in type alias target.",
+            "Type Alias Parsing",
+            "Use a supported concrete alias target for now. Generic type application with `of` is deferred.",
+        ),
+    }
+}
+
 fn expected_type_error(
     context: TypeAnnotationContext,
 ) -> (&'static str, &'static str, &'static str) {
@@ -337,112 +432,363 @@ fn compilation_stage(context: TypeAnnotationContext) -> &'static str {
     }
 }
 
+pub(crate) struct TypeResolutionContext<'a> {
+    pub declarations: &'a [Declaration],
+    pub visible_declaration_ids: Option<&'a FxHashSet<InternedPath>>,
+    pub visible_external_symbols: Option<&'a FxHashMap<StringId, ExternalSymbolId>>,
+    pub visible_source_bindings: Option<&'a FxHashMap<StringId, InternedPath>>,
+    pub visible_type_aliases: Option<&'a FxHashMap<StringId, InternedPath>>,
+    pub resolved_type_aliases: Option<&'a FxHashMap<InternedPath, DataType>>,
+    pub generic_parameters: Option<&'a GenericParameterScope>,
+}
+
+impl<'a> TypeResolutionContext<'a> {
+    #[allow(dead_code)] // Used by tests and planned call sites while Phase 0 wiring lands.
+    pub(crate) fn from_declarations(declarations: &'a [Declaration]) -> Self {
+        Self {
+            declarations,
+            visible_declaration_ids: None,
+            visible_external_symbols: None,
+            visible_source_bindings: None,
+            visible_type_aliases: None,
+            resolved_type_aliases: None,
+            generic_parameters: None,
+        }
+    }
+}
+
 pub(crate) fn for_each_named_type_in_data_type(
     data_type: &DataType,
     visitor: &mut impl FnMut(StringId),
 ) {
     match data_type {
         DataType::NamedType(type_name) => visitor(*type_name),
+        DataType::GenericInstance { base, arguments } => {
+            if let GenericBaseType::Named(name) = base {
+                visitor(*name);
+            }
+            for argument in arguments {
+                for_each_named_type_in_data_type(argument, visitor);
+            }
+        }
         DataType::Collection(inner) | DataType::Option(inner) | DataType::Reference(inner) => {
             for_each_named_type_in_data_type(inner, visitor)
+        }
+        DataType::Result { ok, err } => {
+            for_each_named_type_in_data_type(ok, visitor);
+            for_each_named_type_in_data_type(err, visitor);
         }
         DataType::Returns(values) => {
             for value in values {
                 for_each_named_type_in_data_type(value, visitor);
             }
         }
+        DataType::Function(_, signature) => {
+            for parameter in &signature.parameters {
+                for_each_named_type_in_data_type(&parameter.value.data_type, visitor);
+            }
+            for return_slot in &signature.returns {
+                for_each_named_type_in_data_type(return_slot.data_type(), visitor);
+            }
+        }
+        DataType::Struct { fields, .. } | DataType::Parameters(fields) => {
+            for field in fields {
+                for_each_named_type_in_data_type(&field.value.data_type, visitor);
+            }
+        }
+        DataType::Choices { variants, .. } => {
+            for variant in variants {
+                if let ChoiceVariantPayload::Record { fields } = &variant.payload {
+                    for field in fields {
+                        for_each_named_type_in_data_type(&field.value.data_type, visitor);
+                    }
+                }
+            }
+        }
         _ => {}
     }
 }
 
-pub(crate) fn resolve_named_type(
-    type_name: StringId,
-    location: &SourceLocation,
-    resolve_by_name: &mut impl FnMut(StringId) -> Option<DataType>,
-    string_table: &StringTable,
-) -> Result<DataType, CompilerError> {
-    resolve_by_name(type_name).ok_or_else(|| {
-        CompilerError::new_rule_error(
-            format!(
-                "Unknown type '{}'. Type names must be declared before use.",
-                string_table.resolve(type_name)
-            ),
-            location.clone(),
-        )
-    })
-}
-
-pub(crate) fn resolve_named_types_in_data_type(
+pub(crate) fn resolve_type(
     data_type: &DataType,
     location: &SourceLocation,
-    resolve_by_name: &mut impl FnMut(StringId) -> Option<DataType>,
+    context: &TypeResolutionContext<'_>,
     string_table: &StringTable,
 ) -> Result<DataType, CompilerError> {
     match data_type {
         DataType::NamedType(type_name) => {
-            resolve_named_type(*type_name, location, resolve_by_name, string_table)
+            resolve_named_type_from_context(*type_name, location, context, string_table)
         }
-        DataType::Collection(inner) => Ok(DataType::Collection(Box::new(
-            resolve_named_types_in_data_type(inner, location, resolve_by_name, string_table)?,
-        ))),
-        DataType::Option(inner) => Ok(DataType::Option(Box::new(
-            resolve_named_types_in_data_type(inner, location, resolve_by_name, string_table)?,
-        ))),
-        DataType::Reference(inner) => Ok(DataType::Reference(Box::new(
-            resolve_named_types_in_data_type(inner, location, resolve_by_name, string_table)?,
-        ))),
+        DataType::TypeParameter { .. } => Ok(data_type.to_owned()),
+        DataType::GenericInstance { base, arguments } => {
+            let mut resolved_arguments = Vec::with_capacity(arguments.len());
+            for argument in arguments {
+                resolved_arguments.push(resolve_type(argument, location, context, string_table)?);
+            }
+
+            Ok(DataType::GenericInstance {
+                base: base.to_owned(),
+                arguments: resolved_arguments,
+            })
+        }
+        DataType::Collection(inner) => Ok(DataType::Collection(Box::new(resolve_type(
+            inner,
+            location,
+            context,
+            string_table,
+        )?))),
+        DataType::Option(inner) => Ok(DataType::Option(Box::new(resolve_type(
+            inner,
+            location,
+            context,
+            string_table,
+        )?))),
+        DataType::Reference(inner) => Ok(DataType::Reference(Box::new(resolve_type(
+            inner,
+            location,
+            context,
+            string_table,
+        )?))),
         DataType::Returns(values) => {
             let mut resolved_values = Vec::with_capacity(values.len());
             for value in values {
-                resolved_values.push(resolve_named_types_in_data_type(
-                    value,
-                    location,
-                    resolve_by_name,
-                    string_table,
-                )?);
+                resolved_values.push(resolve_type(value, location, context, string_table)?);
             }
             Ok(DataType::Returns(resolved_values))
+        }
+        DataType::Result { ok, err } => Ok(DataType::Result {
+            ok: Box::new(resolve_type(ok, location, context, string_table)?),
+            err: Box::new(resolve_type(err, location, context, string_table)?),
+        }),
+        DataType::Function(receiver, signature) => {
+            let resolved_receiver = receiver
+                .as_ref()
+                .as_ref()
+                .map(|receiver_key| receiver_key.to_owned());
+
+            let mut resolved_signature = signature.to_owned();
+            for parameter in &mut resolved_signature.parameters {
+                parameter.value.data_type = resolve_type(
+                    &parameter.value.data_type,
+                    &parameter.value.location,
+                    context,
+                    string_table,
+                )?;
+            }
+
+            for return_slot in &mut resolved_signature.returns {
+                match &mut return_slot.value {
+                    FunctionReturn::Value(return_type) => {
+                        *return_type = resolve_type(return_type, location, context, string_table)?;
+                    }
+                    FunctionReturn::AliasCandidates { data_type, .. } => {
+                        *data_type = resolve_type(data_type, location, context, string_table)?;
+                    }
+                }
+            }
+
+            Ok(DataType::Function(
+                Box::new(resolved_receiver),
+                resolved_signature,
+            ))
+        }
+        DataType::Struct {
+            nominal_path,
+            fields,
+            const_record,
+        } => {
+            let mut resolved_fields = Vec::with_capacity(fields.len());
+            for field in fields {
+                let mut resolved_field = field.to_owned();
+                resolved_field.value.data_type = resolve_type(
+                    &field.value.data_type,
+                    &field.value.location,
+                    context,
+                    string_table,
+                )?;
+                resolved_fields.push(resolved_field);
+            }
+
+            Ok(DataType::Struct {
+                nominal_path: nominal_path.to_owned(),
+                fields: resolved_fields,
+                const_record: *const_record,
+            })
         }
         DataType::Choices {
             nominal_path,
             variants,
         } => {
-            use crate::compiler_frontend::declaration_syntax::choice::{
-                ChoiceVariant, ChoiceVariantPayload,
-            };
             let mut resolved_variants = Vec::with_capacity(variants.len());
             for variant in variants {
-                let payload = match &variant.payload {
-                    ChoiceVariantPayload::Unit => ChoiceVariantPayload::Unit,
-                    ChoiceVariantPayload::Record { fields } => {
-                        let mut resolved_fields = Vec::with_capacity(fields.len());
-                        for field in fields {
-                            let mut resolved_field = field.to_owned();
-                            resolved_field.value.data_type = resolve_named_types_in_data_type(
-                                &field.value.data_type,
-                                &field.value.location,
-                                resolve_by_name,
-                                string_table,
-                            )?;
-                            resolved_fields.push(resolved_field);
-                        }
-                        ChoiceVariantPayload::Record {
-                            fields: resolved_fields,
-                        }
-                    }
-                };
-                resolved_variants.push(ChoiceVariant {
-                    id: variant.id,
-                    payload,
-                    location: variant.location.clone(),
-                });
+                resolved_variants.push(resolve_choice_variant_types(
+                    variant,
+                    context,
+                    string_table,
+                )?);
             }
+
             Ok(DataType::Choices {
                 nominal_path: nominal_path.to_owned(),
                 variants: resolved_variants,
             })
         }
+        DataType::Parameters(parameters) => {
+            let mut resolved_parameters = Vec::with_capacity(parameters.len());
+            for parameter in parameters {
+                let mut resolved_parameter = parameter.to_owned();
+                resolved_parameter.value.data_type = resolve_type(
+                    &parameter.value.data_type,
+                    &parameter.value.location,
+                    context,
+                    string_table,
+                )?;
+                resolved_parameters.push(resolved_parameter);
+            }
+
+            Ok(DataType::Parameters(resolved_parameters))
+        }
         _ => Ok(data_type.to_owned()),
+    }
+}
+
+fn resolve_choice_variant_types(
+    variant: &ChoiceVariant,
+    context: &TypeResolutionContext<'_>,
+    string_table: &StringTable,
+) -> Result<ChoiceVariant, CompilerError> {
+    let payload = match &variant.payload {
+        ChoiceVariantPayload::Unit => ChoiceVariantPayload::Unit,
+        ChoiceVariantPayload::Record { fields } => {
+            let mut resolved_fields = Vec::with_capacity(fields.len());
+            for field in fields {
+                let mut resolved_field = field.to_owned();
+                resolved_field.value.data_type = resolve_type(
+                    &field.value.data_type,
+                    &field.value.location,
+                    context,
+                    string_table,
+                )?;
+                resolved_fields.push(resolved_field);
+            }
+            ChoiceVariantPayload::Record {
+                fields: resolved_fields,
+            }
+        }
+    };
+
+    Ok(ChoiceVariant {
+        id: variant.id,
+        payload,
+        location: variant.location.to_owned(),
+    })
+}
+
+fn resolve_named_type_from_context(
+    type_name: StringId,
+    location: &SourceLocation,
+    context: &TypeResolutionContext<'_>,
+    string_table: &StringTable,
+) -> Result<DataType, CompilerError> {
+    // 1) Generic parameter scope.
+    if let Some(generic_scope) = context.generic_parameters
+        && let Some(parameter) = generic_scope.resolve(type_name)
+    {
+        return Ok(DataType::TypeParameter {
+            id: parameter.id,
+            name: parameter.name,
+        });
+    }
+
+    // 2) Visible type aliases.
+    if let Some(visible_aliases) = context.visible_type_aliases
+        && let Some(alias_path) = visible_aliases.get(&type_name)
+        && let Some(resolved_aliases) = context.resolved_type_aliases
+        && let Some(resolved) = resolved_aliases.get(alias_path)
+    {
+        return Ok(resolved.to_owned());
+    }
+
+    // 3) Visible source declarations (path-based first, then name fallback).
+    if let Some(visible_source_bindings) = context.visible_source_bindings
+        && let Some(canonical_path) = visible_source_bindings.get(&type_name)
+        && let Some(declaration) = resolve_declaration_by_path(
+            context.declarations,
+            context.visible_declaration_ids,
+            canonical_path,
+        )
+    {
+        return Ok(declaration.value.data_type.to_owned());
+    }
+
+    if let Some(declaration) = visible_declaration_by_name(
+        context.declarations,
+        context.visible_declaration_ids,
+        type_name,
+    ) {
+        return Ok(declaration.value.data_type.to_owned());
+    }
+
+    // 4) Visible external types.
+    if let Some(external_symbols) = context.visible_external_symbols
+        && let Some(ExternalSymbolId::Type(type_id)) = external_symbols.get(&type_name)
+    {
+        return Ok(DataType::External { type_id: *type_id });
+    }
+
+    // 5) Builtin type names that may still appear as named placeholders.
+    if let Some(builtin_type) = builtin_named_type(type_name, string_table) {
+        return Ok(builtin_type);
+    }
+
+    Err(CompilerError::new_rule_error(
+        format!(
+            "Unknown type '{}'. Type names must be declared before use.",
+            string_table.resolve(type_name)
+        ),
+        location.to_owned(),
+    ))
+}
+
+fn resolve_declaration_by_path<'a>(
+    declarations: &'a [Declaration],
+    visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
+    canonical_path: &InternedPath,
+) -> Option<&'a Declaration> {
+    declarations.iter().rfind(|declaration| {
+        &declaration.id == canonical_path
+            && !declaration.is_unresolved_constant_placeholder()
+            && match visible_declaration_ids {
+                Some(visible) => visible.contains(&declaration.id),
+                None => true,
+            }
+    })
+}
+
+fn visible_declaration_by_name<'a>(
+    declarations: &'a [Declaration],
+    visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
+    name: StringId,
+) -> Option<&'a Declaration> {
+    declarations.iter().rfind(|declaration| {
+        declaration.id.name() == Some(name)
+            && !declaration.is_unresolved_constant_placeholder()
+            && match visible_declaration_ids {
+                Some(visible) => visible.contains(&declaration.id),
+                None => true,
+            }
+    })
+}
+
+fn builtin_named_type(type_name: StringId, string_table: &StringTable) -> Option<DataType> {
+    match string_table.resolve(type_name) {
+        "Int" => Some(DataType::Int),
+        "Float" => Some(DataType::Float),
+        "Bool" => Some(DataType::Bool),
+        "String" => Some(DataType::StringSlice),
+        "Char" => Some(DataType::Char),
+        "ErrorKind" => Some(DataType::BuiltinErrorKind),
+        _ => None,
     }
 }
 

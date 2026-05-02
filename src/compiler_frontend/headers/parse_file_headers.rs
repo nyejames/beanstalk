@@ -13,7 +13,8 @@ use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::file_parser::parse_headers_in_file;
 use crate::compiler_frontend::headers::module_symbols::{
-    FacadeExportEntry, FacadeExportTarget, ModuleSymbols, register_declared_symbol,
+    FacadeExportEntry, FacadeExportTarget, GenericDeclarationKind, GenericDeclarationMetadata,
+    ModuleSymbols, register_declared_symbol,
 };
 pub use crate::compiler_frontend::headers::types::{
     FileImport, FileRole, Header, HeaderKind, HeaderParseOptions, Headers, TopLevelConstFragment,
@@ -329,28 +330,58 @@ fn build_module_symbols(
 
         let is_facade_symbol = path_is_mod_file(&header.source_file, string_table);
         match &header.kind {
-            HeaderKind::Function { .. } => {
+            HeaderKind::Function {
+                generic_parameters, ..
+            } => {
                 register_declared_symbol(
                     &mut module_symbols,
                     &header.tokens.src_path,
                     &header.source_file,
                     Some(header.exported && !is_facade_symbol),
                 );
+                module_symbols.generic_declarations_by_path.insert(
+                    header.tokens.src_path.to_owned(),
+                    GenericDeclarationMetadata {
+                        kind: GenericDeclarationKind::Function,
+                        parameters: generic_parameters.to_owned(),
+                        declaration_location: header.name_location.to_owned(),
+                    },
+                );
             }
-            HeaderKind::Struct { .. } => {
+            HeaderKind::Struct {
+                generic_parameters, ..
+            } => {
                 register_declared_symbol(
                     &mut module_symbols,
                     &header.tokens.src_path,
                     &header.source_file,
                     Some(header.exported && !is_facade_symbol),
                 );
+                module_symbols.generic_declarations_by_path.insert(
+                    header.tokens.src_path.to_owned(),
+                    GenericDeclarationMetadata {
+                        kind: GenericDeclarationKind::Struct,
+                        parameters: generic_parameters.to_owned(),
+                        declaration_location: header.name_location.to_owned(),
+                    },
+                );
             }
-            HeaderKind::Choice { .. } => {
+            HeaderKind::Choice {
+                generic_parameters, ..
+            } => {
                 register_declared_symbol(
                     &mut module_symbols,
                     &header.tokens.src_path,
                     &header.source_file,
                     Some(header.exported && !is_facade_symbol),
+                );
+                module_symbols.generic_declarations_by_path.insert(
+                    header.tokens.src_path.to_owned(),
+                    GenericDeclarationMetadata {
+                        kind: GenericDeclarationKind::Choice,
+                        parameters: generic_parameters.to_owned(),
+                        declaration_location: header.name_location.to_owned(),
+                    },
                 );
             }
             HeaderKind::StartFunction => {
@@ -372,7 +403,9 @@ fn build_module_symbols(
                     Some(header.exported && !is_facade_symbol),
                 );
             }
-            HeaderKind::TypeAlias { .. } => {
+            HeaderKind::TypeAlias {
+                generic_parameters, ..
+            } => {
                 register_declared_symbol(
                     &mut module_symbols,
                     &header.tokens.src_path,
@@ -382,6 +415,14 @@ fn build_module_symbols(
                 module_symbols
                     .type_alias_paths
                     .insert(header.tokens.src_path.to_owned());
+                module_symbols.generic_declarations_by_path.insert(
+                    header.tokens.src_path.to_owned(),
+                    GenericDeclarationMetadata {
+                        kind: GenericDeclarationKind::TypeAlias,
+                        parameters: generic_parameters.to_owned(),
+                        declaration_location: header.name_location.to_owned(),
+                    },
+                );
             }
             _ => {}
         }

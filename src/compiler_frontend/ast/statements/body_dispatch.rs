@@ -175,6 +175,31 @@ fn unexpected_function_body_token_error(
             error
         }
 
+        TokenKind::Type => deferred_feature_rule_error(
+            "Generic declarations using `type` are reserved but not implemented yet.",
+            token_stream.current_location(),
+            "AST Construction",
+            "Remove `type ...` for now. Generic declaration syntax will be enabled in a later implementation phase.",
+        ),
+
+        TokenKind::Of => {
+            let mut error = CompilerError::new_syntax_error(
+                "Unexpected `of` in statement position. `of` is reserved for future generic type application syntax.",
+                token_stream.current_location(),
+            );
+            error.new_metadata_entry(
+                ErrorMetaDataKey::CompilationStage,
+                String::from("AST Construction"),
+            );
+            error.new_metadata_entry(
+                ErrorMetaDataKey::PrimarySuggestion,
+                String::from(
+                    "Remove `of` here. Generic type application syntax is not available yet.",
+                ),
+            );
+            error
+        }
+
         other => {
             if let Some(error) = check_statement_common_mistake(other, token_stream) {
                 return error;

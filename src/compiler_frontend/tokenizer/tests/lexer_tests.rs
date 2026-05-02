@@ -237,6 +237,28 @@ fn tokenizes_reserved_trait_keywords_as_reserved_tokens() {
 }
 
 #[test]
+fn tokenizes_generic_keywords_as_reserved_tokens() {
+    let (file_tokens, _string_table) = tokenize_source("type of\n");
+
+    assert!(
+        matches!(file_tokens.tokens[1].kind, TokenKind::Type),
+        "expected 'type' to lex as a reserved keyword token"
+    );
+    assert!(
+        matches!(file_tokens.tokens[2].kind, TokenKind::Of),
+        "expected 'of' to lex as a reserved keyword token"
+    );
+    assert!(
+        !matches!(file_tokens.tokens[1].kind, TokenKind::Symbol(_)),
+        "'type' should not remain a user symbol"
+    );
+    assert!(
+        !matches!(file_tokens.tokens[2].kind, TokenKind::Symbol(_)),
+        "'of' should not remain a user symbol"
+    );
+}
+
+#[test]
 fn tokenizes_lowercase_this_as_reserved_receiver_keyword() {
     let (file_tokens, _string_table) = tokenize_source("this this_value This _this\n");
 
