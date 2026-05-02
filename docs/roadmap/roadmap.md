@@ -9,7 +9,8 @@ Use the language surface integration matrix as a reference for what is currently
 ---
 
 # Plans / Notes / TODOS
-- Generics: `docs/roadmap/plans/beanstalk-generics-implementation-plan.md`
+- AST refactor and optimisation: `docs/memory-management-design.md`
+- Generics (FINISHED PHASE 1 - 3 ONLY): `docs/roadmap/plans/beanstalk-generics-implementation-plan.md`
 - Traits
 - True results / options with generics
 - Closures
