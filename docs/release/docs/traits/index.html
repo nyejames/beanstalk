@@ -333,8 +333,8 @@ body {
         overflow-x: auto;
     "><code class='codeblock'>
     <span class='bst-code-struct'>DRAWABLE</span> must<span class='bst-code-operator'>:</span>
-        draw <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This,</span> surface <span class='bst-code-struct'>Surface</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>String;</span>
-        bounds <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Rect,</span> <span class='bst-code-struct'>Bool;</span>
+        draw <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This,</span> surface <span class='bst-code-struct'>Surface</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span>
+        bounds <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Rect,</span> <span class='bst-code-type'>Bool</span>
     ;
     </code></pre><p>This reads as:</p><p>&gt; Any type claiming to satisfy <span style="
         color: #c444aff9;
@@ -476,7 +476,7 @@ body {
         overflow-x: auto;
     "><code class='codeblock'>
     <span class='bst-code-struct'>DISPLAY</span> must<span class='bst-code-operator'>:</span>
-        display <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>String;</span>
+        display <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span>
     ;
     </code></pre><p>Mutable receiver requirement:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12); 
@@ -487,7 +487,7 @@ body {
         overflow-x: auto;
     "><code class='codeblock'>
     <span class='bst-code-struct'>RESETTABLE</span> must<span class='bst-code-operator'>:</span>
-        reset <span class='bst-code-operator'>|</span><span class='bst-code-operator'>~</span><span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span>;
+        reset <span class='bst-code-operator'>|</span><span class='bst-code-operator'>~</span><span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span>
     ;
     </code></pre><p>A method that only accepts <span style="
         color: #c444aff9;
@@ -526,7 +526,7 @@ body {
         overflow-x: auto;
     "><code class='codeblock'>
     <span class='bst-code-struct'>DRAWABLE</span> must<span class='bst-code-operator'>:</span>
-        draw <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This,</span> surface <span class='bst-code-struct'>Surface</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>String;</span>
+        draw <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This,</span> surface <span class='bst-code-struct'>Surface</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span>
     ;
     </code></pre><p>The concrete method and the trait requirement should line up by receiver type, parameter list, and return list.</p></section>
     <section class="container"><h1>Design tradeoffs</h1><p>This design deliberately chooses:</p><ul><li>simpler rules over maximal flexibility</li><li>explicit conformance over implicit convenience</li><li>predictable compile times over aggressive zero-cost abstraction by default</li><li>a narrow feature slice now so the language can grow without syntax churn later</li></ul><p>This matches Beanstalk&#39;s broader design priorities:</p><ul><li>readability first</li><li>strong, intentional syntax</li><li>static correctness</li><li>implementation tractability</li><li>room for future optimisation without changing source semantics</li></ul></section>
@@ -543,7 +543,7 @@ body {
         overflow-x: auto;
     "><code class='codeblock'>
     <span class='bst-code-struct'>DRAWABLE</span> must<span class='bst-code-operator'>:</span>
-        draw <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This,</span> surface <span class='bst-code-struct'>Surface</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>String;</span>
+        draw <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This,</span> surface <span class='bst-code-struct'>Surface</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span>
     ;
     </code></pre><p>The core rule is:</p><p>&gt; A trait is a named promise that a type provides a required method surface.</p><p>This keeps traits aligned with Beanstalk&#39;s existing method model while avoiding the complexity and compile-time cost of a more ambitious trait system too early.</p></section>
     <script>

@@ -454,9 +454,32 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;"> Collections</td>
      <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> Broad collection literal, mutation, builtin method, indexing, loop, result, and JS helper coverage.</td>
+     <td style="padding: 0.2em 0.5em;"> Broad collection literal, mutation, builtin method, indexing, loop, result, and JS helper coverage. New capacity parsing coverage.</td>
      <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
-     <td style="padding: 0.2em 0.5em;"> Collection helper runtime contracts should remain JS-owned for Alpha. HTML-Wasm collection behavior is experimental only.</td>
+     <td style="padding: 0.2em 0.5em;"> Collections internally use the generic type infrastructure. Public syntax remains <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">{T}</span> and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">{T capacity}</span>. Capacity is allocation metadata, not part of type identity. Collection helper runtime contracts should remain JS-owned for Alpha. HTML-Wasm collection behavior is experimental only.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Collection generic substrate</td>
+     <td style="padding: 0.2em 0.5em;"> Supported</td>
+     <td style="padding: 0.2em 0.5em;"> Broad existing collection tests plus new capacity parsing tests.</td>
+     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;"> Internally represented as <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">GenericInstance</span> with <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">BuiltinGenericType::Collection</span>. HIR lowering preserves concrete <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">HirTypeKind::Collection</span>. Capacity parsed into declaration metadata but not wired to codegen yet.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -1367,16 +1390,168 @@ body {
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Generic type infrastructure</td>
+     <td style="padding: 0.2em 0.5em;"> Supported</td>
+     <td style="padding: 0.2em 0.5em;"> Targeted frontend unit coverage for type-identity keys, parameter scopes, substitution, generic parameter parsing, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">of</span> type applications, arity checks, collection generic substrate, and Phase 1/2 diagnostics. Integration coverage includes generic struct and choice constructor inference, concrete generic aliases, imported generic types, named argument inference, recursive rejection, receiver rejection, and collection capacity parsing.</td>
+     <td style="padding: 0.2em 0.5em;"> Phases 0-3 are implemented for concrete generic structs and choices. Generic parameter metadata, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">of</span> type applications, concrete generic aliases, collection generic substrate, constructor inference, choice matching, AST unresolved-generic validation, and concrete HIR nominal identity are implemented. Generic free-function execution, nested inline generic applications, recursive generic types, generic aliases, partial application, and generic receiver methods remain deferred or rejected.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;"> Choice generic declarations</td>
+     <td style="padding: 0.2em 0.5em;"> Supported</td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_choice_declaration_parse_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_choice_instantiation_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_choice_match_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_named_choice_payload_infer</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_expected_unit_choice_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_recursive_type_deferred</span></td>
+     <td style="padding: 0.2em 0.5em;"> Generic choice headers and payload type parameters parse and resolve. Concrete constructor inference, named payload arguments, expected-type unit variants, and matching on concrete generic instances are supported. Recursive generic choices and generic receiver methods remain rejected.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Generic structs</td>
+     <td style="padding: 0.2em 0.5em;"> Supported</td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_struct_instantiation_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_named_struct_args_infer</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_collection_element_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_imported_struct_choice_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_recursive_type_deferred</span></td>
+     <td style="padding: 0.2em 0.5em;"> Generic struct headers parse and resolve. Concrete constructor inference, field type substitution, named constructor arguments, imports, collection element types, and concrete HIR lowering are supported. Recursive generic structs and generic receiver methods remain rejected.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Generic choices</td>
+     <td style="padding: 0.2em 0.5em;"> Supported</td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_choice_instantiation_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_named_choice_payload_infer</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_choice_match_success</span></td>
+     <td style="padding: 0.2em 0.5em;"> Concrete generic choice constructors and matching are implemented for resolved nominal instances. Wasm backend support for payload choices remains partial and is tracked by backend-specific expected failures.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Generic functions</td>
      <td style="padding: 0.2em 0.5em;"> Deferred</td>
      <td style="padding: 0.2em 0.5em;"> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">choice_generic_declaration_deferred</span></td>
-     <td style="padding: 0.2em 0.5em;"> Syntax ideas live in <span style="
+    ">generic_function_declaration_parse_success</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">docs/src/docs/generics.md</span>; do not implement here.</td>
+    ">generic_unused_parameter_rejected</span></td>
+     <td style="padding: 0.2em 0.5em;"> Generic function headers parse into frontend metadata. Call-site inference, executable body validation, and monomorphization remain deferred until Phase 4.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Generic type aliases</td>
+     <td style="padding: 0.2em 0.5em;"> Partial</td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_concrete_alias_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_nested_alias_workaround</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_alias_rejected</span></td>
+     <td style="padding: 0.2em 0.5em;"> Aliases to fully concrete generic instances are supported and transparent in annotations. Generic aliases with parameters, partial type application, and type-constructor composition are rejected.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Trait bounds on generics</td>
+     <td style="padding: 0.2em 0.5em;"> Deferred</td>
+     <td style="padding: 0.2em 0.5em;"> None</td>
+     <td style="padding: 0.2em 0.5em;"> Required for operators, equality, methods, and behavior-dependent operations on unconstrained generic parameters.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Explicit generic call-site application</td>
+     <td style="padding: 0.2em 0.5em;"> Deferred</td>
+     <td style="padding: 0.2em 0.5em;"> Diagnostics only.</td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">identity of Int(42)</span> is rejected. Generic function calls infer type arguments from immediate arguments and context only.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Generic receiver methods</td>
+     <td style="padding: 0.2em 0.5em;"> Deferred</td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_receiver_rejected</span></td>
+     <td style="padding: 0.2em 0.5em;"> Both generic receiver methods and receiver methods on concrete generic instantiated types are rejected with targeted diagnostics. Use free functions instead.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Recursive generic types</td>
+     <td style="padding: 0.2em 0.5em;"> Deferred</td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_recursive_type_deferred</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_mutual_recursive_rejected</span></td>
+     <td style="padding: 0.2em 0.5em;"> Recursive generic structs and choices are rejected through declaration dependency or generic recursion diagnostics. Requires layout/indirection design.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Nested generic type application</td>
+     <td style="padding: 0.2em 0.5em;"> Deferred</td>
+     <td style="padding: 0.2em 0.5em;"> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_nested_alias_workaround</span></td>
+     <td style="padding: 0.2em 0.5em;"> More than one <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">of</span> application in a single annotation is rejected, except for collection element types. Name intermediate concrete aliases to compose complex types.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;"> Generic aliases / partial type application</td>
+     <td style="padding: 0.2em 0.5em;"> Deferred</td>
+     <td style="padding: 0.2em 0.5em;"> Diagnostics only.</td>
+     <td style="padding: 0.2em 0.5em;"> Partial application and type-constructor composition are rejected. Alias a fully concrete generic instance instead.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">

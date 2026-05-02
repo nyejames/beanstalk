@@ -71,8 +71,8 @@ import @styles/docs {navbar, title, section, styled_table, header, data, codeblo
 
     [codeblock, $code("bst"):
         DRAWABLE must:
-            draw |This, surface Surface| -> String;
-            bounds |This| -> Rect, Bool;
+            draw |This, surface Surface| -> String
+            bounds |This| -> Rect, Bool
         ;
     ]
 
@@ -301,7 +301,7 @@ import @styles/docs {navbar, title, section, styled_table, header, data, codeblo
 
     [codeblock, $code("bst"):
         DISPLAY must:
-            display |This| -> String;
+            display |This| -> String
         ;
     ]
 
@@ -309,7 +309,7 @@ import @styles/docs {navbar, title, section, styled_table, header, data, codeblo
 
     [codeblock, $code("bst"):
         RESETTABLE must:
-            reset |~This|;
+            reset |~This|
         ;
     ]
 
@@ -343,7 +343,7 @@ import @styles/docs {navbar, title, section, styled_table, header, data, codeblo
 
     [codeblock, $code("bst"):
         DRAWABLE must:
-            draw |This, surface Surface| -> String;
+            draw |This, surface Surface| -> String
         ;
     ]
 
@@ -408,7 +408,7 @@ import @styles/docs {navbar, title, section, styled_table, header, data, codeblo
 
     [codeblock, $code("bst"):
         DRAWABLE must:
-            draw |This, surface Surface| -> String;
+            draw |This, surface Surface| -> String
         ;
     ]
 
