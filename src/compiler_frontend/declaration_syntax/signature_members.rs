@@ -160,6 +160,17 @@ pub fn parse_signature_members(
 
             TokenKind::Comma => {
                 token_stream.advance();
+                // Check for trailing comma before closing bracket
+                if token_stream.current_token_kind() == &TokenKind::TypeParameterBracket {
+                    return_syntax_error!(
+                        "Trailing comma is not allowed in function parameter lists",
+                        token_stream.current_location(),
+                        {
+                            CompilationStage => "Struct/Parameter Parsing",
+                            PrimarySuggestion => "Remove the trailing comma before the closing '|'",
+                        }
+                    );
+                }
                 expecting_member = true;
             }
 

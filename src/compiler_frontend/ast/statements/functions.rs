@@ -253,7 +253,34 @@ fn parse_return_list(
 
         match token_stream.current_token_kind() {
             TokenKind::Comma => {
+                let comma_location = token_stream.current_location();
                 token_stream.advance();
+
+                match token_stream.current_token_kind() {
+                    TokenKind::Colon => {
+                        return_syntax_error!(
+                            "Trailing commas are not allowed in function return declarations",
+                            comma_location,
+                            {
+                                CompilationStage => "Function Signature Parsing",
+                                PrimarySuggestion => "Remove the comma after the final return type",
+                            }
+                        );
+                    }
+
+                    TokenKind::Newline | TokenKind::End | TokenKind::Eof => {
+                        return_syntax_error!(
+                            "Function return declarations cannot end after a comma",
+                            comma_location,
+                            {
+                                CompilationStage => "Function Signature Parsing",
+                                PrimarySuggestion => "Add another return type after the comma or remove the comma",
+                            }
+                        );
+                    }
+
+                    _ => {}
+                }
             }
             TokenKind::Colon => {
                 token_stream.advance();

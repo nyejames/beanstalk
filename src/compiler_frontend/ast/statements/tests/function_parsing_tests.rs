@@ -502,3 +502,172 @@ fn parses_standalone_result_propagation_statement() {
         }
     ));
 }
+
+#[test]
+fn rejects_trailing_comma_in_single_return() {
+    let error = parse_single_file_ast_error("compute |x Int| -> Int,:\n    return 42\n;\n");
+
+    assert!(
+        error
+            .msg
+            .contains("Trailing comma is not allowed in function return lists"),
+        "{}",
+        error.msg
+    );
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::PrimarySuggestion)
+            .map(String::as_str),
+        Some("Remove the trailing comma before the closing ':'")
+    );
+}
+
+#[test]
+fn rejects_trailing_comma_in_multiple_returns() {
+    let error = parse_single_file_ast_error(
+        "compute |x Int| -> Int, String,:\n    return 42, \"result\"\n;\n",
+    );
+
+    assert!(
+        error
+            .msg
+            .contains("Trailing comma is not allowed in function return lists"),
+        "{}",
+        error.msg
+    );
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::PrimarySuggestion)
+            .map(String::as_str),
+        Some("Remove the trailing comma before the closing ':'")
+    );
+}
+
+#[test]
+fn rejects_trailing_comma_in_error_return() {
+    let error = parse_single_file_ast_error("compute |x Int| -> Int, Error!,:\n    return 42\n;\n");
+
+    assert!(
+        error
+            .msg
+            .contains("Trailing comma is not allowed in function return lists"),
+        "{}",
+        error.msg
+    );
+}
+
+#[test]
+fn parses_valid_single_return_without_trailing_comma() {
+    let (ast, string_table) = parse_single_file_ast("compute |x Int| -> Int:\n    return 42\n;\n");
+
+    let signature = function_signature_by_name(&ast, &string_table, "compute");
+    assert_eq!(signature.returns.len(), 1);
+    assert_eq!(
+        signature.returns[0],
+        ReturnSlot::success(FunctionReturn::Value(DataType::Int))
+    );
+}
+
+#[test]
+fn parses_valid_multiple_returns_without_trailing_comma() {
+    let (ast, string_table) =
+        parse_single_file_ast("compute |x Int| -> Int, String:\n    return 42, \"result\"\n;\n");
+
+    let signature = function_signature_by_name(&ast, &string_table, "compute");
+    assert_eq!(signature.returns.len(), 2);
+    assert_eq!(
+        signature.returns[0],
+        ReturnSlot::success(FunctionReturn::Value(DataType::Int))
+    );
+    assert_eq!(
+        signature.returns[1],
+        ReturnSlot::success(FunctionReturn::Value(DataType::StringSlice))
+    );
+}
+
+#[test]
+fn rejects_trailing_comma_in_single_parameter() {
+    let error = parse_single_file_ast_error("compute |x Int,| -> Int:\n    return 42\n;\n");
+
+    assert!(
+        error
+            .msg
+            .contains("Trailing comma is not allowed in function parameter lists"),
+        "{}",
+        error.msg
+    );
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::PrimarySuggestion)
+            .map(String::as_str),
+        Some("Remove the trailing comma before the closing '|'")
+    );
+}
+
+#[test]
+fn rejects_trailing_comma_in_multiple_parameters() {
+    let error =
+        parse_single_file_ast_error("compute |x Int, y Int,| -> Int:\n    return x + y\n;\n");
+
+    assert!(
+        error
+            .msg
+            .contains("Trailing comma is not allowed in function parameter lists"),
+        "{}",
+        error.msg
+    );
+    assert_eq!(
+        error
+            .metadata
+            .get(&ErrorMetaDataKey::PrimarySuggestion)
+            .map(String::as_str),
+        Some("Remove the trailing comma before the closing '|'")
+    );
+}
+
+#[test]
+fn rejects_trailing_comma_in_this_parameter() {
+    let error = parse_single_file_ast_error(
+        "Point = |\n    x Int = 0,\n|\n\nreset |this Point,|:\n    return\n;\n",
+    );
+
+    assert!(
+        error
+            .msg
+            .contains("Trailing comma is not allowed in function parameter lists"),
+        "{}",
+        error.msg
+    );
+}
+
+#[test]
+fn parses_valid_single_parameter_without_trailing_comma() {
+    let (ast, string_table) = parse_single_file_ast("compute |x Int| -> Int:\n    return x\n;\n");
+
+    let signature = function_signature_by_name(&ast, &string_table, "compute");
+    assert_eq!(signature.parameters.len(), 1);
+    assert_eq!(
+        signature.parameters[0].id.name_str(&string_table),
+        Some("x")
+    );
+}
+
+#[test]
+fn parses_valid_multiple_parameters_without_trailing_comma() {
+    let (ast, string_table) =
+        parse_single_file_ast("compute |x Int, y Int| -> Int:\n    return x + y\n;\n");
+
+    let signature = function_signature_by_name(&ast, &string_table, "compute");
+    assert_eq!(signature.parameters.len(), 2);
+    assert_eq!(
+        signature.parameters[0].id.name_str(&string_table),
+        Some("x")
+    );
+    assert_eq!(
+        signature.parameters[1].id.name_str(&string_table),
+        Some("y")
+    );
+}

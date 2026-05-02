@@ -961,7 +961,7 @@ fn header_parsing_rejects_keyword_shadow_constant_name() {
 #[test]
 fn trait_declarations_using_must_are_reserved_during_header_parsing() {
     let result = parse_single_file_headers_with_entry(
-        "Drawable must:\n    draw |This, surface Surface| -> String;\n;\n",
+        "Drawable must:\n    draw |This, surface Surface| -> String\n;\n",
         "src/#page.bst",
         "src/#page.bst",
     );

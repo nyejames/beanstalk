@@ -1,0 +1,5 @@
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+error_type = "Syntax"
+message_contains = ["Trait method requirements should not end with semicolons", "Separate methods with newlines"]

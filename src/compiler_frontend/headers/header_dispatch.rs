@@ -70,6 +70,21 @@ pub(super) fn create_header(
     let mut kind: HeaderKind = HeaderKind::StartFunction;
     let mut body = Vec::new();
     let generic_parameters = parse_optional_generic_parameters(token_stream, context)?;
+
+    // Check for trait syntax after generic parameters and before token dispatch.
+    // WHAT: detects `must` keyword after type name to recognize reserved trait syntax.
+    // WHY: trait declarations must be validated and rejected before attempting other header forms.
+    if token_stream.current_token_kind() == &TokenKind::Must {
+        // Parse the reserved trait syntax to validate structure
+        use crate::compiler_frontend::reserved_trait_syntax::parse_reserved_trait_syntax;
+        parse_reserved_trait_syntax(token_stream, declaration_name, context.string_table)?;
+
+        // Return the deferred trait diagnostic
+        return Err(reserved_trait_declaration_error(
+            token_stream.current_location(),
+        ));
+    }
+
     let current_token = token_stream.current_token_kind().to_owned();
 
     match current_token {
@@ -133,13 +148,6 @@ pub(super) fn create_header(
                 generic_parameters,
                 signature,
             };
-        }
-
-        // `must` keyword: reserved for future trait implementation syntax.
-        TokenKind::Must => {
-            return Err(reserved_trait_declaration_error(
-                token_stream.current_location(),
-            ));
         }
 
         // `This` keyword: reserved for future trait `This` self-type syntax.
