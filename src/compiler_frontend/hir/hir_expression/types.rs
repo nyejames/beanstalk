@@ -204,7 +204,7 @@ impl<'a> HirBuilder<'a> {
         id
     }
 
-    fn resolve_or_register_generic_struct(
+    pub(crate) fn resolve_or_register_generic_struct(
         &mut self,
         key: &crate::compiler_frontend::datatypes::generics::GenericInstantiationKey,
         fields: &[crate::compiler_frontend::ast::ast_nodes::Declaration],
@@ -254,7 +254,7 @@ impl<'a> HirBuilder<'a> {
         Ok(struct_id)
     }
 
-    fn resolve_or_register_generic_choice(
+    pub(crate) fn resolve_or_register_generic_choice(
         &mut self,
         key: &crate::compiler_frontend::datatypes::generics::GenericInstantiationKey,
         variants: &[crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant],

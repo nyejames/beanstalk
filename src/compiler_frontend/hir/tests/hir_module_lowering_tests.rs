@@ -233,6 +233,7 @@ fn rejects_nested_unmaterialized_template_constants_in_hir_module_constant_lower
             test_location(2),
             ValueMode::ImmutableOwned,
             true,
+            None,
         ),
     ));
 
@@ -310,6 +311,7 @@ fn lowers_struct_module_constant_into_record_with_ordered_fields() {
             test_location(2),
             ValueMode::ImmutableOwned,
             true,
+            None,
         ),
     ));
 

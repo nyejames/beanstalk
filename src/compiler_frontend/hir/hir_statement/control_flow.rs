@@ -481,13 +481,26 @@ impl<'a> HirBuilder<'a> {
                 location,
                 ..
             } => {
-                let DataType::Choices { .. } = subject_type else {
+                let DataType::Choices {
+                    variants,
+                    generic_instance_key,
+                    ..
+                } = subject_type
+                else {
                     return_hir_transformation_error!(
                         "ChoiceVariant pattern used with non-choice scrutinee type",
                         self.hir_error_location(location)
                     );
                 };
-                let choice_id = self.resolve_choice_id(nominal_path, location)?;
+                let choice_id = match generic_instance_key {
+                    Some(key) => self.resolve_or_register_generic_choice(
+                        key,
+                        variants,
+                        nominal_path,
+                        location,
+                    )?,
+                    None => self.resolve_choice_id(nominal_path, location)?,
+                };
                 Ok(HirPattern::ChoiceVariant {
                     choice_id,
                     variant_index: *tag,

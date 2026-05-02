@@ -1650,6 +1650,7 @@ fn field_access_from_module_constant_base_materializes_temp_place() {
             location.clone(),
             ValueMode::ImmutableOwned,
             false,
+            None,
         ),
     );
 

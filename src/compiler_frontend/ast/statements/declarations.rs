@@ -233,9 +233,16 @@ pub fn resolve_declaration_syntax(
             // coerces them.
             let declared_type = data_type.clone();
             let mut expr_type = parse_expectation_for_target_type(&declared_type);
+            let mut expr_context =
+                context.new_child_expression(if matches!(declared_type, DataType::Inferred) {
+                    context.expected_result_types.clone()
+                } else {
+                    vec![declared_type.clone()]
+                });
+            expr_context.kind = context.kind.clone();
             let expr = create_expression(
                 &mut initializer_stream,
-                context,
+                &expr_context,
                 &mut expr_type,
                 &value_mode,
                 false,

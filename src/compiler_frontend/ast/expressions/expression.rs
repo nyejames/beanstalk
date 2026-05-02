@@ -520,9 +520,19 @@ impl Expression {
         location: SourceLocation,
         value_mode: ValueMode,
         const_record: bool,
+        generic_instance_key: Option<
+            crate::compiler_frontend::datatypes::generics::GenericInstantiationKey,
+        >,
     ) -> Self {
         let contains_regular_division = args.iter().any(|arg| arg.value.contains_regular_division);
-        let struct_type = if const_record {
+        let struct_type = if let Some(key) = generic_instance_key {
+            DataType::Struct {
+                nominal_path: nominal_path.clone(),
+                fields: args.to_owned(),
+                const_record,
+                generic_instance_key: Some(key),
+            }
+        } else if const_record {
             DataType::const_struct_record(nominal_path, args.to_owned())
         } else {
             DataType::runtime_struct(nominal_path, args.to_owned())

@@ -6,12 +6,18 @@ use crate::compiler_frontend::ast::expressions::call_validation::{
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::function_calls::parse_call_arguments;
 use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::datatypes::generics::{
+    GenericInstantiationKey, TypeParameterId, TypeSubstitution, collect_type_parameter_bindings,
+    data_type_to_type_identity_key, substitute_type_parameters,
+};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::type_coercion::numeric::coerce_expression_to_declared_type;
 use crate::compiler_frontend::value_mode::ValueMode;
 use crate::{return_compiler_error, return_rule_error};
+use rustc_hash::FxHashMap;
 
 /// Parse `StructName(...)` and return a finalized struct instance expression.
 ///
@@ -47,7 +53,134 @@ pub(crate) fn parse_struct_constructor_expression(
     }
 
     let raw_args = parse_call_arguments(token_stream, context, string_table)?;
-    let expectations = expectations_from_struct_fields(fields);
+
+    // --- Generic struct constructor inference ---
+    // If the struct is a generic declaration, infer type arguments from the expected type
+    // context and constructor arguments, then substitute before validating.
+    let (fields, generic_instance_key) = if let Some(generic_decls) =
+        &context.generic_declarations_by_path
+        && let Some(metadata) = generic_decls.get(struct_path)
+        && !metadata.parameters.is_empty()
+    {
+        let mut bindings: FxHashMap<TypeParameterId, DataType> = FxHashMap::default();
+
+        // 1. Collect bindings from expected type(s).
+        for expected in &context.expected_result_types {
+            match expected {
+                DataType::Struct {
+                    nominal_path,
+                    fields: expected_fields,
+                    ..
+                } if nominal_path == struct_path && expected_fields.len() == fields.len() => {
+                    for (template_field, expected_field) in
+                        fields.iter().zip(expected_fields.iter())
+                    {
+                        let _ = collect_type_parameter_bindings(
+                            &template_field.value.data_type,
+                            &expected_field.value.data_type,
+                            &mut bindings,
+                        );
+                    }
+                }
+                DataType::GenericInstance {
+                    base:
+                        crate::compiler_frontend::datatypes::generics::GenericBaseType::ResolvedNominal(
+                            path,
+                        ),
+                    arguments,
+                } if path == struct_path => {
+                    for (param, arg) in metadata.parameters.parameters.iter().zip(arguments.iter())
+                    {
+                        let _ = collect_type_parameter_bindings(
+                            &DataType::TypeParameter {
+                                id: param.id,
+                                name: param.name,
+                            },
+                            arg,
+                            &mut bindings,
+                        );
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // 2. Collect bindings from constructor arguments.
+        for (template_field, arg) in fields.iter().zip(raw_args.iter()) {
+            let arg_type = &arg.value.data_type;
+            let _ = collect_type_parameter_bindings(
+                &template_field.value.data_type,
+                arg_type,
+                &mut bindings,
+            );
+        }
+
+        // 3. Build concrete arguments in parameter order.
+        let mut concrete_args = Vec::with_capacity(metadata.parameters.len());
+        let mut missing_params = Vec::new();
+        for param in &metadata.parameters.parameters {
+            if let Some(concrete) = bindings.get(&param.id).cloned() {
+                concrete_args.push(concrete);
+            } else {
+                missing_params.push(string_table.resolve(param.name).to_owned());
+            }
+        }
+
+        if !missing_params.is_empty() {
+            return_rule_error!(
+                format!(
+                    "Cannot infer type argument(s) for generic struct '{}': {}. Provide an explicit type annotation or constructor arguments with concrete types.",
+                    struct_name_str,
+                    missing_params.join(", ")
+                ),
+                constructor_location.clone(),
+                {
+                    CompilationStage => "Expression Parsing",
+                    PrimarySuggestion => "Add an explicit type annotation (e.g. 'Box of Int = Box(...)' ) or use arguments with unambiguous types",
+                }
+            );
+        }
+
+        // 4. Substitute into template fields.
+        let mut substitution = TypeSubstitution::empty();
+        for (param, arg) in metadata
+            .parameters
+            .parameters
+            .iter()
+            .zip(concrete_args.iter())
+        {
+            substitution.insert(param.id, arg.clone());
+        }
+        let instantiated_fields: Vec<Declaration> = fields
+            .iter()
+            .map(|field| {
+                let mut resolved = field.clone();
+                resolved.value.data_type =
+                    substitute_type_parameters(&field.value.data_type, &substitution);
+                resolved
+            })
+            .collect();
+
+        // 5. Build generic instance key.
+        let arg_keys: Vec<_> = concrete_args
+            .iter()
+            .filter_map(data_type_to_type_identity_key)
+            .collect();
+        let key = if arg_keys.len() == concrete_args.len() {
+            Some(GenericInstantiationKey {
+                base_path: struct_path.to_owned(),
+                arguments: arg_keys,
+            })
+        } else {
+            None
+        };
+
+        (instantiated_fields, key)
+    } else {
+        (fields.to_owned(), None)
+    };
+
+    let expectations = expectations_from_struct_fields(&fields);
     let resolved_args = resolve_call_arguments(
         CallDiagnosticContext::struct_constructor(&struct_name_str),
         &raw_args,
@@ -117,5 +250,6 @@ pub(crate) fn parse_struct_constructor_expression(
         constructor_location,
         instance_ownership,
         enforce_const_record,
+        generic_instance_key,
     ))
 }

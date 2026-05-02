@@ -3,8 +3,7 @@ ResultShape type T, E ::
     Err | error E |,
 ;
 
-get_result |result ResultShape of Int, String| -> ResultShape of String, Int:
-    return result
-;
+ok_result ResultShape of String, Error = ResultShape::Ok("hello")
+err_result ResultShape of Int, String = ResultShape::Err("nope")
 
 [: generic choice success]

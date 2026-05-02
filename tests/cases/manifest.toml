@@ -619,6 +619,11 @@ path = "generic_choice_instantiation_success"
 tags = ["integration","generics","choices"]
 
 [[case]]
+id = "generic_choice_match_success"
+path = "generic_choice_match_success"
+tags = ["integration","generics","choices"]
+
+[[case]]
 id = "choice_variant_default_value_deferred"
 path = "choice_variant_default_value_deferred"
 tags = ["integration","diagnostics","choices"]

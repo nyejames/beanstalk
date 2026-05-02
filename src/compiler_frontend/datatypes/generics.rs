@@ -424,6 +424,122 @@ fn substitute_declaration_types(
         .collect()
 }
 
+/// Attempts to unify a template type with a concrete type, collecting type-parameter bindings.
+///
+/// WHAT: recursively walks both types. When the template side is a `TypeParameter`, records
+/// a binding `parameter_id -> concrete_type`. Returns `true` if unification succeeds.
+///
+/// WHY: generic constructor inference needs to map generic params to concrete types from
+/// argument shapes and expected-type contexts.
+pub fn collect_type_parameter_bindings(
+    template_type: &DataType,
+    concrete_type: &DataType,
+    bindings: &mut FxHashMap<TypeParameterId, DataType>,
+) -> bool {
+    match (template_type, concrete_type) {
+        // A type parameter in the template can bind to any concrete type.
+        (DataType::TypeParameter { id, .. }, _) => {
+            if matches!(concrete_type, DataType::Inferred) {
+                return false;
+            }
+            // If already bound, require consistency.
+            if let Some(existing) = bindings.get(id) {
+                existing == concrete_type
+            } else {
+                bindings.insert(*id, concrete_type.clone());
+                true
+            }
+        }
+
+        // Recurse into matching structural shapes.
+        (
+            DataType::GenericInstance {
+                base: GenericBaseType::Builtin(BuiltinGenericType::Collection),
+                arguments: template_args,
+            },
+            DataType::GenericInstance {
+                base: GenericBaseType::Builtin(BuiltinGenericType::Collection),
+                arguments: concrete_args,
+            },
+        ) => generic_args_unify(template_args, concrete_args, bindings),
+
+        (
+            DataType::GenericInstance {
+                base: GenericBaseType::ResolvedNominal(template_base),
+                arguments: template_args,
+            },
+            DataType::GenericInstance {
+                base: GenericBaseType::ResolvedNominal(concrete_base),
+                arguments: concrete_args,
+            },
+        ) if template_base == concrete_base => {
+            generic_args_unify(template_args, concrete_args, bindings)
+        }
+
+        (
+            DataType::Struct {
+                nominal_path: template_path,
+                fields: template_fields,
+                ..
+            },
+            DataType::Struct {
+                nominal_path: concrete_path,
+                fields: concrete_fields,
+                ..
+            },
+        ) if template_path == concrete_path && template_fields.len() == concrete_fields.len() => {
+            template_fields.iter().zip(concrete_fields.iter()).all(
+                |(template_field, concrete_field)| {
+                    collect_type_parameter_bindings(
+                        &template_field.value.data_type,
+                        &concrete_field.value.data_type,
+                        bindings,
+                    )
+                },
+            )
+        }
+
+        (DataType::Option(template_inner), DataType::Option(concrete_inner)) => {
+            collect_type_parameter_bindings(template_inner, concrete_inner, bindings)
+        }
+
+        (DataType::Reference(template_inner), DataType::Reference(concrete_inner)) => {
+            collect_type_parameter_bindings(template_inner, concrete_inner, bindings)
+        }
+
+        (
+            DataType::Result {
+                ok: t_ok,
+                err: t_err,
+            },
+            DataType::Result {
+                ok: c_ok,
+                err: c_err,
+            },
+        ) => {
+            collect_type_parameter_bindings(t_ok, c_ok, bindings)
+                && collect_type_parameter_bindings(t_err, c_err, bindings)
+        }
+
+        // For everything else, require exact equality.
+        _ => template_type == concrete_type,
+    }
+}
+
+fn generic_args_unify(
+    template_args: &[DataType],
+    concrete_args: &[DataType],
+    bindings: &mut FxHashMap<TypeParameterId, DataType>,
+) -> bool {
+    if template_args.len() != concrete_args.len() {
+        return false;
+    }
+    template_args
+        .iter()
+        .zip(concrete_args.iter())
+        .all(|(t, c)| collect_type_parameter_bindings(t, c, bindings))
+}
+
 /// Returns true if the data type contains any unresolved type parameters.
 pub fn contains_type_parameter(data_type: &DataType) -> bool {
     match data_type {

@@ -53,7 +53,21 @@ impl<'a> HirBuilder<'a> {
                 }
 
                 self.ensure_choice_capture_scrutinee(scrutinee_ast, location)?;
-                let _choice_id = self.resolve_choice_id(nominal_path, location)?;
+                if let DataType::Choices {
+                    variants,
+                    generic_instance_key: Some(key),
+                    ..
+                } = &scrutinee_ast.data_type
+                {
+                    let _ = self.resolve_or_register_generic_choice(
+                        key,
+                        variants,
+                        nominal_path,
+                        location,
+                    )?;
+                } else {
+                    let _choice_id = self.resolve_choice_id(nominal_path, location)?;
+                }
                 let region = self.current_region_or_error(location)?;
 
                 let mut local_ids = Vec::with_capacity(captures.len());
@@ -242,7 +256,16 @@ impl<'a> HirBuilder<'a> {
         };
 
         self.ensure_choice_capture_scrutinee(scrutinee_ast, location)?;
-        let choice_id = self.resolve_choice_id(nominal_path, location)?;
+        let choice_id = if let DataType::Choices {
+            variants,
+            generic_instance_key: Some(key),
+            ..
+        } = &scrutinee_ast.data_type
+        {
+            self.resolve_or_register_generic_choice(key, variants, nominal_path, location)?
+        } else {
+            self.resolve_choice_id(nominal_path, location)?
+        };
         let parent_region = self.current_region_or_error(location)?;
 
         Ok(MatchCaptureLoweringContext {

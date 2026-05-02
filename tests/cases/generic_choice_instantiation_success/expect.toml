@@ -1,5 +1,5 @@
 [backends.html]
-mode = "failure"
+mode = "success"
 warnings = "forbid"
-error_type = "Type"
-message_contains = ["ResultShape of String, Int", "ResultShape of Int, String"]
+golden_mode = "normalized"
+rendered_output_contains = ["generic choice success"]

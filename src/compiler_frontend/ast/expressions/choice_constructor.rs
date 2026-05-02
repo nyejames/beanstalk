@@ -13,12 +13,17 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::ast::expressions::function_calls::parse_call_arguments;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::datatypes::generics::{
+    GenericInstantiationKey, TypeParameterId, TypeSubstitution, collect_type_parameter_bindings,
+    data_type_to_type_identity_key, substitute_type_parameters,
+};
 use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariantPayload;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::type_coercion::numeric::coerce_expression_to_declared_type;
 use crate::compiler_frontend::value_mode::ValueMode;
 use crate::{return_compiler_error, return_rule_error};
+use rustc_hash::FxHashMap;
 
 /// Parse a `Choice::Variant` or `Choice::Variant(...)` construct expression.
 ///
@@ -122,7 +127,213 @@ pub(crate) fn parse_choice_construct(
     let variant = &variants[variant_index];
     let has_parens = token_stream.peek_next_token() == Some(&TokenKind::OpenParenthesis);
 
-    match &variant.payload {
+    // --- Generic choice constructor inference ---
+    // If the choice is a generic declaration, infer type arguments from the expected type
+    // context and (for payload variants) constructor arguments, then substitute before validating.
+    let is_generic = context
+        .generic_declarations_by_path
+        .as_ref()
+        .is_some_and(|decls| {
+            decls
+                .get(nominal_path)
+                .is_some_and(|m| !m.parameters.is_empty())
+        });
+
+    let (
+        instantiated_variants,
+        _generic_instance_key,
+        instantiated_data_type,
+        raw_args_for_inference,
+    ) = if is_generic {
+        let metadata = context
+            .generic_declarations_by_path
+            .as_ref()
+            .unwrap()
+            .get(nominal_path)
+            .unwrap();
+        let mut bindings: FxHashMap<TypeParameterId, DataType> = FxHashMap::default();
+
+        // 1. Collect bindings from expected type(s).
+        for expected in &context.expected_result_types {
+            match expected {
+                DataType::Choices {
+                    nominal_path: expected_path,
+                    variants: expected_variants,
+                    ..
+                } if expected_path == nominal_path && expected_variants.len() == variants.len() => {
+                    for (template_variant, expected_variant) in
+                        variants.iter().zip(expected_variants.iter())
+                    {
+                        match (&template_variant.payload, &expected_variant.payload) {
+                            (
+                                ChoiceVariantPayload::Record { fields: tf },
+                                ChoiceVariantPayload::Record { fields: ef },
+                            ) if tf.len() == ef.len() => {
+                                for (t_field, e_field) in tf.iter().zip(ef.iter()) {
+                                    let _ = collect_type_parameter_bindings(
+                                        &t_field.value.data_type,
+                                        &e_field.value.data_type,
+                                        &mut bindings,
+                                    );
+                                }
+                            }
+                            _ => {}
+                        }
+                    }
+                }
+                DataType::GenericInstance {
+                    base:
+                        crate::compiler_frontend::datatypes::generics::GenericBaseType::ResolvedNominal(
+                            path,
+                        ),
+                    arguments,
+                } if path == nominal_path => {
+                    for (param, arg) in metadata.parameters.parameters.iter().zip(arguments.iter())
+                    {
+                        let _ = collect_type_parameter_bindings(
+                            &DataType::TypeParameter {
+                                id: param.id,
+                                name: param.name,
+                            },
+                            arg,
+                            &mut bindings,
+                        );
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        // 2. For payload variants, collect bindings from constructor arguments.
+        let payload_fields = if let ChoiceVariantPayload::Record { fields } = &variant.payload {
+            Some(fields)
+        } else {
+            None
+        };
+
+        let raw_args_for_inference = if payload_fields.is_some() && has_parens {
+            token_stream.advance(); // past variant name to '('
+            let raw_args = parse_call_arguments(token_stream, context, string_table)?;
+            Some(raw_args)
+        } else {
+            None
+        };
+
+        if let Some(fields) = payload_fields
+            && let Some(ref raw_args) = raw_args_for_inference
+        {
+            for (template_field, arg) in fields.iter().zip(raw_args.iter()) {
+                let _ = collect_type_parameter_bindings(
+                    &template_field.value.data_type,
+                    &arg.value.data_type,
+                    &mut bindings,
+                );
+            }
+        }
+
+        // 3. Build concrete arguments in parameter order.
+        let mut concrete_args = Vec::with_capacity(metadata.parameters.len());
+        let mut missing_params = Vec::new();
+        for param in &metadata.parameters.parameters {
+            if let Some(concrete) = bindings.get(&param.id).cloned() {
+                concrete_args.push(concrete);
+            } else {
+                missing_params.push(string_table.resolve(param.name).to_owned());
+            }
+        }
+
+        if !missing_params.is_empty() {
+            return_rule_error!(
+                format!(
+                    "Cannot infer type argument(s) for generic choice '{}': {}. Provide an explicit type annotation or constructor arguments with concrete types.",
+                    choice_name,
+                    missing_params.join(", ")
+                ),
+                variant_location.clone(),
+                {
+                    CompilationStage => "Expression Parsing",
+                    PrimarySuggestion => "Add an explicit type annotation (e.g. 'ResultShape of String, Error = ResultShape::Ok(...)' ) or use arguments with unambiguous types",
+                }
+            );
+        }
+
+        // 4. Substitute into all variants.
+        let mut substitution = TypeSubstitution::empty();
+        for (param, arg) in metadata
+            .parameters
+            .parameters
+            .iter()
+            .zip(concrete_args.iter())
+        {
+            substitution.insert(param.id, arg.clone());
+        }
+        let instantiated_variants: Vec<_> = variants
+            .iter()
+            .map(|v| {
+                let payload = match &v.payload {
+                    ChoiceVariantPayload::Unit => ChoiceVariantPayload::Unit,
+                    ChoiceVariantPayload::Record { fields } => {
+                        let substituted_fields = fields
+                            .iter()
+                            .map(|field| {
+                                let mut resolved = field.clone();
+                                resolved.value.data_type = substitute_type_parameters(
+                                    &field.value.data_type,
+                                    &substitution,
+                                );
+                                resolved
+                            })
+                            .collect();
+                        ChoiceVariantPayload::Record {
+                            fields: substituted_fields,
+                        }
+                    }
+                };
+                crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant {
+                    id: v.id,
+                    payload,
+                    location: v.location.clone(),
+                }
+            })
+            .collect();
+
+        // 5. Build generic instance key.
+        let arg_keys: Vec<_> = concrete_args
+            .iter()
+            .filter_map(data_type_to_type_identity_key)
+            .collect();
+        let key = if arg_keys.len() == concrete_args.len() {
+            Some(GenericInstantiationKey {
+                base_path: nominal_path.to_owned(),
+                arguments: arg_keys,
+            })
+        } else {
+            None
+        };
+
+        let data_type = DataType::Choices {
+            nominal_path: nominal_path.to_owned(),
+            variants: instantiated_variants.clone(),
+            generic_instance_key: key.clone(),
+        };
+
+        (
+            instantiated_variants,
+            key,
+            data_type,
+            raw_args_for_inference,
+        )
+    } else {
+        (
+            variants.to_owned(),
+            None,
+            choice_declaration.value.data_type.to_owned(),
+            None,
+        )
+    };
+
+    let selected_variant = &instantiated_variants[variant_index];
+    match &selected_variant.payload {
         ChoiceVariantPayload::Unit => {
             token_stream.advance();
             if has_parens {
@@ -162,7 +373,7 @@ pub(crate) fn parse_choice_construct(
                 variant_name,
                 variant_index,
                 vec![],
-                choice_declaration.value.data_type.to_owned(),
+                instantiated_data_type,
                 variant_location,
                 ValueMode::ImmutableOwned,
             ))
@@ -189,9 +400,18 @@ pub(crate) fn parse_choice_construct(
             }
 
             // Parse constructor arguments using shared call-argument machinery.
-            token_stream.advance(); // past variant name to '('
-            let constructor_location = token_stream.current_location();
-            let raw_args = parse_call_arguments(token_stream, context, string_table)?;
+            // For generic choices, args were already parsed during inference; reuse them.
+            let (raw_args, constructor_location) = if is_generic {
+                // Args were parsed earlier during inference. We need to reconstruct the location.
+                let loc = token_stream.current_location();
+                (raw_args_for_inference.unwrap_or_default(), loc)
+            } else {
+                token_stream.advance(); // past variant name to '('
+                let loc = token_stream.current_location();
+                let args = parse_call_arguments(token_stream, context, string_table)?;
+                (args, loc)
+            };
+
             let expectations = expectations_from_choice_payload_fields(fields);
             let resolved_args = resolve_call_arguments(
                 CallDiagnosticContext::choice_constructor(&format!(
@@ -260,7 +480,7 @@ pub(crate) fn parse_choice_construct(
                 variant_name,
                 variant_index,
                 choice_fields,
-                choice_declaration.value.data_type.to_owned(),
+                instantiated_data_type,
                 variant_location,
                 value_mode,
             ))

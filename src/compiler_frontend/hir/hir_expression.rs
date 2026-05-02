@@ -58,13 +58,26 @@ impl<'a> HirBuilder<'a> {
                 tag,
                 fields,
             } => {
-                let DataType::Choices { .. } = &expr.data_type else {
+                let DataType::Choices {
+                    variants,
+                    generic_instance_key,
+                    ..
+                } = &expr.data_type
+                else {
                     return_hir_transformation_error!(
                         "ChoiceConstruct expression has non-choice data type",
                         self.hir_error_location(&expr.location)
                     );
                 };
-                let choice_id = self.resolve_choice_id(nominal_path, &expr.location)?;
+                let choice_id = match generic_instance_key {
+                    Some(key) => self.resolve_or_register_generic_choice(
+                        key,
+                        variants,
+                        nominal_path,
+                        &expr.location,
+                    )?,
+                    None => self.resolve_choice_id(nominal_path, &expr.location)?,
+                };
                 let region = self.current_region_or_error(&expr.location)?;
                 let ty = self.lower_data_type(&expr.data_type, &expr.location)?;
 
@@ -300,8 +313,19 @@ impl<'a> HirBuilder<'a> {
                         self.hir_error_location(&expr.location)
                     );
                 };
-                let struct_id =
-                    self.resolve_struct_id_from_nominal_path(nominal_path, &expr.location)?;
+                let struct_id = match &expr.data_type {
+                    DataType::Struct {
+                        generic_instance_key: Some(key),
+                        fields,
+                        ..
+                    } => self.resolve_or_register_generic_struct(
+                        key,
+                        fields,
+                        nominal_path,
+                        &expr.location,
+                    )?,
+                    _ => self.resolve_struct_id_from_nominal_path(nominal_path, &expr.location)?,
+                };
                 let mut prelude = Vec::new();
                 let mut fields = Vec::with_capacity(args.len());
 
