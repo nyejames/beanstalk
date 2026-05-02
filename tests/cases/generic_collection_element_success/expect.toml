@@ -1,0 +1,11 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+golden_mode = "normalized"
+rendered_output_contains = ["generic collection element"]
+
+[backends.html_wasm]
+mode = "failure"
+warnings = "forbid"
+error_type = "lir_transformation"
+message_contains = ["Wasm lowering only supports empty Vec<String> collection literals"]

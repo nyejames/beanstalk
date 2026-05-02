@@ -11,3 +11,4 @@
 pub(super) mod normalize_ast;
 pub(super) mod normalize_constants;
 pub(super) mod template_helpers;
+pub(super) mod validate_types;

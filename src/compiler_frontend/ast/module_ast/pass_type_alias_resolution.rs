@@ -17,7 +17,7 @@ use crate::compiler_frontend::compiler_errors::{
 };
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::declaration_syntax::type_syntax::{
-    TypeResolutionContext, resolve_type,
+    TypeResolutionContext, TypeResolutionContextInputs, resolve_type,
 };
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -45,24 +45,26 @@ impl<'a> AstBuildState<'a> {
 
             let file_bindings = file_import_bindings.get(&header.source_file);
             let resolved_target = {
-                let type_resolution_context = TypeResolutionContext {
-                    declarations: &self.declarations,
-                    visible_declaration_ids: file_bindings
-                        .map(|bindings| &bindings.visible_symbol_paths),
-                    visible_external_symbols: file_bindings
-                        .map(|bindings| &bindings.visible_external_symbols),
-                    visible_source_bindings: file_bindings
-                        .map(|bindings| &bindings.visible_source_bindings),
-                    visible_type_aliases: file_bindings
-                        .map(|bindings| &bindings.visible_type_aliases),
-                    resolved_type_aliases: Some(&self.resolved_type_aliases_by_path),
-                    generic_declarations_by_path: Some(
-                        &self.module_symbols.generic_declarations_by_path,
-                    ),
-                    generic_parameters: None,
-                    resolved_struct_fields_by_path: Some(&self.resolved_struct_fields_by_path),
-                    generic_nominal_instantiations: Some(&*self.generic_nominal_instantiations),
-                };
+                let type_resolution_context =
+                    TypeResolutionContext::from_inputs(TypeResolutionContextInputs {
+                        declarations: &self.declarations,
+                        visible_declaration_ids: file_bindings
+                            .map(|bindings| &bindings.visible_symbol_paths),
+                        visible_external_symbols: file_bindings
+                            .map(|bindings| &bindings.visible_external_symbols),
+                        visible_source_bindings: file_bindings
+                            .map(|bindings| &bindings.visible_source_bindings),
+                        visible_type_aliases: file_bindings
+                            .map(|bindings| &bindings.visible_type_aliases),
+                        resolved_type_aliases: Some(&self.resolved_type_aliases_by_path),
+                        generic_declarations_by_path: Some(
+                            &self.module_symbols.generic_declarations_by_path,
+                        ),
+                        resolved_struct_fields_by_path: Some(&self.resolved_struct_fields_by_path),
+                        generic_nominal_instantiations: Some(
+                            self.generic_nominal_instantiations.as_ref(),
+                        ),
+                    });
 
                 resolve_type(
                     target,

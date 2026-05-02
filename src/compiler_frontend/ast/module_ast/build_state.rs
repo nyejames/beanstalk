@@ -44,7 +44,7 @@ use std::time::Instant;
 
 use crate::compiler_frontend::ast::type_resolution::ResolvedFunctionSignature;
 use crate::compiler_frontend::datatypes::DataType;
-use crate::compiler_frontend::datatypes::generics::GenericInstantiationKey;
+use crate::compiler_frontend::datatypes::generics::GenericNominalInstantiationCache;
 
 pub(in crate::compiler_frontend::ast) struct AstBuildState<'a> {
     // Header-owned module symbol package from the header/dependency-sort phase.
@@ -89,9 +89,8 @@ pub(in crate::compiler_frontend::ast) struct AstBuildState<'a> {
     // WHAT: maps a concrete generic instantiation key to its fully substituted DataType.
     // WHY: `Box of Int` and `Box of String` are distinct nominal types; substitution is
     //      expensive and must happen exactly once per unique instantiation.
-    //      Shared via Rc<RefCell<...>> so ScopeContext clones can mutate the same cache.
     pub(in crate::compiler_frontend::ast) generic_nominal_instantiations:
-        Rc<RefCell<FxHashMap<GenericInstantiationKey, DataType>>>,
+        Rc<GenericNominalInstantiationCache>,
 }
 
 impl<'a> AstBuildState<'a> {
@@ -130,8 +129,26 @@ impl<'a> AstBuildState<'a> {
             struct_source_by_path,
             resolved_function_signatures_by_path: FxHashMap::default(),
             resolved_type_aliases_by_path: FxHashMap::default(),
-            generic_nominal_instantiations: Rc::new(RefCell::new(FxHashMap::default())),
+            generic_nominal_instantiations: Rc::new(GenericNominalInstantiationCache::new()),
         }
+    }
+
+    pub(in crate::compiler_frontend::ast) fn replace_declaration(
+        &mut self,
+        declaration: Declaration,
+    ) -> Result<(), CompilerError> {
+        let Some(existing) = self
+            .declarations
+            .iter_mut()
+            .find(|candidate| candidate.id == declaration.id)
+        else {
+            return Err(CompilerError::compiler_error(
+                "Resolved top-level declaration was not registered before AST resolution.",
+            ));
+        };
+
+        *existing = declaration;
+        Ok(())
     }
 
     pub(in crate::compiler_frontend::ast) fn error_messages(
@@ -210,6 +227,15 @@ impl<'a> AstBuildState<'a> {
         );
         let _ = module_constant_normalization_start;
 
+        let type_boundary_validation_start = Instant::now();
+        self.validate_no_unresolved_executable_types(&module_constants, string_table)
+            .map_err(|error| self.error_messages(error, string_table))?;
+        timer_log!(
+            type_boundary_validation_start,
+            "AST/finalize/type boundary validated in: "
+        );
+        let _ = type_boundary_validation_start;
+
         let builtin_merge_start = Instant::now();
         if !self.builtin_struct_ast_nodes.is_empty() {
             let mut ast_nodes = self.builtin_struct_ast_nodes;
@@ -222,18 +248,13 @@ impl<'a> AstBuildState<'a> {
         // Collect resolved choice definitions for HIR pre-registration.
         // WHY: choices are nominal types declared at module scope. HIR needs complete
         //      variant metadata before any expression lowering that references them.
-        // NOTE: `self.declarations` may contain multiple versions of the same choice
-        //       (unresolved placeholder from header sorting, then resolved from pass 3).
-        //       Iterate in reverse to prefer the resolved version.
-        let mut seen_choice_paths = rustc_hash::FxHashSet::<InternedPath>::default();
         let mut choice_definitions = vec![];
-        for declaration in self.declarations.iter().rev() {
+        for declaration in &self.declarations {
             if let crate::compiler_frontend::datatypes::DataType::Choices {
                 nominal_path,
                 variants,
                 ..
             } = &declaration.value.data_type
-                && seen_choice_paths.insert(nominal_path.to_owned())
             {
                 if self
                     .module_symbols
@@ -249,7 +270,6 @@ impl<'a> AstBuildState<'a> {
                 });
             }
         }
-        choice_definitions.reverse(); // restore declaration order
 
         Ok(Ast {
             nodes: self.ast,

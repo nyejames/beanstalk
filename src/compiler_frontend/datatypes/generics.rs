@@ -6,7 +6,6 @@
 //! Phase 1 scope:
 //! - Generic declarations and type applications parse into frontend metadata.
 //! - Executable generic instantiations are still resolved before HIR in later phases.
-#![allow(dead_code)] // Some generic infrastructure is intentionally staged for later solver phases.
 
 use super::DataType;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
@@ -20,6 +19,7 @@ use crate::compiler_frontend::symbols::identifier_policy::is_camel_case_type_nam
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use rustc_hash::{FxHashMap, FxHashSet};
+use std::cell::RefCell;
 use std::collections::HashMap;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -53,15 +53,11 @@ impl GenericParameterList {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct TypeArgumentList {
-    pub arguments: Vec<DataType>,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum GenericBaseType {
     Named(StringId),
     ResolvedNominal(InternedPath),
+    #[allow(dead_code)] // Deferred until external generic type metadata exists.
     External(ExternalTypeId),
     Builtin(BuiltinGenericType),
 }
@@ -87,6 +83,27 @@ pub enum BuiltinTypeKey {
 pub struct GenericInstantiationKey {
     pub base_path: InternedPath,
     pub arguments: Vec<TypeIdentityKey>,
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct GenericNominalInstantiationCache {
+    instances: RefCell<FxHashMap<GenericInstantiationKey, DataType>>,
+}
+
+impl GenericNominalInstantiationCache {
+    pub(crate) fn new() -> Self {
+        Self {
+            instances: RefCell::new(FxHashMap::default()),
+        }
+    }
+
+    pub(crate) fn get(&self, key: &GenericInstantiationKey) -> Option<DataType> {
+        self.instances.borrow().get(key).cloned()
+    }
+
+    pub(crate) fn insert(&self, key: GenericInstantiationKey, data_type: DataType) {
+        self.instances.borrow_mut().insert(key, data_type);
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -286,6 +303,7 @@ impl TypeSubstitution {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn with_replacement(
         mut self,
         parameter_id: TypeParameterId,
@@ -295,7 +313,6 @@ impl TypeSubstitution {
         self
     }
 
-    #[allow(dead_code)] // Planned: direct table construction from parser/type solver.
     pub(crate) fn insert(&mut self, parameter_id: TypeParameterId, replacement: DataType) {
         self.replacements.insert(parameter_id, replacement);
     }
@@ -538,41 +555,6 @@ fn generic_args_unify(
         .iter()
         .zip(concrete_args.iter())
         .all(|(t, c)| collect_type_parameter_bindings(t, c, bindings))
-}
-
-/// Returns true if the data type contains any unresolved type parameters.
-pub fn contains_type_parameter(data_type: &DataType) -> bool {
-    match data_type {
-        DataType::TypeParameter { .. } => true,
-        DataType::GenericInstance { arguments, .. } => {
-            arguments.iter().any(contains_type_parameter)
-        }
-        DataType::Option(inner) | DataType::Reference(inner) => contains_type_parameter(inner),
-        DataType::Result { ok, err } => contains_type_parameter(ok) || contains_type_parameter(err),
-        DataType::Returns(values) => values.iter().any(contains_type_parameter),
-        DataType::Function(_, signature) => {
-            signature
-                .parameters
-                .iter()
-                .any(|parameter| contains_type_parameter(&parameter.value.data_type))
-                || signature
-                    .returns
-                    .iter()
-                    .any(|return_slot| contains_type_parameter(return_slot.data_type()))
-        }
-        DataType::Struct { fields, .. } | DataType::Parameters(fields) => fields
-            .iter()
-            .any(|field| contains_type_parameter(&field.value.data_type)),
-        DataType::Choices { variants, .. } => {
-            variants.iter().any(|variant| match &variant.payload {
-                ChoiceVariantPayload::Unit => false,
-                ChoiceVariantPayload::Record { fields } => fields
-                    .iter()
-                    .any(|field| contains_type_parameter(&field.value.data_type)),
-            })
-        }
-        _ => false,
-    }
 }
 
 /// Converts a concrete `DataType` into a stable `TypeIdentityKey`.

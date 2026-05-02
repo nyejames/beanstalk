@@ -50,6 +50,7 @@ pub(crate) mod expressions {
     pub(crate) mod eval_expression;
     pub(crate) mod expression;
     pub(crate) mod function_calls;
+    pub(crate) mod generic_nominal_inference;
     pub(crate) mod mutation;
     pub(crate) mod parse_expression;
     pub(crate) mod parse_expression_dispatch;

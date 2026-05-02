@@ -1,0 +1,11 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+golden_mode = "normalized"
+rendered_output_contains = ["named choice generic inference"]
+
+[backends.html_wasm]
+mode = "failure"
+warnings = "forbid"
+error_type = "lir_transformation"
+message_contains = ["Wasm backend does not yet support variant payload fields"]

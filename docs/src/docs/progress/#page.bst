@@ -595,29 +595,29 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
         [data:
             [: Generic type infrastructure]
             [: Supported]
-            [: Targeted frontend unit coverage for type-identity keys, parameter scopes, substitution, generic parameter parsing, [codesnippet:of] type applications, arity checks, collection generic substrate, and Phase 1/2 diagnostics. Integration coverage includes [codesnippet:generic_choice_declaration_parse_success], [codesnippet:generic_unused_parameter_rejected], [codesnippet:generic_type_wrong_arity_rejected], [codesnippet:generic_recursive_type_deferred], and collection capacity tests.]
-            [: Phases 0-2 complete. Generic parameter metadata, [codesnippet:of] type applications, concrete generic aliases, collection generic substrate, and type resolution through [codesnippet:TypeResolutionContext] are implemented. Generic structs, choices, functions, and aliases to concrete instances are parsed into frontend metadata. Executable instantiation, generic calls, constructors, nested inline generic applications, recursive generic types, and generic receiver methods remain deferred.]
+            [: Targeted frontend unit coverage for type-identity keys, parameter scopes, substitution, generic parameter parsing, [codesnippet:of] type applications, arity checks, collection generic substrate, and Phase 1/2 diagnostics. Integration coverage includes generic struct and choice constructor inference, concrete generic aliases, imported generic types, named argument inference, recursive rejection, receiver rejection, and collection capacity parsing.]
+            [: Phases 0-3 are implemented for concrete generic structs and choices. Generic parameter metadata, [codesnippet:of] type applications, concrete generic aliases, collection generic substrate, constructor inference, choice matching, AST unresolved-generic validation, and concrete HIR nominal identity are implemented. Generic free-function execution, nested inline generic applications, recursive generic types, generic aliases, partial application, and generic receiver methods remain deferred or rejected.]
         ]
 
         [data:
             [: Choice generic declarations]
-            [: Partial]
-            [: [codesnippet:generic_choice_declaration_parse_success], [codesnippet:generic_recursive_type_deferred]]
-            [: Generic choice headers and payload type parameters parse and resolve as frontend metadata. Constructors, matching on generic instances, recursive generic choices, and executable instantiation remain deferred.]
+            [: Supported]
+            [: [codesnippet:generic_choice_declaration_parse_success], [codesnippet:generic_choice_instantiation_success], [codesnippet:generic_choice_match_success], [codesnippet:generic_named_choice_payload_infer], [codesnippet:generic_expected_unit_choice_success], [codesnippet:generic_recursive_type_deferred]]
+            [: Generic choice headers and payload type parameters parse and resolve. Concrete constructor inference, named payload arguments, expected-type unit variants, and matching on concrete generic instances are supported. Recursive generic choices and generic receiver methods remain rejected.]
         ]
 
         [data:
             [: Generic structs]
-            [: Deferred]
-            [: [codesnippet:generic_struct_declaration_parse_success], [codesnippet:generic_recursive_type_deferred]]
-            [: Generic struct headers parse into frontend metadata. Constructors, executable instantiation, and field type substitution remain deferred until Phase 3.]
+            [: Supported]
+            [: [codesnippet:generic_struct_instantiation_success], [codesnippet:generic_named_struct_args_infer], [codesnippet:generic_collection_element_success], [codesnippet:generic_imported_struct_choice_success], [codesnippet:generic_recursive_type_deferred]]
+            [: Generic struct headers parse and resolve. Concrete constructor inference, field type substitution, named constructor arguments, imports, collection element types, and concrete HIR lowering are supported. Recursive generic structs and generic receiver methods remain rejected.]
         ]
 
         [data:
             [: Generic choices]
-            [: Deferred]
-            [: [codesnippet:generic_choice_declaration_parse_success], [codesnippet:generic_recursive_type_deferred]]
-            [: Generic choice headers parse into frontend metadata. Constructors, matching on generic instances, recursive generic choices, and executable instantiation remain deferred until Phase 3.]
+            [: Supported]
+            [: [codesnippet:generic_choice_instantiation_success], [codesnippet:generic_named_choice_payload_infer], [codesnippet:generic_choice_match_success]]
+            [: Concrete generic choice constructors and matching are implemented for resolved nominal instances. Wasm backend support for payload choices remains partial and is tracked by backend-specific expected failures.]
         ]
 
         [data:
@@ -629,9 +629,9 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
 
         [data:
             [: Generic type aliases]
-            [: Deferred]
-            [: No generic alias coverage yet.]
-            [: Only aliases to fully concrete generic instances are supported. Generic aliases with parameters remain deferred.]
+            [: Partial]
+            [: [codesnippet:generic_concrete_alias_success], [codesnippet:generic_nested_alias_workaround], [codesnippet:generic_alias_rejected]]
+            [: Aliases to fully concrete generic instances are supported and transparent in annotations. Generic aliases with parameters, partial type application, and type-constructor composition are rejected.]
         ]
 
         [data:
@@ -651,21 +651,21 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
         [data:
             [: Generic receiver methods]
             [: Deferred]
-            [: Diagnostics only.]
-            [: Both generic receiver methods and receiver methods on generic instantiated types are rejected. Use free functions instead.]
+            [: [codesnippet:generic_receiver_rejected]]
+            [: Both generic receiver methods and receiver methods on concrete generic instantiated types are rejected with targeted diagnostics. Use free functions instead.]
         ]
 
         [data:
             [: Recursive generic types]
             [: Deferred]
-            [: Diagnostics only.]
-            [: Recursive generic structs and choices are rejected cleanly. Requires layout/indirection design.]
+            [: [codesnippet:generic_recursive_type_deferred], [codesnippet:generic_mutual_recursive_rejected]]
+            [: Recursive generic structs and choices are rejected through declaration dependency or generic recursion diagnostics. Requires layout/indirection design.]
         ]
 
         [data:
             [: Nested generic type application]
             [: Deferred]
-            [: Diagnostics only.]
+            [: [codesnippet:generic_nested_alias_workaround]]
             [: More than one [codesnippet:of] application in a single annotation is rejected, except for collection element types. Name intermediate concrete aliases to compose complex types.]
         ]
 

@@ -23,7 +23,7 @@ use crate::compiler_frontend::declaration_syntax::declaration_shell::{
     BindingTargetSyntax, parse_binding_target_syntax,
 };
 use crate::compiler_frontend::declaration_syntax::type_syntax::{
-    TypeResolutionContext, resolve_type,
+    TypeResolutionContext, TypeResolutionContextInputs, resolve_type,
 };
 use crate::compiler_frontend::symbols::identifier_policy::{
     IdentifierNamingKind, ensure_not_keyword_shadow_identifier, naming_warning_for_identifier,
@@ -526,7 +526,7 @@ fn resolve_target_explicit_type(
         return Ok(None);
     }
 
-    let type_resolution_context = TypeResolutionContext {
+    let type_resolution_context = TypeResolutionContext::from_inputs(TypeResolutionContextInputs {
         declarations: context.top_level_declarations.declarations(),
         visible_declaration_ids: context.visible_declaration_ids.as_ref(),
         visible_external_symbols: context.visible_external_symbols.as_ref(),
@@ -534,10 +534,9 @@ fn resolve_target_explicit_type(
         visible_type_aliases: context.visible_type_aliases.as_ref(),
         resolved_type_aliases: context.resolved_type_aliases.as_deref(),
         generic_declarations_by_path: context.generic_declarations_by_path.as_deref(),
-        generic_parameters: None,
         resolved_struct_fields_by_path: context.resolved_struct_fields_by_path.as_deref(),
         generic_nominal_instantiations: context.generic_nominal_instantiations.as_deref(),
-    };
+    });
 
     let resolved_type = resolve_type(
         &target.type_annotation,

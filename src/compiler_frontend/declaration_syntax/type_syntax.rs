@@ -22,8 +22,8 @@ use crate::compiler_frontend::ast::statements::functions::FunctionReturn;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::generics::{
-    BuiltinGenericType, GenericBaseType, GenericInstantiationKey, GenericParameterScope,
-    TypeIdentityKey, TypeSubstitution, data_type_to_type_identity_key,
+    BuiltinGenericType, GenericBaseType, GenericInstantiationKey, GenericNominalInstantiationCache,
+    GenericParameterScope, TypeIdentityKey, TypeSubstitution, data_type_to_type_identity_key,
 };
 use crate::compiler_frontend::declaration_syntax::choice::{ChoiceVariant, ChoiceVariantPayload};
 use crate::compiler_frontend::deferred_feature_diagnostics::deferred_feature_rule_error;
@@ -653,12 +653,24 @@ pub(crate) struct TypeResolutionContext<'a> {
     /// Required for lazy generic struct instantiation.
     pub resolved_struct_fields_by_path: Option<&'a FxHashMap<InternedPath, Vec<Declaration>>>,
     /// Mutable cache for lazily instantiated generic nominal types.
-    pub generic_nominal_instantiations:
-        Option<&'a std::cell::RefCell<FxHashMap<GenericInstantiationKey, DataType>>>,
+    pub generic_nominal_instantiations: Option<&'a GenericNominalInstantiationCache>,
+}
+
+pub(crate) struct TypeResolutionContextInputs<'a> {
+    pub declarations: &'a [Declaration],
+    pub visible_declaration_ids: Option<&'a FxHashSet<InternedPath>>,
+    pub visible_external_symbols: Option<&'a FxHashMap<StringId, ExternalSymbolId>>,
+    pub visible_source_bindings: Option<&'a FxHashMap<StringId, InternedPath>>,
+    pub visible_type_aliases: Option<&'a FxHashMap<StringId, InternedPath>>,
+    pub resolved_type_aliases: Option<&'a FxHashMap<InternedPath, DataType>>,
+    pub generic_declarations_by_path:
+        Option<&'a FxHashMap<InternedPath, GenericDeclarationMetadata>>,
+    pub resolved_struct_fields_by_path: Option<&'a FxHashMap<InternedPath, Vec<Declaration>>>,
+    pub generic_nominal_instantiations: Option<&'a GenericNominalInstantiationCache>,
 }
 
 impl<'a> TypeResolutionContext<'a> {
-    #[allow(dead_code)] // Used by tests and planned call sites while Phase 0 wiring lands.
+    #[cfg(test)]
     pub(crate) fn from_declarations(declarations: &'a [Declaration]) -> Self {
         Self {
             declarations,
@@ -672,6 +684,29 @@ impl<'a> TypeResolutionContext<'a> {
             resolved_struct_fields_by_path: None,
             generic_nominal_instantiations: None,
         }
+    }
+
+    pub(crate) fn from_inputs(inputs: TypeResolutionContextInputs<'a>) -> Self {
+        Self {
+            declarations: inputs.declarations,
+            visible_declaration_ids: inputs.visible_declaration_ids,
+            visible_external_symbols: inputs.visible_external_symbols,
+            visible_source_bindings: inputs.visible_source_bindings,
+            visible_type_aliases: inputs.visible_type_aliases,
+            resolved_type_aliases: inputs.resolved_type_aliases,
+            generic_declarations_by_path: inputs.generic_declarations_by_path,
+            generic_parameters: None,
+            resolved_struct_fields_by_path: inputs.resolved_struct_fields_by_path,
+            generic_nominal_instantiations: inputs.generic_nominal_instantiations,
+        }
+    }
+
+    pub(crate) fn with_generic_parameters(
+        mut self,
+        generic_parameters: Option<&'a GenericParameterScope>,
+    ) -> Self {
+        self.generic_parameters = generic_parameters;
+        self
     }
 }
 
@@ -964,7 +999,7 @@ fn instantiate_generic_nominal(
     // Check cache first.
     if all_concrete
         && let Some(cache) = context.generic_nominal_instantiations
-        && let Some(cached) = cache.borrow().get(&key).cloned()
+        && let Some(cached) = cache.get(&key)
     {
         return Ok(Some(cached));
     }
@@ -1013,7 +1048,7 @@ fn instantiate_generic_nominal(
             }
         }
         GenericDeclarationKind::Choice => {
-            let template_declaration = context.declarations.iter().rfind(|declaration| {
+            let template_declaration = context.declarations.iter().find(|declaration| {
                 &declaration.id == base_path
                     && matches!(declaration.value.data_type, DataType::Choices { .. })
             });
@@ -1078,7 +1113,7 @@ fn instantiate_generic_nominal(
     };
 
     if all_concrete && let Some(cache) = context.generic_nominal_instantiations {
-        cache.borrow_mut().insert(key, instantiated.clone());
+        cache.insert(key, instantiated.clone());
     }
 
     Ok(Some(instantiated))
@@ -1106,7 +1141,10 @@ fn resolve_named_type_from_context(
         && let Some(resolved_aliases) = context.resolved_type_aliases
         && let Some(resolved) = resolved_aliases.get(alias_path)
     {
-        return Ok(resolved.to_owned());
+        // Concrete generic aliases can be parsed before generic template fields are
+        // fully resolved. Re-resolve the stored target in the current context so
+        // aliases stay transparent once template metadata is available.
+        return resolve_type(resolved, location, context, string_table);
     }
 
     // 3) Visible source declarations (path-based first, then name fallback).
@@ -1351,7 +1389,7 @@ fn resolve_declaration_by_path<'a>(
     visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
     canonical_path: &InternedPath,
 ) -> Option<&'a Declaration> {
-    declarations.iter().rfind(|declaration| {
+    declarations.iter().find(|declaration| {
         &declaration.id == canonical_path
             && !declaration.is_unresolved_constant_placeholder()
             && match visible_declaration_ids {
@@ -1366,7 +1404,7 @@ fn visible_declaration_by_name<'a>(
     visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
     name: StringId,
 ) -> Option<&'a Declaration> {
-    declarations.iter().rfind(|declaration| {
+    declarations.iter().find(|declaration| {
         declaration.id.name() == Some(name)
             && !declaration.is_unresolved_constant_placeholder()
             && match visible_declaration_ids {

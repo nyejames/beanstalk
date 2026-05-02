@@ -3,6 +3,9 @@
 //! This module owns the reversible AST/HIR location mapping and the canonical path identity used
 //! by diagnostics, borrow checking, and debug rendering.
 
+#[cfg(any(test, feature = "show_hir"))]
+use crate::compiler_frontend::datatypes::generics::display_generic_instantiation_key;
+use crate::compiler_frontend::datatypes::generics::{GenericInstantiationKey, TypeIdentityKey};
 use crate::compiler_frontend::hir::blocks::{HirBlock, HirLocal};
 use crate::compiler_frontend::hir::functions::HirFunction;
 use crate::compiler_frontend::hir::ids::{
@@ -155,8 +158,10 @@ pub(crate) struct HirSideTable {
     local_origins: FxHashMap<LocalId, HirLocalOrigin>,
     function_names: FxHashMap<FunctionId, InternedPath>,
     struct_names: FxHashMap<StructId, InternedPath>,
+    generic_struct_instances: FxHashMap<StructId, GenericInstantiationKey>,
     field_names: FxHashMap<FieldId, InternedPath>,
     choice_names: FxHashMap<ChoiceId, InternedPath>,
+    generic_choice_instances: FxHashMap<ChoiceId, GenericInstantiationKey>,
 }
 
 impl HirSideTable {
@@ -171,8 +176,10 @@ impl HirSideTable {
         self.local_origins.clear();
         self.function_names.clear();
         self.struct_names.clear();
+        self.generic_struct_instances.clear();
         self.field_names.clear();
         self.choice_names.clear();
+        self.generic_choice_instances.clear();
     }
 
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
@@ -198,11 +205,17 @@ impl HirSideTable {
         for path in self.struct_names.values_mut() {
             path.remap_string_ids(remap);
         }
+        for key in self.generic_struct_instances.values_mut() {
+            remap_generic_instantiation_key(key, remap);
+        }
         for path in self.field_names.values_mut() {
             path.remap_string_ids(remap);
         }
         for path in self.choice_names.values_mut() {
             path.remap_string_ids(remap);
+        }
+        for key in self.generic_choice_instances.values_mut() {
+            remap_generic_instantiation_key(key, remap);
         }
     }
 
@@ -396,6 +409,15 @@ impl HirSideTable {
     }
 
     #[inline]
+    pub(crate) fn bind_generic_struct_instance(
+        &mut self,
+        struct_id: StructId,
+        key: GenericInstantiationKey,
+    ) {
+        self.generic_struct_instances.insert(struct_id, key);
+    }
+
+    #[inline]
     pub(crate) fn bind_field_name(&mut self, field_id: FieldId, name: InternedPath) {
         self.field_names.insert(field_id, name);
     }
@@ -403,6 +425,15 @@ impl HirSideTable {
     #[inline]
     pub(crate) fn bind_choice_name(&mut self, choice_id: ChoiceId, name: InternedPath) {
         self.choice_names.insert(choice_id, name);
+    }
+
+    #[inline]
+    pub(crate) fn bind_generic_choice_instance(
+        &mut self,
+        choice_id: ChoiceId,
+        key: GenericInstantiationKey,
+    ) {
+        self.generic_choice_instances.insert(choice_id, key);
     }
 
     #[inline]
@@ -452,6 +483,19 @@ impl HirSideTable {
             .and_then(|path| path.name_str(string_table))
     }
 
+    #[cfg(any(test, feature = "show_hir"))]
+    pub(crate) fn display_choice_name(
+        &self,
+        choice_id: ChoiceId,
+        string_table: &StringTable,
+    ) -> Option<String> {
+        if let Some(key) = self.generic_choice_instances.get(&choice_id) {
+            return Some(display_generic_instantiation_key(key, string_table));
+        }
+        self.resolve_choice_name(choice_id, string_table)
+            .map(str::to_owned)
+    }
+
     #[inline]
     pub(crate) fn resolve_local_name<'a>(
         &self,
@@ -483,6 +527,19 @@ impl HirSideTable {
             .and_then(|path| path.name_str(string_table))
     }
 
+    #[cfg(any(test, feature = "show_hir"))]
+    pub(crate) fn display_struct_name(
+        &self,
+        struct_id: StructId,
+        string_table: &StringTable,
+    ) -> Option<String> {
+        if let Some(key) = self.generic_struct_instances.get(&struct_id) {
+            return Some(display_generic_instantiation_key(key, string_table));
+        }
+        self.resolve_struct_name(struct_id, string_table)
+            .map(str::to_owned)
+    }
+
     #[inline]
     #[cfg(any(test, feature = "show_hir"))]
     pub(crate) fn resolve_field_name<'a>(
@@ -492,5 +549,29 @@ impl HirSideTable {
     ) -> Option<&'a str> {
         self.field_name_path(field_id)
             .and_then(|path| path.name_str(string_table))
+    }
+}
+
+fn remap_generic_instantiation_key(key: &mut GenericInstantiationKey, remap: &StringIdRemap) {
+    key.base_path.remap_string_ids(remap);
+    for argument in &mut key.arguments {
+        remap_type_identity_key(argument, remap);
+    }
+}
+
+fn remap_type_identity_key(key: &mut TypeIdentityKey, remap: &StringIdRemap) {
+    match key {
+        TypeIdentityKey::Nominal(path) => path.remap_string_ids(remap),
+        TypeIdentityKey::Collection(inner) | TypeIdentityKey::Option(inner) => {
+            remap_type_identity_key(inner, remap)
+        }
+        TypeIdentityKey::Result { ok, err } => {
+            remap_type_identity_key(ok, remap);
+            remap_type_identity_key(err, remap);
+        }
+        TypeIdentityKey::GenericInstance(instance) => {
+            remap_generic_instantiation_key(instance, remap);
+        }
+        TypeIdentityKey::Builtin(_) | TypeIdentityKey::External(_) => {}
     }
 }

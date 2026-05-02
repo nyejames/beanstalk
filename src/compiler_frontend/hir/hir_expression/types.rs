@@ -249,6 +249,8 @@ impl<'a> HirBuilder<'a> {
             .insert(key.to_owned(), struct_id);
         self.side_table
             .bind_struct_name(struct_id, nominal_path.to_owned());
+        self.side_table
+            .bind_generic_struct_instance(struct_id, key.to_owned());
         self.push_struct(hir_struct);
 
         Ok(struct_id)
@@ -272,6 +274,8 @@ impl<'a> HirBuilder<'a> {
             .insert(key.to_owned(), choice_id);
         self.side_table
             .bind_choice_name(choice_id, nominal_path.to_owned());
+        self.side_table
+            .bind_generic_choice_instance(choice_id, key.to_owned());
         let index = choice_id.0 as usize;
         debug_assert!(index == self.module.choices.len());
         self.module.choices.push(HirChoice {

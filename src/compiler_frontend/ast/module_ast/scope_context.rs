@@ -30,7 +30,7 @@ use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::templates::template_folding::TemplateFoldContext;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
-use crate::compiler_frontend::datatypes::generics::GenericInstantiationKey;
+use crate::compiler_frontend::datatypes::generics::GenericNominalInstantiationCache;
 use crate::compiler_frontend::datatypes::{DataType, ReceiverKey};
 use crate::compiler_frontend::external_packages::{
     ExternalFunctionDef, ExternalFunctionId, ExternalPackageRegistry, ExternalSymbolId,
@@ -141,16 +141,13 @@ impl TopLevelDeclarationIndex {
             }
             DeclarationBucket::Many(indices) => indices
                 .iter()
-                .rev()
                 .map(|index| &self.declarations[*index as usize])
                 .find(|declaration| is_visible(declaration)),
         }
     }
 
     pub fn get_by_path(&self, path: &InternedPath) -> Option<&Declaration> {
-        // WHY: declarations may be appended multiple times during fixed-point
-        // constant resolution; the latest entry is the resolved one.
-        self.declarations.iter().rfind(|d| d.id == *path)
+        self.declarations.iter().find(|d| d.id == *path)
     }
 }
 
@@ -211,9 +208,8 @@ pub struct ScopeContext {
         Option<Rc<FxHashMap<InternedPath, Vec<Declaration>>>>,
 
     /// Mutable cache for lazily instantiated generic nominal types.
-    /// Shared via Rc<RefCell<...>> so all cloned scope contexts share the same cache.
-    pub(crate) generic_nominal_instantiations:
-        Option<Rc<RefCell<FxHashMap<GenericInstantiationKey, DataType>>>>,
+    /// Shared so all cloned scope contexts reuse the same concrete nominal instances.
+    pub(crate) generic_nominal_instantiations: Option<Rc<GenericNominalInstantiationCache>>,
 
     // --- Control flow state ---
     pub loop_depth: usize,
@@ -373,7 +369,7 @@ impl ScopeContext {
 
         // Share the top-level declaration table (cheap Rc clone); reset locals to params only.
         new_context.top_level_declarations = Rc::clone(&self.top_level_declarations);
-        new_context.local_declarations = signature.parameters;
+        new_context.set_local_declarations(signature.parameters);
 
         new_context
     }
@@ -589,7 +585,7 @@ impl ScopeContext {
 
     pub(crate) fn with_generic_nominal_instantiations(
         mut self,
-        cache: Rc<RefCell<FxHashMap<GenericInstantiationKey, DataType>>>,
+        cache: Rc<GenericNominalInstantiationCache>,
     ) -> ScopeContext {
         self.generic_nominal_instantiations = Some(cache);
         self

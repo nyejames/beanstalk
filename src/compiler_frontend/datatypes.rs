@@ -224,8 +224,8 @@ impl DataType {
         }
     }
 
-    /// Returns true if this type is a generic instantiation (struct or choice).
-    pub fn is_generic_instance(&self) -> bool {
+    /// Returns true if this is a resolved nominal generic instantiation.
+    pub fn is_resolved_generic_nominal_instance(&self) -> bool {
         matches!(
             self,
             DataType::Struct {
@@ -233,6 +233,16 @@ impl DataType {
                 ..
             } | DataType::Choices {
                 generic_instance_key: Some(..),
+                ..
+            }
+        )
+    }
+
+    pub fn is_unresolved_generic_application(&self) -> bool {
+        matches!(
+            self,
+            DataType::GenericInstance {
+                base: GenericBaseType::Named(_) | GenericBaseType::ResolvedNominal(_),
                 ..
             }
         )
@@ -273,6 +283,10 @@ impl DataType {
 
     /// Returns true if this type is a collection (builtin generic instance with one argument).
     pub fn is_collection(&self) -> bool {
+        self.is_builtin_generic_collection()
+    }
+
+    pub fn is_builtin_generic_collection(&self) -> bool {
         matches!(
             self,
             DataType::GenericInstance {

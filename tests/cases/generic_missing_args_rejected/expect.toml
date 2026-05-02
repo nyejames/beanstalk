@@ -2,4 +2,4 @@
 mode = "failure"
 warnings = "forbid"
 error_type = "Rule"
-message_contains = ["Cannot infer type argument(s) for generic choice 'ResultShape': E"]
+message_contains = ["Cannot infer type argument(s) for generic type 'ResultShape': E"]

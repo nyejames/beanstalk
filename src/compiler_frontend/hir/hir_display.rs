@@ -759,9 +759,9 @@ impl<'a> HirDisplayContext<'a> {
     fn struct_label(&self, struct_id: StructId) -> String {
         if let Some(name) = self
             .side_table
-            .and_then(|side| side.resolve_struct_name(struct_id, self.string_table))
+            .and_then(|side| side.display_struct_name(struct_id, self.string_table))
         {
-            return name.to_owned();
+            return name;
         }
 
         format!("struct{}", struct_id.0)
@@ -770,9 +770,9 @@ impl<'a> HirDisplayContext<'a> {
     fn choice_label(&self, choice_id: ChoiceId) -> String {
         if let Some(name) = self
             .side_table
-            .and_then(|side| side.resolve_choice_name(choice_id, self.string_table))
+            .and_then(|side| side.display_choice_name(choice_id, self.string_table))
         {
-            return name.to_owned();
+            return name;
         }
 
         format!("choice{}", choice_id.0)

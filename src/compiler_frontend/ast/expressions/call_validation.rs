@@ -270,6 +270,115 @@ pub(crate) fn resolve_call_arguments(
     // 6) detect missing required parameters,
     // 7) validate types,
     // 8) validate access mode.
+    let mut resolved = resolve_call_argument_slots(
+        diagnostics,
+        args,
+        expectations,
+        location.clone(),
+        string_table,
+    )?;
+
+    for (slot, expectation) in expectations.iter().enumerate() {
+        if resolved[slot].is_none() {
+            if let Some(default_value) = &expectation.default_value {
+                resolved[slot] = Some(CallArgument::positional(
+                    default_value.clone(),
+                    CallAccessMode::Shared,
+                    location.clone(),
+                ));
+            } else {
+                let parameter_label = expectation
+                    .name
+                    .map(|name| format!("'{}'", string_table.resolve(name)))
+                    .unwrap_or_else(|| format!("#{}", slot + 1));
+                return_type_error!(
+                    format!(
+                        "Missing required argument for {} {} in {}",
+                        diagnostics.slot_noun(),
+                        parameter_label,
+                        diagnostics.callable_label()
+                    ),
+                    location.clone(),
+                    {
+                        CompilationStage => "Function Call Validation",
+                        PrimarySuggestion => format!(
+                            "Provide values for all required {}s",
+                            diagnostics.slot_noun()
+                        ),
+                    }
+                );
+            }
+        }
+    }
+
+    let mut ordered = Vec::with_capacity(expectations.len());
+    for (slot, expectation) in expectations.iter().enumerate() {
+        let Some(argument) = resolved[slot].take() else {
+            return_compiler_error!(
+                format!(
+                    "Call argument resolution left required slot {} empty for {}",
+                    slot + 1,
+                    diagnostics.callable_label()
+                );
+                {
+                    CompilationStage => "Function Call Validation",
+                    PrimarySuggestion => "This indicates a compiler bug in argument slot resolution. Please report this issue.",
+                }
+            );
+        };
+
+        let passing_mode = classify_call_passing_mode(
+            &diagnostics,
+            &argument,
+            expectation,
+            location.clone(),
+            string_table,
+        )?;
+
+        if !is_call_argument_type_compatible(expectation, &argument, passing_mode) {
+            let conversion_hint =
+                argument_conversion_hint(&expectation.data_type, &argument.value.data_type);
+            let slot_label = diagnostics.slot_label(expectation, slot, string_table);
+            return_type_error!(
+                format!(
+                    "Argument for {} {} in {} has incorrect type. {} {} {}",
+                    diagnostics.slot_noun(),
+                    slot_label,
+                    diagnostics.callable_label(),
+                    expected_found_clause(
+                        &expectation.data_type,
+                        &argument.value.data_type,
+                        string_table
+                    ),
+                    offending_value_clause(&argument.value, string_table),
+                    conversion_hint
+                ),
+                argument.location.clone(),
+                {
+                    CompilationStage => "Function Call Validation",
+                    PrimarySuggestion => diagnostics.primary_conversion_suggestion(),
+                }
+            );
+        }
+
+        ordered.push(argument.with_passing_mode(passing_mode));
+    }
+
+    Ok(ordered)
+}
+
+/// Resolves raw call arguments into declaration-order slots without filling defaults or
+/// validating types.
+///
+/// WHAT: generic constructor inference needs the same named/positional routing as full call
+/// validation, but omitted defaulted fields must not infer type parameters.
+pub(crate) fn resolve_call_argument_slots(
+    diagnostics: CallDiagnosticContext<'_>,
+    args: &[CallArgument],
+    expectations: &[ParameterExpectation],
+    location: SourceLocation,
+    string_table: &StringTable,
+) -> Result<Vec<Option<CallArgument>>, CompilerError> {
     let mut resolved: Vec<Option<CallArgument>> = vec![None; expectations.len()];
     let mut positional_cursor = 0usize;
     let mut saw_named_argument = false;
@@ -383,93 +492,7 @@ pub(crate) fn resolve_call_arguments(
         resolved[slot] = Some(argument.clone());
     }
 
-    for (slot, expectation) in expectations.iter().enumerate() {
-        if resolved[slot].is_none() {
-            if let Some(default_value) = &expectation.default_value {
-                resolved[slot] = Some(CallArgument::positional(
-                    default_value.clone(),
-                    CallAccessMode::Shared,
-                    location.clone(),
-                ));
-            } else {
-                let parameter_label = expectation
-                    .name
-                    .map(|name| format!("'{}'", string_table.resolve(name)))
-                    .unwrap_or_else(|| format!("#{}", slot + 1));
-                return_type_error!(
-                    format!(
-                        "Missing required argument for {} {} in {}",
-                        diagnostics.slot_noun(),
-                        parameter_label,
-                        diagnostics.callable_label()
-                    ),
-                    location.clone(),
-                    {
-                        CompilationStage => "Function Call Validation",
-                        PrimarySuggestion => format!(
-                            "Provide values for all required {}s",
-                            diagnostics.slot_noun()
-                        ),
-                    }
-                );
-            }
-        }
-    }
-
-    let mut ordered = Vec::with_capacity(expectations.len());
-    for (slot, expectation) in expectations.iter().enumerate() {
-        let Some(argument) = resolved[slot].take() else {
-            return_compiler_error!(
-                format!(
-                    "Call argument resolution left required slot {} empty for {}",
-                    slot + 1,
-                    diagnostics.callable_label()
-                );
-                {
-                    CompilationStage => "Function Call Validation",
-                    PrimarySuggestion => "This indicates a compiler bug in argument slot resolution. Please report this issue.",
-                }
-            );
-        };
-
-        let passing_mode = classify_call_passing_mode(
-            &diagnostics,
-            &argument,
-            expectation,
-            location.clone(),
-            string_table,
-        )?;
-
-        if !is_call_argument_type_compatible(expectation, &argument, passing_mode) {
-            let conversion_hint =
-                argument_conversion_hint(&expectation.data_type, &argument.value.data_type);
-            let slot_label = diagnostics.slot_label(expectation, slot, string_table);
-            return_type_error!(
-                format!(
-                    "Argument for {} {} in {} has incorrect type. {} {} {}",
-                    diagnostics.slot_noun(),
-                    slot_label,
-                    diagnostics.callable_label(),
-                    expected_found_clause(
-                        &expectation.data_type,
-                        &argument.value.data_type,
-                        string_table
-                    ),
-                    offending_value_clause(&argument.value, string_table),
-                    conversion_hint
-                ),
-                argument.location.clone(),
-                {
-                    CompilationStage => "Function Call Validation",
-                    PrimarySuggestion => diagnostics.primary_conversion_suggestion(),
-                }
-            );
-        }
-
-        ordered.push(argument.with_passing_mode(passing_mode));
-    }
-
-    Ok(ordered)
+    Ok(resolved)
 }
 
 fn classify_call_passing_mode(

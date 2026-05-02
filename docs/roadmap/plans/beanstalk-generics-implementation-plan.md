@@ -1396,6 +1396,12 @@ Phase 4 implements generic free functions with conservative pre-trait body rules
 
 Generic functions are relationship-preserving first. They do not become implicit trait/duck-typed functions.
 
+Generic function templates must not be emitted as ordinary executable AST functions.
+The AST stage should store the template body separately, and each call-site instantiation should
+create or reuse a concrete lowering unit keyed by canonical function path plus concrete type
+arguments. Executable HIR must only see concrete function IDs, concrete call targets, and concrete
+`TypeId`s; unresolved `TypeParameter` or user `GenericInstance` values remain frontend-only.
+
 ## Step 4.1 — Store generic function declarations
 
 Generic function metadata includes:

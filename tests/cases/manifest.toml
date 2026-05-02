@@ -644,6 +644,56 @@ path = "generic_imported_struct_choice_success"
 tags = ["integration","generics","imports"]
 
 [[case]]
+id = "generic_named_struct_args_infer"
+path = "generic_named_struct_args_infer"
+tags = ["integration","generics","structs","named-args"]
+
+[[case]]
+id = "generic_named_choice_payload_infer"
+path = "generic_named_choice_payload_infer"
+tags = ["integration","generics","choices","named-args"]
+
+[[case]]
+id = "generic_concrete_alias_success"
+path = "generic_concrete_alias_success"
+tags = ["integration","generics","aliases"]
+
+[[case]]
+id = "generic_alias_rejected"
+path = "generic_alias_rejected"
+tags = ["integration","generics","aliases","diagnostics"]
+
+[[case]]
+id = "generic_receiver_rejected"
+path = "generic_receiver_rejected"
+tags = ["integration","generics","receiver-methods","diagnostics"]
+
+[[case]]
+id = "generic_mutual_recursive_rejected"
+path = "generic_mutual_recursive_rejected"
+tags = ["integration","generics","diagnostics"]
+
+[[case]]
+id = "generic_default_only_inference_rejected"
+path = "generic_default_only_inference_rejected"
+tags = ["integration","generics","diagnostics"]
+
+[[case]]
+id = "generic_collection_element_success"
+path = "generic_collection_element_success"
+tags = ["integration","generics","collections"]
+
+[[case]]
+id = "generic_expected_unit_choice_success"
+path = "generic_expected_unit_choice_success"
+tags = ["integration","generics","choices"]
+
+[[case]]
+id = "generic_nested_alias_workaround"
+path = "generic_nested_alias_workaround"
+tags = ["integration","generics","aliases"]
+
+[[case]]
 id = "choice_variant_default_value_deferred"
 path = "choice_variant_default_value_deferred"
 tags = ["integration","diagnostics","choices"]
