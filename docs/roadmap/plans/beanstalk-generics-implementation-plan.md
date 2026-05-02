@@ -1925,13 +1925,13 @@ Add or extend smoke cases:
 - many repeated `Box of Int` uses should hit cache
 - many distinct instantiations should remain linear-ish
 - docs build should not slow materially
-- `speed-test.bst` should not degrade heavily
+- `benchmarks/speed-test.bst` should not degrade heavily
 
 Use existing validation commands with detailed timers:
 
 ```bash
 cargo run --features "detailed_timers" docs
-cargo run --release --features "detailed_timers" speed-test.bst
+cargo run --release --features "detailed_timers" check benchmarks/speed-test.bst
 ```
 
 ## Phase 7 audit / style / validation commit

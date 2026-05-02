@@ -1,0 +1,26 @@
+# Benchmark cases for Beanstalk compiler
+# Format: <command> <arg1> <arg2> ...
+# Lines starting with # are comments
+# Empty lines are ignored
+
+# Core benchmarks - speed-test.bst
+check benchmarks/speed-test.bst
+build benchmarks/speed-test.bst
+
+# Documentation site
+check docs
+
+# Compiler stress tests - templates
+check benchmarks/template-stress.bst
+
+# Compiler stress tests - type system
+check benchmarks/type-stress.bst
+
+# Compiler stress tests - constant folding
+check benchmarks/fold-stress.bst
+
+# Compiler stress tests - pattern matching
+check benchmarks/pattern-stress.bst
+
+# Compiler stress tests - collections
+check benchmarks/collection-stress.bst

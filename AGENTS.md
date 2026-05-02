@@ -147,6 +147,10 @@ This automatically executes:
 - The docs build
 - The speed test
 
+## Benchmarking
+
+Use `just bench-ci` for quick performance checks, `just bench-quick` for local development, or `just bench` for comprehensive measurements. Results are written to `benchmarks/results/` with JSONL data and Markdown summaries. See CONTRIBUTING.md for details.
+
 When adding or changing behavior:
 - Prefer integration coverage for user-visible language behavior.
 - Add or update unit tests only where subsystem-local behavior genuinely benefits from them.

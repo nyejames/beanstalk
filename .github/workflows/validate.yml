@@ -45,8 +45,5 @@ jobs:
       - name: Run integration validation suite
         run: cargo run -- tests
 
-      - name: Build docs with timers
-        run: cargo run --features "detailed_timers" docs
-
-      - name: Run release speed test
-        run: cargo run --release --features "detailed_timers" speed-test.bst
+      - name: Check docs compile
+        run: cargo run -- check docs

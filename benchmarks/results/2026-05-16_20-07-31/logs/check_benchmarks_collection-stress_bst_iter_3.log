@@ -1,0 +1,14 @@
+=== STDOUT ===
+Tokenized in: [32m161.334µs[0m
+Headers Parsed in: [32m773.542µs[0m
+
+[1m[1m[31mLanguage Rule Error[0m [0m(˶°o°)ﾉ 🔥[0m
+[0mUnexpected end of file while parsing function body. Missing ';' to close this scope.[0m
+[34m
+  --> [0m[35mcollection-stress.bst[2m[35m:[0m[1m[34m440[0m[90m:[0m[35m1[0m
+[94m  Close the function body with ';'[0m
+[94m  Suggested insertion: ';'[0m
+
+
+=== STDERR ===
+

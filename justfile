@@ -17,7 +17,7 @@ validate:
     cargo run --quiet -- check docs
 
     @echo "speed test"
-    cargo run --quiet --release -- check speed-test.bst
+    cargo run --package xtask --bin xtask -- bench-quick
 
 ship:
     cargo fmt
@@ -27,3 +27,15 @@ release version:
     just validate
     git tag -a v{{version}} -m "Beanstalk v{{version}}"
     git push origin v{{version}}
+
+bench:
+    cargo run --package xtask --bin xtask -- bench
+
+bench-quick:
+    cargo run --package xtask --bin xtask -- bench-quick
+
+bench-ci:
+    cargo run --package xtask --bin xtask -- bench-ci
+
+bench-clean:
+    rm -rf benchmarks/results

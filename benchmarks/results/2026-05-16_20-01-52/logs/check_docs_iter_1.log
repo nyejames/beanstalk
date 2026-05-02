@@ -1,0 +1,911 @@
+=== STDOUT ===
+Tokenized in: [32m30.334µs[0m
+Tokenized in: [32m103.209µs[0m
+Tokenized in: [32m102.209µs[0m
+Tokenized in: [32m134.5µs[0m
+Headers Parsed in: [32m158.792µs[0m
+Dependency graph created in: [32m20.542µs[0m
+Tokenized in: [32m149.417µs[0m
+AST/import bindings resolved in: [32m30.166µs[0m
+AST/type alias resolution completed in: [32m83ns[0m
+Tokenized in: [32m251.625µs[0m
+Tokenized in: [32m266.959µs[0m
+Headers Parsed in: [32m389.875µs[0m
+Headers Parsed in: [32m353.292µs[0m
+Dependency graph created in: [32m76.167µs[0m
+Dependency graph created in: [32m82.541µs[0m
+AST/import bindings resolved in: [32m30.667µs[0m
+AST/type alias resolution completed in: [32m83ns[0m
+AST/import bindings resolved in: [32m28.459µs[0m
+AST/type alias resolution completed in: [32m625ns[0m
+Headers Parsed in: [32m548.667µs[0m
+Headers Parsed in: [32m480.5µs[0m
+Headers Parsed in: [32m731.291µs[0m
+Headers Parsed in: [32m620.042µs[0m
+Dependency graph created in: [32m234.917µs[0m
+Dependency graph created in: [32m245.709µs[0m
+AST/import bindings resolved in: [32m26.791µs[0m
+AST/type alias resolution completed in: [32m84ns[0m
+Tokenized in: [32m611.625µs[0m
+AST/import bindings resolved in: [32m31.708µs[0m
+AST/type alias resolution completed in: [32m83ns[0m
+Tokenized in: [32m378.584µs[0m
+Dependency graph created in: [32m423.084µs[0m
+AST/import bindings resolved in: [32m297.25µs[0m
+AST/type alias resolution completed in: [32m292ns[0m
+Dependency graph created in: [32m1.091584ms[0m
+AST/import bindings resolved in: [32m35.167µs[0m
+AST/type alias resolution completed in: [32m416ns[0m
+Headers Parsed in: [32m1.098375ms[0m
+AST/type resolution/constants deferred resolution in: [32m1.955125ms[0m
+AST/type resolution/constants deferred summary: 
+ rounds = [2m[32m1[0m
+ headers attempted = [2m[32m20[0m
+ headers deferred = [2m[32m0[0m
+ declaration snapshot rebuilds = [2m[32m21[0m
+AST/type resolution/constants resolved in: [32m1.961833ms[0m
+AST/type resolution/struct fields resolved in: [32m42ns[0m
+AST/type resolution/choice variants resolved in: [32m1.333µs[0m
+AST/type resolution/recursive struct validation in: [32m3.417µs[0m
+AST/type resolution completed in: [32m1.969208ms[0m
+
+ AST/function signatures/resolved count: 0[0m
+AST/function signatures resolved in: [32m1.042µs[0m
+
+ AST/receiver catalog/methods indexed: 0[0m
+AST/receiver catalog built in: [32m1.792µs[0m
+AST/node emission/top-level declaration index built in: [32m18.666µs[0m
+AST/node emission/function bodies parsed in: [32m0ns[0m
+AST/node emission/start bodies parsed in: [32m12.625µs[0m
+AST/node emission/const templates parsed in: [32m2.416µs[0m
+AST/node emission/const templates folded in: [32m583ns[0m
+AST/node emission/headers emitted: 
+ functions = [2m[32m0[0m
+ starts = [2m[32m1[0m
+ structs = [2m[32m0[0m
+ const templates = [2m[32m1[0m
+AST/node emission completed in: [32m178.125µs[0m
+AST/finalize/doc fragments collected in: [32m125ns[0m
+AST/finalize/const top-level fragments collected in: [32m292ns[0m
+AST/finalize/AST templates normalized in: [32m500ns[0m
+AST/finalize/module constants normalized in: [32m28.542µs[0m
+AST/finalize/type boundary validated in: [32m2.083µs[0m
+AST/finalize/builtin AST merge in: [32m458ns[0m
+Dependency graph created in: [32m303.042µs[0m
+AST/import bindings resolved in: [32m28.833µs[0m
+AST/type alias resolution completed in: [32m83ns[0m
+AST/finalization completed in: [32m78.417µs[0m
+AST created in: [32m2.27725ms[0m
+HIR generated in: [32m61.125µs[0m
+Borrow checking completed in: [32m28.625µs[0m
+Tokenized in: [32m2.182875ms[0m
+Tokenized in: [32m88.292µs[0m
+Headers Parsed in: [32m287.125µs[0m
+Dependency graph created in: [32m59.25µs[0m
+AST/import bindings resolved in: [32m25.208µs[0m
+AST/type alias resolution completed in: [32m0ns[0m
+Headers Parsed in: [32m2.420375ms[0m
+Dependency graph created in: [32m471.916µs[0m
+AST/import bindings resolved in: [32m47.958µs[0m
+AST/type alias resolution completed in: [32m83ns[0m
+AST/type resolution/constants deferred resolution in: [32m5.109708ms[0m
+AST/type resolution/constants deferred summary: 
+ rounds = [2m[32m2[0m
+ headers attempted = [2m[32m36[0m
+ headers deferred = [2m[32m2[0m
+ declaration snapshot rebuilds = [2m[32m36[0m
+AST/type resolution/constants resolved in: [32m5.115916ms[0m
+AST/type resolution/struct fields resolved in: [32m15.875µs[0m
+AST/type resolution/choice variants resolved in: [32m42ns[0m
+AST/type resolution/recursive struct validation in: [32m2.375µs[0m
+AST/type resolution completed in: [32m5.136708ms[0m
+
+ AST/function signatures/resolved count: 0[0m
+AST/function signatures resolved in: [32m916ns[0m
+
+ AST/receiver catalog/methods indexed: 0[0m
+AST/receiver catalog built in: [32m917ns[0m
+AST/node emission/top-level declaration index built in: [32m54.792µs[0m
+AST/type resolution/constants deferred resolution in: [32m5.202541ms[0m
+AST/type resolution/constants deferred summary: 
+ rounds = [2m[32m2[0m
+ headers attempted = [2m[32m36[0m
+ headers deferred = [2m[32m2[0m
+ declaration snapshot rebuilds = [2m[32m36[0m
+AST/type resolution/constants resolved in: [32m5.207833ms[0m
+AST/type resolution/struct fields resolved in: [32m12.625µs[0m
+AST/type resolution/choice variants resolved in: [32m83ns[0m
+AST/type resolution/recursive struct validation in: [32m2.375µs[0m
+AST/type resolution completed in: [32m5.225417ms[0m
+
+ AST/function signatures/resolved count: 0[0m
+AST/function signatures resolved in: [32m917ns[0m
+
+ AST/receiver catalog/methods indexed: 0[0m
+AST/receiver catalog built in: [32m875ns[0m
+AST/node emission/top-level declaration index built in: [32m52.417µs[0m
+AST/node emission/function bodies parsed in: [32m0ns[0m
+AST/node emission/start bodies parsed in: [32m13.083µs[0m
+AST/node emission/const templates parsed in: [32m223µs[0m
+AST/node emission/const templates folded in: [32m15.624µs[0m
+AST/node emission/headers emitted: 
+ functions = [2m[32m0[0m
+ starts = [2m[32m1[0m
+ structs = [2m[32m1[0m
+ const templates = [2m[32m4[0m
+AST/node emission completed in: [32m849.709µs[0m
+AST/finalize/doc fragments collected in: [32m167ns[0m
+AST/finalize/const top-level fragments collected in: [32m500ns[0m
+AST/finalize/AST templates normalized in: [32m1.625µs[0m
+AST/finalize/module constants normalized in: [32m162.292µs[0m
+AST/finalize/type boundary validated in: [32m625ns[0m
+AST/finalize/builtin AST merge in: [32m416ns[0m
+AST/type resolution/constants deferred resolution in: [32m5.573375ms[0m
+AST/type resolution/constants deferred summary: 
+ rounds = [2m[32m2[0m
+ headers attempted = [2m[32m36[0m
+ headers deferred = [2m[32m2[0m
+ declaration snapshot rebuilds = [2m[32m36[0m
+AST/type resolution/constants resolved in: [32m5.579083ms[0m
+AST/type resolution/struct fields resolved in: [32m31.916µs[0m
+AST/type resolution/choice variants resolved in: [32m83ns[0m
+AST/type resolution/recursive struct validation in: [32m2.834µs[0m
+AST/type resolution completed in: [32m5.618958ms[0m
+
+ AST/function signatures/resolved count: 0[0m
+AST/function signatures resolved in: [32m958ns[0m
+
+ AST/receiver catalog/methods indexed: 0[0m
+AST/receiver catalog built in: [32m875ns[0m
+AST/node emission/top-level declaration index built in: [32m54.75µs[0m
+AST/finalization completed in: [32m315.917µs[0m
+AST created in: [32m6.352291ms[0m
+HIR generated in: [32m64.292µs[0m
+Borrow checking completed in: [32m14.583µs[0m
+Tokenized in: [32m196.5µs[0m
+Headers Parsed in: [32m5.506292ms[0m
+AST/type resolution/constants deferred resolution in: [32m7.625417ms[0m
+AST/type resolution/constants deferred summary: 
+ rounds = [2m[32m2[0m
+ headers attempted = [2m[32m36[0m
+ headers deferred = [2m[32m2[0m
+ declaration snapshot rebuilds = [2m[32m36[0m
+AST/type resolution/constants resolved in: [32m7.656917ms[0m
+AST/type resolution/struct fields resolved in: [32m36.916µs[0m
+AST/type resolution/choice variants resolved in: [32m83ns[0m
+AST/type resolution/recursive struct validation in: [32m3.708µs[0m
+AST/type resolution completed in: [32m7.70025ms[0m
+
+ AST/function signatures/resolved count: 0[0m
+AST/function signatures resolved in: [32m4.375µs[0m
+
+ AST/receiver catalog/methods indexed: 0[0m
+AST/receiver catalog built in: [32m1.25µs[0m
+Headers Parsed in: [32m432.375µs[0m
+AST/node emission/top-level declaration index built in: [32m54.292µs[0m
+Dependency graph created in: [32m569µs[0m
+Dependency graph created in: [32m357.417µs[0m
+AST/import bindings resolved in: [32m32.667µs[0m
+AST/type alias resolution completed in: [32m42ns[0m
+AST/import bindings resolved in: [32m30.166µs[0m
+AST/type alias resolution completed in: [32m83ns[0m
+AST/node emission/function bodies parsed in: [32m0ns[0m
+AST/node emission/start bodies parsed in: [32m12.458µs[0m
+AST/node emission/const templates parsed in: [32m403.583µs[0m
+AST/node emission/const templates folded in: [32m25.874µs[0m
+AST/node emission/headers emitted: 
+ functions = [2m[32m0[0m
+ starts = [2m[32m1[0m
+ structs = [2m[32m1[0m
+ const templates = [2m[32m6[0m
+AST/node emission completed in: [32m1.7775ms[0m
+AST/finalize/doc fragments collected in: [32m125ns[0m
+AST/finalize/const top-level fragments collected in: [32m792ns[0m
+AST/finalize/AST templates normalized in: [32m1.625µs[0m
+AST/finalize/module constants normalized in: [32m161.583µs[0m
+AST/finalize/type boundary validated in: [32m667ns[0m
+AST/finalize/builtin AST merge in: [32m1.25µs[0m
+AST/type resolution/constants deferred resolution in: [32m5.19425ms[0m
+AST/type resolution/constants deferred summary: 
+ rounds = [2m[32m2[0m
+ headers attempted = [2m[32m36[0m
+ headers deferred = [2m[32m2[0m
+ declaration snapshot rebuilds = [2m[32m36[0m
+AST/type resolution/constants resolved in: [32m6.231333ms[0m
+AST/node emission/function bodies parsed in: [32m0ns[0m
+AST/node emission/start bodies parsed in: [32m14.042µs[0m
+AST/node emission/const templates parsed in: [32m350.334µs[0m
+AST/node emission/const templates folded in: [32m21.376µs[0m
+AST/node emission/headers emitted: 
+ functions = [2m[32m0[0m
+ starts = [2m[32m1[0m
+ structs = [2m[32m1[0m
+ const templates = [2m[32m3[0m
+AST/finalization completed in: [32m498.709µs[0m
+AST/node emission completed in: [32m1.298791ms[0m
+AST/finalize/doc fragments collected in: [32m334ns[0m
+AST/finalize/const top-level fragments collected in: [32m500ns[0m
+AST/finalize/AST templates normalized in: [32m5.541µs[0m
+AST/type resolution/struct fields resolved in: [32m448.042µs[0m
+AST/type resolution/choice variants resolved in: [32m125ns[0m
+AST/type resolution/recursive struct validation in: [32m3.458µs[0m
+AST/type resolution completed in: [32m6.687833ms[0m
+
+ AST/function signatures/resolved count: 0[0m
+AST/function signatures resolved in: [32m1µs[0m
+
+ AST/receiver catalog/methods indexed: 0[0m
+AST/receiver catalog built in: [32m958ns[0m
+AST/node emission/top-level declaration index built in: [32m77.916µs[0m
+AST/finalize/module constants normalized in: [32m297.208µs[0m
+AST/finalize/type boundary validated in: [32m2.25µs[0m
+AST/finalize/builtin AST merge in: [32m2.292µs[0m
+AST created in: [32m8.759125ms[0m
+AST/type resolution/constants deferred resolution in: [32m7.814375ms[0m
+AST/type resolution/constants deferred summary: 
+ rounds = [2m[32m2[0m
+ headers attempted = [2m[32m36[0m
+ headers deferred = [2m[32m2[0m
+ declaration snapshot rebuilds = [2m[32m36[0m
+AST/type resolution/constants resolved in: [32m7.823041ms[0m
+AST/type resolution/struct fields resolved in: [32m16.334µs[0m
+AST/type resolution/choice variants resolved in: [32m41ns[0m
+AST/type resolution/recursive struct validation in: [32m2.75µs[0m
+AST/type resolution completed in: [32m7.844916ms[0m
+
+ AST/function signatures/resolved count: 0[0m
+AST/function signatures resolved in: [32m958ns[0m
+
+ AST/receiver catalog/methods indexed: 0[0m
+AST/receiver catalog built in: [32m1.083µs[0m
+AST/node emission/top-level declaration index built in: [32m56.292µs[0m
+HIR generated in: [32m372.709µs[0m
+Borrow checking completed in: [32m19.5µs[0m
+Tokenized in: [32m102.291µs[0m
+Headers Parsed in: [32m318.083µs[0m
+Dependency graph created in: [32m70µs[0m
+AST/import bindings resolved in: [32m29.125µs[0m
+AST/type alias resolution completed in: [32m42ns[0m
+AST/type resolution/constants deferred resolution in: [32m7.515875ms[0m
+AST/type resolution/constants deferred summary: 
+ rounds = [2m[32m2[0m
+ headers attempted = [2m[32m36[0m
+ headers deferred = [2m[32m2[0m
+ declaration snapshot rebuilds = [2m[32m36[0m
+AST/type resolution/constants resolved in: [32m7.574208ms[0m
+AST/type resolution/struct fields resolved in: [32m94.208µs[0m
+AST/type resolution/choice variants resolved in: [32m42ns[0m
+AST/type resolution/recursive struct validation in: [32m2.666µs[0m
+AST/type resolution completed in: [32m7.673834ms[0m
+
+ AST/function signatures/resolved count: 0[0m
+AST/function signatures resolved in: [32m917ns[0m
+
+ AST/receiver catalog/methods indexed: 0[0m
+AST/receiver catalog built in: [32m875ns[0m
+AST/node emission/top-level declaration index built in: [32m59.708µs[0m
+AST/finalization completed in: [32m2.955375ms[0m
+AST created in: [32m12.231791ms[0m
+HIR generated in: [32m174.875µs[0m
+Borrow checking completed in: [32m19.333µs[0m
+AST/node emission/function bodies parsed in: [32m0ns[0m
+AST/node emission/start bodies parsed in: [32m14.458µs[0m
+AST/node emission/const templates parsed in: [32m621.167µs[0m
+AST/node emission/const templates folded in: [32m8.959µs[0m
+AST/node emission/headers emitted: 
+ functions = [2m[32m0[0m
+ starts = [2m[32m1[0m
+ structs = [2m[32m1[0m
+ const templates = [2m[32m2[0m
+AST/node emission completed in: [32m3.469583ms[0m
+AST/finalize/doc fragments collected in: [32m125ns[0m
+AST/finalize/const top-level fragments collected in: [32m250ns[0m
+AST/finalize/AST templates normalized in: [32m2.583µs[0m
+Tokenized in: [32m160.792µs[0m
+AST/finalize/module constants normalized in: [32m181.791µs[0m
+AST/finalize/type boundary validated in: [32m583ns[0m
+AST/finalize/builtin AST merge in: [32m2.25µs[0m
+Headers Parsed in: [32m363.916µs[0m
+Dependency graph created in: [32m113.459µs[0m
+AST/import bindings resolved in: [32m34.375µs[0m
+AST/type alias resolution completed in: [32m83ns[0m
+AST/type resolution/constants deferred resolution in: [32m12.07ms[0m
+AST/type resolution/constants deferred summary: 
+ rounds = [2m[32m2[0m
+ headers attempted = [2m[32m36[0m
+ headers deferred = [2m[32m2[0m
+ declaration snapshot rebuilds = [2m[32m36[0m
+AST/type resolution/constants resolved in: [32m12.075875ms[0m
+AST/type resolution/struct fields resolved in: [32m47.125µs[0m
+AST/type resolution/choice variants resolved in: [32m41ns[0m
+AST/type resolution/recursive struct validation in: [32m2.959µs[0m
+AST/type resolution completed in: [32m12.128875ms[0m
+
+ AST/function signatures/resolved count: 0[0m
+AST/function signatures resolved in: [32m1µs[0m
+
+ AST/receiver catalog/methods indexed: 0[0m
+AST/receiver catalog built in: [32m1.042µs[0m
+AST/node emission/top-level declaration index built in: [32m51.875µs[0m
+AST/finalization completed in: [32m1.869083ms[0m
+AST created in: [32m12.130791ms[0m
+HIR generated in: [32m436.167µs[0m
+Borrow checking completed in: [32m53.292µs[0m
+AST/node emission/function bodies parsed in: [32m0ns[0m
+AST/node emission/start bodies parsed in: [32m15.417µs[0m
+AST/node emission/const templates parsed in: [32m2.706458ms[0m
+AST/node emission/const templates folded in: [32m141.625µs[0m
+AST/node emission/headers emitted: 
+ functions = [2m[32m0[0m
+ starts = [2m[32m1[0m
+ structs = [2m[32m1[0m
+ const templates = [2m[32m3[0m
+AST/node emission completed in: [32m4.142667ms[0m
+AST/finalize/doc fragments collected in: [32m41ns[0m
+AST/finalize/const top-level fragments collected in: [32m458ns[0m
+AST/finalize/AST templates normalized in: [32m1.583µs[0m
+AST/finalize/module constants normalized in: [32m180.083µs[0m
+AST/finalize/type boundary validated in: [32m500ns[0m
+AST/finalize/builtin AST merge in: [32m833ns[0m
+AST/type resolution/constants deferred resolution in: [32m15.5875ms[0m
+AST/type resolution/constants deferred summary: 
+ rounds = [2m[32m2[0m
+ headers attempted = [2m[32m36[0m
+ headers deferred = [2m[32m2[0m
+ declaration snapshot rebuilds = [2m[32m36[0m
+AST/type resolution/constants resolved in: [32m15.619584ms[0m
+AST/type resolution/struct fields resolved in: [32m159.125µs[0m
+AST/type resolution/choice variants resolved in: [32m42ns[0m
+AST/type resolution/recursive struct validation in: [32m15.292µs[0m
+AST/type resolution completed in: [32m15.798292ms[0m
+
+ AST/function signatures/resolved count: 0[0m
+AST/function signatures resolved in: [32m916ns[0m
+
+ AST/receiver catalog/methods indexed: 0[0m
+AST/receiver catalog built in: [32m113.792µs[0m
+Tokenized in: [32m569.042µs[0m
+AST/finalization completed in: [32m780.875µs[0m
+AST/node emission/top-level declaration index built in: [32m214.5µs[0m
+AST/type resolution/constants deferred resolution in: [32m5.544958ms[0m
+AST/type resolution/constants deferred summary: 
+ rounds = [2m[32m2[0m
+ headers attempted = [2m[32m36[0m
+ headers deferred = [2m[32m2[0m
+ declaration snapshot rebuilds = [2m[32m36[0m
+AST/type resolution/constants resolved in: [32m5.549917ms[0m
+AST/type resolution/struct fields resolved in: [32m12.625µs[0m
+AST/type resolution/choice variants resolved in: [32m125ns[0m
+AST created in: [32m12.7815ms[0m
+AST/type resolution/recursive struct validation in: [32m1.916µs[0m
+AST/type resolution completed in: [32m5.572125ms[0m
+
+ AST/function signatures/resolved count: 0[0m
+AST/function signatures resolved in: [32m917ns[0m
+
+ AST/receiver catalog/methods indexed: 0[0m
+AST/receiver catalog built in: [32m917ns[0m
+AST/node emission/top-level declaration index built in: [32m65.666µs[0m
+HIR generated in: [32m166.875µs[0m
+Borrow checking completed in: [32m13.5µs[0m
+AST/node emission/function bodies parsed in: [32m0ns[0m
+AST/node emission/start bodies parsed in: [32m14µs[0m
+AST/node emission/const templates parsed in: [32m245.624µs[0m
+AST/node emission/const templates folded in: [32m10.292µs[0m
+AST/node emission/headers emitted: 
+ functions = [2m[32m0[0m
+ starts = [2m[32m1[0m
+ structs = [2m[32m1[0m
+ const templates = [2m[32m3[0m
+Headers Parsed in: [32m861.666µs[0m
+AST/node emission/function bodies parsed in: [32m0ns[0m
+AST/node emission/start bodies parsed in: [32m12.875µs[0m
+AST/node emission/const templates parsed in: [32m345.333µs[0m
+AST/node emission/const templates folded in: [32m19.165µs[0m
+AST/node emission/headers emitted: 
+ functions = [2m[32m0[0m
+ starts = [2m[32m1[0m
+ structs = [2m[32m1[0m
+ const templates = [2m[32m3[0m
+AST/node emission completed in: [32m1.046917ms[0m
+AST/finalize/doc fragments collected in: [32m41ns[0m
+AST/finalize/const top-level fragments collected in: [32m250ns[0m
+AST/finalize/AST templates normalized in: [32m1.25µs[0m
+AST/finalize/module constants normalized in: [32m171.459µs[0m
+AST/finalize/type boundary validated in: [32m417ns[0m
+AST/finalize/builtin AST merge in: [32m834ns[0m
+AST/node emission completed in: [32m953.25µs[0m
+AST/finalize/doc fragments collected in: [32m167ns[0m
+AST/finalize/const top-level fragments collected in: [32m1.166µs[0m
+AST/finalize/AST templates normalized in: [32m3.833µs[0m
+AST/finalize/module constants normalized in: [32m181.75µs[0m
+AST/finalize/type boundary validated in: [32m375ns[0m
+AST/finalize/builtin AST merge in: [32m417ns[0m
+AST/finalization completed in: [32m442.917µs[0m
+AST created in: [32m17.507209ms[0m
+HIR generated in: [32m75.625µs[0m
+Borrow checking completed in: [32m15.167µs[0m
+AST/finalization completed in: [32m395.25µs[0m
+AST created in: [32m6.96775ms[0m
+HIR generated in: [32m70.917µs[0m
+Borrow checking completed in: [32m9.084µs[0m
+Tokenized in: [32m458.875µs[0m
+Dependency graph created in: [32m882.25µs[0m
+AST/import bindings resolved in: [32m84.708µs[0m
+AST/type alias resolution completed in: [32m250ns[0m
+Tokenized in: [32m251.958µs[0m
+Headers Parsed in: [32m506µs[0m
+AST/type resolution/constants deferred resolution in: [32m10.272625ms[0m
+AST/type resolution/constants deferred summary: 
+ rounds = [2m[32m2[0m
+ headers attempted = [2m[32m36[0m
+ headers deferred = [2m[32m2[0m
+ declaration snapshot rebuilds = [2m[32m36[0m
+AST/type resolution/constants resolved in: [32m10.283917ms[0m
+AST/type resolution/struct fields resolved in: [32m19.083µs[0m
+AST/type resolution/choice variants resolved in: [32m42ns[0m
+AST/type resolution/recursive struct validation in: [32m2.458µs[0m
+AST/type resolution completed in: [32m10.308084ms[0m
+
+ AST/function signatures/resolved count: 0[0m
+AST/function signatures resolved in: [32m958ns[0m
+
+ AST/receiver catalog/methods indexed: 0[0m
+AST/receiver catalog built in: [32m1µs[0m
+Headers Parsed in: [32m486.541µs[0m
+AST/node emission/top-level declaration index built in: [32m57.125µs[0m
+Dependency graph created in: [32m417.5µs[0m
+AST/import bindings resolved in: [32m30.375µs[0m
+AST/type alias resolution completed in: [32m42ns[0m
+Tokenized in: [32m133.125µs[0m
+Dependency graph created in: [32m404.833µs[0m
+AST/import bindings resolved in: [32m28.541µs[0m
+AST/type alias resolution completed in: [32m84ns[0m
+Headers Parsed in: [32m342.125µs[0m
+Dependency graph created in: [32m87.042µs[0m
+AST/import bindings resolved in: [32m31.958µs[0m
+AST/type alias resolution completed in: [32m83ns[0m
+AST/type resolution/constants deferred resolution in: [32m8.883084ms[0m
+AST/type resolution/constants deferred summary: 
+ rounds = [2m[32m2[0m
+ headers attempted = [2m[32m36[0m
+ headers deferred = [2m[32m2[0m
+ declaration snapshot rebuilds = [2m[32m36[0m
+AST/type resolution/constants resolved in: [32m8.896875ms[0m
+AST/type resolution/struct fields resolved in: [32m20.667µs[0m
+AST/type resolution/choice variants resolved in: [32m167ns[0m
+AST/type resolution/recursive struct validation in: [32m3.042µs[0m
+AST/type resolution completed in: [32m8.924125ms[0m
+
+ AST/function signatures/resolved count: 0[0m
+AST/function signatures resolved in: [32m1µs[0m
+
+ AST/receiver catalog/methods indexed: 0[0m
+AST/receiver catalog built in: [32m959ns[0m
+AST/node emission/top-level declaration index built in: [32m194µs[0m
+AST/node emission/function bodies parsed in: [32m0ns[0m
+AST/node emission/start bodies parsed in: [32m15.25µs[0m
+AST/node emission/const templates parsed in: [32m15.454042ms[0m
+AST/node emission/const templates folded in: [32m90.289µs[0m
+AST/node emission/headers emitted: 
+ functions = [2m[32m0[0m
+ starts = [2m[32m1[0m
+ structs = [2m[32m1[0m
+ const templates = [2m[32m13[0m
+AST/node emission completed in: [32m17.065625ms[0m
+AST/finalize/doc fragments collected in: [32m41ns[0m
+AST/finalize/const top-level fragments collected in: [32m833ns[0m
+AST/finalize/AST templates normalized in: [32m1.708µs[0m
+AST/finalize/module constants normalized in: [32m178µs[0m
+AST/finalize/type boundary validated in: [32m750ns[0m
+AST/finalize/builtin AST merge in: [32m1µs[0m
+AST/finalization completed in: [32m342.25µs[0m
+AST created in: [32m22.686917ms[0m
+HIR generated in: [32m64.167µs[0m
+Borrow checking completed in: [32m18.125µs[0m
+Tokenized in: [32m101.292µs[0m
+Headers Parsed in: [32m315.459µs[0m
+Dependency graph created in: [32m71.25µs[0m
+AST/import bindings resolved in: [32m30µs[0m
+AST/type alias resolution completed in: [32m42ns[0m
+AST/node emission/function bodies parsed in: [32m0ns[0m
+AST/node emission/start bodies parsed in: [32m14.375µs[0m
+AST/node emission/const templates parsed in: [32m5.902748ms[0m
+AST/node emission/const templates folded in: [32m303.873µs[0m
+AST/node emission/headers emitted: 
+ functions = [2m[32m0[0m
+ starts = [2m[32m1[0m
+ structs = [2m[32m1[0m
+ const templates = [2m[32m17[0m
+AST/type resolution/constants deferred resolution in: [32m15.830542ms[0m
+AST/type resolution/constants deferred summary: 
+ rounds = [2m[32m2[0m
+ headers attempted = [2m[32m36[0m
+ headers deferred = [2m[32m2[0m
+ declaration snapshot rebuilds = [2m[32m36[0m
+AST/type resolution/constants resolved in: [32m15.872ms[0m
+AST/node emission completed in: [32m10.6295ms[0m
+AST/finalize/doc fragments collected in: [32m667ns[0m
+AST/finalize/const top-level fragments collected in: [32m1.667µs[0m
+AST/finalize/AST templates normalized in: [32m3.208µs[0m
+AST/type resolution/struct fields resolved in: [32m98.791µs[0m
+AST/type resolution/choice variants resolved in: [32m291ns[0m
+AST/type resolution/recursive struct validation in: [32m4.167µs[0m
+AST/type resolution completed in: [32m16.019209ms[0m
+
+ AST/function signatures/resolved count: 0[0m
+AST/function signatures resolved in: [32m1µs[0m
+
+ AST/receiver catalog/methods indexed: 0[0m
+AST/receiver catalog built in: [32m1.625µs[0m
+AST/node emission/top-level declaration index built in: [32m178.375µs[0m
+AST/type resolution/constants deferred resolution in: [32m5.927042ms[0m
+AST/type resolution/constants deferred summary: 
+ rounds = [2m[32m2[0m
+ headers attempted = [2m[32m36[0m
+ headers deferred = [2m[32m2[0m
+ declaration snapshot rebuilds = [2m[32m36[0m
+AST/type resolution/constants resolved in: [32m5.935417ms[0m
+AST/type resolution/struct fields resolved in: [32m12.709µs[0m
+AST/type resolution/choice variants resolved in: [32m42ns[0m
+AST/type resolution/recursive struct validation in: [32m1.792µs[0m
+AST/type resolution completed in: [32m5.954458ms[0m
+
+ AST/function signatures/resolved count: 0[0m
+AST/function signatures resolved in: [32m916ns[0m
+
+ AST/receiver catalog/methods indexed: 0[0m
+AST/receiver catalog built in: [32m959ns[0m
+AST/type resolution/constants deferred resolution in: [32m5.665083ms[0m
+AST/type resolution/constants deferred summary: 
+ rounds = [2m[32m2[0m
+ headers attempted = [2m[32m36[0m
+ headers deferred = [2m[32m2[0m
+ declaration snapshot rebuilds = [2m[32m36[0m
+AST/type resolution/constants resolved in: [32m5.679417ms[0m
+AST/type resolution/struct fields resolved in: [32m13.708µs[0m
+AST/type resolution/choice variants resolved in: [32m83ns[0m
+AST/type resolution/recursive struct validation in: [32m1.959µs[0m
+AST/type resolution completed in: [32m5.705959ms[0m
+
+ AST/function signatures/resolved count: 0[0m
+AST/function signatures resolved in: [32m958ns[0m
+
+ AST/receiver catalog/methods indexed: 0[0m
+AST/receiver catalog built in: [32m875ns[0m
+AST/node emission/top-level declaration index built in: [32m55.208µs[0m
+AST/finalize/module constants normalized in: [32m565.416µs[0m
+AST/finalize/type boundary validated in: [32m1.334µs[0m
+AST/finalize/builtin AST merge in: [32m1.167µs[0m
+AST/node emission/top-level declaration index built in: [32m57.666µs[0m
+AST/finalization completed in: [32m1.794041ms[0m
+AST created in: [32m24.635791ms[0m
+AST/node emission/function bodies parsed in: [32m0ns[0m
+AST/node emission/start bodies parsed in: [32m14.667µs[0m
+AST/node emission/const templates parsed in: [32m5.983668ms[0m
+AST/node emission/const templates folded in: [32m102.501µs[0m
+AST/node emission/headers emitted: 
+ functions = [2m[32m0[0m
+ starts = [2m[32m1[0m
+ structs = [2m[32m1[0m
+ const templates = [2m[32m18[0m
+AST/node emission completed in: [32m7.721917ms[0m
+AST/finalize/doc fragments collected in: [32m42ns[0m
+AST/finalize/const top-level fragments collected in: [32m791ns[0m
+AST/finalize/AST templates normalized in: [32m1.583µs[0m
+AST/finalize/module constants normalized in: [32m201.333µs[0m
+AST/finalize/type boundary validated in: [32m625ns[0m
+AST/finalize/builtin AST merge in: [32m791ns[0m
+HIR generated in: [32m450.667µs[0m
+Borrow checking completed in: [32m64.875µs[0m
+Tokenized in: [32m281.791µs[0m
+AST/finalization completed in: [32m1.409041ms[0m
+AST created in: [32m19.523667ms[0m
+HIR generated in: [32m236.208µs[0m
+Borrow checking completed in: [32m50.875µs[0m
+Headers Parsed in: [32m1.113042ms[0m
+Tokenized in: [32m404.042µs[0m
+AST/type resolution/constants deferred resolution in: [32m4.928417ms[0m
+AST/type resolution/constants deferred summary: 
+ rounds = [2m[32m2[0m
+ headers attempted = [2m[32m36[0m
+ headers deferred = [2m[32m2[0m
+ declaration snapshot rebuilds = [2m[32m36[0m
+AST/type resolution/constants resolved in: [32m4.9335ms[0m
+AST/type resolution/struct fields resolved in: [32m12.875µs[0m
+AST/type resolution/choice variants resolved in: [32m83ns[0m
+AST/type resolution/recursive struct validation in: [32m2.166µs[0m
+AST/type resolution completed in: [32m4.951084ms[0m
+
+ AST/function signatures/resolved count: 0[0m
+AST/function signatures resolved in: [32m1.042µs[0m
+
+ AST/receiver catalog/methods indexed: 0[0m
+AST/receiver catalog built in: [32m875ns[0m
+AST/node emission/top-level declaration index built in: [32m53.167µs[0m
+Headers Parsed in: [32m556.916µs[0m
+AST/node emission/function bodies parsed in: [32m0ns[0m
+AST/node emission/start bodies parsed in: [32m13.791µs[0m
+AST/node emission/const templates parsed in: [32m219.959µs[0m
+AST/node emission/const templates folded in: [32m12.958µs[0m
+AST/node emission/headers emitted: 
+ functions = [2m[32m0[0m
+ starts = [2m[32m1[0m
+ structs = [2m[32m1[0m
+ const templates = [2m[32m3[0m
+AST/node emission completed in: [32m625.292µs[0m
+AST/finalize/doc fragments collected in: [32m125ns[0m
+AST/finalize/const top-level fragments collected in: [32m208ns[0m
+AST/finalize/AST templates normalized in: [32m1.291µs[0m
+AST/finalize/module constants normalized in: [32m158.458µs[0m
+AST/finalize/type boundary validated in: [32m458ns[0m
+AST/finalize/builtin AST merge in: [32m750ns[0m
+Dependency graph created in: [32m1.099792ms[0m
+Dependency graph created in: [32m389µs[0m
+AST/import bindings resolved in: [32m58.708µs[0m
+AST/type alias resolution completed in: [32m83ns[0m
+AST/import bindings resolved in: [32m31.625µs[0m
+AST/type alias resolution completed in: [32m84ns[0m
+AST/finalization completed in: [32m293.75µs[0m
+AST created in: [32m5.915375ms[0m
+HIR generated in: [32m58.916µs[0m
+Borrow checking completed in: [32m11.584µs[0m
+AST/type resolution/constants deferred resolution in: [32m13.603625ms[0m
+AST/type resolution/constants deferred summary: 
+ rounds = [2m[32m2[0m
+ headers attempted = [2m[32m36[0m
+ headers deferred = [2m[32m2[0m
+ declaration snapshot rebuilds = [2m[32m36[0m
+AST/type resolution/constants resolved in: [32m13.6115ms[0m
+AST/type resolution/struct fields resolved in: [32m15.458µs[0m
+AST/type resolution/choice variants resolved in: [32m42ns[0m
+AST/type resolution/recursive struct validation in: [32m2.542µs[0m
+AST/type resolution completed in: [32m13.632ms[0m
+
+ AST/function signatures/resolved count: 0[0m
+AST/function signatures resolved in: [32m917ns[0m
+
+ AST/receiver catalog/methods indexed: 0[0m
+AST/receiver catalog built in: [32m958ns[0m
+AST/node emission/top-level declaration index built in: [32m53.166µs[0m
+AST/node emission/function bodies parsed in: [32m0ns[0m
+AST/node emission/start bodies parsed in: [32m12.792µs[0m
+AST/node emission/const templates parsed in: [32m5.341337ms[0m
+AST/node emission/const templates folded in: [32m265.501µs[0m
+AST/node emission/headers emitted: 
+ functions = [2m[32m0[0m
+ starts = [2m[32m1[0m
+ structs = [2m[32m1[0m
+ const templates = [2m[32m20[0m
+AST/node emission completed in: [32m7.18875ms[0m
+AST/finalize/doc fragments collected in: [32m84ns[0m
+AST/finalize/const top-level fragments collected in: [32m792ns[0m
+AST/finalize/AST templates normalized in: [32m1.75µs[0m
+AST/finalize/module constants normalized in: [32m167.917µs[0m
+AST/finalize/type boundary validated in: [32m333ns[0m
+AST/finalize/builtin AST merge in: [32m542ns[0m
+AST/finalization completed in: [32m330.667µs[0m
+AST created in: [32m13.527125ms[0m
+AST/node emission/function bodies parsed in: [32m0ns[0m
+AST/node emission/start bodies parsed in: [32m11.542µs[0m
+AST/node emission/const templates parsed in: [32m99.792µs[0m
+AST/node emission/const templates folded in: [32m10.083µs[0m
+AST/node emission/headers emitted: 
+ functions = [2m[32m0[0m
+ starts = [2m[32m1[0m
+ structs = [2m[32m1[0m
+ const templates = [2m[32m3[0m
+HIR generated in: [32m62.416µs[0m
+Borrow checking completed in: [32m11.125µs[0m
+AST/node emission completed in: [32m986µs[0m
+AST/finalize/doc fragments collected in: [32m84ns[0m
+AST/finalize/const top-level fragments collected in: [32m625ns[0m
+AST/finalize/AST templates normalized in: [32m1.875µs[0m
+AST/finalize/module constants normalized in: [32m417.209µs[0m
+AST/finalize/type boundary validated in: [32m1.875µs[0m
+AST/finalize/builtin AST merge in: [32m1.292µs[0m
+AST/node emission/function bodies parsed in: [32m0ns[0m
+AST/node emission/start bodies parsed in: [32m12.25µs[0m
+AST/node emission/const templates parsed in: [32m6.992165ms[0m
+AST/node emission/const templates folded in: [32m180.916µs[0m
+AST/node emission/headers emitted: 
+ functions = [2m[32m0[0m
+ starts = [2m[32m1[0m
+ structs = [2m[32m1[0m
+ const templates = [2m[32m31[0m
+AST/node emission completed in: [32m8.8235ms[0m
+AST/finalize/doc fragments collected in: [32m83ns[0m
+AST/finalize/const top-level fragments collected in: [32m1.125µs[0m
+AST/finalize/AST templates normalized in: [32m1.209µs[0m
+AST/finalize/module constants normalized in: [32m164.584µs[0m
+AST/finalize/type boundary validated in: [32m375ns[0m
+AST/finalize/builtin AST merge in: [32m834ns[0m
+AST/finalization completed in: [32m315.042µs[0m
+AST created in: [32m14.89725ms[0m
+HIR generated in: [32m56.667µs[0m
+Borrow checking completed in: [32m10.875µs[0m
+AST/finalization completed in: [32m1.451792ms[0m
+AST created in: [32m16.288334ms[0m
+HIR generated in: [32m256.041µs[0m
+Borrow checking completed in: [32m23.917µs[0m
+AST/type resolution/constants deferred resolution in: [32m5.458291ms[0m
+AST/type resolution/constants deferred summary: 
+ rounds = [2m[32m2[0m
+ headers attempted = [2m[32m36[0m
+ headers deferred = [2m[32m2[0m
+ declaration snapshot rebuilds = [2m[32m36[0m
+AST/type resolution/constants resolved in: [32m5.467792ms[0m
+AST/type resolution/struct fields resolved in: [32m15.125µs[0m
+AST/type resolution/choice variants resolved in: [32m84ns[0m
+AST/type resolution/recursive struct validation in: [32m3.292µs[0m
+AST/type resolution completed in: [32m5.491542ms[0m
+
+ AST/function signatures/resolved count: 0[0m
+AST/function signatures resolved in: [32m1.25µs[0m
+
+ AST/receiver catalog/methods indexed: 0[0m
+AST/receiver catalog built in: [32m916ns[0m
+AST/node emission/top-level declaration index built in: [32m55.542µs[0m
+AST/type resolution/constants deferred resolution in: [32m17.300791ms[0m
+AST/type resolution/constants deferred summary: 
+ rounds = [2m[32m2[0m
+ headers attempted = [2m[32m36[0m
+ headers deferred = [2m[32m2[0m
+ declaration snapshot rebuilds = [2m[32m36[0m
+AST/type resolution/constants resolved in: [32m17.311333ms[0m
+AST/type resolution/struct fields resolved in: [32m16.792µs[0m
+AST/type resolution/choice variants resolved in: [32m42ns[0m
+AST/type resolution/recursive struct validation in: [32m2.666µs[0m
+AST/type resolution completed in: [32m17.344833ms[0m
+
+ AST/function signatures/resolved count: 0[0m
+AST/function signatures resolved in: [32m2.875µs[0m
+
+ AST/receiver catalog/methods indexed: 0[0m
+AST/receiver catalog built in: [32m2.792µs[0m
+AST/node emission/top-level declaration index built in: [32m70.458µs[0m
+AST/node emission/function bodies parsed in: [32m0ns[0m
+AST/node emission/start bodies parsed in: [32m17.416µs[0m
+AST/node emission/const templates parsed in: [32m570.876µs[0m
+AST/node emission/const templates folded in: [32m24.292µs[0m
+AST/node emission/headers emitted: 
+ functions = [2m[32m0[0m
+ starts = [2m[32m1[0m
+ structs = [2m[32m1[0m
+ const templates = [2m[32m3[0m
+AST/node emission completed in: [32m1.579292ms[0m
+AST/finalize/doc fragments collected in: [32m875ns[0m
+AST/finalize/const top-level fragments collected in: [32m500ns[0m
+AST/finalize/AST templates normalized in: [32m3.042µs[0m
+AST/finalize/module constants normalized in: [32m832.125µs[0m
+AST/finalize/type boundary validated in: [32m1µs[0m
+AST/finalize/builtin AST merge in: [32m2.041µs[0m
+AST/type resolution/constants deferred resolution in: [32m10.273166ms[0m
+AST/type resolution/constants deferred summary: 
+ rounds = [2m[32m2[0m
+ headers attempted = [2m[32m36[0m
+ headers deferred = [2m[32m2[0m
+ declaration snapshot rebuilds = [2m[32m36[0m
+AST/type resolution/constants resolved in: [32m10.309083ms[0m
+AST/type resolution/struct fields resolved in: [32m16.333µs[0m
+AST/type resolution/choice variants resolved in: [32m42ns[0m
+AST/type resolution/recursive struct validation in: [32m2.833µs[0m
+AST/type resolution completed in: [32m10.337375ms[0m
+
+ AST/function signatures/resolved count: 0[0m
+AST/function signatures resolved in: [32m8.291µs[0m
+
+ AST/receiver catalog/methods indexed: 0[0m
+AST/receiver catalog built in: [32m1.166µs[0m
+AST/finalization completed in: [32m1.8835ms[0m
+AST created in: [32m20.889708ms[0m
+AST/node emission/top-level declaration index built in: [32m58.75µs[0m
+HIR generated in: [32m134.625µs[0m
+Borrow checking completed in: [32m29.75µs[0m
+AST/node emission/function bodies parsed in: [32m0ns[0m
+AST/node emission/start bodies parsed in: [32m388.208µs[0m
+AST/node emission/const templates parsed in: [32m16.082666ms[0m
+AST/node emission/const templates folded in: [32m34.917µs[0m
+AST/node emission/headers emitted: 
+ functions = [2m[32m0[0m
+ starts = [2m[32m1[0m
+ structs = [2m[32m1[0m
+ const templates = [2m[32m4[0m
+AST/node emission completed in: [32m18.796416ms[0m
+AST/finalize/doc fragments collected in: [32m667ns[0m
+AST/finalize/const top-level fragments collected in: [32m541ns[0m
+AST/finalize/AST templates normalized in: [32m28.833µs[0m
+AST/finalize/module constants normalized in: [32m183.542µs[0m
+AST/finalize/type boundary validated in: [32m1.042µs[0m
+AST/finalize/builtin AST merge in: [32m1.375µs[0m
+AST/finalization completed in: [32m455.958µs[0m
+AST created in: [32m28.235875ms[0m
+HIR generated in: [32m65.625µs[0m
+Borrow checking completed in: [32m11.5µs[0m
+AST/node emission/function bodies parsed in: [32m0ns[0m
+AST/node emission/start bodies parsed in: [32m15.291µs[0m
+AST/node emission/const templates parsed in: [32m25.529207ms[0m
+AST/node emission/const templates folded in: [32m175.417µs[0m
+AST/node emission/headers emitted: 
+ functions = [2m[32m0[0m
+ starts = [2m[32m1[0m
+ structs = [2m[32m1[0m
+ const templates = [2m[32m19[0m
+AST/node emission completed in: [32m34.322209ms[0m
+AST/finalize/doc fragments collected in: [32m166ns[0m
+AST/finalize/const top-level fragments collected in: [32m1.667µs[0m
+AST/finalize/AST templates normalized in: [32m1.75µs[0m
+AST/finalize/module constants normalized in: [32m224.833µs[0m
+AST/finalize/type boundary validated in: [32m708ns[0m
+AST/finalize/builtin AST merge in: [32m1.5µs[0m
+AST/finalization completed in: [32m399.041µs[0m
+AST created in: [32m42.621416ms[0m
+HIR generated in: [32m127.167µs[0m
+Borrow checking completed in: [32m21.667µs[0m
+AST/node emission/function bodies parsed in: [32m0ns[0m
+AST/node emission/start bodies parsed in: [32m11.667µs[0m
+AST/node emission/const templates parsed in: [32m9.164209ms[0m
+AST/node emission/const templates folded in: [32m248.335µs[0m
+AST/node emission/headers emitted: 
+ functions = [2m[32m0[0m
+ starts = [2m[32m1[0m
+ structs = [2m[32m1[0m
+ const templates = [2m[32m33[0m
+AST/node emission completed in: [32m12.204958ms[0m
+AST/finalize/doc fragments collected in: [32m208ns[0m
+AST/finalize/const top-level fragments collected in: [32m1.333µs[0m
+AST/finalize/AST templates normalized in: [32m1.375µs[0m
+AST/finalize/module constants normalized in: [32m172.875µs[0m
+AST/finalize/type boundary validated in: [32m500ns[0m
+AST/finalize/builtin AST merge in: [32m833ns[0m
+AST/finalization completed in: [32m353.584µs[0m
+AST created in: [32m18.108417ms[0m
+HIR generated in: [32m58.292µs[0m
+Borrow checking completed in: [32m11.084µs[0m
+AST/node emission/function bodies parsed in: [32m0ns[0m
+AST/node emission/start bodies parsed in: [32m30.75µs[0m
+AST/node emission/const templates parsed in: [32m18.310041ms[0m
+AST/node emission/const templates folded in: [32m126.833µs[0m
+AST/node emission/headers emitted: 
+ functions = [2m[32m0[0m
+ starts = [2m[32m1[0m
+ structs = [2m[32m1[0m
+ const templates = [2m[32m14[0m
+AST/node emission completed in: [32m21.07825ms[0m
+AST/finalize/doc fragments collected in: [32m250ns[0m
+AST/finalize/const top-level fragments collected in: [32m1.209µs[0m
+AST/finalize/AST templates normalized in: [32m2.208µs[0m
+AST/finalize/module constants normalized in: [32m267.916µs[0m
+AST/finalize/type boundary validated in: [32m959ns[0m
+AST/finalize/builtin AST merge in: [32m1.417µs[0m
+AST/finalization completed in: [32m525.209µs[0m
+AST created in: [32m32.056666ms[0m
+HIR generated in: [32m96.042µs[0m
+Borrow checking completed in: [32m24µs[0m
+AST/node emission/function bodies parsed in: [32m0ns[0m
+AST/node emission/start bodies parsed in: [32m13.458µs[0m
+AST/node emission/const templates parsed in: [32m80.835001ms[0m
+AST/node emission/const templates folded in: [32m90.124µs[0m
+AST/node emission/headers emitted: 
+ functions = [2m[32m0[0m
+ starts = [2m[32m1[0m
+ structs = [2m[32m1[0m
+ const templates = [2m[32m9[0m
+AST/node emission completed in: [32m87.370625ms[0m
+AST/finalize/doc fragments collected in: [32m291ns[0m
+AST/finalize/const top-level fragments collected in: [32m750ns[0m
+AST/finalize/AST templates normalized in: [32m1.875µs[0m
+AST/finalize/module constants normalized in: [32m172.208µs[0m
+AST/finalize/type boundary validated in: [32m1.375µs[0m
+AST/finalize/builtin AST merge in: [32m1.375µs[0m
+AST/finalization completed in: [32m359.25µs[0m
+AST created in: [32m103.806542ms[0m
+HIR generated in: [32m72.5µs[0m
+Borrow checking completed in: [32m22.208µs[0m
+[2m[37m---------------------[0m
+Done in 132.357ms[0m
+[1m[32mNo errors or warnings[0m
+
+
+=== STDERR ===
+

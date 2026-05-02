@@ -1,0 +1,51 @@
+=== STDOUT ===
+Tokenized in: [32m377.916µs[0m
+Headers Parsed in: [32m1.133958ms[0m
+Dependency graph created in: [32m324.667µs[0m
+AST/import bindings resolved in: [32m44.5µs[0m
+AST/type alias resolution completed in: [32m166ns[0m
+AST/type resolution/constants deferred resolution in: [32m24.532958ms[0m
+AST/type resolution/constants deferred summary: 
+ rounds = [2m[32m1[0m
+ headers attempted = [2m[32m108[0m
+ headers deferred = [2m[32m0[0m
+ declaration snapshot rebuilds = [2m[32m109[0m
+AST/type resolution/constants resolved in: [32m24.541792ms[0m
+AST/type resolution/struct fields resolved in: [32m48.584µs[0m
+AST/type resolution/choice variants resolved in: [32m1.041µs[0m
+AST/type resolution/recursive struct validation in: [32m3.208µs[0m
+AST/type resolution completed in: [32m24.597542ms[0m
+
+ AST/function signatures/resolved count: 14[0m
+AST/function signatures resolved in: [32m176.375µs[0m
+
+ AST/receiver catalog/methods indexed: 6[0m
+AST/receiver catalog built in: [32m12µs[0m
+AST/node emission/top-level declaration index built in: [32m85.042µs[0m
+AST/node emission/function bodies parsed in: [32m7.172583ms[0m
+AST/node emission/start bodies parsed in: [32m43.784125ms[0m
+AST/node emission/const templates parsed in: [32m10.582µs[0m
+AST/node emission/const templates folded in: [32m2.041µs[0m
+AST/node emission/headers emitted: 
+ functions = [2m[32m14[0m
+ starts = [2m[32m1[0m
+ structs = [2m[32m3[0m
+ const templates = [2m[32m3[0m
+AST/node emission completed in: [32m53.318ms[0m
+AST/finalize/doc fragments collected in: [32m32.959µs[0m
+AST/finalize/const top-level fragments collected in: [32m625ns[0m
+AST/finalize/AST templates normalized in: [32m5.038542ms[0m
+AST/finalize/module constants normalized in: [32m159.792µs[0m
+AST/finalize/type boundary validated in: [32m42.917µs[0m
+AST/finalize/builtin AST merge in: [32m9.375µs[0m
+AST/finalization completed in: [32m5.570542ms[0m
+AST created in: [32m83.752ms[0m
+HIR generated in: [32m17.421334ms[0m
+Borrow checking completed in: [32m5.657542ms[0m
+[2m[37m---------------------[0m
+Done in 110.813375ms[0m
+[1m[32mNo errors or warnings[0m
+
+
+=== STDERR ===
+

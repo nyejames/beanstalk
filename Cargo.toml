@@ -1,3 +1,7 @@
+[workspace]
+members = [".", "xtask"]
+resolver = "2"
+
 [features]
 # These add println! macros for debugging and info when compiling
 detailed_timers = []
