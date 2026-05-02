@@ -4,6 +4,7 @@
 //! WHY: HIR and later analyses compare stable type IDs rather than re-traversing frontend types.
 
 use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::datatypes::generics::{BuiltinGenericType, GenericBaseType};
 use crate::compiler_frontend::datatypes::{BuiltinScalarReceiver, DataType, ReceiverKey};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_datatypes::{HirType, HirTypeKind, TypeId};
@@ -38,13 +39,6 @@ impl<'a> HirBuilder<'a> {
                     self.hir_error_location(location)
                 )
             }
-            DataType::GenericInstance { .. } => {
-                return_hir_transformation_error!(
-                    "Unresolved DataType::GenericInstance reached HIR lowering",
-                    self.hir_error_location(location)
-                )
-            }
-
             DataType::Reference(inner) => return self.lower_data_type(inner, location),
 
             DataType::Bool | DataType::True | DataType::False => HirTypeKind::Bool,
@@ -60,9 +54,22 @@ impl<'a> HirBuilder<'a> {
             DataType::Range => HirTypeKind::Range,
             DataType::None => HirTypeKind::Unit,
 
-            DataType::Collection(inner) => HirTypeKind::Collection {
-                element: self.lower_data_type(inner, location)?,
-            },
+            DataType::GenericInstance { base, arguments } => {
+                if matches!(
+                    base,
+                    GenericBaseType::Builtin(BuiltinGenericType::Collection)
+                ) && let [single_argument] = arguments.as_slice()
+                {
+                    HirTypeKind::Collection {
+                        element: self.lower_data_type(single_argument, location)?,
+                    }
+                } else {
+                    return_hir_transformation_error!(
+                        "Unresolved generic instance reached HIR lowering",
+                        self.hir_error_location(location)
+                    )
+                }
+            }
 
             DataType::Returns(values) => {
                 if values.is_empty() {

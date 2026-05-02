@@ -509,7 +509,7 @@ impl Expression {
         Self::new(
             ExpressionKind::Collection(items),
             location,
-            DataType::Collection(Box::new(inner_type)),
+            DataType::collection(inner_type),
             value_mode,
         )
         .with_regular_division_provenance(contains_regular_division)

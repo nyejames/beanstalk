@@ -215,7 +215,7 @@ pub(crate) fn register_builtin_error_types(string_table: &mut StringTable) -> Bu
         ),
         defaulted_optional_field(
             error_path.join_str(ERROR_FIELD_TRACE, string_table),
-            DataType::Collection(Box::new(stack_frame_type.to_owned())),
+            DataType::collection(stack_frame_type.to_owned()),
             location.clone(),
         ),
     ];

@@ -33,7 +33,10 @@ use crate::compiler_frontend::datatypes::DataType;
 pub(crate) fn parse_expectation_for_target_type(target: &DataType) -> DataType {
     match target {
         DataType::Option(_) => target.clone(),
-        DataType::Collection(inner) if !matches!(inner.as_ref(), DataType::Inferred) => {
+        data_type
+            if data_type.is_collection()
+                && data_type.collection_element_type() != Some(&DataType::Inferred) =>
+        {
             target.clone()
         }
         _ => DataType::Inferred,

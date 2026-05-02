@@ -127,8 +127,13 @@ fn collect_choice_definitions_from_data_type(
                 }
             }
         }
-        DataType::Collection(inner) | DataType::Option(inner) | DataType::Reference(inner) => {
+        DataType::Option(inner) | DataType::Reference(inner) => {
             collect_choice_definitions_from_data_type(inner, out);
+        }
+        DataType::GenericInstance { arguments, .. } => {
+            for argument in arguments {
+                collect_choice_definitions_from_data_type(argument, out);
+            }
         }
         DataType::Returns(values) => {
             for value in values {

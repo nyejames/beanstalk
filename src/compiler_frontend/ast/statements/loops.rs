@@ -1000,7 +1000,7 @@ fn token_stream_with_eof(tokens: &[Token]) -> Result<FileTokens, CompilerError> 
 
 fn collection_element_type(data_type: &DataType) -> Option<DataType> {
     match data_type {
-        DataType::Collection(inner) => Some((**inner).clone()),
+        data_type if data_type.is_collection() => data_type.collection_element_type_cloned(),
         DataType::Reference(inner) => collection_element_type(inner),
         _ => None,
     }

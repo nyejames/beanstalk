@@ -21,7 +21,9 @@ use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::statements::functions::FunctionReturn;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
-use crate::compiler_frontend::datatypes::generics::{GenericBaseType, GenericParameterScope};
+use crate::compiler_frontend::datatypes::generics::{
+    BuiltinGenericType, GenericBaseType, GenericParameterScope,
+};
 use crate::compiler_frontend::declaration_syntax::choice::{ChoiceVariant, ChoiceVariantPayload};
 use crate::compiler_frontend::deferred_feature_diagnostics::deferred_feature_rule_error;
 use crate::compiler_frontend::external_packages::ExternalSymbolId;
@@ -45,10 +47,43 @@ pub(crate) enum TypeAnnotationContext {
     TypeAliasTarget,
 }
 
+/// Collection capacity parsed from a collection type annotation such as `{Int 64}`.
+///
+/// WHAT: capacity is allocation metadata, not part of type identity.
+/// WHY: keeps capacity separate from the generic type model.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct CollectionCapacity {
+    pub value: i64,
+    pub location: SourceLocation,
+}
+
+/// Result of parsing a type annotation, including optional collection capacity.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct ParsedTypeAnnotation {
+    pub data_type: DataType,
+    pub collection_capacity: Option<CollectionCapacity>,
+}
+
+impl ParsedTypeAnnotation {
+    pub fn new(data_type: DataType) -> Self {
+        Self {
+            data_type,
+            collection_capacity: None,
+        }
+    }
+}
+
 pub(crate) fn parse_type_annotation(
     token_stream: &mut FileTokens,
     context: TypeAnnotationContext,
 ) -> Result<DataType, CompilerError> {
+    parse_type_annotation_with_capacity(token_stream, context).map(|parsed| parsed.data_type)
+}
+
+pub(crate) fn parse_type_annotation_with_capacity(
+    token_stream: &mut FileTokens,
+    context: TypeAnnotationContext,
+) -> Result<ParsedTypeAnnotation, CompilerError> {
     // Regular declarations can be inferred datatypes
     // So they can break out early with an Inferred type.
     if matches!(context, TypeAnnotationContext::DeclarationTarget)
@@ -57,7 +92,7 @@ pub(crate) fn parse_type_annotation(
             TokenKind::Assign | TokenKind::Newline | TokenKind::Comma
         )
     {
-        return Ok(DataType::Inferred);
+        return Ok(ParsedTypeAnnotation::new(DataType::Inferred));
     }
 
     parse_required_type(token_stream, context)
@@ -66,7 +101,7 @@ pub(crate) fn parse_type_annotation(
 fn parse_required_type(
     token_stream: &mut FileTokens,
     context: TypeAnnotationContext,
-) -> Result<DataType, CompilerError> {
+) -> Result<ParsedTypeAnnotation, CompilerError> {
     parse_required_type_with_generic_application(token_stream, context, true)
 }
 
@@ -74,7 +109,7 @@ fn parse_required_type_with_generic_application(
     token_stream: &mut FileTokens,
     context: TypeAnnotationContext,
     allow_generic_application: bool,
-) -> Result<DataType, CompilerError> {
+) -> Result<ParsedTypeAnnotation, CompilerError> {
     let parsed_atom = parse_type_atom(token_stream, context)?;
     parse_type_postfixes(
         token_stream,
@@ -87,27 +122,27 @@ fn parse_required_type_with_generic_application(
 fn parse_type_atom(
     token_stream: &mut FileTokens,
     context: TypeAnnotationContext,
-) -> Result<DataType, CompilerError> {
+) -> Result<ParsedTypeAnnotation, CompilerError> {
     match token_stream.current_token_kind() {
         TokenKind::DatatypeInt => {
             token_stream.advance();
-            Ok(DataType::Int)
+            Ok(ParsedTypeAnnotation::new(DataType::Int))
         }
         TokenKind::DatatypeFloat => {
             token_stream.advance();
-            Ok(DataType::Float)
+            Ok(ParsedTypeAnnotation::new(DataType::Float))
         }
         TokenKind::DatatypeBool => {
             token_stream.advance();
-            Ok(DataType::Bool)
+            Ok(ParsedTypeAnnotation::new(DataType::Bool))
         }
         TokenKind::DatatypeString => {
             token_stream.advance();
-            Ok(DataType::StringSlice)
+            Ok(ParsedTypeAnnotation::new(DataType::StringSlice))
         }
         TokenKind::DatatypeChar => {
             token_stream.advance();
-            Ok(DataType::Char)
+            Ok(ParsedTypeAnnotation::new(DataType::Char))
         }
         TokenKind::DatatypeNone => {
             let (message, stage, suggestion) = none_type_annotation_error(context);
@@ -153,7 +188,7 @@ fn parse_type_atom(
         TokenKind::Symbol(type_name) => {
             let type_name = *type_name;
             token_stream.advance();
-            Ok(DataType::NamedType(type_name))
+            Ok(ParsedTypeAnnotation::new(DataType::NamedType(type_name)))
         }
         TokenKind::Colon if matches!(context, TypeAnnotationContext::DeclarationTarget) => {
             return_syntax_error!(
@@ -204,10 +239,10 @@ fn parse_type_atom(
 
 fn parse_type_postfixes(
     token_stream: &mut FileTokens,
-    parsed_type: DataType,
+    parsed_type: ParsedTypeAnnotation,
     context: TypeAnnotationContext,
     allow_generic_application: bool,
-) -> Result<DataType, CompilerError> {
+) -> Result<ParsedTypeAnnotation, CompilerError> {
     let with_generic_arguments = parse_generic_arguments(
         token_stream,
         parsed_type,
@@ -220,13 +255,36 @@ fn parse_type_postfixes(
 fn parse_collection_type(
     token_stream: &mut FileTokens,
     context: TypeAnnotationContext,
-) -> Result<DataType, CompilerError> {
+) -> Result<ParsedTypeAnnotation, CompilerError> {
     token_stream.advance();
 
-    let inner_type = if token_stream.current_token_kind() == &TokenKind::CloseCurly {
-        DataType::Inferred
+    let inner = if token_stream.current_token_kind() == &TokenKind::CloseCurly {
+        ParsedTypeAnnotation::new(DataType::Inferred)
     } else {
         parse_required_type_with_generic_application(token_stream, context, true)?
+    };
+
+    // Check for optional capacity after the element type.
+    let capacity = if let TokenKind::IntLiteral(value) = token_stream.current_token_kind() {
+        let capacity_location = token_stream.current_location();
+        if *value < 0 {
+            return_syntax_error!(
+                "Collection capacity must be a non-negative integer.",
+                capacity_location,
+                {
+                    CompilationStage => compilation_stage(context),
+                    PrimarySuggestion => "Use a positive integer or zero for collection capacity.",
+                }
+            );
+        }
+        let cap = CollectionCapacity {
+            value: *value,
+            location: capacity_location,
+        };
+        token_stream.advance();
+        Some(cap)
+    } else {
+        None
     };
 
     if token_stream.current_token_kind() != &TokenKind::CloseCurly {
@@ -244,15 +302,19 @@ fn parse_collection_type(
 
     token_stream.advance();
 
-    Ok(DataType::Collection(Box::new(inner_type)))
+    let data_type = DataType::collection(inner.data_type);
+    Ok(ParsedTypeAnnotation {
+        data_type,
+        collection_capacity: capacity.or(inner.collection_capacity),
+    })
 }
 
 fn parse_generic_arguments(
     token_stream: &mut FileTokens,
-    parsed_type: DataType,
+    parsed_type: ParsedTypeAnnotation,
     context: TypeAnnotationContext,
     allow_generic_application: bool,
-) -> Result<DataType, CompilerError> {
+) -> Result<ParsedTypeAnnotation, CompilerError> {
     if token_stream.current_token_kind() != &TokenKind::Of {
         return Ok(parsed_type);
     }
@@ -264,7 +326,7 @@ fn parse_generic_arguments(
         ));
     }
 
-    let base = match parsed_type {
+    let base = match parsed_type.data_type {
         DataType::NamedType(type_name) => GenericBaseType::Named(type_name),
         _ => {
             return_syntax_error!(
@@ -334,7 +396,10 @@ fn parse_generic_arguments(
         }
     }
 
-    Ok(DataType::GenericInstance { base, arguments })
+    Ok(ParsedTypeAnnotation {
+        data_type: DataType::GenericInstance { base, arguments },
+        collection_capacity: parsed_type.collection_capacity,
+    })
 }
 
 fn parse_generic_type_argument(
@@ -350,7 +415,7 @@ fn parse_generic_type_argument(
         ));
     }
 
-    Ok(parsed_argument)
+    Ok(parsed_argument.data_type)
 }
 
 fn generic_argument_list_is_finished(token: &TokenKind) -> bool {
@@ -365,6 +430,7 @@ fn generic_argument_list_is_finished(token: &TokenKind) -> bool {
             | TokenKind::QuestionMark
             | TokenKind::Eof
             | TokenKind::End
+            | TokenKind::IntLiteral(_)
     )
 }
 
@@ -382,14 +448,14 @@ fn nested_generic_application_error(
 
 fn parse_optional_type_suffix(
     token_stream: &mut FileTokens,
-    parsed_type: DataType,
+    parsed_type: ParsedTypeAnnotation,
     context: TypeAnnotationContext,
-) -> Result<DataType, CompilerError> {
+) -> Result<ParsedTypeAnnotation, CompilerError> {
     if token_stream.current_token_kind() != &TokenKind::QuestionMark {
         return Ok(parsed_type);
     }
 
-    if matches!(parsed_type, DataType::Option(_)) {
+    if matches!(parsed_type.data_type, DataType::Option(_)) {
         let stage = compilation_stage(context);
         let duplicate_message = if matches!(context, TypeAnnotationContext::DeclarationTarget) {
             "Duplicate optional marker '?' in declaration type annotation"
@@ -426,7 +492,10 @@ fn parse_optional_type_suffix(
         );
     }
 
-    Ok(DataType::Option(Box::new(parsed_type)))
+    Ok(ParsedTypeAnnotation {
+        data_type: DataType::Option(Box::new(parsed_type.data_type)),
+        collection_capacity: parsed_type.collection_capacity,
+    })
 }
 
 fn type_keyword_deferred_error(
@@ -611,7 +680,7 @@ pub(crate) fn for_each_named_type_in_data_type(
                 for_each_named_type_in_data_type(argument, visitor);
             }
         }
-        DataType::Collection(inner) | DataType::Option(inner) | DataType::Reference(inner) => {
+        DataType::Option(inner) | DataType::Reference(inner) => {
             for_each_named_type_in_data_type(inner, visitor)
         }
         DataType::Result { ok, err } => {
@@ -673,12 +742,6 @@ pub(crate) fn resolve_type(
                 arguments: resolved_arguments,
             })
         }
-        DataType::Collection(inner) => Ok(DataType::Collection(Box::new(resolve_type(
-            inner,
-            location,
-            context,
-            string_table,
-        )?))),
         DataType::Option(inner) => Ok(DataType::Option(Box::new(resolve_type(
             inner,
             location,
@@ -1003,10 +1066,11 @@ fn resolve_generic_base_type(
             ),
             location.to_owned(),
         )),
-        GenericBaseType::Builtin(_) => Err(CompilerError::new_rule_error(
-            "Builtin generic applications are compiler-owned and cannot be written directly.",
-            location.to_owned(),
-        )),
+        GenericBaseType::Builtin(BuiltinGenericType::Collection) => {
+            // Collection is the only builtin generic type allowed in source.
+            // Its arguments are resolved separately by resolve_type.
+            Ok(GenericBaseType::Builtin(BuiltinGenericType::Collection))
+        }
     }
 }
 

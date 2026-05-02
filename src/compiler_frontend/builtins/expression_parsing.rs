@@ -132,11 +132,12 @@ pub(crate) fn parse_collection_expression(
     string_table: &mut StringTable,
 ) -> Result<(), CompilerError> {
     match data_type {
-        DataType::Collection(inner_type) => {
+        data_type if data_type.is_collection() => {
+            let inner_type = data_type.collection_element_type_cloned().unwrap();
             expression.push(AstNode {
                 kind: NodeKind::Rvalue(new_collection(
                     token_stream,
-                    inner_type,
+                    &inner_type,
                     context,
                     value_mode,
                     string_table,

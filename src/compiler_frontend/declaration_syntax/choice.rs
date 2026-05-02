@@ -439,12 +439,12 @@ fn contains_non_generic_choice_self_reference(
 ) -> bool {
     match data_type {
         DataType::NamedType(type_name) => Some(*type_name) == choice_name,
+        DataType::Option(inner) | DataType::Reference(inner) => {
+            contains_non_generic_choice_self_reference(inner, choice_name)
+        }
         DataType::GenericInstance { arguments, .. } => arguments
             .iter()
             .any(|argument| contains_non_generic_choice_self_reference(argument, choice_name)),
-        DataType::Collection(inner) | DataType::Option(inner) | DataType::Reference(inner) => {
-            contains_non_generic_choice_self_reference(inner, choice_name)
-        }
         DataType::Result { ok, err } => {
             contains_non_generic_choice_self_reference(ok, choice_name)
                 || contains_non_generic_choice_self_reference(err, choice_name)

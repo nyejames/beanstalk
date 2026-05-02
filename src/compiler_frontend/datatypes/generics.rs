@@ -271,9 +271,6 @@ pub(crate) fn substitute_type_parameters(
                 .map(|argument| substitute_type_parameters(argument, substitution))
                 .collect(),
         },
-        DataType::Collection(inner) => {
-            DataType::Collection(Box::new(substitute_type_parameters(inner, substitution)))
-        }
         DataType::Option(inner) => {
             DataType::Option(Box::new(substitute_type_parameters(inner, substitution)))
         }
@@ -544,7 +541,7 @@ mod tests {
         let substitution =
             TypeSubstitution::empty().with_replacement(TypeParameterId(0), DataType::Int);
 
-        let collection = DataType::Collection(Box::new(t.to_owned()));
+        let collection = DataType::collection(t.to_owned());
         let optional = DataType::Option(Box::new(t.to_owned()));
         let result = DataType::Result {
             ok: Box::new(t.to_owned()),
@@ -554,7 +551,7 @@ mod tests {
         assert_eq!(substitute_type_parameters(&t, &substitution), DataType::Int);
         assert_eq!(
             substitute_type_parameters(&collection, &substitution),
-            DataType::Collection(Box::new(DataType::Int))
+            DataType::collection(DataType::Int)
         );
         assert_eq!(
             substitute_type_parameters(&optional, &substitution),
@@ -640,10 +637,10 @@ mod tests {
             base: GenericBaseType::Named(pair_name),
             arguments: vec![DataType::StringSlice, DataType::Int],
         };
-        let collection_of_box_string = DataType::Collection(Box::new(DataType::GenericInstance {
+        let collection_of_box_string = DataType::collection(DataType::GenericInstance {
             base: GenericBaseType::Named(box_name),
             arguments: vec![DataType::StringSlice],
-        }));
+        });
         let optional_box_int = DataType::Option(Box::new(box_of_int.to_owned()));
         let result_of_box_int_and_error = DataType::Result {
             ok: Box::new(box_of_int.to_owned()),

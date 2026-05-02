@@ -240,7 +240,7 @@ fn declaration_from_header(header: &Header, string_table: &mut StringTable) -> O
                         FunctionSignature {
                             parameters: vec![],
                             returns: vec![ReturnSlot::success(FunctionReturn::Value(
-                                DataType::Collection(Box::new(DataType::StringSlice)),
+                                DataType::collection(DataType::StringSlice),
                             ))],
                         },
                     ),

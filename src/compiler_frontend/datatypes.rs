@@ -74,7 +74,6 @@ pub enum DataType {
     },
 
     // Container and composite runtime types.
-    Collection(Box<DataType>),
     Struct {
         nominal_path: InternedPath,
         fields: Vec<Declaration>,
@@ -211,6 +210,44 @@ impl DataType {
         matches!(self, DataType::Float | DataType::Int | DataType::Decimal)
     }
 
+    /// Constructs a collection type using the canonical generic instance representation.
+    ///
+    /// WHAT: `DataType::Collection` is being removed; this is the one canonical constructor.
+    /// WHY: keeps collection construction readable while unifying on generic infrastructure.
+    pub fn collection(element_type: DataType) -> Self {
+        Self::GenericInstance {
+            base: GenericBaseType::Builtin(BuiltinGenericType::Collection),
+            arguments: vec![element_type],
+        }
+    }
+
+    /// Returns true if this type is a collection (builtin generic instance with one argument).
+    pub fn is_collection(&self) -> bool {
+        matches!(
+            self,
+            DataType::GenericInstance {
+                base: GenericBaseType::Builtin(BuiltinGenericType::Collection),
+                arguments,
+            } if arguments.len() == 1
+        )
+    }
+
+    /// Returns the element type of a collection, if this is a collection type.
+    pub fn collection_element_type(&self) -> Option<&DataType> {
+        match self {
+            DataType::GenericInstance {
+                base: GenericBaseType::Builtin(BuiltinGenericType::Collection),
+                arguments,
+            } => arguments.first(),
+            _ => None,
+        }
+    }
+
+    /// Returns a cloned copy of the collection element type, if any.
+    pub fn collection_element_type_cloned(&self) -> Option<DataType> {
+        self.collection_element_type().cloned()
+    }
+
     pub fn is_textual_cast_input(&self) -> bool {
         matches!(self, DataType::StringSlice | DataType::Template)
     }
@@ -297,13 +334,6 @@ impl DataType {
             DataType::Float => "Float".to_string(),
             DataType::Int => "Int".to_string(),
             DataType::Decimal => "Decimal".to_string(),
-            DataType::Collection(inner_type) => {
-                if displays_better_in_generic_surface(inner_type) {
-                    format!("{{{}}}", inner_type.display_with_table(string_table))
-                } else {
-                    format!("{} Collection", inner_type.display_with_table(string_table))
-                }
-            }
             DataType::Parameters(args) => {
                 let mut arg_str = String::new();
                 for arg in args {
@@ -423,10 +453,7 @@ impl DataType {
 fn displays_better_in_generic_surface(data_type: &DataType) -> bool {
     matches!(
         data_type,
-        DataType::TypeParameter { .. }
-            | DataType::GenericInstance { .. }
-            | DataType::Collection(_)
-            | DataType::Option(_)
+        DataType::TypeParameter { .. } | DataType::GenericInstance { .. } | DataType::Option(_)
     )
 }
 
@@ -516,7 +543,6 @@ impl PartialEq for DataType {
                     err: err_b,
                 },
             ) => ok_a == ok_b && err_a == err_b,
-            (DataType::Collection(a), DataType::Collection(b)) => a == b,
             (DataType::Path(a), DataType::Path(b)) => a == b,
             (DataType::Template, DataType::Template) => true,
             (DataType::Option(a), DataType::Option(b)) => a == b,
@@ -636,7 +662,7 @@ mod tests {
             }
             .supports_structural_equality()
         );
-        assert!(!DataType::Collection(Box::new(DataType::Int)).supports_structural_equality());
+        assert!(!DataType::collection(DataType::Int).supports_structural_equality());
         assert!(
             !DataType::External {
                 type_id: crate::compiler_frontend::external_packages::ExternalTypeId(0)
@@ -699,7 +725,7 @@ mod tests {
                         id: InternedPath::from_single_str("items", &mut table),
                         value: crate::compiler_frontend::ast::expressions::expression::Expression {
                             kind: crate::compiler_frontend::ast::expressions::expression::ExpressionKind::NoValue,
-                            data_type: DataType::Collection(Box::new(DataType::Int)),
+                            data_type: DataType::collection(DataType::Int),
                             value_mode: crate::compiler_frontend::value_mode::ValueMode::ImmutableOwned,
                             location: Default::default(),
                             contains_regular_division: false,

@@ -1,7 +1,7 @@
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::declaration_syntax::type_syntax::{
-    TypeAnnotationContext, parse_type_annotation,
+    CollectionCapacity, TypeAnnotationContext, parse_type_annotation_with_capacity,
 };
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::token_scan::collect_declaration_initializer_tokens;
@@ -17,6 +17,9 @@ use crate::{return_rule_error, return_syntax_error};
 pub struct DeclarationSyntax {
     pub mutable_marker: bool,
     pub type_annotation: DataType,
+    /// Collection capacity is parsed but not yet wired to codegen.
+    #[allow(dead_code)]
+    pub collection_capacity: Option<CollectionCapacity>,
     pub initializer_tokens: Vec<Token>,
     pub location: SourceLocation,
 }
@@ -26,6 +29,9 @@ pub struct BindingTargetSyntax {
     pub name: StringId,
     pub mutable_marker: bool,
     pub type_annotation: DataType,
+    /// Collection capacity is parsed but not yet wired to codegen.
+    #[allow(dead_code)]
+    pub collection_capacity: Option<CollectionCapacity>,
     pub location: SourceLocation,
 }
 
@@ -98,6 +104,7 @@ pub fn parse_declaration_syntax(
     Ok(DeclarationSyntax {
         mutable_marker: target.mutable_marker,
         type_annotation: target.type_annotation,
+        collection_capacity: target.collection_capacity,
         initializer_tokens,
         location: target.location,
     })
@@ -115,13 +122,16 @@ pub fn parse_binding_target_syntax(
         token_stream.advance();
     }
 
-    let type_annotation =
-        parse_type_annotation(token_stream, TypeAnnotationContext::DeclarationTarget)?;
+    let parsed = parse_type_annotation_with_capacity(
+        token_stream,
+        TypeAnnotationContext::DeclarationTarget,
+    )?;
 
     Ok(BindingTargetSyntax {
         name,
         mutable_marker,
-        type_annotation,
+        type_annotation: parsed.data_type,
+        collection_capacity: parsed.collection_capacity,
         location: target_location,
     })
 }

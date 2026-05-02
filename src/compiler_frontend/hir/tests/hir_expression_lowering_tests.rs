@@ -1722,7 +1722,7 @@ fn lowers_collection_builtin_host_calls_from_explicit_ast_nodes() {
         crate::compiler_frontend::external_packages::ExternalFunctionId::CollectionLength;
     let mut builder = setup_builder(&mut string_table);
 
-    let receiver_type = DataType::Collection(Box::new(DataType::Int));
+    let receiver_type = DataType::collection(DataType::Int);
     register_local(
         &mut builder,
         receiver_name.clone(),
@@ -1820,7 +1820,7 @@ fn lowers_collection_set_builtin_from_explicit_ast_node_to_index_assignment() {
     let receiver_name = super::symbol("values", &mut string_table);
     let mut builder = setup_builder(&mut string_table);
 
-    let receiver_type = DataType::Collection(Box::new(DataType::Int));
+    let receiver_type = DataType::collection(DataType::Int);
     register_local(
         &mut builder,
         receiver_name.clone(),
@@ -1978,7 +1978,7 @@ fn collection_lowering_uses_pure_type_identity() {
     let mut builder = setup_builder(&mut string_table);
     let location = SourceLocation::default();
 
-    let collection_type = DataType::Collection(Box::new(DataType::Int));
+    let collection_type = DataType::collection(DataType::Int);
     let type_id = builder
         .lower_data_type(&collection_type, &location)
         .unwrap();

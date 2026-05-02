@@ -84,7 +84,7 @@ fn infers_collection_element_type_from_non_empty_literal() {
             .value
             .data_type
             .display_with_table(&string_table),
-        "Int Collection"
+        "{Int}"
     );
 }
 
@@ -103,7 +103,7 @@ fn parses_empty_collection_with_explicit_element_type() {
             .value
             .data_type
             .display_with_table(&string_table),
-        "Reading Collection"
+        "{Reading}"
     );
 }
 

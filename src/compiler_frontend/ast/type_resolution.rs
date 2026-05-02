@@ -165,7 +165,7 @@ pub(crate) fn collect_type_parameter_ids_from_type(
                 collect_type_parameter_ids_from_type(argument, used_parameters);
             }
         }
-        DataType::Collection(inner) | DataType::Option(inner) | DataType::Reference(inner) => {
+        DataType::Option(inner) | DataType::Reference(inner) => {
             collect_type_parameter_ids_from_type(inner, used_parameters)
         }
         DataType::Result { ok, err } => {
@@ -257,7 +257,7 @@ fn generic_type_references_nominal_path(
                     generic_type_references_nominal_path(argument, declaration_path)
                 })
         }
-        DataType::Collection(inner) | DataType::Option(inner) | DataType::Reference(inner) => {
+        DataType::Option(inner) | DataType::Reference(inner) => {
             generic_type_references_nominal_path(inner, declaration_path)
         }
         DataType::Result { ok, err } => {
@@ -742,7 +742,7 @@ fn collect_runtime_struct_dependencies(
         } => {
             dependencies.insert(nominal_path.to_owned());
         }
-        DataType::Collection(inner) | DataType::Reference(inner) | DataType::Option(inner) => {
+        DataType::Reference(inner) | DataType::Option(inner) => {
             collect_runtime_struct_dependencies(inner, dependencies)
         }
         DataType::Result { ok, err } => {

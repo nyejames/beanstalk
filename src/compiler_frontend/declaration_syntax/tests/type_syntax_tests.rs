@@ -11,7 +11,8 @@ use crate::compiler_frontend::datatypes::generics::{
     GenericBaseType, GenericParameter, GenericParameterList, TypeParameterId,
 };
 use crate::compiler_frontend::declaration_syntax::type_syntax::{
-    TypeAnnotationContext, TypeResolutionContext, parse_type_annotation, resolve_type,
+    TypeAnnotationContext, TypeResolutionContext, parse_type_annotation,
+    parse_type_annotation_with_capacity, resolve_type,
 };
 use crate::compiler_frontend::headers::module_symbols::{
     GenericDeclarationKind, GenericDeclarationMetadata,
@@ -196,10 +197,10 @@ fn parses_collection_of_generic_type_application() {
 
     assert_eq!(
         parsed,
-        DataType::Collection(Box::new(DataType::GenericInstance {
+        DataType::collection(DataType::GenericInstance {
             base: GenericBaseType::Named(box_name),
             arguments: vec![DataType::StringSlice],
-        }))
+        })
     );
 }
 
@@ -257,9 +258,8 @@ fn resolves_named_types_recursively_in_composite_types() {
     let mut string_table = StringTable::new();
     let point_name = string_table.intern("Point");
 
-    let unresolved = DataType::Collection(Box::new(DataType::Option(Box::new(
-        DataType::NamedType(point_name),
-    ))));
+    let unresolved =
+        DataType::collection(DataType::Option(Box::new(DataType::NamedType(point_name))));
 
     let point_path = InternedPath::from_single_str("Point", &mut string_table);
     let declarations = vec![Declaration {
@@ -279,7 +279,7 @@ fn resolves_named_types_recursively_in_composite_types() {
 
     assert_eq!(
         resolved,
-        DataType::Collection(Box::new(DataType::Option(Box::new(DataType::Int))))
+        DataType::collection(DataType::Option(Box::new(DataType::Int)))
     );
 }
 
@@ -425,4 +425,107 @@ fn unknown_named_type_reports_consistent_error() {
         "{}",
         error.msg
     );
+}
+
+#[test]
+fn parses_collection_with_capacity() {
+    let mut string_table = StringTable::new();
+    let mut stream = stream_from_tokens(
+        vec![
+            token(TokenKind::OpenCurly),
+            token(TokenKind::DatatypeInt),
+            token(TokenKind::IntLiteral(64)),
+            token(TokenKind::CloseCurly),
+            token(TokenKind::Eof),
+        ],
+        &mut string_table,
+    );
+
+    let parsed =
+        parse_type_annotation_with_capacity(&mut stream, TypeAnnotationContext::DeclarationTarget)
+            .expect("collection with capacity should parse");
+
+    assert_eq!(parsed.data_type, DataType::collection(DataType::Int));
+    assert!(parsed.collection_capacity.is_some());
+    assert_eq!(parsed.collection_capacity.unwrap().value, 64);
+}
+
+#[test]
+fn parses_collection_without_capacity() {
+    let mut string_table = StringTable::new();
+    let mut stream = stream_from_tokens(
+        vec![
+            token(TokenKind::OpenCurly),
+            token(TokenKind::DatatypeInt),
+            token(TokenKind::CloseCurly),
+            token(TokenKind::Eof),
+        ],
+        &mut string_table,
+    );
+
+    let parsed =
+        parse_type_annotation_with_capacity(&mut stream, TypeAnnotationContext::DeclarationTarget)
+            .expect("collection without capacity should parse");
+
+    assert_eq!(parsed.data_type, DataType::collection(DataType::Int));
+    assert!(parsed.collection_capacity.is_none());
+}
+
+#[test]
+fn parses_collection_with_generic_element_and_capacity() {
+    let mut string_table = StringTable::new();
+    let box_name = string_table.intern("Box");
+    let mut stream = stream_from_tokens(
+        vec![
+            token(TokenKind::OpenCurly),
+            token(TokenKind::Symbol(box_name)),
+            token(TokenKind::Of),
+            token(TokenKind::DatatypeString),
+            token(TokenKind::IntLiteral(16)),
+            token(TokenKind::CloseCurly),
+            token(TokenKind::Eof),
+        ],
+        &mut string_table,
+    );
+
+    let parsed =
+        parse_type_annotation_with_capacity(&mut stream, TypeAnnotationContext::DeclarationTarget)
+            .expect("collection with generic element and capacity should parse");
+
+    assert_eq!(
+        parsed.data_type,
+        DataType::collection(DataType::GenericInstance {
+            base: GenericBaseType::Named(box_name),
+            arguments: vec![DataType::StringSlice],
+        })
+    );
+    assert_eq!(parsed.collection_capacity.unwrap().value, 16);
+}
+
+#[test]
+fn rejects_negative_collection_capacity() {
+    let mut string_table = StringTable::new();
+    let mut stream = stream_from_tokens(
+        vec![
+            token(TokenKind::OpenCurly),
+            token(TokenKind::DatatypeInt),
+            token(TokenKind::IntLiteral(-1)),
+            token(TokenKind::CloseCurly),
+            token(TokenKind::Eof),
+        ],
+        &mut string_table,
+    );
+
+    let error =
+        parse_type_annotation_with_capacity(&mut stream, TypeAnnotationContext::DeclarationTarget)
+            .expect_err("negative capacity should fail");
+
+    assert!(error.msg.contains("non-negative integer"));
+}
+
+#[test]
+fn collection_type_identity_ignores_capacity() {
+    let with_capacity = DataType::collection(DataType::Int);
+    let without_capacity = DataType::collection(DataType::Int);
+    assert_eq!(with_capacity, without_capacity);
 }

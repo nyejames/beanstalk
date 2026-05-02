@@ -576,8 +576,10 @@ fn fresh_mutable_rvalue_type_compatible(expected: &DataType, actual: &DataType) 
         // Fresh collection literals are produced as immutable-owned values by default, but
         // mutable call slots own and materialize their own hidden local before the call.
         // Inner element type compatibility still has to hold.
-        (DataType::Collection(expected_inner), DataType::Collection(actual_inner)) => {
-            is_type_compatible(expected_inner.as_ref(), actual_inner.as_ref())
+        (expected, actual) if expected.is_collection() && actual.is_collection() => {
+            let expected_inner = expected.collection_element_type().unwrap();
+            let actual_inner = actual.collection_element_type().unwrap();
+            is_type_compatible(expected_inner, actual_inner)
         }
         _ => false,
     }

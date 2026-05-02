@@ -52,7 +52,7 @@ pub(super) fn parse_collection_builtin_member(
         scope_context,
     } = context;
 
-    let DataType::Collection(inner_type) = receiver_type else {
+    let Some(inner_type) = receiver_type.collection_element_type_cloned() else {
         return Ok(None);
     };
 
@@ -108,7 +108,7 @@ pub(super) fn parse_collection_builtin_member(
             let error_type =
                 resolve_builtin_error_type(scope_context, &member_location, string_table)?;
             let get_result_type = DataType::Result {
-                ok: Box::new(inner_type.as_ref().to_owned()),
+                ok: Box::new(inner_type.clone()),
                 err: Box::new(error_type),
             };
             (args, vec![get_result_type])
@@ -117,7 +117,7 @@ pub(super) fn parse_collection_builtin_member(
             let args = parse_builtin_method_args(
                 token_stream,
                 &member_name_text,
-                &[DataType::Int, inner_type.as_ref().to_owned()],
+                &[DataType::Int, inner_type.clone()],
                 scope_context,
                 &member_location,
                 string_table,
@@ -128,7 +128,7 @@ pub(super) fn parse_collection_builtin_member(
             let args = parse_builtin_method_args(
                 token_stream,
                 &member_name_text,
-                &[inner_type.as_ref().to_owned()],
+                std::slice::from_ref(&inner_type),
                 scope_context,
                 &member_location,
                 string_table,

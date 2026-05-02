@@ -67,8 +67,8 @@ fn identical_types_are_always_compatible() {
 
 #[test]
 fn collection_type_identity_is_element_type_only() {
-    let left = DataType::Collection(Box::new(DataType::Int));
-    let right = DataType::Collection(Box::new(DataType::Int));
+    let left = DataType::collection(DataType::Int);
+    let right = DataType::collection(DataType::Int);
 
     assert_eq!(left, right);
     assert!(is_type_compatible(&left, &right));

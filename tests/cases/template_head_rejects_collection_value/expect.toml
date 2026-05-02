@@ -3,5 +3,5 @@ mode = "failure"
 warnings = "forbid"
 error_type = "Syntax"
 message_contains = [
-  "Template head expressions only accept final scalar or textual values, found 'Int Collection'",
+  "Template head expressions only accept final scalar or textual values, found '{Int}'",
 ]

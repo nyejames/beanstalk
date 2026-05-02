@@ -123,7 +123,7 @@ fn collection_literal(location: SourceLocation) -> Expression {
 }
 
 fn int_collection_type() -> DataType {
-    DataType::Collection(Box::new(DataType::Int))
+    DataType::collection(DataType::Int)
 }
 
 #[test]
