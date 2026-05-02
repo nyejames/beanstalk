@@ -8,6 +8,16 @@ The design principles are:
 - Memory Safe with fallback GC that can eventually be statically optimised out with borrow checker rules
 - Strict, statically typed and opinionated about doing things in as few ways as possible as concisely as possible
 
+## Related references
+
+This document describes Beanstalk syntax and user-facing semantics.
+
+Use:
+- `docs/compiler-design-overview.md` for compiler stage ownership and cross-stage data flow
+- `docs/memory-management-design.md` for GC fallback, ownership optimisation, and borrow-analysis strategy
+- `docs/src/docs/progress/#page.bst` for current implementation status
+- `docs/roadmap/roadmap.md` for planned work
+
 ## Syntax Summary
 For developers coming from most other languages, 
 here are some key idiosyncrasies:
@@ -26,13 +36,41 @@ This comes before the type if there is an explicit type declaration
 - Parameters and struct definitions use vertical pipes | 
 - Result types are created with the '!' symbol. Options use '?'
 - `as` is used for three renaming domains:
-  - Type aliases: `AliasName as ExistingType`
-  - Import aliases: `import @path/symbol as local_name`
-  - Grouped import per-entry aliases: `import @path { symbol as local_name }`
+  1. Type aliases: `AliasName as ExistingType`
+  2. Import aliases: `import @path/symbol as local_name`
+  3. Grouped import per-entry aliases: `import @path { symbol as local_name }`
+- Shadowing is not allowed. A name may not be redeclared while an existing binding with that name is visible.
 
-**Naming conventions:**
+### Names and shadowing
 - Types/Objects/Choices/Type aliases: `PascalCase`
 - Variables/functions: `regular_snake_case`
+
+Beanstalk does not allow shadowing.
+
+```beanstalk
+value = 1
+value = 2 -- reassignment if `value` is mutable, not a new binding
+```
+
+A declaration cannot introduce a name that is already visible in the same scope.
+
+```beanstalk
+name = "Priya"
+
+block:
+    name = "Kelsier" -- Error: `name` is already visible
+;
+```
+
+This keeps each name mapped to one binding in its visible scope and avoids accidental rebinding.
+
+
+Note: if immutable reassignment is currently rejected, adjust the first example to avoid implying normal `=` reassignment is accepted. Safer version:
+
+```beanstalk
+value ~= 1
+value = 2 -- assignment to the existing mutable binding
+```
 
 ## Core Syntax Patterns
 ```beanstalk
@@ -109,7 +147,7 @@ Rules:
   * `~place` for mutable/exclusive access to an existing place, or
   * a plain fresh rvalue (literal, template, constructor call, computed value).
 * Passing an existing place to a mutable/exclusive parameter without `~` is an error.
-* `~` is place-only syntax. Using `~` on an immutable binding, literal, temporary, or computed expression is an error; pass fresh values without `~`.
+* `~` is place-only syntax. Using `~` on an immutable binding, literal, template, constructor call, or computed expression is an error. Pass fresh values without `~`.
 * Collections follow the same rule. Mutating collection operations do not get a permissive exception.
 * Positional arguments must come before named arguments.
 * No positional arguments are allowed after the first named argument.
@@ -858,6 +896,8 @@ A project is one or more of these modules together with libraries and sometimes 
 At the root of every project is a `#config.bst` file.
 `#config.bst` uses normal Beanstalk declaration syntax. Stage 0 reads top-level constant declarations from it.
 
+Compiler-stage details for module discovery and dependency sorting are described in `docs/compiler-design-overview.md`; this section describes the language-visible rules.
+
 Example:
 ```beanstalk
 # project = "html"
@@ -998,6 +1038,8 @@ Only `#mod.bst` creates a public module surface.
 Project builders may provide virtual packages such as `@core/io` or `@web/canvas`.
 These are not Beanstalk source files. They expose typed external functions and opaque external types.
 
+The implementation matrix is the source of truth for which external packages and backend targets are currently supported.
+
 ```beanstalk
 import @core/io/io
 import @core/math/sin as sine
@@ -1034,7 +1076,7 @@ At top level, `#` changes behavior by declaration kind:
 - Function declaration: exported function (visibility only)
 - Struct or choice declaration: exported type/symbol (visibility only)
 - Type alias declaration: exported type alias (visibility only)
-- Template head (`#[...]`): entry-file-only top-level const template declaration that must fully fold at compile time
+- Template head (`#[...]`): entry-file-only top-level const template declaration that must fully fold at compile time and can contribute compile-time page fragments in builders that use page fragments.
 
 Non-`#` top-level declarations are module-private.
 
@@ -1051,6 +1093,34 @@ Non-`#` top-level declarations are module-private.
 -- Exported struct/type
 # MyStruct = | ... |
 ```
+
+### Top-level declarations and dependency order
+
+Top-level declarations define the module-level declaration surface.
+
+These forms can participate in top-level dependency ordering:
+
+```beanstalk
+# site_name = "Beanstalk"
+
+# head_defaults = [:
+    <meta charset="UTF-8">
+]
+
+UserId as Int
+
+# Card = |
+    title String,
+|
+
+# render_card |title String| -> String:
+    return [: <article>[title]</article>]
+;
+```
+
+Top-level constants, type aliases, structs, choices, function signatures, and type annotations can depend on other top-level declarations.
+
+Executable statements inside function bodies do not affect top-level declaration order. Only the module entry file may contain top-level runtime statements.
 
 ### Constants and compile-time folding
 Constants use the same declaration syntax as regular variables, including optional explicit type annotations.

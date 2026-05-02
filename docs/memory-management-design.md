@@ -4,9 +4,21 @@ The goal of Beanstalk’s memory system is to guarantee memory safety under all 
 Programs that satisfy stronger static rules run faster with no difference in language semantics. Beanstalk treats ownership as an optimization target.
 If static guarantees are missing or incomplete, the value falls back to GC.
 
+## Related references
+
+This document describes Beanstalk's memory model, GC fallback, ownership optimisation, and borrow-analysis strategy.
+
+Use:
+- `docs/language-overview.md` for user-facing syntax such as `~`, explicit copies, and no-shadowing
+- `docs/compiler-design-overview.md` for compiler stage ownership and where borrow validation fits in the pipeline
+- `docs/src/docs/progress/#page.bst` for current implementation status
+
 ## Core Design Philosophy
 - No explicit lifetime annotations
 - No explicit move syntax
+- No language-level temporary references
+
+Beanstalk does not expose temporary reference categories in the language. Fresh literals, templates, constructor calls, and computed expressions are values. When a fresh value must satisfy a mutable/exclusive parameter, the compiler may materialize it into a hidden local before borrow validation. That hidden local is a compiler lowering detail, not user-visible lifetime syntax.
 
 Beanstalk’s memory model is intentionally layered:
 - Garbage collection guarantees correctness for all heap-managed values by default
@@ -27,7 +39,7 @@ This model is used by:
 - Debug and development builds
 
 ## Ownership as an Optional Runtime State
-When enabled by the backend, ownership is represented as runtime metadata, not a static type distinction. It is yet to be decided to what extend functions will be monomorphasized at compile time vs represented at runtime.
+When enabled by the backend, ownership is represented as runtime metadata, not a static type distinction. The split between compile-time specialisation and runtime ownership metadata is still deferred until benchmarking and backend work make the tradeoff concrete.
 
 Values eligible for non-GC management are passed around as pointers with an **embedded ownership bit**:
 - `borrowed` → the callee must not drop the value
@@ -61,12 +73,15 @@ Mutable access must always be explicit.
 - At most one mutable access to a value may exist at any time.
 - `~` at a call site requests mutable/exclusive access for that specific argument
 - `~` stays place-only: use it for existing mutable places (`~place`), not fresh literals/temporaries/computed values
-- Mutable/exclusive parameters can be satisfied by either explicit `~place` or a plain fresh rvalue lowered through a compiler-introduced hidden local
+- Mutable/exclusive parameters can be satisfied by either explicit `~place` or a plain fresh value lowered through a compiler-introduced hidden local
 - Collections and mutable receiver/member calls follow the same explicit rule
 - Mutable access excludes all other access (shared or mutable)
+- The user never writes `~` for fresh values. `~` requests mutable/exclusive access to an existing place.
 
 Mutable access may be either a mutable borrow, or an ownership transfer.
 Which of these occurs is determined by static last-use analysis and finalised at runtime.
+
+Beanstalk's no-shadowing rule is specified in `docs/language-overview.md`. The memory model benefits from it because each visible name maps to one binding, which simplifies access and last-use analysis.
 
 ### Ownership Transfer (Moves)
 A move transfers full responsibility for a value. 
@@ -161,11 +176,12 @@ The compiler enforces memory safety through the following steps:
    * ownership boundaries are identified,
    * fresh mutable call arguments are materialized into compiler-owned locals before borrow validation.
 3. **Borrow validation**, which:
-   * performs last-use analysis,
    * enforces exclusivity rules,
    * prevents illegal overlapping access,
-   * Enables ownership eligibility,
-   * provides advisory drop_if_owned sites
+   * detects invalid use after possible ownership transfer,
+   * performs or consumes last-use analysis,
+   * produces side-table facts for ownership-aware lowering,
+   * identifies advisory `drop_if_owned` sites.
 4. **Final Lowering**, where:
    * ownership flags are generated,
    * possible drops become conditional frees,
@@ -173,13 +189,15 @@ The compiler enforces memory safety through the following steps:
 
 At no point does the compiler rely on undefined behaviour or unchecked aliasing.
 
+Borrow validation does not mutate HIR. It produces side-table facts keyed by HIR/value identity. HIR remains the semantic representation under GC; ownership-aware lowerings consult the side tables later.
+
 ## Design Tradeoffs
 Beanstalk intentionally trades maximal static precision for predictable semantics, implementation tractability and backend flexibility.
 
 Compared to a fully static borrow checker:
 
 * Some ownership decisions are deferred to runtime.
-* Some errors are detected later than theoretically possible.
+* Some optimisation decisions are deferred to runtime instead of being fully statically resolved.
 * Small runtime cost from drop_if_owned checks.
 
 Comparing the other languages:
