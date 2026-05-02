@@ -625,6 +625,7 @@ fn hir_variant_construct_choice_wrong_field_name_rejected() {
                 location: test_location(2),
             },
         ],
+        generic_instance_key: None,
     };
 
     let start_fn = function_node(
@@ -727,6 +728,7 @@ fn hir_variant_construct_choice_wrong_field_type_rejected() {
                 location: test_location(2),
             },
         ],
+        generic_instance_key: None,
     };
 
     let start_fn = function_node(

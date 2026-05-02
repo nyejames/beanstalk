@@ -183,6 +183,8 @@ pub fn resolve_declaration_syntax(
         resolved_type_aliases: context.resolved_type_aliases.as_deref(),
         generic_declarations_by_path: context.generic_declarations_by_path.as_deref(),
         generic_parameters: None,
+        resolved_struct_fields_by_path: context.resolved_struct_fields_by_path.as_deref(),
+        generic_nominal_instantiations: context.generic_nominal_instantiations.as_deref(),
     };
     data_type = resolve_type(
         &data_type,

@@ -37,6 +37,7 @@ pub(crate) fn parse_choice_construct(
     let DataType::Choices {
         nominal_path,
         variants,
+        ..
     } = &choice_declaration.value.data_type
     else {
         return_compiler_error!(

@@ -314,6 +314,8 @@ fn resolves_generic_instance_base_to_canonical_nominal_path() {
         resolved_type_aliases: None,
         generic_declarations_by_path: Some(&generic_declarations),
         generic_parameters: None,
+        resolved_struct_fields_by_path: None,
+        generic_nominal_instantiations: None,
     };
 
     let location = SourceLocation::default();
@@ -360,6 +362,8 @@ fn generic_instance_resolution_rejects_wrong_arity() {
         resolved_type_aliases: None,
         generic_declarations_by_path: Some(&generic_declarations),
         generic_parameters: None,
+        resolved_struct_fields_by_path: None,
+        generic_nominal_instantiations: None,
     };
 
     let location = SourceLocation::default();
@@ -397,6 +401,8 @@ fn bare_generic_type_name_requires_type_arguments() {
         resolved_type_aliases: None,
         generic_declarations_by_path: Some(&generic_declarations),
         generic_parameters: None,
+        resolved_struct_fields_by_path: None,
+        generic_nominal_instantiations: None,
     };
 
     let location = SourceLocation::default();

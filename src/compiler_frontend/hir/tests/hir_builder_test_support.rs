@@ -112,6 +112,7 @@ fn collect_choice_definitions_from_data_type(
         DataType::Choices {
             nominal_path,
             variants,
+            ..
         } => {
             if !out.iter().any(|c| &c.nominal_path == nominal_path) {
                 out.push(crate::compiler_frontend::ast::AstChoiceDefinition {

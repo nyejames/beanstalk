@@ -18,7 +18,7 @@ use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable}
 use rustc_hash::FxHashSet;
 
 pub(crate) mod generics;
-use generics::{BuiltinGenericType, GenericBaseType, TypeParameterId};
+use generics::{BuiltinGenericType, GenericBaseType, GenericInstantiationKey, TypeParameterId};
 
 /// Type-level distinction for compile-time path values.
 ///
@@ -78,6 +78,7 @@ pub enum DataType {
         nominal_path: InternedPath,
         fields: Vec<Declaration>,
         const_record: bool,
+        generic_instance_key: Option<GenericInstantiationKey>,
     },
     Reference(Box<DataType>),
     Range, // Iterable that must always be owned.
@@ -107,6 +108,7 @@ pub enum DataType {
     Choices {
         nominal_path: InternedPath,
         variants: Vec<ChoiceVariant>,
+        generic_instance_key: Option<GenericInstantiationKey>,
     }, // Choice declaration identity + variant list
     /// Opaque external type provided by a platform package (e.g. `IO`, `Canvas`).
     /// Cannot be constructed with struct literals or field-accessed.
@@ -134,18 +136,36 @@ pub enum DataType {
 // Contextual numeric promotion logic lives in `type_coercion::numeric`.
 impl DataType {
     pub fn runtime_struct(nominal_path: InternedPath, fields: Vec<Declaration>) -> Self {
+        Self::runtime_struct_with_generic_key(nominal_path, fields, None)
+    }
+
+    pub fn runtime_struct_with_generic_key(
+        nominal_path: InternedPath,
+        fields: Vec<Declaration>,
+        generic_instance_key: Option<GenericInstantiationKey>,
+    ) -> Self {
         Self::Struct {
             nominal_path,
             fields,
             const_record: false,
+            generic_instance_key,
         }
     }
 
     pub fn const_struct_record(nominal_path: InternedPath, fields: Vec<Declaration>) -> Self {
+        Self::const_struct_record_with_generic_key(nominal_path, fields, None)
+    }
+
+    pub fn const_struct_record_with_generic_key(
+        nominal_path: InternedPath,
+        fields: Vec<Declaration>,
+        generic_instance_key: Option<GenericInstantiationKey>,
+    ) -> Self {
         Self::Struct {
             nominal_path,
             fields,
             const_record: true,
+            generic_instance_key,
         }
     }
 
@@ -154,6 +174,7 @@ impl DataType {
             DataType::Struct {
                 nominal_path,
                 const_record,
+                generic_instance_key: None,
                 ..
             } if !const_record => Some(ReceiverKey::Struct(nominal_path.to_owned())),
             DataType::Int => Some(ReceiverKey::BuiltinScalar(BuiltinScalarReceiver::Int)),
@@ -174,6 +195,21 @@ impl DataType {
         }
     }
 
+    /// Returns the generic instance key if this is an instantiated generic struct or choice.
+    pub fn generic_instance_key(&self) -> Option<&GenericInstantiationKey> {
+        match self {
+            DataType::Struct {
+                generic_instance_key,
+                ..
+            } => generic_instance_key.as_ref(),
+            DataType::Choices {
+                generic_instance_key,
+                ..
+            } => generic_instance_key.as_ref(),
+            _ => None,
+        }
+    }
+
     pub fn struct_fields(&self) -> Option<&[Declaration]> {
         match self {
             DataType::Struct { fields, .. } => Some(fields.as_slice()),
@@ -186,6 +222,20 @@ impl DataType {
             DataType::Struct { const_record, .. } => *const_record,
             _ => false,
         }
+    }
+
+    /// Returns true if this type is a generic instantiation (struct or choice).
+    pub fn is_generic_instance(&self) -> bool {
+        matches!(
+            self,
+            DataType::Struct {
+                generic_instance_key: Some(..),
+                ..
+            } | DataType::Choices {
+                generic_instance_key: Some(..),
+                ..
+            }
+        )
     }
 
     pub fn is_result(&self) -> bool {
@@ -286,6 +336,7 @@ impl DataType {
             DataType::Choices {
                 nominal_path,
                 variants,
+                ..
             } => {
                 if !visited.insert(nominal_path.clone()) {
                     // Cycle detected: recursive choice equality is not supported.
@@ -349,8 +400,12 @@ impl DataType {
             DataType::Struct {
                 nominal_path,
                 const_record,
+                generic_instance_key,
                 ..
             } => {
+                if let Some(key) = generic_instance_key {
+                    return generics::display_generic_instantiation_key(key, string_table);
+                }
                 let bare_name = nominal_path
                     .name_str(string_table)
                     .unwrap_or("<anonymous struct>");
@@ -425,7 +480,11 @@ impl DataType {
             DataType::Choices {
                 nominal_path,
                 variants,
+                generic_instance_key,
             } => {
+                if let Some(key) = generic_instance_key {
+                    return generics::display_generic_instantiation_key(key, string_table);
+                }
                 let name = nominal_path
                     .name_str(string_table)
                     .unwrap_or("<choice>")
@@ -558,14 +617,20 @@ impl PartialEq for DataType {
                 DataType::Struct {
                     nominal_path: path_a,
                     const_record: const_a,
+                    generic_instance_key: key_a,
                     ..
                 },
                 DataType::Struct {
                     nominal_path: path_b,
                     const_record: const_b,
+                    generic_instance_key: key_b,
                     ..
                 },
-            ) => path_a == path_b && const_a == const_b,
+            ) => match (key_a, key_b) {
+                (Some(a), Some(b)) => a == b && const_a == const_b,
+                (None, None) => path_a == path_b && const_a == const_b,
+                _ => false,
+            },
             (DataType::Function(_, signature1), DataType::Function(_, signature2)) => {
                 // If both functions have the same signature.returns types,
                 // then they are equal
@@ -579,13 +644,19 @@ impl PartialEq for DataType {
             (
                 DataType::Choices {
                     nominal_path: path_a,
+                    generic_instance_key: key_a,
                     ..
                 },
                 DataType::Choices {
                     nominal_path: path_b,
+                    generic_instance_key: key_b,
                     ..
                 },
-            ) => path_a == path_b,
+            ) => match (key_a, key_b) {
+                (Some(a), Some(b)) => a == b,
+                (None, None) => path_a == path_b,
+                _ => false,
+            },
             (DataType::External { type_id: id_a }, DataType::External { type_id: id_b }) => {
                 id_a == id_b
             }
@@ -623,14 +694,17 @@ mod tests {
         let status_a = DataType::Choices {
             nominal_path: path_a.clone(),
             variants: vec![ready.clone(), busy.clone()],
+            generic_instance_key: None,
         };
         let status_b = DataType::Choices {
             nominal_path: path_a.clone(),
             variants: vec![ready.clone()],
+            generic_instance_key: None,
         };
         let other = DataType::Choices {
             nominal_path: path_b.clone(),
             variants: vec![ready.clone(), busy.clone()],
+            generic_instance_key: None,
         };
 
         assert_eq!(
@@ -659,6 +733,7 @@ mod tests {
                 nominal_path: InternedPath::new(),
                 fields: vec![],
                 const_record: false,
+                generic_instance_key: None,
             }
             .supports_structural_equality()
         );
@@ -682,6 +757,7 @@ mod tests {
                 payload: ChoiceVariantPayload::Unit,
                 location: Default::default(),
             }],
+            generic_instance_key: None,
         };
         assert!(status.supports_structural_equality());
     }
@@ -708,6 +784,7 @@ mod tests {
                 },
                 location: Default::default(),
             }],
+            generic_instance_key: None,
         };
         assert!(response.supports_structural_equality());
     }
@@ -734,6 +811,7 @@ mod tests {
                 },
                 location: Default::default(),
             }],
+            generic_instance_key: None,
         };
         assert!(!response.supports_structural_equality());
     }

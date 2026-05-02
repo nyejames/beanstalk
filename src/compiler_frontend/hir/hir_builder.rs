@@ -110,6 +110,13 @@ pub struct HirBuilder<'a> {
     pub(super) functions_by_name: FxHashMap<InternedPath, FunctionId>,
     pub(super) structs_by_name: FxHashMap<InternedPath, StructId>,
     pub(super) choices_by_name: FxHashMap<InternedPath, ChoiceId>,
+    /// Generic struct instantiations keyed by structured identity, not string paths.
+    /// WHAT: `Box of Int` and `Box of String` need distinct StructIds.
+    pub(super) generic_structs_by_key:
+        FxHashMap<crate::compiler_frontend::datatypes::generics::GenericInstantiationKey, StructId>,
+    /// Generic choice instantiations keyed by structured identity.
+    pub(super) generic_choices_by_key:
+        FxHashMap<crate::compiler_frontend::datatypes::generics::GenericInstantiationKey, ChoiceId>,
     pub(super) fields_by_struct_and_name: FxHashMap<(StructId, InternedPath), FieldId>,
     pub(super) module_constants_by_name: FxHashMap<InternedPath, Declaration>,
     pub(super) currently_lowering_constants: FxHashSet<InternedPath>,
@@ -182,6 +189,8 @@ impl<'a> HirBuilder<'a> {
             functions_by_name: FxHashMap::default(),
             structs_by_name: FxHashMap::default(),
             choices_by_name: FxHashMap::default(),
+            generic_structs_by_key: FxHashMap::default(),
+            generic_choices_by_key: FxHashMap::default(),
             fields_by_struct_and_name: FxHashMap::default(),
             module_constants_by_name: FxHashMap::default(),
             currently_lowering_constants: FxHashSet::default(),

@@ -103,6 +103,56 @@ pub enum TypeIdentityKey {
     GenericInstance(GenericInstantiationKey),
 }
 
+pub fn display_generic_instantiation_key(
+    key: &GenericInstantiationKey,
+    string_table: &StringTable,
+) -> String {
+    let base_name = key.base_path.name_str(string_table).unwrap_or("<generic>");
+    let args = key
+        .arguments
+        .iter()
+        .map(|arg| display_type_identity_key(arg, string_table))
+        .collect::<Vec<_>>()
+        .join(", ");
+    format!("{base_name} of {args}")
+}
+
+fn display_type_identity_key(key: &TypeIdentityKey, string_table: &StringTable) -> String {
+    match key {
+        TypeIdentityKey::Builtin(builtin) => match builtin {
+            BuiltinTypeKey::Bool => "Bool".to_owned(),
+            BuiltinTypeKey::Int => "Int".to_owned(),
+            BuiltinTypeKey::Float => "Float".to_owned(),
+            BuiltinTypeKey::Decimal => "Decimal".to_owned(),
+            BuiltinTypeKey::String => "String".to_owned(),
+            BuiltinTypeKey::Char => "Char".to_owned(),
+            BuiltinTypeKey::ErrorKind => "ErrorKind".to_owned(),
+            BuiltinTypeKey::Range => "Range".to_owned(),
+        },
+        TypeIdentityKey::Nominal(path) => path
+            .name_str(string_table)
+            .unwrap_or("<nominal>")
+            .to_owned(),
+        TypeIdentityKey::External(type_id) => format!("External({})", type_id.0),
+        TypeIdentityKey::Collection(inner) => {
+            format!("{{{}}}", display_type_identity_key(inner, string_table))
+        }
+        TypeIdentityKey::Option(inner) => {
+            format!("{}?", display_type_identity_key(inner, string_table))
+        }
+        TypeIdentityKey::Result { ok, err } => {
+            format!(
+                "Result of {}, {}",
+                display_type_identity_key(ok, string_table),
+                display_type_identity_key(err, string_table)
+            )
+        }
+        TypeIdentityKey::GenericInstance(instance) => {
+            display_generic_instantiation_key(instance, string_table)
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub(crate) struct GenericParameterScope {
     parameters_by_name: FxHashMap<StringId, GenericParameter>,
@@ -316,14 +366,17 @@ pub(crate) fn substitute_type_parameters(
             nominal_path,
             fields,
             const_record,
+            generic_instance_key,
         } => DataType::Struct {
             nominal_path: nominal_path.to_owned(),
             fields: substitute_declaration_types(fields, substitution),
             const_record: *const_record,
+            generic_instance_key: generic_instance_key.to_owned(),
         },
         DataType::Choices {
             nominal_path,
             variants,
+            generic_instance_key,
         } => {
             let resolved_variants = variants
                 .iter()
@@ -346,6 +399,7 @@ pub(crate) fn substitute_type_parameters(
             DataType::Choices {
                 nominal_path: nominal_path.to_owned(),
                 variants: resolved_variants,
+                generic_instance_key: generic_instance_key.to_owned(),
             }
         }
         DataType::Parameters(parameters) => {
@@ -368,6 +422,108 @@ fn substitute_declaration_types(
             resolved
         })
         .collect()
+}
+
+/// Returns true if the data type contains any unresolved type parameters.
+pub fn contains_type_parameter(data_type: &DataType) -> bool {
+    match data_type {
+        DataType::TypeParameter { .. } => true,
+        DataType::GenericInstance { arguments, .. } => {
+            arguments.iter().any(contains_type_parameter)
+        }
+        DataType::Option(inner) | DataType::Reference(inner) => contains_type_parameter(inner),
+        DataType::Result { ok, err } => contains_type_parameter(ok) || contains_type_parameter(err),
+        DataType::Returns(values) => values.iter().any(contains_type_parameter),
+        DataType::Function(_, signature) => {
+            signature
+                .parameters
+                .iter()
+                .any(|parameter| contains_type_parameter(&parameter.value.data_type))
+                || signature
+                    .returns
+                    .iter()
+                    .any(|return_slot| contains_type_parameter(return_slot.data_type()))
+        }
+        DataType::Struct { fields, .. } | DataType::Parameters(fields) => fields
+            .iter()
+            .any(|field| contains_type_parameter(&field.value.data_type)),
+        DataType::Choices { variants, .. } => {
+            variants.iter().any(|variant| match &variant.payload {
+                ChoiceVariantPayload::Unit => false,
+                ChoiceVariantPayload::Record { fields } => fields
+                    .iter()
+                    .any(|field| contains_type_parameter(&field.value.data_type)),
+            })
+        }
+        _ => false,
+    }
+}
+
+/// Converts a concrete `DataType` into a stable `TypeIdentityKey`.
+/// Returns `None` for unresolved or unsupported types (e.g., `TypeParameter`, `Inferred`).
+pub fn data_type_to_type_identity_key(data_type: &DataType) -> Option<TypeIdentityKey> {
+    match data_type {
+        DataType::Bool => Some(TypeIdentityKey::Builtin(BuiltinTypeKey::Bool)),
+        DataType::Int => Some(TypeIdentityKey::Builtin(BuiltinTypeKey::Int)),
+        DataType::Float => Some(TypeIdentityKey::Builtin(BuiltinTypeKey::Float)),
+        DataType::Decimal => Some(TypeIdentityKey::Builtin(BuiltinTypeKey::Decimal)),
+        DataType::StringSlice => Some(TypeIdentityKey::Builtin(BuiltinTypeKey::String)),
+        DataType::Char => Some(TypeIdentityKey::Builtin(BuiltinTypeKey::Char)),
+        DataType::BuiltinErrorKind => Some(TypeIdentityKey::Builtin(BuiltinTypeKey::ErrorKind)),
+        DataType::Range => Some(TypeIdentityKey::Builtin(BuiltinTypeKey::Range)),
+        DataType::Struct {
+            nominal_path,
+            generic_instance_key: None,
+            ..
+        }
+        | DataType::Choices {
+            nominal_path,
+            generic_instance_key: None,
+            ..
+        } => Some(TypeIdentityKey::Nominal(nominal_path.to_owned())),
+        DataType::External { type_id } => Some(TypeIdentityKey::External(*type_id)),
+        DataType::GenericInstance {
+            base: GenericBaseType::ResolvedNominal(path),
+            arguments,
+        } => {
+            let arg_keys: Vec<_> = arguments
+                .iter()
+                .filter_map(data_type_to_type_identity_key)
+                .collect();
+            if arg_keys.len() != arguments.len() {
+                return None;
+            }
+            Some(TypeIdentityKey::GenericInstance(GenericInstantiationKey {
+                base_path: path.to_owned(),
+                arguments: arg_keys,
+            }))
+        }
+        DataType::Struct {
+            generic_instance_key: Some(key),
+            ..
+        }
+        | DataType::Choices {
+            generic_instance_key: Some(key),
+            ..
+        } => Some(TypeIdentityKey::GenericInstance(key.to_owned())),
+        DataType::GenericInstance {
+            base: GenericBaseType::Builtin(BuiltinGenericType::Collection),
+            arguments,
+        } if let [element] = arguments.as_slice() => data_type_to_type_identity_key(element)
+            .map(|key| TypeIdentityKey::Collection(Box::new(key))),
+        DataType::Option(inner) => {
+            data_type_to_type_identity_key(inner).map(|key| TypeIdentityKey::Option(Box::new(key)))
+        }
+        DataType::Result { ok, err } => {
+            let ok_key = data_type_to_type_identity_key(ok)?;
+            let err_key = data_type_to_type_identity_key(err)?;
+            Some(TypeIdentityKey::Result {
+                ok: Box::new(ok_key),
+                err: Box::new(err_key),
+            })
+        }
+        _ => None,
+    }
 }
 
 #[cfg(test)]

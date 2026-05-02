@@ -222,6 +222,7 @@ fn declaration_from_header(header: &Header, string_table: &mut StringTable) -> O
                 DataType::Choices {
                     nominal_path: header.tokens.src_path.to_owned(),
                     variants: variants.to_owned(),
+                    generic_instance_key: None,
                 },
                 ValueMode::ImmutableReference,
             ),

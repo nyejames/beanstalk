@@ -30,6 +30,7 @@ use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::templates::template_folding::TemplateFoldContext;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
+use crate::compiler_frontend::datatypes::generics::GenericInstantiationKey;
 use crate::compiler_frontend::datatypes::{DataType, ReceiverKey};
 use crate::compiler_frontend::external_packages::{
     ExternalFunctionDef, ExternalFunctionId, ExternalPackageRegistry, ExternalSymbolId,
@@ -204,6 +205,16 @@ pub struct ScopeContext {
     pub(crate) generic_declarations_by_path:
         Option<Rc<FxHashMap<InternedPath, GenericDeclarationMetadata>>>,
 
+    /// Resolved struct fields by canonical path, including generic struct templates.
+    /// Shared via Rc for lazy generic instantiation in body-level type annotations.
+    pub(crate) resolved_struct_fields_by_path:
+        Option<Rc<FxHashMap<InternedPath, Vec<Declaration>>>>,
+
+    /// Mutable cache for lazily instantiated generic nominal types.
+    /// Shared via Rc<RefCell<...>> so all cloned scope contexts share the same cache.
+    pub(crate) generic_nominal_instantiations:
+        Option<Rc<RefCell<FxHashMap<GenericInstantiationKey, DataType>>>>,
+
     // --- Control flow state ---
     pub loop_depth: usize,
 
@@ -285,6 +296,8 @@ impl ScopeContext {
             visible_type_aliases: None,
             resolved_type_aliases: None,
             generic_declarations_by_path: None,
+            resolved_struct_fields_by_path: None,
+            generic_nominal_instantiations: None,
             loop_depth: 0,
             build_profile: FrontendBuildProfile::Dev,
             emitted_warnings: Rc::new(RefCell::new(Vec::new())),
@@ -327,6 +340,8 @@ impl ScopeContext {
             visible_type_aliases: self.visible_type_aliases.clone(),
             resolved_type_aliases: self.resolved_type_aliases.clone(),
             generic_declarations_by_path: self.generic_declarations_by_path.clone(),
+            resolved_struct_fields_by_path: self.resolved_struct_fields_by_path.clone(),
+            generic_nominal_instantiations: self.generic_nominal_instantiations.clone(),
             style_directives: self.style_directives.clone(),
             loop_depth,
             build_profile: self.build_profile,
@@ -379,6 +394,8 @@ impl ScopeContext {
             visible_type_aliases: self.visible_type_aliases.clone(),
             resolved_type_aliases: self.resolved_type_aliases.clone(),
             generic_declarations_by_path: self.generic_declarations_by_path.clone(),
+            resolved_struct_fields_by_path: self.resolved_struct_fields_by_path.clone(),
+            generic_nominal_instantiations: self.generic_nominal_instantiations.clone(),
             style_directives: self.style_directives.clone(),
             loop_depth: self.loop_depth,
             build_profile: self.build_profile,
@@ -417,6 +434,8 @@ impl ScopeContext {
             visible_type_aliases: self.visible_type_aliases.clone(),
             resolved_type_aliases: self.resolved_type_aliases.clone(),
             generic_declarations_by_path: self.generic_declarations_by_path.clone(),
+            resolved_struct_fields_by_path: self.resolved_struct_fields_by_path.clone(),
+            generic_nominal_instantiations: self.generic_nominal_instantiations.clone(),
             style_directives: self.style_directives.clone(),
             loop_depth: self.loop_depth,
             build_profile: self.build_profile,
@@ -451,6 +470,8 @@ impl ScopeContext {
             visible_type_aliases: parent.visible_type_aliases.clone(),
             resolved_type_aliases: parent.resolved_type_aliases.clone(),
             generic_declarations_by_path: parent.generic_declarations_by_path.clone(),
+            resolved_struct_fields_by_path: parent.resolved_struct_fields_by_path.clone(),
+            generic_nominal_instantiations: parent.generic_nominal_instantiations.clone(),
             style_directives: parent.style_directives.clone(),
             loop_depth: parent.loop_depth,
             build_profile: parent.build_profile,
@@ -555,6 +576,22 @@ impl ScopeContext {
         declarations: FxHashMap<InternedPath, GenericDeclarationMetadata>,
     ) -> ScopeContext {
         self.generic_declarations_by_path = Some(Rc::new(declarations));
+        self
+    }
+
+    pub(crate) fn with_resolved_struct_fields_by_path(
+        mut self,
+        fields: FxHashMap<InternedPath, Vec<Declaration>>,
+    ) -> ScopeContext {
+        self.resolved_struct_fields_by_path = Some(Rc::new(fields));
+        self
+    }
+
+    pub(crate) fn with_generic_nominal_instantiations(
+        mut self,
+        cache: Rc<RefCell<FxHashMap<GenericInstantiationKey, DataType>>>,
+    ) -> ScopeContext {
+        self.generic_nominal_instantiations = Some(cache);
         self
     }
 

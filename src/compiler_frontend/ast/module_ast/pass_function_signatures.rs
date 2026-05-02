@@ -82,6 +82,8 @@ impl<'a> AstBuildState<'a> {
                     &self.module_symbols.generic_declarations_by_path,
                 ),
                 generic_parameters: generic_parameter_scope.as_ref(),
+                resolved_struct_fields_by_path: Some(&self.resolved_struct_fields_by_path),
+                generic_nominal_instantiations: Some(&*self.generic_nominal_instantiations),
             };
             let resolved_signature = resolve_function_signature(
                 &header.tokens.src_path,

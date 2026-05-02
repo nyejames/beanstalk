@@ -44,6 +44,7 @@ use std::time::Instant;
 
 use crate::compiler_frontend::ast::type_resolution::ResolvedFunctionSignature;
 use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::datatypes::generics::GenericInstantiationKey;
 
 pub(in crate::compiler_frontend::ast) struct AstBuildState<'a> {
     // Header-owned module symbol package from the header/dependency-sort phase.
@@ -83,6 +84,14 @@ pub(in crate::compiler_frontend::ast) struct AstBuildState<'a> {
         FxHashMap<InternedPath, ResolvedFunctionSignature>,
     pub(in crate::compiler_frontend::ast) resolved_type_aliases_by_path:
         FxHashMap<InternedPath, DataType>,
+
+    // Lazy generic nominal instantiation cache.
+    // WHAT: maps a concrete generic instantiation key to its fully substituted DataType.
+    // WHY: `Box of Int` and `Box of String` are distinct nominal types; substitution is
+    //      expensive and must happen exactly once per unique instantiation.
+    //      Shared via Rc<RefCell<...>> so ScopeContext clones can mutate the same cache.
+    pub(in crate::compiler_frontend::ast) generic_nominal_instantiations:
+        Rc<RefCell<FxHashMap<GenericInstantiationKey, DataType>>>,
 }
 
 impl<'a> AstBuildState<'a> {
@@ -121,6 +130,7 @@ impl<'a> AstBuildState<'a> {
             struct_source_by_path,
             resolved_function_signatures_by_path: FxHashMap::default(),
             resolved_type_aliases_by_path: FxHashMap::default(),
+            generic_nominal_instantiations: Rc::new(RefCell::new(FxHashMap::default())),
         }
     }
 
@@ -221,6 +231,7 @@ impl<'a> AstBuildState<'a> {
             if let crate::compiler_frontend::datatypes::DataType::Choices {
                 nominal_path,
                 variants,
+                ..
             } = &declaration.value.data_type
                 && seen_choice_paths.insert(nominal_path.to_owned())
             {

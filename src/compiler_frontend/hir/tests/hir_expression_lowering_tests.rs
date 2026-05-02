@@ -1916,6 +1916,7 @@ fn lowers_choice_variant_expression_to_hir_variant_construct() {
     let choice_type = DataType::Choices {
         nominal_path: status_path.clone(),
         variants: choice_variants,
+        generic_instance_key: None,
     };
 
     let choice_expr = Expression::new(

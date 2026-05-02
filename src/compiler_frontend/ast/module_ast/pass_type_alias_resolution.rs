@@ -60,6 +60,8 @@ impl<'a> AstBuildState<'a> {
                         &self.module_symbols.generic_declarations_by_path,
                     ),
                     generic_parameters: None,
+                    resolved_struct_fields_by_path: Some(&self.resolved_struct_fields_by_path),
+                    generic_nominal_instantiations: Some(&*self.generic_nominal_instantiations),
                 };
 
                 resolve_type(

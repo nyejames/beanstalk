@@ -189,6 +189,7 @@ impl TemplateContent {
 }
 
 #[derive(Clone, Debug)]
+#[allow(clippy::large_enum_variant)]
 pub enum TemplateAtom {
     Content(TemplateSegment),
     Slot(SlotPlaceholder),

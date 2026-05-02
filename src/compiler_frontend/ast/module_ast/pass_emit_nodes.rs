@@ -132,6 +132,12 @@ impl<'a> AstBuildState<'a> {
                     .with_visible_type_aliases(bindings.visible_type_aliases.clone())
                     .with_resolved_type_aliases((*resolved_type_aliases).clone())
                     .with_generic_declarations((*generic_declarations).clone())
+                    .with_resolved_struct_fields_by_path(
+                        self.resolved_struct_fields_by_path.clone(),
+                    )
+                    .with_generic_nominal_instantiations(
+                        self.generic_nominal_instantiations.clone(),
+                    )
                     .with_project_path_resolver(self.project_path_resolver.clone())
                     .with_path_format_config(self.path_format_config.clone())
                     .with_rendered_path_usage_sink(self.rendered_path_usages.clone())
@@ -203,6 +209,12 @@ impl<'a> AstBuildState<'a> {
                     .with_visible_type_aliases(bindings.visible_type_aliases.clone())
                     .with_resolved_type_aliases((*resolved_type_aliases).clone())
                     .with_generic_declarations((*generic_declarations).clone())
+                    .with_resolved_struct_fields_by_path(
+                        self.resolved_struct_fields_by_path.clone(),
+                    )
+                    .with_generic_nominal_instantiations(
+                        self.generic_nominal_instantiations.clone(),
+                    )
                     .with_project_path_resolver(self.project_path_resolver.clone())
                     .with_path_format_config(self.path_format_config.clone())
                     .with_rendered_path_usage_sink(self.rendered_path_usages.clone())
@@ -307,6 +319,12 @@ impl<'a> AstBuildState<'a> {
                     .with_visible_type_aliases(bindings.visible_type_aliases.clone())
                     .with_resolved_type_aliases((*resolved_type_aliases).clone())
                     .with_generic_declarations((*generic_declarations).clone())
+                    .with_resolved_struct_fields_by_path(
+                        self.resolved_struct_fields_by_path.clone(),
+                    )
+                    .with_generic_nominal_instantiations(
+                        self.generic_nominal_instantiations.clone(),
+                    )
                     .with_project_path_resolver(self.project_path_resolver.clone())
                     .with_path_format_config(self.path_format_config.clone())
                     .with_rendered_path_usage_sink(self.rendered_path_usages.clone())

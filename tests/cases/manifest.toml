@@ -609,6 +609,16 @@ path = "generic_recursive_type_deferred"
 tags = ["integration","generics","diagnostics"]
 
 [[case]]
+id = "generic_struct_instantiation_success"
+path = "generic_struct_instantiation_success"
+tags = ["integration","generics","structs"]
+
+[[case]]
+id = "generic_choice_instantiation_success"
+path = "generic_choice_instantiation_success"
+tags = ["integration","generics","choices"]
+
+[[case]]
 id = "choice_variant_default_value_deferred"
 path = "choice_variant_default_value_deferred"
 tags = ["integration","diagnostics","choices"]

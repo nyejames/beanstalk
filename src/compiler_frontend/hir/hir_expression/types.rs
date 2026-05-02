@@ -150,6 +150,16 @@ impl<'a> HirBuilder<'a> {
                 HirTypeKind::Result { ok, err }
             }
 
+            DataType::Choices {
+                nominal_path,
+                variants,
+                generic_instance_key: Some(key),
+            } => {
+                let choice_id =
+                    self.resolve_or_register_generic_choice(key, variants, nominal_path, location)?;
+                HirTypeKind::Choice { choice_id }
+            }
+
             DataType::Choices { nominal_path, .. } => {
                 let choice_id = self.resolve_choice_id(nominal_path, location)?;
                 HirTypeKind::Choice { choice_id }
@@ -157,6 +167,17 @@ impl<'a> HirBuilder<'a> {
 
             DataType::Parameters(fields) => {
                 let struct_id = self.resolve_struct_id_from_nominal_fields(fields, location)?;
+                HirTypeKind::Struct { struct_id }
+            }
+
+            DataType::Struct {
+                nominal_path,
+                fields,
+                generic_instance_key: Some(key),
+                ..
+            } => {
+                let struct_id =
+                    self.resolve_or_register_generic_struct(key, fields, nominal_path, location)?;
                 HirTypeKind::Struct { struct_id }
             }
 
@@ -181,5 +202,86 @@ impl<'a> HirBuilder<'a> {
         let id = self.type_context.insert(HirType { kind: kind.clone() });
         self.type_interner.insert(kind, id);
         id
+    }
+
+    fn resolve_or_register_generic_struct(
+        &mut self,
+        key: &crate::compiler_frontend::datatypes::generics::GenericInstantiationKey,
+        fields: &[crate::compiler_frontend::ast::ast_nodes::Declaration],
+        nominal_path: &crate::compiler_frontend::interned_path::InternedPath,
+        location: &SourceLocation,
+    ) -> Result<crate::compiler_frontend::hir::ids::StructId, CompilerError> {
+        use crate::compiler_frontend::hir::hir_side_table::HirLocation;
+        use crate::compiler_frontend::hir::structs::{HirField, HirStruct};
+
+        if let Some(&struct_id) = self.generic_structs_by_key.get(key) {
+            return Ok(struct_id);
+        }
+
+        let struct_id = self.allocate_struct_id();
+        let mut hir_fields = Vec::with_capacity(fields.len());
+
+        for field in fields {
+            let field_type = self.lower_data_type(&field.value.data_type, location)?;
+            let field_id = self.allocate_field_id();
+
+            self.fields_by_struct_and_name
+                .insert((struct_id, field.id.to_owned()), field_id);
+            self.side_table
+                .bind_field_name(field_id, field.id.to_owned());
+            self.side_table
+                .map_ast_to_hir(&field.value.location, HirLocation::Field(field_id));
+            self.side_table
+                .map_hir_source_location(HirLocation::Field(field_id), &field.value.location);
+
+            hir_fields.push(HirField {
+                id: field_id,
+                ty: field_type,
+            });
+        }
+
+        let hir_struct = HirStruct {
+            id: struct_id,
+            fields: hir_fields,
+        };
+
+        self.generic_structs_by_key
+            .insert(key.to_owned(), struct_id);
+        self.side_table
+            .bind_struct_name(struct_id, nominal_path.to_owned());
+        self.push_struct(hir_struct);
+
+        Ok(struct_id)
+    }
+
+    fn resolve_or_register_generic_choice(
+        &mut self,
+        key: &crate::compiler_frontend::datatypes::generics::GenericInstantiationKey,
+        variants: &[crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant],
+        nominal_path: &crate::compiler_frontend::interned_path::InternedPath,
+        location: &SourceLocation,
+    ) -> Result<crate::compiler_frontend::hir::ids::ChoiceId, CompilerError> {
+        use crate::compiler_frontend::hir::module::HirChoice;
+
+        if let Some(&choice_id) = self.generic_choices_by_key.get(key) {
+            return Ok(choice_id);
+        }
+
+        let choice_id = self.allocate_choice_id();
+        self.generic_choices_by_key
+            .insert(key.to_owned(), choice_id);
+        self.side_table
+            .bind_choice_name(choice_id, nominal_path.to_owned());
+        let index = choice_id.0 as usize;
+        debug_assert!(index == self.module.choices.len());
+        self.module.choices.push(HirChoice {
+            id: choice_id,
+            variants: vec![],
+        });
+
+        let hir_variants = self.lower_choice_variants(variants, location)?;
+        self.module.choices[index].variants = hir_variants;
+
+        Ok(choice_id)
     }
 }

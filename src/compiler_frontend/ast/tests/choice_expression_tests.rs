@@ -65,6 +65,7 @@ fn resolves_choice_variant_expressions_with_choice_types() {
             DataType::Choices {
                 nominal_path,
                 variants,
+                ..
             } if nominal_path.name_str(&string_table) == Some("Status") && variants.len() == 2
         ),
         "choice literal should keep declaration-backed choice identity"
@@ -109,6 +110,7 @@ fn resolves_choice_variant_expressions_with_choice_types() {
             DataType::Choices {
                 nominal_path,
                 variants,
+                ..
             } if nominal_path.name_str(&string_table) == Some("Status") && variants.len() == 2
         ),
         "choice literal should preserve declaration-backed choice type"

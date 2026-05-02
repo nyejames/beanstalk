@@ -127,6 +127,7 @@ fn non_unit_function_with_exhaustive_choice_match_returns_on_all_arms() {
                 location: test_location(20),
             },
         ],
+        generic_instance_key: None,
     };
 
     let label_fn = function_node(
@@ -834,6 +835,7 @@ fn lowers_choice_match_arms_to_hir_choice_variant_patterns() {
                 location: test_location(2),
             },
         ],
+        generic_instance_key: None,
     };
 
     let match_node = node(

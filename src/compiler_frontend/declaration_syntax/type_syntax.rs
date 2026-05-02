@@ -22,7 +22,8 @@ use crate::compiler_frontend::ast::statements::functions::FunctionReturn;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::generics::{
-    BuiltinGenericType, GenericBaseType, GenericParameterScope,
+    BuiltinGenericType, GenericBaseType, GenericInstantiationKey, GenericParameterScope,
+    TypeIdentityKey, TypeSubstitution, data_type_to_type_identity_key,
 };
 use crate::compiler_frontend::declaration_syntax::choice::{ChoiceVariant, ChoiceVariantPayload};
 use crate::compiler_frontend::deferred_feature_diagnostics::deferred_feature_rule_error;
@@ -648,6 +649,12 @@ pub(crate) struct TypeResolutionContext<'a> {
     pub generic_declarations_by_path:
         Option<&'a FxHashMap<InternedPath, GenericDeclarationMetadata>>,
     pub generic_parameters: Option<&'a GenericParameterScope>,
+    /// Resolved struct fields by canonical path, including generic struct templates.
+    /// Required for lazy generic struct instantiation.
+    pub resolved_struct_fields_by_path: Option<&'a FxHashMap<InternedPath, Vec<Declaration>>>,
+    /// Mutable cache for lazily instantiated generic nominal types.
+    pub generic_nominal_instantiations:
+        Option<&'a std::cell::RefCell<FxHashMap<GenericInstantiationKey, DataType>>>,
 }
 
 impl<'a> TypeResolutionContext<'a> {
@@ -662,6 +669,8 @@ impl<'a> TypeResolutionContext<'a> {
             resolved_type_aliases: None,
             generic_declarations_by_path: None,
             generic_parameters: None,
+            resolved_struct_fields_by_path: None,
+            generic_nominal_instantiations: None,
         }
     }
 }
@@ -737,6 +746,23 @@ pub(crate) fn resolve_type(
                 resolved_arguments.push(resolve_type(argument, location, context, string_table)?);
             }
 
+            // Attempt lazy instantiation for user-declared generic structs/choices.
+            if let GenericBaseType::ResolvedNominal(base_path) = &resolved_base
+                && let Some(metadata) = context
+                    .generic_declarations_by_path
+                    .and_then(|decls| decls.get(base_path))
+                && let Some(instantiated) = instantiate_generic_nominal(
+                    base_path,
+                    metadata,
+                    &resolved_arguments,
+                    location,
+                    context,
+                    string_table,
+                )?
+            {
+                return Ok(instantiated);
+            }
+
             Ok(DataType::GenericInstance {
                 base: resolved_base,
                 arguments: resolved_arguments,
@@ -801,6 +827,7 @@ pub(crate) fn resolve_type(
             nominal_path,
             fields,
             const_record,
+            ..
         } => {
             let mut resolved_fields = Vec::with_capacity(fields.len());
             for field in fields {
@@ -818,11 +845,13 @@ pub(crate) fn resolve_type(
                 nominal_path: nominal_path.to_owned(),
                 fields: resolved_fields,
                 const_record: *const_record,
+                generic_instance_key: None,
             })
         }
         DataType::Choices {
             nominal_path,
             variants,
+            ..
         } => {
             let mut resolved_variants = Vec::with_capacity(variants.len());
             for variant in variants {
@@ -836,6 +865,7 @@ pub(crate) fn resolve_type(
             Ok(DataType::Choices {
                 nominal_path: nominal_path.to_owned(),
                 variants: resolved_variants,
+                generic_instance_key: None,
             })
         }
         DataType::Parameters(parameters) => {
@@ -887,6 +917,171 @@ fn resolve_choice_variant_types(
         payload,
         location: variant.location.to_owned(),
     })
+}
+
+/// Lazily instantiate a generic struct or choice declaration with concrete type arguments.
+///
+/// WHAT: looks up the template fields/variants, substitutes type parameters, and caches
+///       the concrete nominal type.
+/// WHY: generic structs/choices must be fully concrete before HIR lowering.
+///
+/// Returns `Ok(Some(DataType))` on successful instantiation, `Ok(None)` when template data
+/// is not available (call site should fall back to GenericInstance), or `Err` on failure.
+fn instantiate_generic_nominal(
+    base_path: &InternedPath,
+    metadata: &GenericDeclarationMetadata,
+    arguments: &[DataType],
+    location: &SourceLocation,
+    context: &TypeResolutionContext<'_>,
+    string_table: &StringTable,
+) -> Result<Option<DataType>, CompilerError> {
+    let param_count = metadata.parameters.len();
+    if arguments.len() != param_count {
+        return Err(CompilerError::new_rule_error(
+            format!(
+                "Generic type '{}' expects {} type argument(s), but {} were provided.",
+                base_path.to_string(string_table),
+                param_count,
+                arguments.len()
+            ),
+            location.to_owned(),
+        ));
+    }
+
+    // Build argument identity keys. If any argument can't be keyed (e.g. TypeParameter
+    // inside an unresolved generic function body), we still substitute but skip caching.
+    let arg_keys: Vec<TypeIdentityKey> = arguments
+        .iter()
+        .filter_map(data_type_to_type_identity_key)
+        .collect();
+    let all_concrete = arg_keys.len() == arguments.len();
+
+    let key = GenericInstantiationKey {
+        base_path: base_path.to_owned(),
+        arguments: arg_keys,
+    };
+
+    // Check cache first.
+    if all_concrete
+        && let Some(cache) = context.generic_nominal_instantiations
+        && let Some(cached) = cache.borrow().get(&key).cloned()
+    {
+        return Ok(Some(cached));
+    }
+
+    // Build substitution mapping parameter ids -> concrete arguments.
+    let mut substitution = TypeSubstitution::empty();
+    for (param, arg) in metadata.parameters.parameters.iter().zip(arguments.iter()) {
+        substitution.insert(param.id, arg.to_owned());
+    }
+
+    let instantiated = match metadata.kind {
+        GenericDeclarationKind::Struct => {
+            let Some(fields_map) = context.resolved_struct_fields_by_path else {
+                // Template data unavailable; caller should fall back to GenericInstance.
+                return Ok(None);
+            };
+            let Some(template_fields) = fields_map.get(base_path) else {
+                // Template not yet available (e.g. recursive generic type during its own
+                // resolution). Fall back to GenericInstance so the caller can reject it
+                // with a proper recursive-type diagnostic.
+                return Ok(None);
+            };
+
+            let substituted_fields = template_fields
+                .iter()
+                .map(|field| {
+                    let mut resolved = field.to_owned();
+                    resolved.value.data_type =
+                        crate::compiler_frontend::datatypes::generics::substitute_type_parameters(
+                            &field.value.data_type,
+                            &substitution,
+                        );
+                    resolved
+                })
+                .collect();
+
+            DataType::Struct {
+                nominal_path: base_path.to_owned(),
+                fields: substituted_fields,
+                const_record: false,
+                generic_instance_key: if all_concrete {
+                    Some(key.to_owned())
+                } else {
+                    None
+                },
+            }
+        }
+        GenericDeclarationKind::Choice => {
+            let template_declaration = context.declarations.iter().rfind(|declaration| {
+                &declaration.id == base_path
+                    && matches!(declaration.value.data_type, DataType::Choices { .. })
+            });
+            let Some(template_declaration) = template_declaration else {
+                // Template not yet available (e.g. recursive generic type during its own
+                // resolution). Fall back to GenericInstance so the caller can reject it
+                // with a proper recursive-type diagnostic.
+                return Ok(None);
+            };
+            let DataType::Choices {
+                variants: template_variants,
+                ..
+            } = &template_declaration.value.data_type
+            else {
+                unreachable!("Template declaration filter guarantees Choices variant");
+            };
+
+            let substituted_variants = template_variants
+                .iter()
+                .map(|variant| {
+                    let payload = match &variant.payload {
+                        ChoiceVariantPayload::Unit => ChoiceVariantPayload::Unit,
+                        ChoiceVariantPayload::Record { fields } => {
+                            let substituted_fields = fields
+                                .iter()
+                                .map(|field| {
+                                    let mut resolved = field.to_owned();
+                                    resolved.value.data_type = crate::compiler_frontend::datatypes::generics::substitute_type_parameters(
+                                        &field.value.data_type,
+                                        &substitution,
+                                    );
+                                    resolved
+                                })
+                                .collect();
+                            ChoiceVariantPayload::Record {
+                                fields: substituted_fields,
+                            }
+                        }
+                    };
+                    ChoiceVariant {
+                        id: variant.id,
+                        payload,
+                        location: variant.location.to_owned(),
+                    }
+                })
+                .collect();
+
+            DataType::Choices {
+                nominal_path: base_path.to_owned(),
+                variants: substituted_variants,
+                generic_instance_key: if all_concrete {
+                    Some(key.to_owned())
+                } else {
+                    None
+                },
+            }
+        }
+        _ => {
+            // Not a generic struct or choice; fall back to GenericInstance.
+            return Ok(None);
+        }
+    };
+
+    if all_concrete && let Some(cache) = context.generic_nominal_instantiations {
+        cache.borrow_mut().insert(key, instantiated.clone());
+    }
+
+    Ok(Some(instantiated))
 }
 
 fn resolve_named_type_from_context(

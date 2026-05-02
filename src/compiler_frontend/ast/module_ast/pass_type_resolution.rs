@@ -85,6 +85,8 @@ impl<'a> AstBuildState<'a> {
                     &self.module_symbols.generic_declarations_by_path,
                 ),
                 generic_parameters: generic_parameter_scope.as_ref(),
+                resolved_struct_fields_by_path: Some(&self.resolved_struct_fields_by_path),
+                generic_nominal_instantiations: Some(&*self.generic_nominal_instantiations),
             };
 
             let fields = resolve_struct_field_types(
@@ -175,6 +177,8 @@ impl<'a> AstBuildState<'a> {
                     &self.module_symbols.generic_declarations_by_path,
                 ),
                 generic_parameters: generic_parameter_scope.as_ref(),
+                resolved_struct_fields_by_path: Some(&self.resolved_struct_fields_by_path),
+                generic_nominal_instantiations: Some(&self.generic_nominal_instantiations),
             };
 
             let resolved_variants = resolve_choice_variant_payload_types(
@@ -223,6 +227,7 @@ impl<'a> AstBuildState<'a> {
                     DataType::Choices {
                         nominal_path: header.tokens.src_path.to_owned(),
                         variants: resolved_variants,
+                        generic_instance_key: None,
                     },
                     ValueMode::ImmutableReference,
                 ),

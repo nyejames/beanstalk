@@ -482,6 +482,7 @@ fn parse_case_arm(
             DataType::Choices {
                 nominal_path,
                 variants,
+                ..
             } => {
                 // If the lead token is a bare symbol that is not a known variant name
                 // and is not introducing a qualified variant pattern, treat it as a
