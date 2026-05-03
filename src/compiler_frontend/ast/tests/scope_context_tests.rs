@@ -5,7 +5,8 @@
 //! WHY: these properties are refactor seams — subtle mismatches (e.g. dropping
 //! `expected_error_type` on context clone) silently corrupt later passes.
 
-use super::scope_context::{ContextKind, ScopeContext, TopLevelDeclarationIndex};
+use super::environment::TopLevelDeclarationTable;
+use super::scope_context::{ContextKind, ScopeContext};
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -29,7 +30,7 @@ fn scope_context_new_leaves_no_visibility_gate() {
     let ctx = ScopeContext::new(
         ContextKind::Function,
         scope,
-        Rc::new(TopLevelDeclarationIndex::new(vec![])),
+        Rc::new(TopLevelDeclarationTable::new(vec![])),
         ExternalPackageRegistry::new(),
         vec![],
     );
@@ -56,7 +57,7 @@ fn add_var_extends_visibility_gate_when_gate_is_set() {
     let mut ctx = ScopeContext::new(
         ContextKind::Function,
         scope,
-        Rc::new(TopLevelDeclarationIndex::new(vec![])),
+        Rc::new(TopLevelDeclarationTable::new(vec![])),
         ExternalPackageRegistry::new(),
         vec![],
     );
@@ -101,7 +102,7 @@ fn new_template_parsing_context_preserves_constant_kind() {
     let ctx = ScopeContext::new(
         ContextKind::Constant,
         scope,
-        Rc::new(TopLevelDeclarationIndex::new(vec![])),
+        Rc::new(TopLevelDeclarationTable::new(vec![])),
         ExternalPackageRegistry::new(),
         vec![],
     );
@@ -120,7 +121,7 @@ fn new_template_parsing_context_converts_function_kind_to_template() {
     let ctx = ScopeContext::new(
         ContextKind::Function,
         scope,
-        Rc::new(TopLevelDeclarationIndex::new(vec![])),
+        Rc::new(TopLevelDeclarationTable::new(vec![])),
         ExternalPackageRegistry::new(),
         vec![],
     );
@@ -139,7 +140,7 @@ fn new_template_parsing_context_propagates_expected_error_type() {
     let mut ctx = ScopeContext::new(
         ContextKind::Function,
         scope,
-        Rc::new(TopLevelDeclarationIndex::new(vec![])),
+        Rc::new(TopLevelDeclarationTable::new(vec![])),
         ExternalPackageRegistry::new(),
         vec![],
     );
@@ -164,7 +165,7 @@ fn new_child_control_flow_increments_loop_depth_for_loop_kind() {
     let ctx = ScopeContext::new(
         ContextKind::Function,
         scope,
-        Rc::new(TopLevelDeclarationIndex::new(vec![])),
+        Rc::new(TopLevelDeclarationTable::new(vec![])),
         ExternalPackageRegistry::new(),
         vec![],
     );
@@ -196,7 +197,7 @@ fn new_constant_inherits_parent_visibility_gate() {
     let mut ctx = ScopeContext::new(
         ContextKind::Function,
         scope.to_owned(),
-        Rc::new(TopLevelDeclarationIndex::new(vec![])),
+        Rc::new(TopLevelDeclarationTable::new(vec![])),
         ExternalPackageRegistry::new(),
         vec![],
     );

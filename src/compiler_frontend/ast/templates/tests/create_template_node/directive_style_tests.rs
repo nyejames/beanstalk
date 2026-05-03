@@ -45,7 +45,7 @@ fn test_context(scope: InternedPath) -> ScopeContext {
     ScopeContext::new(
         ContextKind::Constant,
         scope.clone(),
-        Rc::new(TopLevelDeclarationIndex::new(vec![])),
+        Rc::new(TopLevelDeclarationTable::new(vec![])),
         ExternalPackageRegistry::default(),
         vec![],
     )

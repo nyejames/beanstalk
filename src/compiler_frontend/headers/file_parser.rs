@@ -502,7 +502,7 @@ fn starts_duplicate_top_level_header_declaration(
 fn discover_visible_constant_placeholders(
     token_stream: &FileTokens,
     string_table: &mut StringTable,
-) -> Result<Rc<crate::compiler_frontend::ast::TopLevelDeclarationIndex>, CompilerError> {
+) -> Result<Rc<crate::compiler_frontend::ast::TopLevelDeclarationTable>, CompilerError> {
     let mut placeholders = Vec::new();
     let mut seen_paths = HashSet::new();
     let mut next_statement_exported = false;
@@ -575,7 +575,7 @@ fn discover_visible_constant_placeholders(
     }
 
     Ok(Rc::new(
-        crate::compiler_frontend::ast::TopLevelDeclarationIndex::new(placeholders),
+        crate::compiler_frontend::ast::TopLevelDeclarationTable::new(placeholders),
     ))
 }
 

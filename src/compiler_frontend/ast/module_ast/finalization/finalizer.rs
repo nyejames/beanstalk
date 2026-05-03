@@ -141,7 +141,7 @@ impl<'context, 'services, 'environment> AstFinalizer<'context, 'services, 'envir
 
     fn collect_choice_definitions(&self) -> Vec<AstChoiceDefinition> {
         let mut choice_definitions = vec![];
-        for declaration in &self.environment.declarations {
+        for declaration in self.environment.declaration_table.iter() {
             if let DataType::Choices {
                 nominal_path,
                 variants,

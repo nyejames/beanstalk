@@ -85,7 +85,8 @@ pub(crate) mod templates;
 // WHY: the AST module should expose one obvious entry surface. Internal helpers,
 // pass implementations, and parser submodules stay private to `ast/`.
 pub use module_ast::build_context::AstBuildContext;
-pub use module_ast::scope_context::{ContextKind, ScopeContext, TopLevelDeclarationIndex};
+pub(crate) use module_ast::environment::TopLevelDeclarationTable;
+pub use module_ast::scope_context::{ContextKind, ScopeContext};
 pub use templates::top_level_templates::AstDocFragment;
 pub use templates::top_level_templates::AstDocFragmentKind;
 

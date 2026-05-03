@@ -8,7 +8,6 @@
 pub(crate) enum AstCounter {
     ScopeContextsCreated,
     ScopeLocalDeclarationsClonedTotal,
-    DeclarationSnapshotRebuilds,
     ConstantResolutionRounds,
     BoundedExpressionTokenCopies,
     BoundedExpressionTokensCopiedTotal,
@@ -24,7 +23,6 @@ mod detailed {
 
     static SCOPE_CONTEXTS_CREATED: AtomicUsize = AtomicUsize::new(0);
     static SCOPE_LOCAL_DECLARATIONS_CLONED_TOTAL: AtomicUsize = AtomicUsize::new(0);
-    static DECLARATION_SNAPSHOT_REBUILDS: AtomicUsize = AtomicUsize::new(0);
     static CONSTANT_RESOLUTION_ROUNDS: AtomicUsize = AtomicUsize::new(0);
     static BOUNDED_EXPRESSION_TOKEN_COPIES: AtomicUsize = AtomicUsize::new(0);
     static BOUNDED_EXPRESSION_TOKENS_COPIED_TOTAL: AtomicUsize = AtomicUsize::new(0);
@@ -50,7 +48,6 @@ mod detailed {
         let scope_contexts_created = counter_value(AstCounter::ScopeContextsCreated);
         let scope_local_declarations_cloned_total =
             counter_value(AstCounter::ScopeLocalDeclarationsClonedTotal);
-        let declaration_snapshot_rebuilds = counter_value(AstCounter::DeclarationSnapshotRebuilds);
         let constant_resolution_rounds = counter_value(AstCounter::ConstantResolutionRounds);
         let bounded_expression_token_copies =
             counter_value(AstCounter::BoundedExpressionTokenCopies);
@@ -70,10 +67,6 @@ mod detailed {
         saying::say!(
             "  scope local declarations cloned total = ",
             Dark Green scope_local_declarations_cloned_total
-        );
-        saying::say!(
-            "  declaration snapshot rebuilds = ",
-            Dark Green declaration_snapshot_rebuilds
         );
         saying::say!(
             "  constant resolution rounds = ",
@@ -98,11 +91,10 @@ mod detailed {
         );
     }
 
-    fn all_counters() -> [AstCounter; 9] {
+    fn all_counters() -> [AstCounter; 8] {
         [
             AstCounter::ScopeContextsCreated,
             AstCounter::ScopeLocalDeclarationsClonedTotal,
-            AstCounter::DeclarationSnapshotRebuilds,
             AstCounter::ConstantResolutionRounds,
             AstCounter::BoundedExpressionTokenCopies,
             AstCounter::BoundedExpressionTokensCopiedTotal,
@@ -116,7 +108,6 @@ mod detailed {
         match counter {
             AstCounter::ScopeContextsCreated => &SCOPE_CONTEXTS_CREATED,
             AstCounter::ScopeLocalDeclarationsClonedTotal => &SCOPE_LOCAL_DECLARATIONS_CLONED_TOTAL,
-            AstCounter::DeclarationSnapshotRebuilds => &DECLARATION_SNAPSHOT_REBUILDS,
             AstCounter::ConstantResolutionRounds => &CONSTANT_RESOLUTION_ROUNDS,
             AstCounter::BoundedExpressionTokenCopies => &BOUNDED_EXPRESSION_TOKEN_COPIES,
             AstCounter::BoundedExpressionTokensCopiedTotal => {

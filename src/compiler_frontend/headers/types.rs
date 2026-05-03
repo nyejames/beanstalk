@@ -5,7 +5,7 @@
 //! WHY: keeping these types separate from parser control flow makes the header-stage API obvious
 //! and avoids making `parse_file_headers.rs` the dumping ground for every header concern.
 
-use crate::compiler_frontend::ast::TopLevelDeclarationIndex;
+use crate::compiler_frontend::ast::TopLevelDeclarationTable;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
@@ -226,7 +226,7 @@ pub(super) struct HeaderBuildContext<'a> {
     pub warnings: &'a mut Vec<CompilerWarning>,
     pub project_path_resolver: Option<ProjectPathResolver>,
     pub path_format_config: PathStringFormatConfig,
-    pub visible_constant_placeholders: Rc<TopLevelDeclarationIndex>,
+    pub visible_constant_placeholders: Rc<TopLevelDeclarationTable>,
     pub source_file: &'a InternedPath,
     pub file_imports: &'a HashSet<InternedPath>,
     pub file_import_entries: &'a [FileImport],

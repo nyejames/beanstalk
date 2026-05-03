@@ -14,9 +14,7 @@ use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::function_body_to_ast;
 use crate::compiler_frontend::ast::module_ast::build_context::AstPhaseContext;
 use crate::compiler_frontend::ast::module_ast::environment::AstModuleEnvironment;
-use crate::compiler_frontend::ast::module_ast::scope_context::{
-    ContextKind, ScopeContext, TopLevelDeclarationIndex,
-};
+use crate::compiler_frontend::ast::module_ast::scope_context::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnSlot,
 };
@@ -32,7 +30,6 @@ use crate::compiler_frontend::symbols::string_interning::StringId;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::projects::settings;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
-use crate::timer_log;
 use rustc_hash::FxHashMap;
 use std::rc::Rc;
 
@@ -40,6 +37,7 @@ use std::rc::Rc;
 use crate::compiler_frontend::compiler_messages::compiler_dev_logging::log_aggregated_duration;
 #[cfg(feature = "detailed_timers")]
 use std::time::Duration;
+#[cfg(feature = "detailed_timers")]
 use std::time::Instant;
 
 pub(in crate::compiler_frontend::ast) struct AstEmission {
@@ -78,18 +76,9 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
         sorted_headers: Vec<Header>,
         string_table: &mut StringTable,
     ) -> Result<AstEmission, CompilerMessages> {
-        // Build the shared top-level declaration store once, after passes 3–4 have
-        // fully resolved all declarations. Every function and start body clones only
-        // the Rc pointer, not declaration data.
-        let declaration_index_start = Instant::now();
-        let top_level_declarations = Rc::new(TopLevelDeclarationIndex::new(
-            self.environment.declarations.clone(),
-        ));
-        timer_log!(
-            declaration_index_start,
-            "AST/node emission/top-level declaration index built in: "
-        );
-        let _ = declaration_index_start;
+        // The environment owns the single resolved declaration table. Body contexts clone only
+        // the Rc pointer so declaration metadata is not rebuilt during emission.
+        let top_level_declarations = Rc::clone(&self.environment.declaration_table);
 
         let resolved_type_aliases = Rc::new(self.environment.resolved_type_aliases_by_path.clone());
         let generic_declarations = Rc::new(

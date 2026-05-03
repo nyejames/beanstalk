@@ -7,6 +7,7 @@
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration};
 use crate::compiler_frontend::ast::import_bindings::FileImportBindings;
 use crate::compiler_frontend::ast::module_ast::build_context::AstPhaseContext;
+use crate::compiler_frontend::ast::module_ast::environment::TopLevelDeclarationTable;
 use crate::compiler_frontend::ast::module_ast::scope_context::ReceiverMethodCatalog;
 use crate::compiler_frontend::ast::type_resolution::ResolvedFunctionSignature;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
@@ -29,7 +30,7 @@ pub(in crate::compiler_frontend::ast) struct AstModuleEnvironment {
     pub(in crate::compiler_frontend::ast) file_import_bindings:
         FxHashMap<InternedPath, FileImportBindings>,
     pub(in crate::compiler_frontend::ast) warnings: Vec<CompilerWarning>,
-    pub(in crate::compiler_frontend::ast) declarations: Vec<Declaration>,
+    pub(in crate::compiler_frontend::ast) declaration_table: Rc<TopLevelDeclarationTable>,
     pub(in crate::compiler_frontend::ast) module_constants: Vec<Declaration>,
     pub(in crate::compiler_frontend::ast) rendered_path_usages: Rc<RefCell<Vec<RenderedPathUsage>>>,
     pub(in crate::compiler_frontend::ast) builtin_struct_ast_nodes: Vec<AstNode>,
@@ -52,7 +53,7 @@ pub(in crate::compiler_frontend::ast) struct AstModuleEnvironmentBuilder<'contex
 
     // Mutable environment-building state.
     pub(in crate::compiler_frontend::ast) warnings: Vec<CompilerWarning>,
-    pub(in crate::compiler_frontend::ast) declarations: Vec<Declaration>,
+    pub(in crate::compiler_frontend::ast) declaration_table: Rc<TopLevelDeclarationTable>,
     pub(in crate::compiler_frontend::ast) module_constants: Vec<Declaration>,
     pub(in crate::compiler_frontend::ast) rendered_path_usages: Rc<RefCell<Vec<RenderedPathUsage>>>,
     pub(in crate::compiler_frontend::ast) builtin_struct_ast_nodes: Vec<AstNode>,
@@ -83,7 +84,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             context,
             module_symbols,
             warnings: Vec::new(),
-            declarations,
+            declaration_table: Rc::new(TopLevelDeclarationTable::new(declarations)),
             module_constants: Vec::new(),
             rendered_path_usages: Rc::new(RefCell::new(Vec::new())),
             builtin_struct_ast_nodes,
@@ -149,7 +150,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             module_symbols: self.module_symbols,
             file_import_bindings,
             warnings: self.warnings,
-            declarations: self.declarations,
+            declaration_table: self.declaration_table,
             module_constants: self.module_constants,
             rendered_path_usages: self.rendered_path_usages,
             builtin_struct_ast_nodes: self.builtin_struct_ast_nodes,
@@ -165,18 +166,27 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         &mut self,
         declaration: Declaration,
     ) -> Result<(), CompilerError> {
-        let Some(existing) = self
-            .declarations
-            .iter_mut()
-            .find(|candidate| candidate.id == declaration.id)
-        else {
+        if self
+            .declaration_table_mut()?
+            .replace_by_path(declaration)
+            .is_none()
+        {
             return Err(CompilerError::compiler_error(
                 "Resolved top-level declaration was not registered before AST resolution.",
             ));
-        };
+        }
 
-        *existing = declaration;
         Ok(())
+    }
+
+    pub(in crate::compiler_frontend::ast) fn declaration_table_mut(
+        &mut self,
+    ) -> Result<&mut TopLevelDeclarationTable, CompilerError> {
+        Rc::get_mut(&mut self.declaration_table).ok_or_else(|| {
+            CompilerError::compiler_error(
+                "AST declaration table was still shared while environment construction tried to mutate it.",
+            )
+        })
     }
 
     pub(in crate::compiler_frontend::ast) fn error_messages(

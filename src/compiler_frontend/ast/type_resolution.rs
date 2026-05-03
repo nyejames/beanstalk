@@ -9,7 +9,7 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnSlot,
 };
-use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationIndex};
+use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationTable};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::generics::{
     GenericBaseType, GenericParameterList, GenericParameterScope, TypeParameterId,
@@ -36,20 +36,6 @@ pub(crate) struct ResolvedFunctionSignature {
     pub(crate) signature: FunctionSignature,
 }
 
-fn visible_declaration_by_name<'a>(
-    declarations: &'a [Declaration],
-    visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
-    name: StringId,
-) -> Option<&'a Declaration> {
-    declarations.iter().find(|declaration| {
-        declaration.id.name() == Some(name)
-            && match visible_declaration_ids {
-                Some(visible) => visible.contains(&declaration.id),
-                None => true,
-            }
-    })
-}
-
 /// Resolve a declaration type with the shared type-resolution context.
 pub(crate) fn resolve_named_signature_type(
     data_type: &DataType,
@@ -65,7 +51,7 @@ pub(crate) fn build_generic_parameter_scope(
     visible_source_bindings: &FxHashMap<StringId, InternedPath>,
     visible_type_aliases: &FxHashMap<StringId, InternedPath>,
     visible_external_symbols: &FxHashMap<StringId, ExternalSymbolId>,
-    declarations: &[Declaration],
+    declaration_table: &TopLevelDeclarationTable,
     generic_declarations_by_path: &FxHashMap<InternedPath, GenericDeclarationMetadata>,
     string_table: &StringTable,
 ) -> Result<Option<GenericParameterScope>, CompilerError> {
@@ -83,7 +69,7 @@ pub(crate) fn build_generic_parameter_scope(
     }
 
     for (name, path) in visible_source_bindings {
-        if path_is_visible_type(path, declarations, generic_declarations_by_path) {
+        if path_is_visible_type(path, declaration_table, generic_declarations_by_path) {
             forbidden_names.insert(*name);
         }
     }
@@ -99,7 +85,7 @@ pub(crate) fn build_generic_parameter_scope(
 
 fn path_is_visible_type(
     path: &InternedPath,
-    declarations: &[Declaration],
+    declaration_table: &TopLevelDeclarationTable,
     generic_declarations_by_path: &FxHashMap<InternedPath, GenericDeclarationMetadata>,
 ) -> bool {
     if let Some(metadata) = generic_declarations_by_path.get(path) {
@@ -111,9 +97,8 @@ fn path_is_visible_type(
         );
     }
 
-    declarations
-        .iter()
-        .find(|declaration| declaration.id == *path)
+    declaration_table
+        .get_by_path(path)
         .is_some_and(|declaration| {
             matches!(
                 declaration.value.data_type,
@@ -303,9 +288,8 @@ pub(crate) fn resolve_function_signature(
     let this_name = string_table.intern("this");
     let function_name = function_path.name_str(string_table).unwrap_or("<function>");
     let function_location = type_resolution_context
-        .declarations
-        .iter()
-        .find(|declaration| declaration.id == *function_path)
+        .declaration_table
+        .get_by_path(function_path)
         .map(|declaration| declaration.value.location.clone())
         .unwrap_or_default();
 
@@ -463,7 +447,7 @@ pub(crate) fn resolve_struct_field_types(
         )?;
         resolved_field.value = inline_visible_constant_references(
             &resolved_field.value,
-            type_resolution_context.declarations,
+            type_resolution_context.declaration_table,
             type_resolution_context.visible_declaration_ids,
             string_table,
         )?;
@@ -561,13 +545,13 @@ pub(crate) fn resolve_choice_variant_payload_types(
 
 fn inline_visible_constant_references(
     expression: &Expression,
-    declarations: &[Declaration],
+    declaration_table: &Rc<TopLevelDeclarationTable>,
     visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
     string_table: &mut StringTable,
 ) -> Result<Expression, CompilerError> {
     inline_visible_constant_references_impl(
         expression,
-        declarations,
+        declaration_table,
         visible_declaration_ids,
         string_table,
     )
@@ -575,30 +559,19 @@ fn inline_visible_constant_references(
 
 fn inline_visible_constant_references_impl(
     expression: &Expression,
-    declarations: &[Declaration],
+    declaration_table: &Rc<TopLevelDeclarationTable>,
     visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
     string_table: &mut StringTable,
 ) -> Result<Expression, CompilerError> {
     match &expression.kind {
-        ExpressionKind::Reference(path) => Ok(declarations
-            .iter()
-            .find(|declaration| {
-                declaration.id == *path
-                    && !declaration.is_unresolved_constant_placeholder()
-                    && declaration.value.is_compile_time_constant()
-                    && match visible_declaration_ids {
-                        Some(visible) => visible.contains(&declaration.id),
-                        None => true,
-                    }
-            })
+        ExpressionKind::Reference(path) => Ok(declaration_table
+            .get_visible_resolved_by_path(path, visible_declaration_ids)
+            .filter(|declaration| declaration.value.is_compile_time_constant())
             .or_else(|| {
                 path.name().and_then(|name| {
-                    visible_declaration_by_name(declarations, visible_declaration_ids, name).filter(
-                        |declaration| {
-                            !declaration.is_unresolved_constant_placeholder()
-                                && declaration.value.is_compile_time_constant()
-                        },
-                    )
+                    declaration_table
+                        .get_visible_resolved_by_name(name, visible_declaration_ids)
+                        .filter(|declaration| declaration.value.is_compile_time_constant())
                 })
             })
             .map(|declaration| {
@@ -612,7 +585,7 @@ fn inline_visible_constant_references_impl(
             for node in nodes {
                 rewritten_nodes.push(inline_visible_constant_references_in_node(
                     node,
-                    declarations,
+                    declaration_table,
                     visible_declaration_ids,
                     string_table,
                 )?);
@@ -622,7 +595,7 @@ fn inline_visible_constant_references_impl(
             let mut evaluation_context = ScopeContext::new(
                 ContextKind::ConstantHeader,
                 expression.location.scope.to_owned(),
-                Rc::new(TopLevelDeclarationIndex::new(declarations.to_vec())),
+                Rc::clone(declaration_table),
                 ExternalPackageRegistry::new(),
                 Vec::new(),
             );
@@ -652,7 +625,7 @@ fn inline_visible_constant_references_impl(
             for item in items {
                 resolved_items.push(inline_visible_constant_references_impl(
                     item,
-                    declarations,
+                    declaration_table,
                     visible_declaration_ids,
                     string_table,
                 )?);
@@ -671,7 +644,7 @@ fn inline_visible_constant_references_impl(
                     id: field.id.to_owned(),
                     value: inline_visible_constant_references_impl(
                         &field.value,
-                        declarations,
+                        declaration_table,
                         visible_declaration_ids,
                         string_table,
                     )?,
@@ -688,13 +661,13 @@ fn inline_visible_constant_references_impl(
             ExpressionKind::Range(
                 Box::new(inline_visible_constant_references(
                     start,
-                    declarations,
+                    declaration_table,
                     visible_declaration_ids,
                     string_table,
                 )?),
                 Box::new(inline_visible_constant_references(
                     end,
-                    declarations,
+                    declaration_table,
                     visible_declaration_ids,
                     string_table,
                 )?),
@@ -708,7 +681,7 @@ fn inline_visible_constant_references_impl(
                 variant: *variant,
                 value: Box::new(inline_visible_constant_references(
                     value,
-                    declarations,
+                    declaration_table,
                     visible_declaration_ids,
                     string_table,
                 )?),
@@ -721,7 +694,7 @@ fn inline_visible_constant_references_impl(
             ExpressionKind::Coerced {
                 value: Box::new(inline_visible_constant_references(
                     value,
-                    declarations,
+                    declaration_table,
                     visible_declaration_ids,
                     string_table,
                 )?),
@@ -737,7 +710,7 @@ fn inline_visible_constant_references_impl(
 
 fn inline_visible_constant_references_in_node(
     node: &AstNode,
-    declarations: &[Declaration],
+    declaration_table: &Rc<TopLevelDeclarationTable>,
     visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
     string_table: &mut StringTable,
 ) -> Result<AstNode, CompilerError> {
@@ -745,7 +718,7 @@ fn inline_visible_constant_references_in_node(
     rewritten.kind = match &node.kind {
         NodeKind::Rvalue(expression) => NodeKind::Rvalue(inline_visible_constant_references_impl(
             expression,
-            declarations,
+            declaration_table,
             visible_declaration_ids,
             string_table,
         )?),
@@ -753,7 +726,7 @@ fn inline_visible_constant_references_in_node(
             id: declaration.id.to_owned(),
             value: inline_visible_constant_references_impl(
                 &declaration.value,
-                declarations,
+                declaration_table,
                 visible_declaration_ids,
                 string_table,
             )?,

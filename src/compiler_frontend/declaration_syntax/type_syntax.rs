@@ -17,6 +17,7 @@
 //! - expression typing/coercion policy
 //! - call-site/feature-specific diagnostic framing outside type syntax itself
 
+use crate::compiler_frontend::ast::TopLevelDeclarationTable;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::statements::functions::FunctionReturn;
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -39,6 +40,7 @@ use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable}
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
 use crate::return_syntax_error;
 use rustc_hash::{FxHashMap, FxHashSet};
+use std::rc::Rc;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum TypeAnnotationContext {
@@ -640,7 +642,7 @@ fn compilation_stage(context: TypeAnnotationContext) -> &'static str {
 }
 
 pub(crate) struct TypeResolutionContext<'a> {
-    pub declarations: &'a [Declaration],
+    pub declaration_table: &'a Rc<TopLevelDeclarationTable>,
     pub visible_declaration_ids: Option<&'a FxHashSet<InternedPath>>,
     pub visible_external_symbols: Option<&'a FxHashMap<StringId, ExternalSymbolId>>,
     pub visible_source_bindings: Option<&'a FxHashMap<StringId, InternedPath>>,
@@ -657,7 +659,7 @@ pub(crate) struct TypeResolutionContext<'a> {
 }
 
 pub(crate) struct TypeResolutionContextInputs<'a> {
-    pub declarations: &'a [Declaration],
+    pub declaration_table: &'a Rc<TopLevelDeclarationTable>,
     pub visible_declaration_ids: Option<&'a FxHashSet<InternedPath>>,
     pub visible_external_symbols: Option<&'a FxHashMap<StringId, ExternalSymbolId>>,
     pub visible_source_bindings: Option<&'a FxHashMap<StringId, InternedPath>>,
@@ -671,9 +673,11 @@ pub(crate) struct TypeResolutionContextInputs<'a> {
 
 impl<'a> TypeResolutionContext<'a> {
     #[cfg(test)]
-    pub(crate) fn from_declarations(declarations: &'a [Declaration]) -> Self {
+    pub(crate) fn from_declaration_table(
+        declaration_table: &'a Rc<TopLevelDeclarationTable>,
+    ) -> Self {
         Self {
-            declarations,
+            declaration_table,
             visible_declaration_ids: None,
             visible_external_symbols: None,
             visible_source_bindings: None,
@@ -688,7 +692,7 @@ impl<'a> TypeResolutionContext<'a> {
 
     pub(crate) fn from_inputs(inputs: TypeResolutionContextInputs<'a>) -> Self {
         Self {
-            declarations: inputs.declarations,
+            declaration_table: inputs.declaration_table,
             visible_declaration_ids: inputs.visible_declaration_ids,
             visible_external_symbols: inputs.visible_external_symbols,
             visible_source_bindings: inputs.visible_source_bindings,
@@ -1048,10 +1052,13 @@ fn instantiate_generic_nominal(
             }
         }
         GenericDeclarationKind::Choice => {
-            let template_declaration = context.declarations.iter().find(|declaration| {
-                &declaration.id == base_path
-                    && matches!(declaration.value.data_type, DataType::Choices { .. })
-            });
+            let template_declaration =
+                context
+                    .declaration_table
+                    .get_by_path(base_path)
+                    .filter(|declaration| {
+                        matches!(declaration.value.data_type, DataType::Choices { .. })
+                    });
             let Some(template_declaration) = template_declaration else {
                 // Template not yet available (e.g. recursive generic type during its own
                 // resolution). Fall back to GenericInstance so the caller can reject it
@@ -1151,7 +1158,7 @@ fn resolve_named_type_from_context(
     if let Some(visible_source_bindings) = context.visible_source_bindings
         && let Some(canonical_path) = visible_source_bindings.get(&type_name)
         && let Some(declaration) = resolve_declaration_by_path(
-            context.declarations,
+            context.declaration_table,
             context.visible_declaration_ids,
             canonical_path,
         )
@@ -1161,7 +1168,7 @@ fn resolve_named_type_from_context(
     }
 
     if let Some(declaration) = visible_declaration_by_name(
-        context.declarations,
+        context.declaration_table,
         context.visible_declaration_ids,
         type_name,
     ) {
@@ -1225,7 +1232,7 @@ fn resolve_generic_base_type(
             }
 
             if let Some(declaration) = visible_declaration_by_name(
-                context.declarations,
+                context.declaration_table,
                 context.visible_declaration_ids,
                 *type_name,
             ) {
@@ -1385,33 +1392,19 @@ fn reject_bare_generic_type_name(
 }
 
 fn resolve_declaration_by_path<'a>(
-    declarations: &'a [Declaration],
+    declaration_table: &'a TopLevelDeclarationTable,
     visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
     canonical_path: &InternedPath,
 ) -> Option<&'a Declaration> {
-    declarations.iter().find(|declaration| {
-        &declaration.id == canonical_path
-            && !declaration.is_unresolved_constant_placeholder()
-            && match visible_declaration_ids {
-                Some(visible) => visible.contains(&declaration.id),
-                None => true,
-            }
-    })
+    declaration_table.get_visible_resolved_by_path(canonical_path, visible_declaration_ids)
 }
 
 fn visible_declaration_by_name<'a>(
-    declarations: &'a [Declaration],
+    declaration_table: &'a TopLevelDeclarationTable,
     visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
     name: StringId,
 ) -> Option<&'a Declaration> {
-    declarations.iter().find(|declaration| {
-        declaration.id.name() == Some(name)
-            && !declaration.is_unresolved_constant_placeholder()
-            && match visible_declaration_ids {
-                Some(visible) => visible.contains(&declaration.id),
-                None => true,
-            }
-    })
+    declaration_table.get_visible_resolved_by_name(name, visible_declaration_ids)
 }
 
 fn builtin_named_type(type_name: StringId, string_table: &StringTable) -> Option<DataType> {

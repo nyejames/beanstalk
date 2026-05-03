@@ -668,6 +668,37 @@ fn deferred_constant_resolution_struct_literal_reference() {
     );
 }
 
+#[test]
+fn choice_definitions_are_collected_once() {
+    // WHAT: a resolved choice declaration should appear once in the AST/HIR handoff metadata.
+    // WHY: phase 3 stores placeholders and resolved declarations in one stable table instead of
+    // appending later resolved copies that finalization must dedupe.
+    let mut project = FrontendProject::new(
+        &[("src/#page.bst", "Status :: Ready,\nBusy,\n;\n")],
+        "src/#page.bst",
+        StyleDirectiveRegistry::built_ins(),
+    );
+
+    let ast = project.ast();
+    let status_definitions = ast
+        .choice_definitions
+        .iter()
+        .filter(|definition| {
+            definition
+                .nominal_path
+                .name_str(&project.frontend.string_table)
+                == Some("Status")
+        })
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        status_definitions.len(),
+        1,
+        "Status should be collected exactly once"
+    );
+    assert_eq!(status_definitions[0].variants.len(), 2);
+}
+
 // -----------------------------------------------------------------------------
 // Struct field default value regression tests
 // -----------------------------------------------------------------------------

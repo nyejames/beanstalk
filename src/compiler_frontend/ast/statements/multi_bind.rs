@@ -527,7 +527,7 @@ fn resolve_target_explicit_type(
     }
 
     let type_resolution_context = TypeResolutionContext::from_inputs(TypeResolutionContextInputs {
-        declarations: context.top_level_declarations.declarations(),
+        declaration_table: &context.top_level_declarations,
         visible_declaration_ids: context.visible_declaration_ids.as_ref(),
         visible_external_symbols: context.visible_external_symbols.as_ref(),
         visible_source_bindings: context.visible_source_bindings.as_ref(),

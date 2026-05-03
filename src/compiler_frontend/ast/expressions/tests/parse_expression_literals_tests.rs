@@ -6,7 +6,7 @@
 //!      prevents silent changes to literal type inference.
 
 use super::*;
-use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationIndex};
+use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationTable};
 use crate::compiler_frontend::compiler_errors::{ErrorMetaDataKey, ErrorType};
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
@@ -23,7 +23,7 @@ fn parse_literal_expression_rejects_int_negation_overflow() {
     let context = ScopeContext::new(
         ContextKind::Expression,
         scope.clone(),
-        Rc::new(TopLevelDeclarationIndex::new(vec![])),
+        Rc::new(TopLevelDeclarationTable::new(vec![])),
         ExternalPackageRegistry::new(),
         vec![],
     );

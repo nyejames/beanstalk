@@ -7,7 +7,7 @@ use crate::compiler_frontend::ast::templates::template_head_parser::directive_ar
     parse_optional_slot_target_argument, parse_required_slot_name_argument,
 };
 use crate::compiler_frontend::ast::templates::template_types::Template;
-use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationIndex};
+use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationTable};
 use crate::compiler_frontend::compiler_errors::SourceLocation;
 
 // Internal schema helpers are tested here because they drive composition
@@ -59,7 +59,7 @@ fn test_constant_context(scope: InternedPath) -> ScopeContext {
     ScopeContext::new(
         ContextKind::Constant,
         scope.clone(),
-        Rc::new(TopLevelDeclarationIndex::new(vec![])),
+        Rc::new(TopLevelDeclarationTable::new(vec![])),
         ExternalPackageRegistry::default(),
         vec![],
     )

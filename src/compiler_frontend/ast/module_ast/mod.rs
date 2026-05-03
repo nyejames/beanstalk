@@ -32,6 +32,10 @@ pub(crate) use scope_context::{ReceiverMethodCatalog, ReceiverMethodEntry};
 mod module_ast_receiver_method_tests;
 
 #[cfg(test)]
+#[path = "../tests/declaration_table_tests.rs"]
+mod declaration_table_tests;
+
+#[cfg(test)]
 #[path = "../tests/choice_expression_tests.rs"]
 mod choice_expression_tests;
 

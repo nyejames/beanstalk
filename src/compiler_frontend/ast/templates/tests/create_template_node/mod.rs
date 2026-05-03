@@ -3,7 +3,7 @@ use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::templates::template::{TemplateAtom, TemplateSegment};
 use crate::compiler_frontend::ast::templates::template_render_plan::RenderPiece;
-use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationIndex};
+use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationTable};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::WarningKind;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
@@ -129,7 +129,7 @@ fn new_constant_context_with_style_directives(
         ScopeContext::new(
             ContextKind::Constant,
             scope.to_owned(),
-            Rc::new(TopLevelDeclarationIndex::new(vec![])),
+            Rc::new(TopLevelDeclarationTable::new(vec![])),
             ExternalPackageRegistry::default(),
             vec![],
         ),
@@ -186,7 +186,7 @@ fn runtime_template_context_with_style_directives(
         ScopeContext::new(
             ContextKind::Template,
             scope.to_owned(),
-            Rc::new(TopLevelDeclarationIndex::new(vec![declaration])),
+            Rc::new(TopLevelDeclarationTable::new(vec![declaration])),
             ExternalPackageRegistry::default(),
             vec![],
         ),
@@ -209,7 +209,7 @@ fn constant_template_context_with_style_directives(
         ScopeContext::new(
             ContextKind::Constant,
             scope.to_owned(),
-            Rc::new(TopLevelDeclarationIndex::new(declarations.to_vec())),
+            Rc::new(TopLevelDeclarationTable::new(declarations.to_vec())),
             ExternalPackageRegistry::default(),
             vec![],
         ),

@@ -11,7 +11,6 @@ use crate::compiler_frontend::ast::import_bindings::{
     ConstantHeaderParseContext, FileImportBindings, parse_constant_header_declaration,
 };
 use crate::compiler_frontend::ast::instrumentation::{AstCounter, increment_ast_counter};
-use crate::compiler_frontend::ast::module_ast::scope_context::TopLevelDeclarationIndex;
 use crate::compiler_frontend::ast::type_resolution::{
     build_generic_parameter_scope, collect_type_parameter_ids_from_choice_variants,
     collect_type_parameter_ids_from_declarations, resolve_choice_variant_payload_types,
@@ -72,14 +71,14 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 &bindings.visible_source_bindings,
                 &bindings.visible_type_aliases,
                 &bindings.visible_external_symbols,
-                &self.declarations,
+                self.declaration_table.as_ref(),
                 &self.module_symbols.generic_declarations_by_path,
                 string_table,
             )
             .map_err(|error| self.error_messages(error, string_table))?;
             let type_resolution_context =
                 TypeResolutionContext::from_inputs(TypeResolutionContextInputs {
-                    declarations: &self.declarations,
+                    declaration_table: &self.declaration_table,
                     visible_declaration_ids: Some(&bindings.visible_symbol_paths),
                     visible_external_symbols: Some(&bindings.visible_external_symbols),
                     visible_source_bindings: Some(&bindings.visible_source_bindings),
@@ -168,14 +167,14 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 &bindings.visible_source_bindings,
                 &bindings.visible_type_aliases,
                 &bindings.visible_external_symbols,
-                &self.declarations,
+                self.declaration_table.as_ref(),
                 &self.module_symbols.generic_declarations_by_path,
                 string_table,
             )
             .map_err(|error| self.error_messages(error, string_table))?;
             let type_resolution_context =
                 TypeResolutionContext::from_inputs(TypeResolutionContextInputs {
-                    declarations: &self.declarations,
+                    declaration_table: &self.declaration_table,
                     visible_declaration_ids: Some(&bindings.visible_symbol_paths),
                     visible_external_symbols: Some(&bindings.visible_external_symbols),
                     visible_source_bindings: Some(&bindings.visible_source_bindings),
@@ -272,8 +271,6 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         let mut total_rounds = 0usize;
         let mut total_headers_attempted = 0usize;
         let mut total_deferred_headers = 0usize;
-        let mut total_snapshot_rebuilds = 0usize;
-
         let constant_header_paths = sorted_headers
             .iter()
             .filter(|header| matches!(header.kind, HeaderKind::Constant { .. }))
@@ -298,19 +295,8 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 increment_ast_counter(AstCounter::ConstantResolutionRounds);
                 total_headers_attempted += pending_headers.len();
 
-                // Reuse one declaration snapshot for deferred attempts in this round.
-                // Refresh only after successful resolutions so later constants can see
-                // newly-resolved declarations without cloning on every deferred header.
-                let mut declarations_snapshot =
-                    Rc::new(TopLevelDeclarationIndex::new(self.declarations.clone()));
-                let mut round_snapshot_rebuilds = 1usize;
-                increment_ast_counter(AstCounter::DeclarationSnapshotRebuilds);
-                let mut unresolved_constant_paths = declarations_snapshot
-                    .declarations()
-                    .iter()
-                    .filter(|declaration| declaration.is_unresolved_constant_placeholder())
-                    .map(|declaration| declaration.id.to_owned())
-                    .collect::<FxHashSet<_>>();
+                let mut unresolved_constant_paths =
+                    self.declaration_table.unresolved_constant_paths();
                 let mut deferred_headers = Vec::new();
                 let mut deferred_error = None;
                 let mut made_progress = false;
@@ -338,7 +324,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                     match parse_constant_header_declaration(
                         header,
                         ConstantHeaderParseContext {
-                            top_level_declarations: Rc::clone(&declarations_snapshot),
+                            top_level_declarations: Rc::clone(&self.declaration_table),
                             visible_declaration_ids: visible_symbol_paths,
                             visible_external_symbols,
                             visible_source_bindings,
@@ -360,16 +346,8 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                             self.replace_declaration(declaration.clone())
                                 .map_err(|error| self.error_messages(error, string_table))?;
                             self.module_constants.push(declaration);
-                            declarations_snapshot =
-                                Rc::new(TopLevelDeclarationIndex::new(self.declarations.clone()));
-                            round_snapshot_rebuilds += 1;
-                            increment_ast_counter(AstCounter::DeclarationSnapshotRebuilds);
-                            unresolved_constant_paths = declarations_snapshot
-                                .declarations()
-                                .iter()
-                                .filter(|resolved| resolved.is_unresolved_constant_placeholder())
-                                .map(|resolved| resolved.id.to_owned())
-                                .collect::<FxHashSet<_>>();
+                            unresolved_constant_paths =
+                                self.declaration_table.unresolved_constant_paths();
                             made_progress = true;
                         }
                         Err(error)
@@ -389,7 +367,6 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                     }
                 }
 
-                total_snapshot_rebuilds += round_snapshot_rebuilds;
                 total_deferred_headers += deferred_headers.len();
 
                 if !made_progress {
@@ -417,8 +394,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         saying::say!(
             "AST/type resolution/constants deferred summary: \n rounds = ", Dark Green total_rounds,
             Reset "\n headers attempted = ", Dark Green total_headers_attempted,
-            Reset "\n headers deferred = ", Dark Green total_deferred_headers,
-            Reset "\n declaration snapshot rebuilds = ", Dark Green total_snapshot_rebuilds
+            Reset "\n headers deferred = ", Dark Green total_deferred_headers
         );
 
         resolution_result

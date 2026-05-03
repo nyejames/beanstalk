@@ -8,7 +8,7 @@
 use super::*;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::Operator;
-use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationIndex};
+use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationTable};
 use crate::compiler_frontend::compiler_errors::{ErrorMetaDataKey, ErrorType};
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
@@ -60,7 +60,7 @@ fn ordinary_expression_rejects_path_string_concatenation() {
     let context = ScopeContext::new(
         ContextKind::Template,
         source_scope.clone(),
-        Rc::new(TopLevelDeclarationIndex::new(vec![])),
+        Rc::new(TopLevelDeclarationTable::new(vec![])),
         ExternalPackageRegistry::new(),
         vec![],
     )

@@ -68,14 +68,14 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 &bindings.visible_source_bindings,
                 &bindings.visible_type_aliases,
                 &bindings.visible_external_symbols,
-                &self.declarations,
+                self.declaration_table.as_ref(),
                 &self.module_symbols.generic_declarations_by_path,
                 string_table,
             )
             .map_err(|error| self.error_messages(error, string_table))?;
             let type_resolution_context =
                 TypeResolutionContext::from_inputs(TypeResolutionContextInputs {
-                    declarations: &self.declarations,
+                    declaration_table: &self.declaration_table,
                     visible_declaration_ids: Some(&bindings.visible_symbol_paths),
                     visible_external_symbols: Some(&bindings.visible_external_symbols),
                     visible_source_bindings: Some(&bindings.visible_source_bindings),
@@ -115,23 +115,25 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             )
             .map_err(|error| self.error_messages(error, string_table))?;
 
-            let Some(function_declaration) = self
-                .declarations
-                .iter_mut()
-                .find(|declaration| declaration.id == header.tokens.src_path)
-            else {
-                return Err(self.error_messages(
-                    CompilerError::compiler_error(
-                        "Function declaration was not registered before AST signature resolution.",
-                    ),
-                    string_table,
-                ));
+            let update_result = match self.declaration_table_mut() {
+                Ok(table) => {
+                    if let Some(function_declaration) =
+                        table.get_mut_by_path(&header.tokens.src_path)
+                    {
+                        function_declaration.value.data_type = DataType::Function(
+                            Box::new(resolved_signature.receiver.to_owned()),
+                            resolved_signature.signature.to_owned(),
+                        );
+                        Ok(())
+                    } else {
+                        Err(CompilerError::compiler_error(
+                            "Function declaration was not registered before AST signature resolution.",
+                        ))
+                    }
+                }
+                Err(error) => Err(error),
             };
-
-            function_declaration.value.data_type = DataType::Function(
-                Box::new(resolved_signature.receiver.to_owned()),
-                resolved_signature.signature.to_owned(),
-            );
+            update_result.map_err(|error| self.error_messages(error, string_table))?;
             self.resolved_function_signatures_by_path
                 .insert(header.tokens.src_path.to_owned(), resolved_signature);
             #[cfg(feature = "detailed_timers")]

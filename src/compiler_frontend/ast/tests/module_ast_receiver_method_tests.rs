@@ -5,7 +5,8 @@
 //! WHY: receiver methods bridge user-defined behavior to builtin types; catalog drift breaks
 //!      both call resolution and backend lowering.
 
-use super::scope_context::{ContextKind, ScopeContext, TopLevelDeclarationIndex};
+use super::environment::TopLevelDeclarationTable;
+use super::scope_context::{ContextKind, ScopeContext};
 use super::*;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
@@ -50,7 +51,7 @@ fn context_for_source_file(
     ScopeContext::new(
         ContextKind::Function,
         InternedPath::new(),
-        Rc::new(TopLevelDeclarationIndex::new(vec![])),
+        Rc::new(TopLevelDeclarationTable::new(vec![])),
         ExternalPackageRegistry::new(),
         vec![],
     )

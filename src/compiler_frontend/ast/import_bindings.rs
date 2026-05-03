@@ -31,7 +31,7 @@ use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::declarations::resolve_declaration_syntax;
 use crate::compiler_frontend::ast::templates::template::TemplateAtom;
-use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationIndex};
+use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationTable};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_errors::ErrorMetaDataKey;
 use crate::compiler_frontend::compiler_messages::source_location::SourceLocation;
@@ -988,7 +988,7 @@ enum FacadeKey {
 /// WHY: Grouping these parameters keeps the resolver call sites explicit while avoiding
 /// overly-wide function signatures that are harder to maintain.
 pub(crate) struct ConstantHeaderParseContext<'a> {
-    pub top_level_declarations: Rc<TopLevelDeclarationIndex>,
+    pub top_level_declarations: Rc<TopLevelDeclarationTable>,
     pub visible_declaration_ids: &'a FxHashSet<InternedPath>,
     pub visible_external_symbols: &'a FxHashMap<StringId, ExternalSymbolId>,
     pub visible_source_bindings: &'a FxHashMap<StringId, InternedPath>,

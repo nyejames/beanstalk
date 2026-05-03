@@ -2,7 +2,7 @@ use super::*;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::templates::template::TemplateType;
-use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationIndex};
+use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationTable};
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -419,7 +419,7 @@ fn fills_nested_slots_for_runtime_wrappers() {
     let wrapper_context = ScopeContext::new(
         ContextKind::Template,
         scope.to_owned(),
-        Rc::new(TopLevelDeclarationIndex::new(vec![
+        Rc::new(TopLevelDeclarationTable::new(vec![
             value_declaration.to_owned(),
         ])),
         ExternalPackageRegistry::default(),
@@ -446,7 +446,7 @@ fn fills_nested_slots_for_runtime_wrappers() {
     let consuming_context = ScopeContext::new(
         ContextKind::Template,
         scope,
-        Rc::new(TopLevelDeclarationIndex::new(declarations)),
+        Rc::new(TopLevelDeclarationTable::new(declarations)),
         ExternalPackageRegistry::default(),
         vec![],
     );

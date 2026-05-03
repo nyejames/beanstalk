@@ -4,6 +4,7 @@
 //! WHY: type syntax is the source of truth for frontend type identity; parser drift here
 //!      affects every downstream type check.
 
+use crate::compiler_frontend::ast::TopLevelDeclarationTable;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::datatypes::DataType;
@@ -22,6 +23,7 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
 use crate::compiler_frontend::value_mode::ValueMode;
 use rustc_hash::FxHashMap;
+use std::rc::Rc;
 
 fn stream_from_tokens(tokens: Vec<Token>, string_table: &mut StringTable) -> FileTokens {
     FileTokens::new(
@@ -271,7 +273,8 @@ fn resolves_named_types_recursively_in_composite_types() {
         ),
     }];
 
-    let resolution_context = TypeResolutionContext::from_declarations(&declarations);
+    let declaration_table = Rc::new(TopLevelDeclarationTable::new(declarations));
+    let resolution_context = TypeResolutionContext::from_declaration_table(&declaration_table);
 
     let location = SourceLocation::default();
     let resolved = resolve_type(&unresolved, &location, &resolution_context, &string_table)
@@ -305,8 +308,9 @@ fn resolves_generic_instance_base_to_canonical_nominal_path() {
     let mut generic_declarations = FxHashMap::default();
     generic_declarations.insert(box_path.to_owned(), single_parameter_metadata(t_name));
 
+    let declaration_table = Rc::new(TopLevelDeclarationTable::new(declarations));
     let resolution_context = TypeResolutionContext {
-        declarations: &declarations,
+        declaration_table: &declaration_table,
         visible_declaration_ids: None,
         visible_external_symbols: None,
         visible_source_bindings: None,
@@ -353,8 +357,9 @@ fn generic_instance_resolution_rejects_wrong_arity() {
     let mut generic_declarations = FxHashMap::default();
     generic_declarations.insert(box_path, single_parameter_metadata(t_name));
 
+    let declaration_table = Rc::new(TopLevelDeclarationTable::new(declarations));
     let resolution_context = TypeResolutionContext {
-        declarations: &declarations,
+        declaration_table: &declaration_table,
         visible_declaration_ids: None,
         visible_external_symbols: None,
         visible_source_bindings: None,
@@ -392,8 +397,9 @@ fn bare_generic_type_name_requires_type_arguments() {
     let mut generic_declarations = FxHashMap::default();
     generic_declarations.insert(box_path, single_parameter_metadata(t_name));
 
+    let declaration_table = Rc::new(TopLevelDeclarationTable::new(declarations));
     let resolution_context = TypeResolutionContext {
-        declarations: &declarations,
+        declaration_table: &declaration_table,
         visible_declaration_ids: None,
         visible_external_symbols: None,
         visible_source_bindings: None,
@@ -419,7 +425,8 @@ fn unknown_named_type_reports_consistent_error() {
 
     let unresolved = DataType::NamedType(missing);
     let location = SourceLocation::default();
-    let resolution_context = TypeResolutionContext::from_declarations(&[]);
+    let declaration_table = Rc::new(TopLevelDeclarationTable::new(vec![]));
+    let resolution_context = TypeResolutionContext::from_declaration_table(&declaration_table);
 
     let error = resolve_type(&unresolved, &location, &resolution_context, &string_table)
         .expect_err("unknown type should fail");

@@ -12,10 +12,10 @@
 //! environment is complete. `ScopeContext` owns only local scope growth (`local_declarations`,
 //! `loop_depth`, type expectations).
 //!
-//! `ScopeContext` receives cloned/copied state from the shared environment (e.g.
-//! `Rc<TopLevelDeclarationIndex>` for top-level symbols, `Rc<ReceiverMethodCatalog>` for method
-//! lookup, `ExternalPackageRegistry` clone) so body parsing is self-contained without referencing the mutable
-//! environment builder directly.
+//! `ScopeContext` receives shared state from the completed environment (for example
+//! `Rc<TopLevelDeclarationTable>` for top-level symbols and `Rc<ReceiverMethodCatalog>` for
+//! method lookup) so body parsing is self-contained without referencing the mutable environment
+//! builder directly.
 //!
 //! ## External symbol visibility
 //!
@@ -28,6 +28,7 @@ use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::instrumentation::{
     AstCounter, add_ast_counter, increment_ast_counter,
 };
+use crate::compiler_frontend::ast::module_ast::environment::TopLevelDeclarationTable;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::templates::template_folding::TemplateFoldContext;
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -74,85 +75,6 @@ fn external_abi_matches_datatype(abi_type: &ExternalAbiType, data_type: &DataTyp
 
 pub(super) static CONTROL_FLOW_SCOPE_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
-pub struct TopLevelDeclarationIndex {
-    declarations: Box<[Declaration]>,
-    by_name: FxHashMap<StringId, DeclarationBucket>,
-}
-
-enum DeclarationBucket {
-    One(u32),
-    Many(Box<[u32]>),
-}
-
-impl TopLevelDeclarationIndex {
-    pub fn new(declarations: Vec<Declaration>) -> Self {
-        let declarations: Box<[Declaration]> = declarations.into_boxed_slice();
-        let mut temp: FxHashMap<StringId, Vec<u32>> = FxHashMap::default();
-
-        for (index, declaration) in declarations.iter().enumerate() {
-            let Some(name) = declaration.id.name() else {
-                continue;
-            };
-
-            // Receiver methods already have their own catalog.
-            if matches!(
-                &declaration.value.data_type,
-                DataType::Function(receiver, _) if receiver.as_ref().is_some()
-            ) {
-                continue;
-            }
-
-            temp.entry(name).or_default().push(index as u32);
-        }
-
-        let by_name = temp
-            .into_iter()
-            .map(|(name, indices)| {
-                let bucket = match indices.as_slice() {
-                    [one] => DeclarationBucket::One(*one),
-                    _ => DeclarationBucket::Many(indices.into_boxed_slice()),
-                };
-                (name, bucket)
-            })
-            .collect();
-
-        Self {
-            declarations,
-            by_name,
-        }
-    }
-
-    pub fn declarations(&self) -> &[Declaration] {
-        &self.declarations
-    }
-
-    pub fn get_visible(
-        &self,
-        name: StringId,
-        visible: Option<&FxHashSet<InternedPath>>,
-    ) -> Option<&Declaration> {
-        let is_visible = |declaration: &Declaration| match visible {
-            Some(visible) => visible.contains(&declaration.id),
-            None => true,
-        };
-
-        match self.by_name.get(&name)? {
-            DeclarationBucket::One(index) => {
-                let declaration = &self.declarations[*index as usize];
-                is_visible(declaration).then_some(declaration)
-            }
-            DeclarationBucket::Many(indices) => indices
-                .iter()
-                .map(|index| &self.declarations[*index as usize])
-                .find(|declaration| is_visible(declaration)),
-        }
-    }
-
-    pub fn get_by_path(&self, path: &InternedPath) -> Option<&Declaration> {
-        self.declarations.iter().find(|d| d.id == *path)
-    }
-}
-
 #[derive(Clone)]
 /// Shared parser/lowering context for one active AST scope.
 pub struct ScopeContext {
@@ -161,8 +83,8 @@ pub struct ScopeContext {
     pub scope: InternedPath,
 
     // --- Declaration tables ---
-    // Shared module-wide top-level declaration store + name index.
-    pub(crate) top_level_declarations: Rc<TopLevelDeclarationIndex>,
+    // Shared module-wide top-level declaration table.
+    pub(crate) top_level_declarations: Rc<TopLevelDeclarationTable>,
     // Per-scope locals: function parameters + body-declared variables only.
     // Grows incrementally in source order via add_var(); never carries module-wide data.
     pub local_declarations: Vec<Declaration>,
@@ -271,10 +193,10 @@ fn build_local_declarations_index(declarations: &[Declaration]) -> FxHashMap<Str
 }
 
 impl ScopeContext {
-    pub fn new(
+    pub(crate) fn new(
         kind: ContextKind,
         scope: InternedPath,
-        top_level_declarations: Rc<TopLevelDeclarationIndex>,
+        top_level_declarations: Rc<TopLevelDeclarationTable>,
         external_package_registry: ExternalPackageRegistry,
         expected_result_types: Vec<DataType>,
     ) -> ScopeContext {
@@ -707,7 +629,7 @@ impl ScopeContext {
         // 3. Fallback for contexts that do not set visible_source_bindings
         // (e.g. synthetic evaluation contexts and some unit-test helpers).
         self.top_level_declarations
-            .get_visible(*name, self.visible_declaration_ids.as_ref())
+            .get_visible_non_receiver_by_name(*name, self.visible_declaration_ids.as_ref())
     }
 
     pub(crate) fn lookup_receiver_method(

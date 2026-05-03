@@ -77,3 +77,38 @@ AST timer notes: `AstBuildState` was removed and `Ast::new` now orchestrates `bu
 Regression classification: mixed. Core speed-test check stayed neutral by mean threshold, while build/docs and small stress benchmarks show small regressions by mean, with `pattern-stress` crossing the major threshold only in percentage terms because the case is around 5-6ms absolute. This phase removes the central `AstBuildState` architecture debt and does not add a new semantic path; continue to Phase 3 but monitor these rows and recover cost through declaration-table cleanup.
 
 Audit notes: there is one AST orchestration path; `AstBuildState` and old pass modules are gone; `module_ast/mod.rs` and `docs/compiler-design-overview.md` now describe environment/emission/finalization ownership. No language behavior changed, so the progress matrix remains unchanged. `just validate` passed after the refactor.
+
+## Phase 3 — Stable Declaration Table and Environment-Owned Metadata
+
+Phase: Phase 3 / stable top-level declaration table
+
+Commit: pending (working tree)
+
+Before benchmark run directory: `benchmarks/results/2026-05-16_23-29-01`
+
+Before summary path: `benchmarks/results/2026-05-16_23-29-01/summary.md`
+
+After benchmark run directory: `benchmarks/results/2026-05-16_23-41-55`
+
+After summary path: `benchmarks/results/2026-05-16_23-41-55/summary.md`
+
+Additional after check: `benchmarks/results/2026-05-16_23-41-23/summary.md` also showed the same broad shape: core rows improved while sub-10ms stress cases moved by small absolute amounts.
+
+Key rows:
+
+| Case | Mean Before (ms) | Mean After (ms) | Delta | Median Before (ms) | Median After (ms) | Failures |
+|---|---:|---:|---:|---:|---:|---:|
+| check_benchmarks_speed-test_bst | 124.58 | 115.35 | -7.4% | 123.75 | 115.11 | 0 |
+| build_benchmarks_speed-test_bst | 124.92 | 118.78 | -4.9% | 125.40 | 118.88 | 0 |
+| check_docs | 118.60 | 98.98 | -16.5% | 118.59 | 100.75 | 0 |
+| check_benchmarks_template-stress_bst | 24.76 | 19.10 | -22.9% | 24.72 | 19.18 | 0 |
+| check_benchmarks_type-stress_bst | 6.17 | 7.36 | +19.3% | 6.07 | 7.19 | 0 |
+| check_benchmarks_fold-stress_bst | 9.63 | 10.41 | +8.1% | 9.56 | 9.55 | 0 |
+| check_benchmarks_pattern-stress_bst | 6.02 | 6.61 | +9.8% | 5.98 | 6.69 | 0 |
+| check_benchmarks_collection-stress_bst | 6.65 | 7.20 | +8.3% | 6.69 | 7.38 | 0 |
+
+AST timer notes: top-level declarations now live in one `TopLevelDeclarationTable` owned by the AST environment. Constant resolution still uses the fixed-point loop from phase 2, but no longer rebuilds `TopLevelDeclarationIndex` snapshots; emission clones the environment table `Rc` instead of rebuilding an index from `environment.declarations`; finalization iterates the table once for choice definitions. The detailed churn counter for declaration snapshot rebuilds was removed because that path no longer exists.
+
+Regression classification: mixed but acceptable for this phase. Core check/build/docs rows improved materially, and template stress improved. Type/pattern/collection stress rows regressed by percentage but by small absolute amounts (+0.59ms to +1.19ms); fold mean was skewed by one max outlier while median stayed neutral. Continue to monitor these small stress rows in phase 4 and phase 5, where constant ordering and `ScopeContext` shared-state work should address remaining type/scope lookup churn.
+
+Audit notes: top-level declaration placeholders and resolved declarations are represented once; old snapshot rebuild paths and the `TopLevelDeclarationIndex` type are gone; body emission, constant parsing, and type resolution all share the environment-owned table. Diagnostics and import visibility behavior are preserved. Added focused table update coverage and AST choice-definition collection coverage. No language behavior changed, so the progress matrix remains unchanged. `just validate` passed after the refactor.

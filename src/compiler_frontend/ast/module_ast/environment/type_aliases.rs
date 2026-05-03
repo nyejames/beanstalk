@@ -47,7 +47,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             let resolved_target = {
                 let type_resolution_context =
                     TypeResolutionContext::from_inputs(TypeResolutionContextInputs {
-                        declarations: &self.declarations,
+                        declaration_table: &self.declaration_table,
                         visible_declaration_ids: file_bindings
                             .map(|bindings| &bindings.visible_symbol_paths),
                         visible_external_symbols: file_bindings
