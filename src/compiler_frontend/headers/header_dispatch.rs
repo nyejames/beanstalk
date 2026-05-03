@@ -228,7 +228,7 @@ pub(super) fn create_header(
                     IdentifierNamingKind::TopLevelConstant,
                 );
 
-                let constant_header = create_constant_header_payload(
+                let (constant_header, source_order) = create_constant_header_payload(
                     &full_name,
                     token_stream,
                     context,
@@ -237,6 +237,7 @@ pub(super) fn create_header(
 
                 kind = HeaderKind::Constant {
                     declaration: constant_header,
+                    source_order,
                 };
             }
         }
@@ -266,7 +267,7 @@ pub(super) fn create_header(
                 IdentifierNamingKind::TopLevelConstant,
             );
 
-            let constant_header = create_constant_header_payload(
+            let (constant_header, source_order) = create_constant_header_payload(
                 &full_name,
                 token_stream,
                 context,
@@ -275,6 +276,7 @@ pub(super) fn create_header(
 
             kind = HeaderKind::Constant {
                 declaration: constant_header,
+                source_order,
             };
         }
 
@@ -543,7 +545,7 @@ fn create_constant_header_payload(
     token_stream: &mut FileTokens,
     context: &mut HeaderBuildContext<'_>,
     dependencies: &mut HashSet<InternedPath>,
-) -> Result<DeclarationSyntax, CompilerError> {
+) -> Result<(DeclarationSyntax, usize), CompilerError> {
     let Some(declaration_name) = full_name.name() else {
         return Err(CompilerError::compiler_error(
             "Constant header path is missing its declaration name.",
@@ -556,7 +558,8 @@ fn create_constant_header_payload(
     // WHY: initializer-expression symbols are soft ordering hints, not strict structural deps.
     collect_constant_type_dependencies(&declaration_syntax, context, dependencies);
 
+    let source_order = *context.file_constant_order;
     *context.file_constant_order += 1;
 
-    Ok(declaration_syntax)
+    Ok((declaration_syntax, source_order))
 }

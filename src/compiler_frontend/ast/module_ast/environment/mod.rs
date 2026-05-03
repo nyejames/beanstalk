@@ -6,6 +6,7 @@
 //! partially valid accumulator fields.
 
 pub(in crate::compiler_frontend::ast) mod builder;
+mod constant_graph;
 pub(in crate::compiler_frontend::ast) mod declaration_table;
 mod function_signatures;
 mod import_environment;

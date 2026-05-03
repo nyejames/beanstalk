@@ -96,6 +96,7 @@ pub enum HeaderKind {
     },
     Constant {
         declaration: DeclarationSyntax,
+        source_order: usize,
     },
     Struct {
         generic_parameters: GenericParameterList,

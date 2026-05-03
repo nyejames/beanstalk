@@ -1122,7 +1122,7 @@ fn constant_header_with_declared_type_captures_type_in_declaration() {
         .find(|header| matches!(header.kind, HeaderKind::Constant { .. }))
         .expect("expected constant header");
 
-    let HeaderKind::Constant { declaration } = &constant_header.kind else {
+    let HeaderKind::Constant { declaration, .. } = &constant_header.kind else {
         panic!("expected Constant header kind");
     };
 

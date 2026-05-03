@@ -185,9 +185,9 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
         [data:
             [: Constants and compile-time folding]
             [: Supported]
-            [: Broad constant declaration, const-only validation, cross-file soft dependency, folding, overflow, const-template, and const-record coverage.]
+            [: Broad constant declaration, const-only validation, explicit dependency ordering, same-file source-order rejection, cross-file imports, folding, overflow, const-template, and const-record coverage.]
             [: Frontend / HTML builder]
-            [: Runtime expressions and host calls in constants are rejected. Module constants remain compile-time metadata rather than runtime top-level statements.]
+            [: Runtime expressions and host calls in constants are rejected. Same-file constants must be declared before use; imported constants are resolved through the AST constant dependency graph. Module constants remain compile-time metadata rather than runtime top-level statements.]
         ]
 
         [data:

@@ -200,7 +200,7 @@ fn declaration_from_header(header: &Header, string_table: &mut StringTable) -> O
                 ValueMode::ImmutableReference,
             ),
         }),
-        HeaderKind::Constant { declaration } => Some(constant_declaration_placeholder(
+        HeaderKind::Constant { declaration, .. } => Some(constant_declaration_placeholder(
             &header.tokens.src_path,
             declaration,
             &header.name_location,

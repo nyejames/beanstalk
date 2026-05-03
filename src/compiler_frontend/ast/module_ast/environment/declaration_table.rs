@@ -105,16 +105,6 @@ impl TopLevelDeclarationTable {
         })
     }
 
-    pub(in crate::compiler_frontend::ast) fn unresolved_constant_paths(
-        &self,
-    ) -> FxHashSet<InternedPath> {
-        self.declarations
-            .iter()
-            .filter(|declaration| declaration.is_unresolved_constant_placeholder())
-            .map(|declaration| declaration.id.to_owned())
-            .collect()
-    }
-
     pub(in crate::compiler_frontend::ast) fn has_unresolved_constant_placeholder(&self) -> bool {
         self.declarations
             .iter()

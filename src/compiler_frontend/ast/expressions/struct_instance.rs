@@ -106,9 +106,9 @@ pub(crate) fn parse_struct_constructor_expression(
         let mut value = coerce_expression_to_declared_type(arg.value.clone(), field_type);
 
         if enforce_const_record {
-            // Allow unresolved constant placeholders to pass through so the fixed-point
-            // loop can retry after dependencies are resolved.
-            let is_deferred_reference = if let ExpressionKind::Reference(path) = &value.kind
+            // Header-stage struct shells may carry placeholder references until AST environment
+            // construction resolves constants in graph order.
+            let is_placeholder_reference = if let ExpressionKind::Reference(path) = &value.kind
                 && path.name().is_some_and(|name| {
                     context
                         .get_reference(&name)
@@ -119,7 +119,7 @@ pub(crate) fn parse_struct_constructor_expression(
                 false
             };
 
-            if !value.is_compile_time_constant() && !is_deferred_reference {
+            if !value.is_compile_time_constant() && !is_placeholder_reference {
                 let field_name = field.id.name_str(string_table).unwrap_or("<field>");
                 return_rule_error!(
                     format!(

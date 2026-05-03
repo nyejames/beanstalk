@@ -1,4 +1,4 @@
 [backends.html]
 mode = "success"
 warnings = "forbid"
-rendered_output_contains = ["42"]
+rendered_output_contains = ["Beanstalk v4"]

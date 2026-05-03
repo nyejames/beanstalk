@@ -112,3 +112,36 @@ AST timer notes: top-level declarations now live in one `TopLevelDeclarationTabl
 Regression classification: mixed but acceptable for this phase. Core check/build/docs rows improved materially, and template stress improved. Type/pattern/collection stress rows regressed by percentage but by small absolute amounts (+0.59ms to +1.19ms); fold mean was skewed by one max outlier while median stayed neutral. Continue to monitor these small stress rows in phase 4 and phase 5, where constant ordering and `ScopeContext` shared-state work should address remaining type/scope lookup churn.
 
 Audit notes: top-level declaration placeholders and resolved declarations are represented once; old snapshot rebuild paths and the `TopLevelDeclarationIndex` type are gone; body emission, constant parsing, and type resolution all share the environment-owned table. Diagnostics and import visibility behavior are preserved. Added focused table update coverage and AST choice-definition collection coverage. No language behavior changed, so the progress matrix remains unchanged. `just validate` passed after the refactor.
+
+## Phase 4 — Constant Dependency Graph and Single-Pass Resolution
+
+Phase: Phase 4 / explicit constant dependency graph
+
+Commit: pending (working tree)
+
+Before benchmark run directory: `benchmarks/results/2026-05-17_07-05-09`
+
+Before summary path: `benchmarks/results/2026-05-17_07-05-09/summary.md`
+
+After benchmark run directory: `benchmarks/results/2026-05-17_07-16-02`
+
+After summary path: `benchmarks/results/2026-05-17_07-16-02/summary.md`
+
+Key rows:
+
+| Case | Mean Before (ms) | Mean After (ms) | Delta | Median Before (ms) | Median After (ms) | Failures |
+|---|---:|---:|---:|---:|---:|---:|
+| check_benchmarks_speed-test_bst | 121.26 | 112.14 | -7.5% | 118.98 | 112.04 | 0 |
+| build_benchmarks_speed-test_bst | 121.49 | 114.57 | -5.7% | 120.10 | 115.19 | 0 |
+| check_docs | 104.30 | 95.24 | -8.7% | 102.82 | 97.18 | 0 |
+| check_benchmarks_template-stress_bst | 19.36 | 19.25 | -0.6% | 19.19 | 19.12 | 0 |
+| check_benchmarks_type-stress_bst | 7.24 | 6.98 | -3.6% | 6.99 | 6.86 | 0 |
+| check_benchmarks_fold-stress_bst | 10.59 | 11.45 | +8.1% | 9.63 | 11.48 | 0 |
+| check_benchmarks_pattern-stress_bst | 7.10 | 6.69 | -5.8% | 7.08 | 6.50 | 0 |
+| check_benchmarks_collection-stress_bst | 7.51 | 7.22 | -3.9% | 7.53 | 7.21 | 0 |
+
+AST timer notes: constants now resolve through `AST/environment/constants ordered resolution`, with detailed counters reporting `constant dependency edges` and `constant topo-sort count` instead of retry rounds. One detailed `check benchmarks/speed-test.bst` sample recorded 123 constant dependency edges, 1 topo-sort, 584 scope contexts, 503 cloned local declarations, 11 bounded expression token copies, 41 runtime RPN clones, 387 template-normalization node visits, and 71 module-constant normalization visits.
+
+Regression classification: mixed but acceptable. Core check/build/docs rows improved materially, and most stress rows improved or stayed neutral. `fold-stress` regressed by mean and median (+0.86ms mean, +1.85ms median) while still remaining a small absolute case; this phase removes the constant fixed-point retry path and should be watched in the expression/parser churn phase.
+
+Audit notes: constant resolution is no longer retry-based; dependency extraction uses header-owned initializer metadata rather than a second expression parser; same-file source-order semantics now match `docs/language-overview.md`; fixed-point retry counters and deferrable-name retry logic are gone. Added success and diagnostic integration coverage for same-file forward references, imported constants, non-constant imports, unknown references, not-imported constants, cycles, and const templates using constants. Updated the progress matrix for explicit constant dependency ordering. Focused constant graph tests and `cargo run tests` passed before validation.

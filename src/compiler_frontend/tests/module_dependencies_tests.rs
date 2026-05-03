@@ -3,7 +3,7 @@
 //! WHAT: validates topological ordering, cycle detection, deterministic order, and start-function
 //!       exclusion from the import dependency graph.
 //! WHY: dependency sorting is the single producer of sorted declaration placeholders; any drift
-//!      here breaks cross-file visibility and constant deferral.
+//!      here breaks cross-file visibility and AST constant dependency ordering.
 
 use super::*;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;

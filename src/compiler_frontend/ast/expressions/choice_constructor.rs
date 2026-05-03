@@ -299,7 +299,8 @@ pub(crate) fn parse_choice_construct(
                 let mut value = coerce_expression_to_declared_type(arg.value.clone(), field_type);
 
                 if enforce_const {
-                    let is_deferred_reference = if let ExpressionKind::Reference(path) = &value.kind
+                    let is_placeholder_reference = if let ExpressionKind::Reference(path) =
+                        &value.kind
                         && path.name().is_some_and(|name| {
                             context
                                 .get_reference(&name)
@@ -310,7 +311,7 @@ pub(crate) fn parse_choice_construct(
                         false
                     };
 
-                    if !value.is_compile_time_constant() && !is_deferred_reference {
+                    if !value.is_compile_time_constant() && !is_placeholder_reference {
                         let field_name = field.id.name_str(string_table).unwrap_or("<field>");
                         return_rule_error!(
                             format!(

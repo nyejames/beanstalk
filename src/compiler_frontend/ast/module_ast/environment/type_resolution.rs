@@ -10,7 +10,6 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::ast::import_bindings::{
     ConstantHeaderParseContext, FileImportBindings, parse_constant_header_declaration,
 };
-use crate::compiler_frontend::ast::instrumentation::{AstCounter, increment_ast_counter};
 use crate::compiler_frontend::ast::type_resolution::{
     build_generic_parameter_scope, collect_type_parameter_ids_from_choice_variants,
     collect_type_parameter_ids_from_declarations, resolve_choice_variant_payload_types,
@@ -18,7 +17,6 @@ use crate::compiler_frontend::ast::type_resolution::{
     validate_no_recursive_generic_type, validate_no_recursive_runtime_structs,
 };
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
-use crate::compiler_frontend::compiler_errors::ErrorMetaDataKey;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::declaration_syntax::type_syntax::{
     TypeResolutionContext, TypeResolutionContextInputs,
@@ -268,20 +266,10 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         string_table: &mut StringTable,
     ) -> Result<(), CompilerMessages> {
         let constants_resolution_start = Instant::now();
-        let mut total_rounds = 0usize;
-        let mut total_headers_attempted = 0usize;
-        let mut total_deferred_headers = 0usize;
-        let constant_header_paths = sorted_headers
-            .iter()
-            .filter(|header| matches!(header.kind, HeaderKind::Constant { .. }))
-            .map(|header| header.tokens.src_path.to_owned())
-            .collect::<FxHashSet<_>>();
 
         let resolution_result = (|| -> Result<(), CompilerMessages> {
-            let mut pending_headers = sorted_headers
-                .iter()
-                .filter(|header| matches!(header.kind, HeaderKind::Constant { .. }))
-                .collect::<Vec<_>>();
+            let ordered_headers =
+                self.ordered_constant_headers(sorted_headers, file_import_bindings, string_table)?;
             let empty_visible_symbol_paths = FxHashSet::default();
             let empty_visible_external_symbols = FxHashMap::default();
             let empty_visible_source_bindings = FxHashMap::default();
@@ -290,95 +278,51 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             let generic_declarations =
                 Rc::new(self.module_symbols.generic_declarations_by_path.clone());
 
-            while !pending_headers.is_empty() {
-                total_rounds += 1;
-                increment_ast_counter(AstCounter::ConstantResolutionRounds);
-                total_headers_attempted += pending_headers.len();
+            for header in ordered_headers {
+                let visible_symbol_paths = file_import_bindings
+                    .get(&header.source_file)
+                    .map(|bindings| &bindings.visible_symbol_paths)
+                    .unwrap_or(&empty_visible_symbol_paths);
+                let visible_external_symbols = file_import_bindings
+                    .get(&header.source_file)
+                    .map(|bindings| &bindings.visible_external_symbols)
+                    .unwrap_or(&empty_visible_external_symbols);
+                let visible_source_bindings = file_import_bindings
+                    .get(&header.source_file)
+                    .map(|bindings| &bindings.visible_source_bindings)
+                    .unwrap_or(&empty_visible_source_bindings);
+                let visible_type_aliases = file_import_bindings
+                    .get(&header.source_file)
+                    .map(|bindings| &bindings.visible_type_aliases)
+                    .unwrap_or(&empty_visible_type_aliases);
+                let resolved_type_aliases = Rc::clone(&resolved_type_aliases);
+                let generic_declarations_by_path = Rc::clone(&generic_declarations);
 
-                let mut unresolved_constant_paths =
-                    self.declaration_table.unresolved_constant_paths();
-                let mut deferred_headers = Vec::new();
-                let mut deferred_error = None;
-                let mut made_progress = false;
+                let declaration = parse_constant_header_declaration(
+                    header,
+                    ConstantHeaderParseContext {
+                        top_level_declarations: Rc::clone(&self.declaration_table),
+                        visible_declaration_ids: visible_symbol_paths,
+                        visible_external_symbols,
+                        visible_source_bindings,
+                        visible_type_aliases,
+                        resolved_type_aliases,
+                        generic_declarations_by_path,
+                        external_package_registry: self.context.external_package_registry,
+                        style_directives: self.context.style_directives,
+                        project_path_resolver: self.context.project_path_resolver.clone(),
+                        path_format_config: self.context.path_format_config.clone(),
+                        build_profile: self.context.build_profile,
+                        warnings: &mut self.warnings,
+                        rendered_path_usages: self.rendered_path_usages.clone(),
+                        string_table,
+                    },
+                )
+                .map_err(|error| self.error_messages(error, string_table))?;
 
-                for header in pending_headers {
-                    let visible_symbol_paths = file_import_bindings
-                        .get(&header.source_file)
-                        .map(|bindings| &bindings.visible_symbol_paths)
-                        .unwrap_or(&empty_visible_symbol_paths);
-                    let visible_external_symbols = file_import_bindings
-                        .get(&header.source_file)
-                        .map(|bindings| &bindings.visible_external_symbols)
-                        .unwrap_or(&empty_visible_external_symbols);
-                    let visible_source_bindings = file_import_bindings
-                        .get(&header.source_file)
-                        .map(|bindings| &bindings.visible_source_bindings)
-                        .unwrap_or(&empty_visible_source_bindings);
-                    let visible_type_aliases = file_import_bindings
-                        .get(&header.source_file)
-                        .map(|bindings| &bindings.visible_type_aliases)
-                        .unwrap_or(&empty_visible_type_aliases);
-                    let resolved_type_aliases = Rc::clone(&resolved_type_aliases);
-                    let generic_declarations_by_path = Rc::clone(&generic_declarations);
-
-                    match parse_constant_header_declaration(
-                        header,
-                        ConstantHeaderParseContext {
-                            top_level_declarations: Rc::clone(&self.declaration_table),
-                            visible_declaration_ids: visible_symbol_paths,
-                            visible_external_symbols,
-                            visible_source_bindings,
-                            visible_type_aliases,
-                            resolved_type_aliases,
-                            generic_declarations_by_path,
-                            external_package_registry: self.context.external_package_registry,
-                            style_directives: self.context.style_directives,
-                            project_path_resolver: self.context.project_path_resolver.clone(),
-                            path_format_config: self.context.path_format_config.clone(),
-                            build_profile: self.context.build_profile,
-                            warnings: &mut self.warnings,
-                            rendered_path_usages: self.rendered_path_usages.clone(),
-                            unresolved_constant_paths: &unresolved_constant_paths,
-                            string_table,
-                        },
-                    ) {
-                        Ok(declaration) => {
-                            self.replace_declaration(declaration.clone())
-                                .map_err(|error| self.error_messages(error, string_table))?;
-                            self.module_constants.push(declaration);
-                            unresolved_constant_paths =
-                                self.declaration_table.unresolved_constant_paths();
-                            made_progress = true;
-                        }
-                        Err(error)
-                            if is_deferrable_constant_resolution_error(
-                                &error,
-                                visible_symbol_paths,
-                                &constant_header_paths,
-                                string_table,
-                            ) =>
-                        {
-                            deferred_headers.push(header);
-                            deferred_error.get_or_insert(error);
-                        }
-                        Err(error) => {
-                            return Err(self.error_messages(error, string_table));
-                        }
-                    }
-                }
-
-                total_deferred_headers += deferred_headers.len();
-
-                if !made_progress {
-                    let error = deferred_error.unwrap_or_else(|| {
-                        crate::compiler_frontend::compiler_errors::CompilerError::compiler_error(
-                            "Constant header resolution stalled without making progress.",
-                        )
-                    });
-                    return Err(self.error_messages(error, string_table));
-                }
-
-                pending_headers = deferred_headers;
+                self.replace_declaration(declaration.clone())
+                    .map_err(|error| self.error_messages(error, string_table))?;
+                self.module_constants.push(declaration);
             }
 
             Ok(())
@@ -386,35 +330,10 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
 
         timer_log!(
             constants_resolution_start,
-            "AST/environment/constants deferred resolution in: "
+            "AST/environment/constants ordered resolution in: "
         );
         let _ = constants_resolution_start;
 
-        #[cfg(feature = "detailed_timers")]
-        saying::say!(
-            "AST/type resolution/constants deferred summary: \n rounds = ", Dark Green total_rounds,
-            Reset "\n headers attempted = ", Dark Green total_headers_attempted,
-            Reset "\n headers deferred = ", Dark Green total_deferred_headers
-        );
-
         resolution_result
     }
-}
-
-fn is_deferrable_constant_resolution_error(
-    error: &crate::compiler_frontend::compiler_errors::CompilerError,
-    visible_symbol_paths: &FxHashSet<InternedPath>,
-    constant_header_paths: &FxHashSet<InternedPath>,
-    string_table: &mut StringTable,
-) -> bool {
-    let Some(variable_name) = error.metadata.get(&ErrorMetaDataKey::VariableName) else {
-        return false;
-    };
-
-    let variable_id = string_table.intern(variable_name);
-
-    visible_symbol_paths
-        .iter()
-        .filter(|path| path.name() == Some(variable_id))
-        .any(|path| constant_header_paths.contains(path))
 }

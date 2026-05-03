@@ -496,39 +496,42 @@ fn borrow_checker_errors_preserve_string_table_context() {
 }
 
 // -----------------------------------------------------------------------------
-// Deferred constant-header resolution regression tests
+// Constant dependency graph regression tests
 // -----------------------------------------------------------------------------
 #[test]
-fn deferred_constant_resolution_same_file_constant() {
-    // WHAT: a constant references another exported constant in the same file that appears
-    // later in source order. Because constant initializer references are soft edges (not
-    // strict structural dependencies), the topological sort may place the dependent constant
-    // first. The fixed-point loop must defer it until the referenced constant is resolved.
+fn constant_graph_rejects_same_file_forward_constant_reference() {
+    // WHAT: same-file constant references are source-order based.
+    // WHY: phase 4 replaces fixed-point retries with an explicit dependency graph, so
+    // same-file forward references fail before expression parsing.
     let mut project = FrontendProject::new(
         &[("src/#page.bst", "#page_head = theme\n#theme = \"dark\"\n")],
         "src/#page.bst",
         StyleDirectiveRegistry::built_ins(),
     );
 
-    let ast = project.ast();
-
-    let page_head = ast
-        .module_constants
-        .iter()
-        .find(|c| c.id.name_str(&project.frontend.string_table) == Some("page_head"))
-        .expect("page_head constant should exist");
+    let sorted = project.sorted_headers();
+    let messages = match project.frontend.headers_to_ast(
+        sorted,
+        &project.entry_file,
+        FrontendBuildProfile::Dev,
+    ) {
+        Err(messages) => messages,
+        Ok(_) => panic!("same-file forward constant reference should fail"),
+    };
     assert!(
-        matches!(page_head.value.kind, ExpressionKind::StringSlice(_)),
-        "page_head should be resolved to a string literal, got {:?}",
-        page_head.value.kind
+        messages
+            .errors
+            .iter()
+            .any(|error| error.msg.contains("cannot reference same-file constant")),
+        "expected same-file forward-reference diagnostic, got: {:?}",
+        messages.errors
     );
 }
 
 #[test]
-fn deferred_constant_resolution_imported_constant() {
-    // WHAT: a constant references an imported constant from another file. The imported
-    // constant may be processed later in the fixed-point loop. This must defer cleanly
-    // and then resolve successfully.
+fn constant_graph_orders_imported_constant() {
+    // WHAT: a constant references an imported constant from another file.
+    // WHY: cross-file constant dependencies are ordered by the AST constant graph.
     let mut project = FrontendProject::new(
         &[
             (
@@ -556,10 +559,10 @@ fn deferred_constant_resolution_imported_constant() {
 }
 
 #[test]
-fn deferred_constant_resolution_nested_template_reference() {
+fn constant_graph_orders_nested_template_reference() {
     // WHAT: a template constant references another template constant inside its body.
-    // The reference is nested inside a TemplateAtom::Content expression. The walker
-    // must find the unresolved Reference and defer the outer constant until #css resolves.
+    // The reference is nested inside a TemplateAtom::Content expression; the graph hint
+    // must still order #css before #head.
     // Both directives must be registered so the template parser recognises [$html:...]/[$css:...].
     let html_directive = StyleDirectiveSpec::handler(
         "html",
@@ -593,7 +596,7 @@ fn deferred_constant_resolution_nested_template_reference() {
     let mut project = FrontendProject::new(
         &[(
             "src/#page.bst",
-            "#head = [$html: <style>[css]</style>]\n#css = [$css: body {}]\n",
+            "#css = [$css: body {}]\n#head = [$html: <style>[css]</style>]\n",
         )],
         "src/#page.bst",
         directives,
@@ -615,13 +618,12 @@ fn deferred_constant_resolution_nested_template_reference() {
 }
 
 #[test]
-fn deferred_constant_resolution_collection_reference() {
-    // WHAT: a collection constant contains a reference to an unresolved constant.
-    // The walker must recurse into Collection items and detect the placeholder.
+fn constant_graph_orders_collection_reference() {
+    // WHAT: a collection constant contains a reference to another constant.
     let mut project = FrontendProject::new(
         &[(
             "src/#page.bst",
-            "#all = {theme, \"extra\"}\n#theme = \"dark\"\n",
+            "#theme = \"dark\"\n#all = {theme, \"extra\"}\n",
         )],
         "src/#page.bst",
         StyleDirectiveRegistry::built_ins(),
@@ -642,13 +644,12 @@ fn deferred_constant_resolution_collection_reference() {
 }
 
 #[test]
-fn deferred_constant_resolution_struct_literal_reference() {
-    // WHAT: a struct-instance constant references an unresolved constant in a field
-    // position. The walker must recurse into StructInstance fields.
+fn constant_graph_orders_struct_literal_reference() {
+    // WHAT: a struct-instance constant references another constant in a field position.
     let mut project = FrontendProject::new(
         &[(
             "src/#page.bst",
-            "#wrapper = Wrapper(theme)\n#theme = \"dark\"\n\nWrapper = | value String |\n",
+            "#theme = \"dark\"\n#wrapper = Wrapper(theme)\n\nWrapper = | value String |\n",
         )],
         "src/#page.bst",
         StyleDirectiveRegistry::built_ins(),

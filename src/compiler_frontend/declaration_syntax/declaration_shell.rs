@@ -21,7 +21,21 @@ pub struct DeclarationSyntax {
     #[allow(dead_code)]
     pub collection_capacity: Option<CollectionCapacity>,
     pub initializer_tokens: Vec<Token>,
+    pub initializer_references: Vec<InitializerReference>,
     pub location: SourceLocation,
+}
+
+/// A lightweight value-reference hint extracted from declaration initializer tokens.
+///
+/// WHAT: records symbol-shaped references in a constant initializer without resolving or parsing
+/// the expression. WHY: the AST constant graph needs ordering hints, while expression parsing
+/// remains the semantic authority for folding, calls, constructors, and diagnostics.
+#[derive(Clone, Debug)]
+pub struct InitializerReference {
+    pub name: StringId,
+    pub location: SourceLocation,
+    pub followed_by_call: bool,
+    pub followed_by_choice_namespace: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -105,9 +119,42 @@ pub fn parse_declaration_syntax(
         mutable_marker: target.mutable_marker,
         type_annotation: target.type_annotation,
         collection_capacity: target.collection_capacity,
+        initializer_references: collect_initializer_references(&initializer_tokens),
         initializer_tokens,
         location: target.location,
     })
+}
+
+fn collect_initializer_references(tokens: &[Token]) -> Vec<InitializerReference> {
+    let mut references = Vec::new();
+
+    for (index, token) in tokens.iter().enumerate() {
+        let TokenKind::Symbol(name) = &token.kind else {
+            continue;
+        };
+
+        let previous = index
+            .checked_sub(1)
+            .and_then(|previous_index| tokens.get(previous_index))
+            .map(|previous_token| &previous_token.kind);
+        if matches!(previous, Some(TokenKind::Dot | TokenKind::DoubleColon)) {
+            continue;
+        }
+
+        let next = tokens.get(index + 1).map(|next_token| &next_token.kind);
+        if matches!(next, Some(TokenKind::Assign)) {
+            continue;
+        }
+
+        references.push(InitializerReference {
+            name: *name,
+            location: token.location.clone(),
+            followed_by_call: matches!(next, Some(TokenKind::OpenParenthesis)),
+            followed_by_choice_namespace: matches!(next, Some(TokenKind::DoubleColon)),
+        });
+    }
+
+    references
 }
 
 pub fn parse_binding_target_syntax(

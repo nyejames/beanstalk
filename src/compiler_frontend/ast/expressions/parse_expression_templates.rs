@@ -26,10 +26,9 @@ pub(super) fn parse_template_expression(
     match template.kind {
         TemplateType::StringFunction => {
             // In a constant context, return as Template rather than erroring immediately.
-            // WHY: template slots may reference unresolved constants; the deferred constant
-            // resolution loop retries after dependencies resolve. If the template is still
-            // StringFunction after all constants are known, the loop emits a permanent
-            // "not compile-time resolvable" error via parse_constant_header_declaration.
+            // WHY: constant dependency ordering resolves referenced constants before parsing;
+            // if the template is still runtime-only here, constant-header validation emits the
+            // permanent "not compile-time resolvable" error.
             if consume_closing_parenthesis
                 && token_stream.current_token_kind() == &TokenKind::CloseParenthesis
             {
