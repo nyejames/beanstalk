@@ -31,8 +31,8 @@ They assemble one or more compiled modules into runnable artifacts such as HTML,
 
 ### Declarations, imports, and type surface
 
-- `src/compiler_frontend/headers/` discovers top-level declarations, parses declaration shells, captures imports, and records strict top-level dependency edges.
-- `src/compiler_frontend/module_dependencies.rs` orders top-level declaration headers by strict dependency edges.
+- `src/compiler_frontend/headers/` discovers top-level declarations, imports, normalized path/reference shells, declaration shells, constant initializer dependency hints, and start-body separation
+- `src/compiler_frontend/module_dependencies.rs` orders top-level declaration headers by header-provided dependency edges, including constant initializer dependencies
 - `src/compiler_frontend/declaration_syntax/` owns shared declaration parsing used by headers and body-local AST parsing.
 - `src/compiler_frontend/datatypes/` owns frontend type representations used across declarations, AST validation, HIR lowering, and backend-facing metadata.
 - `src/compiler_frontend/type_coercion/` owns contextual compatibility and promotion rules layered on top of type identity.
@@ -113,7 +113,8 @@ Individual directive syntax and behavior belong in `docs/language-overview.md`.
 ### Import, library, and external package contract
 
 Stage 0 discovers source libraries as normal module inputs.
-Header parsing records imports and top-level dependency edges.
+Header parsing records, validates, normalizes, and resolves imports into file-local visibility data.
+Dependency sorting uses header dependency edges.
 AST import binding enforces file-local visibility, collision rules, prelude/builtin reservations, and external symbol resolution.
 
 Compiler-facing rules:
@@ -177,9 +178,9 @@ The compiler frontend and build system process modules through these stages:
 
 0. **Project Structure**: discovers config, module roots, reachable source files, source libraries, and external package namespaces.
 1. **Tokenization**: converts source text to located tokens.
-2. **Header Parsing**: discovers top-level declarations, parses declaration shells, collects strict top-level dependency edges, and captures the entry `start` body separately.
-3. **Dependency Sorting**: orders top-level declaration headers by strict dependency edges, detects cycles, and appends the implicit entry `start` header last.
-4. **AST Construction**: consumes sorted headers and module symbols, resolves and validates semantic information, parses executable bodies, type-checks expressions, and prepares templates/constants for HIR/builders.
+2. **Header Parsing**: parses imports, declaration shells, top-level dependency edges, constant initializer reference edges, and captures entry start body separately.
+3. **Dependency Sorting**: orders top-level declaration headers by all header-provided top-level dependency edges.
+4. **AST Construction**: consumes sorted headers linearly, resolves and validates semantic information, parses executable bodies, type-checks expressions, and prepares templates/constants for HIR/builders.
 5. **HIR Generation**: lowers the typed AST into backend-facing semantic IR with explicit control flow.
 6. **Borrow Validation**: validates borrow/exclusivity rules and produces side-table facts for later lowering.
 7. **Backend Lowering**: project builders lower compiled modules into backend-specific artifacts.
@@ -228,21 +229,49 @@ It parses top-level declaration shells so later stages do not reconstruct them f
 
 It owns:
 
-* top-level function signatures
-* exported constant declarations
-* struct, choice, and type-alias declaration shells
-* generic parameter syntax attached to declarations and type surfaces
-* import collection
-* strict top-level dependency edge collection
-* entry `start` body capture
-* ordered top-level const fragment capture
-* module symbol metadata needed by dependency sorting and AST
+- import and re-export parsing
+- import path validation and normalization
+- file-local import/visibility environment construction
+- declaration shell parsing for constants/functions/structs/choices/type aliases
+- constant initializer reference hint collection
+- top-level dependency edge generation
+- start-body token separation
+- top-level const fragment placement metadata
+
+Header dependency edges include every top-level declaration dependency needed before AST can resolve declarations linearly:
+- imported declaration references
+- type alias targets
+- struct and choice field type annotations
+- function parameter and return type annotations
+- constant explicit type annotations
+- constant initializer references to other constants
+- top-level const-template references where structurally detectable
+
+Header parsing does not type-check executable bodies or fold expressions. It should prefer storing normalized, validated path/reference forms instead of raw import/path syntax where enough context exists. Later stages should consume these normalized forms instead of reparsing path text.
+
+Header parsing/import preparation builds the file-local import environment used by dependency sorting and AST. It validates and normalizes source imports, re-exports, external package imports, aliases, prelude/builtin reservations, and collision rules where they can be checked structurally.
+
+Constants are compile-time declarations. Header parsing records symbol-shaped references found in constant initializer tokens and resolves them far enough to create dependency edges to other constants. The AST later parses and folds the initializer expression, but it must not build a second constant ordering graph.
 
 Header parsing does not type-check executable bodies.
 Function bodies and other executable tokens are captured for AST.
 
-### Header and AST ownership boundary
+Executable function/start body references do not participate in dependency sorting.
+Body-local declarations do not participate in dependency sorting.
+The implicit entry start header is always appended last.
 
+### Declaration shells
+A declaration shell is a structured top-level header payload, not a fully resolved AST node.
+
+Examples:
+- constant shell: name, export flag, explicit type annotation, initializer token span/tokens, initializer reference hints, source order
+- function shell: name, generic parameters, parsed signature, body tokens
+- struct shell: name, generic parameters, parsed field names/types/default token data where applicable
+- choice shell: name, generic parameters, variant names and payload field type shells
+- type alias shell: name, generic parameters, target type annotation
+- start shell: entry-file executable token body, excluded from dependency sorting
+
+### Header and AST ownership boundary
 Header parsing owns top-level discovery and declaration shell parsing.
 AST must not rediscover top-level symbols or reconstruct top-level declaration shells from raw tokens.
 
@@ -264,15 +293,31 @@ It owns:
 * source-order stability among otherwise independent declarations
 * appending the implicit entry `start` header after sorted declarations
 
-It does not use executable body references, body-local declarations, or soft expression-derived edges.
+It does not use executable function/start body references or body-local declarations. Constant initializer references are not body references; they are top-level compile-time declaration dependencies and belong in the header dependency graph.
 Dependency sorting exists only to order top-level declarations before AST construction.
+
+Dependency sorting orders constants using header-provided constant initializer dependency edges. Same-file constants keep source-order semantics; same-file forward references are rejected. Cross-file constant cycles are dependency cycles.
+
+### Header/dependency/AST contract
+
+Header parsing and dependency sorting are responsible for making top-level declarations linearly consumable by AST.
+
+After dependency sorting:
+
+* AST receives headers in dependency order.
+* AST must not topologically sort constants, structs, choices, functions, or aliases again.
+* AST must not rediscover top-level declarations from raw file tokens.
+* AST must not rebuild file import visibility from scratch.
+* AST resolves declaration shells in sorted order, then parses executable bodies against the completed environment.
+* If AST needs a top-level declaration to be resolved before another declaration, that dependency belongs in the header dependency graph.
+* If a new feature introduces a top-level dependency, add it to header parsing/dependency sorting rather than adding another AST ordering pass.
+* The implicit entry `start` header is never a dependency participant and is always emitted after sorted declarations.
 
 ## Stage 4: AST Construction
 
 Path: `src/compiler_frontend/ast/mod.rs`
 
-AST consumes sorted headers and header-owned `ModuleSymbols`.
-It resolves and validates semantic information, enforces file-local visibility, parses executable bodies, and emits the typed AST consumed by HIR.
+AST consumes already-sorted declaration headers and the header-built module environment. It resolves declarations in order, folds constants/templates, parses executable bodies, type-checks expressions, and emits typed AST nodes.
 
 Internally, AST construction is organized around three phase owners:
 
@@ -282,9 +327,6 @@ Internally, AST construction is organized around three phase owners:
 
 AST owns:
 
-* per-file import visibility
-* visible source, external, builtin, and type-alias bindings
-* user-visible name collision checks
 * type alias, constant, struct field, choice variant, and function signature validation
 * expression parsing and type checking
 * contextual coercion at declaration, return, and template/string boundaries
@@ -301,19 +343,12 @@ The internal substeps inside each phase are implementation details and may chang
 
 ### Imports and visibility
 
-AST import binding builds file-local visibility maps while using the module-wide symbol package.
-
-These maps cover:
-
-* source declarations and imported source symbols
-* external package functions, types, and constants
-* type aliases visible in the file
-* compiler-owned builtins and prelude symbols
+AST consumes the header-built file visibility environment through ScopeContext. It may validate semantic use of visible symbols, but it must not rebuild import bindings or rediscover top-level visibility.
 
 All user-visible names go through one collision policy.
 Same-file declarations, source imports, external imports, type aliases, prelude symbols, and builtins cannot silently shadow each other.
 
-External expression and type resolution must go through the active `ScopeContext` visibility lookup.
+External expression and type resolution must go through the active `ScopeContext` visibility lookup. If AST cannot resolve a top-level declaration by walking sorted headers in order, the missing dependency belongs in header parsing or dependency sorting, not in a new AST pass.
 
 ### Type checking and coercion
 
