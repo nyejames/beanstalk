@@ -1,5 +1,5 @@
 import @html {center}
-import @styles/docs {navbar, title, section, palette, styled_table, codeblock, theme_head}
+import @styles/docs {navbar, title, section, palette, styled_table, codeblock, theme_head, codesnippet}
 
 # page_title = "Pattern Matching"
 # page_description = "Pattern matching in Beanstalk."
@@ -12,10 +12,9 @@ import @styles/docs {navbar, title, section, palette, styled_table, codeblock, t
 
     # Pattern matching
     Pattern matching is a control-flow tool for checking one value against multiple patterns.
-    Alpha supports literal patterns, relational ordered-scalar patterns, guards, choice variant patterns (including payload captures), and explicit `else =>` fallback arms.
 
-    Non-choice matches must include `else =>`.
-    Choice matches can omit `else =>` only when every variant is covered and no arm has a guard.
+    Non-choice matches must include [codesnippet: else =>].
+    Choice matches can omit [codesnippet: else =>] only when every variant is covered and no arm has a guard.
 
     [codeblock, $code("bst"):
         score = 84
@@ -66,12 +65,12 @@ import @styles/docs {navbar, title, section, palette, styled_table, codeblock, t
         ;
     ]
 
-    The names before `as` must match the declared payload fields. The optional name after `as` is the arm-local binding.
+    The names before [codesnippet: as] must match the declared payload fields. The optional name after [codesnippet: as] is the arm-local binding.
 
     Capture originals must exactly match the declared payload field names.
-    For example, `case Err(message as error_text)` binds the payload field `message` to the local name `error_text`.
+    For example, [codesnippet: case Err(message as error_text)] binds the payload field [codesnippet: message] to the local name [codesnippet: error_text].
 
-    Exhaustiveness is tag-level: `case Err(message)` covers all `Err` values regardless of payload content.
+    Exhaustiveness is tag-level: [codesnippet: case Err(message)] covers all [codesnippet: Err] values regardless of payload content.
     
-    Fallback match arms use `else =>`, not a `case` pattern.
+    Fallback match arms use [codesnippet: else =>], not a [codesnippet: case] pattern.
 ]

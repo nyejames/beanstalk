@@ -25,52 +25,52 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Instant;
 
-pub(in crate::compiler_frontend::ast) struct AstModuleEnvironment {
-    pub(in crate::compiler_frontend::ast) module_symbols: ModuleSymbols,
-    pub(in crate::compiler_frontend::ast) file_import_bindings:
+pub(crate) struct AstModuleEnvironment {
+    pub(crate) module_symbols: ModuleSymbols,
+    pub(crate) file_import_bindings:
         FxHashMap<InternedPath, FileImportBindings>,
-    pub(in crate::compiler_frontend::ast) warnings: Vec<CompilerWarning>,
-    pub(in crate::compiler_frontend::ast) declaration_table: Rc<TopLevelDeclarationTable>,
-    pub(in crate::compiler_frontend::ast) module_constants: Vec<Declaration>,
-    pub(in crate::compiler_frontend::ast) rendered_path_usages: Rc<RefCell<Vec<RenderedPathUsage>>>,
-    pub(in crate::compiler_frontend::ast) builtin_struct_ast_nodes: Vec<AstNode>,
-    pub(in crate::compiler_frontend::ast) resolved_struct_fields_by_path:
+    pub(crate) warnings: Vec<CompilerWarning>,
+    pub(crate) declaration_table: Rc<TopLevelDeclarationTable>,
+    pub(crate) module_constants: Vec<Declaration>,
+    pub(crate) rendered_path_usages: Rc<RefCell<Vec<RenderedPathUsage>>>,
+    pub(crate) builtin_struct_ast_nodes: Vec<AstNode>,
+    pub(crate) resolved_struct_fields_by_path:
         FxHashMap<InternedPath, Vec<Declaration>>,
-    pub(in crate::compiler_frontend::ast) resolved_function_signatures_by_path:
+    pub(crate) resolved_function_signatures_by_path:
         FxHashMap<InternedPath, ResolvedFunctionSignature>,
-    pub(in crate::compiler_frontend::ast) resolved_type_aliases_by_path:
+    pub(crate) resolved_type_aliases_by_path:
         FxHashMap<InternedPath, DataType>,
-    pub(in crate::compiler_frontend::ast) receiver_methods: Rc<ReceiverMethodCatalog>,
-    pub(in crate::compiler_frontend::ast) generic_nominal_instantiations:
+    pub(crate) receiver_methods: Rc<ReceiverMethodCatalog>,
+    pub(crate) generic_nominal_instantiations:
         Rc<GenericNominalInstantiationCache>,
 }
 
-pub(in crate::compiler_frontend::ast) struct AstModuleEnvironmentBuilder<'context, 'services> {
-    pub(in crate::compiler_frontend::ast) context: &'context AstPhaseContext<'services>,
+pub(crate) struct AstModuleEnvironmentBuilder<'context, 'services> {
+    pub(crate) context: &'context AstPhaseContext<'services>,
 
     // Header-owned module symbol package from the header/dependency-sort phase.
-    pub(in crate::compiler_frontend::ast) module_symbols: ModuleSymbols,
+    pub(crate) module_symbols: ModuleSymbols,
 
     // Mutable environment-building state.
-    pub(in crate::compiler_frontend::ast) warnings: Vec<CompilerWarning>,
-    pub(in crate::compiler_frontend::ast) declaration_table: Rc<TopLevelDeclarationTable>,
-    pub(in crate::compiler_frontend::ast) module_constants: Vec<Declaration>,
-    pub(in crate::compiler_frontend::ast) rendered_path_usages: Rc<RefCell<Vec<RenderedPathUsage>>>,
-    pub(in crate::compiler_frontend::ast) builtin_struct_ast_nodes: Vec<AstNode>,
-    pub(in crate::compiler_frontend::ast) resolved_struct_fields_by_path:
+    pub(crate) warnings: Vec<CompilerWarning>,
+    pub(crate) declaration_table: Rc<TopLevelDeclarationTable>,
+    pub(crate) module_constants: Vec<Declaration>,
+    pub(crate) rendered_path_usages: Rc<RefCell<Vec<RenderedPathUsage>>>,
+    pub(crate) builtin_struct_ast_nodes: Vec<AstNode>,
+    pub(crate) resolved_struct_fields_by_path:
         FxHashMap<InternedPath, Vec<Declaration>>,
-    pub(in crate::compiler_frontend::ast) struct_source_by_path:
+    pub(crate) struct_source_by_path:
         FxHashMap<InternedPath, InternedPath>,
-    pub(in crate::compiler_frontend::ast) resolved_function_signatures_by_path:
+    pub(crate) resolved_function_signatures_by_path:
         FxHashMap<InternedPath, ResolvedFunctionSignature>,
-    pub(in crate::compiler_frontend::ast) resolved_type_aliases_by_path:
+    pub(crate) resolved_type_aliases_by_path:
         FxHashMap<InternedPath, DataType>,
-    pub(in crate::compiler_frontend::ast) generic_nominal_instantiations:
+    pub(crate) generic_nominal_instantiations:
         Rc<GenericNominalInstantiationCache>,
 }
 
 impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
-    pub(in crate::compiler_frontend::ast) fn new(
+    pub(crate) fn new(
         context: &'context AstPhaseContext<'services>,
         mut module_symbols: ModuleSymbols,
     ) -> Self {
@@ -96,7 +96,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         }
     }
 
-    pub(in crate::compiler_frontend::ast) fn build(
+    pub(crate) fn build(
         mut self,
         sorted_headers: &[Header],
         string_table: &mut StringTable,
@@ -162,7 +162,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         })
     }
 
-    pub(in crate::compiler_frontend::ast) fn replace_declaration(
+    pub(crate) fn replace_declaration(
         &mut self,
         declaration: Declaration,
     ) -> Result<(), CompilerError> {
@@ -179,7 +179,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         Ok(())
     }
 
-    pub(in crate::compiler_frontend::ast) fn declaration_table_mut(
+    pub(crate) fn declaration_table_mut(
         &mut self,
     ) -> Result<&mut TopLevelDeclarationTable, CompilerError> {
         Rc::get_mut(&mut self.declaration_table).ok_or_else(|| {
@@ -189,7 +189,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         })
     }
 
-    pub(in crate::compiler_frontend::ast) fn error_messages(
+    pub(crate) fn error_messages(
         &self,
         error: CompilerError,
         string_table: &StringTable,

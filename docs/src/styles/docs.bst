@@ -178,7 +178,7 @@ Palette = |
 ]
 
 # data = [$html:
-    [$children([$html: <td style="padding: 0.2em 0.5em;">[$slot]</td>]):
+    [$children([$html: <td style="padding: 0.2em 0.5em;  [$slot("style")]">[$slot]</td>]):
         [$slot]
     ]
 ]

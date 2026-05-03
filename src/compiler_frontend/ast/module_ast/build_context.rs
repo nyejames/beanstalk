@@ -23,17 +23,17 @@ pub struct AstBuildContext<'a> {
     pub path_format_config: PathStringFormatConfig,
 }
 
-pub(in crate::compiler_frontend::ast) struct AstPhaseContext<'a> {
-    pub(in crate::compiler_frontend::ast) external_package_registry: &'a ExternalPackageRegistry,
-    pub(in crate::compiler_frontend::ast) style_directives: &'a StyleDirectiveRegistry,
-    pub(in crate::compiler_frontend::ast) entry_dir: InternedPath,
-    pub(in crate::compiler_frontend::ast) build_profile: FrontendBuildProfile,
-    pub(in crate::compiler_frontend::ast) project_path_resolver: Option<ProjectPathResolver>,
-    pub(in crate::compiler_frontend::ast) path_format_config: PathStringFormatConfig,
+pub(crate) struct AstPhaseContext<'a> {
+    pub(crate) external_package_registry: &'a ExternalPackageRegistry,
+    pub(crate) style_directives: &'a StyleDirectiveRegistry,
+    pub(crate) entry_dir: InternedPath,
+    pub(crate) build_profile: FrontendBuildProfile,
+    pub(crate) project_path_resolver: Option<ProjectPathResolver>,
+    pub(crate) path_format_config: PathStringFormatConfig,
 }
 
 impl<'a> AstPhaseContext<'a> {
-    pub(in crate::compiler_frontend::ast) fn from_build_context(
+    pub(crate) fn from_build_context(
         context: AstBuildContext<'a>,
     ) -> (Self, &'a mut StringTable) {
         let AstBuildContext {

@@ -368,63 +368,63 @@ body {
             
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">kind</span> </td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
+     <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">ErrorKind</span> </td>
-     <td style="padding: 0.2em 0.5em;"> Broad category of failure </td>
+     <td style="padding: 0.2em 0.5em;  "> Broad category of failure </td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">code</span> </td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
+     <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">String</span> </td>
-     <td style="padding: 0.2em 0.5em;"> Stable machine-readable error code </td>
+     <td style="padding: 0.2em 0.5em;  "> Stable machine-readable error code </td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">message</span> </td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
+     <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">String</span> </td>
-     <td style="padding: 0.2em 0.5em;"> Human-readable explanation </td>
+     <td style="padding: 0.2em 0.5em;  "> Human-readable explanation </td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">location</span> </td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
+     <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">ErrorLocation?</span> </td>
-     <td style="padding: 0.2em 0.5em;"> Optional source or runtime location </td>
+     <td style="padding: 0.2em 0.5em;  "> Optional source or runtime location </td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">trace</span> </td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
+     <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">{StackFrame}?</span> </td>
-     <td style="padding: 0.2em 0.5em;"> Optional stack trace or call trace </td>
+     <td style="padding: 0.2em 0.5em;  "> Optional stack trace or call trace </td>
         </tr>
         
     </table><p><span style="
@@ -654,41 +654,41 @@ body {
             
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">parse_number(text)!</span> </td>
-     <td style="padding: 0.2em 0.5em;"> Bubble the error to the surrounding function. </td>
+     <td style="padding: 0.2em 0.5em;  "> Bubble the error to the surrounding function. </td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">parse_number(text) catch -> 0</span> </td>
-     <td style="padding: 0.2em 0.5em;"> Use <span style="
+     <td style="padding: 0.2em 0.5em;  "> Use <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">0</span> as a fallback value if an error is returned. </td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">parse_number(text) catch |err|: ... ;</span> </td>
-     <td style="padding: 0.2em 0.5em;"> Bind the error as <span style="
+     <td style="padding: 0.2em 0.5em;  "> Bind the error as <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">err</span>, run a handler block, then bubble the same error. </td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">parse_number(text) catch |err| -> 0: ... ;</span> </td>
-     <td style="padding: 0.2em 0.5em;"> Bind the error as <span style="
+     <td style="padding: 0.2em 0.5em;  "> Bind the error as <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">err</span>, run a handler block, then recover with <span style="
@@ -698,11 +698,11 @@ body {
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">return!</span> </td>
-     <td style="padding: 0.2em 0.5em;"> Return an error from the current function's error slot. </td>
+     <td style="padding: 0.2em 0.5em;  "> Return an error from the current function's error slot. </td>
         </tr>
         
     </table></section>
@@ -774,21 +774,21 @@ body {
             
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">T?</span> </td>
-     <td style="padding: 0.2em 0.5em;"> Absence is expected and not a failure. </td>
-     <td style="padding: 0.2em 0.5em;"> A user profile has no avatar. </td>
+     <td style="padding: 0.2em 0.5em;  "> Absence is expected and not a failure. </td>
+     <td style="padding: 0.2em 0.5em;  "> A user profile has no avatar. </td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">Error!</span> </td>
-     <td style="padding: 0.2em 0.5em;"> Something failed and the caller needs failure information. </td>
-     <td style="padding: 0.2em 0.5em;"> Parsing text failed because the format was invalid. </td>
+     <td style="padding: 0.2em 0.5em;  "> Something failed and the caller needs failure information. </td>
+     <td style="padding: 0.2em 0.5em;  "> Parsing text failed because the format was invalid. </td>
         </tr>
         
     </table><p>Use <span style="
@@ -820,30 +820,30 @@ body {
             
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">Error!</span> </td>
-     <td style="padding: 0.2em 0.5em;"> Recoverable failure returned as a value. </td>
-     <td style="padding: 0.2em 0.5em;"> Must catch, recover, or bubble. </td>
+     <td style="padding: 0.2em 0.5em;  "> Recoverable failure returned as a value. </td>
+     <td style="padding: 0.2em 0.5em;  "> Must catch, recover, or bubble. </td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">T?</span> </td>
-     <td style="padding: 0.2em 0.5em;"> Optional absence of a value. </td>
-     <td style="padding: 0.2em 0.5em;"> Must handle according to optional-value rules. </td>
+     <td style="padding: 0.2em 0.5em;  "> Optional absence of a value. </td>
+     <td style="padding: 0.2em 0.5em;  "> Must handle according to optional-value rules. </td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">#panic</span> </td>
-     <td style="padding: 0.2em 0.5em;"> Runtime stop caused by an unrecoverable condition. </td>
-     <td style="padding: 0.2em 0.5em;"> Should not be used for normal control flow. </td>
+     <td style="padding: 0.2em 0.5em;  "> Runtime stop caused by an unrecoverable condition. </td>
+     <td style="padding: 0.2em 0.5em;  "> Should not be used for normal control flow. </td>
         </tr>
         
     </table><p>Use panics for broken assumptions, not regular failures.</p></section>

@@ -3,10 +3,8 @@
 Beanstalk is a high-level language with first-class string templates.
 The compiler is modular, exposed as a library, and used by the built-in project tooling, dev server, and backend builders.
 
-This document describes compiler stage ownership, data flow, and cross-stage contracts.
-It is not the language syntax reference, memory model spec, code style guide, roadmap, or implementation-status matrix.
+This document describes compiler stage ownership, data flow, and cross-stage contracts. Use:
 
-Use:
 - `docs/language-overview.md` for language syntax and user-facing semantics
 - `docs/memory-management-design.md` for ownership, GC fallback, borrow analysis strategy, and lowering implications
 - `docs/codebase-style-guide.md` for implementation standards
@@ -20,35 +18,35 @@ They assemble one or more compiled modules into runnable artifacts such as HTML,
 
 ### Stage orchestration
 
-- `src/compiler_frontend/mod.rs` is the frontend module map.
-- `src/compiler_frontend/pipeline.rs` owns the `CompilerFrontend` stage flow: source → tokens → headers → sorted headers → AST → HIR → borrow report.
+- `src/compiler_frontend/mod.rs` is the frontend module map
+- `src/compiler_frontend/pipeline.rs` owns the `CompilerFrontend` stage flow: source → tokens → headers → sorted headers → AST → HIR → borrow report
 
 ### Input, paths, diagnostics, and symbols
 
-- `src/compiler_frontend/tokenizer/` converts source text into located tokens and handles string/template delimiter context.
-- `src/compiler_frontend/compiler_messages/` owns structured errors, warnings, source locations, metadata, and render-boundary message aggregation.
-- `src/compiler_frontend/symbols/`, `interned_path`, and `paths/` own interned source identities, path formatting/resolution, and canonical symbol identity shared across diagnostics, imports, and lowering.
+- `src/compiler_frontend/tokenizer/` converts source text into located tokens and handles string/template delimiter context
+- `src/compiler_frontend/compiler_messages/` owns structured errors, warnings, source locations, metadata, and render-boundary message aggregation
+- `src/compiler_frontend/symbols/`, `interned_path`, and `paths/` own interned source identities, path formatting/resolution, and canonical symbol identity shared across diagnostics, imports, and lowering
 
 ### Declarations, imports, and type surface
 
 - `src/compiler_frontend/headers/` discovers top-level declarations, imports, normalized path/reference shells, declaration shells, constant initializer dependency hints, and start-body separation
 - `src/compiler_frontend/module_dependencies.rs` orders top-level declaration headers by header-provided dependency edges, including constant initializer dependencies
-- `src/compiler_frontend/declaration_syntax/` owns shared declaration parsing used by headers and body-local AST parsing.
-- `src/compiler_frontend/datatypes/` owns frontend type representations used across declarations, AST validation, HIR lowering, and backend-facing metadata.
-- `src/compiler_frontend/type_coercion/` owns contextual compatibility and promotion rules layered on top of type identity.
-- `src/compiler_frontend/value_mode.rs` tracks frontend access classification for bindings, expressions, call arguments, and receiver use. It keeps mutability/reference state separate from `DataType`; runtime ownership is a later borrow/lowering concern.
-- `src/compiler_frontend/source_libraries/` resolves builder/project source library roots into normal module inputs.
-- `src/compiler_frontend/external_packages/` stores backend-provided virtual package metadata and stable external symbol IDs.
-- `src/compiler_frontend/builtins/` owns compiler-defined language symbols and operations that are neither user source declarations nor backend-provided external packages.
-- `src/compiler_frontend/style_directives/` owns the merged frontend + builder directive registry used by tokenizer and template parsing.
-- `src/compiler_frontend/deferred_feature_diagnostics.rs` centralizes consistent diagnostics for documented or reserved language surface that is not implemented yet.
+- `src/compiler_frontend/declaration_syntax/` owns shared declaration parsing used by headers and body-local AST parsing
+- `src/compiler_frontend/datatypes/` owns frontend type representations used across declarations, AST validation, HIR lowering, and backend-facing metadata
+- `src/compiler_frontend/type_coercion/` owns contextual compatibility and promotion rules layered on top of type identity
+- `src/compiler_frontend/value_mode.rs` tracks frontend access classification for bindings, expressions, call arguments, and receiver use. It keeps mutability/reference state separate from `DataType`; runtime ownership is a later borrow/lowering concern
+- `src/compiler_frontend/source_libraries/` resolves builder/project source library roots into normal module inputs
+- `src/compiler_frontend/external_packages/` stores backend-provided virtual package metadata and stable external symbol IDs
+- `src/compiler_frontend/builtins/` owns compiler-defined language symbols and operations that are neither user source declarations nor backend-provided external packages
+- `src/compiler_frontend/style_directives/` owns the merged frontend + builder directive registry used by tokenizer and template parsing
+- `src/compiler_frontend/deferred_feature_diagnostics.rs` centralizes consistent diagnostics for documented or reserved language surface that is not implemented yet
 
 ### Semantic lowering and analysis
 
-- `src/compiler_frontend/ast/` builds the typed AST from sorted headers, resolves semantic information, parses executable bodies, folds constants/templates, and prepares HIR input.
-- `src/compiler_frontend/optimizers/constant_folding.rs` supports AST compile-time evaluation for constants and foldable template expressions.
-- `src/compiler_frontend/hir/` lowers the typed AST into the first backend-facing semantic IR.
-- `src/compiler_frontend/analysis/borrow_checker/` validates borrow/exclusivity rules and produces side-table facts for later lowering.
+- `src/compiler_frontend/ast/` builds the typed AST from sorted headers, resolves semantic information, parses executable bodies, folds constants/templates, and prepares HIR input
+- `src/compiler_frontend/optimizers/constant_folding.rs` supports AST compile-time evaluation for constants and foldable template expressions
+- `src/compiler_frontend/hir/` lowers the typed AST into the first backend-facing semantic IR
+- `src/compiler_frontend/analysis/borrow_checker/` validates borrow/exclusivity rules and produces side-table facts for later lowering
 
 ## Build-system and frontend boundary
 
@@ -93,20 +91,22 @@ Complex release optimizations should remain outside the fast frontend path unles
 
 ### Diagnostic and path identity contract
 
-A build lifecycle uses one shared `StringTable` across config loading, frontend compilation, backend validation/build, and diagnostic rendering.
+A build lifecycle uses a `StringTable` across config loading, frontend compilation, backend validation/build, and diagnostic rendering.
 
-* `SourceLocation` stores interned path/scope identity, not owned diagnostic paths.
-* Rendering and filesystem-adjacent code resolve interned paths through the shared `StringTable`.
-* Boundary types such as `BuildResult` and failed `CompilerMessages` carry the string table so later output writing, terminal rendering, and dev-server reporting can resolve paths consistently.
+- `SourceLocation` stores interned path/scope identity, not owned diagnostic paths
+
+- Rendering and filesystem-adjacent code resolve interned paths through the `StringTable`
+
+- Boundary types such as `BuildResult` and failed `CompilerMessages` carry the string table so later output writing, terminal rendering, and dev-server reporting can resolve paths consistently
 
 ### Style directive contract
 
-Project builders can register frontend style directives through `frontend_style_directives`.
+Project builders can register style directives through `frontend_style_directives`.
 
-* Frontend-owned directives are always available.
-* Builder directives cannot override frontend-owned names.
-* Tokenizer and template parsing use the same merged registry.
-* Unknown directives are rejected strictly.
+- Frontend-owned directives are always available
+- Builder directives cannot override frontend-owned names
+- Tokenizer and template parsing use the same merged registry
+- Unknown directives are rejected strictly
 
 Individual directive syntax and behavior belong in `docs/language-overview.md`.
 
@@ -119,13 +119,13 @@ AST import binding enforces file-local visibility, collision rules, prelude/buil
 
 Compiler-facing rules:
 
-* Source libraries are normal modules behind `#mod.bst` facades.
-* External packages are virtual typed symbols provided by backend metadata, not `.bst` source files.
-* External imports resolve to stable frontend IDs such as `ExternalFunctionId`.
-* Expression/type resolution uses the active `ScopeContext` visibility maps, not global bare-name lookup.
-* Backends map stable external IDs to target-specific runtime names, imports, or helper calls.
+- Source libraries are normal modules behind `#mod.bst` facades
+- External packages are virtual typed symbols provided by backend metadata, not `.bst` source files
+- External imports resolve to stable frontend IDs such as `ExternalFunctionId`
+- Expression/type resolution uses the active `ScopeContext` visibility maps, not global bare-name lookup
+- Backends map stable external IDs to target-specific runtime names, imports, or helper calls
 
-User-facing import syntax, facade rules, library categories, and deferred package features belong in `docs/language-overview.md`.
+User-facing import syntax, facade rules, library categories, and deferred package features are detailed in `docs/language-overview.md`.
 
 ### Entry start and page fragments
 
@@ -133,16 +133,16 @@ The module entry file has an implicit `start()` function containing top-level ru
 Non-entry files contribute declarations only.
 
 Header parsing captures the entry file’s top-level runtime code as a `HeaderKind::StartFunction`.
-The implicit `start` header is not part of dependency sorting; it is appended after sorted top-level declarations and lowered by AST.
+The implicit `start` header is not part of dependency sorting. It is appended after sorted top-level declarations and lowered by the AST.
 
 Entry-file page fragments are split:
 
-* Top-level runtime templates remain runtime code inside `start()`.
-* `start()` returns runtime fragment strings in source order.
-* Entry-file top-level const templates fold in AST into builder-facing compile-time fragments.
-* Each compile-time fragment records a runtime insertion index.
-* Builders merge compile-time fragments into the runtime fragment list.
-* HIR does not carry compile-time page fragments or a separate ordered start-fragment stream.
+- Top-level runtime templates remain runtime code inside `start()`
+- `start()` returns runtime fragment strings in source order
+- Entry-file top-level const templates fold in AST into builder-facing compile-time fragments
+- Each compile-time fragment records a runtime insertion index
+- Builders merge compile-time fragments into the runtime fragment list
+- HIR does not carry compile-time page fragments or a separate ordered start-fragment stream
 
 ### Top-level declaration shape
 
@@ -189,9 +189,7 @@ The compiler frontend and build system process modules through these stages:
 
 Path: `src/build_system/create_project_modules.rs`
 
-Stage 0 builds the module inputs consumed by the frontend.
-
-It:
+Stage 0 builds the module inputs consumed by the frontend. It:
 
 * loads project config constants into `Config`
 * discovers module roots from build-system entry files
@@ -208,9 +206,7 @@ Detailed `#config.bst`, module-root, `#page.bst`, and `#mod.bst` user rules belo
 
 Path: `src/compiler_frontend/tokenizer/lexer.rs`
 
-Tokenization converts source text into structured tokens with source locations.
-
-It owns:
+Tokenization converts source text into structured tokens with source locations. It owns:
 
 * basic lexical recognition
 * source location tracking
@@ -218,22 +214,17 @@ It owns:
 * style directive token recognition through the merged directive registry
 * syntax-level rejection of unsupported or unknown directive forms where applicable
 
-Tokenization does not perform semantic resolution.
-
 ## Stage 2: Header Parsing
 
 Path: `src/compiler_frontend/headers/parse_file_headers.rs`
 
 Header parsing is the only stage that discovers module-wide top-level declarations.
-It parses top-level declaration shells so later stages do not reconstruct them from raw tokens.
-
-It owns:
+It parses top-level declaration shells so later stages do not reconstruct them from raw tokens. It owns:
 
 - import and re-export parsing
 - import path validation and normalization
 - file-local import/visibility environment construction
 - declaration shell parsing for constants/functions/structs/choices/type aliases
-- constant initializer reference hint collection
 - top-level dependency edge generation
 - start-body token separation
 - top-level const fragment placement metadata
@@ -247,11 +238,11 @@ Header dependency edges include every top-level declaration dependency needed be
 - constant initializer references to other constants
 - top-level const-template references where structurally detectable
 
-Header parsing does not type-check executable bodies or fold expressions. It should prefer storing normalized, validated path/reference forms instead of raw import/path syntax where enough context exists. Later stages should consume these normalized forms instead of reparsing path text.
+Header parsing does not type-check executable bodies or fold expressions. It should prefer storing normalized, validated path/reference forms instead of raw import/path syntax where enough context exists for later stages to consume.
 
 Header parsing/import preparation builds the file-local import environment used by dependency sorting and AST. It validates and normalizes source imports, re-exports, external package imports, aliases, prelude/builtin reservations, and collision rules where they can be checked structurally.
 
-Constants are compile-time declarations. Header parsing records symbol-shaped references found in constant initializer tokens and resolves them far enough to create dependency edges to other constants. The AST later parses and folds the initializer expression, but it must not build a second constant ordering graph.
+Constants are compile-time declarations. Header parsing records symbol-shaped references found in constant initializer tokens and resolves them far enough to create dependency edges to other constants.
 
 Header parsing does not type-check executable bodies.
 Function bodies and other executable tokens are captured for AST.
@@ -283,20 +274,18 @@ AST consumes that package directly.
 
 Path: `src/compiler_frontend/module_dependencies.rs`
 
-Dependency sorting operates only on top-level declaration headers and strict dependency edges.
+Dependency sorting operates only on top-level declaration headers and strict dependency edges. It owns:
 
-It owns:
+- topological sorting of parsed top-level declaration headers
+- cycle detection in the strict top-level declaration graph
+- missing strict dependency diagnostics
+- source-order stability among otherwise independent declarations
+- appending the implicit entry `start` header after sorted declarations
 
-* topological sorting of parsed top-level declaration headers
-* cycle detection in the strict top-level declaration graph
-* missing strict dependency diagnostics
-* source-order stability among otherwise independent declarations
-* appending the implicit entry `start` header after sorted declarations
-
-It does not use executable function/start body references or body-local declarations. Constant initializer references are not body references; they are top-level compile-time declaration dependencies and belong in the header dependency graph.
+It does not use executable function/start body references or body-local declarations. Constant initializer references are not body references, they are top-level compile-time declaration dependencies and belong in the header dependency graph.
 Dependency sorting exists only to order top-level declarations before AST construction.
 
-Dependency sorting orders constants using header-provided constant initializer dependency edges. Same-file constants keep source-order semantics; same-file forward references are rejected. Cross-file constant cycles are dependency cycles.
+Dependency sorting orders constants using header-provided constant initializer dependency edges. Same-file constants keep source-order semantics. Same-file forward references are rejected. Cross-file constant cycles are dependency cycles.
 
 ### Header/dependency/AST contract
 
@@ -304,14 +293,12 @@ Header parsing and dependency sorting are responsible for making top-level decla
 
 After dependency sorting:
 
-* AST receives headers in dependency order.
-* AST must not topologically sort constants, structs, choices, functions, or aliases again.
-* AST must not rediscover top-level declarations from raw file tokens.
-* AST must not rebuild file import visibility from scratch.
-* AST resolves declaration shells in sorted order, then parses executable bodies against the completed environment.
-* If AST needs a top-level declaration to be resolved before another declaration, that dependency belongs in the header dependency graph.
-* If a new feature introduces a top-level dependency, add it to header parsing/dependency sorting rather than adding another AST ordering pass.
-* The implicit entry `start` header is never a dependency participant and is always emitted after sorted declarations.
+- AST receives headers in dependency order (it does not topologically sort constants, structs, choices, functions, or aliases again)
+- AST must not rediscover top-level declarations from raw file tokens or rebuild file import visibility from scratch
+- AST resolves declaration shells in sorted order, then parses executable bodies against the completed environment
+- If AST needs a top-level declaration to be resolved before another declaration, that dependency belongs in the header dependency graph
+- If a new feature introduces a top-level dependency, add it to header parsing/dependency sorting rather than adding another AST ordering pass
+- The implicit entry `start` header is never a dependency participant and is always emitted after sorted declarations
 
 ## Stage 4: AST Construction
 
@@ -321,22 +308,22 @@ AST consumes already-sorted declaration headers and the header-built module envi
 
 Internally, AST construction is organized around three phase owners:
 
-* `build_ast_environment`: builds file import bindings, resolved declaration metadata, constants, nominal types, function signatures, receiver catalog data, and shared environment side channels.
-* `emit_ast_nodes`: parses function/start/template bodies against the completed environment and emits AST nodes plus const-template output.
-* `finalize_ast`: performs HIR-boundary cleanup, including doc fragment extraction, const top-level fragment assembly, module constant normalization, template normalization, type-boundary validation, builtin AST merging, and final `Ast` construction.
+* `build_ast_environment`: builds file import bindings, resolved declaration metadata, constants, nominal types, function signatures, receiver catalog data, and shared environment side channels
+* `emit_ast_nodes`: parses function/start/template bodies against the completed environment and emits AST nodes plus const-template output
+* `finalize_ast`: performs HIR-boundary cleanup, including doc fragment extraction, const top-level fragment assembly, module constant normalization, template normalization, type-boundary validation, builtin AST merging, and final `Ast` construction
 
 AST owns:
 
-* type alias, constant, struct field, choice variant, and function signature validation
-* expression parsing and type checking
-* contextual coercion at declaration, return, and template/string boundaries
-* match guard validation and exhaustiveness checks
-* body-local declarations in source order
-* multi-bind validation for explicit multi-return calls
-* receiver-method cataloging
-* generic declaration/type validation at the frontend level
-* constant folding and const-only validation
-* template composition, compile-time folding, helper elimination, and runtime render-plan preparation
+- type alias, constant, struct field, choice variant, and function signature validation
+- expression parsing and type checking
+- contextual coercion at declaration, return, and template/string boundaries
+- match guard validation and exhaustiveness checks
+- body-local declarations in source order
+- multi-bind validation for explicit multi-return calls
+- receiver-method cataloging
+- generic declaration/type validation at the frontend level
+- constant folding and const-only validation
+- template composition, compile-time folding, helper elimination, and runtime render-plan preparation
 
 AST should be described by this ownership and data-flow contract, not by a fixed internal pass count.
 The internal substeps inside each phase are implementation details and may change as the stage is simplified.
@@ -356,12 +343,11 @@ Expression evaluation determines the natural type of an expression and stays str
 Contextual coercion is applied only by the frontend site that owns the boundary.
 
 Examples of boundary owners:
-
-* declarations
-* returns
-* template/string content
-* explicit builtin casts
-* backend/prelude call contracts
+- declarations
+- returns
+- template/string content
+- explicit builtin casts
+- backend/prelude call contracts
 
 Detailed numeric rules, match syntax, cast syntax, and string coercion rules belong in `docs/language-overview.md`.
 

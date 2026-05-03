@@ -36,10 +36,10 @@ import @styles/docs {navbar, title, section, palette, codeblock, theme_head}
     - @./structs (Structs)
     - @./choices (Choices)
     - @./pattern-matching (Pattern Matching)
-    - @./errors (Error Handling)
     - @./aliases (Aliases)
 
     ### Future Design Drafts
+    - @./errors (Error Handling)
     - @./reactivity (Reactivity)
     - @./async (Async)
     - @./generics (Generics)

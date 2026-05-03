@@ -8,11 +8,9 @@ The goal is to tokenize and header-parse each source file independently, using p
 
 This supports the new stage contract:
 
-```text
 Header parsing prepares top-level declaration shells, imports, visibility data, and dependency edges.
 Dependency sorting produces top-level headers in the order AST needs.
 AST consumes sorted top-level shells. It does not discover, bind, or sort them.
-```
 
 Parallelizing this stage is useful because tokenization and header parsing are the last major per-file frontend steps before dependency sorting introduces module-wide ordering. The work is cheap but frequent, and it currently forces shared mutable access to the global `StringTable`.
 
@@ -35,13 +33,11 @@ Some of these are valid interning sites. Others are churn caused by late string/
 
 Each source file is processed independently:
 
-```text
 source file
   -> preseeded local StringTable
   -> tokenize
   -> parse headers
   -> FileFrontendPrepareOutput
-```
 
 Then the module combines the per-file outputs:
 

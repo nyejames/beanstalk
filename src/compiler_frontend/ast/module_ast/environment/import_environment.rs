@@ -15,7 +15,7 @@ use rustc_hash::FxHashMap;
 
 impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
     /// Build per-source-file import visibility and start-function aliases.
-    pub(in crate::compiler_frontend::ast) fn resolve_import_bindings(
+    pub(crate)  fn resolve_import_bindings(
         &mut self,
         string_table: &mut StringTable,
     ) -> Result<FxHashMap<InternedPath, FileImportBindings>, CompilerMessages> {

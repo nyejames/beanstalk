@@ -5,6 +5,10 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
 # page_description = "Current implementation and coverage status for the Beanstalk compiler."
 # page_head = theme_head
 
+# red = [$css("inline"): background-color: rgb(232, 109, 171)]
+# orange = [$css("inline"): background-color: rgb(223, 162, 100)]
+# green = [$css("inline"): background-color: rgb(109, 232, 138)]
+
 #[navbar]
 #[title, center: IMPLEMENTATION MATRIX]
 
@@ -40,22 +44,22 @@ import @styles/docs {navbar, title, section, palette, styled_table, header, data
     [styled_table:
         [header: [: Status] [: Meaning] ]
 
-        [data:
+        [data, green:
             [: Supported]
             [: Implemented for the Alpha surface and expected to compile, type check, lower, and run through the JS / HTML pipeline.]
         ]
 
-        [data:
+        [data, orange:
             [: Partial]
             [: A useful subset is implemented, but some sub-surfaces are intentionally deferred or still being shaped before Alpha.]
         ]
 
-        [data:
+        [data, red:
             [: Experimental]
             [: Present in the repo, but not part of the Alpha stability promise.]
         ]
 
-        [data:
+        [data, red:
             [: Deferred]
             [: Not part of Alpha. Syntax should either be reserved or rejected with structured diagnostics.]
         ]

@@ -325,23 +325,23 @@ body {
             
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> Implemented for the Alpha surface and expected to compile, type check, lower, and run through the JS / HTML pipeline.</td>
+             background-color: rgb(109, 232, 138) <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Implemented for the Alpha surface and expected to compile, type check, lower, and run through the JS / HTML pipeline.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Partial</td>
-     <td style="padding: 0.2em 0.5em;"> A useful subset is implemented, but some sub-surfaces are intentionally deferred or still being shaped before Alpha.</td>
+             background-color: rgb(223, 162, 100) <td style="padding: 0.2em 0.5em;  "> Partial</td>
+     <td style="padding: 0.2em 0.5em;  "> A useful subset is implemented, but some sub-surfaces are intentionally deferred or still being shaped before Alpha.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Experimental</td>
-     <td style="padding: 0.2em 0.5em;"> Present in the repo, but not part of the Alpha stability promise.</td>
+             background-color: rgb(232, 109, 171) <td style="padding: 0.2em 0.5em;  "> Experimental</td>
+     <td style="padding: 0.2em 0.5em;  "> Present in the repo, but not part of the Alpha stability promise.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Deferred</td>
-     <td style="padding: 0.2em 0.5em;"> Not part of Alpha. Syntax should either be reserved or rejected with structured diagnostics.</td>
+             background-color: rgb(232, 109, 171) <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> Not part of Alpha. Syntax should either be reserved or rejected with structured diagnostics.</td>
         </tr>
         
     </table><h1>Coverage legend</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
@@ -353,23 +353,23 @@ body {
             
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Broad</td>
-     <td style="padding: 0.2em 0.5em;"> Multiple focused cases exist, including success and failure coverage.</td>
+             <td style="padding: 0.2em 0.5em;  "> Broad</td>
+     <td style="padding: 0.2em 0.5em;  "> Multiple focused cases exist, including success and failure coverage.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Targeted</td>
-     <td style="padding: 0.2em 0.5em;"> Dedicated coverage exists, but not across all important edges.</td>
+             <td style="padding: 0.2em 0.5em;  "> Targeted</td>
+     <td style="padding: 0.2em 0.5em;  "> Dedicated coverage exists, but not across all important edges.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Thin</td>
-     <td style="padding: 0.2em 0.5em;"> Coverage exists indirectly or through only a small number of cases.</td>
+             <td style="padding: 0.2em 0.5em;  "> Thin</td>
+     <td style="padding: 0.2em 0.5em;  "> Coverage exists indirectly or through only a small number of cases.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> None</td>
-     <td style="padding: 0.2em 0.5em;"> No clear canonical coverage found.</td>
+             <td style="padding: 0.2em 0.5em;  "> None</td>
+     <td style="padding: 0.2em 0.5em;  "> No clear canonical coverage found.</td>
         </tr>
         
     </table></section>
@@ -382,81 +382,81 @@ body {
             
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Entry files and implicit start</td>
-     <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> Broad entry-start, dependency-sort, non-entry top-level rejection, imported-start, and fragment-order coverage.</td>
-     <td style="padding: 0.2em 0.5em;"> Frontend / HTML builder</td>
-     <td style="padding: 0.2em 0.5em;"> Only the module entry file runs top-level runtime code. Non-entry top-level executable code and runtime templates are rejected. The implicit <span style="
+             <td style="padding: 0.2em 0.5em;  "> Entry files and implicit start</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad entry-start, dependency-sort, non-entry top-level rejection, imported-start, and fragment-order coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> Frontend / HTML builder</td>
+     <td style="padding: 0.2em 0.5em;  "> Only the module entry file runs top-level runtime code. Non-entry top-level executable code and runtime templates are rejected. The implicit <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">start</span> function is build-system-owned and is not an importable/callable user declaration.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Variables, assignment, and scoped blocks</td>
-     <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> Broad declaration, reassignment, mutability, scope, shadowing, undefined-mutation, block-scope, and diagnostics coverage.</td>
-     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
-     <td style="padding: 0.2em 0.5em;"> Mutable writes require mutable places. <span style="
+             <td style="padding: 0.2em 0.5em;  "> Variables, assignment, and scoped blocks</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad declaration, reassignment, mutability, scope, shadowing, undefined-mutation, block-scope, and diagnostics coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;  "> Mutable writes require mutable places. <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">block:</span> creates a lexical/control-flow scope. Bare labeled scopes remain rejected.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Control flow</td>
-     <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> Broad parser, HIR, integration, dispatcher, and structured-lowering coverage.</td>
-     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
-     <td style="padding: 0.2em 0.5em;"> Keep loops, break / continue, match lowering, and branch-heavy CFG cases covered.</td>
+             <td style="padding: 0.2em 0.5em;  "> Control flow</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad parser, HIR, integration, dispatcher, and structured-lowering coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;  "> Keep loops, break / continue, match lowering, and branch-heavy CFG cases covered.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Functions and calls</td>
-     <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> Broad function declaration, call validation, parameter passing, external-call, and return coverage.</td>
-     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
-     <td style="padding: 0.2em 0.5em;"> Keep named and positional call semantics strict. External and builtin calls remain positional-only.</td>
+             <td style="padding: 0.2em 0.5em;  "> Functions and calls</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad function declaration, call validation, parameter passing, external-call, and return coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;  "> Keep named and positional call semantics strict. External and builtin calls remain positional-only.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Templates and style directives</td>
-     <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> Broad template parsing, slot, directive, const-fragment, and runtime-fragment coverage.</td>
-     <td style="padding: 0.2em 0.5em;"> HTML / JS</td>
-     <td style="padding: 0.2em 0.5em;"> This is one of the main Alpha surfaces. Keep fragment ordering and slot composition heavily tested.</td>
+             <td style="padding: 0.2em 0.5em;  "> Templates and style directives</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad template parsing, slot, directive, const-fragment, and runtime-fragment coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> HTML / JS</td>
+     <td style="padding: 0.2em 0.5em;  "> This is one of the main Alpha surfaces. Keep fragment ordering and slot composition heavily tested.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Structs, records, and receiver methods</td>
-     <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> Broad integration coverage with targeted parser and receiver-catalog unit coverage.</td>
-     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
-     <td style="padding: 0.2em 0.5em;"> Field mutation, nested field mutation, nominal mismatch, constructor named arguments, receiver borrow behavior, scalar receiver methods, and cross-file exported receiver use are covered. Keep Wasm receiver behavior experimental.</td>
+             <td style="padding: 0.2em 0.5em;  "> Structs, records, and receiver methods</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad integration coverage with targeted parser and receiver-catalog unit coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;  "> Field mutation, nested field mutation, nominal mismatch, constructor named arguments, receiver borrow behavior, scalar receiver methods, and cross-file exported receiver use are covered. Keep Wasm receiver behavior experimental.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Choices</td>
-     <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> Broad parser, declaration, constructor, match, import, assignment, return, JS carrier-shape, payload coverage, unit equality, and payload structural equality coverage.</td>
-     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
-     <td style="padding: 0.2em 0.5em;"> Unit variants, payload variants, constructor calls, imports, assignment, return, JS carrier shape, payload matching, and structural equality are supported. Structural equality compares variant identity and payload fields recursively when every payload field supports equality. Payload fields are immutable. Payload shorthand, generic choices, recursive choices, nested payload patterns, direct payload field access, and variant defaults remain deferred or rejected with diagnostics.</td>
+             <td style="padding: 0.2em 0.5em;  "> Choices</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad parser, declaration, constructor, match, import, assignment, return, JS carrier-shape, payload coverage, unit equality, and payload structural equality coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;  "> Unit variants, payload variants, constructor calls, imports, assignment, return, JS carrier shape, payload matching, and structural equality are supported. Structural equality compares variant identity and payload fields recursively when every payload field supports equality. Payload fields are immutable. Payload shorthand, generic choices, recursive choices, nested payload patterns, direct payload field access, and variant defaults remain deferred or rejected with diagnostics.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Pattern matching</td>
-     <td style="padding: 0.2em 0.5em;"> Partial</td>
-     <td style="padding: 0.2em 0.5em;"> Broad literal, choice-match, and payload-capture coverage, including exhaustiveness and diagnostics.</td>
-     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
-     <td style="padding: 0.2em 0.5em;"> Literal patterns, choice variant patterns, payload extraction, relational patterns including strings, guards, else arms, and general capture patterns are supported. Wildcard patterns using '_' are permanently rejected; use else => instead. Obvious unreachable arms warn. Full relational overlap analysis and nested choice payload patterns remain deferred.</td>
+             <td style="padding: 0.2em 0.5em;  "> Pattern matching</td>
+     <td style="padding: 0.2em 0.5em;  "> Partial</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad literal, choice-match, and payload-capture coverage, including exhaustiveness and diagnostics.</td>
+     <td style="padding: 0.2em 0.5em;  "> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;  "> Literal patterns, choice variant patterns, payload extraction, relational patterns including strings, guards, else arms, and general capture patterns are supported. Wildcard patterns using '_' are permanently rejected; use else => instead. Obvious unreachable arms warn. Full relational overlap analysis and nested choice payload patterns remain deferred.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Collections</td>
-     <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> Broad collection literal, mutation, builtin method, indexing, loop, result, and JS helper coverage. New capacity parsing coverage.</td>
-     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
-     <td style="padding: 0.2em 0.5em;"> Collections internally use the generic type infrastructure. Public syntax remains <span style="
+             <td style="padding: 0.2em 0.5em;  "> Collections</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad collection literal, mutation, builtin method, indexing, loop, result, and JS helper coverage. New capacity parsing coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;  "> Collections internally use the generic type infrastructure. Public syntax remains <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">{T}</span> and <span style="
@@ -466,11 +466,11 @@ body {
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Collection generic substrate</td>
-     <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> Broad existing collection tests plus new capacity parsing tests.</td>
-     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
-     <td style="padding: 0.2em 0.5em;"> Internally represented as <span style="
+             <td style="padding: 0.2em 0.5em;  "> Collection generic substrate</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad existing collection tests plus new capacity parsing tests.</td>
+     <td style="padding: 0.2em 0.5em;  "> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;  "> Internally represented as <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">GenericInstance</span> with <span style="
@@ -483,35 +483,35 @@ body {
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Results, options, multiple returns, and multi-bind</td>
-     <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> Broad result, option, fallback, propagation, handler, cast, and multi-bind coverage.</td>
-     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
-     <td style="padding: 0.2em 0.5em;"> Multi-bind is limited to explicit multi-return function calls. It is not general destructuring.</td>
+             <td style="padding: 0.2em 0.5em;  "> Results, options, multiple returns, and multi-bind</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad result, option, fallback, propagation, handler, cast, and multi-bind coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;  "> Multi-bind is limited to explicit multi-return function calls. It is not general destructuring.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Constants and compile-time folding</td>
-     <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> Broad constant declaration, const-only validation, explicit dependency ordering, same-file source-order rejection, cross-file imports, folding, overflow, const-template, and const-record coverage.</td>
-     <td style="padding: 0.2em 0.5em;"> Frontend / HTML builder</td>
-     <td style="padding: 0.2em 0.5em;"> Runtime expressions and host calls in constants are rejected. Same-file constants must be declared before use; imported constants are resolved through the AST constant dependency graph. Module constants remain compile-time metadata rather than runtime top-level statements.</td>
+             <td style="padding: 0.2em 0.5em;  "> Constants and compile-time folding</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad constant declaration, const-only validation, explicit dependency ordering, same-file source-order rejection, cross-file imports, folding, overflow, const-template, and const-record coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> Frontend / HTML builder</td>
+     <td style="padding: 0.2em 0.5em;  "> Runtime expressions and host calls in constants are rejected. Same-file constants must be declared before use; imported constants are resolved through the AST constant dependency graph. Module constants remain compile-time metadata rather than runtime top-level statements.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Type aliases</td>
-     <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> Broad alias declaration, collection/option/import target, visibility, cycle, duplicate, value-misuse, constructor-misuse, and import-alias interaction coverage.</td>
-     <td style="padding: 0.2em 0.5em;"> Frontend-owned</td>
-     <td style="padding: 0.2em 0.5em;"> Type aliases are transparent and annotation-only. Imported aliases are file-local; exporting an imported type under a public name requires declaring a real exported type alias. Aliases to external opaque types are rejected with structured diagnostics.</td>
+             <td style="padding: 0.2em 0.5em;  "> Type aliases</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad alias declaration, collection/option/import target, visibility, cycle, duplicate, value-misuse, constructor-misuse, and import-alias interaction coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> Frontend-owned</td>
+     <td style="padding: 0.2em 0.5em;  "> Type aliases are transparent and annotation-only. Imported aliases are file-local; exporting an imported type under a public name requires declaring a real exported type alias. Aliases to external opaque types are rejected with structured diagnostics.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Arithmetic, numeric casts, and explicit copy</td>
-     <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> Broad arithmetic, precedence, integer division, contextual numeric promotion, compound assignment, builtin cast, runtime fallback, explicit copy, and JS helper coverage.</td>
-     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
-     <td style="padding: 0.2em 0.5em;"> Regular <span style="
+             <td style="padding: 0.2em 0.5em;  "> Arithmetic, numeric casts, and explicit copy</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad arithmetic, precedence, integer division, contextual numeric promotion, compound assignment, builtin cast, runtime fallback, explicit copy, and JS helper coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;  "> Regular <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">/</span> returns <span style="
@@ -539,46 +539,46 @@ body {
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Type checking and coercion</td>
-     <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> Broad type compatibility, contextual promotion, strict expression typing, call argument, and declaration coverage.</td>
-     <td style="padding: 0.2em 0.5em;"> Frontend-owned</td>
-     <td style="padding: 0.2em 0.5em;"> Keep strict expression typing separate from contextual declaration / return coercion.</td>
+             <td style="padding: 0.2em 0.5em;  "> Type checking and coercion</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad type compatibility, contextual promotion, strict expression typing, call argument, and declaration coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> Frontend-owned</td>
+     <td style="padding: 0.2em 0.5em;  "> Keep strict expression typing separate from contextual declaration / return coercion.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> String coercion and IO/template boundaries</td>
-     <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> Broad valid string-content coercion plus IO/template rejection coverage for structs, collections, options, results, and multiple-return values.</td>
-     <td style="padding: 0.2em 0.5em;"> Frontend / JS</td>
-     <td style="padding: 0.2em 0.5em;"> Template heads and <span style="
+             <td style="padding: 0.2em 0.5em;  "> String coercion and IO/template boundaries</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad valid string-content coercion plus IO/template rejection coverage for structs, collections, options, results, and multiple-return values.</td>
+     <td style="padding: 0.2em 0.5em;  "> Frontend / JS</td>
+     <td style="padding: 0.2em 0.5em;  "> Template heads and <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">io</span> accept only supported string-content values. Complex values must be handled, extracted, or converted before string-boundary use.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Borrow validation and ownership analysis</td>
-     <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> Broad borrow, aliasing, mutable/exclusive access, use-after-move, branch merge, loop, short-circuit, lifetime, drop-site, and adversarial coverage.</td>
-     <td style="padding: 0.2em 0.5em;"> HIR analysis / JS GC baseline</td>
-     <td style="padding: 0.2em 0.5em;"> Borrow validation enforces exclusivity and move-safety, while ownership/drop facts remain advisory for GC-only JS. Do not make ownership semantic; GC fallback remains the language baseline.</td>
+             <td style="padding: 0.2em 0.5em;  "> Borrow validation and ownership analysis</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad borrow, aliasing, mutable/exclusive access, use-after-move, branch merge, loop, short-circuit, lifetime, drop-site, and adversarial coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> HIR analysis / JS GC baseline</td>
+     <td style="padding: 0.2em 0.5em;  "> Borrow validation enforces exclusivity and move-safety, while ownership/drop facts remain advisory for GC-only JS. Do not make ownership semantic; GC fallback remains the language baseline.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Paths and imports</td>
-     <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> Broad import syntax, relative child path, entry root fallback, source library prefix, circular dependency, multi-file module, single-symbol aliases, grouped aliases, nested grouped aliases, collision, and file-local coverage.</td>
-     <td style="padding: 0.2em 0.5em;"> Frontend / HTML builder</td>
-     <td style="padding: 0.2em 0.5em;"> Path rendering is golden-sensitive. Keep normalized output and platform-stable diagnostics covered. Single-symbol source import aliases, grouped source import aliases, and nested grouped source import aliases are supported. Aliases are file-local and not re-exported. Alias and visible-name collisions are hard errors across same-file declarations, source imports, external imports, type aliases, prelude symbols, builtins, and re-export public names. Prelude and external symbols cannot be redeclared as user functions or variables at top level or in body scope. Alias case mismatches warn. Grouped import aliases reject group-level trailing aliases, invalid local alias names, and duplicate alias syntax with structured diagnostics. Parent-directory imports with `..` are not supported, and imports must stay within allowed module/library/project roots.</td>
+             <td style="padding: 0.2em 0.5em;  "> Paths and imports</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad import syntax, relative child path, entry root fallback, source library prefix, circular dependency, multi-file module, single-symbol aliases, grouped aliases, nested grouped aliases, collision, and file-local coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> Frontend / HTML builder</td>
+     <td style="padding: 0.2em 0.5em;  "> Path rendering is golden-sensitive. Keep normalized output and platform-stable diagnostics covered. Single-symbol source import aliases, grouped source import aliases, and nested grouped source import aliases are supported. Aliases are file-local and not re-exported. Alias and visible-name collisions are hard errors across same-file declarations, source imports, external imports, type aliases, prelude symbols, builtins, and re-export public names. Prelude and external symbols cannot be redeclared as user functions or variables at top level or in body scope. Alias case mismatches warn. Grouped import aliases reject group-level trailing aliases, invalid local alias names, and duplicate alias syntax with structured diagnostics. Parent-directory imports with `..` are not supported, and imports must stay within allowed module/library/project roots.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> External platform packages</td>
-     <td style="padding: 0.2em 0.5em;"> Partial</td>
-     <td style="padding: 0.2em 0.5em;"> Broad package-scoped import and visibility coverage, with targeted external constant, Float/F64 ABI, core libraries, prelude, duplicate-name, non-imported-symbol, and alias diagnostics.</td>
-     <td style="padding: 0.2em 0.5em;"> Frontend / JS</td>
-     <td style="padding: 0.2em 0.5em;"> Functions, opaque types, and compile-time external constants are supported through Rust-side registry metadata. <ul><li>User-authored external binding files are not supported. Alpha external packages are Rust-side builder/compiler metadata.</li><li>External constants are implemented for scalar compile-time values (Int, Float, Bool) and lower through expression parsing as ordinary literals. Non-scalar external constants are rejected in constant contexts.</li><li>External ABI metadata includes <span style="
+             <td style="padding: 0.2em 0.5em;  "> External platform packages</td>
+     <td style="padding: 0.2em 0.5em;  "> Partial</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad package-scoped import and visibility coverage, with targeted external constant, Float/F64 ABI, core libraries, prelude, duplicate-name, non-imported-symbol, and alias diagnostics.</td>
+     <td style="padding: 0.2em 0.5em;  "> Frontend / JS</td>
+     <td style="padding: 0.2em 0.5em;  "> Functions, opaque types, and compile-time external constants are supported through Rust-side registry metadata. <ul><li>User-authored external binding files are not supported. Alpha external packages are Rust-side builder/compiler metadata.</li><li>External constants are implemented for scalar compile-time values (Int, Float, Bool) and lower through expression parsing as ordinary literals. Non-scalar external constants are rejected in constant contexts.</li><li>External ABI metadata includes <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">F64</span>, <span style="
@@ -606,25 +606,25 @@ body {
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Core prelude libraries</td>
-     <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> Targeted coverage for prelude symbol registration and collision rejection.</td>
-     <td style="padding: 0.2em 0.5em;"> Frontend / JS</td>
-     <td style="padding: 0.2em 0.5em;"> Every builder must provide `@core/prelude`. `io` and `IO` are registered as bare prelude symbols. Prelude collision rejection is enforced: explicit imports cannot shadow prelude names, and prelude symbols cannot be redeclared as user declarations.</td>
+             <td style="padding: 0.2em 0.5em;  "> Core prelude libraries</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Targeted coverage for prelude symbol registration and collision rejection.</td>
+     <td style="padding: 0.2em 0.5em;  "> Frontend / JS</td>
+     <td style="padding: 0.2em 0.5em;  "> Every builder must provide `@core/prelude`. `io` and `IO` are registered as bare prelude symbols. Prelude collision rejection is enforced: explicit imports cannot shadow prelude names, and prelude symbols cannot be redeclared as user declarations.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Core math package</td>
-     <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> Targeted success and diagnostic coverage for direct, grouped, and aliased imports; aliased constants such as <span style="
+             <td style="padding: 0.2em 0.5em;  "> Core math package</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Targeted success and diagnostic coverage for direct, grouped, and aliased imports; aliased constants such as <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">PI as pi</span>; aliased functions such as <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">sin as sine</span>; const-context constants; arity errors; type errors; missing symbols; and non-imported access.</td>
-     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
+     <td style="padding: 0.2em 0.5em;  "> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">@core/math</span> exposes <span style="
@@ -706,11 +706,11 @@ body {
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Core text package</td>
-     <td style="padding: 0.2em 0.5em;"> Partial</td>
-     <td style="padding: 0.2em 0.5em;"> Targeted runtime, JS helper, arity, type-error, edge-case, unsupported-builder, and Wasm-unsupported coverage.</td>
-     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> Core text package</td>
+     <td style="padding: 0.2em 0.5em;  "> Partial</td>
+     <td style="padding: 0.2em 0.5em;  "> Targeted runtime, JS helper, arity, type-error, edge-case, unsupported-builder, and Wasm-unsupported coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">@core/text</span> exposes <span style="
@@ -741,11 +741,11 @@ body {
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Core random package</td>
-     <td style="padding: 0.2em 0.5em;"> Partial</td>
-     <td style="padding: 0.2em 0.5em;"> Targeted import, JS helper, runtime smoke, arity, type-error, and Wasm-unsupported coverage.</td>
-     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> Core random package</td>
+     <td style="padding: 0.2em 0.5em;  "> Partial</td>
+     <td style="padding: 0.2em 0.5em;  "> Targeted import, JS helper, runtime smoke, arity, type-error, and Wasm-unsupported coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">@core/random</span> exposes <span style="
@@ -773,11 +773,11 @@ body {
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Core time package</td>
-     <td style="padding: 0.2em 0.5em;"> Partial</td>
-     <td style="padding: 0.2em 0.5em;"> Targeted import, JS helper, runtime smoke, arity-error, and Wasm-unsupported coverage.</td>
-     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> Core time package</td>
+     <td style="padding: 0.2em 0.5em;  "> Partial</td>
+     <td style="padding: 0.2em 0.5em;  "> Targeted import, JS helper, runtime smoke, arity-error, and Wasm-unsupported coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">@core/time</span> exposes <span style="
@@ -793,11 +793,11 @@ body {
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Source library roots</td>
-     <td style="padding: 0.2em 0.5em;"> Partial</td>
-     <td style="padding: 0.2em 0.5em;"> Targeted coverage for config-defined source library root resolution, prefix collision detection, and `#mod.bst` facade enforcement.</td>
-     <td style="padding: 0.2em 0.5em;"> Frontend / HTML</td>
-     <td style="padding: 0.2em 0.5em;"> Source libraries and regular modules share the same visibility model. <span style="
+             <td style="padding: 0.2em 0.5em;  "> Source library roots</td>
+     <td style="padding: 0.2em 0.5em;  "> Partial</td>
+     <td style="padding: 0.2em 0.5em;  "> Targeted coverage for config-defined source library root resolution, prefix collision detection, and `#mod.bst` facade enforcement.</td>
+     <td style="padding: 0.2em 0.5em;  "> Frontend / HTML</td>
+     <td style="padding: 0.2em 0.5em;  "> Source libraries and regular modules share the same visibility model. <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">#library_folders</span> defines project-local source-library scan folders; each direct child directory of a configured scan folder becomes an import prefix. The configured scan folder name itself is not an import prefix. `/lib` is the default scan folder when <span style="
@@ -813,62 +813,62 @@ body {
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Builder-provided source libraries</td>
-     <td style="padding: 0.2em 0.5em;"> Partial</td>
-     <td style="padding: 0.2em 0.5em;"> Targeted coverage for builder-provided source library root registration and HTML builder library.</td>
-     <td style="padding: 0.2em 0.5em;"> Frontend / HTML</td>
-     <td style="padding: 0.2em 0.5em;"> Builders expose source libraries through `LibrarySet.source_libraries`. The HTML builder provides `@html` as a default source library with basic HTML tag helpers and formatting utilities. These libraries follow the same module visibility/facade rules as project modules. Prefix collisions between builder-provided and project-local libraries produce a hard config error.</td>
+             <td style="padding: 0.2em 0.5em;  "> Builder-provided source libraries</td>
+     <td style="padding: 0.2em 0.5em;  "> Partial</td>
+     <td style="padding: 0.2em 0.5em;  "> Targeted coverage for builder-provided source library root registration and HTML builder library.</td>
+     <td style="padding: 0.2em 0.5em;  "> Frontend / HTML</td>
+     <td style="padding: 0.2em 0.5em;  "> Builders expose source libraries through `LibrarySet.source_libraries`. The HTML builder provides `@html` as a default source library with basic HTML tag helpers and formatting utilities. These libraries follow the same module visibility/facade rules as project modules. Prefix collisions between builder-provided and project-local libraries produce a hard config error.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Project-local libraries</td>
-     <td style="padding: 0.2em 0.5em;"> Partial</td>
-     <td style="padding: 0.2em 0.5em;"> Targeted coverage for config-defined project library folders, import resolution, and facade gating.</td>
-     <td style="padding: 0.2em 0.5em;"> Frontend / HTML</td>
-     <td style="padding: 0.2em 0.5em;"> Project-local source libraries are discovered from <span style="
+             <td style="padding: 0.2em 0.5em;  "> Project-local libraries</td>
+     <td style="padding: 0.2em 0.5em;  "> Partial</td>
+     <td style="padding: 0.2em 0.5em;  "> Targeted coverage for config-defined project library folders, import resolution, and facade gating.</td>
+     <td style="padding: 0.2em 0.5em;  "> Frontend / HTML</td>
+     <td style="padding: 0.2em 0.5em;  "> Project-local source libraries are discovered from <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">#library_folders</span> (default convention: `/lib` when not configured). Imports resolve through the library prefix (for example, `/lib/helper` as `@helper` or `/packages/helper` as `@helper`). Public cross-module access goes through `#mod.bst`; bypassing implementation files from outside the module is rejected. Module boundary enforcement applies to all module roots, not only project-local libraries.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> HTML project builds</td>
-     <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> Broad routing, document shell, metadata, tracked asset, config, and page-fragment coverage.</td>
-     <td style="padding: 0.2em 0.5em;"> HTML / JS</td>
-     <td style="padding: 0.2em 0.5em;"> This is the release-critical project backend. HTML-Wasm cases must not be treated as Alpha support requirements.</td>
+             <td style="padding: 0.2em 0.5em;  "> HTML project builds</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad routing, document shell, metadata, tracked asset, config, and page-fragment coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> HTML / JS</td>
+     <td style="padding: 0.2em 0.5em;  "> This is the release-critical project backend. HTML-Wasm cases must not be treated as Alpha support requirements.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Logical expressions</td>
-     <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> Broad precedence, grouping, invalid operand, not, comparison, and JS operator mapping coverage.</td>
-     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
-     <td style="padding: 0.2em 0.5em;"> Keep short-circuit behavior covered through artifact-shaped tests.</td>
+             <td style="padding: 0.2em 0.5em;  "> Logical expressions</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad precedence, grouping, invalid operand, not, comparison, and JS operator mapping coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;  "> Keep short-circuit behavior covered through artifact-shaped tests.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> If statements and conditions</td>
-     <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> Broad condition validation, nested condition, Bool requirement, and JS lowering coverage.</td>
-     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
-     <td style="padding: 0.2em 0.5em;"> No major Alpha gap if current control-flow coverage remains green.</td>
+             <td style="padding: 0.2em 0.5em;  "> If statements and conditions</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad condition validation, nested condition, Bool requirement, and JS lowering coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;  "> No major Alpha gap if current control-flow coverage remains green.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Char</td>
-     <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> Broad success coverage with targeted diagnostic coverage.</td>
-     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
-     <td style="padding: 0.2em 0.5em;"> Additional malformed-char diagnostics are useful cleanup, not a core Alpha blocker.</td>
+             <td style="padding: 0.2em 0.5em;  "> Char</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad success coverage with targeted diagnostic coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;  "> Additional malformed-char diagnostics are useful cleanup, not a core Alpha blocker.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Named arguments and call-site mutability</td>
-     <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> Broad function-call, constructor-call, duplicate, unknown, missing, ordering, and tilde diagnostics coverage.</td>
-     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
-     <td style="padding: 0.2em 0.5em;"> Fresh rvalues can satisfy mutable parameters without <span style="
+             <td style="padding: 0.2em 0.5em;  "> Named arguments and call-site mutability</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad function-call, constructor-call, duplicate, unknown, missing, ordering, and tilde diagnostics coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;  "> Fresh rvalues can satisfy mutable parameters without <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">~</span>. Existing places still require explicit <span style="
@@ -887,11 +887,11 @@ body {
             
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Collection methods</td>
-     <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> Broad JS helper, mutation, indexed write, out-of-bounds, and explicit-mutable-receiver coverage.</td>
-     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> Collection methods</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad JS helper, mutation, indexed write, out-of-bounds, and explicit-mutable-receiver coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">get</span>, <span style="
@@ -910,9 +910,9 @@ body {
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Error helper methods</td>
-     <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> Targeted coverage for <span style="
+             <td style="padding: 0.2em 0.5em;  "> Error helper methods</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Targeted coverage for <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">with_location</span>, <span style="
@@ -922,24 +922,24 @@ body {
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">bubble</span>.</td>
-     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
-     <td style="padding: 0.2em 0.5em;"> Keep emitted helper contracts pinned through JS backend tests.</td>
+     <td style="padding: 0.2em 0.5em;  "> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;  "> Keep emitted helper contracts pinned through JS backend tests.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Receiver methods</td>
-     <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> Broad method call, export, same-file restriction, unsupported receiver, and mutable receiver diagnostics coverage.</td>
-     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
-     <td style="padding: 0.2em 0.5em;"> User-defined struct methods must stay statically resolved and same-file with the struct for Alpha.</td>
+             <td style="padding: 0.2em 0.5em;  "> Receiver methods</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad method call, export, same-file restriction, unsupported receiver, and mutable receiver diagnostics coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;  "> User-defined struct methods must stay statically resolved and same-file with the struct for Alpha.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Result suffix handling</td>
-     <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> Broad propagation, fallback, named handler, handler fallthrough, and template-boundary coverage.</td>
-     <td style="padding: 0.2em 0.5em;"> JS / HTML</td>
-     <td style="padding: 0.2em 0.5em;"> Keep <span style="
+             <td style="padding: 0.2em 0.5em;  "> Result suffix handling</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad propagation, fallback, named handler, handler fallthrough, and template-boundary coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> JS / HTML</td>
+     <td style="padding: 0.2em 0.5em;  "> Keep <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">__bs_result_propagate</span> and <span style="
@@ -949,11 +949,11 @@ body {
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Builtin Error type</td>
-     <td style="padding: 0.2em 0.5em;"> Supported for current runtime surface</td>
-     <td style="padding: 0.2em 0.5em;"> Reserved symbol diagnostics and helper runtime coverage exist.</td>
-     <td style="padding: 0.2em 0.5em;"> Frontend / JS</td>
-     <td style="padding: 0.2em 0.5em;"> Further Error enrichment is deferred. Do not expand this before Alpha unless required by supported result handling.</td>
+             <td style="padding: 0.2em 0.5em;  "> Builtin Error type</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported for current runtime surface</td>
+     <td style="padding: 0.2em 0.5em;  "> Reserved symbol diagnostics and helper runtime coverage exist.</td>
+     <td style="padding: 0.2em 0.5em;  "> Frontend / JS</td>
+     <td style="padding: 0.2em 0.5em;  "> Further Error enrichment is deferred. Do not expand this before Alpha unless required by supported result handling.</td>
         </tr>
         
     </table></section>
@@ -966,20 +966,20 @@ body {
             
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> HTML-Wasm</td>
-     <td style="padding: 0.2em 0.5em;"> Experimental</td>
-     <td style="padding: 0.2em 0.5em;"> Backend experiment and integration path for future Wasm output.</td>
-     <td style="padding: 0.2em 0.5em;"> Keep behind <span style="
+             <td style="padding: 0.2em 0.5em;  "> HTML-Wasm</td>
+     <td style="padding: 0.2em 0.5em;  "> Experimental</td>
+     <td style="padding: 0.2em 0.5em;  "> Backend experiment and integration path for future Wasm output.</td>
+     <td style="padding: 0.2em 0.5em;  "> Keep behind <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">--html-wasm</span>. Tests may pin current behavior, but Alpha support is JS / HTML.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Wasm backend</td>
-     <td style="padding: 0.2em 0.5em;"> Experimental</td>
-     <td style="padding: 0.2em 0.5em;"> Long-term backend direction. Current lowering/runtime support is partial.</td>
-     <td style="padding: 0.2em 0.5em;"> Do not count Wasm support as an Alpha blocker except for clean diagnostics or no-panic guarantees on covered paths.</td>
+             <td style="padding: 0.2em 0.5em;  "> Wasm backend</td>
+     <td style="padding: 0.2em 0.5em;  "> Experimental</td>
+     <td style="padding: 0.2em 0.5em;  "> Long-term backend direction. Current lowering/runtime support is partial.</td>
+     <td style="padding: 0.2em 0.5em;  "> Do not count Wasm support as an Alpha blocker except for clean diagnostics or no-panic guarantees on covered paths.</td>
         </tr>
         
     </table></section>
@@ -992,58 +992,58 @@ body {
             
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Traits / interfaces</td>
-     <td style="padding: 0.2em 0.5em;"> Deferred</td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> Traits / interfaces</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">trait_declaration_reserved</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">trait_this_reserved</span></td>
-     <td style="padding: 0.2em 0.5em;"> Syntax is reserved for future design work.</td>
+     <td style="padding: 0.2em 0.5em;  "> Syntax is reserved for future design work.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Async / concurrency scopes</td>
-     <td style="padding: 0.2em 0.5em;"> Deferred</td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> Async / concurrency scopes</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">async_block_reserved</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">async_keyword_declaration_rejected</span></td>
-     <td style="padding: 0.2em 0.5em;"> Future async syntax is design-only. Current <span style="
+     <td style="padding: 0.2em 0.5em;  "> Future async syntax is design-only. Current <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">async</span> statement and declaration positions are rejected with structured diagnostics.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Checked scopes</td>
-     <td style="padding: 0.2em 0.5em;"> Deferred</td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> Checked scopes</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">checked_block_reserved</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">checked_keyword_declaration_rejected</span></td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
+     <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">checked</span> is reserved and rejected cleanly until checked/effect semantics are designed.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Labeled scopes</td>
-     <td style="padding: 0.2em 0.5em;"> Rejected / Reserved</td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> Labeled scopes</td>
+     <td style="padding: 0.2em 0.5em;  "> Rejected / Reserved</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">labeled_scope_rejected</span></td>
-     <td style="padding: 0.2em 0.5em;"> Bare <span style="
+     <td style="padding: 0.2em 0.5em;  "> Bare <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">label:</span> syntax is not supported. Use <span style="
@@ -1053,9 +1053,9 @@ body {
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Legacy / foreign-language syntax</td>
-     <td style="padding: 0.2em 0.5em;"> Rejected / Reserved</td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> Legacy / foreign-language syntax</td>
+     <td style="padding: 0.2em 0.5em;  "> Rejected / Reserved</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">typescript_style_declaration_rejected</span>, <span style="
@@ -1086,13 +1086,13 @@ body {
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">diagnostic_expression_bang_negation</span></td>
-     <td style="padding: 0.2em 0.5em;"> These are diagnostic-quality fixtures only. Do not treat compatibility syntax as planned Alpha surface.</td>
+     <td style="padding: 0.2em 0.5em;  "> These are diagnostic-quality fixtures only. Do not treat compatibility syntax as planned Alpha surface.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Choice unit variants</td>
-     <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> Choice unit variants</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">choice_basic_declaration_and_use</span>, <span style="
@@ -1102,13 +1102,13 @@ body {
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">choice_imported_unit_constructor_call_rejected</span></td>
-     <td style="padding: 0.2em 0.5em;"> Unit variants are constructed as `Choice::Variant`. Empty constructor calls are invalid.</td>
+     <td style="padding: 0.2em 0.5em;  "> Unit variants are constructed as `Choice::Variant`. Empty constructor calls are invalid.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Choice record payload variants</td>
-     <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> Choice record payload variants</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">choice_payload_record_declaration_success</span>, <span style="
@@ -1130,13 +1130,13 @@ body {
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">choice_payload_shorthand_rejected</span></td>
-     <td style="padding: 0.2em 0.5em;"> Only `Variant | field Type, ... |` syntax. Payload shorthand is rejected.</td>
+     <td style="padding: 0.2em 0.5em;  "> Only `Variant | field Type, ... |` syntax. Payload shorthand is rejected.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Choice constructor use</td>
-     <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> Choice constructor use</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">choice_payload_constructor_positional_success</span>, <span style="
@@ -1173,26 +1173,26 @@ body {
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">choice_imported_payload_constructor_success</span></td>
-     <td style="padding: 0.2em 0.5em;"> Unit variants use `Choice::Variant` without parentheses. Payload variants use `Choice::Variant(...)` with positional and named arguments. Empty constructor calls on unit variants are rejected. Missing constructor args on payload variants are rejected.</td>
+     <td style="padding: 0.2em 0.5em;  "> Unit variants use `Choice::Variant` without parentheses. Payload variants use `Choice::Variant(...)` with positional and named arguments. Empty constructor calls on unit variants are rejected. Missing constructor args on payload variants are rejected.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Choice const values</td>
-     <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> Choice const values</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">choice_const_unit_success</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">choice_const_payload_success</span></td>
-     <td style="padding: 0.2em 0.5em;"> Unit and payload choice variants can be used in top-level `#` constant declarations.</td>
+     <td style="padding: 0.2em 0.5em;  "> Unit and payload choice variants can be used in top-level `#` constant declarations.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Choice payload matching</td>
-     <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> Choice payload matching</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">choice_payload_match_capture_success</span>, <span style="
@@ -1265,23 +1265,23 @@ body {
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">choice_payload_match_guard_requires_else</span></td>
-     <td style="padding: 0.2em 0.5em;"> Constructor-like patterns support declared payload field names and `field as local_name` aliases. Field matching remains positional and validated against declared field names. Exhaustiveness is tag-level.</td>
+     <td style="padding: 0.2em 0.5em;  "> Constructor-like patterns support declared payload field names and `field as local_name` aliases. Field matching remains positional and validated against declared field names. Exhaustiveness is tag-level.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Choice payload field access</td>
-     <td style="padding: 0.2em 0.5em;"> Deferred</td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> Choice payload field access</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">choice_payload_direct_field_access_deferred</span></td>
-     <td style="padding: 0.2em 0.5em;"> No `value.field` until variant narrowing/refinement is designed. Use pattern matching to extract payload fields.</td>
+     <td style="padding: 0.2em 0.5em;  "> No `value.field` until variant narrowing/refinement is designed. Use pattern matching to extract payload fields.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Choice payload capture renames</td>
-     <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> Choice payload capture renames</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">choice_payload_match_rename_success</span>, <span style="
@@ -1309,13 +1309,13 @@ body {
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">choice_payload_match_rename_self_alias_success</span></td>
-     <td style="padding: 0.2em 0.5em;"> `case Variant(original_name as local_name) =>` binds the payload field to a different local name visible in the guard and arm body.</td>
+     <td style="padding: 0.2em 0.5em;  "> `case Variant(original_name as local_name) =>` binds the payload field to a different local name visible in the guard and arm body.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> `as` keyword outside supported domains</td>
-     <td style="padding: 0.2em 0.5em;"> Rejected / Reserved</td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> `as` keyword outside supported domains</td>
+     <td style="padding: 0.2em 0.5em;  "> Rejected / Reserved</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">as_in_expression_rejected</span>, <span style="
@@ -1331,81 +1331,81 @@ body {
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">as_in_match_pattern_lead_rejected</span></td>
-     <td style="padding: 0.2em 0.5em;"> `as` is only valid in three contexts: type aliases (`TypeAlias as ExistingType`), import clauses (`import @path/symbol as local_name`), and choice payload captures (`case Variant(field as local_name)`). All other uses are rejected with targeted diagnostics.</td>
+     <td style="padding: 0.2em 0.5em;  "> `as` is only valid in three contexts: type aliases (`TypeAlias as ExistingType`), import clauses (`import @path/symbol as local_name`), and choice payload captures (`case Variant(field as local_name)`). All other uses are rejected with targeted diagnostics.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> General pattern binding renames</td>
-     <td style="padding: 0.2em 0.5em;"> Deferred</td>
-     <td style="padding: 0.2em 0.5em;"> No canonical case yet.</td>
-     <td style="padding: 0.2em 0.5em;"> Non-choice capture renaming and nested payload pattern renaming remain deferred.</td>
+             <td style="padding: 0.2em 0.5em;  "> General pattern binding renames</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> No canonical case yet.</td>
+     <td style="padding: 0.2em 0.5em;  "> Non-choice capture renaming and nested payload pattern renaming remain deferred.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Choice nested payload patterns / exhaustiveness</td>
-     <td style="padding: 0.2em 0.5em;"> Deferred</td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> Choice nested payload patterns / exhaustiveness</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">choice_nested_payload_pattern_deferred</span></td>
-     <td style="padding: 0.2em 0.5em;"> Exhaustiveness is tag-level for now.</td>
+     <td style="padding: 0.2em 0.5em;  "> Exhaustiveness is tag-level for now.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Import re-exports</td>
-     <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> Targeted coverage for single, aliased, grouped, nested grouped, cross-library, external function, external type, duplicate, collision, no-local-binding, and invalid-location diagnostics.</td>
-     <td style="padding: 0.2em 0.5em;"> `#import @...` is valid only in `#mod.bst` module facades (including source libraries). It re-exports source or external package symbols through the facade export map without creating a local binding in `#mod.bst` or sibling implementation files. Grouped imports and per-symbol aliases are supported; wildcard and namespace imports remain deferred.</td>
+             <td style="padding: 0.2em 0.5em;  "> Import re-exports</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Targeted coverage for single, aliased, grouped, nested grouped, cross-library, external function, external type, duplicate, collision, no-local-binding, and invalid-location diagnostics.</td>
+     <td style="padding: 0.2em 0.5em;  "> `#import @...` is valid only in `#mod.bst` module facades (including source libraries). It re-exports source or external package symbols through the facade export map without creating a local binding in `#mod.bst` or sibling implementation files. Grouped imports and per-symbol aliases are supported; wildcard and namespace imports remain deferred.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Source-library HIR caching</td>
-     <td style="padding: 0.2em 0.5em;"> Deferred</td>
-     <td style="padding: 0.2em 0.5em;"> No precompiled source-library cache.</td>
-     <td style="padding: 0.2em 0.5em;"> Source libraries are compiled from `.bst` source each build. HIR caching is deferred until the library system is stable.</td>
+             <td style="padding: 0.2em 0.5em;  "> Source-library HIR caching</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> No precompiled source-library cache.</td>
+     <td style="padding: 0.2em 0.5em;  "> Source libraries are compiled from `.bst` source each build. HIR caching is deferred until the library system is stable.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Package manager</td>
-     <td style="padding: 0.2em 0.5em;"> Deferred</td>
-     <td style="padding: 0.2em 0.5em;"> No package manager, remote registries, or dependency resolution.</td>
-     <td style="padding: 0.2em 0.5em;"> The library system plan explicitly defers package management, versioning, lockfiles, and remote fetching.</td>
+             <td style="padding: 0.2em 0.5em;  "> Package manager</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> No package manager, remote registries, or dependency resolution.</td>
+     <td style="padding: 0.2em 0.5em;  "> The library system plan explicitly defers package management, versioning, lockfiles, and remote fetching.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Namespace / wildcard imports</td>
-     <td style="padding: 0.2em 0.5em;"> Deferred</td>
-     <td style="padding: 0.2em 0.5em;"> Unsupported syntax should fail cleanly.</td>
-     <td style="padding: 0.2em 0.5em;"> No `import @pkg.*` or namespace-import syntax is planned for Alpha.</td>
+             <td style="padding: 0.2em 0.5em;  "> Namespace / wildcard imports</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> Unsupported syntax should fail cleanly.</td>
+     <td style="padding: 0.2em 0.5em;  "> No `import @pkg.*` or namespace-import syntax is planned for Alpha.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Choice recursive types</td>
-     <td style="padding: 0.2em 0.5em;"> Deferred</td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> Choice recursive types</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">choice_recursive_direct_declaration_deferred</span></td>
-     <td style="padding: 0.2em 0.5em;"> Requires layout/indirection design.</td>
+     <td style="padding: 0.2em 0.5em;  "> Requires layout/indirection design.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Generic type infrastructure</td>
-     <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> Targeted frontend unit coverage for type-identity keys, parameter scopes, substitution, generic parameter parsing, <span style="
+             <td style="padding: 0.2em 0.5em;  "> Generic type infrastructure</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Targeted frontend unit coverage for type-identity keys, parameter scopes, substitution, generic parameter parsing, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">of</span> type applications, arity checks, collection generic substrate, and Phase 1/2 diagnostics. Integration coverage includes generic struct and choice constructor inference, concrete generic aliases, imported generic types, named argument inference, recursive rejection, receiver rejection, and collection capacity parsing.</td>
-     <td style="padding: 0.2em 0.5em;"> Phases 0-3 are implemented for concrete generic structs and choices. Generic parameter metadata, <span style="
+     <td style="padding: 0.2em 0.5em;  "> Phases 0-3 are implemented for concrete generic structs and choices. Generic parameter metadata, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">of</span> type applications, concrete generic aliases, collection generic substrate, constructor inference, choice matching, AST unresolved-generic validation, and concrete HIR nominal identity are implemented. Generic free-function execution, nested inline generic applications, recursive generic types, generic aliases, partial application, and generic receiver methods remain deferred or rejected.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Choice generic declarations</td>
-     <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> Choice generic declarations</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">generic_choice_declaration_parse_success</span>, <span style="
@@ -1424,13 +1424,13 @@ body {
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">generic_recursive_type_deferred</span></td>
-     <td style="padding: 0.2em 0.5em;"> Generic choice headers and payload type parameters parse and resolve. Concrete constructor inference, named payload arguments, expected-type unit variants, and matching on concrete generic instances are supported. Recursive generic choices and generic receiver methods remain rejected.</td>
+     <td style="padding: 0.2em 0.5em;  "> Generic choice headers and payload type parameters parse and resolve. Concrete constructor inference, named payload arguments, expected-type unit variants, and matching on concrete generic instances are supported. Recursive generic choices and generic receiver methods remain rejected.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Generic structs</td>
-     <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> Generic structs</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">generic_struct_instantiation_success</span>, <span style="
@@ -1446,13 +1446,13 @@ body {
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">generic_recursive_type_deferred</span></td>
-     <td style="padding: 0.2em 0.5em;"> Generic struct headers parse and resolve. Concrete constructor inference, field type substitution, named constructor arguments, imports, collection element types, and concrete HIR lowering are supported. Recursive generic structs and generic receiver methods remain rejected.</td>
+     <td style="padding: 0.2em 0.5em;  "> Generic struct headers parse and resolve. Concrete constructor inference, field type substitution, named constructor arguments, imports, collection element types, and concrete HIR lowering are supported. Recursive generic structs and generic receiver methods remain rejected.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Generic choices</td>
-     <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> Generic choices</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">generic_choice_instantiation_success</span>, <span style="
@@ -1462,26 +1462,26 @@ body {
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">generic_choice_match_success</span></td>
-     <td style="padding: 0.2em 0.5em;"> Concrete generic choice constructors and matching are implemented for resolved nominal instances. Wasm backend support for payload choices remains partial and is tracked by backend-specific expected failures.</td>
+     <td style="padding: 0.2em 0.5em;  "> Concrete generic choice constructors and matching are implemented for resolved nominal instances. Wasm backend support for payload choices remains partial and is tracked by backend-specific expected failures.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Generic functions</td>
-     <td style="padding: 0.2em 0.5em;"> Deferred</td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> Generic functions</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">generic_function_declaration_parse_success</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">generic_unused_parameter_rejected</span></td>
-     <td style="padding: 0.2em 0.5em;"> Generic function headers parse into frontend metadata. Call-site inference, executable body validation, and monomorphization remain deferred until Phase 4.</td>
+     <td style="padding: 0.2em 0.5em;  "> Generic function headers parse into frontend metadata. Call-site inference, executable body validation, and monomorphization remain deferred until Phase 4.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Generic type aliases</td>
-     <td style="padding: 0.2em 0.5em;"> Partial</td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> Generic type aliases</td>
+     <td style="padding: 0.2em 0.5em;  "> Partial</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">generic_concrete_alias_success</span>, <span style="
@@ -1491,73 +1491,73 @@ body {
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">generic_alias_rejected</span></td>
-     <td style="padding: 0.2em 0.5em;"> Aliases to fully concrete generic instances are supported and transparent in annotations. Generic aliases with parameters, partial type application, and type-constructor composition are rejected.</td>
+     <td style="padding: 0.2em 0.5em;  "> Aliases to fully concrete generic instances are supported and transparent in annotations. Generic aliases with parameters, partial type application, and type-constructor composition are rejected.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Trait bounds on generics</td>
-     <td style="padding: 0.2em 0.5em;"> Deferred</td>
-     <td style="padding: 0.2em 0.5em;"> None</td>
-     <td style="padding: 0.2em 0.5em;"> Required for operators, equality, methods, and behavior-dependent operations on unconstrained generic parameters.</td>
+             <td style="padding: 0.2em 0.5em;  "> Trait bounds on generics</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> None</td>
+     <td style="padding: 0.2em 0.5em;  "> Required for operators, equality, methods, and behavior-dependent operations on unconstrained generic parameters.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Explicit generic call-site application</td>
-     <td style="padding: 0.2em 0.5em;"> Deferred</td>
-     <td style="padding: 0.2em 0.5em;"> Diagnostics only.</td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> Explicit generic call-site application</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> Diagnostics only.</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">identity of Int(42)</span> is rejected. Generic function calls infer type arguments from immediate arguments and context only.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Generic receiver methods</td>
-     <td style="padding: 0.2em 0.5em;"> Deferred</td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> Generic receiver methods</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">generic_receiver_rejected</span></td>
-     <td style="padding: 0.2em 0.5em;"> Both generic receiver methods and receiver methods on concrete generic instantiated types are rejected with targeted diagnostics. Use free functions instead.</td>
+     <td style="padding: 0.2em 0.5em;  "> Both generic receiver methods and receiver methods on concrete generic instantiated types are rejected with targeted diagnostics. Use free functions instead.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Recursive generic types</td>
-     <td style="padding: 0.2em 0.5em;"> Deferred</td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> Recursive generic types</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">generic_recursive_type_deferred</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">generic_mutual_recursive_rejected</span></td>
-     <td style="padding: 0.2em 0.5em;"> Recursive generic structs and choices are rejected through declaration dependency or generic recursion diagnostics. Requires layout/indirection design.</td>
+     <td style="padding: 0.2em 0.5em;  "> Recursive generic structs and choices are rejected through declaration dependency or generic recursion diagnostics. Requires layout/indirection design.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Nested generic type application</td>
-     <td style="padding: 0.2em 0.5em;"> Deferred</td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> Nested generic type application</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">generic_nested_alias_workaround</span></td>
-     <td style="padding: 0.2em 0.5em;"> More than one <span style="
+     <td style="padding: 0.2em 0.5em;  "> More than one <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">of</span> application in a single annotation is rejected, except for collection element types. Name intermediate concrete aliases to compose complex types.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Generic aliases / partial type application</td>
-     <td style="padding: 0.2em 0.5em;"> Deferred</td>
-     <td style="padding: 0.2em 0.5em;"> Diagnostics only.</td>
-     <td style="padding: 0.2em 0.5em;"> Partial application and type-constructor composition are rejected. Alias a fully concrete generic instance instead.</td>
+             <td style="padding: 0.2em 0.5em;  "> Generic aliases / partial type application</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> Diagnostics only.</td>
+     <td style="padding: 0.2em 0.5em;  "> Partial application and type-constructor composition are rejected. Alias a fully concrete generic instance instead.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Choice equality</td>
-     <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> Choice equality</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">choice_unit_equality_deferred</span>, <span style="
@@ -1627,53 +1627,53 @@ body {
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">choice_equality_constructor_wrong_field_rejected</span></td>
-     <td style="padding: 0.2em 0.5em;"> Structural equality is supported for unit and payload choices in type checking and JS lowering. Payload fields are compared recursively when all fields support equality. Unsupported payload field types, different choice types, and choice-vs-non-choice comparisons are rejected with specific diagnostics.</td>
+     <td style="padding: 0.2em 0.5em;  "> Structural equality is supported for unit and payload choices in type checking and JS lowering. Payload fields are compared recursively when all fields support equality. Unsupported payload field types, different choice types, and choice-vs-non-choice comparisons are rejected with specific diagnostics.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Choice tagged/default declarations</td>
-     <td style="padding: 0.2em 0.5em;"> Deferred</td>
-     <td style="padding: 0.2em 0.5em;"> No canonical tagged-declaration case yet; <span style="
+             <td style="padding: 0.2em 0.5em;  "> Choice tagged/default declarations</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> No canonical tagged-declaration case yet; <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">choice_default_decl_deferred</span> covers default declaration rejection.</td>
-     <td style="padding: 0.2em 0.5em;"> These belong to the fuller tagged-union design, not the current Alpha subset.</td>
+     <td style="padding: 0.2em 0.5em;  "> These belong to the fuller tagged-union design, not the current Alpha subset.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Choice default variant values</td>
-     <td style="padding: 0.2em 0.5em;"> Deferred</td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> Choice default variant values</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">choice_default_decl_deferred</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">choice_variant_default_value_deferred</span></td>
-     <td style="padding: 0.2em 0.5em;"> If field defaults are inherited, document separately from variant defaults.</td>
+     <td style="padding: 0.2em 0.5em;  "> If field defaults are inherited, document separately from variant defaults.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Wasm payload layout for choices</td>
-     <td style="padding: 0.2em 0.5em;"> Experimental</td>
-     <td style="padding: 0.2em 0.5em;"> No canonical case yet.</td>
-     <td style="padding: 0.2em 0.5em;"> JS is the supported Alpha backend. Wasm backend lowering for choice payloads remains experimental.</td>
+             <td style="padding: 0.2em 0.5em;  "> Wasm payload layout for choices</td>
+     <td style="padding: 0.2em 0.5em;  "> Experimental</td>
+     <td style="padding: 0.2em 0.5em;  "> No canonical case yet.</td>
+     <td style="padding: 0.2em 0.5em;  "> JS is the supported Alpha backend. Wasm backend lowering for choice payloads remains experimental.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Negated match patterns</td>
-     <td style="padding: 0.2em 0.5em;"> Deferred</td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> Negated match patterns</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">diagnostic_match_negated_pattern</span></td>
-     <td style="padding: 0.2em 0.5em;"> Should wait until the match exhaustiveness model is deliberately extended.</td>
+     <td style="padding: 0.2em 0.5em;  "> Should wait until the match exhaustiveness model is deliberately extended.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> General capture / tagged match patterns</td>
-     <td style="padding: 0.2em 0.5em;"> Supported</td>
-     <td style="padding: 0.2em 0.5em;"> <span style="
+             <td style="padding: 0.2em 0.5em;  "> General capture / tagged match patterns</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">pattern_capture_binds_scrutinee_success</span>, <span style="
@@ -1692,14 +1692,14 @@ body {
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">pattern_choice_payload_existing_capture_alias_success</span></td>
-     <td style="padding: 0.2em 0.5em;"> General capture patterns (for example `case captured =>`) are supported for both choice and non-choice scrutinees. Choice payload capture patterns with `field as local_name` aliases are also supported. Nested payload patterns and `|...|` tagged patterns remain deferred.</td>
+     <td style="padding: 0.2em 0.5em;  "> General capture patterns (for example `case captured =>`) are supported for both choice and non-choice scrutinees. Choice payload capture patterns with `field as local_name` aliases are also supported. Nested payload patterns and `|...|` tagged patterns remain deferred.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;"> Rich numeric redesign</td>
-     <td style="padding: 0.2em 0.5em;"> Deferred</td>
-     <td style="padding: 0.2em 0.5em;"> Unsupported syntax should fail cleanly.</td>
-     <td style="padding: 0.2em 0.5em;"> Includes arbitrary precision compile-time arithmetic, decimal type work, and more specific numeric widths.</td>
+             <td style="padding: 0.2em 0.5em;  "> Rich numeric redesign</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> Unsupported syntax should fail cleanly.</td>
+     <td style="padding: 0.2em 0.5em;  "> Includes arbitrary precision compile-time arithmetic, decimal type work, and more specific numeric widths.</td>
         </tr>
         
     </table></section>
