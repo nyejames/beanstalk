@@ -1331,7 +1331,7 @@ fn resolve_generic_base_path(
         .and_then(|generic_declarations| generic_declarations.get(canonical_path))
     else {
         return Err(CompilerError::new_rule_error(
-            format!("Type '{}' does not accept generic arguments.", display_name),
+            format!("Type '{display_name}' does not accept generic arguments."),
             location.to_owned(),
         ));
     };
@@ -1341,7 +1341,7 @@ fn resolve_generic_base_path(
         GenericDeclarationKind::Struct | GenericDeclarationKind::Choice
     ) {
         return Err(CompilerError::new_rule_error(
-            format!("'{}' is not a generic type declaration.", display_name),
+            format!("'{display_name}' is not a generic type declaration."),
             location.to_owned(),
         ));
     }
@@ -1351,8 +1351,7 @@ fn resolve_generic_base_path(
     if actual != expected {
         return Err(CompilerError::new_rule_error(
             format!(
-                "Generic type '{}' expects {expected} type argument(s), but {actual} were provided.",
-                display_name
+                "Generic type '{display_name}' expects {expected} type argument(s), but {actual} were provided."
             ),
             location.to_owned(),
         ));

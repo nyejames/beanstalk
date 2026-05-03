@@ -219,8 +219,7 @@ impl GenericParameterScope {
             if is_reserved_generic_parameter_name(parameter_name) {
                 return Err(generic_scope_rule_error(
                     format!(
-                        "Generic parameter '{}' collides with a builtin type name.",
-                        parameter_name
+                        "Generic parameter '{parameter_name}' collides with a builtin type name.",
                     ),
                     parameter.location.to_owned(),
                     compilation_stage,
@@ -231,8 +230,7 @@ impl GenericParameterScope {
             if !is_generic_parameter_name(parameter_name) {
                 return Err(generic_scope_rule_error(
                     format!(
-                        "Invalid generic parameter name '{}'. Generic parameter names must be PascalCase or a single uppercase letter.",
-                        parameter_name
+                        "Invalid generic parameter name '{parameter_name}'. Generic parameter names must be PascalCase or a single uppercase letter."
                     ),
                     parameter.location.to_owned(),
                     compilation_stage,
@@ -607,8 +605,11 @@ pub fn data_type_to_type_identity_key(data_type: &DataType) -> Option<TypeIdenti
         DataType::GenericInstance {
             base: GenericBaseType::Builtin(BuiltinGenericType::Collection),
             arguments,
-        } if let [element] = arguments.as_slice() => data_type_to_type_identity_key(element)
-            .map(|key| TypeIdentityKey::Collection(Box::new(key))),
+        } => match arguments.as_slice() {
+            [element] => data_type_to_type_identity_key(element)
+                .map(|key| TypeIdentityKey::Collection(Box::new(key))),
+            _ => None,
+        },
         DataType::Option(inner) => {
             data_type_to_type_identity_key(inner).map(|key| TypeIdentityKey::Option(Box::new(key)))
         }
