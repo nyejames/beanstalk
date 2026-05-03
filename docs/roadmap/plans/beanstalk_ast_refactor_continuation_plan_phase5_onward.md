@@ -8,19 +8,15 @@ Phases 1–4 of the earlier AST pipeline restructure have already been completed
 
 The new rule is:
 
-```text
 Header parsing prepares top-level declaration shells, imports, visibility data, and dependency edges.
 Dependency sorting produces top-level headers in the order AST needs.
 AST consumes sorted top-level shells. It does not discover, bind, or sort them.
-```
 
 This continuation plan starts with a contract review and cleanup phase. That phase checks the work done by the header/dependency/AST refactor, removes any remaining duplicate AST-owned ordering/import work, verifies documentation and file-level comments, and only then resumes the remaining AST performance refactor.
 
 ## Current prerequisite state
 
 Before starting this continuation plan, the header/dependency/AST refactor should have made the following true:
-
-```text
 - Header parsing parses imports and re-exports.
 - Header parsing builds top-level declaration shells.
 - Header parsing records constant initializer dependency edges.
@@ -32,7 +28,6 @@ Before starting this continuation plan, the header/dependency/AST refactor shoul
 - The implicit entry start header is always appended last.
 - AST does not topologically sort constants or any other top-level declarations.
 - AST does not rebuild file import visibility from scratch.
-```
 
 This plan begins by auditing whether that is actually true in code.
 

@@ -77,11 +77,8 @@ Generated files in `benchmarks/results/` must not be committed. Commit only summ
 
 ## Benchmark log
 
-Use the existing AST benchmark log if present:
-
-```text
-docs/roadmap/refactors/ast-pipeline-optimisation-benchmark-log.md
-```
+Use the existing AST benchmark log:
+`docs/roadmap/refactors/ast-pipeline-optimisation-benchmark-log.md`
 
 If the file does not exist yet, create it in Phase 0.
 
@@ -92,8 +89,6 @@ Header / Dependency Sorting / AST Contract Refactor
 ```
 
 Each phase entry should include:
-
-```text
 - phase name
 - before benchmark run directory / summary path
 - after benchmark run directory / summary path
@@ -101,16 +96,12 @@ Each phase entry should include:
 - relevant detailed timer changes: headers, dependency sorting, AST/build environment, AST/constants
 - regression classification
 - notes / follow-up optimization observations
-```
 
 Regression classification:
-
-```text
 Improved:          >= 3% faster
 Neutral:           within ±3%
 Regression:        >= 3% slower
 Major regression:  >= 10% slower
-```
 
 A major regression blocks continuation unless the cause is identified and explicitly accepted.
 

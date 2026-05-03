@@ -156,10 +156,10 @@ impl FrontendModuleBuildContext<'_> {
     ) -> Result<Vec<FileTokens>, CompilerMessages> {
         let tokenizer_result = module
             .iter()
-            .map(|module| {
+            .map(|file| {
                 compiler.source_to_tokens(
-                    &module.source_code,
-                    &module.source_path,
+                    &file.source_code,
+                    &file.source_path,
                     TokenizeMode::Normal,
                 )
             })
@@ -167,6 +167,7 @@ impl FrontendModuleBuildContext<'_> {
 
         let mut project_tokens = Vec::with_capacity(tokenizer_result.len());
         let mut errors = Vec::new();
+        
         for file in tokenizer_result {
             match file {
                 Ok(tokens) => project_tokens.push(tokens),
