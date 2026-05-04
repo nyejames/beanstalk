@@ -55,7 +55,7 @@ use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::value_mode::ValueMode;
 
-impl AstFinalizer<'_, '_, '_> {
+impl AstFinalizer<'_, '_> {
     /// Normalizes all templates in the AST for HIR consumption.
     ///
     /// WHAT: Traverses all AST nodes and normalizes embedded templates by

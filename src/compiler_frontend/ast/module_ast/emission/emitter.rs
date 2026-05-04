@@ -48,25 +48,26 @@ pub(in crate::compiler_frontend::ast) struct AstEmission {
         FxHashMap<InternedPath, StringId>,
 }
 
-pub(in crate::compiler_frontend::ast) struct AstEmitter<'context, 'services, 'environment> {
+pub(in crate::compiler_frontend::ast) struct AstEmitter<'context, 'services> {
     context: &'context AstPhaseContext<'services>,
-    environment: &'environment AstModuleEnvironment,
+    environment: Rc<AstModuleEnvironment>,
     ast: Vec<AstNode>,
     warnings: Vec<CompilerWarning>,
     const_templates_by_path: FxHashMap<InternedPath, StringId>,
 }
 
-impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environment> {
+impl<'context, 'services> AstEmitter<'context, 'services> {
     pub(in crate::compiler_frontend::ast) fn new(
         context: &'context AstPhaseContext<'services>,
-        environment: &'environment AstModuleEnvironment,
+        environment: Rc<AstModuleEnvironment>,
         header_count: usize,
     ) -> Self {
+        let warnings = environment.warnings.clone();
         Self {
             context,
             environment,
             ast: Vec::with_capacity(header_count * settings::TOKEN_TO_NODE_RATIO),
-            warnings: environment.warnings.clone(),
+            warnings,
             const_templates_by_path: FxHashMap::default(),
         }
     }
@@ -83,18 +84,10 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
         kind: ContextKind,
         scope: InternedPath,
         top_level_declarations: &Rc<TopLevelDeclarationTable>,
-        visibility: &crate::compiler_frontend::headers::import_environment::FileVisibility,
+        visibility: Rc<crate::compiler_frontend::headers::import_environment::FileVisibility>,
         source_file_scope: InternedPath,
         expected_result_types: Vec<DataType>,
     ) -> ScopeContext {
-        let resolved_type_aliases = Rc::new(self.environment.resolved_type_aliases_by_path.clone());
-        let generic_declarations = Rc::new(
-            self.environment
-                .module_symbols
-                .generic_declarations_by_path
-                .clone(),
-        );
-
         ScopeContext::new(
             kind,
             scope,
@@ -105,18 +98,18 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
         .with_style_directives(self.context.style_directives)
         .with_build_profile(self.context.build_profile)
         .with_file_visibility(visibility)
-        .with_resolved_type_aliases((*resolved_type_aliases).clone())
-        .with_generic_declarations((*generic_declarations).clone())
-        .with_resolved_struct_fields_by_path(
-            self.environment.resolved_struct_fields_by_path.clone(),
-        )
-        .with_generic_nominal_instantiations(
-            self.environment.generic_nominal_instantiations.clone(),
-        )
+        .with_resolved_type_aliases(Rc::clone(&self.environment.resolved_type_aliases_by_path))
+        .with_generic_declarations(Rc::clone(&self.environment.generic_declarations_by_path))
+        .with_resolved_struct_fields_by_path(Rc::clone(
+            &self.environment.resolved_struct_fields_by_path,
+        ))
+        .with_generic_nominal_instantiations(Rc::clone(
+            &self.environment.generic_nominal_instantiations,
+        ))
         .with_project_path_resolver(self.context.project_path_resolver.clone())
         .with_path_format_config(self.context.path_format_config.clone())
-        .with_rendered_path_usage_sink(self.environment.rendered_path_usages.clone())
-        .with_receiver_methods(self.environment.receiver_methods.clone())
+        .with_rendered_path_usage_sink(Rc::clone(&self.environment.rendered_path_usages))
+        .with_receiver_methods(Rc::clone(&self.environment.receiver_methods))
         .with_source_file_scope(source_file_scope)
     }
 
@@ -147,11 +140,13 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
         let mut const_templates_emitted = 0usize;
 
         for header in sorted_headers {
-            let visibility = self
-                .environment
-                .import_environment
-                .visibility_for(&header.source_file)
-                .map_err(|error| self.error_messages(error, string_table))?;
+            let visibility = Rc::new(
+                self.environment
+                    .import_environment
+                    .visibility_for(&header.source_file)
+                    .map_err(|error| self.error_messages(error, string_table))?
+                    .clone(),
+            );
             let source_file_scope = header.canonical_source_file(string_table);
 
             match header.kind {
@@ -191,7 +186,7 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
                             ContextKind::Function,
                             header.tokens.src_path.to_owned(),
                             &top_level_declarations,
-                            visibility,
+                            Rc::clone(&visibility),
                             source_file_scope.to_owned(),
                             resolved_signature.signature.return_data_types(),
                         )
@@ -254,7 +249,7 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
                         ContextKind::Module,
                         header.tokens.src_path.to_owned(),
                         &top_level_declarations,
-                        visibility,
+                        Rc::clone(&visibility),
                         source_file_scope.to_owned(),
                         vec![],
                     );
@@ -351,7 +346,7 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
                         ContextKind::Constant,
                         template_tokens.src_path.to_owned(),
                         &top_level_declarations,
-                        visibility,
+                        Rc::clone(&visibility),
                         source_file_scope,
                         vec![],
                     );

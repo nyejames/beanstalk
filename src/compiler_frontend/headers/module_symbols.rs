@@ -15,8 +15,10 @@
 //! Dependency sorting owns:
 //! - Reconstruction of `declarations` in topologically sorted header order
 //!
+//! AST consumes:
+//! - Header-built file visibility (via `FileVisibility`)
+//!
 //! AST owns:
-//! - Import visibility resolution
 //! - Type/constant/signature resolution
 //! - Receiver-method catalog construction
 //! - Body lowering and template normalization

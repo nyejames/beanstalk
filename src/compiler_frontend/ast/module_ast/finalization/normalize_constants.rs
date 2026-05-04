@@ -39,7 +39,7 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
-impl AstFinalizer<'_, '_, '_> {
+impl AstFinalizer<'_, '_> {
     /// Normalizes module constants for HIR metadata.
     ///
     /// WHAT: Folds compile-time templates in module constants and filters

@@ -102,8 +102,8 @@ pub(crate) fn parse_constant_header_declaration(
     .with_visible_source_bindings(visible_source_bindings.to_owned())
     .with_visible_type_aliases(visible_type_aliases.to_owned())
     // Type resolution support
-    .with_resolved_type_aliases((*resolved_type_aliases).clone())
-    .with_generic_declarations((*generic_declarations_by_path).clone())
+    .with_resolved_type_aliases(Rc::clone(&resolved_type_aliases))
+    .with_generic_declarations(Rc::clone(&generic_declarations_by_path))
     .with_source_file_scope(source_file_scope);
 
     let declaration_result = resolve_declaration_syntax(

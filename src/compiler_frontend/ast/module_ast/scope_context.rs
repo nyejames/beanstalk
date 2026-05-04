@@ -32,7 +32,9 @@ use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::instrumentation::{
     AstCounter, add_ast_counter, increment_ast_counter,
 };
-use crate::compiler_frontend::ast::module_ast::environment::TopLevelDeclarationTable;
+use crate::compiler_frontend::ast::module_ast::environment::{
+    AstModuleEnvironment, TopLevelDeclarationTable,
+};
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::templates::template_folding::TemplateFoldContext;
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -43,7 +45,12 @@ use crate::compiler_frontend::external_packages::{
     ExternalFunctionDef, ExternalFunctionId, ExternalPackageRegistry, ExternalSymbolId,
     ExternalTypeId,
 };
-use crate::compiler_frontend::headers::module_symbols::GenericDeclarationMetadata;
+use crate::compiler_frontend::headers::import_environment::{
+    FileVisibility, HeaderImportEnvironment,
+};
+use crate::compiler_frontend::headers::module_symbols::{
+    GenericDeclarationMetadata, ModuleSymbols,
+};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
@@ -53,7 +60,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-use crate::compiler_frontend::headers::import_environment::FileVisibility;
+// FileVisibility and HeaderImportEnvironment already imported above.
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
@@ -88,6 +95,7 @@ pub(super) static CONTROL_FLOW_SCOPE_COUNTER: AtomicUsize = AtomicUsize::new(0);
 /// every time a child control-flow or expression scope is created.
 #[derive(Clone)]
 pub struct ScopeShared {
+    pub(crate) environment: Rc<AstModuleEnvironment>,
     pub(crate) top_level_declarations: Rc<TopLevelDeclarationTable>,
     pub(crate) external_package_registry: ExternalPackageRegistry,
     pub(crate) style_directives: StyleDirectiveRegistry,
@@ -194,22 +202,44 @@ impl ScopeContext {
     ) -> ScopeContext {
         increment_ast_counter(AstCounter::ScopeContextsCreated);
 
-        let shared = Rc::new(ScopeShared {
-            top_level_declarations,
+        let environment = Rc::new(AstModuleEnvironment {
+            module_symbols: ModuleSymbols::empty(),
+            import_environment: HeaderImportEnvironment::default(),
+            warnings: Vec::new(),
+            declaration_table: top_level_declarations,
+            module_constants: Vec::new(),
+            rendered_path_usages: Rc::new(RefCell::new(Vec::new())),
+            builtin_struct_ast_nodes: Vec::new(),
+            resolved_struct_fields_by_path: Rc::new(FxHashMap::default()),
+            resolved_function_signatures_by_path: Rc::new(FxHashMap::default()),
+            resolved_type_aliases_by_path: Rc::new(FxHashMap::default()),
+            receiver_methods: Rc::new(ReceiverMethodCatalog::default()),
+            generic_nominal_instantiations: Rc::new(GenericNominalInstantiationCache::new()),
+            generic_declarations_by_path: Rc::new(FxHashMap::default()),
             external_package_registry,
             style_directives: StyleDirectiveRegistry::built_ins(),
             build_profile: FrontendBuildProfile::Dev,
+            project_path_resolver: None,
+            path_format_config: PathStringFormatConfig::default(),
+        });
+
+        let shared = Rc::new(ScopeShared {
+            environment: Rc::clone(&environment),
+            top_level_declarations: Rc::clone(&environment.declaration_table),
+            external_package_registry: environment.external_package_registry.clone(),
+            style_directives: environment.style_directives.clone(),
+            build_profile: environment.build_profile,
             file_visibility: None,
             resolved_type_aliases: None,
             generic_declarations_by_path: None,
             resolved_struct_fields_by_path: None,
             generic_nominal_instantiations: None,
             emitted_warnings: Rc::new(RefCell::new(Vec::new())),
-            rendered_path_usages: Rc::new(RefCell::new(Vec::new())),
-            project_path_resolver: None,
+            rendered_path_usages: Rc::clone(&environment.rendered_path_usages),
+            project_path_resolver: environment.project_path_resolver.clone(),
             source_file_scope: None,
-            path_format_config: PathStringFormatConfig::default(),
-            receiver_methods: Rc::new(ReceiverMethodCatalog::default()),
+            path_format_config: environment.path_format_config.clone(),
+            receiver_methods: Rc::clone(&environment.receiver_methods),
         });
 
         ScopeContext {
@@ -387,7 +417,7 @@ impl ScopeContext {
         &self,
         operation: &str,
     ) -> Result<&InternedPath, CompilerError> {
-        let Some(source_scope) = self.source_file_scope.as_ref() else {
+        let Some(source_scope) = self.shared.source_file_scope.as_ref() else {
             return_compiler_error!(
                 "Missing source file scope during '{}'. Context scope: '{}'. This is a compiler setup bug.",
                 operation,
@@ -480,34 +510,34 @@ impl ScopeContext {
     /// reconstructing import bindings or manually setting each field.
     pub(crate) fn with_file_visibility(
         mut self,
-        visibility: &crate::compiler_frontend::headers::import_environment::FileVisibility,
+        visibility: Rc<crate::compiler_frontend::headers::import_environment::FileVisibility>,
     ) -> ScopeContext {
         self.visible_declaration_ids = Some(visibility.visible_declaration_paths.clone());
-        Rc::make_mut(&mut self.shared).file_visibility = Some(Rc::new(visibility.clone()));
+        Rc::make_mut(&mut self.shared).file_visibility = Some(visibility);
         self
     }
 
     pub fn with_resolved_type_aliases(
         mut self,
-        aliases: FxHashMap<InternedPath, DataType>,
+        aliases: Rc<FxHashMap<InternedPath, DataType>>,
     ) -> ScopeContext {
-        Rc::make_mut(&mut self.shared).resolved_type_aliases = Some(Rc::new(aliases));
+        Rc::make_mut(&mut self.shared).resolved_type_aliases = Some(aliases);
         self
     }
 
     pub(crate) fn with_generic_declarations(
         mut self,
-        declarations: FxHashMap<InternedPath, GenericDeclarationMetadata>,
+        declarations: Rc<FxHashMap<InternedPath, GenericDeclarationMetadata>>,
     ) -> ScopeContext {
-        Rc::make_mut(&mut self.shared).generic_declarations_by_path = Some(Rc::new(declarations));
+        Rc::make_mut(&mut self.shared).generic_declarations_by_path = Some(declarations);
         self
     }
 
     pub(crate) fn with_resolved_struct_fields_by_path(
         mut self,
-        fields: FxHashMap<InternedPath, Vec<Declaration>>,
+        fields: Rc<FxHashMap<InternedPath, Vec<Declaration>>>,
     ) -> ScopeContext {
-        Rc::make_mut(&mut self.shared).resolved_struct_fields_by_path = Some(Rc::new(fields));
+        Rc::make_mut(&mut self.shared).resolved_struct_fields_by_path = Some(fields);
         self
     }
 
@@ -593,7 +623,11 @@ impl ScopeContext {
         // receiver method catalog handles their lookup.
         if let Some(fv) = &self.file_visibility {
             if let Some(canonical_path) = fv.visible_source_names.get(name)
-                && let Some(declaration) = self.top_level_declarations.get_by_path(canonical_path)
+                && let Some(declaration) = self
+                    .shared
+                    .environment
+                    .declaration_table
+                    .get_by_path(canonical_path)
                 && !matches!(
                     &declaration.value.data_type,
                     DataType::Function(receiver, _) if receiver.as_ref().is_some()
@@ -608,7 +642,9 @@ impl ScopeContext {
 
         // 3. Fallback for contexts that do not set file_visibility
         // (e.g. synthetic evaluation contexts and some unit-test helpers).
-        self.top_level_declarations
+        self.shared
+            .environment
+            .declaration_table
             .get_visible_non_receiver_by_name(*name, self.visible_declaration_ids.as_ref())
     }
 
@@ -727,7 +763,8 @@ impl ScopeContext {
     /// WHAT: used by expression parsing to give a precise diagnostic when a type alias
     /// is mistakenly used in value position.
     pub(crate) fn is_visible_type_alias_name(&self, name: StringId) -> bool {
-        self.file_visibility
+        self.shared
+            .file_visibility
             .as_ref()
             .is_some_and(|fv| fv.visible_type_alias_names.contains_key(&name))
     }
@@ -755,11 +792,11 @@ impl ScopeContext {
     }
 
     pub fn emit_warning(&self, warning: CompilerWarning) {
-        self.emitted_warnings.borrow_mut().push(warning);
+        self.shared.emitted_warnings.borrow_mut().push(warning);
     }
 
     pub fn take_emitted_warnings(&self) -> Vec<CompilerWarning> {
-        std::mem::take(&mut *self.emitted_warnings.borrow_mut())
+        std::mem::take(&mut *self.shared.emitted_warnings.borrow_mut())
     }
 
     pub fn record_rendered_path_usages(&self, usages: Vec<RenderedPathUsage>) {

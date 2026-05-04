@@ -536,3 +536,37 @@ Regression classification: improved for core speed-test and docs; stress cases m
 Notes: extracted `ScopeShared` from `ScopeContext` — all immutable environment-wide state (registries, visibility maps, resolution tables, path resolver, receiver catalog) now lives behind a single `Rc`. Child scope constructors (`new_child_control_flow`, `new_child_expression`, `new_template_parsing_context`, `new_constant`) clone one `Rc` instead of deep-copying multiple `FxHashMap`s and optionals. `visible_declaration_ids` remains directly on `ScopeContext` because `add_var` mutates it. Added `type_resolution_context_for` helper on `AstModuleEnvironmentBuilder` to replace four duplicated `TypeResolutionContext::from_inputs(...)` blocks in `type_aliases.rs`, `type_resolution.rs` (2×), and `function_signatures.rs`. Extracted `build_base_scope_context` in `emitter.rs` to eliminate triplicated 11-method `ScopeContext` builder chains. Migrated `module_dependencies.rs` from `std::collections::{HashMap, HashSet}` to `FxHashMap`/`FxHashSet` for consistency. Updated stale "strict dependency edges" terminology to "header-provided dependency edges" in `dependency_edges.rs`, `imports.rs`, `header_dispatch.rs`, `compiler-design-overview.md`, and related tests. Renamed three integration test fixtures to clearer names (`constant_cross_file_soft_dependency` → `constant_cross_file_dependency_chain`, `import_alias_constant_dependency` → `const_template_import_alias_dependency`, `constant_import_alias_dependency` → `constant_initializer_import_alias_dependency`).
 
 Audit notes: `ScopeContext` now implements `Deref<Target = ScopeShared>` so existing field accesses (`context.top_level_declarations`, `context.external_package_registry`, etc.) continue to work without changing call sites. `with_visible_external_symbols`, `with_visible_source_bindings`, and `with_visible_type_aliases` use `Rc::make_mut` to mutate the `FileVisibility` inside `ScopeShared` when needed. `just validate` passed (1334 unit tests, 783/783 integration tests). No language behavior changed; progress matrix unchanged.
+
+### Phase 10 — Continuation Plan Phase 5: Contract Review and AST Cleanup
+
+Phase: Phase 5 / contract review and AST cleanup after header/dependency refactor
+
+Commit: pending (working tree)
+
+Before benchmark run directory: `benchmarks/results/2026-05-18_22-14-13`
+
+Before summary path: `benchmarks/results/2026-05-18_22-14-13/summary.md`
+
+After benchmark run directory: `benchmarks/results/2026-05-18_22-14-13`
+
+After summary path: `benchmarks/results/2026-05-18_22-14-13/summary.md`
+
+Key rows:
+
+| Case | Mean (ms) | Median (ms) | Failures |
+|---|---:|---:|---:|
+| check_benchmarks_speed-test_bst | 74.61 | 75.05 | 0 |
+| build_benchmarks_speed-test_bst | 78.20 | 78.64 | 0 |
+| check_docs | 72.37 | 71.87 | 0 |
+| check_benchmarks_template-stress_bst | 17.37 | 17.26 | 0 |
+| check_benchmarks_type-stress_bst | 14.14 | 13.99 | 0 |
+| check_benchmarks_fold-stress_bst | 14.77 | 14.66 | 0 |
+| check_benchmarks_pattern-stress_bst | 14.25 | 14.29 | 0 |
+| check_benchmarks_collection-stress_bst | 14.08 | 13.83 | 0 |
+
+Regression classification: baseline (no code changes)
+
+Notes: fixed `module_symbols.rs` ownership split comment from "AST owns: Import visibility resolution" to "AST consumes: header-built file visibility". Verified file-level doc comments across `ast/mod.rs`, `ast/module_ast/mod.rs`, `environment/mod.rs`, `environment/builder.rs`, `scope_context.rs`, `emission/mod.rs`, `headers/mod.rs`, `headers/parse_file_headers.rs`, and `module_dependencies.rs` — all accurately state the header/dependency/AST contract. Verified existing integration test coverage proves the contract: `entry_start_sees_sorted_declarations`, `linear_constant_resolution_order`, `constant_cross_file_dependency_chain`, `source_alias_hides_original`, `const_template_import_alias_dependency`, `constant_same_file_forward_reference_rejected`, `constant_not_imported_reference_rejected`. No new tests needed. `docs/compiler-design-overview.md` and `docs/roadmap/roadmap.md` are accurate.
+
+Audit notes: no AST constant graph remains. No AST topo-sort remains. No AST import-binding builder remains. All doc comments correctly state stage ownership. `just validate` passed (1334 unit tests, 784/784 integration tests).
+

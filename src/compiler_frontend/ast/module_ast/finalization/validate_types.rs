@@ -22,7 +22,7 @@ use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariantPayload;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
-impl AstFinalizer<'_, '_, '_> {
+impl AstFinalizer<'_, '_> {
     pub(crate) fn validate_no_unresolved_executable_types(
         &self,
         ast: &[AstNode],

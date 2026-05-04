@@ -5,6 +5,7 @@
 //! WHY: after this phase completes, AST emission can parse bodies against a stable environment
 //! instead of depending on pass-order-specific accumulator fields.
 
+use crate::compiler_frontend::FrontendBuildProfile;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration};
 use crate::compiler_frontend::ast::module_ast::build_context::AstPhaseContext;
 use crate::compiler_frontend::ast::module_ast::environment::TopLevelDeclarationTable;
@@ -17,13 +18,19 @@ use crate::compiler_frontend::datatypes::generics::GenericNominalInstantiationCa
 use crate::compiler_frontend::declaration_syntax::type_syntax::{
     TypeResolutionContext, TypeResolutionContextInputs,
 };
+use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::import_environment::{
     FileVisibility, HeaderImportEnvironment,
 };
-use crate::compiler_frontend::headers::module_symbols::ModuleSymbols;
+use crate::compiler_frontend::headers::module_symbols::{
+    GenericDeclarationMetadata, ModuleSymbols,
+};
 use crate::compiler_frontend::headers::parse_file_headers::Header;
 use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
+use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
+use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::timer_log;
 use rustc_hash::FxHashMap;
@@ -39,12 +46,22 @@ pub(crate) struct AstModuleEnvironment {
     pub(crate) module_constants: Vec<Declaration>,
     pub(crate) rendered_path_usages: Rc<RefCell<Vec<RenderedPathUsage>>>,
     pub(crate) builtin_struct_ast_nodes: Vec<AstNode>,
-    pub(crate) resolved_struct_fields_by_path: FxHashMap<InternedPath, Vec<Declaration>>,
+    pub(crate) resolved_struct_fields_by_path: Rc<FxHashMap<InternedPath, Vec<Declaration>>>,
     pub(crate) resolved_function_signatures_by_path:
-        FxHashMap<InternedPath, ResolvedFunctionSignature>,
-    pub(crate) resolved_type_aliases_by_path: FxHashMap<InternedPath, DataType>,
+        Rc<FxHashMap<InternedPath, ResolvedFunctionSignature>>,
+    pub(crate) resolved_type_aliases_by_path: Rc<FxHashMap<InternedPath, DataType>>,
     pub(crate) receiver_methods: Rc<ReceiverMethodCatalog>,
     pub(crate) generic_nominal_instantiations: Rc<GenericNominalInstantiationCache>,
+    pub(crate) generic_declarations_by_path:
+        Rc<FxHashMap<InternedPath, GenericDeclarationMetadata>>,
+
+    // Environment-wide immutable services copied from AstPhaseContext so ScopeShared
+    // can reference everything through one Rc<AstModuleEnvironment>.
+    pub(crate) external_package_registry: ExternalPackageRegistry,
+    pub(crate) style_directives: StyleDirectiveRegistry,
+    pub(crate) build_profile: FrontendBuildProfile,
+    pub(crate) project_path_resolver: Option<ProjectPathResolver>,
+    pub(crate) path_format_config: PathStringFormatConfig,
 }
 
 /// Header-stage outputs consumed by AST environment construction.
@@ -166,6 +183,9 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         timer_log!(environment_start, "AST/build environment completed in: ");
         let _ = environment_start;
 
+        let generic_declarations_by_path =
+            std::mem::take(&mut self.module_symbols.generic_declarations_by_path);
+
         Ok(AstModuleEnvironment {
             module_symbols: self.module_symbols,
             import_environment: self.import_environment,
@@ -174,11 +194,19 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             module_constants: self.module_constants,
             rendered_path_usages: self.rendered_path_usages,
             builtin_struct_ast_nodes: self.builtin_struct_ast_nodes,
-            resolved_struct_fields_by_path: self.resolved_struct_fields_by_path,
-            resolved_function_signatures_by_path: self.resolved_function_signatures_by_path,
-            resolved_type_aliases_by_path: self.resolved_type_aliases_by_path,
+            resolved_struct_fields_by_path: Rc::new(self.resolved_struct_fields_by_path),
+            resolved_function_signatures_by_path: Rc::new(
+                self.resolved_function_signatures_by_path,
+            ),
+            resolved_type_aliases_by_path: Rc::new(self.resolved_type_aliases_by_path),
             receiver_methods,
             generic_nominal_instantiations: self.generic_nominal_instantiations,
+            generic_declarations_by_path: Rc::new(generic_declarations_by_path),
+            external_package_registry: self.context.external_package_registry.clone(),
+            style_directives: self.context.style_directives.clone(),
+            build_profile: self.context.build_profile,
+            project_path_resolver: self.context.project_path_resolver.clone(),
+            path_format_config: self.context.path_format_config.clone(),
         })
     }
 

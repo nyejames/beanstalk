@@ -16,17 +16,18 @@ use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::headers::parse_file_headers::TopLevelConstFragment;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::timer_log;
+use std::rc::Rc;
 use std::time::Instant;
 
-pub(in crate::compiler_frontend::ast) struct AstFinalizer<'context, 'services, 'environment> {
+pub(in crate::compiler_frontend::ast) struct AstFinalizer<'context, 'services> {
     pub(super) context: &'context AstPhaseContext<'services>,
-    pub(super) environment: &'environment AstModuleEnvironment,
+    pub(super) environment: Rc<AstModuleEnvironment>,
 }
 
-impl<'context, 'services, 'environment> AstFinalizer<'context, 'services, 'environment> {
+impl<'context, 'services> AstFinalizer<'context, 'services> {
     pub(in crate::compiler_frontend::ast) fn new(
         context: &'context AstPhaseContext<'services>,
-        environment: &'environment AstModuleEnvironment,
+        environment: Rc<AstModuleEnvironment>,
     ) -> Self {
         Self {
             context,
@@ -168,7 +169,6 @@ impl<'context, 'services, 'environment> AstFinalizer<'context, 'services, 'envir
             {
                 if self
                     .environment
-                    .module_symbols
                     .generic_declarations_by_path
                     .contains_key(nominal_path)
                 {

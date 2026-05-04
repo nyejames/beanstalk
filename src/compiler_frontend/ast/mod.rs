@@ -111,6 +111,7 @@ use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::FileTokens;
 use crate::timer_log;
+use std::rc::Rc;
 use std::time::Instant;
 
 /// Resolved choice definition carried from AST to HIR for pre-registration.
@@ -187,23 +188,23 @@ impl Ast {
         let header_count = headers.len();
         let (phase_context, string_table) = AstPhaseContext::from_build_context(context);
 
-        let environment = AstModuleEnvironmentBuilder::new(&phase_context).build(
+        let environment = Rc::new(AstModuleEnvironmentBuilder::new(&phase_context).build(
             &headers,
             AstEnvironmentInput {
                 module_symbols,
                 import_environment,
             },
             string_table,
-        )?;
+        )?);
 
         let node_emission_start = Instant::now();
-        let emitted = AstEmitter::new(&phase_context, &environment, header_count)
+        let emitted = AstEmitter::new(&phase_context, Rc::clone(&environment), header_count)
             .emit(headers, string_table)?;
         timer_log!(node_emission_start, "AST/emit nodes completed in: ");
         let _ = node_emission_start;
 
         let finalization_start = Instant::now();
-        let ast = AstFinalizer::new(&phase_context, &environment).finalize(
+        let ast = AstFinalizer::new(&phase_context, Rc::clone(&environment)).finalize(
             emitted,
             &top_level_const_fragments,
             string_table,

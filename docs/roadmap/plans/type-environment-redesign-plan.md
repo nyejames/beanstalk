@@ -15,7 +15,6 @@ Deferred follow-up for the AST pipeline restructure. This plan should start only
 ## Non-Goals
 
 - Do not change Beanstalk language semantics as part of the redesign.
-- Do not mix this with the current AST pipeline restructure phases.
 - Do not preserve compatibility wrappers for old type APIs; Beanstalk is pre-release.
 
 ## Initial Acceptance Criteria
