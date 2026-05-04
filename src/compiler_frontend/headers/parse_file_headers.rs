@@ -11,7 +11,13 @@ use crate::compiler_frontend::builtins::error_type::{
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
+use crate::compiler_frontend::headers::constant_dependencies::{
+    ConstantDependencyInput, add_constant_initializer_dependencies,
+};
 use crate::compiler_frontend::headers::file_parser::parse_headers_in_file;
+use crate::compiler_frontend::headers::import_environment::{
+    HeaderImportEnvironment, ImportEnvironmentInput, prepare_import_environment,
+};
 use crate::compiler_frontend::headers::module_symbols::{
     FacadeExportEntry, FacadeExportTarget, GenericDeclarationKind, GenericDeclarationMetadata,
     ModuleSymbols, register_declared_symbol,
@@ -28,6 +34,7 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::FileTokens;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 use rustc_hash::{FxHashMap, FxHashSet};
+use std::collections::HashSet;
 use std::path::Path;
 
 pub fn parse_headers(
@@ -111,20 +118,110 @@ pub fn parse_headers(
             .map_err(|e| vec![e])?;
     }
 
+    let import_environment = prepare_import_environment(ImportEnvironmentInput {
+        module_symbols: &mut module_symbols,
+        external_package_registry,
+        string_table,
+    })
+    .map_err(|messages| messages.errors)?;
+
+    canonicalize_header_dependencies(&mut headers, &import_environment)?;
+
+    let _constant_report = add_constant_initializer_dependencies(ConstantDependencyInput {
+        headers: &mut headers,
+        module_symbols: &module_symbols,
+        import_environment: &import_environment,
+        string_table,
+    })?;
+
     Ok(Headers {
         headers,
         top_level_const_fragments,
         entry_runtime_fragment_count: runtime_fragment_count,
         module_symbols,
+        import_environment,
     })
+}
+
+/// Rewrite raw import-path dependency edges into canonical resolved symbol paths.
+///
+/// WHAT: after `prepare_import_environment` resolves imports, this pass replaces any
+/// `Header.dependencies` entries that came from `FileImport.header_path` with the resolved
+/// canonical path from `FileVisibility`. Same-file edges (already canonical) are preserved.
+/// Edges that resolve to external symbols or virtual packages are dropped because they have no
+/// header graph participant.
+///
+/// WHY: dependency sorting performs exact graph key lookup only; it must not carry legacy
+/// suffix-matching fallbacks for raw import paths.
+fn canonicalize_header_dependencies(
+    headers: &mut [Header],
+    import_environment: &HeaderImportEnvironment,
+) -> Result<(), Vec<CompilerError>> {
+    let mut errors: Vec<CompilerError> = Vec::new();
+
+    for header in headers.iter_mut() {
+        let visibility = match import_environment.visibility_for(&header.source_file) {
+            Ok(v) => v,
+            Err(error) => {
+                errors.push(error);
+                continue;
+            }
+        };
+
+        let mut canonical: HashSet<InternedPath> =
+            HashSet::with_capacity(header.dependencies.len());
+
+        for dep in header.dependencies.drain() {
+            // Find whether this dependency came from a file import.
+            let matching_import = header
+                .file_imports
+                .iter()
+                .find(|import| import.header_path == dep);
+
+            if let Some(import) = matching_import {
+                let local_name = match import.alias {
+                    Some(alias) => alias,
+                    None => match import.header_path.name() {
+                        Some(name) => name,
+                        None => {
+                            canonical.insert(dep);
+                            continue;
+                        }
+                    },
+                };
+
+                // Replace with the resolved canonical path if available.
+                if let Some(resolved_path) = visibility
+                    .visible_source_names
+                    .get(&local_name)
+                    .or_else(|| visibility.visible_type_alias_names.get(&local_name))
+                {
+                    canonical.insert(resolved_path.clone());
+                }
+                // If the import resolved to an external symbol or virtual package,
+                // drop the edge — there is no corresponding header in the graph.
+            } else {
+                // Same-file or already-canonical edge: preserve it.
+                canonical.insert(dep);
+            }
+        }
+
+        header.dependencies = canonical;
+    }
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
 }
 
 /// Build facade export maps and file library/module membership from parsed headers and the path resolver.
 ///
 /// WHAT: scans each source library root's and regular module root's `#mod.bst` for exported symbols,
 /// and records which source files belong to which library or module root.
-/// WHY: AST import binding needs this data to enforce the facade gate for cross-library and
-///      cross-module imports.
+/// WHY: header import environment needs this data to enforce the facade gate for cross-library
+///      and cross-module imports.
 fn build_facade_data(
     module_symbols: &mut ModuleSymbols,
     headers: &[Header],

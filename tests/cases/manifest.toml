@@ -2885,8 +2885,8 @@ path = "constant_same_file_forward_reference_rejected"
 tags = ["integration", "constants", "dependency-resolution", "diagnostics"]
 
 [[case]]
-id = "constant_cross_file_soft_dependency"
-path = "constant_cross_file_soft_dependency"
+id = "constant_cross_file_dependency_chain"
+path = "constant_cross_file_dependency_chain"
 tags = ["integration", "constants", "dependency-resolution", "imports"]
 
 [[case]]
@@ -2910,8 +2910,8 @@ path = "constant_cycle_rejected"
 tags = ["integration", "constants", "dependency-resolution", "imports", "diagnostics"]
 
 [[case]]
-id = "constant_graph_const_template_uses_constants"
-path = "constant_graph_const_template_uses_constants"
+id = "const_template_uses_constants"
+path = "const_template_uses_constants"
 tags = ["integration", "constants", "dependency-resolution", "templates"]
 
 [[case]]
@@ -2978,6 +2978,11 @@ tags = ["integration", "language", "external-packages", "diagnostics"]
 id = "external_package_import_alias"
 path = "external_package_import_alias"
 tags = ["integration", "language", "external-packages", "aliases"]
+
+[[case]]
+id = "const_template_import_alias_dependency"
+path = "const_template_import_alias_dependency"
+tags = ["integration", "language", "aliases", "constants"]
 
 [[case]]
 id = "import_alias_collision_rejected"
@@ -3754,3 +3759,23 @@ tags = ["integration","diagnostics","pattern-matching","choices"]
 id = "pattern_relational_overlap_no_warning"
 path = "pattern_relational_overlap_no_warning"
 tags = ["integration","language","pattern-matching","js-backend"]
+
+[[case]]
+id = "constant_initializer_import_alias_dependency"
+path = "constant_initializer_import_alias_dependency"
+tags = ["integration", "constants", "dependency-resolution", "imports"]
+
+[[case]]
+id = "constant_self_reference_rejected"
+path = "constant_self_reference_rejected"
+tags = ["integration", "constants", "dependency-resolution", "diagnostics"]
+
+[[case]]
+id = "constant_constructor_like_valid"
+path = "constant_constructor_like_valid"
+tags = ["integration", "constants", "dependency-resolution", "structs"]
+
+[[case]]
+id = "linear_constant_resolution_order"
+path = "linear_constant_resolution_order"
+tags = ["integration", "constants", "dependency-resolution", "header-sorting"]

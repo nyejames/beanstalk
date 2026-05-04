@@ -1,9 +1,13 @@
-//! Neutral top-level declaration shell parsers shared between the header stage and AST.
+//! Reusable declaration shell parsers shared between the header stage and AST.
 //!
-//! Top level declarations can be fully parsed by the header stage if they are structs or choices ,
-//! So the AST stage and the header stage need to share the basic syntaxes of all these declarations.
+//! WHAT: `declaration_syntax` owns the syntax parsers that build declaration shells (unresolved
+//! structural metadata) for both header top-level declarations and AST body-local declarations.
+//! Header parsing stores shells; AST resolves shells.
 //!
-//! AST stage and headers also want to parse function signatures and type the same way,
+//! WHY: centralising shell parsing prevents header and AST from rediscovering the same syntax
+//! rules independently, and makes the shell/resolution boundary explicit.
+//!
+//! AST stage and headers also parse function signatures and type annotations the same way,
 //! so that logic is centralized in this module.
 
 pub(crate) mod choice;

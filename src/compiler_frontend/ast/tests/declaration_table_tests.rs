@@ -3,7 +3,7 @@
 //! WHAT: checks the AST environment-owned top-level declaration table independent of parser
 //! setup.
 //! WHY: phase 3 relies on updates preserving placeholder slots so later lookups observe resolved
-//! metadata without rebuilding declaration snapshots.
+//! metadata through the shared environment-owned table.
 
 use super::environment::TopLevelDeclarationTable;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;

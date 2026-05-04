@@ -6,14 +6,13 @@
 //! partially valid accumulator fields.
 
 pub(in crate::compiler_frontend::ast) mod builder;
-mod constant_graph;
+pub(in crate::compiler_frontend::ast) mod constant_resolution;
 pub(in crate::compiler_frontend::ast) mod declaration_table;
 mod function_signatures;
-mod import_environment;
 mod type_aliases;
 mod type_resolution;
 
 pub(in crate::compiler_frontend::ast) use builder::{
-    AstModuleEnvironment, AstModuleEnvironmentBuilder,
+    AstEnvironmentInput, AstModuleEnvironment, AstModuleEnvironmentBuilder,
 };
 pub(crate) use declaration_table::TopLevelDeclarationTable;

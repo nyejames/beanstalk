@@ -871,22 +871,22 @@ This phase verifies that the AST continuation refactor is complete and aligned w
 End this continuation refactor only when all are true:
 
 ```text
-- Header/dependency/AST contract is enforced in code.
-- AST has no constant graph.
-- AST has no top-level dependency sort.
-- AST does not rebuild file import visibility.
-- AST resolves top-level declarations by walking sorted headers.
-- AstBuildState is gone.
-- Stable declaration slots/table are used.
-- ScopeContext no longer clones environment-wide maps.
-- Bounded expression token copying is gone from targeted hot paths.
-- constant_fold no longer clones unchanged runtime RPN.
-- Finalization no longer compensates for duplicate declarations or missing top-level ordering.
-- compiler-design-overview and relevant file doc comments are current.
-- roadmap notes capture remaining template/type-environment follow-ups.
-- benchmark log shows phase-by-phase before/after results.
-- generated benchmark results are uncommitted.
-- just bench and just validate pass.
+- [x] Header/dependency/AST contract is enforced in code.
+- [x] AST has no constant graph.
+- [x] AST has no top-level dependency sort.
+- [x] AST does not rebuild file import visibility.
+- [x] AST resolves top-level declarations by walking sorted headers.
+- [x] AstBuildState is gone.
+- [x] Stable declaration slots/table are used.
+- [x] ScopeContext no longer clones environment-wide maps.
+- [ ] Bounded expression token copying is gone from targeted hot paths.
+- [ ] constant_fold no longer clones unchanged runtime RPN.
+- [x] Finalization no longer compensates for duplicate declarations or missing top-level ordering.
+- [x] compiler-design-overview and relevant file doc comments are current.
+- [x] roadmap notes capture remaining template/type-environment follow-ups.
+- [x] benchmark log shows phase-by-phase before/after results.
+- [x] generated benchmark results are uncommitted.
+- [x] just bench and just validate pass.
 ```
 
 ## Audit checklist

@@ -7,7 +7,7 @@ use crate::compiler_frontend::FrontendBuildProfile;
 use crate::compiler_frontend::analysis::borrow_checker::{
     BorrowCheckReport, check_borrows as run_borrow_checker,
 };
-use crate::compiler_frontend::ast::{Ast, AstBuildContext};
+use crate::compiler_frontend::ast::{Ast, AstBuildContext, AstBuildInput};
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
@@ -157,13 +157,6 @@ impl CompilerFrontend {
         entry_file_path: &Path,
         build_profile: FrontendBuildProfile,
     ) -> Result<Ast, CompilerMessages> {
-        let SortedHeaders {
-            headers,
-            top_level_const_fragments,
-            entry_runtime_fragment_count: _,
-            module_symbols,
-        } = sorted;
-
         let interned_entry_dir = self
             .source_files
             .get_by_canonical_path(entry_file_path)
@@ -173,9 +166,12 @@ impl CompilerFrontend {
             );
 
         Ast::new(
-            headers,
-            top_level_const_fragments,
-            module_symbols,
+            AstBuildInput {
+                headers: sorted.headers,
+                module_symbols: sorted.module_symbols,
+                import_environment: sorted.import_environment,
+                top_level_const_fragments: sorted.top_level_const_fragments,
+            },
             AstBuildContext {
                 external_package_registry: &self.external_package_registry,
                 style_directives: &self.style_directives,

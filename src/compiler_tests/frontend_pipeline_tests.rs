@@ -193,12 +193,9 @@ fn start_function_is_excluded_from_dependency_graph_and_appended_last() {
         &[
             (
                 "src/#page.bst",
-                "import @helper\n#helper_const = \"page_helper\"\nio(\"page\")\n",
+                "#helper_const = \"page_helper\"\nio(\"page\")\n",
             ),
-            (
-                "src/helper.bst",
-                "import @leaf\n#leaf_const = \"helper_leaf\"\n",
-            ),
+            ("src/helper.bst", "#leaf_const = \"helper_leaf\"\n"),
             ("src/leaf.bst", "#leaf_const = \"leaf_value\"\n"),
         ],
         "src/#page.bst",
@@ -336,9 +333,9 @@ fn reports_circular_imports_through_frontend_header_sorting() {
         .expect_err("cycle should fail dependency sorting");
 
     assert!(
-        errors
-            .iter()
-            .any(|error| error.msg.contains("Circular dependency detected")),
+        errors.iter().any(|error| error
+            .msg
+            .contains("Circular declaration dependency detected")),
         "expected circular dependency diagnostic, got: {errors:?}"
     );
 }
@@ -496,42 +493,43 @@ fn borrow_checker_errors_preserve_string_table_context() {
 }
 
 // -----------------------------------------------------------------------------
-// Constant dependency graph regression tests
+// Constant dependency ordering regression tests
 // -----------------------------------------------------------------------------
 #[test]
-fn constant_graph_rejects_same_file_forward_constant_reference() {
+fn same_file_forward_constant_reference_rejected() {
     // WHAT: same-file constant references are source-order based.
-    // WHY: phase 4 replaces fixed-point retries with an explicit dependency graph, so
-    // same-file forward references fail before expression parsing.
+    // WHY: header-stage constant_dependencies.rs detects forward references before
+    // dependency sorting, so same-file forward references fail during header parsing.
     let mut project = FrontendProject::new(
         &[("src/#page.bst", "#page_head = theme\n#theme = \"dark\"\n")],
         "src/#page.bst",
         StyleDirectiveRegistry::built_ins(),
     );
 
-    let sorted = project.sorted_headers();
-    let messages = match project.frontend.headers_to_ast(
-        sorted,
+    let tokenized_files = project.tokenize_all();
+    let mut warnings = Vec::new();
+    let errors = match project.frontend.tokens_to_headers(
+        tokenized_files,
+        &mut warnings,
         &project.entry_file,
-        FrontendBuildProfile::Dev,
     ) {
-        Err(messages) => messages,
-        Ok(_) => panic!("same-file forward constant reference should fail"),
+        Ok(_) => panic!("same-file forward constant reference should fail during header parsing"),
+        Err(errors) => errors,
     };
+
     assert!(
-        messages
-            .errors
+        errors
             .iter()
             .any(|error| error.msg.contains("cannot reference same-file constant")),
         "expected same-file forward-reference diagnostic, got: {:?}",
-        messages.errors
+        errors
     );
 }
 
 #[test]
-fn constant_graph_orders_imported_constant() {
+fn imported_constant_dependency_order() {
     // WHAT: a constant references an imported constant from another file.
-    // WHY: cross-file constant dependencies are ordered by the AST constant graph.
+    // WHY: header dependency sorting orders constants before dependents.
     let mut project = FrontendProject::new(
         &[
             (
@@ -559,9 +557,9 @@ fn constant_graph_orders_imported_constant() {
 }
 
 #[test]
-fn constant_graph_orders_nested_template_reference() {
+fn nested_template_constant_reference_order() {
     // WHAT: a template constant references another template constant inside its body.
-    // The reference is nested inside a TemplateAtom::Content expression; the graph hint
+    // The reference is nested inside a TemplateAtom::Content expression; header sorting
     // must still order #css before #head.
     // Both directives must be registered so the template parser recognises [$html:...]/[$css:...].
     let html_directive = StyleDirectiveSpec::handler(
@@ -618,7 +616,7 @@ fn constant_graph_orders_nested_template_reference() {
 }
 
 #[test]
-fn constant_graph_orders_collection_reference() {
+fn collection_constant_reference_order() {
     // WHAT: a collection constant contains a reference to another constant.
     let mut project = FrontendProject::new(
         &[(
@@ -644,7 +642,7 @@ fn constant_graph_orders_collection_reference() {
 }
 
 #[test]
-fn constant_graph_orders_struct_literal_reference() {
+fn struct_literal_constant_reference_order() {
     // WHAT: a struct-instance constant references another constant in a field position.
     let mut project = FrontendProject::new(
         &[(
@@ -891,22 +889,25 @@ fn rejects_virtual_package_import_of_missing_symbol() {
         StyleDirectiveRegistry::built_ins(),
     );
 
-    let sorted = project.sorted_headers();
-    let Err(messages) =
-        project
-            .frontend
-            .headers_to_ast(sorted, &project.entry_file, FrontendBuildProfile::Dev)
-    else {
-        panic!("import of missing virtual package symbol should fail during AST construction");
+    let tokenized_files = project.tokenize_all();
+    let mut warnings = Vec::new();
+    let errors = match project.frontend.tokens_to_headers(
+        tokenized_files,
+        &mut warnings,
+        &project.entry_file,
+    ) {
+        Ok(_) => {
+            panic!("import of missing virtual package symbol should fail during header parsing")
+        }
+        Err(e) => e,
     };
 
     assert!(
-        messages
-            .errors
+        errors
             .iter()
             .any(|e| e.msg.contains("symbol not found in package")),
-        "Expected error about missing symbol in @core/io, got: {:?}",
-        messages.errors.iter().map(|e| &e.msg).collect::<Vec<_>>()
+        "expected 'symbol not found in package' error, got: {:?}",
+        errors
     );
 }
 

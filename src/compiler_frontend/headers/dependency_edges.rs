@@ -1,9 +1,8 @@
-//! Strict header dependency edge collection.
+//! Header-provided dependency edge collection.
 //!
 //! WHAT: converts type references from declaration shells into dependency edges for top-level
 //! declaration sorting.
-//! WHY: dependency sorting uses strict structural edges only; expression/body references stay soft
-//! and are resolved later by AST.
+//! WHY: dependency sorting uses header-provided edges only; body references are excluded.
 
 use crate::compiler_frontend::builtins::error_type::is_reserved_builtin_symbol;
 use crate::compiler_frontend::declaration_syntax::declaration_shell::DeclarationSyntax;
@@ -15,10 +14,11 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use std::collections::HashSet;
 
-/// Collect strict dependency edges from a constant's declared type annotation.
+/// Collect header-provided dependency edges from a constant's declared type annotation.
 ///
-/// WHY: only the declared type creates a structural ordering constraint; initializer-expression
-/// symbol references are soft hints that are intentionally excluded from strict graph edges.
+/// WHY: only the declared type creates a structural ordering constraint.
+/// Initializer-expression constant references are handled by
+/// `constant_dependencies::add_constant_initializer_dependencies`.
 pub(super) fn collect_constant_type_dependencies(
     declaration_syntax: &DeclarationSyntax,
     context: &HeaderBuildContext<'_>,
@@ -60,7 +60,7 @@ pub(super) fn collect_named_type_dependency_edge(
         .map(|import| import.header_path.clone());
 
     // Virtual package imports are not source graph participants, so they must not
-    // create strict dependency edges. AST import binding resolution handles them later.
+    // create dependency edges. Header import environment handles them during resolution.
     if let Some(ref import_path) = edge
         && external_package_registry.is_virtual_package_import(import_path, string_table)
     {

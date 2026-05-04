@@ -9,14 +9,12 @@ Use the language surface integration matrix as a reference for what is currently
 ---
 
 # Plans / Notes / TODOS
-- Large header / ast stage contract reinforcement and removal of any dependency sorting from ast: `docs/roadmap/plans/header_dependency_ast_contract_refactor_plan.md`
 - AST pipeline restructure and optimisation plan (continued): `docs/roadmap/plans/beanstalk_ast_refactor_continuation_plan_phase5_onward.md`
 - Parallel tokenization/header parsing and string table plan (after the major AST refactoring plans): `docs/roadmap/plans/parallel-tokenize-header-parse-string-table-plan.md`
 - AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisation-benchmark-log.md`
 - Type environment redesign follow-up: `docs/roadmap/plans/type-environment-redesign-plan.md`
 - Template optimisation follow-up: track measured finalization/template bottlenecks in the AST benchmark log before creating a separate plan.
 - Generics (FINISHED PHASE 1 - 3 ONLY): `docs/roadmap/plans/beanstalk-generics-implementation-plan.md`
-- Smelly files with a lot of noise, badly structured functions (too many args) and confusing code / lack of helpful/clear comments: `src\compiler_frontend\ast\module_ast\environment\import_environment.rs` (also avoid tons of function args and just pass in &self.module_symbols), `src\compiler_frontend\ast\import_bindings.rs`
 - Traits
 - New Result/Error syntax: `docs/roadmap/plans/beanstalk-error-catch-syntax-migration-plan.md`
 - True Results / Options with generics

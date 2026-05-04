@@ -119,22 +119,22 @@ fn reports_circular_dependencies() {
 
     // resolve_module_dependencies now returns Vec<CompilerError>
     assert!(
-        errors
-            .iter()
-            .any(|error| error.msg.contains("Circular dependency detected")),
+        errors.iter().any(|error| error
+            .msg
+            .contains("Circular declaration dependency detected")),
         "expected a cycle diagnostic, got: {errors:?}"
     );
 }
 
 #[test]
-fn constant_initializer_does_not_create_strict_sort_dependency() {
-    // WHY: only declared-type annotations create strict graph edges for constants.
-    // Initializer-expression symbol references are excluded so that the sort only
-    // constrains ordering by structural type dependencies, not by runtime value flow.
+fn constant_initializer_creates_dependency_sort_edge() {
+    // WHY: header-stage constant_dependencies.rs now extracts initializer reference edges.
+    // Constant initializers that reference other constants create top-level dependency edges
+    // that dependency sorting respects.
     let (headers, mut string_table) = parse_module_headers(
         &[
-            // Config's initializer references Value, but Config has no declared type.
-            // That reference must NOT create a strict sort edge from Config to Value.
+            // Config's initializer references Value.
+            // That reference creates a dependency edge from Config to Value.
             ("src/a.bst", "import @b/Value\n#Config = Value\n"),
             ("src/b.bst", "#Value Int = 42\n"),
         ],
@@ -142,7 +142,7 @@ fn constant_initializer_does_not_create_strict_sort_dependency() {
     );
 
     let sorted = resolve_module_dependencies(headers, &mut string_table)
-        .expect("sort must succeed — initializer refs do not produce unresolvable strict edges");
+        .expect("sort must succeed — constant initializer edges are resolved by headers");
 
     let non_start_names: Vec<_> = sorted
         .headers
@@ -151,21 +151,18 @@ fn constant_initializer_does_not_create_strict_sort_dependency() {
         .map(|h| header_name(h, &string_table))
         .collect();
 
-    // Both headers must be present in the sorted output.
-    assert!(
-        non_start_names.contains(&"Config".to_string()),
-        "Config header must appear in sorted output"
-    );
-    assert!(
-        non_start_names.contains(&"Value".to_string()),
-        "Value header must appear in sorted output"
+    // Both headers must be present and Value must precede Config.
+    assert_eq!(
+        non_start_names,
+        vec!["Value", "Config"],
+        "constant initializer dependency must order Value before Config"
     );
 }
 
 #[test]
-fn function_body_references_do_not_influence_strict_header_sort_order() {
-    // WHY: function body references are AST/body-phase concerns (soft edges), not
-    // strict top-level header dependencies. Sorting should preserve source order
+fn function_body_references_do_not_influence_header_provided_sort_order() {
+    // WHY: function body references are AST/body-phase concerns, not
+    // header-provided top-level dependency edges. Sorting should preserve source order
     // for otherwise-independent declarations.
     let (headers, mut string_table) = parse_module_headers(
         &[(
@@ -194,25 +191,51 @@ fn function_body_references_do_not_influence_strict_header_sort_order() {
 
 #[test]
 fn reports_ambiguous_suffix_import_resolution() {
-    let (headers, mut string_table) = parse_module_headers(
-        &[
-            (
-                "src/app.bst",
-                "import @shared/util/Thing\n#Top Thing = Thing\n",
-            ),
-            ("src/features/shared/util.bst", "#Thing Int = 1\n"),
-            ("src/lib/shared/util.bst", "#Thing Int = 2\n"),
-        ],
-        "src/app.bst",
-    );
+    let mut string_table = StringTable::new();
+    let style_directives = StyleDirectiveRegistry::built_ins();
 
-    let errors = resolve_module_dependencies(headers, &mut string_table)
-        .expect_err("ambiguous suffix import should fail dependency sorting");
+    let mut tokenized_files = Vec::with_capacity(3);
+    for (path, source) in &[
+        (
+            "src/app.bst",
+            "import @shared/util/Thing\n#Top Thing = Thing\n",
+        ),
+        ("src/features/shared/util.bst", "#Thing Int = 1\n"),
+        ("src/lib/shared/util.bst", "#Thing Int = 2\n"),
+    ] {
+        let path_buf = PathBuf::from(path);
+        let interned_path = InternedPath::from_path_buf(&path_buf, &mut string_table);
+        let tokens = tokenize(
+            source,
+            &interned_path,
+            TokenizeMode::Normal,
+            NewlineMode::NormalizeToLf,
+            &style_directives,
+            &mut string_table,
+            None,
+        )
+        .expect("tokenization should succeed");
+        tokenized_files.push(tokens);
+    }
+
+    let external_package_registry = ExternalPackageRegistry::new();
+    let mut warnings = Vec::new();
+    let errors = match parse_headers(
+        tokenized_files,
+        &external_package_registry,
+        &mut warnings,
+        &PathBuf::from("src/app.bst"),
+        HeaderParseOptions::default(),
+        &mut string_table,
+    ) {
+        Ok(_) => panic!("ambiguous suffix import should fail header parsing"),
+        Err(e) => e,
+    };
 
     assert!(
         errors
             .iter()
-            .any(|error| error.msg.contains("Missing import target")
+            .any(|error| error.msg.contains("Ambiguous import target")
                 && error.msg.contains("shared/util/Thing")),
         "expected an ambiguous-import diagnostic, got: {errors:?}"
     );

@@ -19,6 +19,10 @@
 //!
 //! ## External symbol visibility
 //!
+//! File-local visibility originates from the header-built `FileVisibility` struct and is
+//! applied to each `ScopeContext` via `with_file_visibility`. This includes same-file
+//! declarations, imported source symbols, type aliases, and external package symbols.
+//!
 //! `visible_external_symbols` stores source-visible names mapped to already-resolved
 //! `ExternalSymbolId` values. Expression and type resolution must use these IDs directly;
 //! they must never re-resolve names globally through the registry.
@@ -49,6 +53,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use crate::compiler_frontend::headers::import_environment::FileVisibility;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
@@ -75,6 +80,33 @@ fn external_abi_matches_datatype(abi_type: &ExternalAbiType, data_type: &DataTyp
 
 pub(super) static CONTROL_FLOW_SCOPE_COUNTER: AtomicUsize = AtomicUsize::new(0);
 
+/// Immutable shared state common to a scope and all its cloned children.
+///
+/// WHAT: bundles all state that is identical across child scopes so cloning a
+/// `ScopeContext` only copies per-scope mutable fields and one `Rc` pointer.
+/// WHY: eliminates deep cloning of visibility maps, registries, and lookup tables
+/// every time a child control-flow or expression scope is created.
+#[derive(Clone)]
+pub struct ScopeShared {
+    pub(crate) top_level_declarations: Rc<TopLevelDeclarationTable>,
+    pub(crate) external_package_registry: ExternalPackageRegistry,
+    pub(crate) style_directives: StyleDirectiveRegistry,
+    pub(crate) build_profile: FrontendBuildProfile,
+    pub(crate) file_visibility: Option<Rc<FileVisibility>>,
+    pub(crate) resolved_type_aliases: Option<Rc<FxHashMap<InternedPath, DataType>>>,
+    pub(crate) generic_declarations_by_path:
+        Option<Rc<FxHashMap<InternedPath, GenericDeclarationMetadata>>>,
+    pub(crate) resolved_struct_fields_by_path:
+        Option<Rc<FxHashMap<InternedPath, Vec<Declaration>>>>,
+    pub(crate) generic_nominal_instantiations: Option<Rc<GenericNominalInstantiationCache>>,
+    pub(crate) emitted_warnings: Rc<RefCell<Vec<CompilerWarning>>>,
+    pub(crate) rendered_path_usages: Rc<RefCell<Vec<RenderedPathUsage>>>,
+    pub(crate) project_path_resolver: Option<ProjectPathResolver>,
+    pub(crate) source_file_scope: Option<InternedPath>,
+    pub(crate) path_format_config: PathStringFormatConfig,
+    pub(crate) receiver_methods: Rc<ReceiverMethodCatalog>,
+}
+
 #[derive(Clone)]
 /// Shared parser/lowering context for one active AST scope.
 pub struct ScopeContext {
@@ -82,9 +114,10 @@ pub struct ScopeContext {
     pub kind: ContextKind,
     pub scope: InternedPath,
 
-    // --- Declaration tables ---
-    // Shared module-wide top-level declaration table.
-    pub(crate) top_level_declarations: Rc<TopLevelDeclarationTable>,
+    // --- Immutable shared state (cheap Rc clone for children) ---
+    pub(crate) shared: Rc<ScopeShared>,
+
+    // --- Per-scope mutable state ---
     // Per-scope locals: function parameters + body-declared variables only.
     // Grows incrementally in source order via add_var(); never carries module-wide data.
     pub local_declarations: Vec<Declaration>,
@@ -93,67 +126,22 @@ pub struct ScopeContext {
     local_declarations_by_name: FxHashMap<StringId, Vec<u32>>,
     // Optional file-local visibility gate over declarations.
     // When present, references must be in this set, which enforces import boundaries.
+    // Kept directly on ScopeContext (not in ScopeShared) because add_var mutates it.
     pub visible_declaration_ids: Option<FxHashSet<InternedPath>>,
 
     // --- Type expectations ---
     pub expected_result_types: Vec<DataType>,
     pub expected_error_type: Option<DataType>,
 
-    // --- External registries ---
-    pub external_package_registry: ExternalPackageRegistry,
-    pub style_directives: StyleDirectiveRegistry,
-    pub build_profile: FrontendBuildProfile,
-
-    // --- External symbol visibility ---
-    /// Optional file-local visibility gate over external package symbols.
-    /// When present, only external symbols in this map are resolvable.
-    pub visible_external_symbols: Option<FxHashMap<StringId, ExternalSymbolId>>,
-
-    /// Optional file-local source-visible names → canonical declaration path.
-    /// Includes same-file declarations and imported source symbols (aliased or not).
-    pub visible_source_bindings: Option<FxHashMap<StringId, InternedPath>>,
-
-    /// Optional file-local type aliases.
-    /// Maps local visible name → canonical type alias path.
-    pub visible_type_aliases: Option<FxHashMap<StringId, InternedPath>>,
-
-    /// Resolved type alias targets: canonical path → resolved DataType.
-    /// Shared via Rc to avoid cloning the full table across scope contexts.
-    pub resolved_type_aliases: Option<Rc<FxHashMap<InternedPath, DataType>>>,
-
-    /// Generic declaration metadata: canonical path → declaration parameters/kind.
-    /// Shared via Rc because body-local type annotations need the same generic arity checks.
-    pub(crate) generic_declarations_by_path:
-        Option<Rc<FxHashMap<InternedPath, GenericDeclarationMetadata>>>,
-
-    /// Resolved struct fields by canonical path, including generic struct templates.
-    /// Shared via Rc for lazy generic instantiation in body-level type annotations.
-    pub(crate) resolved_struct_fields_by_path:
-        Option<Rc<FxHashMap<InternedPath, Vec<Declaration>>>>,
-
-    /// Mutable cache for lazily instantiated generic nominal types.
-    /// Shared so all cloned scope contexts reuse the same concrete nominal instances.
-    pub(crate) generic_nominal_instantiations: Option<Rc<GenericNominalInstantiationCache>>,
-
     // --- Control flow state ---
     pub loop_depth: usize,
+}
 
-    // --- Side-channels (Rc-shared across clones) ---
-    pub(crate) emitted_warnings: Rc<RefCell<Vec<CompilerWarning>>>,
-    pub(crate) rendered_path_usages: Rc<RefCell<Vec<RenderedPathUsage>>>,
-
-    // --- Path resolution (optional) ---
-    /// Project-aware path resolver for compile-time path validation.
-    pub(crate) project_path_resolver: Option<ProjectPathResolver>,
-    /// The real filesystem source file that this context originated from.
-    /// For const templates, `scope` is a synthetic path like `#page.bst/#const_template0`,
-    /// so this field carries the actual source file path for path resolution.
-    pub(crate) source_file_scope: Option<InternedPath>,
-    /// Path formatting config for `#origin`-aware path string coercion.
-    pub(crate) path_format_config: PathStringFormatConfig,
-
-    // --- Method catalog ---
-    pub(crate) receiver_methods: Rc<ReceiverMethodCatalog>,
+impl std::ops::Deref for ScopeContext {
+    type Target = ScopeShared;
+    fn deref(&self) -> &Self::Target {
+        &self.shared
+    }
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -202,32 +190,34 @@ impl ScopeContext {
     ) -> ScopeContext {
         increment_ast_counter(AstCounter::ScopeContextsCreated);
 
+        let shared = Rc::new(ScopeShared {
+            top_level_declarations,
+            external_package_registry,
+            style_directives: StyleDirectiveRegistry::built_ins(),
+            build_profile: FrontendBuildProfile::Dev,
+            file_visibility: None,
+            resolved_type_aliases: None,
+            generic_declarations_by_path: None,
+            resolved_struct_fields_by_path: None,
+            generic_nominal_instantiations: None,
+            emitted_warnings: Rc::new(RefCell::new(Vec::new())),
+            rendered_path_usages: Rc::new(RefCell::new(Vec::new())),
+            project_path_resolver: None,
+            source_file_scope: None,
+            path_format_config: PathStringFormatConfig::default(),
+            receiver_methods: Rc::new(ReceiverMethodCatalog::default()),
+        });
+
         ScopeContext {
             kind,
             scope,
-            top_level_declarations,
+            shared,
             local_declarations: Vec::new(),
             local_declarations_by_name: FxHashMap::default(),
             visible_declaration_ids: None,
             expected_result_types,
             expected_error_type: None,
-            external_package_registry,
-            style_directives: StyleDirectiveRegistry::built_ins(),
-            visible_external_symbols: None,
-            visible_source_bindings: None,
-            visible_type_aliases: None,
-            resolved_type_aliases: None,
-            generic_declarations_by_path: None,
-            resolved_struct_fields_by_path: None,
-            generic_nominal_instantiations: None,
             loop_depth: 0,
-            build_profile: FrontendBuildProfile::Dev,
-            emitted_warnings: Rc::new(RefCell::new(Vec::new())),
-            project_path_resolver: None,
-            source_file_scope: None,
-            path_format_config: PathStringFormatConfig::default(),
-            rendered_path_usages: Rc::new(RefCell::new(Vec::new())),
-            receiver_methods: Rc::new(ReceiverMethodCatalog::default()),
         }
     }
 
@@ -256,29 +246,13 @@ impl ScopeContext {
         ScopeContext {
             kind,
             scope,
-            top_level_declarations: Rc::clone(&self.top_level_declarations),
+            shared: Rc::clone(&self.shared),
             local_declarations: self.local_declarations.clone(),
             local_declarations_by_name: self.local_declarations_by_name.clone(),
             visible_declaration_ids: self.visible_declaration_ids.clone(),
             expected_result_types: self.expected_result_types.clone(),
             expected_error_type: self.expected_error_type.clone(),
-            external_package_registry: self.external_package_registry.clone(),
-            visible_external_symbols: self.visible_external_symbols.clone(),
-            visible_source_bindings: self.visible_source_bindings.clone(),
-            visible_type_aliases: self.visible_type_aliases.clone(),
-            resolved_type_aliases: self.resolved_type_aliases.clone(),
-            generic_declarations_by_path: self.generic_declarations_by_path.clone(),
-            resolved_struct_fields_by_path: self.resolved_struct_fields_by_path.clone(),
-            generic_nominal_instantiations: self.generic_nominal_instantiations.clone(),
-            style_directives: self.style_directives.clone(),
             loop_depth,
-            build_profile: self.build_profile,
-            emitted_warnings: self.emitted_warnings.clone(),
-            project_path_resolver: self.project_path_resolver.clone(),
-            source_file_scope: self.source_file_scope.clone(),
-            path_format_config: self.path_format_config.clone(),
-            rendered_path_usages: self.rendered_path_usages.clone(),
-            receiver_methods: self.receiver_methods.clone(),
         }
     }
 
@@ -306,7 +280,6 @@ impl ScopeContext {
         new_context.loop_depth = 0;
 
         // Share the top-level declaration table (cheap Rc clone); reset locals to params only.
-        new_context.top_level_declarations = Rc::clone(&self.top_level_declarations);
         new_context.set_local_declarations(signature.parameters);
 
         new_context
@@ -322,29 +295,13 @@ impl ScopeContext {
         ScopeContext {
             kind: ContextKind::Expression,
             scope: self.scope.clone(),
-            top_level_declarations: Rc::clone(&self.top_level_declarations),
+            shared: Rc::clone(&self.shared),
             local_declarations: self.local_declarations.clone(),
             local_declarations_by_name: self.local_declarations_by_name.clone(),
             visible_declaration_ids: self.visible_declaration_ids.clone(),
             expected_result_types,
             expected_error_type: self.expected_error_type.clone(),
-            external_package_registry: self.external_package_registry.clone(),
-            visible_external_symbols: self.visible_external_symbols.clone(),
-            visible_source_bindings: self.visible_source_bindings.clone(),
-            visible_type_aliases: self.visible_type_aliases.clone(),
-            resolved_type_aliases: self.resolved_type_aliases.clone(),
-            generic_declarations_by_path: self.generic_declarations_by_path.clone(),
-            resolved_struct_fields_by_path: self.resolved_struct_fields_by_path.clone(),
-            generic_nominal_instantiations: self.generic_nominal_instantiations.clone(),
-            style_directives: self.style_directives.clone(),
             loop_depth: self.loop_depth,
-            build_profile: self.build_profile,
-            emitted_warnings: self.emitted_warnings.clone(),
-            project_path_resolver: self.project_path_resolver.clone(),
-            source_file_scope: self.source_file_scope.clone(),
-            path_format_config: self.path_format_config.clone(),
-            rendered_path_usages: self.rendered_path_usages.clone(),
-            receiver_methods: self.receiver_methods.clone(),
         }
     }
 
@@ -368,29 +325,13 @@ impl ScopeContext {
         ScopeContext {
             kind: template_kind,
             scope: self.scope.clone(),
-            top_level_declarations: Rc::clone(&self.top_level_declarations),
+            shared: Rc::clone(&self.shared),
             local_declarations: self.local_declarations.clone(),
             local_declarations_by_name: self.local_declarations_by_name.clone(),
             visible_declaration_ids: self.visible_declaration_ids.clone(),
             expected_result_types: vec![],
             expected_error_type: self.expected_error_type.clone(),
-            external_package_registry: self.external_package_registry.clone(),
-            visible_external_symbols: self.visible_external_symbols.clone(),
-            visible_source_bindings: self.visible_source_bindings.clone(),
-            visible_type_aliases: self.visible_type_aliases.clone(),
-            resolved_type_aliases: self.resolved_type_aliases.clone(),
-            generic_declarations_by_path: self.generic_declarations_by_path.clone(),
-            resolved_struct_fields_by_path: self.resolved_struct_fields_by_path.clone(),
-            generic_nominal_instantiations: self.generic_nominal_instantiations.clone(),
-            style_directives: self.style_directives.clone(),
             loop_depth: self.loop_depth,
-            build_profile: self.build_profile,
-            emitted_warnings: self.emitted_warnings.clone(),
-            project_path_resolver: self.project_path_resolver.clone(),
-            source_file_scope: self.source_file_scope.clone(),
-            path_format_config: self.path_format_config.clone(),
-            rendered_path_usages: self.rendered_path_usages.clone(),
-            receiver_methods: self.receiver_methods.clone(),
         }
     }
 
@@ -410,29 +351,13 @@ impl ScopeContext {
         ScopeContext {
             kind: ContextKind::Constant,
             scope,
-            top_level_declarations: Rc::clone(&parent.top_level_declarations),
+            shared: Rc::clone(&parent.shared),
             local_declarations: parent.local_declarations.clone(),
             local_declarations_by_name: parent.local_declarations_by_name.clone(),
             visible_declaration_ids: parent.visible_declaration_ids.clone(),
             expected_result_types: Vec::new(),
             expected_error_type: parent.expected_error_type.clone(),
-            external_package_registry: parent.external_package_registry.clone(),
-            visible_external_symbols: parent.visible_external_symbols.clone(),
-            visible_source_bindings: parent.visible_source_bindings.clone(),
-            visible_type_aliases: parent.visible_type_aliases.clone(),
-            resolved_type_aliases: parent.resolved_type_aliases.clone(),
-            generic_declarations_by_path: parent.generic_declarations_by_path.clone(),
-            resolved_struct_fields_by_path: parent.resolved_struct_fields_by_path.clone(),
-            generic_nominal_instantiations: parent.generic_nominal_instantiations.clone(),
-            style_directives: parent.style_directives.clone(),
             loop_depth: parent.loop_depth,
-            build_profile: parent.build_profile,
-            emitted_warnings: parent.emitted_warnings.clone(),
-            project_path_resolver: parent.project_path_resolver.clone(),
-            source_file_scope: parent.source_file_scope.clone(),
-            path_format_config: parent.path_format_config.clone(),
-            rendered_path_usages: parent.rendered_path_usages.clone(),
-            receiver_methods: parent.receiver_methods.clone(),
         }
     }
 
@@ -480,7 +405,7 @@ impl ScopeContext {
     }
 
     pub fn with_build_profile(mut self, profile: FrontendBuildProfile) -> ScopeContext {
-        self.build_profile = profile;
+        Rc::make_mut(&mut self.shared).build_profile = profile;
         self
     }
 
@@ -495,7 +420,14 @@ impl ScopeContext {
         mut self,
         visible: FxHashMap<StringId, ExternalSymbolId>,
     ) -> ScopeContext {
-        self.visible_external_symbols = Some(visible);
+        let shared = Rc::make_mut(&mut self.shared);
+        let mut fv = shared
+            .file_visibility
+            .as_ref()
+            .map(|f| (**f).clone())
+            .unwrap_or_default();
+        fv.visible_external_symbols = visible;
+        shared.file_visibility = Some(Rc::new(fv));
         self
     }
 
@@ -503,7 +435,14 @@ impl ScopeContext {
         mut self,
         bindings: FxHashMap<StringId, InternedPath>,
     ) -> ScopeContext {
-        self.visible_source_bindings = Some(bindings);
+        let shared = Rc::make_mut(&mut self.shared);
+        let mut fv = shared
+            .file_visibility
+            .as_ref()
+            .map(|f| (**f).clone())
+            .unwrap_or_default();
+        fv.visible_source_names = bindings;
+        shared.file_visibility = Some(Rc::new(fv));
         self
     }
 
@@ -511,7 +450,28 @@ impl ScopeContext {
         mut self,
         aliases: FxHashMap<StringId, InternedPath>,
     ) -> ScopeContext {
-        self.visible_type_aliases = Some(aliases);
+        let shared = Rc::make_mut(&mut self.shared);
+        let mut fv = shared
+            .file_visibility
+            .as_ref()
+            .map(|f| (**f).clone())
+            .unwrap_or_default();
+        fv.visible_type_alias_names = aliases;
+        shared.file_visibility = Some(Rc::new(fv));
+        self
+    }
+
+    /// Apply a header-built `FileVisibility` to this scope context.
+    ///
+    /// WHAT: copies all visibility maps from the prepared header environment.
+    /// WHY: AST emission should consume header-built visibility directly instead of
+    /// reconstructing import bindings or manually setting each field.
+    pub(crate) fn with_file_visibility(
+        mut self,
+        visibility: &crate::compiler_frontend::headers::import_environment::FileVisibility,
+    ) -> ScopeContext {
+        self.visible_declaration_ids = Some(visibility.visible_declaration_paths.clone());
+        Rc::make_mut(&mut self.shared).file_visibility = Some(Rc::new(visibility.clone()));
         self
     }
 
@@ -519,7 +479,7 @@ impl ScopeContext {
         mut self,
         aliases: FxHashMap<InternedPath, DataType>,
     ) -> ScopeContext {
-        self.resolved_type_aliases = Some(Rc::new(aliases));
+        Rc::make_mut(&mut self.shared).resolved_type_aliases = Some(Rc::new(aliases));
         self
     }
 
@@ -527,7 +487,7 @@ impl ScopeContext {
         mut self,
         declarations: FxHashMap<InternedPath, GenericDeclarationMetadata>,
     ) -> ScopeContext {
-        self.generic_declarations_by_path = Some(Rc::new(declarations));
+        Rc::make_mut(&mut self.shared).generic_declarations_by_path = Some(Rc::new(declarations));
         self
     }
 
@@ -535,7 +495,7 @@ impl ScopeContext {
         mut self,
         fields: FxHashMap<InternedPath, Vec<Declaration>>,
     ) -> ScopeContext {
-        self.resolved_struct_fields_by_path = Some(Rc::new(fields));
+        Rc::make_mut(&mut self.shared).resolved_struct_fields_by_path = Some(Rc::new(fields));
         self
     }
 
@@ -543,7 +503,7 @@ impl ScopeContext {
         mut self,
         cache: Rc<GenericNominalInstantiationCache>,
     ) -> ScopeContext {
-        self.generic_nominal_instantiations = Some(cache);
+        Rc::make_mut(&mut self.shared).generic_nominal_instantiations = Some(cache);
         self
     }
 
@@ -551,7 +511,7 @@ impl ScopeContext {
         mut self,
         style_directives: &StyleDirectiveRegistry,
     ) -> ScopeContext {
-        self.style_directives = style_directives.clone();
+        Rc::make_mut(&mut self.shared).style_directives = style_directives.clone();
         self
     }
 
@@ -559,17 +519,17 @@ impl ScopeContext {
         mut self,
         resolver: Option<ProjectPathResolver>,
     ) -> ScopeContext {
-        self.project_path_resolver = resolver;
+        Rc::make_mut(&mut self.shared).project_path_resolver = resolver;
         self
     }
 
     pub fn with_source_file_scope(mut self, source_file: InternedPath) -> ScopeContext {
-        self.source_file_scope = Some(source_file);
+        Rc::make_mut(&mut self.shared).source_file_scope = Some(source_file);
         self
     }
 
     pub fn with_path_format_config(mut self, config: PathStringFormatConfig) -> ScopeContext {
-        self.path_format_config = config;
+        Rc::make_mut(&mut self.shared).path_format_config = config;
         self
     }
 
@@ -577,7 +537,7 @@ impl ScopeContext {
         mut self,
         sink: Rc<RefCell<Vec<RenderedPathUsage>>>,
     ) -> ScopeContext {
-        self.rendered_path_usages = sink;
+        Rc::make_mut(&mut self.shared).rendered_path_usages = sink;
         self
     }
 
@@ -585,7 +545,7 @@ impl ScopeContext {
         mut self,
         receiver_methods: Rc<ReceiverMethodCatalog>,
     ) -> ScopeContext {
-        self.receiver_methods = receiver_methods;
+        Rc::make_mut(&mut self.shared).receiver_methods = receiver_methods;
         self
     }
 
@@ -606,13 +566,13 @@ impl ScopeContext {
 
         // 2. Source-visible names → canonical declaration path.
         // Includes same-file declarations and imported source symbols (aliased or not).
-        // When visible_source_bindings is populated (production contexts), this is the
+        // When file_visibility is populated (production contexts), this is the
         // *only* path for cross-file name lookup. The fallback below is only for test
-        // contexts that do not set visible_source_bindings.
+        // contexts that do not set file_visibility.
         // Skip receiver methods: they must be called via receiver syntax, and the
         // receiver method catalog handles their lookup.
-        if let Some(bindings) = &self.visible_source_bindings {
-            if let Some(canonical_path) = bindings.get(name)
+        if let Some(fv) = &self.file_visibility {
+            if let Some(canonical_path) = fv.visible_source_names.get(name)
                 && let Some(declaration) = self.top_level_declarations.get_by_path(canonical_path)
                 && !matches!(
                     &declaration.value.data_type,
@@ -621,12 +581,12 @@ impl ScopeContext {
             {
                 return Some(declaration);
             }
-            // visible_source_bindings is set but name not found — do not fall back.
+            // file_visibility is set but name not found — do not fall back.
             // This ensures import aliases hide the original name.
             return None;
         }
 
-        // 3. Fallback for contexts that do not set visible_source_bindings
+        // 3. Fallback for contexts that do not set file_visibility
         // (e.g. synthetic evaluation contexts and some unit-test helpers).
         self.top_level_declarations
             .get_visible_non_receiver_by_name(*name, self.visible_declaration_ids.as_ref())
@@ -671,8 +631,8 @@ impl ScopeContext {
         ExternalFunctionId,
         &crate::compiler_frontend::external_packages::ExternalFunctionDef,
     )> {
-        let visible = self.visible_external_symbols.as_ref()?;
-        let symbol_id = *visible.get(&name)?;
+        let fv = self.file_visibility.as_ref()?;
+        let symbol_id = *fv.visible_external_symbols.get(&name)?;
         let ExternalSymbolId::Function(func_id) = symbol_id else {
             return None;
         };
@@ -689,8 +649,8 @@ impl ScopeContext {
         ExternalTypeId,
         &crate::compiler_frontend::external_packages::ExternalTypeDef,
     )> {
-        let visible = self.visible_external_symbols.as_ref()?;
-        let symbol_id = *visible.get(&name)?;
+        let fv = self.file_visibility.as_ref()?;
+        let symbol_id = *fv.visible_external_symbols.get(&name)?;
         let ExternalSymbolId::Type(type_id) = symbol_id else {
             return None;
         };
@@ -707,8 +667,8 @@ impl ScopeContext {
         crate::compiler_frontend::external_packages::ExternalConstantId,
         &crate::compiler_frontend::external_packages::ExternalConstantDef,
     )> {
-        let visible = self.visible_external_symbols.as_ref()?;
-        let symbol_id = *visible.get(&name)?;
+        let fv = self.file_visibility.as_ref()?;
+        let symbol_id = *fv.visible_external_symbols.get(&name)?;
         let ExternalSymbolId::Constant(const_id) = symbol_id else {
             return None;
         };
@@ -719,7 +679,7 @@ impl ScopeContext {
 
     /// Look up a visible external receiver method by receiver type and method name.
     ///
-    /// WHAT: only considers external functions in `visible_external_symbols`; checks
+    /// WHAT: only considers external functions in `file_visibility.visible_external_symbols`; checks
     ///       receiver compatibility against the def's `receiver_type`.
     /// WHY: package-scoped external symbols must respect file-local visibility.
     pub(crate) fn lookup_visible_external_method(
@@ -727,8 +687,8 @@ impl ScopeContext {
         receiver_type: &DataType,
         method_name: StringId,
     ) -> Option<(ExternalFunctionId, &ExternalFunctionDef)> {
-        let visible = self.visible_external_symbols.as_ref()?;
-        let symbol_id = *visible.get(&method_name)?;
+        let fv = self.file_visibility.as_ref()?;
+        let symbol_id = *fv.visible_external_symbols.get(&method_name)?;
         let ExternalSymbolId::Function(func_id) = symbol_id else {
             return None;
         };
@@ -747,9 +707,9 @@ impl ScopeContext {
     /// WHAT: used by expression parsing to give a precise diagnostic when a type alias
     /// is mistakenly used in value position.
     pub(crate) fn is_visible_type_alias_name(&self, name: StringId) -> bool {
-        self.visible_type_aliases
+        self.file_visibility
             .as_ref()
-            .is_some_and(|m| m.contains_key(&name))
+            .is_some_and(|fv| fv.visible_type_alias_names.contains_key(&name))
     }
 
     pub fn add_var(&mut self, arg: Declaration) {

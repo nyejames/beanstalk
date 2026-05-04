@@ -1,0 +1,9 @@
+entry = "."
+
+[backends.html]
+mode = "success"
+warnings = "forbid"
+
+[backends.html_wasm]
+mode = "success"
+warnings = "forbid"

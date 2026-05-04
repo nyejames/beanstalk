@@ -2,8 +2,8 @@
 //!
 //! WHAT: stores one slot per top-level declaration discovered by the header/dependency stages.
 //! WHY: AST environment construction updates placeholders in place as declarations are resolved,
-//! so body emission and type resolution can share one indexed declaration source instead of
-//! rebuilding snapshot indexes.
+//! so body emission and type resolution can share one indexed declaration source without
+//! reconstructing lookup indexes.
 
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::datatypes::DataType;

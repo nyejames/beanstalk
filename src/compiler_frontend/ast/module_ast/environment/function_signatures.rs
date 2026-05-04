@@ -2,11 +2,10 @@
 //!
 //! WHAT: resolves function parameter/return types using the struct declarations from pass 3,
 //! then builds an indexed receiver-method catalog from the resolved signatures.
-//! WHY: late resolution lets signatures reference named struct types; the catalog depends on
-//! resolved signatures and must be built before AST emission in pass 6.
+//! WHY: late resolution lets signatures use named struct types and receiver syntax
+//! without adding a second nominal-type system just for headers.
 
 use super::builder::AstModuleEnvironmentBuilder;
-use crate::compiler_frontend::ast::import_bindings::FileImportBindings;
 use crate::compiler_frontend::ast::receiver_methods::build_receiver_method_catalog;
 use crate::compiler_frontend::ast::type_resolution::{
     build_generic_parameter_scope, collect_type_parameter_ids_from_declarations,
@@ -17,14 +16,9 @@ use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::generics::GenericParameterList;
-use crate::compiler_frontend::declaration_syntax::type_syntax::{
-    TypeResolutionContext, TypeResolutionContextInputs,
-};
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
-use rustc_hash::FxHashMap;
 use std::rc::Rc;
 
 use crate::compiler_frontend::ast::module_ast::scope_context::ReceiverMethodCatalog;
@@ -36,7 +30,6 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
     pub(in crate::compiler_frontend::ast) fn resolve_function_signatures(
         &mut self,
         sorted_headers: &[Header],
-        file_import_bindings: &FxHashMap<InternedPath, FileImportBindings>,
         string_table: &mut StringTable,
     ) -> Result<(), CompilerMessages> {
         #[cfg(feature = "detailed_timers")]
@@ -51,10 +44,11 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 continue;
             };
 
-            let bindings = file_import_bindings
-                .get(&header.source_file)
-                .cloned()
-                .unwrap_or_default();
+            let visibility = self
+                .import_environment
+                .visibility_for(&header.source_file)
+                .map_err(|error| self.error_messages(error, string_table))?;
+
             reject_generic_receiver_method(
                 generic_parameters,
                 signature,
@@ -65,31 +59,16 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
 
             let generic_parameter_scope = build_generic_parameter_scope(
                 generic_parameters,
-                &bindings.visible_source_bindings,
-                &bindings.visible_type_aliases,
-                &bindings.visible_external_symbols,
+                &visibility.visible_source_names,
+                &visibility.visible_type_alias_names,
+                &visibility.visible_external_symbols,
                 self.declaration_table.as_ref(),
                 &self.module_symbols.generic_declarations_by_path,
                 string_table,
             )
             .map_err(|error| self.error_messages(error, string_table))?;
             let type_resolution_context =
-                TypeResolutionContext::from_inputs(TypeResolutionContextInputs {
-                    declaration_table: &self.declaration_table,
-                    visible_declaration_ids: Some(&bindings.visible_symbol_paths),
-                    visible_external_symbols: Some(&bindings.visible_external_symbols),
-                    visible_source_bindings: Some(&bindings.visible_source_bindings),
-                    visible_type_aliases: Some(&bindings.visible_type_aliases),
-                    resolved_type_aliases: Some(&self.resolved_type_aliases_by_path),
-                    generic_declarations_by_path: Some(
-                        &self.module_symbols.generic_declarations_by_path,
-                    ),
-                    resolved_struct_fields_by_path: Some(&self.resolved_struct_fields_by_path),
-                    generic_nominal_instantiations: Some(
-                        self.generic_nominal_instantiations.as_ref(),
-                    ),
-                })
-                .with_generic_parameters(generic_parameter_scope.as_ref());
+                self.type_resolution_context_for(visibility, generic_parameter_scope.as_ref());
             let resolved_signature = resolve_function_signature(
                 &header.tokens.src_path,
                 signature,

@@ -317,7 +317,7 @@ The primary goal is end-to-end language correctness. Prefer real usage patterns 
 ### Integration Testing
 Integration tests are the main regression check for new features and refactors.
 
-- `cargo run tests` runs the integration test runner in `src/compiler_tests`
+- `cargo run -- tests` runs the integration test runner in `src/compiler_tests`
 - Tests should use real Beanstalk snippets
 - Canonical cases should be self-contained directories representing one scenario each
 - Multi-file fixtures should remain inside one case folder so helpers are not treated as standalone tests

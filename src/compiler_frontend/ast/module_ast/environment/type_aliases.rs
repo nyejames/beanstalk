@@ -10,19 +10,14 @@
 //! `create_header` collects named-type dependency edges from alias targets just like from struct
 //! fields and constant type annotations. Self-reference (`A as A`) also creates a self-loop edge.
 
-use crate::compiler_frontend::ast::import_bindings::FileImportBindings;
 use crate::compiler_frontend::ast::module_ast::environment::builder::AstModuleEnvironmentBuilder;
 use crate::compiler_frontend::compiler_errors::{
     CompilerError, CompilerMessages, ErrorMetaDataKey,
 };
 use crate::compiler_frontend::datatypes::DataType;
-use crate::compiler_frontend::declaration_syntax::type_syntax::{
-    TypeResolutionContext, TypeResolutionContextInputs, resolve_type,
-};
+use crate::compiler_frontend::declaration_syntax::type_syntax::resolve_type;
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use rustc_hash::FxHashMap;
 
 impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
     /// Resolve all type alias targets in sorted-header order.
@@ -34,7 +29,6 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
     pub(in crate::compiler_frontend::ast) fn resolve_type_aliases(
         &mut self,
         sorted_headers: &[Header],
-        file_import_bindings: &FxHashMap<InternedPath, FileImportBindings>,
         string_table: &mut StringTable,
     ) -> Result<(), CompilerMessages> {
         for header in sorted_headers {
@@ -43,28 +37,13 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             };
             let alias_path = &header.tokens.src_path;
 
-            let file_bindings = file_import_bindings.get(&header.source_file);
+            let visibility = self
+                .import_environment
+                .visibility_for(&header.source_file)
+                .map_err(|error| self.error_messages(error, string_table))?;
+
             let resolved_target = {
-                let type_resolution_context =
-                    TypeResolutionContext::from_inputs(TypeResolutionContextInputs {
-                        declaration_table: &self.declaration_table,
-                        visible_declaration_ids: file_bindings
-                            .map(|bindings| &bindings.visible_symbol_paths),
-                        visible_external_symbols: file_bindings
-                            .map(|bindings| &bindings.visible_external_symbols),
-                        visible_source_bindings: file_bindings
-                            .map(|bindings| &bindings.visible_source_bindings),
-                        visible_type_aliases: file_bindings
-                            .map(|bindings| &bindings.visible_type_aliases),
-                        resolved_type_aliases: Some(&self.resolved_type_aliases_by_path),
-                        generic_declarations_by_path: Some(
-                            &self.module_symbols.generic_declarations_by_path,
-                        ),
-                        resolved_struct_fields_by_path: Some(&self.resolved_struct_fields_by_path),
-                        generic_nominal_instantiations: Some(
-                            self.generic_nominal_instantiations.as_ref(),
-                        ),
-                    });
+                let type_resolution_context = self.type_resolution_context_for(visibility, None);
 
                 resolve_type(
                     target,

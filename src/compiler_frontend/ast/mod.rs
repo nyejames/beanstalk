@@ -23,9 +23,10 @@
 //!
 //! ## Pipeline
 //!
-//! 1. `build_ast_environment` — build imports, declarations, constants, signatures, and receiver metadata
-//! 2. `emit_ast_nodes` — lower function/start/template bodies into typed AST nodes
-//! 3. `finalize_ast` — normalize templates/constants and assemble [`Ast`] output
+//! 1. `AstModuleEnvironmentBuilder::build` — resolves type aliases, nominal types, function
+//!    signatures, receiver catalog, and constants from sorted headers.
+//! 2. `AstEmitter::emit` — lowers function/start/template bodies into typed AST nodes.
+//! 3. `AstFinalizer::finalize` — normalizes templates/constants and assembles [`Ast`] output.
 //!
 //! Entry point: [`Ast::new`].
 
@@ -35,7 +36,6 @@
 // implement the AST pipeline. The rest of the AST surface is split by concern
 // (expressions, statements, templates, field access, etc.).
 pub(crate) mod ast_nodes;
-mod import_bindings;
 pub(crate) mod instrumentation;
 mod module_ast;
 mod receiver_methods;
@@ -95,7 +95,9 @@ use crate::compiler_frontend::ast::ast_nodes::AstNode;
 use crate::compiler_frontend::ast::instrumentation::{log_ast_counters, reset_ast_counters};
 use crate::compiler_frontend::ast::module_ast::build_context::AstPhaseContext;
 use crate::compiler_frontend::ast::module_ast::emission::AstEmitter;
-use crate::compiler_frontend::ast::module_ast::environment::AstModuleEnvironmentBuilder;
+use crate::compiler_frontend::ast::module_ast::environment::{
+    AstEnvironmentInput, AstModuleEnvironmentBuilder,
+};
 use crate::compiler_frontend::ast::module_ast::finalization::AstFinalizer;
 use crate::compiler_frontend::ast::statements::body_dispatch::parse_function_body_statements;
 use crate::compiler_frontend::ast::templates::top_level_templates::AstConstTopLevelFragment;
@@ -148,32 +150,55 @@ pub struct Ast {
     pub choice_definitions: Vec<AstChoiceDefinition>,
 }
 
+/// Complete header-stage output consumed by AST construction.
+///
+/// WHAT: bundles everything produced by header parsing and dependency sorting that AST needs.
+/// WHY: `Ast::new` should receive one named contract, not a loose list of parameters.
+pub struct AstBuildInput {
+    pub headers: Vec<Header>,
+    pub module_symbols: ModuleSymbols,
+    pub import_environment:
+        crate::compiler_frontend::headers::import_environment::HeaderImportEnvironment,
+    pub top_level_const_fragments: Vec<TopLevelConstFragment>,
+}
+
 impl Ast {
-    /// Constructs a complete typed AST from sorted headers and a pre-built symbol manifest.
+    /// Constructs a complete typed AST from header-stage outputs and build services.
     ///
-    /// WHAT: Orchestrates all AST construction passes in sequence, consuming the manifest
-    /// through finalization, then assembles the final [`Ast`] output.
+    /// WHAT: Orchestrates all AST construction passes in sequence, consuming sorted headers
+    /// and header-built visibility through finalization, then assembles the final [`Ast`] output.
     ///
     /// WHY: Centralizes the pass sequence so the full compilation pipeline is readable in
-    /// one place without implementation details. Symbol discovery is owned by the header/
-    /// dependency stages and passed in via `module_symbols`.
+    /// one place without implementation details. Symbol discovery and import visibility are
+    /// owned by the header/dependency stages and passed in via `AstBuildInput`.
     pub fn new(
-        sorted_headers: Vec<Header>,
-        top_level_const_fragments: Vec<TopLevelConstFragment>,
-        module_symbols: ModuleSymbols,
+        input: AstBuildInput,
         context: AstBuildContext<'_>,
     ) -> Result<Ast, CompilerMessages> {
+        let AstBuildInput {
+            headers,
+            module_symbols,
+            import_environment,
+            top_level_const_fragments,
+        } = input;
+
         reset_ast_counters();
 
-        let header_count = sorted_headers.len();
+        let header_count = headers.len();
         let (phase_context, string_table) = AstPhaseContext::from_build_context(context);
 
-        let environment = AstModuleEnvironmentBuilder::new(&phase_context, module_symbols)
-            .build(&sorted_headers, string_table)?;
+        let environment = AstModuleEnvironmentBuilder::new(&phase_context).build(
+            &headers,
+            AstEnvironmentInput {
+                module_symbols,
+                import_environment,
+            },
+            string_table,
+        )?;
 
         let node_emission_start = Instant::now();
         let emitted = AstEmitter::new(&phase_context, &environment, header_count)
-            .emit(sorted_headers, string_table)?;
+            .emit(headers, string_table)?;
         timer_log!(node_emission_start, "AST/emit nodes completed in: ");
         let _ = node_emission_start;
 

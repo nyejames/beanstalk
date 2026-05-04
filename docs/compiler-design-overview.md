@@ -169,7 +169,7 @@ UserId as Int
 ;
 ```
 
-Top-level constants, type aliases, structs, choices, function signatures, and relevant type annotations can create strict dependency edges.
+Top-level constants, type aliases, structs, choices, function signatures, and relevant type annotations can create header-provided dependency edges.
 Executable body references do not.
 
 `#` syntax, constant rules, export behavior, and top-level template syntax are specified in `docs/language-overview.md`.
@@ -276,11 +276,11 @@ AST consumes that package directly.
 
 Path: `src/compiler_frontend/module_dependencies.rs`
 
-Dependency sorting operates only on top-level declaration headers and strict dependency edges. It owns:
+Dependency sorting operates only on top-level declaration headers and header-provided dependency edges. It owns:
 
 - topological sorting of parsed top-level declaration headers
 - cycle detection in the strict top-level declaration graph
-- missing strict dependency diagnostics
+- missing header-provided dependency diagnostics
 - source-order stability among otherwise independent declarations
 - appending the implicit entry `start` header after sorted declarations
 

@@ -1,20 +1,21 @@
 //! Stage 3 dependency ordering for parsed Beanstalk headers.
 //!
-//! WHAT: topologically sorts top-level declaration headers by their strict dependency edges, then
-//! appends `StartFunction` headers in source order. Finalizes the header-owned `ModuleSymbols` package:
+//! WHAT: topologically sorts top-level declaration headers by their header-provided dependency edges,
+//! then appends `StartFunction` headers in source order. Finalizes the header-owned `ModuleSymbols` package:
 //! declarations are built from the sorted headers and appended with builtin declarations.
 //!
 //! ## Stage contract
 //!
-//! **Strict-edges-only sort.** Dependency edges are structural: function signature type refs,
-//! struct field type refs, constant declared-type refs. Initializer-expression symbols are NOT
-//! edges; they are soft hints handled at AST body-parsing time.
+//! Dependency edges are header-provided top-level declaration dependencies.
+//! They include type-surface dependencies and constant initializer dependencies.
+//! Executable function/start body references remain excluded.
 //!
 //! **`start` excluded from the graph.** `StartFunction` headers are not graph participants — they
 //! have no dependents and cannot be imported. They are appended after the sorted top-level
 //! headers so AST emission sees all top-level declarations before processing the start body.
 
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
+use crate::compiler_frontend::headers::import_environment::HeaderImportEnvironment;
 use crate::compiler_frontend::headers::module_symbols::{FacadeExportEntry, ModuleSymbols};
 use crate::compiler_frontend::headers::parse_file_headers::{
     Header, HeaderKind, Headers, TopLevelConstFragment,
@@ -24,7 +25,6 @@ use crate::compiler_frontend::source_libraries::mod_file::path_is_mod_file;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::{header_log, return_rule_error};
 use rustc_hash::{FxHashMap, FxHashSet};
-use std::collections::{HashMap, HashSet};
 
 /// Dependency-sorted module headers with a finalized symbol package.
 ///
@@ -38,33 +38,34 @@ pub(crate) struct SortedHeaders {
     pub(crate) top_level_const_fragments: Vec<TopLevelConstFragment>,
     pub(crate) entry_runtime_fragment_count: usize,
     pub(crate) module_symbols: ModuleSymbols,
+    pub(crate) import_environment: HeaderImportEnvironment,
 }
 
 /// Tracks which modules are temporarily marked (in the current DFS stack)
 /// and which have been permanently visited.
 struct DependencyTracker {
-    temp_mark: HashSet<InternedPath>,
-    visited: HashSet<InternedPath>,
+    temp_mark: FxHashSet<InternedPath>,
+    visited: FxHashSet<InternedPath>,
 }
 
 impl DependencyTracker {
     fn new(capacity: usize) -> Self {
         DependencyTracker {
-            temp_mark: HashSet::with_capacity(capacity),
-            visited: HashSet::with_capacity(capacity),
+            temp_mark: FxHashSet::with_capacity_and_hasher(capacity, Default::default()),
+            visited: FxHashSet::with_capacity_and_hasher(capacity, Default::default()),
         }
     }
 }
 
 /// Topologically sort headers and finalize the header-owned module symbol package.
 ///
-/// WHAT: sorts top-level declaration headers (non-start) by their strict dependency edges, then
-/// appends `StartFunction` headers in source order. Builds the `declarations` Vec in sorted order
+/// WHAT: sorts top-level declaration headers (non-start) by their header-provided dependency edges,
+/// then appends `StartFunction` headers in source order. Builds the `declarations` Vec in sorted order
 /// and appends builtin declarations.
 ///
 /// WHY: `StartFunction` is excluded from the dependency graph — it is build-system-only and
-/// cannot be imported by other headers. All other headers are sorted by strict structural edges
-/// (signature types, field types, declared constant types) so AST sees dependencies first.
+/// cannot be imported by other headers. All other headers are sorted by header-provided edges
+/// (type surfaces and constant initializer references) so AST sees dependencies first.
 pub fn resolve_module_dependencies(
     parsed: Headers,
     string_table: &mut StringTable,
@@ -74,12 +75,13 @@ pub fn resolve_module_dependencies(
         top_level_const_fragments,
         entry_runtime_fragment_count,
         mut module_symbols,
+        import_environment,
     } = parsed;
 
     // Partition: StartFunction and facade (#mod.bst) headers are appended last, not sorted.
     // WHY: start is build-system-only and has no dependents; facades only consume dependencies
     // from other files and do not expose symbols to the rest of the module, so they must not
-    // participate in cycle detection or strict-edge traversal.
+    // participate in cycle detection or dependency-edge traversal.
     let mut facade_headers: Vec<Header> = Vec::new();
     let mut start_headers: Vec<Header> = Vec::new();
     let top_level_headers: Vec<Header> = headers
@@ -97,7 +99,8 @@ pub fn resolve_module_dependencies(
         })
         .collect();
 
-    let mut graph: HashMap<InternedPath, Header> = HashMap::with_capacity(top_level_headers.len());
+    let mut graph: FxHashMap<InternedPath, Header> =
+        FxHashMap::with_capacity_and_hasher(top_level_headers.len(), Default::default());
     let mut errors: Vec<CompilerError> = Vec::with_capacity(top_level_headers.len());
     let mut ordered_paths: Vec<InternedPath> = Vec::with_capacity(top_level_headers.len());
 
@@ -112,9 +115,9 @@ pub fn resolve_module_dependencies(
         .iter()
         .enumerate()
         .map(|(index, path)| (path.to_owned(), index))
-        .collect::<HashMap<_, _>>();
+        .collect::<FxHashMap<_, _>>();
 
-    // Perform topological sort on strict-edge graph only.
+    // Perform topological sort on header-provided dependency edges.
     let mut tracker = DependencyTracker::new(graph.len());
     let mut sorted: Vec<Header> = Vec::with_capacity(graph.len());
 
@@ -154,6 +157,7 @@ pub fn resolve_module_dependencies(
         top_level_const_fragments,
         entry_runtime_fragment_count,
         module_symbols,
+        import_environment,
     })
 }
 
@@ -161,8 +165,8 @@ pub fn resolve_module_dependencies(
 fn visit_node(
     node_path: &InternedPath,
     tracker: &mut DependencyTracker,
-    graph: &HashMap<InternedPath, Header>,
-    order_lookup: &HashMap<InternedPath, usize>,
+    graph: &FxHashMap<InternedPath, Header>,
+    order_lookup: &FxHashMap<InternedPath, usize>,
     sorted: &mut Vec<Header>,
     facade_exports: &FxHashMap<String, FxHashSet<FacadeExportEntry>>,
     string_table: &mut StringTable,
@@ -186,7 +190,7 @@ fn visit_node(
     if tracker.temp_mark.contains(&resolved_path) {
         let path_str = resolved_path.to_portable_string(string_table);
         return_rule_error!(
-            format!("Circular dependency detected at {}", path_str),
+            format!("Circular declaration dependency detected at {}", path_str),
             SourceLocation::default(),
             {
                 CompilationStage => "Dependency Resolution",
@@ -214,9 +218,9 @@ fn visit_node(
         // mark temporarily
         tracker.temp_mark.insert(resolved_path.to_owned());
 
-        // Recurse on strict dependency edges only.
-        // WHY: strict edges are structural (signature types, field types, declared constant types).
-        // Body / initializer expression references are soft and excluded from the graph.
+        // Recurse on header-provided dependency edges.
+        // WHY: edges include type surfaces and constant initializer references.
+        // Executable body references are excluded.
         let mut strict_imports = header.dependencies.iter().cloned().collect::<Vec<_>>();
         strict_imports.sort_by(|left, right| {
             let left_order = resolve_graph_path(left, graph, facade_exports, string_table)
@@ -264,9 +268,15 @@ fn visit_node(
     Ok(())
 }
 
+/// Resolves a requested dependency path to a graph key.
+///
+/// WHAT: performs a canonical graph key lookup.
+/// WHY: header edge producers (type dependencies, constant initializer dependencies, import
+/// dependencies) all emit canonical paths, so only exact graph membership and the facade
+/// fallback are needed.
 fn resolve_graph_path(
     requested_path: &InternedPath,
-    graph: &HashMap<InternedPath, Header>,
+    graph: &FxHashMap<InternedPath, Header>,
     facade_exports: &FxHashMap<String, FxHashSet<FacadeExportEntry>>,
     string_table: &StringTable,
 ) -> Option<InternedPath> {
@@ -274,120 +284,10 @@ fn resolve_graph_path(
         return Some(requested_path.to_owned());
     }
 
-    let normalized_requested = normalize_relative_dependency_path(requested_path, string_table);
-
-    let exact_header_path_matches = graph
-        .keys()
-        .filter(|candidate| {
-            exact_path_matches_candidate(candidate, requested_path, string_table)
-                || normalized_requested.as_ref().is_some_and(|normalized| {
-                    exact_path_matches_candidate(candidate, normalized, string_table)
-                })
-        })
-        .cloned()
-        .collect::<Vec<_>>();
-
-    match exact_header_path_matches.as_slice() {
-        [single] => return Some(single.to_owned()),
-        [] => {}
-        _ => return None,
-    }
-
-    let header_path_matches = graph
-        .keys()
-        .filter(|candidate| {
-            path_matches_candidate(candidate, requested_path, string_table)
-                || normalized_requested.as_ref().is_some_and(|normalized| {
-                    path_matches_candidate(candidate, normalized, string_table)
-                })
-        })
-        .cloned()
-        .collect::<Vec<_>>();
-
-    match header_path_matches.as_slice() {
-        [single] => return Some(single.to_owned()),
-        [] => {}
-        _ => return None,
-    }
-
-    let mut exact_source_file_matches = graph
-        .iter()
-        .filter(|(_, header)| {
-            exact_path_matches_candidate(&header.source_file, requested_path, string_table)
-                || normalized_requested.as_ref().is_some_and(|normalized| {
-                    exact_path_matches_candidate(&header.source_file, normalized, string_table)
-                })
-        })
-        .map(|(path, header)| {
-            (
-                path.to_owned(),
-                matches!(header.kind, HeaderKind::StartFunction),
-            )
-        })
-        .collect::<Vec<_>>();
-
-    if !exact_source_file_matches.is_empty() {
-        let start_function_matches = exact_source_file_matches
-            .iter()
-            .filter(|(_, is_start)| *is_start)
-            .map(|(path, _)| path.to_owned())
-            .collect::<Vec<_>>();
-
-        if start_function_matches.len() == 1 {
-            return Some(start_function_matches[0].to_owned());
-        }
-        if start_function_matches.len() > 1 {
-            return None;
-        }
-
-        if exact_source_file_matches.len() == 1 {
-            return exact_source_file_matches.pop().map(|(path, _)| path);
-        }
-
-        return None;
-    }
-
-    let mut source_file_matches = graph
-        .iter()
-        .filter(|(_, header)| {
-            path_matches_candidate(&header.source_file, requested_path, string_table)
-                || normalized_requested.as_ref().is_some_and(|normalized| {
-                    path_matches_candidate(&header.source_file, normalized, string_table)
-                })
-        })
-        .map(|(path, header)| {
-            (
-                path.to_owned(),
-                matches!(header.kind, HeaderKind::StartFunction),
-            )
-        })
-        .collect::<Vec<_>>();
-
     // Facade fallback: cross-library imports resolve to facade-declared symbols that are
     // excluded from the graph. Return the path so visit_node can skip them safely.
     if is_facade_path(requested_path, facade_exports, string_table) {
         return Some(requested_path.to_owned());
-    }
-
-    if source_file_matches.is_empty() {
-        return None;
-    }
-
-    let start_function_matches = source_file_matches
-        .iter()
-        .filter(|(_, is_start)| *is_start)
-        .map(|(path, _)| path.to_owned())
-        .collect::<Vec<_>>();
-
-    if start_function_matches.len() == 1 {
-        return Some(start_function_matches[0].to_owned());
-    }
-    if start_function_matches.len() > 1 {
-        return None;
-    }
-
-    if source_file_matches.len() == 1 {
-        return source_file_matches.pop().map(|(path, _)| path);
     }
 
     None
@@ -397,7 +297,7 @@ fn resolve_graph_path(
 ///
 /// WHAT: facade files declare symbols that are visible to cross-library importers. When the
 /// facade header is excluded from the dependency graph, consumer dependencies on facade symbols
-/// still need to resolve successfully so strict-edge traversal does not fail.
+/// still need to resolve successfully so dependency-edge traversal does not fail.
 fn is_facade_path(
     path: &InternedPath,
     facade_exports: &FxHashMap<String, FxHashSet<FacadeExportEntry>>,
@@ -434,95 +334,6 @@ fn is_same_file_symbol_hint(path: &InternedPath, source_file: &InternedPath) -> 
 /// symbols to the rest of the module, so they should be excluded from dependency sorting.
 fn is_facade_header(header: &Header, string_table: &StringTable) -> bool {
     path_is_mod_file(&header.source_file, string_table)
-}
-
-fn exact_path_matches_candidate(
-    candidate: &InternedPath,
-    requested: &InternedPath,
-    string_table: &StringTable,
-) -> bool {
-    components_match_with_optional_bst_extension(
-        candidate.as_components(),
-        requested.as_components(),
-        string_table,
-    )
-}
-
-fn path_matches_candidate(
-    candidate: &InternedPath,
-    requested: &InternedPath,
-    string_table: &StringTable,
-) -> bool {
-    candidate.ends_with(requested)
-        || suffix_matches_with_optional_bst_extension(candidate, requested, string_table)
-}
-
-fn normalize_relative_dependency_path(
-    requested: &InternedPath,
-    string_table: &StringTable,
-) -> Option<InternedPath> {
-    let components = requested.as_components();
-    let mut start = 0usize;
-
-    while start < components.len() {
-        let segment = string_table.resolve(components[start]);
-        if segment == "." || segment == ".." {
-            start += 1;
-            continue;
-        }
-        break;
-    }
-
-    if start == 0 || start >= components.len() {
-        return None;
-    }
-
-    Some(InternedPath::from_components(components[start..].to_vec()))
-}
-
-fn suffix_matches_with_optional_bst_extension(
-    candidate: &InternedPath,
-    requested: &InternedPath,
-    string_table: &StringTable,
-) -> bool {
-    if requested.len() > candidate.len() {
-        return false;
-    }
-
-    let candidate_components = candidate.as_components();
-    let requested_components = requested.as_components();
-    let start_index = candidate_components.len() - requested_components.len();
-
-    components_match_with_optional_bst_extension(
-        &candidate_components[start_index..],
-        requested_components,
-        string_table,
-    )
-}
-
-fn components_match_with_optional_bst_extension(
-    candidate_components: &[crate::compiler_frontend::symbols::string_interning::StringId],
-    requested_components: &[crate::compiler_frontend::symbols::string_interning::StringId],
-    string_table: &StringTable,
-) -> bool {
-    if candidate_components.len() != requested_components.len() {
-        return false;
-    }
-
-    candidate_components
-        .iter()
-        .zip(requested_components.iter())
-        .all(|(candidate_component, requested_component)| {
-            if candidate_component == requested_component {
-                return true;
-            }
-
-            let candidate_str = string_table.resolve(*candidate_component);
-            let requested_str = string_table.resolve(*requested_component);
-
-            candidate_str.strip_suffix(".bst") == Some(requested_str)
-                || requested_str.strip_suffix(".bst") == Some(candidate_str)
-        })
 }
 
 #[cfg(test)]

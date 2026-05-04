@@ -1,10 +1,10 @@
-//! Choice declaration shell parsing for the header stage.
+//! Choice declaration shell parsing.
 //!
-//! WHAT: defines the header-level choice metadata types and the parser that produces them
-//! from `Choice :: VariantA, VariantB, ...;` syntax.
-//! WHY: choice header metadata is consumed by both the dependency-sorting stage (for type-ref
-//! edges) and AST construction. Centralising these types here keeps the header stage free of
-//! direct AST imports for the choice shell contract.
+//! WHAT: defines the choice metadata types and the parser that produces them from
+//! `Choice :: VariantA, VariantB, ...;` syntax.
+//! WHY: the header stage stores choice shells (variants + payload types) for dependency sorting
+//! and AST construction. Centralising these types here keeps the header stage free of direct AST
+//! imports for the choice shell contract.
 //!
 //! Body-context choice expression parsing (`Choice::Variant` values) lives in
 //! `ast/expressions/parse_expression_identifiers.rs` and is intentionally separate.

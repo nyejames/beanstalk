@@ -8,8 +8,6 @@
 pub(crate) enum AstCounter {
     ScopeContextsCreated,
     ScopeLocalDeclarationsClonedTotal,
-    ConstantDependencyEdges,
-    ConstantTopologicalSortCount,
     BoundedExpressionTokenCopies,
     BoundedExpressionTokensCopiedTotal,
     RuntimeRpnCloneCount,
@@ -24,8 +22,6 @@ mod detailed {
 
     static SCOPE_CONTEXTS_CREATED: AtomicUsize = AtomicUsize::new(0);
     static SCOPE_LOCAL_DECLARATIONS_CLONED_TOTAL: AtomicUsize = AtomicUsize::new(0);
-    static CONSTANT_DEPENDENCY_EDGES: AtomicUsize = AtomicUsize::new(0);
-    static CONSTANT_TOPOLOGICAL_SORT_COUNT: AtomicUsize = AtomicUsize::new(0);
     static BOUNDED_EXPRESSION_TOKEN_COPIES: AtomicUsize = AtomicUsize::new(0);
     static BOUNDED_EXPRESSION_TOKENS_COPIED_TOTAL: AtomicUsize = AtomicUsize::new(0);
     static RUNTIME_RPN_CLONE_COUNT: AtomicUsize = AtomicUsize::new(0);
@@ -50,9 +46,6 @@ mod detailed {
         let scope_contexts_created = counter_value(AstCounter::ScopeContextsCreated);
         let scope_local_declarations_cloned_total =
             counter_value(AstCounter::ScopeLocalDeclarationsClonedTotal);
-        let constant_dependency_edges = counter_value(AstCounter::ConstantDependencyEdges);
-        let constant_topological_sort_count =
-            counter_value(AstCounter::ConstantTopologicalSortCount);
         let bounded_expression_token_copies =
             counter_value(AstCounter::BoundedExpressionTokenCopies);
         let bounded_expression_tokens_copied_total =
@@ -73,14 +66,6 @@ mod detailed {
             Dark Green scope_local_declarations_cloned_total
         );
         saying::say!(
-            "  constant dependency edges = ",
-            Dark Green constant_dependency_edges
-        );
-        saying::say!(
-            "  constant topo-sort count = ",
-            Dark Green constant_topological_sort_count
-        );
-        saying::say!(
             "  bounded expression token copies = ",
             Dark Green bounded_expression_token_copies
         );
@@ -99,12 +84,10 @@ mod detailed {
         );
     }
 
-    fn all_counters() -> [AstCounter; 9] {
+    fn all_counters() -> [AstCounter; 7] {
         [
             AstCounter::ScopeContextsCreated,
             AstCounter::ScopeLocalDeclarationsClonedTotal,
-            AstCounter::ConstantDependencyEdges,
-            AstCounter::ConstantTopologicalSortCount,
             AstCounter::BoundedExpressionTokenCopies,
             AstCounter::BoundedExpressionTokensCopiedTotal,
             AstCounter::RuntimeRpnCloneCount,
@@ -117,8 +100,6 @@ mod detailed {
         match counter {
             AstCounter::ScopeContextsCreated => &SCOPE_CONTEXTS_CREATED,
             AstCounter::ScopeLocalDeclarationsClonedTotal => &SCOPE_LOCAL_DECLARATIONS_CLONED_TOTAL,
-            AstCounter::ConstantDependencyEdges => &CONSTANT_DEPENDENCY_EDGES,
-            AstCounter::ConstantTopologicalSortCount => &CONSTANT_TOPOLOGICAL_SORT_COUNT,
             AstCounter::BoundedExpressionTokenCopies => &BOUNDED_EXPRESSION_TOKEN_COPIES,
             AstCounter::BoundedExpressionTokensCopiedTotal => {
                 &BOUNDED_EXPRESSION_TOKENS_COPIED_TOTAL

@@ -1,13 +1,13 @@
 //! AST module construction phases and scope-context helpers.
 //!
 //! WHAT: maps the AST stage into three explicit owners:
-//! `build_ast_environment`, `emit_ast_nodes`, and `finalize_ast`.
+//! `AstModuleEnvironmentBuilder`, `AstEmitter`, and `AstFinalizer`.
 //! WHY: the old pass accumulator made field validity depend on implicit ordering. Keeping
 //! environment, emission, and finalization state separate makes stage ownership reviewable.
 //!
 //! ## Phase ownership
 //!
-//! - `environment` builds import bindings, resolved declarations, signatures, and receiver data.
+//! - `environment` consumes header-built visibility and resolves declarations, signatures, and receiver data.
 //! - `emission` lowers executable bodies and const templates into AST-owned output state.
 //! - `finalization` normalizes HIR-boundary templates/constants and assembles [`Ast`].
 //!

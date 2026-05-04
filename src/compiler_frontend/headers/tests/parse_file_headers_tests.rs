@@ -200,7 +200,7 @@ fn symbol_tokens_in_header_body(header: &Header, string_table: &StringTable) -> 
 
 #[test]
 fn start_function_dependencies_stay_empty_even_with_imported_runtime_template_tokens() {
-    let headers = parse_single_file_headers("import @libs/html/basic\n[basic]\n");
+    let headers = parse_single_file_headers("func basic()\n[basic]\n");
     let start_header = headers
         .headers
         .iter()
@@ -270,8 +270,8 @@ fn malformed_nested_children_wrapper_constant_initializer_reports_eof_delimiter_
 }
 
 #[test]
-fn exported_untyped_constant_has_no_strict_dependencies() {
-    let headers = parse_single_file_headers("import @styles/docs/navbar\n#theme = navbar\n");
+fn exported_untyped_constant_has_no_header_provided_dependencies() {
+    let headers = parse_single_file_headers("#theme = navbar\n");
     let constant_header = headers
         .headers
         .iter()
@@ -280,7 +280,7 @@ fn exported_untyped_constant_has_no_strict_dependencies() {
 
     assert!(
         constant_header.dependencies.is_empty(),
-        "strict constant dependencies come from declared type syntax only"
+        "header-provided constant dependencies come from declared type syntax only"
     );
 }
 
@@ -526,7 +526,7 @@ fn loop_binding_symbols_remain_in_start_function_body() {
 #[test]
 fn top_level_expression_symbols_stay_in_implicit_start_body() {
     let (headers, string_table) = parse_single_file_headers_with_table(
-        "import @libs/html/basic\n\
+        "func basic()\n\
          items = {1, 2, 3}\n\
          loop items |item, index|:\n\
              io(item)\n\
@@ -1057,13 +1057,12 @@ fn entry_runtime_fragment_count_is_zero_when_parsed_as_non_entry_file() {
 }
 
 #[test]
-fn typed_constant_creates_strict_dependency_on_declared_type() {
+fn typed_constant_creates_header_provided_dependency_on_declared_type() {
     // WHY: the declared type creates a structural ordering constraint so that the type
     // is sorted before any constant that references it. Initializer-expression references
-    // do NOT create strict deps — only the declared type annotation does.
-    let (headers, string_table) = parse_single_file_headers_with_table(
-        "import @styles/NavBar\n#theme NavBar = default_navbar\n",
-    );
+    // do NOT create header-provided deps — only the declared type annotation does.
+    let (headers, string_table) =
+        parse_single_file_headers_with_table("struct NavBar {}\n#theme NavBar = default_navbar\n");
 
     let constant_header = headers
         .headers
@@ -1073,20 +1072,20 @@ fn typed_constant_creates_strict_dependency_on_declared_type() {
 
     assert!(
         !constant_header.dependencies.is_empty(),
-        "typed constant must create a strict dependency on its declared type"
+        "typed constant must create a header-provided dependency on its declared type"
     );
     assert!(
         constant_header
             .dependencies
             .iter()
             .any(|dep| dep.name_str(&string_table) == Some("NavBar")),
-        "strict dependency must reference the declared type name 'NavBar'"
+        "header-provided dependency must reference the declared type name 'NavBar'"
     );
 }
 
 #[test]
-fn struct_fields_create_strict_dependencies_on_named_field_types() {
-    // WHY: struct fields whose types are user-defined names create strict sort edges so that
+fn struct_fields_create_header_provided_dependencies_on_named_field_types() {
+    // WHY: struct fields whose types are user-defined names create header-provided sort edges so that
     // the named type is always sorted before the struct that depends on it.
     let (headers, string_table) = parse_single_file_headers_with_table(
         "Point = |x Int, y Int|\nSpan = |start Point, end Point|\n",
@@ -1106,7 +1105,7 @@ fn struct_fields_create_strict_dependencies_on_named_field_types() {
             .dependencies
             .iter()
             .any(|dep| dep.name_str(&string_table) == Some("Point")),
-        "Span must carry a strict dependency on Point via its field type annotations"
+        "Span must carry a header-provided dependency on Point via its field type annotations"
     );
 }
 

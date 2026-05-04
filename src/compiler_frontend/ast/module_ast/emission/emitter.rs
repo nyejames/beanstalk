@@ -5,7 +5,7 @@
 //! WHY: emission is the ONLY pass that parses executable bodies (function bodies, template
 //! bodies, start body). All prior passes consume header shells without body parsing.
 //! Top-level declaration shell reparsing does NOT happen here — shells were fully parsed
-//! by the header stage and resolved by passes 2–5.
+//! by the header stage and resolved by environment construction passes.
 //!
 //! Constants and choices are handled in earlier passes; they do not emit nodes here.
 //! Struct node emission reads `resolved_struct_fields_by_path` populated in pass 3.
@@ -14,6 +14,7 @@ use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::function_body_to_ast;
 use crate::compiler_frontend::ast::module_ast::build_context::AstPhaseContext;
 use crate::compiler_frontend::ast::module_ast::environment::AstModuleEnvironment;
+use crate::compiler_frontend::ast::module_ast::environment::TopLevelDeclarationTable;
 use crate::compiler_frontend::ast::module_ast::scope_context::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnSlot,
@@ -71,6 +72,54 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
     }
 
     /// Emits AST nodes for each header kind (functions, structs, templates).
+    /// Build a base `ScopeContext` with all shared state that is identical across function,
+    /// start, and const-template emission.
+    ///
+    /// WHAT: centralizes the repeated 11-method `ScopeContext` builder chain so each emission
+    /// arm only adds emission-specific configuration (parameters for functions, etc.).
+    /// WHY: avoids duplicating the same visibility/alias/field/setup sequence in three match arms.
+    fn build_base_scope_context(
+        &self,
+        kind: ContextKind,
+        scope: InternedPath,
+        top_level_declarations: &Rc<TopLevelDeclarationTable>,
+        visibility: &crate::compiler_frontend::headers::import_environment::FileVisibility,
+        source_file_scope: InternedPath,
+        expected_result_types: Vec<DataType>,
+    ) -> ScopeContext {
+        let resolved_type_aliases = Rc::new(self.environment.resolved_type_aliases_by_path.clone());
+        let generic_declarations = Rc::new(
+            self.environment
+                .module_symbols
+                .generic_declarations_by_path
+                .clone(),
+        );
+
+        ScopeContext::new(
+            kind,
+            scope,
+            Rc::clone(top_level_declarations),
+            self.context.external_package_registry.clone(),
+            expected_result_types,
+        )
+        .with_style_directives(self.context.style_directives)
+        .with_build_profile(self.context.build_profile)
+        .with_file_visibility(visibility)
+        .with_resolved_type_aliases((*resolved_type_aliases).clone())
+        .with_generic_declarations((*generic_declarations).clone())
+        .with_resolved_struct_fields_by_path(
+            self.environment.resolved_struct_fields_by_path.clone(),
+        )
+        .with_generic_nominal_instantiations(
+            self.environment.generic_nominal_instantiations.clone(),
+        )
+        .with_project_path_resolver(self.context.project_path_resolver.clone())
+        .with_path_format_config(self.context.path_format_config.clone())
+        .with_rendered_path_usage_sink(self.environment.rendered_path_usages.clone())
+        .with_receiver_methods(self.environment.receiver_methods.clone())
+        .with_source_file_scope(source_file_scope)
+    }
+
     pub(in crate::compiler_frontend::ast) fn emit(
         mut self,
         sorted_headers: Vec<Header>,
@@ -79,14 +128,6 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
         // The environment owns the single resolved declaration table. Body contexts clone only
         // the Rc pointer so declaration metadata is not rebuilt during emission.
         let top_level_declarations = Rc::clone(&self.environment.declaration_table);
-
-        let resolved_type_aliases = Rc::new(self.environment.resolved_type_aliases_by_path.clone());
-        let generic_declarations = Rc::new(
-            self.environment
-                .module_symbols
-                .generic_declarations_by_path
-                .clone(),
-        );
 
         #[cfg(feature = "detailed_timers")]
         let mut total_function_body_parse_time = Duration::default();
@@ -106,12 +147,11 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
         let mut const_templates_emitted = 0usize;
 
         for header in sorted_headers {
-            let bindings = self
+            let visibility = self
                 .environment
-                .file_import_bindings
-                .get(&header.source_file)
-                .cloned()
-                .unwrap_or_default();
+                .import_environment
+                .visibility_for(&header.source_file)
+                .map_err(|error| self.error_messages(error, string_table))?;
             let source_file_scope = header.canonical_source_file(string_table);
 
             match header.kind {
@@ -137,39 +177,23 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
                         ));
                     };
 
-                    let mut visible_declarations = bindings.visible_symbol_paths.to_owned();
+                    let mut visible_declarations = visibility.visible_declaration_paths.clone();
                     for parameter in &resolved_signature.signature.parameters {
                         visible_declarations.insert(parameter.id.to_owned());
                     }
 
                     // Build the function body context: top-level declarations are shared via Rc
                     // (no data copy); parameters live in local_declarations.
-                    let mut context = ScopeContext::new(
-                        ContextKind::Function,
-                        header.tokens.src_path.to_owned(),
-                        Rc::clone(&top_level_declarations),
-                        self.context.external_package_registry.clone(),
-                        resolved_signature.signature.return_data_types(),
-                    )
-                    .with_style_directives(self.context.style_directives)
-                    .with_build_profile(self.context.build_profile)
-                    .with_visible_declarations(visible_declarations)
-                    .with_visible_external_symbols(bindings.visible_external_symbols.clone())
-                    .with_visible_source_bindings(bindings.visible_source_bindings.clone())
-                    .with_visible_type_aliases(bindings.visible_type_aliases.clone())
-                    .with_resolved_type_aliases((*resolved_type_aliases).clone())
-                    .with_generic_declarations((*generic_declarations).clone())
-                    .with_resolved_struct_fields_by_path(
-                        self.environment.resolved_struct_fields_by_path.clone(),
-                    )
-                    .with_generic_nominal_instantiations(
-                        self.environment.generic_nominal_instantiations.clone(),
-                    )
-                    .with_project_path_resolver(self.context.project_path_resolver.clone())
-                    .with_path_format_config(self.context.path_format_config.clone())
-                    .with_rendered_path_usage_sink(self.environment.rendered_path_usages.clone())
-                    .with_receiver_methods(self.environment.receiver_methods.clone())
-                    .with_source_file_scope(source_file_scope.to_owned());
+                    let mut context = self
+                        .build_base_scope_context(
+                            ContextKind::Function,
+                            header.tokens.src_path.to_owned(),
+                            &top_level_declarations,
+                            visibility,
+                            source_file_scope.to_owned(),
+                            resolved_signature.signature.return_data_types(),
+                        )
+                        .with_visible_declarations(visible_declarations);
                     context.expected_error_type = resolved_signature
                         .signature
                         .error_return()
@@ -221,32 +245,14 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
                 // adds the implicit return of the fragment vec.
                 // Start functions are build-system-only and are not importable or callable.
                 HeaderKind::StartFunction => {
-                    let context = ScopeContext::new(
+                    let context = self.build_base_scope_context(
                         ContextKind::Module,
                         header.tokens.src_path.to_owned(),
-                        Rc::clone(&top_level_declarations),
-                        self.context.external_package_registry.clone(),
+                        &top_level_declarations,
+                        visibility,
+                        source_file_scope.to_owned(),
                         vec![],
-                    )
-                    .with_style_directives(self.context.style_directives)
-                    .with_build_profile(self.context.build_profile)
-                    .with_visible_declarations(bindings.visible_symbol_paths.to_owned())
-                    .with_visible_external_symbols(bindings.visible_external_symbols.clone())
-                    .with_visible_source_bindings(bindings.visible_source_bindings.clone())
-                    .with_visible_type_aliases(bindings.visible_type_aliases.clone())
-                    .with_resolved_type_aliases((*resolved_type_aliases).clone())
-                    .with_generic_declarations((*generic_declarations).clone())
-                    .with_resolved_struct_fields_by_path(
-                        self.environment.resolved_struct_fields_by_path.clone(),
-                    )
-                    .with_generic_nominal_instantiations(
-                        self.environment.generic_nominal_instantiations.clone(),
-                    )
-                    .with_project_path_resolver(self.context.project_path_resolver.clone())
-                    .with_path_format_config(self.context.path_format_config.clone())
-                    .with_rendered_path_usage_sink(self.environment.rendered_path_usages.clone())
-                    .with_receiver_methods(self.environment.receiver_methods.clone())
-                    .with_source_file_scope(source_file_scope.to_owned());
+                    );
 
                     let mut token_stream = header.tokens;
                     let start_scope = context.scope.clone();
@@ -332,31 +338,14 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
                 // --- Const templates ---
                 HeaderKind::ConstTemplate => {
                     let mut template_tokens = header.tokens;
-                    let context = ScopeContext::new(
+                    let context = self.build_base_scope_context(
                         ContextKind::Constant,
                         template_tokens.src_path.to_owned(),
-                        Rc::clone(&top_level_declarations),
-                        self.context.external_package_registry.clone(),
+                        &top_level_declarations,
+                        visibility,
+                        source_file_scope,
                         vec![],
-                    )
-                    .with_style_directives(self.context.style_directives)
-                    .with_build_profile(self.context.build_profile)
-                    .with_visible_declarations(bindings.visible_symbol_paths.to_owned())
-                    .with_visible_external_symbols(bindings.visible_external_symbols.clone())
-                    .with_visible_source_bindings(bindings.visible_source_bindings.clone())
-                    .with_visible_type_aliases(bindings.visible_type_aliases.clone())
-                    .with_resolved_type_aliases((*resolved_type_aliases).clone())
-                    .with_generic_declarations((*generic_declarations).clone())
-                    .with_resolved_struct_fields_by_path(
-                        self.environment.resolved_struct_fields_by_path.clone(),
-                    )
-                    .with_generic_nominal_instantiations(
-                        self.environment.generic_nominal_instantiations.clone(),
-                    )
-                    .with_project_path_resolver(self.context.project_path_resolver.clone())
-                    .with_path_format_config(self.context.path_format_config.clone())
-                    .with_rendered_path_usage_sink(self.environment.rendered_path_usages.clone())
-                    .with_source_file_scope(source_file_scope);
+                    );
 
                     #[cfg(feature = "detailed_timers")]
                     let const_template_parse_start = Instant::now();

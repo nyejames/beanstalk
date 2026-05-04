@@ -1,7 +1,7 @@
 //! Header-stage import collection.
 //!
 //! WHAT: parses top-level import clauses into normalized header dependency paths.
-//! WHY: imports affect file-local visibility and strict dependency edges, so their normalization
+//! WHY: imports affect file-local visibility and header-provided dependency edges, so their normalization
 //! belongs to the header stage rather than AST body parsing.
 
 use crate::compiler_frontend::compiler_errors::CompilerError;

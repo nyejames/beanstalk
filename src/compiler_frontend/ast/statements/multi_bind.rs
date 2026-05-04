@@ -529,9 +529,18 @@ fn resolve_target_explicit_type(
     let type_resolution_context = TypeResolutionContext::from_inputs(TypeResolutionContextInputs {
         declaration_table: &context.top_level_declarations,
         visible_declaration_ids: context.visible_declaration_ids.as_ref(),
-        visible_external_symbols: context.visible_external_symbols.as_ref(),
-        visible_source_bindings: context.visible_source_bindings.as_ref(),
-        visible_type_aliases: context.visible_type_aliases.as_ref(),
+        visible_external_symbols: context
+            .file_visibility
+            .as_ref()
+            .map(|fv| &fv.visible_external_symbols),
+        visible_source_bindings: context
+            .file_visibility
+            .as_ref()
+            .map(|fv| &fv.visible_source_names),
+        visible_type_aliases: context
+            .file_visibility
+            .as_ref()
+            .map(|fv| &fv.visible_type_alias_names),
         resolved_type_aliases: context.resolved_type_aliases.as_deref(),
         generic_declarations_by_path: context.generic_declarations_by_path.as_deref(),
         resolved_struct_fields_by_path: context.resolved_struct_fields_by_path.as_deref(),

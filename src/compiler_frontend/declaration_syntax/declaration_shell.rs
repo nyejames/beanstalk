@@ -1,3 +1,12 @@
+//! Declaration shell parsing for constants and variables.
+//!
+//! WHAT: parses the structural components of a declaration (mutability marker, type annotation,
+//! initializer token slice, and initializer reference hints) into `DeclarationSyntax` and
+//! `BindingTargetSyntax` shells.
+//! WHY: header parsing stores these shells so that dependency sorting can see initializer
+//! references, while AST resolves the full expression semantics later.
+//! MUST NOT: perform type checking, constant folding, or semantic validation.
+
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::declaration_syntax::type_syntax::{
@@ -10,9 +19,7 @@ use crate::compiler_frontend::value_mode::ValueMode;
 use crate::{return_rule_error, return_syntax_error};
 
 // All the component parts of a declaration before it is resolved / parsed.
-// The compiler used to fully parse/resolve/type-check declarations immediately at AST time.
-// Constants need this split representation because they are parsed in headers before full
-// dependency/type resolution is available.
+// Header parsing stores the shell; AST resolves the shell into a fully typed declaration.
 #[derive(Clone, Debug)]
 pub struct DeclarationSyntax {
     pub mutable_marker: bool,
@@ -28,7 +35,7 @@ pub struct DeclarationSyntax {
 /// A lightweight value-reference hint extracted from declaration initializer tokens.
 ///
 /// WHAT: records symbol-shaped references in a constant initializer without resolving or parsing
-/// the expression. WHY: the AST constant graph needs ordering hints, while expression parsing
+/// the expression. WHY: dependency sorting needs ordering hints, while expression parsing
 /// remains the semantic authority for folding, calls, constructors, and diagnostics.
 #[derive(Clone, Debug)]
 pub struct InitializerReference {

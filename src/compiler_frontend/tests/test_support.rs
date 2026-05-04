@@ -13,7 +13,7 @@ use crate::compiler_frontend::ast::expressions::expression::{
 use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnSlot,
 };
-use crate::compiler_frontend::ast::{Ast, AstBuildContext};
+use crate::compiler_frontend::ast::{Ast, AstBuildContext, AstBuildInput};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
@@ -97,9 +97,12 @@ fn parse_single_file_ast_result(source: &str) -> Result<(Ast, StringTable), Comp
 
     let entry_path = InternedPath::from_single_str("#page.bst", &mut string_table);
     let ast = Ast::new(
-        sorted.headers,
-        sorted.top_level_const_fragments,
-        sorted.module_symbols,
+        AstBuildInput {
+            headers: sorted.headers,
+            module_symbols: sorted.module_symbols,
+            import_environment: sorted.import_environment,
+            top_level_const_fragments: sorted.top_level_const_fragments,
+        },
         AstBuildContext {
             external_package_registry: &external_package_registry,
             style_directives: &style_directives,

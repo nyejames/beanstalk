@@ -14,6 +14,7 @@ use crate::compiler_frontend::datatypes::generics::GenericParameterList;
 use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant;
 use crate::compiler_frontend::declaration_syntax::declaration_shell::DeclarationSyntax;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
+use crate::compiler_frontend::headers::import_environment::HeaderImportEnvironment;
 use crate::compiler_frontend::headers::module_symbols::ModuleSymbols;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
@@ -48,6 +49,11 @@ pub struct Headers {
     /// WHY: top-level symbol discovery is owned by the header stage; dependency sorting and AST
     /// construction consume this directly without a separate manifest-building step.
     pub module_symbols: ModuleSymbols,
+    /// Header-built per-file import visibility environment.
+    ///
+    /// WHY: import binding and visibility construction is owned by the header stage; AST
+    /// consumes this directly without rebuilding import bindings or rediscovering visibility.
+    pub import_environment: HeaderImportEnvironment,
 }
 
 /// Placement metadata for one compile-time top-level template in the entry file.
@@ -166,12 +172,6 @@ pub struct FileImport {
     pub location: SourceLocation,
     pub path_location: SourceLocation,
     pub alias_location: Option<SourceLocation>,
-}
-
-impl FileImport {
-    // NOTE: `local_name()` was intended for import alias binding but the
-    // resolution logic inlines `alias.unwrap_or(symbol_name)` to use the
-    // resolved symbol name rather than the raw path name.
 }
 
 /// Re-export clause item parsed from `#import @path/to/symbol` in a `#mod.bst` facade.

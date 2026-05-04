@@ -1,14 +1,14 @@
 //! Type resolution for constants and nominal declarations.
 //!
-//! WHAT: parses constant values and resolves struct field types in dependency order.
-//! WHY: struct defaults can reference constants, so constants must be parsed first;
-//! both use file-scoped visibility gates from pass 2.
+//! WHAT: parses constant values and resolves struct field types in header dependency order.
+//! WHY: headers are already dependency-sorted; constants are parsed linearly. Struct defaults
+//! can reference constants, so constants are resolved before struct fields.
 
 use super::builder::AstModuleEnvironmentBuilder;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::ast::import_bindings::{
-    ConstantHeaderParseContext, FileImportBindings, parse_constant_header_declaration,
+use crate::compiler_frontend::ast::module_ast::environment::constant_resolution::{
+    ConstantHeaderParseContext, parse_constant_header_declaration,
 };
 use crate::compiler_frontend::ast::type_resolution::{
     build_generic_parameter_scope, collect_type_parameter_ids_from_choice_variants,
@@ -18,31 +18,26 @@ use crate::compiler_frontend::ast::type_resolution::{
 };
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::datatypes::DataType;
-use crate::compiler_frontend::declaration_syntax::type_syntax::{
-    TypeResolutionContext, TypeResolutionContextInputs,
-};
 use crate::compiler_frontend::value_mode::ValueMode;
 
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::timer_log;
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashSet;
 use std::rc::Rc;
 use std::time::Instant;
 
 impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
-    /// Resolves constants and nominal declaration types in dependency order.
-    /// WHY: struct defaults require constant-context parsing and import gates, so defaults
-    /// can consume constants deterministically.
+    /// Resolves constants and nominal declaration types in header dependency order.
+    /// WHY: headers are already dependency-sorted; constants are parsed in that order.
+    /// Struct defaults require constant-context parsing and import gates.
     pub(in crate::compiler_frontend::ast) fn resolve_types(
         &mut self,
         sorted_headers: &[Header],
-        file_import_bindings: &FxHashMap<InternedPath, FileImportBindings>,
         string_table: &mut StringTable,
     ) -> Result<(), CompilerMessages> {
         let constant_resolution_start = Instant::now();
-        self.resolve_constant_headers(sorted_headers, file_import_bindings, string_table)?;
+        self.resolve_constant_headers(sorted_headers, string_table)?;
         timer_log!(
             constant_resolution_start,
             "AST/environment/constants resolved in: "
@@ -59,38 +54,24 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 continue;
             };
 
-            let bindings = file_import_bindings
-                .get(&header.source_file)
-                .cloned()
-                .unwrap_or_default();
+            let visibility = self
+                .import_environment
+                .visibility_for(&header.source_file)
+                .map_err(|error| self.error_messages(error, string_table))?;
+
             let source_file_scope = header.canonical_source_file(string_table);
             let generic_parameter_scope = build_generic_parameter_scope(
                 generic_parameters,
-                &bindings.visible_source_bindings,
-                &bindings.visible_type_aliases,
-                &bindings.visible_external_symbols,
+                &visibility.visible_source_names,
+                &visibility.visible_type_alias_names,
+                &visibility.visible_external_symbols,
                 self.declaration_table.as_ref(),
                 &self.module_symbols.generic_declarations_by_path,
                 string_table,
             )
             .map_err(|error| self.error_messages(error, string_table))?;
             let type_resolution_context =
-                TypeResolutionContext::from_inputs(TypeResolutionContextInputs {
-                    declaration_table: &self.declaration_table,
-                    visible_declaration_ids: Some(&bindings.visible_symbol_paths),
-                    visible_external_symbols: Some(&bindings.visible_external_symbols),
-                    visible_source_bindings: Some(&bindings.visible_source_bindings),
-                    visible_type_aliases: Some(&bindings.visible_type_aliases),
-                    resolved_type_aliases: Some(&self.resolved_type_aliases_by_path),
-                    generic_declarations_by_path: Some(
-                        &self.module_symbols.generic_declarations_by_path,
-                    ),
-                    resolved_struct_fields_by_path: Some(&self.resolved_struct_fields_by_path),
-                    generic_nominal_instantiations: Some(
-                        self.generic_nominal_instantiations.as_ref(),
-                    ),
-                })
-                .with_generic_parameters(generic_parameter_scope.as_ref());
+                self.type_resolution_context_for(visibility, generic_parameter_scope.as_ref());
 
             let fields = resolve_struct_field_types(
                 &header.tokens.src_path,
@@ -156,37 +137,23 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 continue;
             };
 
-            let bindings = file_import_bindings
-                .get(&header.source_file)
-                .cloned()
-                .unwrap_or_default();
+            let visibility = self
+                .import_environment
+                .visibility_for(&header.source_file)
+                .map_err(|error| self.error_messages(error, string_table))?;
+
             let generic_parameter_scope = build_generic_parameter_scope(
                 generic_parameters,
-                &bindings.visible_source_bindings,
-                &bindings.visible_type_aliases,
-                &bindings.visible_external_symbols,
+                &visibility.visible_source_names,
+                &visibility.visible_type_alias_names,
+                &visibility.visible_external_symbols,
                 self.declaration_table.as_ref(),
                 &self.module_symbols.generic_declarations_by_path,
                 string_table,
             )
             .map_err(|error| self.error_messages(error, string_table))?;
             let type_resolution_context =
-                TypeResolutionContext::from_inputs(TypeResolutionContextInputs {
-                    declaration_table: &self.declaration_table,
-                    visible_declaration_ids: Some(&bindings.visible_symbol_paths),
-                    visible_external_symbols: Some(&bindings.visible_external_symbols),
-                    visible_source_bindings: Some(&bindings.visible_source_bindings),
-                    visible_type_aliases: Some(&bindings.visible_type_aliases),
-                    resolved_type_aliases: Some(&self.resolved_type_aliases_by_path),
-                    generic_declarations_by_path: Some(
-                        &self.module_symbols.generic_declarations_by_path,
-                    ),
-                    resolved_struct_fields_by_path: Some(&self.resolved_struct_fields_by_path),
-                    generic_nominal_instantiations: Some(
-                        self.generic_nominal_instantiations.as_ref(),
-                    ),
-                })
-                .with_generic_parameters(generic_parameter_scope.as_ref());
+                self.type_resolution_context_for(visibility, generic_parameter_scope.as_ref());
 
             let resolved_variants = resolve_choice_variant_payload_types(
                 variants,
@@ -262,78 +229,57 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
     fn resolve_constant_headers(
         &mut self,
         sorted_headers: &[Header],
-        file_import_bindings: &FxHashMap<InternedPath, FileImportBindings>,
         string_table: &mut StringTable,
     ) -> Result<(), CompilerMessages> {
         let constants_resolution_start = Instant::now();
 
-        let resolution_result = (|| -> Result<(), CompilerMessages> {
-            let ordered_headers =
-                self.ordered_constant_headers(sorted_headers, file_import_bindings, string_table)?;
-            let empty_visible_symbol_paths = FxHashSet::default();
-            let empty_visible_external_symbols = FxHashMap::default();
-            let empty_visible_source_bindings = FxHashMap::default();
-            let empty_visible_type_aliases = FxHashMap::default();
-            let resolved_type_aliases = Rc::new(self.resolved_type_aliases_by_path.clone());
-            let generic_declarations =
-                Rc::new(self.module_symbols.generic_declarations_by_path.clone());
+        let resolved_type_aliases = Rc::new(self.resolved_type_aliases_by_path.clone());
+        let generic_declarations =
+            Rc::new(self.module_symbols.generic_declarations_by_path.clone());
 
-            for header in ordered_headers {
-                let visible_symbol_paths = file_import_bindings
-                    .get(&header.source_file)
-                    .map(|bindings| &bindings.visible_symbol_paths)
-                    .unwrap_or(&empty_visible_symbol_paths);
-                let visible_external_symbols = file_import_bindings
-                    .get(&header.source_file)
-                    .map(|bindings| &bindings.visible_external_symbols)
-                    .unwrap_or(&empty_visible_external_symbols);
-                let visible_source_bindings = file_import_bindings
-                    .get(&header.source_file)
-                    .map(|bindings| &bindings.visible_source_bindings)
-                    .unwrap_or(&empty_visible_source_bindings);
-                let visible_type_aliases = file_import_bindings
-                    .get(&header.source_file)
-                    .map(|bindings| &bindings.visible_type_aliases)
-                    .unwrap_or(&empty_visible_type_aliases);
-                let resolved_type_aliases = Rc::clone(&resolved_type_aliases);
-                let generic_declarations_by_path = Rc::clone(&generic_declarations);
+        for header in sorted_headers {
+            let HeaderKind::Constant { .. } = &header.kind else {
+                continue;
+            };
 
-                let declaration = parse_constant_header_declaration(
-                    header,
-                    ConstantHeaderParseContext {
-                        top_level_declarations: Rc::clone(&self.declaration_table),
-                        visible_declaration_ids: visible_symbol_paths,
-                        visible_external_symbols,
-                        visible_source_bindings,
-                        visible_type_aliases,
-                        resolved_type_aliases,
-                        generic_declarations_by_path,
-                        external_package_registry: self.context.external_package_registry,
-                        style_directives: self.context.style_directives,
-                        project_path_resolver: self.context.project_path_resolver.clone(),
-                        path_format_config: self.context.path_format_config.clone(),
-                        build_profile: self.context.build_profile,
-                        warnings: &mut self.warnings,
-                        rendered_path_usages: self.rendered_path_usages.clone(),
-                        string_table,
-                    },
-                )
+            let visibility = self
+                .import_environment
+                .visibility_for(&header.source_file)
                 .map_err(|error| self.error_messages(error, string_table))?;
 
-                self.replace_declaration(declaration.clone())
-                    .map_err(|error| self.error_messages(error, string_table))?;
-                self.module_constants.push(declaration);
-            }
+            let declaration = parse_constant_header_declaration(
+                header,
+                ConstantHeaderParseContext {
+                    top_level_declarations: Rc::clone(&self.declaration_table),
+                    visible_declaration_ids: &visibility.visible_declaration_paths,
+                    visible_external_symbols: &visibility.visible_external_symbols,
+                    visible_source_bindings: &visibility.visible_source_names,
+                    visible_type_aliases: &visibility.visible_type_alias_names,
+                    resolved_type_aliases: Rc::clone(&resolved_type_aliases),
+                    generic_declarations_by_path: Rc::clone(&generic_declarations),
+                    external_package_registry: self.context.external_package_registry,
+                    style_directives: self.context.style_directives,
+                    project_path_resolver: self.context.project_path_resolver.clone(),
+                    path_format_config: self.context.path_format_config.clone(),
+                    build_profile: self.context.build_profile,
+                    warnings: &mut self.warnings,
+                    rendered_path_usages: self.rendered_path_usages.clone(),
+                    string_table,
+                },
+            )
+            .map_err(|error| self.error_messages(error, string_table))?;
 
-            Ok(())
-        })();
+            self.replace_declaration(declaration.clone())
+                .map_err(|error| self.error_messages(error, string_table))?;
+            self.module_constants.push(declaration);
+        }
 
         timer_log!(
             constants_resolution_start,
-            "AST/environment/constants ordered resolution in: "
+            "AST/environment/constants resolved in: "
         );
         let _ = constants_resolution_start;
 
-        resolution_result
+        Ok(())
     }
 }
