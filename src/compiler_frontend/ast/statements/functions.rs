@@ -107,6 +107,9 @@ impl FunctionSignature {
     ) -> Result<Self, CompilerError> {
         token_stream.advance();
 
+        // ----------------------------
+        //  Parse parameters
+        // ----------------------------
         let signature_context = ScopeContext::new_constant(scope.to_owned(), parent_context);
         let parameters = parse_signature_members(
             token_stream,
@@ -183,6 +186,9 @@ impl FunctionSignature {
             }
         }
 
+        // ----------------------------
+        //  Parse return list
+        // ----------------------------
         let returns = parse_return_list(token_stream, &parameters, string_table)?;
 
         Ok(FunctionSignature {
@@ -232,6 +238,9 @@ fn parse_return_list(
 ) -> Result<Vec<ReturnSlot>, CompilerError> {
     let mut returns = Vec::new();
 
+    // ----------------------------
+    //  Parse return declarations
+    // ----------------------------
     token_stream.advance();
     if token_stream.current_token_kind() == &TokenKind::Colon {
         return_syntax_error!(

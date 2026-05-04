@@ -234,6 +234,7 @@ fn normalize_control_flow_templates(
     string_table: &mut StringTable,
 ) -> Result<(), CompilerError> {
     match &mut node.kind {
+        // If statements
         NodeKind::If(condition, then_body, else_body) => {
             normalize_expression_templates(
                 condition,
@@ -265,6 +266,7 @@ fn normalize_control_flow_templates(
             Ok(())
         }
 
+        // Match statements
         NodeKind::Match {
             scrutinee,
             arms,
@@ -329,6 +331,7 @@ fn normalize_control_flow_templates(
             Ok(())
         }
 
+        // Scoped blocks
         NodeKind::ScopedBlock { body } => {
             for statement in body {
                 normalize_ast_node_templates(
@@ -342,6 +345,7 @@ fn normalize_control_flow_templates(
             Ok(())
         }
 
+        // Range loops
         NodeKind::RangeLoop {
             bindings,
             range,
@@ -400,6 +404,7 @@ fn normalize_control_flow_templates(
             Ok(())
         }
 
+        // Collection loops
         NodeKind::CollectionLoop {
             bindings,
             iterable,
@@ -442,6 +447,7 @@ fn normalize_control_flow_templates(
             Ok(())
         }
 
+        // While loops
         NodeKind::WhileLoop(condition, body) => {
             normalize_expression_templates(
                 condition,
@@ -694,6 +700,7 @@ fn normalize_expression_templates_with_context(
     helper_artifact_policy: HelperArtifactPolicy,
 ) -> Result<(), CompilerError> {
     let folded_template = match &mut expression.kind {
+        // Place and container expressions
         ExpressionKind::Copy(place) => {
             normalize_ast_node_templates(
                 place,
@@ -718,6 +725,7 @@ fn normalize_expression_templates_with_context(
             None
         }
 
+        // Function and call expressions
         ExpressionKind::Function(_, body) => {
             for node in body {
                 normalize_ast_node_templates(
@@ -745,6 +753,7 @@ fn normalize_expression_templates_with_context(
             None
         }
 
+        // Collection and builtin call expressions
         ExpressionKind::Collection(args) => {
             for argument in args {
                 normalize_expression_templates_with_context(
@@ -781,6 +790,7 @@ fn normalize_expression_templates_with_context(
             None
         }
 
+        // Wrapping and coerced expressions
         ExpressionKind::BuiltinCast { value, .. }
         | ExpressionKind::ResultConstruct { value, .. }
         | ExpressionKind::Coerced { value, .. } => {
@@ -815,6 +825,7 @@ fn normalize_expression_templates_with_context(
             None
         }
 
+        // Template expressions (may fold to literal)
         ExpressionKind::Template(template) => {
             normalize_template_for_hir(
                 template,
@@ -856,6 +867,7 @@ fn normalize_expression_templates_with_context(
             }
         }
 
+        // Struct and range expressions
         ExpressionKind::StructDefinition(arguments) | ExpressionKind::StructInstance(arguments) => {
             for argument in arguments {
                 normalize_expression_templates_with_context(
@@ -890,6 +902,7 @@ fn normalize_expression_templates_with_context(
             None
         }
 
+        // Literals and simple values (nothing to normalize)
         ExpressionKind::NoValue
         | ExpressionKind::OptionNone
         | ExpressionKind::Int(_)
@@ -900,6 +913,7 @@ fn normalize_expression_templates_with_context(
         | ExpressionKind::Path(_)
         | ExpressionKind::Reference(_) => None,
 
+        // Choice construct expressions
         ExpressionKind::ChoiceConstruct { fields, .. } => {
             for field in fields {
                 normalize_expression_templates(

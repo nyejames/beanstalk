@@ -181,6 +181,10 @@ pub(crate) fn parse_result_handling_suffix_for_expression(
     Ok(value)
 }
 
+// --------------------------
+//  Named handler call parsing
+// --------------------------
+
 pub(crate) fn parse_named_result_handler_call(
     token_stream: &mut FileTokens,
     context: &ScopeContext,

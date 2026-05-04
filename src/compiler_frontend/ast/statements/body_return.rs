@@ -36,6 +36,10 @@ fn normalize_return_expression_type(data_type: &DataType) -> DataType {
     }
 }
 
+// --------------------------
+//  Return statement parsing
+// --------------------------
+
 pub(crate) fn parse_return_statement(
     token_stream: &mut FileTokens,
     ast: &mut Vec<AstNode>,

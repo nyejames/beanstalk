@@ -190,6 +190,9 @@ fn create_match_node(
     // Once an unconditional capture pattern is seen, all later arms are unreachable.
     let mut seen_unconditional_capture = false;
 
+    // ----------------------------
+    //  Parse match arms
+    // ----------------------------
     loop {
         token_stream.skip_newlines();
 
@@ -345,6 +348,9 @@ fn create_match_node(
         }
     }
 
+    // ----------------------------
+    //  Enforce exhaustiveness and build node
+    // ----------------------------
     enforce_match_exhaustiveness(
         &subject,
         &else_block,

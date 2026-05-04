@@ -15,6 +15,10 @@ use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::value_mode::ValueMode;
 use crate::return_rule_error;
 
+// --------------------------
+//  Helpers
+// --------------------------
+
 fn field_member(receiver_type: &DataType, field_id: StringId) -> Option<Declaration> {
     receiver_type.struct_fields().and_then(|fields| {
         fields
@@ -47,6 +51,7 @@ pub(super) fn parse_member_name(
                 "Use a normal field or receiver method name until traits are implemented",
             ))
         }
+
         _ => return_rule_error!(
             format!(
                 "Expected property or method name after '.', found '{:?}'",
@@ -60,6 +65,10 @@ pub(super) fn parse_member_name(
         ),
     }
 }
+
+// --------------------------
+//  Main parsers
+// --------------------------
 
 /// Parses field-only member access and returns `None` when the member is not a field.
 pub(super) fn parse_field_member_access(

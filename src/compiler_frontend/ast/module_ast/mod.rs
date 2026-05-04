@@ -19,6 +19,14 @@ pub(in crate::compiler_frontend::ast) mod environment;
 pub(in crate::compiler_frontend::ast) mod finalization;
 pub(crate) mod scope_context;
 
+// --------------------------
+//  Internal re-exports
+// --------------------------
+//
+// `Ast` and `AstBuildContext` live in `ast/mod.rs` (the strict module entry point).
+// The types below are re-exported here only so `ast/mod.rs` can re-export them;
+// callers should import through `ast::` directly.
+
 // Internal re-exports so `ast/mod.rs` can surface the minimal public API.
 //
 // `Ast` and `AstBuildContext` live in `ast/mod.rs` (the strict module entry point).
@@ -26,6 +34,10 @@ pub(crate) mod scope_context;
 // callers should import through `ast::` directly.
 #[cfg(test)]
 pub(crate) use scope_context::{ReceiverMethodCatalog, ReceiverMethodEntry};
+
+// --------------------------
+//  Tests
+// --------------------------
 
 #[cfg(test)]
 #[path = "../tests/module_ast_receiver_method_tests.rs"]

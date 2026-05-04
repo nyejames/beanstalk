@@ -40,6 +40,10 @@ struct ResolvedMultiBindTargets {
     new_declarations: Vec<Declaration>,
 }
 
+// --------------------------
+//  Parsing
+// --------------------------
+
 pub(crate) fn parse_multi_bind_statement(
     token_stream: &mut FileTokens,
     context: &mut ScopeContext,
@@ -375,6 +379,7 @@ fn resolve_multi_bind_targets(
             continue;
         };
 
+        // Existing mutable target — validate compatibility and produce an assignment target.
         resolved_targets.push(resolve_existing_target(
             target_syntax,
             slot_type,
@@ -390,6 +395,10 @@ fn resolve_multi_bind_targets(
         new_declarations,
     })
 }
+
+// --------------------------
+//  Target resolution
+// --------------------------
 
 fn resolve_existing_target(
     target_syntax: &BindingTargetSyntax,
@@ -516,6 +525,10 @@ fn register_new_declarations(context: &mut ScopeContext, new_declarations: Vec<D
         context.add_var(declaration);
     }
 }
+
+// --------------------------
+//  Helpers
+// --------------------------
 
 fn resolve_target_explicit_type(
     target: &BindingTargetSyntax,

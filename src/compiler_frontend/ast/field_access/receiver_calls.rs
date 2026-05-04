@@ -9,7 +9,7 @@ use super::receiver_access::{
 };
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
-use crate::compiler_frontend::ast::expressions::call_argument::CallArgument;
+use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, CallArgument};
 use crate::compiler_frontend::ast::expressions::call_validation::{
     CallDiagnosticContext, expectations_from_external_method,
     expectations_from_receiver_method_signature, resolve_call_arguments,
@@ -60,7 +60,9 @@ pub(super) fn parse_receiver_method_call(
 
     let context = scope_context;
 
-    // Try user-defined receiver method first.
+    // ----------------------------
+    //  Try user-defined receiver method
+    // ----------------------------
     if let Some(method_entry) = lookup_receiver_method(context, receiver_type, member_name) {
         if receiver_type.is_const_record_struct() {
             return_rule_error!(
@@ -134,7 +136,9 @@ pub(super) fn parse_receiver_method_call(
         }));
     }
 
-    // Try external (platform-package) receiver method.
+    // ----------------------------
+    //  Try external platform-package receiver method
+    // ----------------------------
     let method_name_str = string_table.resolve(member_name).to_owned();
     if let Some((external_id, external_def)) =
         context.lookup_visible_external_method(receiver_type, member_name)
@@ -183,9 +187,9 @@ pub(super) fn parse_receiver_method_call(
         // Prepend the receiver as the first argument (mirrors user-method lowering).
         let receiver_expr = receiver_node.get_expr()?.to_owned();
         let receiver_access = if requires_mutable {
-            crate::compiler_frontend::ast::expressions::call_argument::CallAccessMode::Mutable
+            CallAccessMode::Mutable
         } else {
-            crate::compiler_frontend::ast::expressions::call_argument::CallAccessMode::Shared
+            CallAccessMode::Shared
         };
         let receiver_arg =
             CallArgument::positional(receiver_expr, receiver_access, member_location.clone());

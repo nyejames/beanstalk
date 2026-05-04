@@ -155,7 +155,9 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
             let source_file_scope = header.canonical_source_file(string_table);
 
             match header.kind {
-                // --- Functions ---
+                // --------------------------
+                //  Emit function bodies
+                // --------------------------
                 HeaderKind::Function {
                     generic_parameters, ..
                 } => {
@@ -242,6 +244,9 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
                 // WHY: only the module entry file produces a start function. The body contains
                 // `PushStartRuntimeFragment` nodes for each top-level template. The function
                 // returns `Vec<String>` — the accumulated runtime fragment list. The HIR builder
+                // --------------------------
+                //  Emit start function bodies
+                // --------------------------
                 // adds the implicit return of the fragment vec.
                 // Start functions are build-system-only and are not importable or callable.
                 HeaderKind::StartFunction => {
@@ -299,7 +304,9 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
                     });
                 }
 
-                // --- Structs ---
+                // --------------------------
+                //  Emit struct definitions
+                // --------------------------
                 HeaderKind::Struct {
                     generic_parameters, ..
                 } => {
@@ -335,7 +342,9 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
                 // Constants and choices are fully handled in earlier passes.
                 HeaderKind::Constant { .. } | HeaderKind::Choice { .. } => {}
 
-                // --- Const templates ---
+                // --------------------------
+                //  Emit const templates
+                // --------------------------
                 HeaderKind::ConstTemplate => {
                     let mut template_tokens = header.tokens;
                     let context = self.build_base_scope_context(
@@ -418,6 +427,9 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
                         .insert(template_tokens.src_path, html);
                 }
 
+                // --------------------------
+                //  Type aliases (no runtime emission)
+                // --------------------------
                 HeaderKind::TypeAlias { .. } => {
                     // Type aliases are compile-time-only metadata; they do not emit runtime nodes.
                 }

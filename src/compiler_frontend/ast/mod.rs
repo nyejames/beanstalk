@@ -113,11 +113,6 @@ use crate::compiler_frontend::tokenizer::tokens::FileTokens;
 use crate::timer_log;
 use std::time::Instant;
 
-/// Unified AST output for all source files in one compilation unit.
-///
-/// WHAT: the fully resolved, typed AST produced by Stage 4, ready for HIR lowering.
-/// WHY: one container keeps the pipeline contract explicit — HIR receives exactly this
-/// struct and nothing else from the AST stage.
 /// Resolved choice definition carried from AST to HIR for pre-registration.
 ///
 /// WHAT: pairs a choice's canonical path with its fully resolved variants.
@@ -129,6 +124,11 @@ pub struct AstChoiceDefinition {
     pub variants: Vec<crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant>,
 }
 
+/// Unified AST output for all source files in one compilation unit.
+///
+/// WHAT: the fully resolved, typed AST produced by Stage 4, ready for HIR lowering.
+/// WHY: one container keeps the pipeline contract explicit — HIR receives exactly this
+/// struct and nothing else from the AST stage.
 pub struct Ast {
     pub nodes: Vec<AstNode>,
     pub module_constants: Vec<crate::compiler_frontend::ast::ast_nodes::Declaration>,

@@ -151,7 +151,7 @@ pub fn parse_template_head(
         let mut defer_separator_token = false;
 
         match token {
-            // If this is a template, we have to do some clever parsing here.
+            // Variable and template references
             TokenKind::Symbol(name) => {
                 // Check if it's a regular template reference or variable reference.
                 // If this is a reference to a function or variable.
@@ -212,6 +212,7 @@ pub fn parse_template_head(
                 }
             }
 
+            // Receiver self-reference
             TokenKind::This => {
                 let this_id = string_table.intern("this");
                 if let Some(arg) = context.get_reference(&this_id) {
@@ -250,6 +251,7 @@ pub fn parse_template_head(
             }
 
             // Constants can be inserted directly into head content.
+            // Literal values
             TokenKind::FloatLiteral(_)
             | TokenKind::BoolLiteral(_)
             | TokenKind::IntLiteral(_)
@@ -283,6 +285,7 @@ pub fn parse_template_head(
                 apply_head_compatibility(&mut head_state, &meaningful_item_compatibility);
             }
 
+            // Import path references
             TokenKind::Path(items) => {
                 enforce_head_compatibility(
                     &head_state,
@@ -310,6 +313,7 @@ pub fn parse_template_head(
                 apply_head_compatibility(&mut head_state, &meaningful_item_compatibility);
             }
 
+            // Parenthesized sub-expressions
             TokenKind::OpenParenthesis => {
                 enforce_head_compatibility(
                     &head_state,
@@ -339,6 +343,7 @@ pub fn parse_template_head(
                 apply_head_compatibility(&mut head_state, &meaningful_item_compatibility);
             }
 
+            // Style and setting directives
             TokenKind::StyleDirective(directive) => {
                 // Template directives share the `$name` token shape with style directives.
                 // Parse `$slot` / `$insert` first, then fall back to style handling.
@@ -383,6 +388,7 @@ pub fn parse_template_head(
                 }
             }
 
+            // Separators
             TokenKind::Comma => {
                 // Multiple commas in succession.
                 return_syntax_error!(
@@ -392,6 +398,7 @@ pub fn parse_template_head(
             }
 
             // Newlines / empty things in the template head are ignored.
+            // Whitespace
             TokenKind::Newline => {
                 token_stream.advance();
                 continue;

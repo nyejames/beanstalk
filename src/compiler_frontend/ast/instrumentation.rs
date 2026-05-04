@@ -99,13 +99,19 @@ mod detailed {
     fn atomic_counter(counter: AstCounter) -> &'static AtomicUsize {
         match counter {
             AstCounter::ScopeContextsCreated => &SCOPE_CONTEXTS_CREATED,
+
             AstCounter::ScopeLocalDeclarationsClonedTotal => &SCOPE_LOCAL_DECLARATIONS_CLONED_TOTAL,
+
             AstCounter::BoundedExpressionTokenCopies => &BOUNDED_EXPRESSION_TOKEN_COPIES,
+
             AstCounter::BoundedExpressionTokensCopiedTotal => {
                 &BOUNDED_EXPRESSION_TOKENS_COPIED_TOTAL
             }
+
             AstCounter::RuntimeRpnCloneCount => &RUNTIME_RPN_CLONE_COUNT,
+
             AstCounter::TemplateNormalizationNodesVisited => &TEMPLATE_NORMALIZATION_NODES_VISITED,
+
             AstCounter::ModuleConstantNormalizationExpressionsVisited => {
                 &MODULE_CONSTANT_NORMALIZATION_EXPRESSIONS_VISITED
             }
@@ -122,6 +128,7 @@ pub(crate) use detailed::{
     add_ast_counter, increment_ast_counter, log_ast_counters, reset_ast_counters,
 };
 
+// Stubs when detailed timers are disabled.
 #[cfg(not(feature = "detailed_timers"))]
 pub(crate) fn reset_ast_counters() {}
 

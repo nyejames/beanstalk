@@ -51,6 +51,9 @@ impl<'context, 'services, 'environment> AstFinalizer<'context, 'services, 'envir
             )
         })?;
 
+        // ----------------------------
+        //  Collect doc fragments
+        // ----------------------------
         let doc_fragments_start = Instant::now();
         let doc_fragments = collect_and_strip_comment_templates(
             &mut emitted.ast,
@@ -65,6 +68,9 @@ impl<'context, 'services, 'environment> AstFinalizer<'context, 'services, 'envir
         );
         let _ = doc_fragments_start;
 
+        // ----------------------------
+        //  Collect const top-level fragments
+        // ----------------------------
         let const_fragments_start = Instant::now();
         let const_top_level_fragments = collect_const_top_level_fragments(
             top_level_const_fragments,
@@ -77,6 +83,9 @@ impl<'context, 'services, 'environment> AstFinalizer<'context, 'services, 'envir
         );
         let _ = const_fragments_start;
 
+        // ----------------------------
+        //  Normalize AST templates for HIR
+        // ----------------------------
         let ast_template_normalization_start = Instant::now();
         self.normalize_ast_templates_for_hir(&mut emitted.ast, project_path_resolver, string_table)
             .map_err(|error| self.error_messages(error, &emitted.warnings, string_table))?;
@@ -86,6 +95,9 @@ impl<'context, 'services, 'environment> AstFinalizer<'context, 'services, 'envir
         );
         let _ = ast_template_normalization_start;
 
+        // ----------------------------
+        //  Normalize module constants
+        // ----------------------------
         let module_constant_normalization_start = Instant::now();
         let module_constants = self
             .normalize_module_constants_for_hir(project_path_resolver, string_table)
@@ -96,6 +108,9 @@ impl<'context, 'services, 'environment> AstFinalizer<'context, 'services, 'envir
         );
         let _ = module_constant_normalization_start;
 
+        // ----------------------------
+        //  Validate type boundaries
+        // ----------------------------
         let type_boundary_validation_start = Instant::now();
         self.validate_no_unresolved_executable_types(&emitted.ast, &module_constants, string_table)
             .map_err(|error| self.error_messages(error, &emitted.warnings, string_table))?;
@@ -105,6 +120,9 @@ impl<'context, 'services, 'environment> AstFinalizer<'context, 'services, 'envir
         );
         let _ = type_boundary_validation_start;
 
+        // ----------------------------
+        //  Merge builtin AST nodes
+        // ----------------------------
         let builtin_merge_start = Instant::now();
         if !self.environment.builtin_struct_ast_nodes.is_empty() {
             let mut ast_nodes = self.environment.builtin_struct_ast_nodes.clone();

@@ -25,8 +25,8 @@ use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 use crate::compiler_frontend::ast::templates::template_render_plan::{
     FormatterAnchorId, FormatterInput, FormatterInputPiece, FormatterOpaqueKind,
-    FormatterOpaquePiece, FormatterOutputPiece, FormatterTextPiece, RenderExpressionPiece,
-    RenderPiece, RenderTextPiece, TemplateRenderPlan,
+    FormatterOpaquePiece, FormatterOutput, FormatterOutputPiece, FormatterTextPiece,
+    RenderExpressionPiece, RenderPiece, RenderTextPiece, TemplateRenderPlan,
 };
 
 pub(crate) struct BodyFormattingResult {
@@ -97,6 +97,9 @@ pub(crate) fn apply_body_formatter(
 
     let mut current_run = Vec::new();
 
+    // ----------------------------
+    //  Closure: process one contiguous body run
+    // ----------------------------
     // Processes a contiguous body run through whitespace passes and the style formatter.
     // Non-text pieces (child templates, dynamic expressions) are mapped to opaque anchors
     // so formatters never see their content. After formatting, anchors are mapped back.
@@ -197,6 +200,9 @@ pub(crate) fn apply_body_formatter(
         Ok((replacement_pieces, formatter_warnings))
     };
 
+    // ----------------------------
+    //  Walk pieces and format contiguous body runs
+    // ----------------------------
     let mut is_first_run = true;
     for piece in original_pieces.iter().cloned() {
         match &piece {
@@ -239,6 +245,9 @@ pub(crate) fn apply_body_formatter(
         new_plan_pieces.extend(replacement);
     }
 
+    // ----------------------------
+    //  Assemble result
+    // ----------------------------
     let content_changed = render_pieces_changed(&original_pieces, &new_plan_pieces);
     plan.pieces = new_plan_pieces;
     Ok(BodyFormattingResult {
@@ -251,7 +260,7 @@ pub(crate) fn apply_body_formatter(
 /// Converts formatter output back into formatter input for chaining pipeline stages.
 /// Text pieces are interned, opaque anchors are preserved as-is.
 fn output_to_input(
-    output: crate::compiler_frontend::ast::templates::template_render_plan::FormatterOutput,
+    output: FormatterOutput,
     representative_location: &SourceLocation,
     string_table: &mut StringTable,
 ) -> FormatterInput {

@@ -17,11 +17,19 @@ use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable}
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::return_rule_error;
 
+// --------------------------
+//  Constants
+// --------------------------
+
 const COLLECTION_GET_NAME: &str = "get";
 const COLLECTION_SET_NAME: &str = "set";
 const COLLECTION_PUSH_NAME: &str = "push";
 const COLLECTION_REMOVE_NAME: &str = "remove";
 const COLLECTION_LENGTH_NAME: &str = "length";
+
+// --------------------------
+//  Helpers
+// --------------------------
 
 fn collection_builtin_method_name(
     member_name: StringId,
@@ -29,13 +37,22 @@ fn collection_builtin_method_name(
 ) -> Option<CollectionBuiltinOp> {
     match string_table.resolve(member_name) {
         COLLECTION_GET_NAME => Some(CollectionBuiltinOp::Get),
+
         COLLECTION_SET_NAME => Some(CollectionBuiltinOp::Set),
+
         COLLECTION_PUSH_NAME => Some(CollectionBuiltinOp::Push),
+
         COLLECTION_REMOVE_NAME => Some(CollectionBuiltinOp::Remove),
+
         COLLECTION_LENGTH_NAME => Some(CollectionBuiltinOp::Length),
+
         _ => None,
     }
 }
+
+// --------------------------
+//  Main parser
+// --------------------------
 
 /// Parses one collection builtin receiver member in postfix position.
 pub(super) fn parse_collection_builtin_member(
@@ -113,6 +130,7 @@ pub(super) fn parse_collection_builtin_member(
             };
             (args, vec![get_result_type])
         }
+
         CollectionBuiltinOp::Set => {
             let args = parse_builtin_method_args(
                 token_stream,
@@ -124,6 +142,7 @@ pub(super) fn parse_collection_builtin_member(
             )?;
             (args, Vec::new())
         }
+
         CollectionBuiltinOp::Push => {
             let args = parse_builtin_method_args(
                 token_stream,
@@ -135,6 +154,7 @@ pub(super) fn parse_collection_builtin_member(
             )?;
             (args, Vec::new())
         }
+
         CollectionBuiltinOp::Remove => {
             let args = parse_builtin_method_args(
                 token_stream,
@@ -146,6 +166,7 @@ pub(super) fn parse_collection_builtin_member(
             )?;
             (args, Vec::new())
         }
+
         CollectionBuiltinOp::Length => {
             let args = parse_builtin_method_args(
                 token_stream,

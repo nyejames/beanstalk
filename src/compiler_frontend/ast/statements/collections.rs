@@ -37,8 +37,7 @@ pub fn new_collection(
     let collection_location = token_stream.current_location();
     let mut consumed_close_curly = false;
 
-    // Should always start with the current token being an open curly brace,
-    // So skip to the first value
+    // The current token is an open curly brace; skip to the first value.
     token_stream.advance();
 
     let mut next_item: bool = true;

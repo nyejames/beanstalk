@@ -127,6 +127,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
 
         let environment_start = Instant::now();
 
+        // --- Phase 1: Type aliases ---
         let type_alias_resolution_start = Instant::now();
         self.resolve_type_aliases(sorted_headers, string_table)?;
         timer_log!(
@@ -135,6 +136,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         );
         let _ = type_alias_resolution_start;
 
+        // --- Phase 2: Nominal types ---
         let type_resolution_start = Instant::now();
         self.resolve_types(sorted_headers, string_table)?;
         timer_log!(
@@ -143,6 +145,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         );
         let _ = type_resolution_start;
 
+        // --- Phase 3: Function signatures ---
         let function_signatures_start = Instant::now();
         self.resolve_function_signatures(sorted_headers, string_table)?;
         timer_log!(
@@ -151,6 +154,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         );
         let _ = function_signatures_start;
 
+        // --- Phase 4: Receiver catalog ---
         let receiver_catalog_start = Instant::now();
         let receiver_methods = self.build_receiver_catalog(sorted_headers, string_table)?;
         timer_log!(

@@ -12,6 +12,10 @@ mod function_signatures;
 mod type_aliases;
 mod type_resolution;
 
+// --------------------------
+//  Re-exports
+// --------------------------
+
 pub(in crate::compiler_frontend::ast) use builder::{
     AstEnvironmentInput, AstModuleEnvironment, AstModuleEnvironmentBuilder,
 };

@@ -41,6 +41,7 @@ pub(super) fn try_fold_template_to_string(
             );
             Ok(Some(template.fold_into_stringid(&mut fold_context)?))
         }
+
         TemplateConstValueKind::SlotInsertHelper | TemplateConstValueKind::NonConst => Ok(None),
     }
 }

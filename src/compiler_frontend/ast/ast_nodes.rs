@@ -19,9 +19,10 @@ use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::external_packages::ExternalFunctionId;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringId;
-pub(crate) use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::value_mode::ValueMode;
 use crate::return_compiler_error;
+
+pub(crate) use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 #[derive(Debug, Clone)]
 pub struct Declaration {
@@ -164,7 +165,6 @@ pub enum NodeKind {
         args: Vec<CallArgument>,
         result_types: Vec<DataType>,
         location: SourceLocation,
-        // bool, // Function is pure
     },
 
     ResultHandledFunctionCall {
@@ -208,16 +208,17 @@ pub enum NodeKind {
     Rvalue(Expression),
 
     // Operators
-    // Operator, Precedence
-    Operator(Operator), // Operator,
+    Operator(Operator),
 }
 
 impl AstNode {
     pub fn get_expr(&self) -> Result<Expression, CompilerError> {
         match &self.kind {
+            // Declarations and rvalues
             NodeKind::VariableDeclaration(arg) => Ok(arg.value.to_owned()),
             NodeKind::Rvalue(value, ..) => Ok(value.to_owned()),
-            // NodeKind::Assignment(_, value) => Ok(value.to_owned()),
+
+            // Call variants
             NodeKind::FunctionCall {
                 name,
                 args: arguments,
@@ -256,6 +257,7 @@ impl AstNode {
                 location.to_owned(),
             )),
 
+            // Field and method access
             NodeKind::FieldAccess {
                 data_type,
                 value_mode,

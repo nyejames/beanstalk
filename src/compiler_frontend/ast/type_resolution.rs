@@ -15,6 +15,7 @@ use crate::compiler_frontend::datatypes::generics::{
     GenericBaseType, GenericParameterList, GenericParameterScope, TypeParameterId,
 };
 use crate::compiler_frontend::datatypes::{DataType, ReceiverKey};
+use crate::compiler_frontend::declaration_syntax::choice::{ChoiceVariant, ChoiceVariantPayload};
 use crate::compiler_frontend::declaration_syntax::type_syntax::{
     TypeResolutionContext, resolve_type,
 };
@@ -119,6 +120,7 @@ pub(crate) fn validate_generic_parameters_used(
             let declaration_name = declaration_path
                 .name_str(string_table)
                 .unwrap_or("<declaration>");
+
             return_rule_error!(
                 format!(
                     "Generic parameter '{}' is declared but never used in the public type shape for '{}'.",
@@ -142,9 +144,12 @@ pub(crate) fn collect_type_parameter_ids_from_type(
     used_parameters: &mut FxHashSet<TypeParameterId>,
 ) {
     match data_type {
+        // Direct type-parameter reference.
         DataType::TypeParameter { id, .. } => {
             used_parameters.insert(*id);
         }
+
+        // Container types — recurse into inner types.
         DataType::GenericInstance { arguments, .. } => {
             for argument in arguments {
                 collect_type_parameter_ids_from_type(argument, used_parameters);
@@ -162,6 +167,8 @@ pub(crate) fn collect_type_parameter_ids_from_type(
                 collect_type_parameter_ids_from_type(value, used_parameters);
             }
         }
+
+        // Function-like shapes — parameters and returns.
         DataType::Function(_, signature) => {
             for parameter in &signature.parameters {
                 collect_type_parameter_ids_from_type(&parameter.value.data_type, used_parameters);
@@ -170,12 +177,15 @@ pub(crate) fn collect_type_parameter_ids_from_type(
                 collect_type_parameter_ids_from_type(return_slot.data_type(), used_parameters);
             }
         }
+
+        // Record-like shapes — fields and variants.
         DataType::Struct { fields, .. } | DataType::Parameters(fields) => {
             collect_type_parameter_ids_from_declarations(fields, used_parameters);
         }
         DataType::Choices { variants, .. } => {
             collect_type_parameter_ids_from_choice_variants(variants, used_parameters);
         }
+
         _ => {}
     }
 }
@@ -190,11 +200,9 @@ pub(crate) fn collect_type_parameter_ids_from_declarations(
 }
 
 pub(crate) fn collect_type_parameter_ids_from_choice_variants(
-    variants: &[crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant],
+    variants: &[ChoiceVariant],
     used_parameters: &mut FxHashSet<TypeParameterId>,
 ) {
-    use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariantPayload;
-
     for variant in variants {
         if let ChoiceVariantPayload::Record { fields } = &variant.payload {
             collect_type_parameter_ids_from_declarations(fields, used_parameters);
@@ -212,6 +220,7 @@ pub(crate) fn validate_no_recursive_generic_type(
         let declaration_name = declaration_path
             .name_str(string_table)
             .unwrap_or("<generic type>");
+
         return_rule_error!(
             format!(
                 "Recursive generic types are not supported yet. Generic type '{declaration_name}' cannot contain itself."
@@ -237,11 +246,13 @@ fn generic_type_references_nominal_path(
                 base,
                 GenericBaseType::ResolvedNominal(path) if path == declaration_path
             );
+
             base_matches
                 || arguments.iter().any(|argument| {
                     generic_type_references_nominal_path(argument, declaration_path)
                 })
         }
+
         DataType::Option(inner) | DataType::Reference(inner) => {
             generic_type_references_nominal_path(inner, declaration_path)
         }
@@ -252,6 +263,7 @@ fn generic_type_references_nominal_path(
         DataType::Returns(values) => values
             .iter()
             .any(|value| generic_type_references_nominal_path(value, declaration_path)),
+
         DataType::Function(_, signature) => {
             signature.parameters.iter().any(|parameter| {
                 generic_type_references_nominal_path(&parameter.value.data_type, declaration_path)
@@ -259,14 +271,13 @@ fn generic_type_references_nominal_path(
                 generic_type_references_nominal_path(return_slot.data_type(), declaration_path)
             })
         }
+
         DataType::Struct { fields, .. } | DataType::Parameters(fields) => {
             fields.iter().any(|field| {
                 generic_type_references_nominal_path(&field.value.data_type, declaration_path)
             })
         }
         DataType::Choices { variants, .. } => {
-            use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariantPayload;
-
             variants.iter().any(|variant| match &variant.payload {
                 ChoiceVariantPayload::Unit => false,
                 ChoiceVariantPayload::Record { fields } => fields.iter().any(|field| {
@@ -274,9 +285,14 @@ fn generic_type_references_nominal_path(
                 }),
             })
         }
+
         _ => false,
     }
 }
+
+// --------------------------
+//  Function signature resolution
+// --------------------------
 
 /// Resolve a function signature and extract receiver metadata for method cataloging.
 pub(crate) fn resolve_function_signature(
@@ -296,6 +312,9 @@ pub(crate) fn resolve_function_signature(
     let mut resolved_parameters = Vec::with_capacity(signature.parameters.len());
     let mut receiver = None;
 
+    // ----------------------------
+    //  Resolve parameters
+    // ----------------------------
     for (index, parameter) in signature.parameters.iter().enumerate() {
         let mut resolved_parameter = parameter.to_owned();
         resolved_parameter.value.data_type = resolve_named_signature_type(
@@ -385,6 +404,9 @@ pub(crate) fn resolve_function_signature(
         resolved_parameters.push(resolved_parameter);
     }
 
+    // ----------------------------
+    //  Resolve returns
+    // ----------------------------
     let mut resolved_returns = Vec::with_capacity(signature.returns.len());
     for return_slot in &signature.returns {
         let resolved_value = match &return_slot.value {
@@ -425,6 +447,10 @@ pub(crate) fn resolve_function_signature(
     })
 }
 
+// --------------------------
+//  Struct field type resolution
+// --------------------------
+
 /// Resolve all declared struct field types against visible declarations.
 pub(crate) fn resolve_struct_field_types(
     struct_path: &InternedPath,
@@ -439,18 +465,21 @@ pub(crate) fn resolve_struct_field_types(
 
     for field in fields {
         let mut resolved_field = field.to_owned();
+
         resolved_field.value.data_type = resolve_named_signature_type(
             &field.value.data_type,
             &field.value.location,
             type_resolution_context,
             string_table,
         )?;
+
         resolved_field.value = inline_visible_constant_references(
             &resolved_field.value,
             type_resolution_context.declaration_table,
             type_resolution_context.visible_declaration_ids,
             string_table,
         )?;
+
         if !matches!(resolved_field.value.kind, ExpressionKind::NoValue)
             && !resolved_field.value.is_compile_time_constant()
         {
@@ -458,6 +487,7 @@ pub(crate) fn resolve_struct_field_types(
                 .id
                 .name_str(string_table)
                 .unwrap_or("<field>");
+
             return_rule_error!(
                 format!(
                     "Struct field '{}' default value must fold to a single compile-time value.",
@@ -470,6 +500,7 @@ pub(crate) fn resolve_struct_field_types(
                 }
             );
         }
+
         resolved_fields.push(resolved_field);
     }
 
@@ -502,23 +533,24 @@ pub(crate) fn resolve_struct_field_types(
     Ok(resolved_fields)
 }
 
+// --------------------------
+//  Choice variant payload resolution
+// --------------------------
+
 /// Resolve choice payload field types, replacing `NamedType` placeholders in record variants.
 pub(crate) fn resolve_choice_variant_payload_types(
     variants: &[crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant],
     type_resolution_context: &TypeResolutionContext<'_>,
     string_table: &StringTable,
-) -> Result<Vec<crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant>, CompilerError>
-{
-    use crate::compiler_frontend::declaration_syntax::choice::{
-        ChoiceVariant, ChoiceVariantPayload,
-    };
-
+) -> Result<Vec<ChoiceVariant>, CompilerError> {
     let mut resolved_variants = Vec::with_capacity(variants.len());
+
     for variant in variants {
         let payload = match &variant.payload {
             ChoiceVariantPayload::Unit => ChoiceVariantPayload::Unit,
             ChoiceVariantPayload::Record { fields } => {
                 let mut resolved_fields = Vec::with_capacity(fields.len());
+
                 for field in fields {
                     let mut resolved_field = field.to_owned();
                     resolved_field.value.data_type = resolve_named_signature_type(
@@ -529,19 +561,26 @@ pub(crate) fn resolve_choice_variant_payload_types(
                     )?;
                     resolved_fields.push(resolved_field);
                 }
+
                 ChoiceVariantPayload::Record {
                     fields: resolved_fields,
                 }
             }
         };
+
         resolved_variants.push(ChoiceVariant {
             id: variant.id,
             payload,
             location: variant.location.clone(),
         });
     }
+
     Ok(resolved_variants)
 }
+
+// --------------------------
+//  Constant inlining for field defaults
+// --------------------------
 
 fn inline_visible_constant_references(
     expression: &Expression,
@@ -564,6 +603,7 @@ fn inline_visible_constant_references_impl(
     string_table: &mut StringTable,
 ) -> Result<Expression, CompilerError> {
     match &expression.kind {
+        // Direct reference — try to resolve to a visible compile-time constant.
         ExpressionKind::Reference(path) => Ok(declaration_table
             .get_visible_resolved_by_path(path, visible_declaration_ids)
             .filter(|declaration| declaration.value.is_compile_time_constant())
@@ -580,6 +620,8 @@ fn inline_visible_constant_references_impl(
                 resolved
             })
             .unwrap_or_else(|| expression.to_owned())),
+
+        // Runtime expression — inline constants inside nested nodes, then re-evaluate.
         ExpressionKind::Runtime(nodes) => {
             let mut rewritten_nodes = Vec::with_capacity(nodes.len());
             for node in nodes {
@@ -620,6 +662,8 @@ fn inline_visible_constant_references_impl(
                 )
             })
         }
+
+        // Collection — inline each item.
         ExpressionKind::Collection(items) => {
             let mut resolved_items = Vec::with_capacity(items.len());
             for item in items {
@@ -630,6 +674,7 @@ fn inline_visible_constant_references_impl(
                     string_table,
                 )?);
             }
+
             Ok(Expression::new(
                 ExpressionKind::Collection(resolved_items),
                 expression.location.clone(),
@@ -637,6 +682,8 @@ fn inline_visible_constant_references_impl(
                 expression.value_mode.to_owned(),
             ))
         }
+
+        // Struct instance — inline each field value.
         ExpressionKind::StructInstance(fields) => {
             let mut resolved_fields = Vec::with_capacity(fields.len());
             for field in fields {
@@ -650,6 +697,7 @@ fn inline_visible_constant_references_impl(
                     )?,
                 });
             }
+
             Ok(Expression::new(
                 ExpressionKind::StructInstance(resolved_fields),
                 expression.location.clone(),
@@ -657,6 +705,8 @@ fn inline_visible_constant_references_impl(
                 expression.value_mode.to_owned(),
             ))
         }
+
+        // Range — inline start and end.
         ExpressionKind::Range(start, end) => Ok(Expression::new(
             ExpressionKind::Range(
                 Box::new(inline_visible_constant_references(
@@ -676,6 +726,8 @@ fn inline_visible_constant_references_impl(
             expression.data_type.to_owned(),
             expression.value_mode.to_owned(),
         )),
+
+        // Result construct — inline the wrapped value.
         ExpressionKind::ResultConstruct { variant, value } => Ok(Expression::new(
             ExpressionKind::ResultConstruct {
                 variant: *variant,
@@ -690,6 +742,8 @@ fn inline_visible_constant_references_impl(
             expression.data_type.to_owned(),
             expression.value_mode.to_owned(),
         )),
+
+        // Coercion — inline the inner value.
         ExpressionKind::Coerced { value, to_type } => Ok(Expression::new(
             ExpressionKind::Coerced {
                 value: Box::new(inline_visible_constant_references(
@@ -704,6 +758,8 @@ fn inline_visible_constant_references_impl(
             expression.data_type.to_owned(),
             expression.value_mode.to_owned(),
         )),
+
+        // Everything else — no inlining needed.
         _ => Ok(expression.to_owned()),
     }
 }
@@ -715,6 +771,7 @@ fn inline_visible_constant_references_in_node(
     string_table: &mut StringTable,
 ) -> Result<AstNode, CompilerError> {
     let mut rewritten = node.to_owned();
+
     rewritten.kind = match &node.kind {
         NodeKind::Rvalue(expression) => NodeKind::Rvalue(inline_visible_constant_references_impl(
             expression,
@@ -733,8 +790,13 @@ fn inline_visible_constant_references_in_node(
         }),
         _ => node.kind.to_owned(),
     };
+
     Ok(rewritten)
 }
+
+// --------------------------
+//  Runtime struct cycle validation
+// --------------------------
 
 fn collect_runtime_struct_dependencies(
     data_type: &DataType,
@@ -750,6 +812,7 @@ fn collect_runtime_struct_dependencies(
         } => {
             dependencies.insert(nominal_path.to_owned());
         }
+
         DataType::Reference(inner) | DataType::Option(inner) => {
             collect_runtime_struct_dependencies(inner, dependencies)
         }
@@ -767,6 +830,7 @@ fn collect_runtime_struct_dependencies(
                 collect_runtime_struct_dependencies(value, dependencies);
             }
         }
+
         _ => {}
     }
 }
@@ -796,15 +860,18 @@ pub(crate) fn validate_no_recursive_runtime_structs(
                 .map(|path| path.to_string(string_table))
                 .collect::<Vec<_>>()
                 .join(" -> ");
+
+            let cycle_location = struct_fields_by_path
+                .get(current)
+                .and_then(|fields| fields.first())
+                .map(|field| field.value.location.clone())
+                .unwrap_or_default();
+
             return_rule_error!(
                 format!(
                     "Recursive runtime struct definitions are not supported in v1. Cycle: {cycle}"
                 ),
-                struct_fields_by_path
-                    .get(current)
-                    .and_then(|fields| fields.first())
-                    .map(|field| field.value.location.clone())
-                    .unwrap_or_default(),
+                cycle_location,
                 {
                     CompilationStage => "AST Construction",
                     PrimarySuggestion => "Remove the recursive runtime struct field cycle or replace it with an indirect runtime representation",
@@ -818,6 +885,7 @@ pub(crate) fn validate_no_recursive_runtime_structs(
             for field in fields {
                 let mut dependencies = FxHashSet::default();
                 collect_runtime_struct_dependencies(&field.value.data_type, &mut dependencies);
+
                 for dependency in dependencies {
                     if struct_fields_by_path.contains_key(&dependency) {
                         visit(
@@ -839,6 +907,7 @@ pub(crate) fn validate_no_recursive_runtime_structs(
 
     let mut visited = FxHashSet::default();
     let mut visiting = Vec::new();
+
     for struct_path in struct_fields_by_path.keys() {
         visit(
             struct_path,

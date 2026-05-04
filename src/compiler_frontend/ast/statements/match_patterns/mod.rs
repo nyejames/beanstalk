@@ -9,6 +9,10 @@ mod literal;
 mod relational;
 mod types;
 
+// --------------------------
+//  Re-exports
+// --------------------------
+//
 // Public types consumed by AST statement parsing, HIR lowering, and tests.
 pub use types::{ChoicePayloadCapture, MatchArm, MatchPattern, RelationalPatternOp};
 

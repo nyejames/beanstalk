@@ -41,12 +41,18 @@ impl AstFinalizer<'_, '_, '_> {
     }
 }
 
+// --------------------------
+//  Node validation
+// --------------------------
+
 fn validate_node(node: &AstNode, string_table: &StringTable) -> Result<(), CompilerError> {
     match &node.kind {
         NodeKind::Return(values) => validate_expressions(values, string_table),
+
         NodeKind::ReturnError(value)
         | NodeKind::PushStartRuntimeFragment(value)
         | NodeKind::Rvalue(value) => validate_expression(value, string_table),
+
         NodeKind::If(condition, then_body, else_body) => {
             validate_expression(condition, string_table)?;
             validate_nodes(then_body, string_table)?;
@@ -55,6 +61,7 @@ fn validate_node(node: &AstNode, string_table: &StringTable) -> Result<(), Compi
             }
             Ok(())
         }
+
         NodeKind::Match {
             scrutinee,
             arms,
@@ -84,7 +91,9 @@ fn validate_node(node: &AstNode, string_table: &StringTable) -> Result<(), Compi
             }
             Ok(())
         }
+
         NodeKind::ScopedBlock { body } => validate_nodes(body, string_table),
+
         NodeKind::RangeLoop {
             bindings,
             range,
@@ -98,6 +107,7 @@ fn validate_node(node: &AstNode, string_table: &StringTable) -> Result<(), Compi
             }
             validate_nodes(body, string_table)
         }
+
         NodeKind::CollectionLoop {
             bindings,
             iterable,
@@ -107,19 +117,23 @@ fn validate_node(node: &AstNode, string_table: &StringTable) -> Result<(), Compi
             validate_expression(iterable, string_table)?;
             validate_nodes(body, string_table)
         }
+
         NodeKind::WhileLoop(condition, body) => {
             validate_expression(condition, string_table)?;
             validate_nodes(body, string_table)
         }
+
         NodeKind::VariableDeclaration(declaration) => {
             validate_declaration(declaration, string_table)
         }
+
         NodeKind::FieldAccess {
             base, data_type, ..
         } => {
             validate_node(base, string_table)?;
             validate_type(data_type, &node.location, string_table)
         }
+
         NodeKind::MethodCall {
             receiver,
             args,
@@ -136,6 +150,7 @@ fn validate_node(node: &AstNode, string_table: &StringTable) -> Result<(), Compi
             validate_call_arguments(args, string_table)?;
             validate_types(result_types, &node.location, string_table)
         }
+
         NodeKind::FunctionCall {
             args, result_types, ..
         }
@@ -148,24 +163,33 @@ fn validate_node(node: &AstNode, string_table: &StringTable) -> Result<(), Compi
             validate_call_arguments(args, string_table)?;
             validate_types(result_types, &node.location, string_table)
         }
+
         NodeKind::StructDefinition(_, fields) => validate_declarations(fields, string_table),
+
         NodeKind::Function(_, signature, body) => {
             validate_signature(signature, &node.location, string_table)?;
             validate_nodes(body, string_table)
         }
+
         NodeKind::Assignment { target, value } => {
             validate_node(target, string_table)?;
             validate_expression(value, string_table)
         }
+
         NodeKind::MultiBind { targets, value } => {
             for target in targets {
                 validate_multi_bind_target(target, string_table)?;
             }
             validate_expression(value, string_table)
         }
+
         NodeKind::Break | NodeKind::Continue | NodeKind::Operator(_) => Ok(()),
     }
 }
+
+// --------------------------
+//  Expression validation
+// --------------------------
 
 fn validate_expression(
     expression: &Expression,
@@ -175,25 +199,32 @@ fn validate_expression(
 
     match &expression.kind {
         ExpressionKind::Runtime(nodes) => validate_nodes(nodes, string_table),
+
         ExpressionKind::Copy(place) => validate_node(place, string_table),
+
         ExpressionKind::Function(signature, body) => {
             validate_signature(signature, &expression.location, string_table)?;
             validate_nodes(body, string_table)
         }
+
         ExpressionKind::FunctionCall(_, args) | ExpressionKind::HostFunctionCall(_, args) => {
             validate_call_arguments(args, string_table)
         }
+
         ExpressionKind::ResultHandledFunctionCall { args, handling, .. } => {
             validate_call_arguments(args, string_table)?;
             validate_result_handling(handling, string_table)
         }
+
         ExpressionKind::BuiltinCast { value, .. }
         | ExpressionKind::ResultConstruct { value, .. }
         | ExpressionKind::Coerced { value, .. } => validate_expression(value, string_table),
+
         ExpressionKind::HandledResult { value, handling } => {
             validate_expression(value, string_table)?;
             validate_result_handling(handling, string_table)
         }
+
         ExpressionKind::Template(template) => {
             for atom in &template.content.atoms {
                 let TemplateAtom::Content(segment) = atom else {
@@ -203,16 +234,20 @@ fn validate_expression(
             }
             Ok(())
         }
+
         ExpressionKind::Collection(items) => validate_expressions(items, string_table),
+
         ExpressionKind::StructDefinition(fields)
         | ExpressionKind::StructInstance(fields)
         | ExpressionKind::ChoiceConstruct { fields, .. } => {
             validate_declarations(fields, string_table)
         }
+
         ExpressionKind::Range(start, end) => {
             validate_expression(start, string_table)?;
             validate_expression(end, string_table)
         }
+
         ExpressionKind::NoValue
         | ExpressionKind::OptionNone
         | ExpressionKind::Int(_)
@@ -224,6 +259,10 @@ fn validate_expression(
         | ExpressionKind::Reference(_) => Ok(()),
     }
 }
+
+// --------------------------
+//  Helpers
+// --------------------------
 
 fn validate_result_handling(
     handling: &ResultCallHandling,
@@ -342,25 +381,33 @@ fn validate_type(
         DataType::NamedType(_) | DataType::TypeParameter { .. } => {
             unresolved_type_error(data_type, location, string_table)
         }
+
         DataType::GenericInstance {
             base: GenericBaseType::Builtin(BuiltinGenericType::Collection),
             arguments,
         } => validate_types(arguments, location, string_table),
+
         DataType::GenericInstance { .. } => {
             unresolved_type_error(data_type, location, string_table)
         }
+
         DataType::Option(inner) | DataType::Reference(inner) => {
             validate_type(inner, location, string_table)
         }
+
         DataType::Result { ok, err } => {
             validate_type(ok, location, string_table)?;
             validate_type(err, location, string_table)
         }
+
         DataType::Returns(values) => validate_types(values, location, string_table),
+
         DataType::Function(_, signature) => validate_signature(signature, location, string_table),
+
         DataType::Struct { fields, .. } | DataType::Parameters(fields) => {
             validate_declarations(fields, string_table)
         }
+
         DataType::Choices { variants, .. } => {
             for variant in variants {
                 let ChoiceVariantPayload::Record { fields } = &variant.payload else {
@@ -370,6 +417,7 @@ fn validate_type(
             }
             Ok(())
         }
+
         _ => Ok(()),
     }
 }

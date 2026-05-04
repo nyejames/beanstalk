@@ -120,13 +120,16 @@ impl AstFinalizer<'_, '_, '_> {
                     normalized.data_type = DataType::StringSlice;
                     ExpressionKind::StringSlice(folded)
                 }
+
                 TemplateConstValueKind::SlotInsertHelper => expression.kind.to_owned(),
+
                 TemplateConstValueKind::NonConst => {
                     return Err(CompilerError::compiler_error(
                         "Non-constant template reached AST finalization in module constant metadata.",
                     ));
                 }
             },
+
             ExpressionKind::Collection(items) => ExpressionKind::Collection(
                 items
                     .iter()
@@ -140,6 +143,7 @@ impl AstFinalizer<'_, '_, '_> {
                     })
                     .collect::<Result<Vec<_>, _>>()?,
             ),
+
             ExpressionKind::StructInstance(fields) => ExpressionKind::StructInstance(
                 fields
                     .iter()
@@ -156,6 +160,7 @@ impl AstFinalizer<'_, '_, '_> {
                     })
                     .collect::<Result<Vec<_>, CompilerError>>()?,
             ),
+
             ExpressionKind::Range(start, end) => ExpressionKind::Range(
                 Box::new(self.normalize_module_constant_expression(
                     start,
@@ -170,6 +175,7 @@ impl AstFinalizer<'_, '_, '_> {
                     string_table,
                 )?),
             ),
+
             ExpressionKind::ResultConstruct { variant, value } => ExpressionKind::ResultConstruct {
                 variant: *variant,
                 value: Box::new(self.normalize_module_constant_expression(
@@ -179,6 +185,7 @@ impl AstFinalizer<'_, '_, '_> {
                     string_table,
                 )?),
             },
+
             ExpressionKind::Coerced { value, to_type } => ExpressionKind::Coerced {
                 value: Box::new(self.normalize_module_constant_expression(
                     value,
@@ -188,11 +195,16 @@ impl AstFinalizer<'_, '_, '_> {
                 )?),
                 to_type: to_type.to_owned(),
             },
+
             _ => expression.kind.to_owned(),
         };
         Ok(normalized)
     }
 }
+
+// --------------------------
+//  Helper-only template filter
+// --------------------------
 
 fn contains_helper_only_template_value(expression: &Expression) -> bool {
     match &expression.kind {
@@ -200,15 +212,21 @@ fn contains_helper_only_template_value(expression: &Expression) -> bool {
             template.const_value_kind(),
             TemplateConstValueKind::SlotInsertHelper
         ),
+
         ExpressionKind::Collection(items) => items.iter().any(contains_helper_only_template_value),
+
         ExpressionKind::StructInstance(fields) => fields
             .iter()
             .any(|field| contains_helper_only_template_value(&field.value)),
+
         ExpressionKind::Range(start, end) => {
             contains_helper_only_template_value(start) || contains_helper_only_template_value(end)
         }
+
         ExpressionKind::ResultConstruct { value, .. } => contains_helper_only_template_value(value),
+
         ExpressionKind::Coerced { value, .. } => contains_helper_only_template_value(value),
+
         _ => false,
     }
 }

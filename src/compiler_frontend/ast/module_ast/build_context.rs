@@ -23,6 +23,9 @@ pub struct AstBuildContext<'a> {
     pub path_format_config: PathStringFormatConfig,
 }
 
+// Phase-local context derived from `AstBuildContext`.
+//
+// Omits the `StringTable` because each phase borrows it mutably.
 pub(crate) struct AstPhaseContext<'a> {
     pub(crate) external_package_registry: &'a ExternalPackageRegistry,
     pub(crate) style_directives: &'a StyleDirectiveRegistry,

@@ -30,6 +30,10 @@ pub(super) struct ReceiverAccessRequirement<'a> {
     pub diagnostic: ReceiverAccessDiagnostic<'a>,
 }
 
+// --------------------------
+//  Validation entry point
+// --------------------------
+
 pub(super) fn validate_receiver_access(
     receiver_node: &AstNode,
     access_mode: ReceiverAccessMode,
@@ -68,6 +72,10 @@ pub(super) fn validate_receiver_access(
 
     Ok(())
 }
+
+// --------------------------
+//  Rejection helpers
+// --------------------------
 
 fn reject_non_place_receiver(
     diagnostic: &ReceiverAccessDiagnostic<'_>,

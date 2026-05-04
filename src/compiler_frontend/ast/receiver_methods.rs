@@ -16,8 +16,8 @@ use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::return_rule_error;
 use rustc_hash::FxHashMap;
 
-#[derive(Clone)]
 /// Canonical metadata for one receiver method declaration.
+#[derive(Clone)]
 pub(crate) struct ReceiverMethodEntry {
     pub(crate) function_path: InternedPath,
     pub(crate) receiver: ReceiverKey,
@@ -27,8 +27,8 @@ pub(crate) struct ReceiverMethodEntry {
     pub(crate) signature: FunctionSignature,
 }
 
-#[derive(Clone, Default)]
 /// Receiver-method lookup tables used by parser and diagnostics.
+#[derive(Clone, Default)]
 pub(crate) struct ReceiverMethodCatalog {
     pub(crate) by_receiver_and_name: FxHashMap<(ReceiverKey, StringId), ReceiverMethodEntry>,
     pub(crate) by_method_name: FxHashMap<StringId, Vec<ReceiverMethodEntry>>,
@@ -87,6 +87,9 @@ pub(crate) fn build_receiver_method_catalog(
     // without scanning declaration vectors at call sites.
     let mut catalog = ReceiverMethodCatalog::default();
 
+    // ----------------------------
+    //  Filter function headers with receivers
+    // ----------------------------
     for header in sorted_headers {
         let HeaderKind::Function { .. } = &header.kind else {
             continue;
@@ -97,6 +100,7 @@ pub(crate) fn build_receiver_method_catalog(
         else {
             continue;
         };
+
         let Some(receiver) = resolved_signature.receiver.as_ref() else {
             continue;
         };
@@ -104,6 +108,7 @@ pub(crate) fn build_receiver_method_catalog(
         let Some(method_name) = header.tokens.src_path.name() else {
             continue;
         };
+
         let Some(method_source_file) = source_file_by_symbol_path
             .get(&header.tokens.src_path)
             .cloned()
@@ -120,6 +125,9 @@ pub(crate) fn build_receiver_method_catalog(
             );
         };
 
+        // ----------------------------
+        //  Validate struct receiver constraints
+        // ----------------------------
         if let ReceiverKey::Struct(struct_path) = receiver {
             let Some(struct_source_file) = struct_source_by_path.get(struct_path) else {
                 return_rule_error!(
@@ -173,6 +181,9 @@ pub(crate) fn build_receiver_method_catalog(
             }
         }
 
+        // ----------------------------
+        //  Check for duplicate receiver methods
+        // ----------------------------
         let key = (receiver.to_owned(), method_name);
         if catalog.by_receiver_and_name.contains_key(&key) {
             return_rule_error!(
@@ -189,16 +200,18 @@ pub(crate) fn build_receiver_method_catalog(
             );
         }
 
+        let receiver_mutable = resolved_signature
+            .signature
+            .parameters
+            .first()
+            .is_some_and(|parameter| parameter.value.value_mode.is_mutable());
+
         let entry = ReceiverMethodEntry {
             function_path: header.tokens.src_path.to_owned(),
             receiver: receiver.to_owned(),
             source_file: method_source_file,
             exported: header.exported,
-            receiver_mutable: resolved_signature
-                .signature
-                .parameters
-                .first()
-                .is_some_and(|parameter| parameter.value.value_mode.is_mutable()),
+            receiver_mutable,
             signature: resolved_signature.signature.to_owned(),
         };
 
@@ -210,6 +223,9 @@ pub(crate) fn build_receiver_method_catalog(
             .push(entry);
     }
 
+    // ----------------------------
+    //  Sort catalog entries for deterministic lookup
+    // ----------------------------
     for entries in catalog.by_method_name.values_mut() {
         entries.sort_by(|left, right| {
             left.function_path

@@ -13,12 +13,15 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 pub(crate) fn ast_node_is_place(node: &AstNode) -> bool {
     match &node.kind {
         NodeKind::Rvalue(expr) => matches!(expr.kind, ExpressionKind::Reference(_)),
+
         NodeKind::FieldAccess { base, .. } => ast_node_is_place(base),
+
         NodeKind::CollectionBuiltinCall {
             receiver,
             op: CollectionBuiltinOp::Get,
             ..
         } => ast_node_is_place(receiver),
+
         _ => false,
     }
 }
@@ -29,12 +32,15 @@ pub(crate) fn ast_node_is_mutable_place(node: &AstNode) -> bool {
         NodeKind::Rvalue(expr) => {
             matches!(expr.kind, ExpressionKind::Reference(_)) && expr.value_mode.is_mutable()
         }
+
         NodeKind::FieldAccess { base, .. } => ast_node_is_mutable_place(base),
+
         NodeKind::CollectionBuiltinCall {
             receiver,
             op: CollectionBuiltinOp::Get,
             ..
         } => ast_node_is_mutable_place(receiver),
+
         _ => false,
     }
 }
@@ -47,8 +53,10 @@ pub(crate) fn receiver_access_hint(node: &AstNode, string_table: &StringTable) -
                 .name_str(string_table)
                 .map(str::to_owned)
                 .unwrap_or_else(|| path.to_string(string_table)),
+
             _ => String::from("receiver"),
         },
+
         NodeKind::FieldAccess { base, field, .. } => {
             format!(
                 "{}.{}",

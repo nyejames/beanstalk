@@ -180,6 +180,10 @@ fn build_local_declarations_index(declarations: &[Declaration]) -> FxHashMap<Str
     index
 }
 
+// --------------------------
+//  Constructors
+// --------------------------
+
 impl ScopeContext {
     pub(crate) fn new(
         kind: ContextKind,
@@ -361,6 +365,10 @@ impl ScopeContext {
         }
     }
 
+    // --------------------------
+    //  Required services
+    // --------------------------
+
     pub(crate) fn required_project_path_resolver(
         &self,
         operation: &str,
@@ -403,6 +411,10 @@ impl ScopeContext {
             source_file_scope,
         })
     }
+
+    // --------------------------
+    //  Builder setters
+    // --------------------------
 
     pub fn with_build_profile(mut self, profile: FrontendBuildProfile) -> ScopeContext {
         Rc::make_mut(&mut self.shared).build_profile = profile;
@@ -549,10 +561,18 @@ impl ScopeContext {
         self
     }
 
+    // --------------------------
+    //  Local mutation
+    // --------------------------
+
     pub(crate) fn set_local_declarations(&mut self, declarations: Vec<Declaration>) {
         self.local_declarations_by_name = build_local_declarations_index(&declarations);
         self.local_declarations = declarations;
     }
+
+    // --------------------------
+    //  Symbol lookup
+    // --------------------------
 
     pub(crate) fn get_reference(&self, name: &StringId) -> Option<&Declaration> {
         // 1. Locals (latest visible local wins)
@@ -711,6 +731,10 @@ impl ScopeContext {
             .as_ref()
             .is_some_and(|fv| fv.visible_type_alias_names.contains_key(&name))
     }
+
+    // --------------------------
+    //  Warning / path tracking
+    // --------------------------
 
     pub fn add_var(&mut self, arg: Declaration) {
         if let Some(visible_declarations) = self.visible_declaration_ids.as_mut() {

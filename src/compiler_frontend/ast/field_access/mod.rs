@@ -21,6 +21,10 @@ use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::symbols::string_interning::StringId;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
+// --------------------------
+//  Types
+// --------------------------
+
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ReceiverAccessMode {
     Shared,

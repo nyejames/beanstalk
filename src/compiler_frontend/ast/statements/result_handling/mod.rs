@@ -12,6 +12,10 @@ mod propagation;
 mod termination;
 mod validation;
 
+// --------------------------
+//  Re-exports
+// --------------------------
+
 pub(crate) use self::fallback::parse_result_fallback_values;
 pub(crate) use self::propagation::is_result_propagation_boundary;
 pub(crate) use parser::{

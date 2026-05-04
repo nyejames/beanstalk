@@ -306,10 +306,12 @@ pub(crate) fn parse_function_body_statements(
         ast_log!("Parsing Token: ", #current_token);
 
         match current_token {
+            // Module start marker
             TokenKind::ModuleStart => {
                 token_stream.advance();
             }
 
+            // Symbol statements (declarations, assignments, calls)
             TokenKind::Symbol(_) => parse_symbol_statement(
                 token_stream,
                 &mut ast,
@@ -322,6 +324,7 @@ pub(crate) fn parse_function_body_statements(
                 parse_this_statement(token_stream, &mut ast, &mut context, string_table)?
             }
 
+            // Scoped blocks and deferred features
             TokenKind::Block => ast.push(parse_scoped_block_statement(
                 token_stream,
                 &context,
@@ -337,6 +340,7 @@ pub(crate) fn parse_function_body_statements(
                 return Err(async_block_error(token_stream));
             }
 
+            // Control flow
             TokenKind::Loop => {
                 token_stream.advance();
 
@@ -382,10 +386,12 @@ pub(crate) fn parse_function_body_statements(
                 }
             }
 
+            // Whitespace
             TokenKind::Newline => {
                 token_stream.advance();
             }
 
+            // Return and loop control
             TokenKind::Return => {
                 parse_return_statement(token_stream, &mut ast, &context, string_table)?;
             }
@@ -430,6 +436,7 @@ pub(crate) fn parse_function_body_statements(
                 token_stream.advance();
             }
 
+            // Scope terminators
             TokenKind::End => match context.kind {
                 ContextKind::Expression => {
                     return_syntax_error!(
@@ -452,6 +459,7 @@ pub(crate) fn parse_function_body_statements(
                 }
             },
 
+            // Templates
             // Top-level runtime template in the entry start() body.
             // Each template becomes a PushStartRuntimeFragment so the HIR builder can
             // push the evaluated string directly to the runtime fragment list.
@@ -475,10 +483,12 @@ pub(crate) fn parse_function_body_statements(
                 })
             }
 
+            // End of file
             TokenKind::Eof => {
                 break;
             }
 
+            // Expression statements
             TokenKind::OpenParenthesis
             | TokenKind::FloatLiteral(_)
             | TokenKind::IntLiteral(_)
@@ -497,6 +507,7 @@ pub(crate) fn parse_function_body_statements(
                 });
             }
 
+            // Unrecognized tokens
             _ => {
                 return Err(unexpected_function_body_token_error(
                     token_stream.current_token_kind(),

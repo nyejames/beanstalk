@@ -79,6 +79,9 @@ pub(crate) fn parse_postfix_chain(
 ) -> Result<AstNode, CompilerError> {
     let mut saw_receiver_call = false;
 
+    // ----------------------------
+    //  Walk postfix member-access chain
+    // ----------------------------
     while token_stream.index < token_stream.length
         && token_stream.current_token_kind() == &TokenKind::Dot
     {
@@ -191,6 +194,9 @@ pub(crate) fn parse_postfix_chain(
         );
     }
 
+    // ----------------------------
+    //  Validate assignment receiver is a place
+    // ----------------------------
     if token_stream.current_token_kind().is_assignment_operator()
         && !ast_node_is_place(&receiver_node)
     {

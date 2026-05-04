@@ -28,14 +28,21 @@ enum ErrorBuiltinMethod {
     Bubble,
 }
 
+// --------------------------
+//  Helpers
+// --------------------------
+
 fn error_builtin_method_name(
     member_name: StringId,
     string_table: &StringTable,
 ) -> Option<ErrorBuiltinMethod> {
     match string_table.resolve(member_name) {
         ERROR_HELPER_WITH_LOCATION => Some(ErrorBuiltinMethod::WithLocation),
+
         ERROR_HELPER_PUSH_TRACE => Some(ErrorBuiltinMethod::PushTrace),
+
         ERROR_HELPER_BUBBLE => Some(ErrorBuiltinMethod::Bubble),
+
         _ => None,
     }
 }
@@ -43,7 +50,9 @@ fn error_builtin_method_name(
 fn error_builtin_path(builtin: ErrorBuiltinMethod, string_table: &mut StringTable) -> InternedPath {
     let builtin_name = match builtin {
         ErrorBuiltinMethod::WithLocation => ERROR_WITH_LOCATION_HOST_NAME,
+
         ErrorBuiltinMethod::PushTrace => ERROR_PUSH_TRACE_HOST_NAME,
+
         ErrorBuiltinMethod::Bubble => ERROR_BUBBLE_HOST_NAME,
     };
 
@@ -53,10 +62,16 @@ fn error_builtin_path(builtin: ErrorBuiltinMethod, string_table: &mut StringTabl
 fn error_builtin_kind(builtin: ErrorBuiltinMethod) -> BuiltinMethodKind {
     match builtin {
         ErrorBuiltinMethod::WithLocation => BuiltinMethodKind::WithLocation,
+
         ErrorBuiltinMethod::PushTrace => BuiltinMethodKind::PushTrace,
+
         ErrorBuiltinMethod::Bubble => BuiltinMethodKind::Bubble,
     }
 }
+
+// --------------------------
+//  Main parser
+// --------------------------
 
 /// Parses one builtin error helper member in postfix position.
 pub(super) fn parse_error_builtin_member(
@@ -127,6 +142,7 @@ pub(super) fn parse_error_builtin_member(
             )?;
             (args, vec![error_type])
         }
+
         ErrorBuiltinMethod::PushTrace => {
             let frame_type =
                 resolve_builtin_stack_frame_type(scope_context, &member_location, string_table)?;
@@ -140,6 +156,7 @@ pub(super) fn parse_error_builtin_member(
             )?;
             (args, vec![error_type])
         }
+
         ErrorBuiltinMethod::Bubble => {
             let args = parse_builtin_method_args(
                 token_stream,

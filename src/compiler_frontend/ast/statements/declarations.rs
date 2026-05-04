@@ -98,6 +98,9 @@ pub fn new_declaration(
 
     let full_name = context.scope.to_owned().append(id);
 
+    // ----------------------------
+    //  Function declaration fast-path
+    // ----------------------------
     // Function declarations are parsed eagerly here because they use
     // a dedicated signature/body syntax that does not fit value declarations.
     if token_stream.current_token_kind() == &TokenKind::TypeParameterBracket {
@@ -131,6 +134,9 @@ pub fn new_declaration(
         return Err(error);
     }
 
+    // ----------------------------
+    //  Parse declaration syntax
+    // ----------------------------
     let declaration_syntax = parse_declaration_syntax(token_stream, id, string_table)?;
     let naming_kind = if matches!(
         declaration_syntax
@@ -160,6 +166,9 @@ pub fn resolve_declaration_syntax(
     context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> Result<Declaration, CompilerError> {
+    // ----------------------------
+    //  Validate constant-context constraints
+    // ----------------------------
     let value_mode = declaration_syntax.value_mode();
     if declaration_syntax.mutable_marker && context.kind.is_constant_context() {
         return_rule_error!(
@@ -171,6 +180,9 @@ pub fn resolve_declaration_syntax(
         )
     }
 
+    // ----------------------------
+    //  Resolve declared type
+    // ----------------------------
     let mut data_type = declaration_syntax.semantic_type();
 
     let declaration_location = declaration_syntax.location.clone();

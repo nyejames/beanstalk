@@ -24,6 +24,10 @@ use crate::compiler_frontend::syntax_errors::statement_position::check_mistaken_
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::{return_rule_error, return_syntax_error};
 
+// --------------------------
+//  Accessed-symbol statement helper
+// --------------------------
+
 fn push_accessed_symbol_statement(
     accessed: AstNode,
     ast: &mut Vec<AstNode>,
@@ -67,6 +71,10 @@ fn push_accessed_symbol_statement(
         }
     }
 }
+
+// --------------------------
+//  `this` statement parsing
+// --------------------------
 
 pub(crate) fn parse_this_statement(
     token_stream: &mut FileTokens,
@@ -143,6 +151,10 @@ pub(crate) fn parse_this_statement(
         }
     }
 }
+
+// --------------------------
+//  Symbol-led statement parsing
+// --------------------------
 
 pub(crate) fn parse_symbol_statement(
     token_stream: &mut FileTokens,

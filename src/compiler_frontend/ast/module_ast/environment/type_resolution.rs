@@ -44,6 +44,9 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         );
         let _ = constant_resolution_start;
 
+        // ----------------------------
+        //  Resolve struct field types
+        // ----------------------------
         let struct_fields_resolution_start = Instant::now();
         for header in sorted_headers {
             let HeaderKind::Struct {
@@ -127,6 +130,9 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         );
         let _ = struct_fields_resolution_start;
 
+        // ----------------------------
+        //  Resolve choice variant payload types
+        // ----------------------------
         let choice_resolution_start = Instant::now();
         for header in sorted_headers {
             let HeaderKind::Choice {
@@ -214,6 +220,9 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         );
         let _ = choice_resolution_start;
 
+        // ----------------------------
+        //  Validate no recursive runtime structs
+        // ----------------------------
         let recursive_validation_start = Instant::now();
         validate_no_recursive_runtime_structs(&self.resolved_struct_fields_by_path, string_table)
             .map_err(|error| self.error_messages(error, string_table))?;
