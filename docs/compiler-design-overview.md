@@ -121,7 +121,7 @@ AST consumes file-local visibility through `ScopeContext`. It validates semantic
 
 Compiler-facing rules:
 
-- Source libraries are normal modules behind `#mod.bst` facades
+- Source libraries are normal modules behind `#mod.bst` facades and participate in module-level dependency sorting
 - External packages are virtual typed symbols provided by backend metadata, not `.bst` source files
 - External imports resolve to stable frontend IDs such as `ExternalFunctionId`
 - Expression/type resolution uses the active `ScopeContext` visibility maps, not global bare-name lookup
@@ -288,6 +288,14 @@ It does not use executable function/start body references or body-local declarat
 Dependency sorting exists only to order top-level declarations before AST construction.
 
 Dependency sorting orders constants using header-provided constant initializer dependency edges. Same-file constants keep source-order semantics. Same-file forward references are rejected. Cross-file constant cycles are dependency cycles.
+
+### Facades and source libraries in dependency sorting
+
+Module-root facades (`#mod.bst` files that belong to a project module root) are excluded from dependency sorting and appended after sorted top-level headers. They act as boundary re-export layers — other files in the same module should not depend on symbols declared directly inside the module-root facade.
+
+Source-library facades (`#mod.bst` files provided by builder source libraries such as `@html`) participate in dependency sorting like any other file. Their declarations are first-class providers to the consuming module, not opaque boundaries. Because source libraries have no outgoing dependency edges to project files, the topological sort naturally places them before project files that import them.
+
+> **Note:** In the current architecture, source libraries are compiled into each consuming module. A future package system may move to separate library compilation, where libraries are built first and project modules consume pre-compiled library artifacts.
 
 ### Header/dependency/AST contract
 

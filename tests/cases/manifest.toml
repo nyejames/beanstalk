@@ -3779,3 +3779,8 @@ tags = ["integration", "constants", "dependency-resolution", "structs"]
 id = "linear_constant_resolution_order"
 path = "linear_constant_resolution_order"
 tags = ["integration", "constants", "dependency-resolution", "header-sorting"]
+
+[[case]]
+id = "const_template_head_imported_source_library"
+path = "const_template_head_imported_source_library"
+tags = ["integration", "constants", "templates", "source-libraries", "imports"]

@@ -78,10 +78,12 @@ pub fn resolve_module_dependencies(
         import_environment,
     } = parsed;
 
-    // Partition: StartFunction and facade (#mod.bst) headers are appended last, not sorted.
-    // WHY: start is build-system-only and has no dependents; facades only consume dependencies
-    // from other files and do not expose symbols to the rest of the module, so they must not
-    // participate in cycle detection or dependency-edge traversal.
+    // Partition: StartFunction and module-root facade (#mod.bst) headers are appended last, not sorted.
+    // WHY: start is build-system-only and has no dependents; module-root facades only consume
+    // dependencies from other module files and do not expose symbols to the rest of the module,
+    // so they must not participate in cycle detection or dependency-edge traversal.
+    // Source-library facades participate in sorting because their declarations are first-class
+    // providers to the consuming module.
     let mut facade_headers: Vec<Header> = Vec::new();
     let mut start_headers: Vec<Header> = Vec::new();
     let top_level_headers: Vec<Header> = headers
@@ -90,7 +92,7 @@ pub fn resolve_module_dependencies(
             if matches!(h.kind, HeaderKind::StartFunction) {
                 start_headers.push(h);
                 None
-            } else if is_facade_header(&h, string_table) {
+            } else if is_module_root_facade_header(&h, &module_symbols, string_table) {
                 facade_headers.push(h);
                 None
             } else {
@@ -142,8 +144,9 @@ pub fn resolve_module_dependencies(
         return Err(errors);
     }
 
-    // Append facade headers and start headers after the sorted top-level headers.
-    // WHY: facades only consume dependencies and start sees all declarations, so both must come last.
+    // Append module-root facade headers and start headers after the sorted top-level headers.
+    // WHY: module-root facades only consume dependencies and start sees all declarations, so both
+    // must come last. Source-library facades are already in `sorted` via the topological sort.
     sorted.extend(facade_headers);
     sorted.extend(start_headers);
 
@@ -328,12 +331,25 @@ fn is_same_file_symbol_hint(path: &InternedPath, source_file: &InternedPath) -> 
     path.parent().as_ref() == Some(source_file)
 }
 
-/// Checks whether a header belongs to a module facade (`#mod.bst`).
+/// Checks whether a header belongs to a **module-root** facade (`#mod.bst`).
 ///
-/// WHAT: facade files only consume dependencies from other module files and do not expose
-/// symbols to the rest of the module, so they should be excluded from dependency sorting.
-fn is_facade_header(header: &Header, string_table: &StringTable) -> bool {
-    path_is_mod_file(&header.source_file, string_table)
+/// WHAT: module-root facade files only consume dependencies from other module files and do not
+/// expose symbols to the rest of the module, so they should be excluded from dependency sorting.
+/// WHY: source-library `#mod.bst` files are also facades, but their declarations are explicitly
+/// meant to be imported and depended on by the consuming module. Excluding them would place
+/// their constants after module constants that reference them, breaking constant resolution.
+fn is_module_root_facade_header(
+    header: &Header,
+    module_symbols: &ModuleSymbols,
+    string_table: &StringTable,
+) -> bool {
+    if !path_is_mod_file(&header.source_file, string_table) {
+        return false;
+    }
+    // A #mod.bst that belongs to a source library is NOT a module-root facade.
+    !module_symbols
+        .file_library_membership
+        .contains_key(&header.source_file)
 }
 
 #[cfg(test)]
