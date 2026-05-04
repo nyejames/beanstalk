@@ -27,22 +27,18 @@ use std::time::Instant;
 
 pub(crate) struct AstModuleEnvironment {
     pub(crate) module_symbols: ModuleSymbols,
-    pub(crate) file_import_bindings:
-        FxHashMap<InternedPath, FileImportBindings>,
+    pub(crate) file_import_bindings: FxHashMap<InternedPath, FileImportBindings>,
     pub(crate) warnings: Vec<CompilerWarning>,
     pub(crate) declaration_table: Rc<TopLevelDeclarationTable>,
     pub(crate) module_constants: Vec<Declaration>,
     pub(crate) rendered_path_usages: Rc<RefCell<Vec<RenderedPathUsage>>>,
     pub(crate) builtin_struct_ast_nodes: Vec<AstNode>,
-    pub(crate) resolved_struct_fields_by_path:
-        FxHashMap<InternedPath, Vec<Declaration>>,
+    pub(crate) resolved_struct_fields_by_path: FxHashMap<InternedPath, Vec<Declaration>>,
     pub(crate) resolved_function_signatures_by_path:
         FxHashMap<InternedPath, ResolvedFunctionSignature>,
-    pub(crate) resolved_type_aliases_by_path:
-        FxHashMap<InternedPath, DataType>,
+    pub(crate) resolved_type_aliases_by_path: FxHashMap<InternedPath, DataType>,
     pub(crate) receiver_methods: Rc<ReceiverMethodCatalog>,
-    pub(crate) generic_nominal_instantiations:
-        Rc<GenericNominalInstantiationCache>,
+    pub(crate) generic_nominal_instantiations: Rc<GenericNominalInstantiationCache>,
 }
 
 pub(crate) struct AstModuleEnvironmentBuilder<'context, 'services> {
@@ -57,16 +53,12 @@ pub(crate) struct AstModuleEnvironmentBuilder<'context, 'services> {
     pub(crate) module_constants: Vec<Declaration>,
     pub(crate) rendered_path_usages: Rc<RefCell<Vec<RenderedPathUsage>>>,
     pub(crate) builtin_struct_ast_nodes: Vec<AstNode>,
-    pub(crate) resolved_struct_fields_by_path:
-        FxHashMap<InternedPath, Vec<Declaration>>,
-    pub(crate) struct_source_by_path:
-        FxHashMap<InternedPath, InternedPath>,
+    pub(crate) resolved_struct_fields_by_path: FxHashMap<InternedPath, Vec<Declaration>>,
+    pub(crate) struct_source_by_path: FxHashMap<InternedPath, InternedPath>,
     pub(crate) resolved_function_signatures_by_path:
         FxHashMap<InternedPath, ResolvedFunctionSignature>,
-    pub(crate) resolved_type_aliases_by_path:
-        FxHashMap<InternedPath, DataType>,
-    pub(crate) generic_nominal_instantiations:
-        Rc<GenericNominalInstantiationCache>,
+    pub(crate) resolved_type_aliases_by_path: FxHashMap<InternedPath, DataType>,
+    pub(crate) generic_nominal_instantiations: Rc<GenericNominalInstantiationCache>,
 }
 
 impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {

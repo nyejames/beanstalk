@@ -33,9 +33,7 @@ pub(crate) struct AstPhaseContext<'a> {
 }
 
 impl<'a> AstPhaseContext<'a> {
-    pub(crate) fn from_build_context(
-        context: AstBuildContext<'a>,
-    ) -> (Self, &'a mut StringTable) {
+    pub(crate) fn from_build_context(context: AstBuildContext<'a>) -> (Self, &'a mut StringTable) {
         let AstBuildContext {
             external_package_registry,
             style_directives,

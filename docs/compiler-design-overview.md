@@ -111,11 +111,13 @@ Project builders can register style directives through `frontend_style_directive
 Individual directive syntax and behavior belong in `docs/language-overview.md`.
 
 ### Import, library, and external package contract
-
 Stage 0 discovers source libraries as normal module inputs.
-Header parsing records, validates, normalizes, and resolves imports into file-local visibility data.
-Dependency sorting uses header dependency edges.
-AST import binding enforces file-local visibility, collision rules, prelude/builtin reservations, and external symbol resolution.
+
+Header parsing/import preparation resolves imports, re-exports, aliases, facade boundaries, external package symbols, prelude symbols, builtins, and file-local visibility. It produces the visibility environment consumed by dependency sorting and AST.
+
+Dependency sorting uses header-provided dependency edges.
+
+AST consumes file-local visibility through `ScopeContext`. It validates semantic use of visible symbols, but it does not rebuild import bindings or rediscover import visibility.
 
 Compiler-facing rules:
 
@@ -308,7 +310,7 @@ AST consumes already-sorted declaration headers and the header-built module envi
 
 Internally, AST construction is organized around three phase owners:
 
-* `build_ast_environment`: builds file import bindings, resolved declaration metadata, constants, nominal types, function signatures, receiver catalog data, and shared environment side channels
+* `build_ast_environment`: consumes header-built file visibility, then resolves declaration metadata, constants, nominal types, function signatures, receiver catalog data, and shared environment side channels
 * `emit_ast_nodes`: parses function/start/template bodies against the completed environment and emits AST nodes plus const-template output
 * `finalize_ast`: performs HIR-boundary cleanup, including doc fragment extraction, const top-level fragment assembly, module constant normalization, template normalization, type-boundary validation, builtin AST merging, and final `Ast` construction
 
