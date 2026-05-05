@@ -12,12 +12,12 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 
 # Plans / Notes / TODOS
 - Type environment redesign plan: `docs/roadmap/plans/type-environment-redesign-plan.md`
-- Parallel tokenization/header parsing and string table plan (after the major AST refactoring plans): `docs/roadmap/plans/parallel-tokenize-header-parse-string-table-plan.md`
-- Template optimisation follow-up: track measured finalization/template bottlenecks in the AST benchmark log before creating a separate plan.
+- Diagnostics refactor: `docs/roadmap/plans/compiler_diagnostics_redesign_plan.md`
 - Generics (FINISHED PHASE 1 - 3 ONLY): `docs/roadmap/plans/beanstalk-generics-implementation-plan.md`
 - Traits
 - New Result/Error syntax: `docs/roadmap/plans/beanstalk-error-catch-syntax-migration-plan.md`
 - True Results / Options with generics
+- Parallel tokenization/header parsing and string table plan (after the major AST refactoring plans): `docs/roadmap/plans/parallel-tokenize-header-parse-string-table-plan.md`
 - Closures
 - Hash Maps
 - Compile time arbitary precision aritmetic + Decimals Type support
