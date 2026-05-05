@@ -22,7 +22,6 @@ use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{
     BuiltinCastKind, Expression, ExpressionKind, Operator, ResultCallHandling, ResultVariant,
 };
-use crate::compiler_frontend::ast::instrumentation::{AstCounter, increment_ast_counter};
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -33,6 +32,17 @@ const CONSTANT_FOLDING_STAGE: &str = "Constant Folding";
 const INTEGER_OVERFLOW_SUGGESTION: &str =
     "Reduce the value range or compute this at runtime instead";
 const FLOAT_NON_FINITE_SUGGESTION: &str = "Use smaller values or compute this at runtime instead";
+
+/// Result of constant folding over an RPN expression stack.
+///
+/// WHAT: distinguishes expressions that were fully or partially folded from those
+///       that stayed unchanged, so callers can avoid cloning runtime RPN.
+pub enum ConstantFoldResult {
+    /// The expression contained runtime-dependent operands and the original RPN is unchanged.
+    Unchanged,
+    /// The expression was fully or partially reduced; the contained stack is the new RPN.
+    Folded(Vec<AstNode>),
+}
 
 /// Perform conservative constant folding on an expression in RPN order.
 ///
@@ -57,7 +67,7 @@ const FLOAT_NON_FINITE_SUGGESTION: &str = "Use smaller values or compute this at
 pub fn constant_fold(
     output_stack: &[AstNode],
     string_table: &mut StringTable,
-) -> Result<Vec<AstNode>, CompilerError> {
+) -> Result<ConstantFoldResult, CompilerError> {
     // If any operand is runtime-dependent, keep the original RPN intact.
     // Partial folding can invalidate operand/operator ordering for chained runtime expressions.
     if output_stack.iter().any(|node| {
@@ -66,8 +76,7 @@ pub fn constant_fold(
             NodeKind::Rvalue(expr) if !expr.kind.is_foldable()
         ) || !matches!(&node.kind, NodeKind::Rvalue(_) | NodeKind::Operator(_))
     }) {
-        increment_ast_counter(AstCounter::RuntimeRpnCloneCount);
-        return Ok(output_stack.to_vec());
+        return Ok(ConstantFoldResult::Unchanged);
     }
 
     let mut stack: Vec<AstNode> = Vec::with_capacity(output_stack.len());
@@ -163,7 +172,7 @@ pub fn constant_fold(
         }
     }
 
-    Ok(stack)
+    Ok(ConstantFoldResult::Folded(stack))
 }
 
 pub fn fold_compile_time_expression(

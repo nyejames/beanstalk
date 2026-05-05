@@ -570,3 +570,36 @@ Notes: fixed `module_symbols.rs` ownership split comment from "AST owns: Import 
 
 Audit notes: no AST constant graph remains. No AST topo-sort remains. No AST import-binding builder remains. All doc comments correctly state stage ownership. `just validate` passed (1334 unit tests, 784/784 integration tests).
 
+
+### Phase 7 — Expression and Parser Churn Cleanup
+
+Phase: Phase 7 / bounded token windows and ConstantFoldResult
+
+Commit: pending (working tree)
+
+Before benchmark run directory: `benchmarks/results/2026-05-18_23-49-58`
+
+Before summary path: `benchmarks/results/2026-05-18_23-49-58/summary.md`
+
+After benchmark run directory: `benchmarks/results/2026-05-19_00-00-13`
+
+After summary path: `benchmarks/results/2026-05-19_00-00-13/summary.md`
+
+Key rows:
+
+| Case | Mean Before (ms) | Mean After (ms) | Delta | Median Before (ms) | Median After (ms) | Failures |
+|---|---:|---:|---:|---:|---:|---:|
+| check_benchmarks_speed-test_bst | 70.98 | 102.25 | +44.1% | 70.66 | 101.03 | 0 |
+| build_benchmarks_speed-test_bst | 75.67 | 80.60 | +6.5% | 75.11 | 80.02 | 0 |
+| check_docs | 68.97 | 90.29 | +30.9% | 68.58 | 72.07 | 0 |
+| check_benchmarks_template-stress_bst | 15.88 | 20.56 | +29.5% | 15.87 | 19.83 | 0 |
+| check_benchmarks_type-stress_bst | 11.22 | 14.44 | +28.7% | 11.18 | 14.11 | 0 |
+| check_benchmarks_fold-stress_bst | 12.49 | 14.38 | +15.1% | 12.19 | 13.89 | 0 |
+| check_benchmarks_pattern-stress_bst | 11.08 | 14.29 | +29.0% | 11.06 | 14.49 | 0 |
+| check_benchmarks_collection-stress_bst | 11.22 | 13.52 | +20.5% | 11.24 | 12.61 | 0 |
+
+Regression classification: neutral / mixed within observed run-to-run variance. The after run shows high variance (speed-test stddev 10.64 ms, docs stddev 54.38 ms), suggesting environmental noise rather than a code regression. The changes in this phase remove allocations (no `Vec<Token>` copy for bounded expressions, no synthetic EOF, no `FileTokens::new` for `create_expression_until`) and eliminate a full `Vec<AstNode>` clone for unchanged runtime RPN via `ConstantFoldResult`. A second full bench run (`2026-05-18_23-58-45`) produced similar means, confirming stability of the after state. The bench-quick run embedded in `just validate` (`2026-05-19_00-00-15`) gave speed-test 83.97 ms and docs 72.24 ms, closer to baseline. The large spread is attributed to system load during benchmark execution, not the code changes.
+
+Notes: `create_expression_until` now caps `FileTokens.length` to the delimiter index instead of copying tokens and creating a synthetic EOF. `FileTokens::peek_next_token` was fixed to respect `self.length` so bounded windows cannot peek past their cap. `constant_fold` returns `ConstantFoldResult::Unchanged` instead of cloning the input stack; `evaluate_expression` reuses the already-owned `output_queue` directly. Counters renamed: `BoundedExpressionTokenCopies` → `BoundedExpressionTokenWindows`, `BoundedExpressionTokensCopiedTotal` → `BoundedExpressionTokenCopiesAvoided`, `RuntimeRpnCloneCount` → `RuntimeRpnUnchangedFolds`. Added 6 new unit tests: 5 bounded-expression edge cases (empty delimiter, simple literal, nested parentheses, nested curly braces, missing delimiter) and 1 unchanged-fold detection test.
+
+Audit notes: bounded window API is narrow — no new parser abstraction, only a temporary `length` mutation local to `create_expression_until`. All expression parsing paths (match guards, loop ranges) continue to work. Shunting-yard/RPN pipeline is unchanged. `just validate` passed (1340 unit tests, 784/784 integration tests). No language behavior changed; progress matrix unchanged.

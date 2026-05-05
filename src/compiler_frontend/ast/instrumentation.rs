@@ -8,9 +8,9 @@
 pub(crate) enum AstCounter {
     ScopeContextsCreated,
     ScopeLocalDeclarationsClonedTotal,
-    BoundedExpressionTokenCopies,
-    BoundedExpressionTokensCopiedTotal,
-    RuntimeRpnCloneCount,
+    BoundedExpressionTokenWindows,
+    BoundedExpressionTokenCopiesAvoided,
+    RuntimeRpnUnchangedFolds,
     TemplateNormalizationNodesVisited,
     ModuleConstantNormalizationExpressionsVisited,
 }
@@ -22,9 +22,9 @@ mod detailed {
 
     static SCOPE_CONTEXTS_CREATED: AtomicUsize = AtomicUsize::new(0);
     static SCOPE_LOCAL_DECLARATIONS_CLONED_TOTAL: AtomicUsize = AtomicUsize::new(0);
-    static BOUNDED_EXPRESSION_TOKEN_COPIES: AtomicUsize = AtomicUsize::new(0);
-    static BOUNDED_EXPRESSION_TOKENS_COPIED_TOTAL: AtomicUsize = AtomicUsize::new(0);
-    static RUNTIME_RPN_CLONE_COUNT: AtomicUsize = AtomicUsize::new(0);
+    static BOUNDED_EXPRESSION_TOKEN_WINDOWS: AtomicUsize = AtomicUsize::new(0);
+    static BOUNDED_EXPRESSION_TOKEN_COPIES_AVOIDED: AtomicUsize = AtomicUsize::new(0);
+    static RUNTIME_RPN_UNCHANGED_FOLDS: AtomicUsize = AtomicUsize::new(0);
     static TEMPLATE_NORMALIZATION_NODES_VISITED: AtomicUsize = AtomicUsize::new(0);
     static MODULE_CONSTANT_NORMALIZATION_EXPRESSIONS_VISITED: AtomicUsize = AtomicUsize::new(0);
 
@@ -46,11 +46,11 @@ mod detailed {
         let scope_contexts_created = counter_value(AstCounter::ScopeContextsCreated);
         let scope_local_declarations_cloned_total =
             counter_value(AstCounter::ScopeLocalDeclarationsClonedTotal);
-        let bounded_expression_token_copies =
-            counter_value(AstCounter::BoundedExpressionTokenCopies);
-        let bounded_expression_tokens_copied_total =
-            counter_value(AstCounter::BoundedExpressionTokensCopiedTotal);
-        let runtime_rpn_clone_count = counter_value(AstCounter::RuntimeRpnCloneCount);
+        let bounded_expression_token_windows =
+            counter_value(AstCounter::BoundedExpressionTokenWindows);
+        let bounded_expression_token_copies_avoided =
+            counter_value(AstCounter::BoundedExpressionTokenCopiesAvoided);
+        let runtime_rpn_unchanged_folds = counter_value(AstCounter::RuntimeRpnUnchangedFolds);
         let template_normalization_nodes_visited =
             counter_value(AstCounter::TemplateNormalizationNodesVisited);
         let module_constant_normalization_expressions_visited =
@@ -66,14 +66,14 @@ mod detailed {
             Dark Green scope_local_declarations_cloned_total
         );
         saying::say!(
-            "  bounded expression token copies = ",
-            Dark Green bounded_expression_token_copies
+            "  bounded expression token windows = ",
+            Dark Green bounded_expression_token_windows
         );
         saying::say!(
-            "  bounded expression tokens copied total = ",
-            Dark Green bounded_expression_tokens_copied_total
+            "  bounded expression token copies avoided = ",
+            Dark Green bounded_expression_token_copies_avoided
         );
-        saying::say!("  runtime RPN clone count = ", Dark Green runtime_rpn_clone_count);
+        saying::say!("  runtime RPN unchanged folds = ", Dark Green runtime_rpn_unchanged_folds);
         saying::say!(
             "  template normalization nodes visited = ",
             Dark Green template_normalization_nodes_visited
@@ -88,9 +88,9 @@ mod detailed {
         [
             AstCounter::ScopeContextsCreated,
             AstCounter::ScopeLocalDeclarationsClonedTotal,
-            AstCounter::BoundedExpressionTokenCopies,
-            AstCounter::BoundedExpressionTokensCopiedTotal,
-            AstCounter::RuntimeRpnCloneCount,
+            AstCounter::BoundedExpressionTokenWindows,
+            AstCounter::BoundedExpressionTokenCopiesAvoided,
+            AstCounter::RuntimeRpnUnchangedFolds,
             AstCounter::TemplateNormalizationNodesVisited,
             AstCounter::ModuleConstantNormalizationExpressionsVisited,
         ]
@@ -102,13 +102,13 @@ mod detailed {
 
             AstCounter::ScopeLocalDeclarationsClonedTotal => &SCOPE_LOCAL_DECLARATIONS_CLONED_TOTAL,
 
-            AstCounter::BoundedExpressionTokenCopies => &BOUNDED_EXPRESSION_TOKEN_COPIES,
+            AstCounter::BoundedExpressionTokenWindows => &BOUNDED_EXPRESSION_TOKEN_WINDOWS,
 
-            AstCounter::BoundedExpressionTokensCopiedTotal => {
-                &BOUNDED_EXPRESSION_TOKENS_COPIED_TOTAL
+            AstCounter::BoundedExpressionTokenCopiesAvoided => {
+                &BOUNDED_EXPRESSION_TOKEN_COPIES_AVOIDED
             }
 
-            AstCounter::RuntimeRpnCloneCount => &RUNTIME_RPN_CLONE_COUNT,
+            AstCounter::RuntimeRpnUnchangedFolds => &RUNTIME_RPN_UNCHANGED_FOLDS,
 
             AstCounter::TemplateNormalizationNodesVisited => &TEMPLATE_NORMALIZATION_NODES_VISITED,
 

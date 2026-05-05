@@ -7,10 +7,11 @@
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler_frontend::ast::instrumentation::{AstCounter, increment_ast_counter};
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::optimizers::constant_folding::{
-    constant_fold, fold_compile_time_expression,
+    ConstantFoldResult, constant_fold, fold_compile_time_expression,
 };
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::type_coercion::compatibility::is_type_compatible;
@@ -64,35 +65,58 @@ pub fn evaluate_expression(
 
     let value_mode = value_mode.as_owned();
     eval_log!("Attempting to Fold: ", Pretty output_queue);
-    let stack = constant_fold(&output_queue, string_table)?;
-    eval_log!("Stack after folding: ", Pretty stack);
 
-    if stack.len() == 1 {
-        return stack[0].get_expr();
-    }
+    match constant_fold(&output_queue, string_table)? {
+        ConstantFoldResult::Unchanged => {
+            increment_ast_counter(AstCounter::RuntimeRpnUnchangedFolds);
+            eval_log!("Fold unchanged — reusing owned RPN");
 
-    if stack.is_empty() {
-        let expected_type_str = current_type.display_with_table(string_table);
-        return_syntax_error!(
-            "Invalid expression: no valid operands found during evaluation.",
-            SourceLocation::default(),
-            {
-                ExpectedType => expected_type_str,
-                CompilationStage => String::from("Expression Evaluation"),
-                PrimarySuggestion => String::from("Ensure the expression contains valid operands and operators"),
+            if output_queue.len() == 1 {
+                return output_queue.into_iter().next().unwrap().get_expr();
             }
-        );
+
+            let first_node_start = output_queue[0].location.start_pos;
+            let last_node_end = output_queue[output_queue.len() - 1].location.end_pos;
+
+            Ok(Expression::runtime(
+                output_queue,
+                resolved_type,
+                SourceLocation::new(context.scope.to_owned(), first_node_start, last_node_end),
+                value_mode,
+            ))
+        }
+
+        ConstantFoldResult::Folded(stack) => {
+            eval_log!("Stack after folding: ", Pretty stack);
+
+            if stack.len() == 1 {
+                return stack[0].get_expr();
+            }
+
+            if stack.is_empty() {
+                let expected_type_str = current_type.display_with_table(string_table);
+                return_syntax_error!(
+                    "Invalid expression: no valid operands found during evaluation.",
+                    SourceLocation::default(),
+                    {
+                        ExpectedType => expected_type_str,
+                        CompilationStage => String::from("Expression Evaluation"),
+                        PrimarySuggestion => String::from("Ensure the expression contains valid operands and operators"),
+                    }
+                );
+            }
+
+            let first_node_start = stack[0].location.start_pos;
+            let last_node_end = stack[stack.len() - 1].location.end_pos;
+
+            Ok(Expression::runtime(
+                stack,
+                resolved_type,
+                SourceLocation::new(context.scope.to_owned(), first_node_start, last_node_end),
+                value_mode,
+            ))
+        }
     }
-
-    let first_node_start = stack[0].location.start_pos;
-    let last_node_end = stack[stack.len() - 1].location.end_pos;
-
-    Ok(Expression::runtime(
-        stack,
-        resolved_type,
-        SourceLocation::new(context.scope.to_owned(), first_node_start, last_node_end),
-        value_mode,
-    ))
 }
 
 fn validate_expression_result_type(

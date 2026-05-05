@@ -16,7 +16,7 @@ use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::token_scan::find_expression_end_index;
-use crate::compiler_frontend::tokenizer::tokens::{FileTokens, Token, TokenKind};
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::type_coercion::parse_context::parse_expectation_for_target_type;
 use crate::compiler_frontend::value_mode::ValueMode;
 use crate::{return_syntax_error, return_type_error};
@@ -259,29 +259,30 @@ pub(crate) fn create_expression_until(
         )
     }
 
-    let copied_token_count = end_index.saturating_sub(start_index);
-    add_ast_counter(AstCounter::BoundedExpressionTokenCopies, 1);
+    let window_token_count = end_index.saturating_sub(start_index);
+    add_ast_counter(AstCounter::BoundedExpressionTokenWindows, 1);
     add_ast_counter(
-        AstCounter::BoundedExpressionTokensCopiedTotal,
-        copied_token_count,
+        AstCounter::BoundedExpressionTokenCopiesAvoided,
+        window_token_count,
     );
 
-    let mut expression_tokens = token_stream.tokens[start_index..end_index].to_vec();
-    expression_tokens.push(Token::new(
-        TokenKind::Eof,
-        token_stream.tokens[end_index].location.clone(),
-    ));
+    let original_length = token_stream.length;
+    token_stream.length = end_index;
 
-    let mut scoped_stream = FileTokens::new(token_stream.src_path.clone(), expression_tokens);
-    let expression = create_expression(
-        &mut scoped_stream,
+    let result = create_expression(
+        token_stream,
         context,
         data_type,
         value_mode,
         false,
         string_table,
-    )?;
+    );
 
+    token_stream.length = original_length;
     token_stream.index = end_index;
-    Ok(expression)
+    result
 }
+
+#[cfg(test)]
+#[path = "tests/bounded_expression_tests.rs"]
+mod bounded_expression_tests;

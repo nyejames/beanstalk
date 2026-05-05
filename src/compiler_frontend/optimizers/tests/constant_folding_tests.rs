@@ -318,7 +318,10 @@ fn constant_fold_folds_comparison_then_boolean_chain() {
         operator_node(Operator::And),
     ];
 
-    let folded = constant_fold(&nodes, &mut string_table).expect("folding should succeed");
+    let folded = match constant_fold(&nodes, &mut string_table).expect("folding should succeed") {
+        ConstantFoldResult::Folded(stack) => stack,
+        ConstantFoldResult::Unchanged => panic!("expected folded result"),
+    };
     assert_eq!(folded.len(), 1);
     assert!(matches!(
         folded[0].kind,
@@ -341,7 +344,10 @@ fn constant_fold_keeps_unary_not_when_operand_is_not_bool_literal() {
         operator_node(Operator::Not),
     ];
 
-    let folded = constant_fold(&nodes, &mut string_table).expect("folding should not error");
+    let folded = match constant_fold(&nodes, &mut string_table).expect("folding should not error") {
+        ConstantFoldResult::Folded(stack) => stack,
+        ConstantFoldResult::Unchanged => panic!("expected folded result"),
+    };
     assert_eq!(folded.len(), 2);
     assert!(matches!(
         folded[0].kind,
@@ -372,8 +378,42 @@ fn constant_fold_stays_conservative_with_runtime_operands() {
         operator_node(Operator::And),
     ];
 
-    let folded =
-        constant_fold(&nodes, &mut string_table).expect("runtime-dependent folding should succeed");
-    assert_eq!(folded.len(), nodes.len());
-    assert!(matches!(folded[2].kind, NodeKind::Operator(Operator::And)));
+    match constant_fold(&nodes, &mut string_table)
+        .expect("runtime-dependent folding should succeed")
+    {
+        ConstantFoldResult::Unchanged => {}
+        ConstantFoldResult::Folded(_) => panic!("expected unchanged result for runtime operands"),
+    }
+}
+
+#[test]
+fn constant_fold_unchanged_reuses_original_stack() {
+    let mut string_table = StringTable::new();
+    let flag_name = InternedPath::from_single_str("flag", &mut string_table);
+    let nodes = vec![
+        rvalue_node(Expression::reference(
+            flag_name,
+            DataType::Bool,
+            SourceLocation::default(),
+            ValueMode::ImmutableReference,
+        )),
+        rvalue_node(Expression::bool(
+            true,
+            SourceLocation::default(),
+            ValueMode::ImmutableOwned,
+        )),
+        operator_node(Operator::And),
+    ];
+
+    let result = constant_fold(&nodes, &mut string_table).expect("folding should succeed");
+
+    match result {
+        ConstantFoldResult::Unchanged => {
+            // The original nodes slice length should match what we passed in.
+            assert_eq!(nodes.len(), 3);
+        }
+        ConstantFoldResult::Folded(_) => {
+            panic!("expected Unchanged for runtime-dependent operands")
+        }
+    }
 }

@@ -137,6 +137,9 @@ impl FileTokens {
     }
 
     pub fn peek_next_token(&self) -> Option<&TokenKind> {
+        if self.index + 1 >= self.length {
+            return None;
+        }
         self.tokens.get(self.index + 1).map(|token| &token.kind)
     }
 
