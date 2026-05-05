@@ -17,11 +17,12 @@ pub(super) fn order_expression_nodes(
     }
 
     let mut output_queue: Vec<AstNode> = Vec::new();
-    let mut operators_stack: Vec<AstNode> = Vec::new();
+    let mut operator_stack: Vec<AstNode> = Vec::new();
     let location = extract_expression_location(&nodes)?;
 
     // The parser already handled parentheses recursively, so this pass only needs to order the
     // flat infix fragment by precedence and associativity before typing/folding it.
+
     for node in nodes {
         eval_log!("Evaluating node in expression: ", Pretty node);
         match &node.kind {
@@ -40,13 +41,13 @@ pub(super) fn order_expression_nodes(
                 let left_associative = node.is_left_associative();
 
                 pop_higher_precedence(
-                    &mut operators_stack,
+                    &mut operator_stack,
                     &mut output_queue,
                     node_precedence,
                     left_associative,
                 )?;
 
-                operators_stack.push(node);
+                operator_stack.push(node);
             }
 
             _ => {
@@ -58,7 +59,7 @@ pub(super) fn order_expression_nodes(
         }
     }
 
-    while let Some(operator) = operators_stack.pop() {
+    while let Some(operator) = operator_stack.pop() {
         output_queue.push(operator);
     }
 
@@ -68,13 +69,13 @@ pub(super) fn order_expression_nodes(
 // Standard shunting-yard pop rule: earlier operators leave the stack when they bind at least
 // as tightly as the new operator, adjusted for right-associative cases like exponentiation.
 fn pop_higher_precedence(
-    operators_stack: &mut Vec<AstNode>,
+    operator_stack: &mut Vec<AstNode>,
     output_queue: &mut Vec<AstNode>,
     current_precedence: u32,
     left_associative: bool,
 ) -> Result<(), CompilerError> {
-    while let Some(top_op_node) = operators_stack.last() {
-        let existing_precedence = top_op_node.get_precedence();
+    while let Some(top_operator_node) = operator_stack.last() {
+        let existing_precedence = top_operator_node.get_precedence();
 
         let should_pop = if left_associative {
             existing_precedence >= current_precedence
@@ -83,7 +84,7 @@ fn pop_higher_precedence(
         };
 
         if should_pop {
-            let Some(operator) = operators_stack.pop() else {
+            let Some(operator) = operator_stack.pop() else {
                 return_compiler_error!(
                     "Expression ordering lost operator stack state during shunting-yard pop."
                 );

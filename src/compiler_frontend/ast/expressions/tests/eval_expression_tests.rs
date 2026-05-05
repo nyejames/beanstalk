@@ -104,6 +104,7 @@ fn ordinary_expression_rejects_path_string_concatenation() {
         &mut string_table,
     )
     .expect_err("ordinary expressions should stay strict");
+
     assert!(
         error
             .msg
@@ -117,6 +118,7 @@ fn ordinary_expression_rejects_path_string_concatenation() {
 #[test]
 fn unary_not_requires_boolean_operand() {
     let error = parse_single_file_ast_error("value = not 1\n");
+
     assert_eq!(error.error_type, ErrorType::Type);
     assert!(
         error
@@ -144,6 +146,7 @@ fn unary_not_requires_boolean_operand() {
 #[test]
 fn logical_and_requires_bool_operands() {
     let error = parse_single_file_ast_error("value = true and 1\n");
+
     assert_eq!(error.error_type, ErrorType::Type);
     assert!(
         error
@@ -171,6 +174,7 @@ fn logical_and_requires_bool_operands() {
 #[test]
 fn logical_and_reports_found_types_in_operand_order() {
     let error = parse_single_file_ast_error("value = 1 and true\n");
+
     assert_eq!(error.error_type, ErrorType::Type);
     assert_eq!(
         error
@@ -184,6 +188,7 @@ fn logical_and_reports_found_types_in_operand_order() {
 #[test]
 fn logical_or_rejects_string_operands() {
     let error = parse_single_file_ast_error("value = \"a\" or \"b\"\n");
+
     assert_eq!(error.error_type, ErrorType::Type);
     assert!(
         error
@@ -204,6 +209,7 @@ fn logical_or_rejects_string_operands() {
 #[test]
 fn logical_mix_rejects_non_bool_rhs_after_comparison() {
     let error = parse_single_file_ast_error("value = 1 < 2 and 3\n");
+
     assert_eq!(error.error_type, ErrorType::Type);
     assert!(
         error
@@ -224,6 +230,7 @@ fn logical_mix_rejects_non_bool_rhs_after_comparison() {
 #[test]
 fn ordinary_operators_reject_result_operands_without_handler() {
     let error = parse_single_file_ast_error("value = Int(\"1\") is 1\n");
+
     assert_eq!(error.error_type, ErrorType::Type);
     assert!(
         error
@@ -237,6 +244,7 @@ fn ordinary_operators_reject_result_operands_without_handler() {
 #[test]
 fn arithmetic_operator_rejects_result_operands_without_handler() {
     let error = parse_single_file_ast_error("value = Int(\"1\") + 1\n");
+
     assert_eq!(error.error_type, ErrorType::Type);
     assert!(
         error
@@ -250,6 +258,7 @@ fn arithmetic_operator_rejects_result_operands_without_handler() {
 #[test]
 fn logical_operator_rejects_result_operands_before_bool_validation() {
     let error = parse_single_file_ast_error("value = true and Int(\"1\")\n");
+
     assert_eq!(error.error_type, ErrorType::Type);
     assert!(
         error
@@ -263,6 +272,7 @@ fn logical_operator_rejects_result_operands_before_bool_validation() {
 #[test]
 fn logical_operator_rejects_option_operands_with_precise_found_type() {
     let error = parse_single_file_ast_error("maybe String? = none\nvalue = maybe or true\n");
+
     assert_eq!(error.error_type, ErrorType::Type);
     assert!(
         error
@@ -283,6 +293,7 @@ fn logical_operator_rejects_option_operands_with_precise_found_type() {
 #[test]
 fn comparison_operator_rejects_option_to_scalar_comparison() {
     let error = parse_single_file_ast_error("maybe String? = none\nvalue = maybe is \"x\"\n");
+
     assert_eq!(error.error_type, ErrorType::Type);
     assert!(
         error
@@ -303,24 +314,28 @@ fn comparison_operator_rejects_option_to_scalar_comparison() {
 #[test]
 fn mixed_int_float_arithmetic_resolves_to_float() {
     let value = first_start_declaration_expression("value = 1 + 2.5\n");
+
     assert_eq!(value.data_type, DataType::Float);
 }
 
 #[test]
 fn int_division_resolves_to_float() {
     let value = first_start_declaration_expression("value = 5 / 2\n");
+
     assert_eq!(value.data_type, DataType::Float);
 }
 
 #[test]
 fn integer_division_resolves_to_int() {
     let value = first_start_declaration_expression("value = 5 // 2\n");
+
     assert_eq!(value.data_type, DataType::Int);
 }
 
 #[test]
 fn integer_division_rejects_int_float_operands() {
     let error = parse_single_file_ast_error("value = 5 // 2.0\n");
+
     assert_eq!(error.error_type, ErrorType::Type);
     assert!(
         error.msg.contains("Operator '//' cannot be applied"),
@@ -339,6 +354,7 @@ fn integer_division_rejects_int_float_operands() {
 #[test]
 fn integer_division_rejects_float_int_operands() {
     let error = parse_single_file_ast_error("value = 5.0 // 2\n");
+
     assert_eq!(error.error_type, ErrorType::Type);
     assert!(
         error.msg.contains("Operator '//' cannot be applied"),
@@ -357,6 +373,7 @@ fn integer_division_rejects_float_int_operands() {
 #[test]
 fn multiline_expression_with_operator_on_next_line_resolves_correctly() {
     let value = first_start_declaration_expression("value = 1\n + 2\n + 3\n");
+
     assert_eq!(value.data_type, DataType::Int);
     assert!(
         matches!(value.kind, ExpressionKind::Int(6)),
@@ -368,6 +385,7 @@ fn multiline_expression_with_operator_on_next_line_resolves_correctly() {
 #[test]
 fn multiline_expression_with_operator_at_end_of_line_resolves_correctly() {
     let value = first_start_declaration_expression("value = 1 +\n 2 +\n 3\n");
+
     assert_eq!(value.data_type, DataType::Int);
     assert!(
         matches!(value.kind, ExpressionKind::Int(6)),
@@ -379,6 +397,7 @@ fn multiline_expression_with_operator_at_end_of_line_resolves_correctly() {
 #[test]
 fn multiline_comparison_expression_resolves_to_bool() {
     let value = first_start_declaration_expression("value = 1\n is\n 1\n");
+
     assert_eq!(value.data_type, DataType::Bool);
     assert!(
         matches!(value.kind, ExpressionKind::Bool(true)),
@@ -390,12 +409,14 @@ fn multiline_comparison_expression_resolves_to_bool() {
 #[test]
 fn mixed_int_float_comparison_resolves_to_bool() {
     let value = first_start_declaration_expression("value = 1 <= 2.5\n");
+
     assert_eq!(value.data_type, DataType::Bool);
 }
 
 #[test]
 fn bool_relational_comparison_is_rejected() {
     let error = parse_single_file_ast_error("value = true < false\n");
+
     assert_eq!(error.error_type, ErrorType::Type);
     assert!(
         error.msg.contains("Comparison operator '<' cannot compare"),
@@ -414,12 +435,14 @@ fn bool_relational_comparison_is_rejected() {
 #[test]
 fn string_equality_comparison_resolves_to_bool() {
     let value = first_start_declaration_expression("value = \"a\" is \"b\"\n");
+
     assert_eq!(value.data_type, DataType::Bool);
 }
 
 #[test]
 fn char_relational_comparison_resolves_to_bool() {
     let value = first_start_declaration_expression("value = 'a' < 'b'\n");
+
     assert_eq!(value.data_type, DataType::Bool);
 }
 

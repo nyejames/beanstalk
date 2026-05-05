@@ -33,6 +33,10 @@ fn loop_function_body<'a>(ast: &'a Ast, string_table: &StringTable) -> &'a [AstN
     function_body_by_name(ast, string_table, "loop_test")
 }
 
+// --------------------------
+//  Conditional loops
+// --------------------------
+
 #[test]
 fn parses_conditional_loop_without_bindings() {
     let (ast, string_table) =
@@ -48,6 +52,10 @@ fn parses_conditional_loop_without_bindings() {
     assert_eq!(loop_body.len(), 1);
     assert!(matches!(loop_body[0].kind, NodeKind::Assignment { .. }));
 }
+
+// --------------------------
+//  Range loops
+// --------------------------
 
 #[test]
 fn parses_range_loop_with_pipe_binding() {
@@ -111,6 +119,29 @@ fn parses_range_loop_with_value_and_index_bindings() {
 }
 
 #[test]
+fn range_index_binding_has_int_type() {
+    let (ast, string_table) =
+        parse_loop_fixture("sum ~= 0\nloop 0 to 4 |value, index|:\n    sum = sum + value\n;");
+    let body = loop_function_body(&ast, &string_table);
+
+    let NodeKind::RangeLoop { bindings, .. } = &body[1].kind else {
+        panic!("expected range loop in function body");
+    };
+
+    assert!(matches!(
+        bindings
+            .index
+            .as_ref()
+            .map(|binding| &binding.value.data_type),
+        Some(DataType::Int)
+    ));
+}
+
+// --------------------------
+//  Collection loops
+// --------------------------
+
+#[test]
 fn parses_collection_loop_with_pipe_item_binding() {
     let (ast, string_table) =
         parse_loop_fixture("items = {1, 2, 3}\nloop items |item|:\n    io(item)\n;");
@@ -169,25 +200,6 @@ fn parses_collection_loop_with_item_and_index_pipe_bindings() {
 }
 
 #[test]
-fn range_index_binding_has_int_type() {
-    let (ast, string_table) =
-        parse_loop_fixture("sum ~= 0\nloop 0 to 4 |value, index|:\n    sum = sum + value\n;");
-    let body = loop_function_body(&ast, &string_table);
-
-    let NodeKind::RangeLoop { bindings, .. } = &body[1].kind else {
-        panic!("expected range loop in function body");
-    };
-
-    assert!(matches!(
-        bindings
-            .index
-            .as_ref()
-            .map(|binding| &binding.value.data_type),
-        Some(DataType::Int)
-    ));
-}
-
-#[test]
 fn collection_index_binding_has_int_type() {
     let (ast, string_table) =
         parse_loop_fixture("items = {1, 2, 3}\nloop items |item, index|:\n    io(item)\n;");
@@ -206,6 +218,10 @@ fn collection_index_binding_has_int_type() {
     ));
 }
 
+// --------------------------
+//  Legacy syntax rejections
+// --------------------------
+
 #[test]
 fn rejects_old_in_loop_syntax_with_migration_error() {
     let error = parse_loop_fixture_error("loop i in 0 to 3:\n    io(i)\n;");
@@ -217,6 +233,10 @@ fn rejects_old_in_loop_syntax_with_migration_error() {
         error.msg
     );
 }
+
+// --------------------------
+//  Bare binding rejections
+// --------------------------
 
 #[test]
 fn rejects_collection_loop_with_bare_single_binding() {
@@ -291,6 +311,10 @@ fn rejects_range_loop_with_bare_dual_bindings() {
     );
 }
 
+// --------------------------
+//  Loops without bindings
+// --------------------------
+
 #[test]
 fn parses_collection_loop_without_bindings() {
     let (ast, string_table) =
@@ -317,6 +341,10 @@ fn parses_range_loop_without_bindings() {
     assert!(bindings.item.is_none());
     assert!(bindings.index.is_none());
 }
+
+// --------------------------
+//  Binding list validation
+// --------------------------
 
 #[test]
 fn rejects_empty_loop_binding_list() {
@@ -360,6 +388,10 @@ fn rejects_keyword_shadow_loop_binding_names() {
         error.msg
     );
 }
+
+// --------------------------
+//  Loop source type checks
+// --------------------------
 
 #[test]
 fn rejects_collection_loop_on_non_collection_expression() {
@@ -406,6 +438,10 @@ fn rejects_non_boolean_conditional_loop_condition() {
         Some("Use a boolean expression after 'loop', e.g. loop is_ready():")
     );
 }
+
+// --------------------------
+//  Range loop edge cases
+// --------------------------
 
 #[test]
 fn parses_inclusive_range_loop_with_tight_ampersand() {
@@ -497,6 +533,10 @@ fn rejects_float_range_without_by() {
             .contains("Float ranges require an explicit 'by' step")
     );
 }
+
+// --------------------------
+//  Bare binding edge cases
+// --------------------------
 
 #[test]
 fn rejects_missing_comma_between_bare_dual_bindings() {

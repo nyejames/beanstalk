@@ -14,6 +14,10 @@ use crate::compiler_frontend::tests::test_support::{
     parse_single_file_ast_error, start_function_body,
 };
 
+// --------------------------
+//  Signature parsing
+// --------------------------
+
 #[test]
 fn parses_function_parameters_and_return_types() {
     let (ast, string_table) =
@@ -54,6 +58,10 @@ fn parses_alias_return_candidates_in_function_signatures() {
     );
 }
 
+// --------------------------
+//  Call dispatch
+// --------------------------
+
 #[test]
 fn start_function_distinguishes_user_and_host_calls() {
     let (ast, string_table) = parse_single_file_ast(
@@ -84,6 +92,10 @@ fn start_function_distinguishes_user_and_host_calls() {
         "explicit function body should preserve return statements"
     );
 }
+
+// --------------------------
+//  Collection and struct parameter validation
+// --------------------------
 
 #[test]
 fn rejects_missing_tilde_for_collection_place_argument_to_mutable_parameter() {
@@ -139,6 +151,10 @@ fn rejects_struct_constructor_argument_type_with_field_wording() {
     );
 }
 
+// --------------------------
+//  Named types in signatures
+// --------------------------
+
 #[test]
 fn resolves_named_struct_type_in_function_parameters() {
     let (ast, string_table) = parse_single_file_ast(
@@ -185,6 +201,10 @@ fn rejects_unknown_named_return_type_in_function_signatures() {
     assert!(error.msg.contains("Unknown type 'Missing'"));
 }
 
+// --------------------------
+//  Receiver parameter rules
+// --------------------------
+
 #[test]
 fn rejects_receiver_parameter_when_not_first() {
     let error = parse_single_file_ast_error(
@@ -215,6 +235,10 @@ fn rejects_multiple_this_parameters_in_one_signature() {
         error.msg
     );
 }
+
+// --------------------------
+//  Method call rules
+// --------------------------
 
 #[test]
 fn rejects_field_method_name_collisions() {
@@ -321,6 +345,10 @@ fn rejects_explicit_receiver_tilde_for_shared_receiver_methods() {
         error.msg
     );
 }
+
+// --------------------------
+//  Result handling
+// --------------------------
 
 #[test]
 fn parses_result_propagation_call_in_expression_position() {
@@ -503,6 +531,10 @@ fn parses_standalone_result_propagation_statement() {
     ));
 }
 
+// --------------------------
+//  Trailing comma rejections
+// --------------------------
+
 #[test]
 fn rejects_trailing_comma_in_single_return() {
     let error = parse_single_file_ast_error("compute |x Int| -> Int,:\n    return 42\n;\n");
@@ -525,6 +557,10 @@ fn rejects_trailing_comma_in_error_return() {
 
     assert!(error.msg.contains("Trailing comma"), "{}", error.msg);
 }
+
+// --------------------------
+//  Valid parameter and return parsing
+// --------------------------
 
 #[test]
 fn parses_valid_single_return_without_trailing_comma() {

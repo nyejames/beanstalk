@@ -76,7 +76,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             let type_resolution_context =
                 self.type_resolution_context_for(visibility, generic_parameter_scope.as_ref());
 
-            let fields = resolve_struct_field_types(
+            let resolved_fields = resolve_struct_field_types(
                 &header.tokens.src_path,
                 fields,
                 &type_resolution_context,
@@ -84,11 +84,13 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             )
             .map_err(|error| self.error_messages(error, string_table))?;
 
-            self.resolved_struct_fields_by_path
-                .insert(header.tokens.src_path.to_owned(), fields.to_owned());
+            self.resolved_struct_fields_by_path.insert(
+                header.tokens.src_path.to_owned(),
+                resolved_fields.to_owned(),
+            );
 
             let mut used_parameters = FxHashSet::default();
-            collect_type_parameter_ids_from_declarations(&fields, &mut used_parameters);
+            collect_type_parameter_ids_from_declarations(&resolved_fields, &mut used_parameters);
             validate_generic_parameters_used(
                 generic_parameters,
                 &used_parameters,
@@ -98,7 +100,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             )
             .map_err(|error| self.error_messages(error, string_table))?;
 
-            for field in &fields {
+            for field in &resolved_fields {
                 validate_no_recursive_generic_type(
                     &header.tokens.src_path,
                     &field.value.data_type,
@@ -118,7 +120,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 value: Expression::new(
                     ExpressionKind::NoValue,
                     header.name_location.to_owned(),
-                    DataType::runtime_struct(header.tokens.src_path.to_owned(), fields),
+                    DataType::runtime_struct(header.tokens.src_path.to_owned(), resolved_fields),
                     ValueMode::ImmutableReference,
                 ),
             })

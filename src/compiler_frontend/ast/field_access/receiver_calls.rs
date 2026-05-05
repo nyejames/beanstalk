@@ -46,7 +46,7 @@ fn lookup_receiver_method<'a>(
 /// Returns `None` when no declared receiver method matches the current receiver/member pair.
 pub(super) fn parse_receiver_method_call(
     token_stream: &mut FileTokens,
-    context: MemberStepContext<'_>,
+    member_step_context: MemberStepContext<'_>,
     string_table: &mut StringTable,
 ) -> Result<Option<AstNode>, CompilerError> {
     let MemberStepContext {
@@ -56,14 +56,12 @@ pub(super) fn parse_receiver_method_call(
         member_location,
         receiver_access_mode,
         scope_context,
-    } = context;
-
-    let context = scope_context;
+    } = member_step_context;
 
     // ----------------------------
     //  Try user-defined receiver method
     // ----------------------------
-    if let Some(method_entry) = lookup_receiver_method(context, receiver_type, member_name) {
+    if let Some(method_entry) = lookup_receiver_method(scope_context, receiver_type, member_name) {
         if receiver_type.is_const_record_struct() {
             return_rule_error!(
                 format!(
@@ -109,7 +107,7 @@ pub(super) fn parse_receiver_method_call(
             string_table,
         )?;
 
-        let raw_args = parse_call_arguments(token_stream, context, string_table)?;
+        let raw_args = parse_call_arguments(token_stream, scope_context, string_table)?;
         let expectations =
             expectations_from_receiver_method_signature(&method_entry.signature.parameters[1..]);
         let args = resolve_call_arguments(
@@ -131,7 +129,7 @@ pub(super) fn parse_receiver_method_call(
                 result_types,
                 location: member_location.clone(),
             },
-            scope: context.scope.to_owned(),
+            scope: scope_context.scope.to_owned(),
             location: member_location,
         }));
     }
@@ -141,7 +139,7 @@ pub(super) fn parse_receiver_method_call(
     // ----------------------------
     let method_name_str = string_table.resolve(member_name).to_owned();
     if let Some((external_id, external_def)) =
-        context.lookup_visible_external_method(receiver_type, member_name)
+        scope_context.lookup_visible_external_method(receiver_type, member_name)
     {
         if token_stream.peek_next_token() != Some(&TokenKind::OpenParenthesis) {
             return_rule_error!(
@@ -174,7 +172,7 @@ pub(super) fn parse_receiver_method_call(
             string_table,
         )?;
 
-        let raw_args = parse_call_arguments(token_stream, context, string_table)?;
+        let raw_args = parse_call_arguments(token_stream, scope_context, string_table)?;
         let expectations = expectations_from_external_method(external_def);
         let mut args = resolve_call_arguments(
             CallDiagnosticContext::receiver_method(&method_name_str),
@@ -204,7 +202,7 @@ pub(super) fn parse_receiver_method_call(
                 result_types,
                 location: member_location.clone(),
             },
-            scope: context.scope.to_owned(),
+            scope: scope_context.scope.to_owned(),
             location: member_location,
         }));
     }

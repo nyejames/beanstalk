@@ -102,13 +102,13 @@ pub fn create_loop(
         );
     }
 
-    let (parsed_header, body_context) =
+    let (parsed_loop_header, body_context) =
         parse_loop_header(&header_tokens, context, warnings, string_table)?;
 
     token_stream.index = colon_index + 1;
     let body = function_body_to_ast(token_stream, body_context, warnings, string_table)?;
 
-    let kind = match parsed_header {
+    let kind = match parsed_loop_header {
         ParsedLoopHeader::Conditional { condition } => NodeKind::WhileLoop(condition, body),
         ParsedLoopHeader::Range { bindings, range } => NodeKind::RangeLoop {
             bindings,
@@ -130,18 +130,18 @@ pub fn create_loop(
 }
 
 fn find_loop_header_colon_index(token_stream: &FileTokens) -> Result<usize, CompilerError> {
-    let mut depth = NestingDepth::default();
-    let mut index = token_stream.index;
+    let mut nesting_depth = NestingDepth::default();
+    let mut search_index = token_stream.index;
 
-    while index < token_stream.length {
-        let token = &token_stream.tokens[index];
-        let at_top_level = depth.is_top_level();
+    while search_index < token_stream.length {
+        let token = &token_stream.tokens[search_index];
+        let is_top_level = nesting_depth.is_top_level();
 
-        if at_top_level && matches!(token.kind, TokenKind::Colon) {
-            return Ok(index);
+        if is_top_level && matches!(token.kind, TokenKind::Colon) {
+            return Ok(search_index);
         }
 
-        if at_top_level && matches!(token.kind, TokenKind::End | TokenKind::Eof) {
+        if is_top_level && matches!(token.kind, TokenKind::End | TokenKind::Eof) {
             return_syntax_error!(
                 "A loop must have ':' after the loop header",
                 token.location.clone(),
@@ -153,8 +153,8 @@ fn find_loop_header_colon_index(token_stream: &FileTokens) -> Result<usize, Comp
             );
         }
 
-        depth.step(&token.kind);
-        index += 1;
+        nesting_depth.step(&token.kind);
+        search_index += 1;
     }
 
     return_syntax_error!(
@@ -179,12 +179,14 @@ fn parse_loop_header(
     // Range markers are syntax-defining for loop kind, so we dispatch range parsing first.
     // Non-range headers are then resolved as either conditional (`Bool`) or collection loops.
     if has_top_level_range_marker(header_tokens) {
-        let parsed = parse_range_loop_header(header_tokens, &mut context, warnings, string_table)?;
-        return Ok((parsed, context));
+        let loop_header =
+            parse_range_loop_header(header_tokens, &mut context, warnings, string_table)?;
+        return Ok((loop_header, context));
     }
 
-    let parsed = parse_non_range_loop_header(header_tokens, &mut context, warnings, string_table)?;
-    Ok((parsed, context))
+    let loop_header =
+        parse_non_range_loop_header(header_tokens, &mut context, warnings, string_table)?;
+    Ok((loop_header, context))
 }
 
 fn parse_range_loop_header(
@@ -195,12 +197,15 @@ fn parse_range_loop_header(
 ) -> Result<ParsedLoopHeader, CompilerError> {
     // Parse explicit `|...|` bindings first, then reject bare binding tails with a targeted
     // diagnostic before falling back to no-binding range parsing.
-    if let Some(pipe_split) = parse_pipe_binding_suffix(header_tokens, string_table)? {
-        let range =
-            parse_range_loop_spec_from_tokens(&pipe_split.core_tokens, context, string_table)?;
+    if let Some(pipe_binding_split) = parse_pipe_binding_suffix(header_tokens, string_table)? {
+        let range = parse_range_loop_spec_from_tokens(
+            &pipe_binding_split.core_tokens,
+            context,
+            string_table,
+        )?;
         let binding_type = range_binding_type(&range, string_table)?;
         let bindings = declare_loop_bindings(
-            Some(pipe_split.bindings),
+            Some(pipe_binding_split.bindings),
             binding_type,
             context,
             warnings,
@@ -210,11 +215,15 @@ fn parse_range_loop_header(
         return Ok(ParsedLoopHeader::Range { bindings, range });
     }
 
-    if let Some(bare_suffix) = detect_bare_loop_binding_suffix(header_tokens)
-        && parse_range_loop_spec_from_tokens(&bare_suffix.core_tokens, context, string_table)
-            .is_ok()
+    if let Some(bare_binding_suffix) = detect_bare_loop_binding_suffix(header_tokens)
+        && parse_range_loop_spec_from_tokens(
+            &bare_binding_suffix.core_tokens,
+            context,
+            string_table,
+        )
+        .is_ok()
     {
-        return bare_loop_binding_syntax_error(&bare_suffix);
+        return bare_loop_binding_syntax_error(&bare_binding_suffix);
     }
 
     let range = parse_range_loop_spec_from_tokens(header_tokens, context, string_table)?;
@@ -232,11 +241,14 @@ fn parse_non_range_loop_header(
     // Conditional loops are distinguished by a full-header boolean expression with no binding
     // suffix. Parse explicit `|...|` bindings first, then reject bare binding tails with a
     // targeted diagnostic before evaluating conditional/collection fallback.
-    if let Some(pipe_split) = parse_pipe_binding_suffix(header_tokens, string_table)? {
-        let (iterable, item_type) =
-            parse_collection_iterable_from_tokens(&pipe_split.core_tokens, context, string_table)?;
+    if let Some(pipe_binding_split) = parse_pipe_binding_suffix(header_tokens, string_table)? {
+        let (iterable, item_type) = parse_collection_iterable_from_tokens(
+            &pipe_binding_split.core_tokens,
+            context,
+            string_table,
+        )?;
         let bindings = declare_loop_bindings(
-            Some(pipe_split.bindings),
+            Some(pipe_binding_split.bindings),
             item_type,
             context,
             warnings,
@@ -246,20 +258,20 @@ fn parse_non_range_loop_header(
         return Ok(ParsedLoopHeader::Collection { bindings, iterable });
     }
 
-    if let Some(bare_suffix) = detect_bare_loop_binding_suffix(header_tokens)
-        && parses_as_collection_iterable(&bare_suffix.core_tokens, context, string_table)
+    if let Some(bare_binding_suffix) = detect_bare_loop_binding_suffix(header_tokens)
+        && parses_as_collection_iterable(&bare_binding_suffix.core_tokens, context, string_table)
     {
-        return bare_loop_binding_syntax_error(&bare_suffix);
+        return bare_loop_binding_syntax_error(&bare_binding_suffix);
     }
 
-    let full_expression = parse_expression_from_tokens(
+    let header_expression = parse_expression_from_tokens(
         header_tokens,
         context,
         &ValueMode::ImmutableOwned,
         string_table,
     );
 
-    match full_expression {
+    match header_expression {
         Ok(expression) => {
             if let Some(item_type) = collection_element_type(&expression.data_type) {
                 let bindings =
@@ -314,11 +326,11 @@ fn parse_pipe_binding_suffix(
     header_tokens: &[Token],
     string_table: &StringTable,
 ) -> Result<Option<BindingSuffixSplit>, CompilerError> {
-    let top_level_pipe_indexes = collect_top_level_token_indexes(header_tokens, |token| {
+    let pipe_indices = collect_top_level_token_indexes(header_tokens, |token| {
         matches!(token, TokenKind::TypeParameterBracket)
     });
 
-    if top_level_pipe_indexes.is_empty() {
+    if pipe_indices.is_empty() {
         return Ok(None);
     }
 
@@ -337,10 +349,10 @@ fn parse_pipe_binding_suffix(
         );
     }
 
-    if top_level_pipe_indexes.len() != 2 {
+    if pipe_indices.len() != 2 {
         return_syntax_error!(
             "Malformed loop binding pipes",
-            header_tokens[top_level_pipe_indexes[0]].location.clone(),
+            header_tokens[pipe_indices[0]].location.clone(),
             {
                 CompilationStage => LOOP_PARSING_STAGE,
                 PrimarySuggestion => "Use exactly one loop binding group, for example '|item|' or '|item, index|'",
@@ -348,8 +360,8 @@ fn parse_pipe_binding_suffix(
         );
     }
 
-    let open_pipe_index = top_level_pipe_indexes[0];
-    let close_pipe_index = top_level_pipe_indexes[1];
+    let open_pipe_index = pipe_indices[0];
+    let close_pipe_index = pipe_indices[1];
 
     if close_pipe_index <= open_pipe_index {
         return_syntax_error!(
@@ -408,11 +420,11 @@ fn parse_binding_tokens(
         );
     }
 
-    let mut names = Vec::with_capacity(2);
-    let mut cursor = 0;
+    let mut binding_names = Vec::with_capacity(2);
+    let mut position = 0;
 
-    while cursor < filtered_tokens.len() {
-        let token = &filtered_tokens[cursor];
+    while position < filtered_tokens.len() {
+        let token = &filtered_tokens[position];
         if token.kind == TokenKind::This {
             return_syntax_error!(
                 "'this' is reserved for method receiver parameters and cannot be used as a loop binding.",
@@ -434,20 +446,20 @@ fn parse_binding_tokens(
             );
         };
 
-        names.push(ParsedBindingName {
+        binding_names.push(ParsedBindingName {
             id: symbol_id,
             location: token.location.clone(),
         });
-        cursor += 1;
+        position += 1;
 
-        if cursor >= filtered_tokens.len() {
+        if position >= filtered_tokens.len() {
             break;
         }
 
-        if !matches!(filtered_tokens[cursor].kind, TokenKind::Comma) {
+        if !matches!(filtered_tokens[position].kind, TokenKind::Comma) {
             return_syntax_error!(
                 "Missing comma between loop bindings",
-                filtered_tokens[cursor].location.clone(),
+                filtered_tokens[position].location.clone(),
                 {
                     CompilationStage => LOOP_PARSING_STAGE,
                     PrimarySuggestion => "Separate loop bindings with commas, for example '|item, index|'",
@@ -455,11 +467,11 @@ fn parse_binding_tokens(
             );
         }
 
-        cursor += 1;
-        if cursor >= filtered_tokens.len() {
+        position += 1;
+        if position >= filtered_tokens.len() {
             return_syntax_error!(
                 "Loop binding list cannot end with a comma",
-                filtered_tokens[cursor - 1].location.clone(),
+                filtered_tokens[position - 1].location.clone(),
                 {
                     CompilationStage => LOOP_PARSING_STAGE,
                     PrimarySuggestion => "Remove the trailing comma or add a second binding name",
@@ -468,21 +480,21 @@ fn parse_binding_tokens(
         }
     }
 
-    build_binding_name_pair(names)
+    build_binding_name_pair(binding_names)
 }
 
 fn detect_bare_loop_binding_suffix(header_tokens: &[Token]) -> Option<BareLoopBindingSuffix> {
-    let top_level_indexes = collect_top_level_token_indexes(header_tokens, |token| {
+    let non_newline_indices = collect_top_level_token_indexes(header_tokens, |token| {
         !matches!(token, TokenKind::Newline)
     });
-    if top_level_indexes.len() < 2 {
+    if non_newline_indices.len() < 2 {
         return None;
     }
 
-    if top_level_indexes.len() >= 3 {
-        let first_index = top_level_indexes[top_level_indexes.len() - 3];
-        let separator_index = top_level_indexes[top_level_indexes.len() - 2];
-        let second_index = top_level_indexes[top_level_indexes.len() - 1];
+    if non_newline_indices.len() >= 3 {
+        let first_index = non_newline_indices[non_newline_indices.len() - 3];
+        let separator_index = non_newline_indices[non_newline_indices.len() - 2];
+        let second_index = non_newline_indices[non_newline_indices.len() - 1];
 
         if matches!(header_tokens[first_index].kind, TokenKind::Symbol(_))
             && matches!(header_tokens[separator_index].kind, TokenKind::Comma)
@@ -509,8 +521,8 @@ fn detect_bare_loop_binding_suffix(header_tokens: &[Token]) -> Option<BareLoopBi
         }
     }
 
-    let binding_index = *top_level_indexes.last()?;
-    let core_tail_index = top_level_indexes[top_level_indexes.len() - 2];
+    let binding_index = *non_newline_indices.last()?;
+    let core_tail_index = non_newline_indices[non_newline_indices.len() - 2];
 
     if matches!(header_tokens[binding_index].kind, TokenKind::Symbol(_))
         && !matches!(header_tokens[core_tail_index].kind, TokenKind::Comma)
@@ -543,13 +555,13 @@ fn parses_as_collection_iterable(
 }
 
 fn bare_loop_binding_syntax_error<T>(
-    bare_binding: &BareLoopBindingSuffix,
+    binding_suffix: &BareLoopBindingSuffix,
 ) -> Result<T, CompilerError> {
-    match bare_binding.kind {
+    match binding_suffix.kind {
         BareLoopBindingKind::Single => {
             return_syntax_error!(
                 "Loop bindings must use `|...|` after the loop source or range.",
-                bare_binding.location.clone(),
+                binding_suffix.location.clone(),
                 {
                     CompilationStage => LOOP_PARSING_STAGE,
                     PrimarySuggestion => "Use syntax like `loop items |item|:` or `loop 0 to 10 |i|:`",
@@ -559,7 +571,7 @@ fn bare_loop_binding_syntax_error<T>(
         BareLoopBindingKind::Dual => {
             return_syntax_error!(
                 "Loop bindings must use `|item, index|` form.",
-                bare_binding.location.clone(),
+                binding_suffix.location.clone(),
                 {
                     CompilationStage => LOOP_PARSING_STAGE,
                     PrimarySuggestion => "Write `loop items |item, index|:` instead of bare trailing names.",
@@ -571,12 +583,12 @@ fn bare_loop_binding_syntax_error<T>(
 }
 
 fn build_binding_name_pair(
-    names: Vec<ParsedBindingName>,
+    binding_names: Vec<ParsedBindingName>,
 ) -> Result<ParsedBindingNames, CompilerError> {
-    if names.len() > 2 {
+    if binding_names.len() > 2 {
         return_syntax_error!(
             "Loop bindings support at most two names",
-            names[2].location.clone(),
+            binding_names[2].location.clone(),
             {
                 CompilationStage => LOOP_PARSING_STAGE,
                 PrimarySuggestion => "Use one binding for item/counter, or two for item/counter and index",
@@ -584,7 +596,7 @@ fn build_binding_name_pair(
         );
     }
 
-    let Some(item) = names.first().cloned() else {
+    let Some(item_binding) = binding_names.first().cloned() else {
         return_syntax_error!(
             "Loop binding list cannot be empty",
             SourceLocation::default(),
@@ -595,14 +607,14 @@ fn build_binding_name_pair(
         );
     };
 
-    let index = names.get(1).cloned();
+    let index_binding = binding_names.get(1).cloned();
 
-    if let Some(index_binding) = &index
-        && index_binding.id == item.id
+    if let Some(index) = &index_binding
+        && index.id == item_binding.id
     {
         return_syntax_error!(
             "Duplicate loop binding name in the same loop header",
-            index_binding.location.clone(),
+            index.location.clone(),
             {
                 CompilationStage => LOOP_PARSING_STAGE,
                 PrimarySuggestion => "Use unique names for value and index bindings",
@@ -610,7 +622,10 @@ fn build_binding_name_pair(
         );
     }
 
-    Ok(ParsedBindingNames { item, index })
+    Ok(ParsedBindingNames {
+        item: item_binding,
+        index: index_binding,
+    })
 }
 
 fn parse_collection_iterable_from_tokens(
@@ -618,30 +633,30 @@ fn parse_collection_iterable_from_tokens(
     context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> Result<(Expression, DataType), CompilerError> {
-    let iterable = parse_expression_from_tokens(
+    let collection_expression = parse_expression_from_tokens(
         iterable_tokens,
         context,
         &ValueMode::ImmutableReference,
         string_table,
     )?;
 
-    let Some(item_type) = collection_element_type(&iterable.data_type) else {
+    let Some(item_type) = collection_element_type(&collection_expression.data_type) else {
         return_syntax_error!(
             format!(
                 "Collection loop source must be a collection. Found '{}'",
-                iterable.data_type.display_with_table(string_table)
+                collection_expression.data_type.display_with_table(string_table)
             ),
-            iterable.location.clone(),
+            collection_expression.location.clone(),
             {
                 CompilationStage => LOOP_PARSING_STAGE,
-                FoundType => iterable.data_type.display_with_table(string_table),
+                FoundType => collection_expression.data_type.display_with_table(string_table),
                 ExpectedType => "Collection",
                 PrimarySuggestion => "Use a collection expression before loop bindings, for example 'loop items |item|:'",
             }
         );
     };
 
-    Ok((iterable, item_type))
+    Ok((collection_expression, item_type))
 }
 
 fn parse_range_loop_spec_from_tokens(
@@ -649,11 +664,11 @@ fn parse_range_loop_spec_from_tokens(
     context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> Result<RangeLoopSpec, CompilerError> {
-    let mut range_stream = token_stream_with_eof(range_tokens)?;
+    let mut stream = token_stream_with_eof(range_tokens)?;
 
     // Omitted-start sugar: `loop to 5:` desugars to `loop 0 to 5:`.
-    let start = if matches!(range_stream.current_token_kind(), TokenKind::ExclusiveRange) {
-        let location = range_stream.current_location();
+    let start = if matches!(stream.current_token_kind(), TokenKind::ExclusiveRange) {
+        let location = stream.current_location();
         Expression::new(
             ExpressionKind::Int(0),
             location,
@@ -663,7 +678,7 @@ fn parse_range_loop_spec_from_tokens(
     } else {
         let mut start_type = DataType::Inferred;
         create_expression_until(
-            &mut range_stream,
+            &mut stream,
             context,
             &mut start_type,
             &ValueMode::ImmutableReference,
@@ -672,12 +687,12 @@ fn parse_range_loop_spec_from_tokens(
         )?
     };
 
-    let end_kind = match range_stream.current_token_kind() {
+    let end_kind = match stream.current_token_kind() {
         TokenKind::ExclusiveRange => {
-            range_stream.advance();
+            stream.advance();
             // Optional inclusive marker: `to & end`
-            if matches!(range_stream.current_token_kind(), TokenKind::Ampersand) {
-                range_stream.advance();
+            if matches!(stream.current_token_kind(), TokenKind::Ampersand) {
+                stream.advance();
                 RangeEndKind::Inclusive
             } else {
                 RangeEndKind::Exclusive
@@ -697,7 +712,7 @@ fn parse_range_loop_spec_from_tokens(
         _ => {
             return_syntax_error!(
                 "Range loops must include 'to' between bounds",
-                range_stream.current_location(),
+                stream.current_location(),
                 {
                     CompilationStage => LOOP_PARSING_STAGE,
                     PrimarySuggestion => "Use syntax like: loop 0 to 10 |i|:",
@@ -707,7 +722,7 @@ fn parse_range_loop_spec_from_tokens(
         }
     };
 
-    if matches!(range_stream.current_token_kind(), TokenKind::Eof) {
+    if matches!(stream.current_token_kind(), TokenKind::Eof) {
         return_syntax_error!(
             "Range loop is missing an end bound",
             start.location.clone(),
@@ -720,7 +735,7 @@ fn parse_range_loop_spec_from_tokens(
 
     let mut end_type = DataType::Inferred;
     let end = create_expression_until(
-        &mut range_stream,
+        &mut stream,
         context,
         &mut end_type,
         &ValueMode::ImmutableReference,
@@ -728,11 +743,11 @@ fn parse_range_loop_spec_from_tokens(
         string_table,
     )?;
 
-    let step = if matches!(range_stream.current_token_kind(), TokenKind::By) {
-        let by_location = range_stream.current_location();
-        range_stream.advance();
+    let step = if matches!(stream.current_token_kind(), TokenKind::By) {
+        let by_location = stream.current_location();
+        stream.advance();
 
-        if matches!(range_stream.current_token_kind(), TokenKind::Eof) {
+        if matches!(stream.current_token_kind(), TokenKind::Eof) {
             return_syntax_error!(
                 "Range loop uses 'by' without a step value",
                 by_location,
@@ -745,7 +760,7 @@ fn parse_range_loop_spec_from_tokens(
 
         let mut step_type = DataType::Inferred;
         Some(create_expression_until(
-            &mut range_stream,
+            &mut stream,
             context,
             &mut step_type,
             &ValueMode::ImmutableReference,
@@ -756,7 +771,7 @@ fn parse_range_loop_spec_from_tokens(
         None
     };
 
-    let start_numeric = numeric_type_for_expression(&start).ok_or_else(|| {
+    let start_number_type = numeric_type_for_expression(&start).ok_or_else(|| {
         CompilerError::new_syntax_error(
             format!(
                 "Range start must be numeric (Int or Float). Found '{}'",
@@ -765,7 +780,7 @@ fn parse_range_loop_spec_from_tokens(
             start.location.clone(),
         )
     })?;
-    let end_numeric = numeric_type_for_expression(&end).ok_or_else(|| {
+    let end_number_type = numeric_type_for_expression(&end).ok_or_else(|| {
         CompilerError::new_syntax_error(
             format!(
                 "Range end must be numeric (Int or Float). Found '{}'",
@@ -775,23 +790,23 @@ fn parse_range_loop_spec_from_tokens(
         )
     })?;
 
-    let step_numeric = if let Some(step_expr) = &step {
-        Some(numeric_type_for_expression(step_expr).ok_or_else(|| {
+    let step_number_type = if let Some(step_expression) = &step {
+        Some(numeric_type_for_expression(step_expression).ok_or_else(|| {
             CompilerError::new_syntax_error(
                 format!(
                     "Range step must be numeric (Int or Float). Found '{}'",
-                    step_expr.data_type.display_with_table(string_table)
+                    step_expression.data_type.display_with_table(string_table)
                 ),
-                step_expr.location.clone(),
+                step_expression.location.clone(),
             )
         })?)
     } else {
         None
     };
 
-    let uses_float = matches!(start_numeric, DataType::Float)
-        || matches!(end_numeric, DataType::Float)
-        || matches!(step_numeric, Some(DataType::Float));
+    let uses_float = matches!(start_number_type, DataType::Float)
+        || matches!(end_number_type, DataType::Float)
+        || matches!(step_number_type, Some(DataType::Float));
 
     if uses_float && step.is_none() {
         return_syntax_error!(
@@ -804,12 +819,12 @@ fn parse_range_loop_spec_from_tokens(
         );
     }
 
-    if let Some(step_expr) = &step
-        && is_zero_numeric_literal(step_expr)
+    if let Some(step_expression) = &step
+        && is_zero_numeric_literal(step_expression)
     {
         return_syntax_error!(
             "Range step cannot be zero",
-            step_expr.location.clone(),
+            step_expression.location.clone(),
             {
                 CompilationStage => LOOP_PARSING_STAGE,
                 PrimarySuggestion => "Use a non-zero step value after 'by'",
@@ -829,7 +844,7 @@ fn range_binding_type(
     range: &RangeLoopSpec,
     string_table: &StringTable,
 ) -> Result<DataType, CompilerError> {
-    let start_numeric = numeric_type_for_expression(&range.start).ok_or_else(|| {
+    let start_number_type = numeric_type_for_expression(&range.start).ok_or_else(|| {
         CompilerError::new_syntax_error(
             format!(
                 "Range start must be numeric (Int or Float). Found '{}'",
@@ -839,7 +854,7 @@ fn range_binding_type(
         )
     })?;
 
-    let end_numeric = numeric_type_for_expression(&range.end).ok_or_else(|| {
+    let end_number_type = numeric_type_for_expression(&range.end).ok_or_else(|| {
         CompilerError::new_syntax_error(
             format!(
                 "Range end must be numeric (Int or Float). Found '{}'",
@@ -849,23 +864,23 @@ fn range_binding_type(
         )
     })?;
 
-    let step_numeric = if let Some(step_expr) = &range.step {
-        Some(numeric_type_for_expression(step_expr).ok_or_else(|| {
+    let step_number_type = if let Some(step_expression) = &range.step {
+        Some(numeric_type_for_expression(step_expression).ok_or_else(|| {
             CompilerError::new_syntax_error(
                 format!(
                     "Range step must be numeric (Int or Float). Found '{}'",
-                    step_expr.data_type.display_with_table(string_table)
+                    step_expression.data_type.display_with_table(string_table)
                 ),
-                step_expr.location.clone(),
+                step_expression.location.clone(),
             )
         })?)
     } else {
         None
     };
 
-    let uses_float = matches!(start_numeric, DataType::Float)
-        || matches!(end_numeric, DataType::Float)
-        || matches!(step_numeric, Some(DataType::Float));
+    let uses_float = matches!(start_number_type, DataType::Float)
+        || matches!(end_number_type, DataType::Float)
+        || matches!(step_number_type, Some(DataType::Float));
 
     Ok(if uses_float {
         DataType::Float
@@ -875,13 +890,13 @@ fn range_binding_type(
 }
 
 fn declare_loop_bindings(
-    names: Option<ParsedBindingNames>,
+    binding_names: Option<ParsedBindingNames>,
     item_data_type: DataType,
     context: &mut ScopeContext,
     warnings: &mut Vec<CompilerWarning>,
     string_table: &mut StringTable,
 ) -> Result<LoopBindings, CompilerError> {
-    let Some(names) = names else {
+    let Some(binding_names) = binding_names else {
         return Ok(LoopBindings {
             item: None,
             index: None,
@@ -889,14 +904,14 @@ fn declare_loop_bindings(
     };
 
     let item = Some(declare_loop_binding(
-        &names.item,
+        &binding_names.item,
         item_data_type,
         context,
         warnings,
         string_table,
     )?);
 
-    let index = names
+    let index = binding_names
         .index
         .as_ref()
         .map(|index_name| {
@@ -908,27 +923,27 @@ fn declare_loop_bindings(
 }
 
 fn declare_loop_binding(
-    name: &ParsedBindingName,
+    binding_name: &ParsedBindingName,
     data_type: DataType,
     context: &mut ScopeContext,
     warnings: &mut Vec<CompilerWarning>,
     string_table: &mut StringTable,
 ) -> Result<Declaration, CompilerError> {
-    let binding_name_text = string_table.resolve(name.id).to_owned();
+    let name_text = string_table.resolve(binding_name.id).to_owned();
 
     ensure_not_keyword_shadow_identifier(
-        &binding_name_text,
-        name.location.clone(),
+        &name_text,
+        binding_name.location.clone(),
         LOOP_PARSING_STAGE,
     )?;
 
-    if context.get_reference(&name.id).is_some() {
+    if context.get_reference(&binding_name.id).is_some() {
         return_syntax_error!(
             format!(
                 "Loop binding '{}' is already declared in this scope",
-                binding_name_text
+                name_text
             ),
-            name.location.clone(),
+            binding_name.location.clone(),
             {
                 CompilationStage => LOOP_PARSING_STAGE,
                 PrimarySuggestion => "Use a different binding name. Shadowing is not supported",
@@ -937,18 +952,18 @@ fn declare_loop_binding(
     }
 
     if let Some(warning) = naming_warning_for_identifier(
-        &binding_name_text,
-        name.location.clone(),
+        &name_text,
+        binding_name.location.clone(),
         IdentifierNamingKind::ValueLike,
     ) {
         warnings.push(warning);
     }
 
     let declaration = Declaration {
-        id: context.scope.append(name.id),
+        id: context.scope.append(binding_name.id),
         value: Expression::new(
             ExpressionKind::NoValue,
-            name.location.clone(),
+            binding_name.location.clone(),
             data_type,
             ValueMode::ImmutableOwned,
         ),
@@ -964,11 +979,11 @@ fn parse_expression_from_tokens(
     value_mode: &ValueMode,
     string_table: &mut StringTable,
 ) -> Result<Expression, CompilerError> {
-    let mut scoped_stream = token_stream_with_eof(expression_tokens)?;
+    let mut expression_stream = token_stream_with_eof(expression_tokens)?;
     let mut inferred_type = DataType::Inferred;
 
     create_expression(
-        &mut scoped_stream,
+        &mut expression_stream,
         context,
         &mut inferred_type,
         value_mode,
@@ -989,32 +1004,34 @@ fn token_stream_with_eof(tokens: &[Token]) -> Result<FileTokens, CompilerError> 
         );
     }
 
-    let mut scoped_tokens = tokens.to_vec();
+    let mut tokens_with_eof = tokens.to_vec();
     let eof_location = tokens[tokens.len() - 1].location.clone();
     let src_path = tokens[0].location.scope.clone();
 
-    scoped_tokens.push(Token::new(TokenKind::Eof, eof_location));
+    tokens_with_eof.push(Token::new(TokenKind::Eof, eof_location));
 
-    Ok(FileTokens::new(src_path, scoped_tokens))
+    Ok(FileTokens::new(src_path, tokens_with_eof))
 }
 
-fn collection_element_type(data_type: &DataType) -> Option<DataType> {
-    match data_type {
-        data_type if data_type.is_collection() => data_type.collection_element_type_cloned(),
+fn collection_element_type(collection_type: &DataType) -> Option<DataType> {
+    match collection_type {
+        collection_type if collection_type.is_collection() => {
+            collection_type.collection_element_type_cloned()
+        }
         DataType::Reference(inner) => collection_element_type(inner),
         _ => None,
     }
 }
 
 fn has_top_level_range_marker(tokens: &[Token]) -> bool {
-    let mut depth = NestingDepth::default();
+    let mut nesting_depth = NestingDepth::default();
 
     for token in tokens {
-        if depth.is_top_level() && matches!(token.kind, TokenKind::ExclusiveRange) {
+        if nesting_depth.is_top_level() && matches!(token.kind, TokenKind::ExclusiveRange) {
             return true;
         }
 
-        depth.step(&token.kind);
+        nesting_depth.step(&token.kind);
     }
 
     false
@@ -1022,17 +1039,17 @@ fn has_top_level_range_marker(tokens: &[Token]) -> bool {
 
 fn collect_top_level_token_indexes(
     tokens: &[Token],
-    matches_token: impl Fn(&TokenKind) -> bool,
+    predicate: impl Fn(&TokenKind) -> bool,
 ) -> Vec<usize> {
-    let mut depth = NestingDepth::default();
+    let mut nesting_depth = NestingDepth::default();
     let mut indexes = Vec::new();
 
     for (index, token) in tokens.iter().enumerate() {
-        if depth.is_top_level() && matches_token(&token.kind) {
+        if nesting_depth.is_top_level() && predicate(&token.kind) {
             indexes.push(index);
         }
 
-        depth.step(&token.kind);
+        nesting_depth.step(&token.kind);
     }
 
     indexes

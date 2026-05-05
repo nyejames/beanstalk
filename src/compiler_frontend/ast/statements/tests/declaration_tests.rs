@@ -12,6 +12,10 @@ use crate::compiler_frontend::tests::test_support::{
 };
 use crate::compiler_frontend::value_mode::ValueMode;
 
+// --------------------------
+//  Basic declarations
+// --------------------------
+
 #[test]
 fn parses_mutable_and_explicitly_typed_declarations() {
     let (ast, string_table) = parse_single_file_ast("count ~= 1\nname String = \"Ada\"\n");
@@ -57,6 +61,10 @@ fn resolves_named_type_annotations_against_prior_structs() {
     ));
 }
 
+// --------------------------
+//  Reserved name rejections
+// --------------------------
+
 #[test]
 fn rejects_user_declarations_named_error() {
     let error = parse_single_file_ast_error("Error = 1\n");
@@ -82,6 +90,10 @@ fn rejects_keyword_shadow_variable_declarations() {
         error.msg
     );
 }
+
+// --------------------------
+//  Type mismatch diagnostics
+// --------------------------
 
 #[test]
 fn rejects_initializer_type_mismatch_with_target_and_value_details() {

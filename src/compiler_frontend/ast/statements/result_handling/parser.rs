@@ -76,6 +76,7 @@ pub(crate) fn parse_result_handling_suffix_for_expression(
 
     let success_result_types = result_success_types(&value.data_type);
 
+    // Postfix `!` propagation or fallback
     if token_stream.current_token_kind() == &TokenKind::Bang {
         token_stream.advance();
 
@@ -142,6 +143,7 @@ pub(crate) fn parse_result_handling_suffix_for_expression(
         ));
     }
 
+    // Named handler: `err! ... : ... ;`
     if matches!(token_stream.current_token_kind(), TokenKind::Symbol(_))
         && token_stream.peek_next_token() == Some(&TokenKind::Bang)
     {

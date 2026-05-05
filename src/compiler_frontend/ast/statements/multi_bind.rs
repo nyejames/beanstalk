@@ -124,7 +124,7 @@ fn parse_target_list(
 ) -> Result<Option<Vec<BindingTargetSyntax>>, CompilerError> {
     let start_index = token_stream.index;
     let mut parsed_targets = Vec::new();
-    let mut seen_comma = false;
+    let mut saw_comma = false;
 
     loop {
         if token_stream.current_token_kind() == &TokenKind::This {
@@ -155,7 +155,7 @@ fn parse_target_list(
 
         match token_stream.current_token_kind() {
             TokenKind::Comma => {
-                seen_comma = true;
+                saw_comma = true;
                 token_stream.advance();
 
                 if matches!(
@@ -199,7 +199,7 @@ fn parse_target_list(
         }
     }
 
-    if !seen_comma || parsed_targets.len() < 2 {
+    if !saw_comma || parsed_targets.len() < 2 {
         token_stream.index = start_index;
         return Ok(None);
     }
@@ -233,9 +233,9 @@ fn validate_unique_target_names(
     parsed_targets: &[BindingTargetSyntax],
     string_table: &StringTable,
 ) -> Result<(), CompilerError> {
-    let mut seen_names = HashSet::new();
+    let mut seen_target_names = HashSet::new();
     for target in parsed_targets {
-        if !seen_names.insert(target.name) {
+        if !seen_target_names.insert(target.name) {
             return_rule_error!(
                 format!(
                     "Duplicate multi-bind target '{}' in the same target list",
@@ -342,7 +342,7 @@ fn resolve_multi_bind_targets(
     context: &ScopeContext,
     string_table: &StringTable,
 ) -> Result<ResolvedMultiBindTargets, CompilerError> {
-    let mut resolved_targets = Vec::with_capacity(parsed_targets.len());
+    let mut resolved_bindings = Vec::with_capacity(parsed_targets.len());
     let mut new_declarations = Vec::new();
 
     for (slot_index, (slot_type, target_syntax)) in
@@ -369,7 +369,7 @@ fn resolve_multi_bind_targets(
                 ),
             });
 
-            resolved_targets.push(MultiBindTarget {
+            resolved_bindings.push(MultiBindTarget {
                 id: target_id,
                 data_type: target_data_type,
                 value_mode: target_ownership,
@@ -380,7 +380,7 @@ fn resolve_multi_bind_targets(
         };
 
         // Existing mutable target — validate compatibility and produce an assignment target.
-        resolved_targets.push(resolve_existing_target(
+        resolved_bindings.push(resolve_existing_target(
             target_syntax,
             slot_type,
             explicit_type.as_ref(),
@@ -391,7 +391,7 @@ fn resolve_multi_bind_targets(
     }
 
     Ok(ResolvedMultiBindTargets {
-        targets: resolved_targets,
+        targets: resolved_bindings,
         new_declarations,
     })
 }
@@ -487,19 +487,19 @@ fn resolve_new_target_data_type(
     slot_index: usize,
     string_table: &StringTable,
 ) -> Result<DataType, CompilerError> {
-    let inferred_slot_type = slot_type.to_owned();
+    let inferred_type = slot_type.to_owned();
     let Some(explicit_type) = explicit_type else {
-        return Ok(inferred_slot_type);
+        return Ok(inferred_type);
     };
 
-    if explicit_type != inferred_slot_type {
+    if explicit_type != inferred_type {
         return_type_error!(
             format!(
                 "Type mismatch for target '{}' at multi-bind slot {}. Expected '{}', got '{}'.",
                 string_table.resolve(target_syntax.name),
                 slot_index + 1,
                 explicit_type.display_with_table(string_table),
-                inferred_slot_type.display_with_table(string_table)
+                inferred_type.display_with_table(string_table)
             ),
             target_syntax.location.clone(),
             {
@@ -531,11 +531,11 @@ fn register_new_declarations(context: &mut ScopeContext, new_declarations: Vec<D
 // --------------------------
 
 fn resolve_target_explicit_type(
-    target: &BindingTargetSyntax,
+    target_syntax: &BindingTargetSyntax,
     context: &ScopeContext,
     string_table: &StringTable,
 ) -> Result<Option<DataType>, CompilerError> {
-    if target.type_annotation.eq(&DataType::Inferred) {
+    if target_syntax.type_annotation.eq(&DataType::Inferred) {
         return Ok(None);
     }
 
@@ -561,8 +561,8 @@ fn resolve_target_explicit_type(
     });
 
     let resolved_type = resolve_type(
-        &target.type_annotation,
-        &target.location,
+        &target_syntax.type_annotation,
+        &target_syntax.location,
         &type_resolution_context,
         string_table,
     )?;

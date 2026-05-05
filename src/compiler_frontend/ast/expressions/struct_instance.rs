@@ -52,7 +52,7 @@ pub(crate) fn parse_struct_constructor_expression(
 
     let raw_args = parse_call_arguments(token_stream, context, string_table)?;
 
-    let (fields, generic_instance_key) = if let Some(generic_decls) =
+    let (resolved_fields, generic_instance_key) = if let Some(generic_decls) =
         &context.generic_declarations_by_path
         && let Some(metadata) = generic_decls.get(struct_path)
         && !metadata.parameters.is_empty()
@@ -75,10 +75,10 @@ pub(crate) fn parse_struct_constructor_expression(
         let instantiated_fields: Vec<Declaration> = fields
             .iter()
             .map(|field| {
-                let mut resolved = field.clone();
-                resolved.value.data_type =
+                let mut instantiated_field = field.clone();
+                instantiated_field.value.data_type =
                     substitute_type_parameters(&field.value.data_type, &inference.substitution);
-                resolved
+                instantiated_field
             })
             .collect();
 
@@ -87,7 +87,7 @@ pub(crate) fn parse_struct_constructor_expression(
         (fields.to_owned(), None)
     };
 
-    let expectations = expectations_from_struct_fields(&fields);
+    let expectations = expectations_from_struct_fields(&resolved_fields);
     let resolved_args = resolve_call_arguments(
         CallDiagnosticContext::struct_constructor(&struct_name_str),
         &raw_args,
@@ -99,7 +99,7 @@ pub(crate) fn parse_struct_constructor_expression(
     let enforce_const_record = context.kind.allows_const_record_coercion();
     let mut struct_fields = Vec::with_capacity(fields.len());
 
-    for (field, arg) in fields.iter().zip(resolved_args.iter()) {
+    for (field, arg) in resolved_fields.iter().zip(resolved_args.iter()) {
         let field_type = &field.value.data_type;
         // Apply contextual numeric coercion (Int → Float) post-resolution, consistent with
         // declaration sites. resolve_call_arguments has already validated type compatibility.
@@ -108,13 +108,12 @@ pub(crate) fn parse_struct_constructor_expression(
         if enforce_const_record {
             // Header-stage struct shells may carry placeholder references until AST environment
             // construction resolves constants in graph order.
-            let is_placeholder_reference = if let ExpressionKind::Reference(path) = &value.kind
-                && path.name().is_some_and(|name| {
+            let is_placeholder_reference = if let ExpressionKind::Reference(path) = &value.kind {
+                path.name().is_some_and(|name| {
                     context
                         .get_reference(&name)
                         .is_some_and(Declaration::is_unresolved_constant_placeholder)
-                }) {
-                true
+                })
             } else {
                 false
             };

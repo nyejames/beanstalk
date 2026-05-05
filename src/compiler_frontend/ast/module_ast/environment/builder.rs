@@ -249,7 +249,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             &'a crate::compiler_frontend::datatypes::generics::GenericParameterScope,
         >,
     ) -> TypeResolutionContext<'a> {
-        let mut ctx = TypeResolutionContext::from_inputs(TypeResolutionContextInputs {
+        let mut context = TypeResolutionContext::from_inputs(TypeResolutionContextInputs {
             declaration_table: &self.declaration_table,
             visible_declaration_ids: Some(&visibility.visible_declaration_paths),
             visible_external_symbols: Some(&visibility.visible_external_symbols),
@@ -261,9 +261,9 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             generic_nominal_instantiations: Some(self.generic_nominal_instantiations.as_ref()),
         });
         if let Some(gp) = generic_parameters {
-            ctx = ctx.with_generic_parameters(Some(gp));
+            context = context.with_generic_parameters(Some(gp));
         }
-        ctx
+        context
     }
 
     pub(crate) fn error_messages(

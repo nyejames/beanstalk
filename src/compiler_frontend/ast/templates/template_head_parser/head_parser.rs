@@ -93,7 +93,7 @@ pub fn parse_template_head(
     template.id = format!("{BS_VAR_PREFIX}templateID_{}", token_stream.index);
 
     // Each expression must be separated with a comma.
-    let mut comma_separator = true;
+    let mut expecting_comma = true;
     let mut head_state = TemplateHeadState::default();
     let meaningful_item_compatibility = TemplateHeadCompatibility::fully_compatible_meaningful();
     token_stream.advance();
@@ -132,7 +132,7 @@ pub fn parse_template_head(
         }
 
         // Make sure there is a comma before the next token.
-        if !comma_separator {
+        if !expecting_comma {
             if token != TokenKind::Comma {
                 return_syntax_error!(
                     format!(
@@ -143,19 +143,19 @@ pub fn parse_template_head(
                 )
             }
 
-            comma_separator = true;
+            expecting_comma = true;
             token_stream.advance();
             continue;
         }
 
-        let mut defer_separator_token = false;
+        let mut defer_comma_advance = false;
 
         match token {
             // Variable and template references
             TokenKind::Symbol(name) => {
                 // Check if it's a regular template reference or variable reference.
                 // If this is a reference to a function or variable.
-                if let Some(arg) = context.get_reference(&name) {
+                if let Some(reference) = context.get_reference(&name) {
                     enforce_head_compatibility(
                         &head_state,
                         &meaningful_item_compatibility,
@@ -163,7 +163,7 @@ pub fn parse_template_head(
                         None,
                     )?;
                     let value_location = token_stream.current_location();
-                    match &arg.value.kind {
+                    match &reference.value.kind {
                         // Direct template references should preserve wrapper/slot semantics.
                         ExpressionKind::Template(inserted_template) => {
                             handle_template_value_in_template_head(
@@ -179,24 +179,24 @@ pub fn parse_template_head(
                         // Otherwise this is a reference to some other variable:
                         // string, number, bool, etc.
                         _ => {
-                            let expr = create_expression(
+                            let expression = create_expression(
                                 token_stream,
                                 context,
                                 &mut DataType::Inferred,
-                                &arg.value.value_mode,
+                                &reference.value.value_mode,
                                 false,
                                 string_table,
                             )?;
 
                             push_template_head_expression(
-                                expr,
+                                expression,
                                 context,
                                 template,
                                 foldable,
                                 &value_location,
                                 string_table,
                             )?;
-                            defer_separator_token = true;
+                            defer_comma_advance = true;
                         }
                     }
 
@@ -215,7 +215,7 @@ pub fn parse_template_head(
             // Receiver self-reference
             TokenKind::This => {
                 let this_id = string_table.intern("this");
-                if let Some(arg) = context.get_reference(&this_id) {
+                if let Some(reference) = context.get_reference(&this_id) {
                     enforce_head_compatibility(
                         &head_state,
                         &meaningful_item_compatibility,
@@ -223,24 +223,24 @@ pub fn parse_template_head(
                         None,
                     )?;
                     let value_location = token_stream.current_location();
-                    let expr = create_expression(
+                    let expression = create_expression(
                         token_stream,
                         context,
                         &mut DataType::Inferred,
-                        &arg.value.value_mode,
+                        &reference.value.value_mode,
                         false,
                         string_table,
                     )?;
 
                     push_template_head_expression(
-                        expr,
+                        expression,
                         context,
                         template,
                         foldable,
                         &value_location,
                         string_table,
                     )?;
-                    defer_separator_token = true;
+                    defer_comma_advance = true;
                     apply_head_compatibility(&mut head_state, &meaningful_item_compatibility);
                 } else {
                     return_syntax_error!(
@@ -264,7 +264,7 @@ pub fn parse_template_head(
                     None,
                 )?;
                 let value_location = token_stream.current_location();
-                let expr = create_expression(
+                let expression = create_expression(
                     token_stream,
                     context,
                     &mut DataType::Inferred,
@@ -274,14 +274,14 @@ pub fn parse_template_head(
                 )?;
 
                 push_template_head_expression(
-                    expr,
+                    expression,
                     context,
                     template,
                     foldable,
                     &value_location,
                     string_table,
                 )?;
-                defer_separator_token = true;
+                defer_comma_advance = true;
                 apply_head_compatibility(&mut head_state, &meaningful_item_compatibility);
             }
 
@@ -322,7 +322,7 @@ pub fn parse_template_head(
                     None,
                 )?;
                 let value_location = token_stream.current_location();
-                let expr = create_expression(
+                let expression = create_expression(
                     token_stream,
                     context,
                     &mut DataType::Inferred,
@@ -332,14 +332,14 @@ pub fn parse_template_head(
                 )?;
 
                 push_template_head_expression(
-                    expr,
+                    expression,
                     context,
                     template,
                     foldable,
                     &value_location,
                     string_table,
                 )?;
-                defer_separator_token = true;
+                defer_comma_advance = true;
                 apply_head_compatibility(&mut head_state, &meaningful_item_compatibility);
             }
 
@@ -376,7 +376,7 @@ pub fn parse_template_head(
                 if handled_slot_insert {
                     apply_head_compatibility(&mut head_state, &spec.head_compatibility);
                 } else {
-                    defer_separator_token = parse_style_directive_from_spec(
+                    defer_comma_advance = parse_style_directive_from_spec(
                         token_stream,
                         context,
                         template,
@@ -434,8 +434,8 @@ pub fn parse_template_head(
             return Ok(());
         }
 
-        comma_separator = false;
-        if !defer_separator_token {
+        expecting_comma = false;
+        if !defer_comma_advance {
             token_stream.advance();
         }
     }
@@ -454,7 +454,7 @@ fn parse_style_directive_from_spec(
     spec: &StyleDirectiveSpec,
     string_table: &mut StringTable,
 ) -> Result<bool, CompilerError> {
-    let parse_result = match &spec.kind {
+    let directive_result = match &spec.kind {
         StyleDirectiveKind::Core(kind) => parse_core_style_directive(
             token_stream,
             context,
@@ -473,12 +473,12 @@ fn parse_style_directive_from_spec(
         ),
     };
 
-    if parse_result.is_ok() {
+    if directive_result.is_ok() {
         // Any explicit style directive switches the template into style-controlled
         // whitespace mode. Individual formatters can opt into shared whitespace
         // passes explicitly via `Formatter` pre/post pass profiles.
         mark_template_body_whitespace_style_controlled(template);
     }
 
-    parse_result.map(|_| false)
+    directive_result.map(|_| false)
 }

@@ -10,6 +10,10 @@ use crate::compiler_frontend::tests::test_support::{
     function_body_by_name, parse_single_file_ast, parse_single_file_ast_error,
 };
 
+// --------------------------
+//  Named handler with fallback
+// --------------------------
+
 #[test]
 fn parses_named_handler_with_fallback() {
     let (ast, string_table) = parse_single_file_ast(
@@ -41,6 +45,10 @@ fn parses_named_handler_with_fallback() {
     assert_eq!(handler_body.len(), 1);
 }
 
+// --------------------------
+//  Named handler without fallback (terminating body)
+// --------------------------
+
 #[test]
 fn parses_named_handler_without_fallback_when_handler_guarantees_return() {
     let (ast, string_table) = parse_single_file_ast(
@@ -69,6 +77,10 @@ fn parses_named_handler_without_fallback_when_handler_guarantees_return() {
     assert!(matches!(handler_body[0].kind, NodeKind::Return(_)));
 }
 
+// --------------------------
+//  Named handler fallthrough rejection
+// --------------------------
+
 #[test]
 fn rejects_named_handler_without_fallback_when_handler_can_fall_through() {
     let error = parse_single_file_ast_error(
@@ -83,6 +95,10 @@ fn rejects_named_handler_without_fallback_when_handler_can_fall_through() {
         error.msg
     );
 }
+
+// --------------------------
+//  Handler name conflict
+// --------------------------
 
 #[test]
 fn rejects_named_handler_name_conflict_with_visible_declaration() {
@@ -99,6 +115,10 @@ fn rejects_named_handler_name_conflict_with_visible_declaration() {
     );
 }
 
+// --------------------------
+//  Fallback arity validation
+// --------------------------
+
 #[test]
 fn rejects_fallback_arity_mismatch_for_multi_value_success_returns() {
     let error = parse_single_file_ast_error(
@@ -113,6 +133,10 @@ fn rejects_fallback_arity_mismatch_for_multi_value_success_returns() {
         error.msg
     );
 }
+
+// --------------------------
+//  Bare handler rejections
+// --------------------------
 
 #[test]
 fn rejects_invalid_bare_err_for_call_named_handler_shape() {

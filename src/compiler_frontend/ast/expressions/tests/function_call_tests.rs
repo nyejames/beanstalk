@@ -34,9 +34,11 @@ fn parse_args(
         None,
     )
     .expect("tokenization should succeed");
+
     while tokens.current_token_kind() != &TokenKind::OpenParenthesis {
         tokens.advance();
     }
+
     let context = ScopeContext::new(
         ContextKind::Function,
         InternedPath::new(),
@@ -44,6 +46,7 @@ fn parse_args(
         ExternalPackageRegistry::new(),
         vec![],
     );
+
     parse_call_arguments(&mut tokens, &context, &mut string_table)
         .expect("call arguments should parse")
 }
@@ -61,9 +64,11 @@ fn parse_args_error(source: &str) -> crate::compiler_frontend::compiler_errors::
         None,
     )
     .expect("tokenization should succeed");
+
     while tokens.current_token_kind() != &TokenKind::OpenParenthesis {
         tokens.advance();
     }
+
     let context = ScopeContext::new(
         ContextKind::Function,
         InternedPath::new(),
@@ -71,6 +76,7 @@ fn parse_args_error(source: &str) -> crate::compiler_frontend::compiler_errors::
         ExternalPackageRegistry::new(),
         vec![],
     );
+
     parse_call_arguments(&mut tokens, &context, &mut string_table)
         .expect_err("call arguments should fail")
 }
@@ -80,6 +86,7 @@ fn parse_args_error(source: &str) -> crate::compiler_frontend::compiler_errors::
 #[test]
 fn parses_positional_and_named_call_arguments_with_equals_syntax() {
     let args = parse_args("sum(1, b = 2)");
+
     assert_eq!(args.len(), 2);
     assert!(args[0].target_param.is_none());
     assert_eq!(args[0].access_mode, CallAccessMode::Shared);
@@ -89,6 +96,7 @@ fn parses_positional_and_named_call_arguments_with_equals_syntax() {
 #[test]
 fn parses_named_mutable_argument_on_value_side() {
     let args = parse_args("take(value = ~1)");
+
     assert_eq!(args.len(), 1);
     assert!(args[0].target_param.is_some());
     assert_eq!(args[0].access_mode, CallAccessMode::Mutable);
@@ -97,6 +105,7 @@ fn parses_named_mutable_argument_on_value_side() {
 #[test]
 fn parses_all_named_arguments() {
     let args = parse_args("sum(a = 1, b = 2)");
+
     assert_eq!(args.len(), 2);
     assert!(args[0].target_param.is_some());
     assert!(args[1].target_param.is_some());
@@ -105,6 +114,7 @@ fn parses_all_named_arguments() {
 #[test]
 fn parses_mixed_positional_then_named() {
     let args = parse_args("sum(1, b = 2, c = 3)");
+
     assert_eq!(args.len(), 3);
     assert!(args[0].target_param.is_none());
     assert!(args[1].target_param.is_some());
@@ -122,6 +132,7 @@ value ~= 1
 take(~value = value)
 "#,
     );
+
     assert!(
         error
             .msg
@@ -140,6 +151,7 @@ sum |a Int, b Int| -> Int:
 sum(a = 1, 2)
 "#,
     );
+
     assert!(
         error.msg.contains("positional arguments after named")
             || error.msg.contains("does not allow positional")
@@ -157,6 +169,7 @@ sum |a Int, b Int| -> Int:
 sum(a = 1, a = 2)
 "#,
     );
+
     assert!(error.msg.contains("more than once") || error.msg.contains("Parameter 'a'"));
 }
 
@@ -171,6 +184,7 @@ sum |a Int, b Int| -> Int:
 sum(a = 1, unknown = 2)
 "#,
     );
+
     assert!(error.msg.contains("no parameter named 'unknown'"));
 }
 
@@ -185,6 +199,7 @@ sum |a Int, b Int| -> Int:
 sum(a = 1)
 "#,
     );
+
     assert!(error.msg.contains("Missing required argument") || error.msg.contains("parameter 'b'"));
 }
 
@@ -192,6 +207,7 @@ sum(a = 1)
 fn rejects_tilde_on_left_side_of_named_arg() {
     // ~name = value is explicitly rejected at the parse level
     let error = parse_args_error("take(~value = 1)");
+
     assert!(
         error
             .msg

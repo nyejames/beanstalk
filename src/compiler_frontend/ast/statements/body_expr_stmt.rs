@@ -16,8 +16,8 @@ use crate::compiler_frontend::tokenizer::tokens::FileTokens;
 use crate::compiler_frontend::value_mode::ValueMode;
 use crate::return_syntax_error;
 
-fn is_expression_statement(expr: &Expression) -> bool {
-    match &expr.kind {
+fn is_expression_statement(expression: &Expression) -> bool {
+    match &expression.kind {
         ExpressionKind::FunctionCall(..)
         | ExpressionKind::ResultHandledFunctionCall { .. }
         | ExpressionKind::HandledResult { .. }
@@ -41,7 +41,7 @@ pub(crate) fn parse_expression_statement_candidate(
     string_table: &mut StringTable,
 ) -> Result<Expression, CompilerError> {
     let mut inferred = DataType::Inferred;
-    let expr = create_expression(
+    let expression = create_expression(
         token_stream,
         context,
         &mut inferred,
@@ -50,7 +50,7 @@ pub(crate) fn parse_expression_statement_candidate(
         string_table,
     )?;
 
-    if !is_expression_statement(&expr) {
+    if !is_expression_statement(&expression) {
         return_syntax_error!(
             "Standalone expression is not a valid statement in this position.",
             token_stream.current_location(),
@@ -61,7 +61,7 @@ pub(crate) fn parse_expression_statement_candidate(
         );
     }
 
-    Ok(expr)
+    Ok(expression)
 }
 
 pub(crate) fn parse_symbol_expression_statement_candidate(
@@ -71,7 +71,7 @@ pub(crate) fn parse_symbol_expression_statement_candidate(
     string_table: &mut StringTable,
 ) -> Result<Expression, CompilerError> {
     let mut inferred = DataType::Inferred;
-    let expr = create_expression(
+    let expression = create_expression(
         token_stream,
         context,
         &mut inferred,
@@ -80,7 +80,7 @@ pub(crate) fn parse_symbol_expression_statement_candidate(
         string_table,
     )?;
 
-    if !is_expression_statement(&expr) {
+    if !is_expression_statement(&expression) {
         return_syntax_error!(
             format!(
                 "Unexpected token '{:?}' after variable reference '{}'. Expected an assignment or callable expression.",
@@ -95,5 +95,5 @@ pub(crate) fn parse_symbol_expression_statement_candidate(
         );
     }
 
-    Ok(expr)
+    Ok(expression)
 }

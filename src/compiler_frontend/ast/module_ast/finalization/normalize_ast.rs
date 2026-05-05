@@ -982,6 +982,10 @@ fn normalize_template_for_hir(
     Ok(())
 }
 
+/// Checks whether a template's final value is an illegal helper artifact.
+///
+/// WHAT: `$insert(...)` helpers and `SlotInsert` template types are only valid
+/// during wrapper composition; they must not survive as standalone values.
 fn is_illegal_final_template_helper_value(
     template: &Template,
     const_kind: TemplateConstValueKind,

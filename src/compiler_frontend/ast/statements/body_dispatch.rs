@@ -32,10 +32,10 @@ use crate::projects::settings;
 use crate::{ast_log, return_rule_error, return_syntax_error};
 
 fn unexpected_function_body_token_error(
-    token: &TokenKind,
+    token_kind: &TokenKind,
     token_stream: &FileTokens,
 ) -> CompilerError {
-    match token {
+    match token_kind {
         TokenKind::Comma => {
             let mut error = CompilerError::new_syntax_error(
                 "Unexpected ',' in function body. Commas only separate items in lists, arguments, or return declarations.",
@@ -108,7 +108,7 @@ fn unexpected_function_body_token_error(
 
         TokenKind::Must | TokenKind::TraitThis => {
             let keyword = match reserved_trait_keyword_or_dispatch_mismatch(
-                token,
+                token_kind,
                 token_stream.current_location(),
                 "AST Construction",
                 "function-body statement parsing",
@@ -200,13 +200,13 @@ fn unexpected_function_body_token_error(
             error
         }
 
-        other => {
-            if let Some(error) = check_statement_common_mistake(other, token_stream) {
+        unrecognized => {
+            if let Some(error) = check_statement_common_mistake(unrecognized, token_stream) {
                 return error;
             }
 
             let mut error = CompilerError::new_syntax_error(
-                format!("Unexpected token '{other:?}' in a function body."),
+                format!("Unexpected token '{unrecognized:?}' in a function body."),
                 token_stream.current_location(),
             );
             error.new_metadata_entry(
@@ -297,7 +297,7 @@ pub(crate) fn parse_function_body_statements(
     warnings: &mut Vec<CompilerWarning>,
     string_table: &mut StringTable,
 ) -> Result<Vec<AstNode>, CompilerError> {
-    let mut ast: Vec<AstNode> =
+    let mut body_nodes: Vec<AstNode> =
         Vec::with_capacity(token_stream.length / settings::TOKEN_TO_NODE_RATIO);
 
     while token_stream.index < token_stream.length {
@@ -314,18 +314,18 @@ pub(crate) fn parse_function_body_statements(
             // Symbol statements (declarations, assignments, calls)
             TokenKind::Symbol(_) => parse_symbol_statement(
                 token_stream,
-                &mut ast,
+                &mut body_nodes,
                 &mut context,
                 warnings,
                 string_table,
             )?,
 
             TokenKind::This => {
-                parse_this_statement(token_stream, &mut ast, &mut context, string_table)?
+                parse_this_statement(token_stream, &mut body_nodes, &mut context, string_table)?
             }
 
             // Scoped blocks and deferred features
-            TokenKind::Block => ast.push(parse_scoped_block_statement(
+            TokenKind::Block => body_nodes.push(parse_scoped_block_statement(
                 token_stream,
                 &context,
                 warnings,
@@ -344,7 +344,7 @@ pub(crate) fn parse_function_body_statements(
             TokenKind::Loop => {
                 token_stream.advance();
 
-                ast.push(create_loop(
+                body_nodes.push(create_loop(
                     token_stream,
                     context.new_child_control_flow(ContextKind::Loop, string_table),
                     warnings,
@@ -355,7 +355,7 @@ pub(crate) fn parse_function_body_statements(
             TokenKind::If => {
                 token_stream.advance();
 
-                ast.extend(create_branch(
+                body_nodes.extend(create_branch(
                     token_stream,
                     &mut context.new_child_control_flow(ContextKind::Branch, string_table),
                     warnings,
@@ -393,7 +393,7 @@ pub(crate) fn parse_function_body_statements(
 
             // Return and loop control
             TokenKind::Return => {
-                parse_return_statement(token_stream, &mut ast, &context, string_table)?;
+                parse_return_statement(token_stream, &mut body_nodes, &context, string_table)?;
             }
 
             TokenKind::Break => {
@@ -408,7 +408,7 @@ pub(crate) fn parse_function_body_statements(
                     );
                 }
 
-                ast.push(AstNode {
+                body_nodes.push(AstNode {
                     kind: NodeKind::Break,
                     location: token_stream.current_location(),
                     scope: context.scope.clone(),
@@ -428,7 +428,7 @@ pub(crate) fn parse_function_body_statements(
                     );
                 }
 
-                ast.push(AstNode {
+                body_nodes.push(AstNode {
                     kind: NodeKind::Continue,
                     location: token_stream.current_location(),
                     scope: context.scope.clone(),
@@ -473,11 +473,11 @@ pub(crate) fn parse_function_body_statements(
                 }
 
                 let template = Template::new(token_stream, &context, vec![], string_table)?;
-                let expr = Expression::template(template, ValueMode::MutableOwned);
+                let expression = Expression::template(template, ValueMode::MutableOwned);
                 let location = token_stream.current_location();
 
-                ast.push(AstNode {
-                    kind: NodeKind::PushStartRuntimeFragment(expr),
+                body_nodes.push(AstNode {
+                    kind: NodeKind::PushStartRuntimeFragment(expression),
                     location,
                     scope: context.scope.clone(),
                 })
@@ -497,11 +497,11 @@ pub(crate) fn parse_function_body_statements(
             | TokenKind::CharLiteral(_)
             | TokenKind::Copy
             | TokenKind::Mutable => {
-                let expr =
+                let expression =
                     parse_expression_statement_candidate(token_stream, &context, string_table)?;
 
-                ast.push(AstNode {
-                    kind: NodeKind::Rvalue(expr),
+                body_nodes.push(AstNode {
+                    kind: NodeKind::Rvalue(expression),
                     location: token_stream.current_location(),
                     scope: context.scope.clone(),
                 });
@@ -518,5 +518,5 @@ pub(crate) fn parse_function_body_statements(
     }
 
     warnings.extend(context.take_emitted_warnings());
-    Ok(ast)
+    Ok(body_nodes)
 }

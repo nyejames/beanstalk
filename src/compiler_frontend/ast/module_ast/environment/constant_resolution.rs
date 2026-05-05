@@ -83,7 +83,7 @@ pub(crate) fn parse_constant_header_declaration(
         .map(|canonical_path| InternedPath::from_path_buf(canonical_path, string_table))
         .unwrap_or_else(|| header.source_file.to_owned());
 
-    let context = ScopeContext::new(
+    let scope_context = ScopeContext::new(
         ContextKind::ConstantHeader,
         header.tokens.src_path.to_owned(),
         top_level_declarations,
@@ -109,10 +109,10 @@ pub(crate) fn parse_constant_header_declaration(
     let declaration_result = resolve_declaration_syntax(
         declaration.clone(),
         header.tokens.src_path.to_owned(),
-        &context,
+        &scope_context,
         string_table,
     );
-    warnings.extend(context.take_emitted_warnings());
+    warnings.extend(scope_context.take_emitted_warnings());
     let declaration = declaration_result?;
 
     if !declaration.value.is_compile_time_constant() {

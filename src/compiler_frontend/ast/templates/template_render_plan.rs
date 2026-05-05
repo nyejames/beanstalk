@@ -143,9 +143,7 @@ impl TemplateRenderPlan {
                     pieces.push(RenderPiece::Slot(slot.clone()));
                 }
                 TemplateAtom::Content(segment) => {
-                    if segment.is_child_template_output
-                        && let Some(_source) = &segment.source_child_template
-                    {
+                    if segment.is_child_template_output && segment.source_child_template.is_some() {
                         pieces.push(RenderPiece::ChildTemplate(RenderChildPiece {
                             expression: segment.expression.clone(),
                         }));
@@ -197,44 +195,46 @@ impl TemplateRenderPlan {
 
         for piece in &self.pieces {
             match piece {
-                RenderPiece::HeadContent(p) => {
+                RenderPiece::HeadContent(text_piece) => {
                     atoms.push(TemplateAtom::Content(TemplateSegment::new(
                         Expression::string_slice(
-                            p.text,
-                            p.location.clone(),
+                            text_piece.text,
+                            text_piece.location.clone(),
                             ValueMode::ImmutableOwned,
                         ),
                         TemplateSegmentOrigin::Head,
                     )));
                 }
-                RenderPiece::Text(p) => {
+                RenderPiece::Text(text_piece) => {
                     atoms.push(TemplateAtom::Content(TemplateSegment::new(
                         Expression::string_slice(
-                            p.text,
-                            p.location.clone(),
+                            text_piece.text,
+                            text_piece.location.clone(),
                             ValueMode::ImmutableOwned,
                         ),
                         TemplateSegmentOrigin::Body,
                     )));
                 }
-                RenderPiece::ChildTemplate(c) => {
+                RenderPiece::ChildTemplate(child_piece) => {
                     atoms.push(TemplateAtom::Content(TemplateSegment {
                         expression: Expression {
-                            kind: c.expression.kind.clone(),
+                            kind: child_piece.expression.kind.clone(),
                             data_type: DataType::Template,
                             value_mode: ValueMode::ImmutableOwned,
-                            location: c.expression.location.clone(),
-                            contains_regular_division: c.expression.contains_regular_division,
+                            location: child_piece.expression.location.clone(),
+                            contains_regular_division: child_piece
+                                .expression
+                                .contains_regular_division,
                         },
                         origin: TemplateSegmentOrigin::Body,
                         is_child_template_output: true,
                         source_child_template: None,
                     }));
                 }
-                RenderPiece::DynamicExpression(p) => {
+                RenderPiece::DynamicExpression(expression_piece) => {
                     atoms.push(TemplateAtom::Content(TemplateSegment::new(
-                        p.expression.clone(),
-                        p.origin,
+                        expression_piece.expression.clone(),
+                        expression_piece.origin,
                     )));
                 }
                 RenderPiece::Slot(placeholder) => {

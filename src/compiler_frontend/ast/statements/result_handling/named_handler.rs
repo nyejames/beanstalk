@@ -59,7 +59,7 @@ pub(super) fn parse_named_result_handler(
     };
 
     let handler_name_location = token_stream.current_location();
-    let handler_name_text = string_table.resolve(handler_name).to_owned();
+    let handler_name_string = string_table.resolve(handler_name).to_owned();
 
     let mut local_handler_warnings: Vec<CompilerWarning> = Vec::new();
     let warnings = match warnings {
@@ -68,7 +68,7 @@ pub(super) fn parse_named_result_handler(
     };
 
     validate_named_result_handler_binding(
-        &handler_name_text,
+        &handler_name_string,
         handler_name_location.to_owned(),
         site.compilation_stage,
         warnings,
@@ -77,7 +77,7 @@ pub(super) fn parse_named_result_handler(
     validate_named_result_handler_conflict(
         context,
         handler_name,
-        &handler_name_text,
+        &handler_name_string,
         handler_name_location.to_owned(),
         site.compilation_stage,
     )?;
@@ -103,7 +103,7 @@ pub(super) fn parse_named_result_handler(
         context,
         site.success_result_types,
         string_table,
-        &handler_name_text,
+        &handler_name_string,
         site.compilation_stage,
         site.bare_handler_suggestion,
     )?;

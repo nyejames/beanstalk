@@ -4,15 +4,15 @@
 //! WHY: collections use expression recursion and can silently drift without focused coverage.
 
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
-use crate::compiler_frontend::ast::expressions::expression::{ExpressionKind, ResultCallHandling};
+use crate::compiler_frontend::ast::expressions::expression::{
+    Expression, ExpressionKind, ResultCallHandling,
+};
 use crate::compiler_frontend::builtins::{BuiltinMethodKind, CollectionBuiltinOp};
 use crate::compiler_frontend::tests::test_support::{
     function_body_by_name, parse_single_file_ast, parse_single_file_ast_error, start_function_body,
 };
 
-fn runtime_collection_builtin_op(
-    expression: &crate::compiler_frontend::ast::expressions::expression::Expression,
-) -> CollectionBuiltinOp {
+fn runtime_collection_builtin_op(expression: &Expression) -> CollectionBuiltinOp {
     let ExpressionKind::Runtime(nodes) = &expression.kind else {
         panic!("expected runtime expression");
     };
@@ -24,9 +24,7 @@ fn runtime_collection_builtin_op(
     *op
 }
 
-fn runtime_method_builtin_kind(
-    expression: &crate::compiler_frontend::ast::expressions::expression::Expression,
-) -> BuiltinMethodKind {
+fn runtime_method_builtin_kind(expression: &Expression) -> BuiltinMethodKind {
     let ExpressionKind::Runtime(nodes) = &expression.kind else {
         panic!("expected runtime expression");
     };
@@ -42,14 +40,16 @@ fn runtime_method_builtin_kind(
     *kind
 }
 
-fn declaration_runtime_method_builtin_kind(
-    node: &NodeKind,
-) -> crate::compiler_frontend::builtins::BuiltinMethodKind {
+fn declaration_runtime_method_builtin_kind(node: &NodeKind) -> BuiltinMethodKind {
     let NodeKind::VariableDeclaration(declaration) = node else {
         panic!("expected variable declaration node");
     };
     runtime_method_builtin_kind(&declaration.value)
 }
+
+// --------------------------
+//  Collection literals
+// --------------------------
 
 #[test]
 fn parses_collection_literal_items() {
@@ -193,6 +193,10 @@ fn rejects_missing_collection_item_after_comma() {
     );
 }
 
+// --------------------------
+//  Result handling on collections
+// --------------------------
+
 #[test]
 fn parses_collection_get_with_fallback_handler_and_propagation() {
     let (ast, string_table) = parse_single_file_ast(
@@ -226,6 +230,10 @@ fn parses_collection_get_with_fallback_handler_and_propagation() {
     };
     assert!(matches!(handling, ResultCallHandling::Propagate));
 }
+
+// --------------------------
+//  Collection mutators and accessors
+// --------------------------
 
 #[test]
 fn parses_collection_mutators_and_length_calls() {
@@ -385,6 +393,10 @@ fn rejects_unhandled_collection_get_result() {
         error.msg
     );
 }
+
+// --------------------------
+//  Builtin error helpers
+// --------------------------
 
 #[test]
 fn parses_builtin_error_helper_methods() {

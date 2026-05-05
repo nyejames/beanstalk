@@ -28,10 +28,11 @@ pub(super) fn parse_children_style_directive(
     template: &mut Template,
     string_table: &mut StringTable,
 ) -> Result<(), CompilerError> {
-    let argument = parse_required_parenthesized_expression(token_stream, context, string_table)?;
-    let argument_location = argument.location.clone();
+    let directive_argument =
+        parse_required_parenthesized_expression(token_stream, context, string_table)?;
+    let argument_location = directive_argument.location.clone();
 
-    if !argument.is_compile_time_constant() {
+    if !directive_argument.is_compile_time_constant() {
         return_syntax_error!(
             "The '$children(..)' directive only accepts compile-time values.",
             argument_location,
@@ -41,7 +42,7 @@ pub(super) fn parse_children_style_directive(
         );
     }
 
-    let normalized = match argument.kind {
+    let normalized = match directive_argument.kind {
         ExpressionKind::Template(child_template) => {
             if matches!(
                 child_template.kind,

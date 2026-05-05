@@ -102,7 +102,7 @@ impl FunctionSignature {
         token_stream: &mut FileTokens,
         warnings: &mut Vec<CompilerWarning>,
         string_table: &mut StringTable,
-        scope: &InternedPath,
+        function_path: &InternedPath,
         parent_context: &ScopeContext,
     ) -> Result<Self, CompilerError> {
         token_stream.advance();
@@ -110,13 +110,14 @@ impl FunctionSignature {
         // ----------------------------
         //  Parse parameters
         // ----------------------------
-        let signature_context = ScopeContext::new_constant(scope.to_owned(), parent_context);
+        let signature_context =
+            ScopeContext::new_constant(function_path.to_owned(), parent_context);
         let parameters = parse_signature_members(
             token_stream,
             string_table,
             &signature_context,
             SignatureMemberContext::FunctionParameter,
-            scope,
+            function_path,
         )?;
         warnings.extend(signature_context.take_emitted_warnings());
         token_stream.advance();
@@ -236,7 +237,7 @@ fn parse_return_list(
     parameters: &[Declaration],
     string_table: &mut StringTable,
 ) -> Result<Vec<ReturnSlot>, CompilerError> {
-    let mut returns = Vec::new();
+    let mut return_slots = Vec::new();
 
     // ----------------------------
     //  Parse return declarations
@@ -254,7 +255,7 @@ fn parse_return_list(
     }
 
     loop {
-        returns.push(parse_single_return_item(
+        return_slots.push(parse_single_return_item(
             token_stream,
             parameters,
             string_table,
@@ -293,8 +294,8 @@ fn parse_return_list(
             }
             TokenKind::Colon => {
                 token_stream.advance();
-                validate_return_slots(&returns, token_stream, string_table)?;
-                return Ok(returns);
+                validate_return_slots(&return_slots, token_stream, string_table)?;
+                return Ok(return_slots);
             }
             TokenKind::Eof => {
                 return_syntax_error!(
@@ -327,10 +328,10 @@ fn parse_return_list(
                     }
                 )
             }
-            other => {
+            unexpected_token => {
                 return_syntax_error!(
                     format!(
-                        "Expected ',' or ':' after function return declaration, found '{other:?}'",
+                        "Expected ',' or ':' after function return declaration, found '{unexpected_token:?}'",
                     ),
                     token_stream.current_location(),
                     {
@@ -348,25 +349,20 @@ fn parse_single_return_item(
     parameters: &[Declaration],
     string_table: &mut StringTable,
 ) -> Result<ReturnSlot, CompilerError> {
-    let current_location = token_stream.current_location();
+    let location = token_stream.current_location();
     if let Some(symbol) = parameter_alias_symbol(token_stream.current_token_kind(), string_table) {
         if parameters
             .iter()
             .any(|parameter| parameter.id.name() == Some(symbol))
         {
-            return parse_alias_return_item(
-                token_stream,
-                parameters,
-                string_table,
-                current_location,
-            );
+            return parse_alias_return_item(token_stream, parameters, string_table, location);
         }
 
         let symbol_name = string_table.resolve(symbol);
         if symbol_name == "Void" {
             return_syntax_error!(
                 "Void is not a valid function return declaration",
-                current_location,
+                location,
                 {
                     CompilationStage => "Function Signature Parsing",
                     PrimarySuggestion => "Functions without return values should omit '->' entirely",
@@ -396,9 +392,9 @@ fn parse_alias_return_item(
     token_stream: &mut FileTokens,
     parameters: &[Declaration],
     string_table: &mut StringTable,
-    current_location: SourceLocation,
+    location: SourceLocation,
 ) -> Result<ReturnSlot, CompilerError> {
-    let mut parameter_indices = Vec::new();
+    let mut candidate_indices = Vec::new();
     let mut alias_type: Option<DataType> = None;
 
     loop {
@@ -425,7 +421,7 @@ fn parse_alias_return_item(
                     "Unknown return alias '{}'. Alias returns must name a function parameter.",
                     string_table.resolve(current_symbol)
                 ),
-                current_location,
+                location,
                 {
                     CompilationStage => "Function Signature Parsing",
                     PrimarySuggestion => "Use a parameter name in the return list or a concrete return type such as Int",
@@ -438,7 +434,7 @@ fn parse_alias_return_item(
             if existing_type != &param_type {
                 return_type_error!(
                     "All alias candidates in a single return slot must have the same type",
-                    current_location,
+                    location,
                     {
                         CompilationStage => "Function Signature Parsing",
                         PrimarySuggestion => "Only combine parameters of the same type with 'or'",
@@ -449,7 +445,7 @@ fn parse_alias_return_item(
             alias_type = Some(param_type);
         }
 
-        if parameter_indices.contains(&param_index) {
+        if candidate_indices.contains(&param_index) {
             return_syntax_error!(
                 "Duplicate parameter used in the same alias return declaration",
                 token_stream.current_location(),
@@ -460,7 +456,7 @@ fn parse_alias_return_item(
             );
         }
 
-        parameter_indices.push(param_index);
+        candidate_indices.push(param_index);
         token_stream.advance();
 
         match token_stream.current_token_kind() {
@@ -485,7 +481,7 @@ fn parse_alias_return_item(
     let Some(data_type) = alias_type else {
         return_syntax_error!(
             "Alias return declarations must include at least one parameter name",
-            current_location,
+            location,
             {
                 CompilationStage => "Function Signature Parsing",
                 PrimarySuggestion => "Write alias returns like 'arg' or 'arg or other_arg'",
@@ -505,7 +501,7 @@ fn parse_alias_return_item(
     }
 
     Ok(ReturnSlot::success(FunctionReturn::AliasCandidates {
-        parameter_indices,
+        parameter_indices: candidate_indices,
         data_type,
     }))
 }
@@ -515,13 +511,13 @@ fn validate_return_slots(
     token_stream: &FileTokens,
     string_table: &StringTable,
 ) -> Result<(), CompilerError> {
-    let error_slots: Vec<(usize, &ReturnSlot)> = returns
+    let error_return_slots: Vec<(usize, &ReturnSlot)> = returns
         .iter()
         .enumerate()
-        .filter(|(_, slot)| slot.channel == ReturnChannel::Error)
+        .filter(|(_, return_slot)| return_slot.channel == ReturnChannel::Error)
         .collect();
 
-    if error_slots.len() > 1 {
+    if error_return_slots.len() > 1 {
         return_syntax_error!(
             "Function signatures can only declare one distinguished error return slot",
             token_stream.current_location(),
@@ -532,7 +528,7 @@ fn validate_return_slots(
         );
     }
 
-    if let Some((error_index, _)) = error_slots.first()
+    if let Some((error_index, _)) = error_return_slots.first()
         && *error_index + 1 != returns.len()
     {
         return_syntax_error!(
@@ -545,8 +541,8 @@ fn validate_return_slots(
         );
     }
 
-    for slot in returns {
-        if let DataType::NamedType(type_name) = slot.data_type()
+    for return_slot in returns {
+        if let DataType::NamedType(type_name) = return_slot.data_type()
             && string_table.resolve(*type_name) == "Void"
         {
             return_syntax_error!(
@@ -564,10 +560,10 @@ fn validate_return_slots(
 }
 
 fn parameter_alias_symbol(
-    token_kind: &TokenKind,
+    token: &TokenKind,
     string_table: &mut StringTable,
 ) -> Option<crate::compiler_frontend::symbols::string_interning::StringId> {
-    match token_kind {
+    match token {
         TokenKind::Symbol(symbol) => Some(*symbol),
         TokenKind::This => Some(string_table.intern("this")),
         _ => None,

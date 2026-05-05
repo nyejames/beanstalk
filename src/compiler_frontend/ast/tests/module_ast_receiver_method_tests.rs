@@ -176,14 +176,14 @@ fn recursive_runtime_struct_cycles_are_rejected() {
     let mut string_table = StringTable::new();
     let struct_a = interned_path(&["A"], &mut string_table);
     let struct_b = interned_path(&["B"], &mut string_table);
-    let field_ab = interned_path(&["A", "b"], &mut string_table);
-    let field_ba = interned_path(&["B", "a"], &mut string_table);
+    let struct_a_field_b = interned_path(&["A", "b"], &mut string_table);
+    let struct_b_field_a = interned_path(&["B", "a"], &mut string_table);
 
     let mut struct_fields = FxHashMap::default();
     struct_fields.insert(
         struct_a.to_owned(),
         vec![Declaration {
-            id: field_ab,
+            id: struct_a_field_b,
             value: Expression::new(
                 ExpressionKind::NoValue,
                 SourceLocation::default(),
@@ -195,7 +195,7 @@ fn recursive_runtime_struct_cycles_are_rejected() {
     struct_fields.insert(
         struct_b.to_owned(),
         vec![Declaration {
-            id: field_ba,
+            id: struct_b_field_a,
             value: Expression::new(
                 ExpressionKind::NoValue,
                 SourceLocation::default(),

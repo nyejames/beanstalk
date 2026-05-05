@@ -259,13 +259,15 @@ fn push_atom_to_current_line(lines: &mut Vec<MarkdownLine>, atom: MarkdownInline
 /// Renders the full markdown line stream while keeping block/list state across anchors.
 fn render_markdown_stream(lines: &[MarkdownLine], default_tag: &str) -> Vec<FormatterOutputPiece> {
     let mut output = MarkdownOutputBuilder::default();
-    let mut index = 0usize;
+    let mut line_index = 0usize;
     let mut has_rendered_block = false;
 
-    while index < lines.len() {
-        if line_is_blank(&lines[index]) {
+    while line_index < lines.len() {
+        if line_is_blank(&lines[line_index]) {
             let mut blank_run = 0usize;
-            while index + blank_run < lines.len() && line_is_blank(&lines[index + blank_run]) {
+            while line_index + blank_run < lines.len()
+                && line_is_blank(&lines[line_index + blank_run])
+            {
                 blank_run += 1;
             }
 
@@ -275,42 +277,42 @@ fn render_markdown_stream(lines: &[MarkdownLine], default_tag: &str) -> Vec<Form
                 blank_run.saturating_sub(1) / 2
             };
             append_break_tags(&mut output, break_count);
-            index += blank_run;
+            line_index += blank_run;
             continue;
         }
 
-        if parse_list_item_line(&lines[index]).is_some() {
-            let (rendered, consumed_lines) = render_list_block(&lines[index..], default_tag);
+        if parse_list_item_line(&lines[line_index]).is_some() {
+            let (rendered, consumed_lines) = render_list_block(&lines[line_index..], default_tag);
             if consumed_lines == 0 {
                 break;
             }
 
             output.append_pieces(rendered);
             has_rendered_block = true;
-            index += consumed_lines;
+            line_index += consumed_lines;
             continue;
         }
 
-        if let Some(heading) = parse_heading_line(&lines[index]) {
+        if let Some(heading) = parse_heading_line(&lines[line_index]) {
             output.append_pieces(render_heading_line(&heading));
             has_rendered_block = true;
-            index += 1;
+            line_index += 1;
             continue;
         }
 
-        let region_start = index;
-        while index < lines.len() {
-            if line_is_blank(&lines[index])
-                || parse_list_item_line(&lines[index]).is_some()
-                || parse_heading_line(&lines[index]).is_some()
+        let region_start = line_index;
+        while line_index < lines.len() {
+            if line_is_blank(&lines[line_index])
+                || parse_list_item_line(&lines[line_index]).is_some()
+                || parse_heading_line(&lines[line_index]).is_some()
             {
                 break;
             }
-            index += 1;
+            line_index += 1;
         }
 
         output.append_pieces(render_plain_region(
-            &lines[region_start..index],
+            &lines[region_start..line_index],
             default_tag,
         ));
         has_rendered_block = true;
@@ -606,15 +608,18 @@ fn render_inline_atoms(
     let mut emphasis_strength: Option<usize> = None;
     let mut pending_open_strength = 0usize;
     let mut prev_whitespace = true;
-    let mut index = 0usize;
+    let mut atom_index = 0usize;
 
     if open_wrapper_immediately {
         open_wrapper(&mut output, wrapper_tag, &mut wrapper_open);
     }
 
-    while index < atoms.len() {
+    while atom_index < atoms.len() {
         if pending_open_strength > 0
-            && !matches!(atoms[index], MarkdownInlineAtom::Char(' ' | '\t' | '*'))
+            && !matches!(
+                atoms[atom_index],
+                MarkdownInlineAtom::Char(' ' | '\t' | '*')
+            )
         {
             open_pending_emphasis(
                 &mut output,
@@ -625,12 +630,13 @@ fn render_inline_atoms(
             );
         }
 
-        match atoms[index] {
+        match atoms[atom_index] {
             MarkdownInlineAtom::Opaque(anchor) => {
                 output.push_opaque(anchor);
                 prev_whitespace = false;
-                index += 1;
+                atom_index += 1;
             }
+
             MarkdownInlineAtom::Char(ch @ (' ' | '\t')) => {
                 literalize_pending_stars(
                     &mut output,
@@ -640,8 +646,9 @@ fn render_inline_atoms(
                 );
                 output.push_escaped_char(ch);
                 prev_whitespace = true;
-                index += 1;
+                atom_index += 1;
             }
+
             MarkdownInlineAtom::Char('\n') | MarkdownInlineAtom::Char('\r') => {
                 literalize_pending_stars(
                     &mut output,
@@ -653,29 +660,30 @@ fn render_inline_atoms(
                 // here so inline parsing can still reject cross-line constructs.
                 output.push_escaped_char(' ');
                 prev_whitespace = true;
-                index += 1;
+                atom_index += 1;
             }
+
             MarkdownInlineAtom::Char('*') => {
-                let star_run = count_consecutive_star_chars(atoms, index);
+                let star_run = count_consecutive_star_chars(atoms, atom_index);
 
                 if let Some(active_strength) = emphasis_strength {
                     if star_run >= active_strength {
                         output.push_raw(em_tag_strength(active_strength as i32, true));
                         emphasis_strength = None;
                         prev_whitespace = false;
-                        index += active_strength;
+                        atom_index += active_strength;
                     } else {
                         open_wrapper(&mut output, wrapper_tag, &mut wrapper_open);
                         output.push_raw(&"*".repeat(star_run));
                         prev_whitespace = false;
-                        index += star_run;
+                        atom_index += star_run;
                     }
                     continue;
                 }
 
                 if prev_whitespace && (1..=3).contains(&star_run) {
                     pending_open_strength = star_run;
-                    index += star_run;
+                    atom_index += star_run;
                     continue;
                 }
 
@@ -688,10 +696,11 @@ fn render_inline_atoms(
                 open_wrapper(&mut output, wrapper_tag, &mut wrapper_open);
                 output.push_raw(&"*".repeat(star_run));
                 prev_whitespace = false;
-                index += star_run;
+                atom_index += star_run;
             }
+
             MarkdownInlineAtom::Char('@') if prev_whitespace => {
-                if let Some(link) = try_parse_link_at_atoms(atoms, index) {
+                if let Some(link) = try_parse_link_at_atoms(atoms, atom_index) {
                     open_pending_emphasis(
                         &mut output,
                         wrapper_tag,
@@ -706,7 +715,7 @@ fn render_inline_atoms(
                     output.push_escaped_text(&link.label);
                     output.push_raw("</a>");
                     prev_whitespace = false;
-                    index += link.consumed_atoms;
+                    atom_index += link.consumed_atoms;
                     continue;
                 }
 
@@ -720,8 +729,9 @@ fn render_inline_atoms(
                 open_wrapper(&mut output, wrapper_tag, &mut wrapper_open);
                 output.push_escaped_char('@');
                 prev_whitespace = false;
-                index += 1;
+                atom_index += 1;
             }
+
             MarkdownInlineAtom::Char(ch) => {
                 open_pending_emphasis(
                     &mut output,
@@ -733,7 +743,7 @@ fn render_inline_atoms(
                 open_wrapper(&mut output, wrapper_tag, &mut wrapper_open);
                 output.push_escaped_char(ch);
                 prev_whitespace = false;
-                index += 1;
+                atom_index += 1;
             }
         }
     }
@@ -1106,6 +1116,7 @@ fn collect_plain_chars(atoms: &[MarkdownInlineAtom]) -> String {
         .collect()
 }
 
+/// Consumes the scheme or path prefix at the start of a markdown link target.
 fn consume_target_start_atoms(atoms: &[MarkdownInlineAtom], cursor: &mut usize) -> bool {
     if *cursor >= atoms.len() {
         return false;
@@ -1170,8 +1181,8 @@ fn is_horizontal_whitespace(ch: char) -> bool {
     matches!(ch, ' ' | '\t')
 }
 
-fn em_tag_strength(strength: i32, closing: bool) -> &'static str {
-    if closing {
+fn em_tag_strength(strength: i32, is_closing_tag: bool) -> &'static str {
+    if is_closing_tag {
         match strength {
             2 => "</strong>",
             3 => "</strong></em>",

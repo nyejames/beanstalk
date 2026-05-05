@@ -40,8 +40,8 @@ pub(super) fn parse_identifier_or_call(
         return Ok(());
     };
 
-    if let Some(arg) = context.get_reference(&id) {
-        if let ExpressionKind::Template(template_value) = &arg.value.kind
+    if let Some(binding) = context.get_reference(&id) {
+        if let ExpressionKind::Template(template_value) = &binding.value.kind
             && matches!(template_value.kind, TemplateType::SlotInsert(_))
             && !matches!(
                 context.kind,
@@ -62,7 +62,7 @@ pub(super) fn parse_identifier_or_call(
             nominal_path,
             fields,
             ..
-        } = &arg.value.data_type
+        } = &binding.value.data_type
             && token_stream.peek_next_token() == Some(&TokenKind::OpenParenthesis)
         {
             // Struct constructors are parsed before constant-reference checks.
@@ -74,7 +74,7 @@ pub(super) fn parse_identifier_or_call(
                 nominal_path,
                 id,
                 fields,
-                &arg.value.value_mode,
+                &binding.value.value_mode,
                 context,
                 string_table,
             )?;
@@ -95,9 +95,9 @@ pub(super) fn parse_identifier_or_call(
         }
 
         if token_stream.peek_next_token() == Some(&TokenKind::DoubleColon) {
-            if matches!(&arg.value.data_type, DataType::Choices { .. }) {
+            if matches!(&binding.value.data_type, DataType::Choices { .. }) {
                 let choice_value =
-                    parse_choice_construct(token_stream, arg, context, string_table)?;
+                    parse_choice_construct(token_stream, binding, context, string_table)?;
                 let choice_location = choice_value.location.to_owned();
 
                 push_expression_node(
@@ -129,8 +129,8 @@ pub(super) fn parse_identifier_or_call(
         }
 
         if context.kind.is_constant_context()
-            && !arg.value.is_compile_time_constant()
-            && !arg.is_unresolved_constant_placeholder()
+            && !binding.value.is_compile_time_constant()
+            && !binding.is_unresolved_constant_placeholder()
         {
             let variable_name = string_table.resolve(id).to_owned();
             return_rule_error!(
@@ -147,7 +147,7 @@ pub(super) fn parse_identifier_or_call(
             );
         }
 
-        match &arg.value.data_type {
+        match &binding.value.data_type {
             DataType::Function(_, signature) => {
                 // Advance past the function name to position at the opening parenthesis
                 token_stream.advance();
@@ -155,7 +155,7 @@ pub(super) fn parse_identifier_or_call(
                 // This is a function call - parse it using the function call parser
                 let function_call_node = parse_function_call(
                     token_stream,
-                    &arg.id,
+                    &binding.id,
                     context,
                     signature,
                     true,
@@ -230,7 +230,8 @@ pub(super) fn parse_identifier_or_call(
 
             DataType::Struct { .. } => {
                 // Fall through to normal reference behaviour for non-constructor uses.
-                let reference_node = create_reference(token_stream, arg, context, string_table)?;
+                let reference_node =
+                    create_reference(token_stream, binding, context, string_table)?;
                 push_expression_node(
                     token_stream,
                     context,
@@ -245,7 +246,8 @@ pub(super) fn parse_identifier_or_call(
             // VARIABLE INSIDE EXPRESSION
             // --------------------------
             _ => {
-                let reference_node = create_reference(token_stream, arg, context, string_table)?;
+                let reference_node =
+                    create_reference(token_stream, binding, context, string_table)?;
                 push_expression_node(
                     token_stream,
                     context,
@@ -316,7 +318,9 @@ pub(super) fn parse_identifier_or_call(
     // ------------------------------------
     // HOST FUNCTION CALL INSIDE EXPRESSION
     // ------------------------------------
-    if let Some((func_id, host_func_def)) = context.lookup_visible_external_function(id) {
+    if let Some((function_id, host_function_definition)) =
+        context.lookup_visible_external_function(id)
+    {
         if context.kind.is_constant_context() {
             return_rule_error!(
                 format!(
@@ -336,8 +340,8 @@ pub(super) fn parse_identifier_or_call(
 
         let function_call_node = parse_external_function_call(
             token_stream,
-            func_id,
-            host_func_def,
+            function_id,
+            host_function_definition,
             context,
             string_table,
         )?;

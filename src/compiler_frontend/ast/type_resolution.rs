@@ -30,8 +30,8 @@ use crate::return_rule_error;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::rc::Rc;
 
-#[derive(Clone)]
 /// Function signature after resolving all named types and receiver metadata.
+#[derive(Clone)]
 pub(crate) struct ResolvedFunctionSignature {
     pub(crate) receiver: Option<ReceiverKey>,
     pub(crate) signature: FunctionSignature,
@@ -315,7 +315,7 @@ pub(crate) fn resolve_function_signature(
     // ----------------------------
     //  Resolve parameters
     // ----------------------------
-    for (index, parameter) in signature.parameters.iter().enumerate() {
+    for (parameter_index, parameter) in signature.parameters.iter().enumerate() {
         let mut resolved_parameter = parameter.to_owned();
         resolved_parameter.value.data_type = resolve_named_signature_type(
             &parameter.value.data_type,
@@ -339,7 +339,7 @@ pub(crate) fn resolve_function_signature(
                 );
             }
 
-            if index != 0 {
+            if parameter_index != 0 {
                 return_rule_error!(
                     format!(
                         "Function '{}' uses 'this' as a receiver parameter, but it is not the first parameter.",
@@ -622,9 +622,9 @@ fn inline_visible_constant_references_impl(
             .unwrap_or_else(|| expression.to_owned())),
 
         // Runtime expression — inline constants inside nested nodes, then re-evaluate.
-        ExpressionKind::Runtime(nodes) => {
-            let mut rewritten_nodes = Vec::with_capacity(nodes.len());
-            for node in nodes {
+        ExpressionKind::Runtime(runtime_nodes) => {
+            let mut rewritten_nodes = Vec::with_capacity(runtime_nodes.len());
+            for node in runtime_nodes {
                 rewritten_nodes.push(inline_visible_constant_references_in_node(
                     node,
                     declaration_table,
@@ -663,12 +663,12 @@ fn inline_visible_constant_references_impl(
             })
         }
 
-        // Collection — inline each item.
-        ExpressionKind::Collection(items) => {
-            let mut resolved_items = Vec::with_capacity(items.len());
-            for item in items {
-                resolved_items.push(inline_visible_constant_references_impl(
-                    item,
+        // Collection — inline each element.
+        ExpressionKind::Collection(elements) => {
+            let mut resolved_elements = Vec::with_capacity(elements.len());
+            for element in elements {
+                resolved_elements.push(inline_visible_constant_references_impl(
+                    element,
                     declaration_table,
                     visible_declaration_ids,
                     string_table,
@@ -676,7 +676,7 @@ fn inline_visible_constant_references_impl(
             }
 
             Ok(Expression::new(
-                ExpressionKind::Collection(resolved_items),
+                ExpressionKind::Collection(resolved_elements),
                 expression.location.clone(),
                 expression.data_type.to_owned(),
                 expression.value_mode.to_owned(),
@@ -770,9 +770,9 @@ fn inline_visible_constant_references_in_node(
     visible_declaration_ids: Option<&FxHashSet<InternedPath>>,
     string_table: &mut StringTable,
 ) -> Result<AstNode, CompilerError> {
-    let mut rewritten = node.to_owned();
+    let mut rewritten_node = node.to_owned();
 
-    rewritten.kind = match &node.kind {
+    rewritten_node.kind = match &node.kind {
         NodeKind::Rvalue(expression) => NodeKind::Rvalue(inline_visible_constant_references_impl(
             expression,
             declaration_table,
@@ -791,7 +791,7 @@ fn inline_visible_constant_references_in_node(
         _ => node.kind.to_owned(),
     };
 
-    Ok(rewritten)
+    Ok(rewritten_node)
 }
 
 // --------------------------

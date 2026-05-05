@@ -84,6 +84,7 @@ fn bounded_expression_parses_simple_literal() {
     .expect("simple literal should parse");
 
     assert!(matches!(expression.kind, ExpressionKind::Int(42)));
+
     // The stop token (comma) should not be consumed.
     assert_eq!(stream.index, 1);
     assert_eq!(stream.current_token_kind(), &TokenKind::Comma);
@@ -120,6 +121,7 @@ fn bounded_expression_nested_parentheses() {
 
     // All literals fold to a single Int(6).
     assert!(matches!(expression.kind, ExpressionKind::Int(6)));
+
     // Stop token should remain unconsumed.
     assert_eq!(stream.index, 7);
     assert_eq!(stream.current_token_kind(), &TokenKind::Comma);

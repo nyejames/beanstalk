@@ -53,6 +53,7 @@ pub(crate) fn collect_const_top_level_fragments(
     const_templates_by_path: &FxHashMap<InternedPath, StringId>,
 ) -> Result<Vec<AstConstTopLevelFragment>, CompilerError> {
     let mut result = Vec::with_capacity(top_level_const_fragments.len());
+
     for fragment in top_level_const_fragments {
         let value = const_templates_by_path
             .get(&fragment.header_path)
@@ -68,6 +69,7 @@ pub(crate) fn collect_const_top_level_fragments(
             _location: fragment.location.clone(),
         });
     }
+
     Ok(result)
 }
 

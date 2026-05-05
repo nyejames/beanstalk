@@ -39,7 +39,7 @@ pub(super) fn validate_named_result_handler_binding(
 pub(super) fn validate_named_result_handler_conflict(
     context: &ScopeContext,
     handler_name: StringId,
-    handler_name_text: &str,
+    handler_name_string: &str,
     location: SourceLocation,
     compilation_stage: &str,
 ) -> Result<(), CompilerError> {
@@ -47,7 +47,7 @@ pub(super) fn validate_named_result_handler_conflict(
         return_rule_error!(
             format!(
                 "Named handler '{}' conflicts with an existing visible declaration.",
-                handler_name_text
+                handler_name_string
             ),
             location,
             {

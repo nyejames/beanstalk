@@ -77,7 +77,7 @@ pub(crate) fn parse_postfix_chain(
     context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> Result<AstNode, CompilerError> {
-    let mut saw_receiver_call = false;
+    let mut encountered_receiver_call = false;
 
     // ----------------------------
     //  Walk postfix member-access chain
@@ -126,7 +126,7 @@ pub(crate) fn parse_postfix_chain(
             parse_collection_builtin_member(token_stream, member_context.to_owned(), string_table)?
         {
             receiver_node = collection_builtin_call;
-            saw_receiver_call = true;
+            encountered_receiver_call = true;
             continue;
         }
 
@@ -134,7 +134,7 @@ pub(crate) fn parse_postfix_chain(
             parse_error_builtin_member(token_stream, member_context.to_owned(), string_table)?
         {
             receiver_node = error_builtin_call;
-            saw_receiver_call = true;
+            encountered_receiver_call = true;
             continue;
         }
 
@@ -142,10 +142,11 @@ pub(crate) fn parse_postfix_chain(
             parse_receiver_method_call(token_stream, member_context, string_table)?
         {
             receiver_node = receiver_method_call;
-            saw_receiver_call = true;
+            encountered_receiver_call = true;
             continue;
         }
 
+        // No handler matched. Build a tailored "not found" error.
         let (message, suggestion) = if matches!(receiver_type, DataType::Choices { .. })
             && token_stream.peek_next_token() != Some(&TokenKind::OpenParenthesis)
         {
@@ -214,7 +215,7 @@ pub(crate) fn parse_postfix_chain(
         );
     }
 
-    if receiver_access_mode == ReceiverAccessMode::Mutable && !saw_receiver_call {
+    if receiver_access_mode == ReceiverAccessMode::Mutable && !encountered_receiver_call {
         return_rule_error!(
             "Mutable receiver marker '~' is only valid for receiver calls like '~value.method(...)' or '~values.push(...)'.",
             receiver_node.location.clone(),

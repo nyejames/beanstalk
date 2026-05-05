@@ -167,40 +167,40 @@ fn compose_wrapper_atoms_recursive(
 }
 
 fn expand_slot_placeholder(
-    slot: &SlotPlaceholder,
+    placeholder: &SlotPlaceholder,
     contributions: &SlotContributions,
     string_table: &StringTable,
 ) -> Result<Vec<TemplateAtom>, CompilerError> {
-    let slot_atoms = contributions.atoms_for_slot(&slot.key);
-    if slot.applied_child_wrappers.is_empty() && slot.child_wrappers.is_empty() {
+    let slot_atoms = contributions.atoms_for_slot(&placeholder.key);
+    if placeholder.applied_child_wrappers.is_empty() && placeholder.child_wrappers.is_empty() {
         return Ok(slot_atoms.to_owned());
     }
 
     let mut expanded = Vec::with_capacity(slot_atoms.len());
-    for atom in slot_atoms {
-        let atom = if slot.child_wrappers.is_empty() {
-            atom.clone()
-        } else if contribution_is_child_template_output(atom)
-            || contribution_template_ref(atom).is_some()
+    for source_atom in slot_atoms {
+        let wrapped_atom = if placeholder.child_wrappers.is_empty() {
+            source_atom.clone()
+        } else if contribution_is_child_template_output(source_atom)
+            || contribution_template_ref(source_atom).is_some()
         {
             // `$children(..)` applies to this direct slot contribution as a whole.
             // It must not descend into the contribution and wrap grandchildren.
-            wrap_child_slot_contribution(atom, &slot.child_wrappers, string_table)?
+            wrap_child_slot_contribution(source_atom, &placeholder.child_wrappers, string_table)?
         } else {
-            atom.clone()
+            source_atom.clone()
         };
 
-        if !slot.skip_parent_child_wrappers
-            && !slot.applied_child_wrappers.is_empty()
-            && is_child_slot_contribution(&atom)
+        if !placeholder.skip_parent_child_wrappers
+            && !placeholder.applied_child_wrappers.is_empty()
+            && is_child_slot_contribution(&wrapped_atom)
         {
             expanded.push(wrap_child_slot_contribution(
-                &atom,
-                &slot.applied_child_wrappers,
+                &wrapped_atom,
+                &placeholder.applied_child_wrappers,
                 string_table,
             )?);
         } else {
-            expanded.push(atom);
+            expanded.push(wrapped_atom);
         }
     }
 

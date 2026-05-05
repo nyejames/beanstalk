@@ -78,13 +78,13 @@ fn fold_plan(
     plan: &TemplateRenderPlan,
     fold_context: &mut TemplateFoldContext<'_>,
 ) -> Result<StringId, CompilerError> {
-    let mut final_string = String::new();
+    let mut output_buffer = String::new();
 
     for piece in &plan.pieces {
         // Map each render piece to an optional expression to fold. Head and body text
         // are treated identically during folding — the distinction only matters for
         // formatter boundary detection, which already ran before this stage.
-        let expression = match piece {
+        let maybe_expression_kind = match piece {
             RenderPiece::Text(p) => Some(ExpressionKind::StringSlice(p.text)),
             RenderPiece::HeadContent(p) => Some(ExpressionKind::StringSlice(p.text)),
             RenderPiece::ChildTemplate(p) => Some(p.expression.kind.clone()),
@@ -96,7 +96,7 @@ fn fold_plan(
             }
         };
 
-        let Some(expression_kind) = expression else {
+        let Some(expression_kind) = maybe_expression_kind else {
             continue;
         };
 
@@ -105,11 +105,11 @@ fn fold_plan(
         // the decision about which expression kinds are renderable lives in type_coercion::string.
         match fold_expression_kind_to_string(&expression_kind, fold_context.string_table) {
             Some(FoldedStringPiece::Text(text)) => {
-                final_string.push_str(&text);
+                output_buffer.push_str(&text);
             }
 
             Some(FoldedStringPiece::Char(ch)) => {
-                final_string.push(ch);
+                output_buffer.push(ch);
             }
 
             Some(FoldedStringPiece::Skip) => {
@@ -136,7 +136,7 @@ fn fold_plan(
                 // Nested templates that became fully resolved only after wrapper
                 // composition are folded here to preserve authored nesting order.
                 let folded_nested = template.fold_into_stringid(fold_context)?;
-                final_string.push_str(fold_context.string_table.resolve(folded_nested));
+                output_buffer.push_str(fold_context.string_table.resolve(folded_nested));
             }
 
             // Anything else can't be folded and should not get to this stage.
@@ -149,7 +149,7 @@ fn fold_plan(
         }
     }
 
-    ast_log!("Folded template into: ", final_string);
+    ast_log!("Folded template into: ", output_buffer);
 
-    Ok(fold_context.string_table.intern(&final_string))
+    Ok(fold_context.string_table.intern(&output_buffer))
 }

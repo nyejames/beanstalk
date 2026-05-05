@@ -25,7 +25,6 @@ fn parse_template_head_handles_truncated_stream_without_panicking() {
 }
 
 #[test]
-
 fn single_item_template_head_with_close_is_foldable() {
     let mut string_table = StringTable::new();
     let scope = InternedPath::from_single_str("main.bst/#const_template0", &mut string_table);

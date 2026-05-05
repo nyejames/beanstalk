@@ -42,8 +42,8 @@ use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::generics::GenericNominalInstantiationCache;
 use crate::compiler_frontend::datatypes::{DataType, ReceiverKey};
 use crate::compiler_frontend::external_packages::{
-    ExternalFunctionDef, ExternalFunctionId, ExternalPackageRegistry, ExternalSymbolId,
-    ExternalTypeId,
+    ExternalAbiType, ExternalFunctionDef, ExternalFunctionId, ExternalPackageRegistry,
+    ExternalSymbolId, ExternalTypeId,
 };
 use crate::compiler_frontend::headers::import_environment::{
     FileVisibility, HeaderImportEnvironment,
@@ -60,7 +60,6 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
-// FileVisibility and HeaderImportEnvironment already imported above.
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
@@ -68,8 +67,6 @@ use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
 pub(crate) use crate::compiler_frontend::ast::receiver_methods::{
     ReceiverMethodCatalog, ReceiverMethodEntry,
 };
-
-use crate::compiler_frontend::external_packages::ExternalAbiType;
 
 /// Checks whether an `ExternalAbiType` is compatible with a frontend `DataType`
 /// for receiver method dispatch.
@@ -292,7 +289,7 @@ impl ScopeContext {
 
     pub fn new_child_function(
         &self,
-        id: StringId,
+        function_name: StringId,
         signature: FunctionSignature,
         _string_table: &mut StringTable,
     ) -> ScopeContext {
@@ -310,7 +307,7 @@ impl ScopeContext {
             .map(|ret| ret.data_type().to_owned());
 
         // Create a new scope path by joining the current scope with the function name
-        new_context.scope = self.scope.append(id);
+        new_context.scope = self.scope.append(function_name);
         new_context.loop_depth = 0;
 
         // Share the top-level declaration table (cheap Rc clone); reset locals to params only.
@@ -463,13 +460,13 @@ impl ScopeContext {
         visible: FxHashMap<StringId, ExternalSymbolId>,
     ) -> ScopeContext {
         let shared = Rc::make_mut(&mut self.shared);
-        let mut fv = shared
+        let mut file_visibility = shared
             .file_visibility
             .as_ref()
             .map(|f| (**f).clone())
             .unwrap_or_default();
-        fv.visible_external_symbols = visible;
-        shared.file_visibility = Some(Rc::new(fv));
+        file_visibility.visible_external_symbols = visible;
+        shared.file_visibility = Some(Rc::new(file_visibility));
         self
     }
 
@@ -478,13 +475,13 @@ impl ScopeContext {
         bindings: FxHashMap<StringId, InternedPath>,
     ) -> ScopeContext {
         let shared = Rc::make_mut(&mut self.shared);
-        let mut fv = shared
+        let mut file_visibility = shared
             .file_visibility
             .as_ref()
             .map(|f| (**f).clone())
             .unwrap_or_default();
-        fv.visible_source_names = bindings;
-        shared.file_visibility = Some(Rc::new(fv));
+        file_visibility.visible_source_names = bindings;
+        shared.file_visibility = Some(Rc::new(file_visibility));
         self
     }
 
@@ -493,13 +490,13 @@ impl ScopeContext {
         aliases: FxHashMap<StringId, InternedPath>,
     ) -> ScopeContext {
         let shared = Rc::make_mut(&mut self.shared);
-        let mut fv = shared
+        let mut file_visibility = shared
             .file_visibility
             .as_ref()
             .map(|f| (**f).clone())
             .unwrap_or_default();
-        fv.visible_type_alias_names = aliases;
-        shared.file_visibility = Some(Rc::new(fv));
+        file_visibility.visible_type_alias_names = aliases;
+        shared.file_visibility = Some(Rc::new(file_visibility));
         self
     }
 
@@ -621,8 +618,8 @@ impl ScopeContext {
         // contexts that do not set file_visibility.
         // Skip receiver methods: they must be called via receiver syntax, and the
         // receiver method catalog handles their lookup.
-        if let Some(fv) = &self.file_visibility {
-            if let Some(canonical_path) = fv.visible_source_names.get(name)
+        if let Some(file_visibility) = &self.file_visibility {
+            if let Some(canonical_path) = file_visibility.visible_source_names.get(name)
                 && let Some(declaration) = self
                     .shared
                     .environment
@@ -773,18 +770,18 @@ impl ScopeContext {
     //  Warning / path tracking
     // --------------------------
 
-    pub fn add_var(&mut self, arg: Declaration) {
+    pub fn add_var(&mut self, declaration: Declaration) {
         if let Some(visible_declarations) = self.visible_declaration_ids.as_mut() {
-            visible_declarations.insert(arg.id.clone());
+            visible_declarations.insert(declaration.id.clone());
         }
-        if let Some(name) = arg.id.name() {
+        if let Some(name) = declaration.id.name() {
             let index = self.local_declarations.len() as u32;
             self.local_declarations_by_name
                 .entry(name)
                 .or_default()
                 .push(index);
         }
-        self.local_declarations.push(arg);
+        self.local_declarations.push(declaration);
     }
 
     pub fn is_inside_loop(&self) -> bool {

@@ -43,8 +43,7 @@ pub struct Template {
     pub content: TemplateContent,
     pub unformatted_content: TemplateContent,
     pub content_needs_formatting: bool,
-    pub render_plan:
-        Option<crate::compiler_frontend::ast::templates::template_render_plan::TemplateRenderPlan>,
+    pub render_plan: Option<TemplateRenderPlan>,
     pub kind: TemplateType,
     pub doc_children: Vec<Template>,
     pub style: Style,

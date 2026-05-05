@@ -12,7 +12,9 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 /// Returns true when the node resolves to a valid place expression.
 pub(crate) fn ast_node_is_place(node: &AstNode) -> bool {
     match &node.kind {
-        NodeKind::Rvalue(expr) => matches!(expr.kind, ExpressionKind::Reference(_)),
+        NodeKind::Rvalue(expression) => {
+            matches!(expression.kind, ExpressionKind::Reference(_))
+        }
 
         NodeKind::FieldAccess { base, .. } => ast_node_is_place(base),
 
@@ -29,8 +31,9 @@ pub(crate) fn ast_node_is_place(node: &AstNode) -> bool {
 /// Returns true when the node resolves to a mutable place expression.
 pub(crate) fn ast_node_is_mutable_place(node: &AstNode) -> bool {
     match &node.kind {
-        NodeKind::Rvalue(expr) => {
-            matches!(expr.kind, ExpressionKind::Reference(_)) && expr.value_mode.is_mutable()
+        NodeKind::Rvalue(expression) => {
+            matches!(expression.kind, ExpressionKind::Reference(_))
+                && expression.value_mode.is_mutable()
         }
 
         NodeKind::FieldAccess { base, .. } => ast_node_is_mutable_place(base),
@@ -48,7 +51,7 @@ pub(crate) fn ast_node_is_mutable_place(node: &AstNode) -> bool {
 /// Builds a user-facing receiver hint for diagnostics like `~value.method(...)`.
 pub(crate) fn receiver_access_hint(node: &AstNode, string_table: &StringTable) -> String {
     match &node.kind {
-        NodeKind::Rvalue(expr) => match &expr.kind {
+        NodeKind::Rvalue(expression) => match &expression.kind {
             ExpressionKind::Reference(path) => path
                 .name_str(string_table)
                 .map(str::to_owned)

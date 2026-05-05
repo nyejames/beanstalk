@@ -6,8 +6,7 @@
 //! consistency and ensures every composition error path produces an actionable
 //! diagnostic.
 
-use crate::compiler_frontend::ast::templates::template::SlotKey;
-use crate::compiler_frontend::ast::templates::template::TemplateContent;
+use crate::compiler_frontend::ast::templates::template::{SlotKey, TemplateContent};
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::return_rule_error;

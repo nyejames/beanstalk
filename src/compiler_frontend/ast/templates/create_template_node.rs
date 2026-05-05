@@ -70,25 +70,26 @@ impl Template {
         doc_context: bool,
     ) -> Result<Template, CompilerError> {
         let direct_child_wrappers = inheritance.direct_child_wrappers.to_owned();
+
         // These are variables or special keywords passed into the template head.
         // Nested templates do not inherit formatter/style state by default.
         let mut template = Self::empty();
+
         // Capture the opening token location early so style/directive errors can
         // still point at the template even if parsing later advances deeply.
         template.location = token_stream.current_location();
 
         // Templates that call any functions or have children that call functions
-        // Can't be folded at compile time.
-        // This is because the template might be changing at runtime.
-        // If the entire template can be folded, it just becomes a string after the AST stage.
-        let mut foldable = true;
+        // cannot be folded at compile time because the output may change at runtime.
+        // If the entire template can be folded, it becomes a plain string after the AST stage.
+        let mut can_fold = true;
 
         // Stage 1: Parse the template head (directives, expressions, style config)
         parse_template_head(
             token_stream,
             context,
             &mut template,
-            &mut foldable,
+            &mut can_fold,
             string_table,
         )?;
 
@@ -102,7 +103,7 @@ impl Template {
             context,
             &mut template,
             &direct_child_wrappers,
-            &mut foldable,
+            &mut can_fold,
             string_table,
         )?;
 
@@ -112,7 +113,7 @@ impl Template {
         // Stage 3: build the composed pre-format snapshot.
         build_unformatted_template_content(
             &mut template,
-            &mut foldable,
+            &mut can_fold,
             string_table,
             requires_post_format_recomposition,
         )?;
@@ -129,7 +130,7 @@ impl Template {
             &mut template,
             render_plan,
             content_changed,
-            &mut foldable,
+            &mut can_fold,
             string_table,
             requires_post_format_recomposition,
         )?;
@@ -160,7 +161,7 @@ impl Template {
             ensure_no_slot_insertions_remain(&template.content, &template.location, string_table)?;
         }
 
-        if foldable
+        if can_fold
             && !matches!(
                 template.kind,
                 TemplateType::SlotInsert(_)
@@ -187,7 +188,7 @@ impl Template {
 ///   future reformat/recomposition workflows).
 fn build_unformatted_template_content(
     template: &mut Template,
-    foldable: &mut bool,
+    can_fold: &mut bool,
     string_table: &StringTable,
     requires_post_format_recomposition: bool,
 ) -> Result<(), CompilerError> {
@@ -202,7 +203,7 @@ fn build_unformatted_template_content(
         string_table,
     )?;
     template.unformatted_content =
-        compose_template_head_chain(&template.unformatted_content, foldable, string_table)?;
+        compose_template_head_chain(&template.unformatted_content, can_fold, string_table)?;
     Ok(())
 }
 
@@ -221,7 +222,7 @@ fn format_template_body(
     context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> Result<BodyFormattingResult, CompilerError> {
-    let formatting_result =
+    let formatter_result =
         match apply_body_formatter(&template.content, &template.style, string_table) {
             Ok(result) => result,
             Err(messages) => {
@@ -237,11 +238,11 @@ fn format_template_body(
             }
         };
 
-    for warning in &formatting_result.warnings {
+    for warning in &formatter_result.warnings {
         context.emit_warning(warning.clone());
     }
 
-    Ok(formatting_result)
+    Ok(formatter_result)
 }
 
 /// Stage 5 helper: rebuild formatted content and finalize the template outputs.
@@ -265,12 +266,12 @@ fn finalize_template_after_formatting(
     template: &mut Template,
     render_plan: TemplateRenderPlan,
     content_changed: bool,
-    foldable: &mut bool,
+    can_fold: &mut bool,
     string_table: &StringTable,
     requires_post_format_recomposition: bool,
 ) -> Result<(), CompilerError> {
     // If formatting made no changes and no post-format recomposition is needed,
-    // skip the expensive content → plan → content round-trip.
+    // skip the expensive content -> plan -> content round-trip.
     if content_changed || requires_post_format_recomposition {
         template.content = render_plan.rebuild_content();
         if requires_post_format_recomposition {
@@ -280,7 +281,7 @@ fn finalize_template_after_formatting(
                 string_table,
             )?;
             template.content =
-                compose_template_head_chain(&template.content, foldable, string_table)?;
+                compose_template_head_chain(&template.content, can_fold, string_table)?;
         }
         template.render_plan = Some(TemplateRenderPlan::from_content(&template.content));
     } else {
@@ -295,6 +296,12 @@ fn finalize_template_after_formatting(
     Ok(())
 }
 
+/// Returns true when the template contains head-origin atoms or child wrappers
+/// that require recomposition after formatting.
+///
+/// WHY:
+/// - Formatting may rewrite body text, but head-origin segments and `$children(..)`
+///   wrappers are structural and must be reapplied to the rebuilt content.
 fn template_requires_post_format_recomposition(template: &Template) -> bool {
     if !template.style.child_templates.is_empty() {
         return true;

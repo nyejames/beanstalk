@@ -132,13 +132,14 @@ impl TemplateContent {
         self.atoms.is_empty()
     }
 
-    pub fn add(&mut self, content: Expression) {
-        self.add_with_origin(content, TemplateSegmentOrigin::Body);
+    pub fn add(&mut self, expression: Expression) {
+        self.add_with_origin(expression, TemplateSegmentOrigin::Body);
     }
 
-    pub fn add_with_origin(&mut self, content: Expression, origin: TemplateSegmentOrigin) {
-        self.atoms
-            .push(TemplateAtom::Content(TemplateSegment::new(content, origin)));
+    pub fn add_with_origin(&mut self, expression: Expression, origin: TemplateSegmentOrigin) {
+        self.atoms.push(TemplateAtom::Content(TemplateSegment::new(
+            expression, origin,
+        )));
     }
 
     pub fn push_slot_with_child_wrappers(
@@ -323,9 +324,11 @@ pub struct Formatter {
     // This allows directive-owned formatters (for example, `$markdown`) to opt into
     // shared dedent/trim behavior while still operating over raw template body text.
     pub(crate) pre_format_whitespace_passes: Vec<TemplateWhitespacePassProfile>,
+
     // Shared ownership keeps formatters cheap to clone when template styles are
     // copied or explicitly inherited during AST construction.
     pub formatter: Arc<dyn TemplateFormatter>,
+
     // Post-format passes run after formatter output is generated.
     pub(crate) post_format_whitespace_passes: Vec<TemplateWhitespacePassProfile>,
 }
@@ -360,10 +363,13 @@ pub struct Style {
     // Passes templates into the head of each direct child template of this template.
     // These wrappers do not automatically flow into grandchildren.
     pub child_templates: Vec<Template>,
+
     /// When true, nested child templates skip the parent-applied `$children(..)`
     /// wrappers while still allowing wrappers declared on the child itself.
     pub skip_parent_child_wrappers: bool,
+
     pub body_whitespace_policy: BodyWhitespacePolicy,
+
     /// When true, `[...]` brackets in the template body are treated as balanced
     /// literal text rather than parsed as nested child templates.
     pub suppress_child_templates: bool,

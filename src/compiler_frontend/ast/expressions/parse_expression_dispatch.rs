@@ -149,6 +149,9 @@ pub(super) fn dispatch_expression_token(
     // This state machine is intentionally flat: each token either appends one AST node, advances
     // past a nested parse, or signals the caller that the surrounding grammar owns the delimiter.
     match token {
+        // -------------------------------
+        //  Delimiters and terminators
+        // -------------------------------
         TokenKind::CloseCurly
         | TokenKind::Comma
         | TokenKind::Eof
@@ -212,6 +215,9 @@ pub(super) fn dispatch_expression_token(
             Ok(ExpressionTokenStep::Break)
         }
 
+        // -------------------------------
+        //  Parentheses and grouping
+        // -------------------------------
         TokenKind::CloseParenthesis => {
             if state.consume_closing_parenthesis {
                 token_stream.advance();
@@ -431,6 +437,9 @@ pub(super) fn dispatch_expression_token(
             Ok(ExpressionTokenStep::Advance)
         }
 
+        // -------------------------------
+        //  Arithmetic and comparison operators
+        // -------------------------------
         TokenKind::Add => {
             push_operator_node(
                 state.expression,
@@ -597,6 +606,7 @@ pub(super) fn dispatch_expression_token(
             );
             Ok(ExpressionTokenStep::Advance)
         }
+
         TokenKind::ExclusiveRange => {
             push_operator_node(
                 state.expression,

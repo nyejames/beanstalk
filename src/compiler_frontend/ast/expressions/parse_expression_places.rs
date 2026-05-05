@@ -40,7 +40,7 @@ pub(super) fn parse_mutable_receiver_expression(
         );
     };
 
-    let Some(reference_arg) = context.get_reference(&id) else {
+    let Some(receiver_declaration) = context.get_reference(&id) else {
         if context.is_visible_type_alias_name(id) {
             return_rule_error!(
                 format!(
@@ -81,7 +81,7 @@ pub(super) fn parse_mutable_receiver_expression(
     token_stream.advance();
     let receiver_node = parse_field_access_with_receiver_access(
         token_stream,
-        reference_arg,
+        receiver_declaration,
         context,
         ReceiverAccessMode::Mutable,
         string_table,
@@ -127,7 +127,7 @@ pub(super) fn parse_copy_place_expression(
         }
 
         TokenKind::Symbol(symbol) => {
-            let Some(reference_arg) = context.get_reference(symbol) else {
+            let Some(place_declaration) = context.get_reference(symbol) else {
                 if context.is_visible_type_alias_name(*symbol) {
                     return_rule_error!(
                         format!(
@@ -154,7 +154,7 @@ pub(super) fn parse_copy_place_expression(
                 );
             };
 
-            match &reference_arg.value.data_type {
+            match &place_declaration.value.data_type {
                 DataType::Function(_, _) => {
                     return_rule_error!(
                         "The 'copy' keyword only accepts places, not function values or calls",
@@ -168,7 +168,7 @@ pub(super) fn parse_copy_place_expression(
 
                 _ => {
                     let place =
-                        create_reference(token_stream, reference_arg, context, string_table)?;
+                        create_reference(token_stream, place_declaration, context, string_table)?;
                     if !ast_node_is_place(&place) {
                         return_rule_error!(
                             "The 'copy' keyword only accepts a place expression",

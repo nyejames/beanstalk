@@ -37,15 +37,10 @@ fn collection_builtin_method_name(
 ) -> Option<CollectionBuiltinOp> {
     match string_table.resolve(member_name) {
         COLLECTION_GET_NAME => Some(CollectionBuiltinOp::Get),
-
         COLLECTION_SET_NAME => Some(CollectionBuiltinOp::Set),
-
         COLLECTION_PUSH_NAME => Some(CollectionBuiltinOp::Push),
-
         COLLECTION_REMOVE_NAME => Some(CollectionBuiltinOp::Remove),
-
         COLLECTION_LENGTH_NAME => Some(CollectionBuiltinOp::Length),
-
         _ => None,
     }
 }
@@ -69,7 +64,7 @@ pub(super) fn parse_collection_builtin_member(
         scope_context,
     } = context;
 
-    let Some(inner_type) = receiver_type.collection_element_type_cloned() else {
+    let Some(element_type) = receiver_type.collection_element_type_cloned() else {
         return Ok(None);
     };
 
@@ -125,7 +120,7 @@ pub(super) fn parse_collection_builtin_member(
             let error_type =
                 resolve_builtin_error_type(scope_context, &member_location, string_table)?;
             let get_result_type = DataType::Result {
-                ok: Box::new(inner_type.clone()),
+                ok: Box::new(element_type.clone()),
                 err: Box::new(error_type),
             };
             (args, vec![get_result_type])
@@ -135,7 +130,7 @@ pub(super) fn parse_collection_builtin_member(
             let args = parse_builtin_method_args(
                 token_stream,
                 &member_name_text,
-                &[DataType::Int, inner_type.clone()],
+                &[DataType::Int, element_type.clone()],
                 scope_context,
                 &member_location,
                 string_table,
@@ -147,7 +142,7 @@ pub(super) fn parse_collection_builtin_member(
             let args = parse_builtin_method_args(
                 token_stream,
                 &member_name_text,
-                std::slice::from_ref(&inner_type),
+                std::slice::from_ref(&element_type),
                 scope_context,
                 &member_location,
                 string_table,
@@ -180,6 +175,8 @@ pub(super) fn parse_collection_builtin_member(
         }
     };
 
+    // Collection `get` returns a `Result`, so the caller must handle it with `!`
+    // or use it in an assignment context.
     if matches!(builtin, CollectionBuiltinOp::Get)
         && token_stream.current_token_kind() != &TokenKind::Bang
         && !(matches!(token_stream.current_token_kind(), TokenKind::Symbol(_))

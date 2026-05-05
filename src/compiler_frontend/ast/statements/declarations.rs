@@ -39,18 +39,18 @@ use crate::{ast_log, return_rule_error, return_syntax_error, return_type_error};
 
 pub fn create_reference(
     token_stream: &mut FileTokens,
-    reference_arg: &Declaration,
+    declaration: &Declaration,
     context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> Result<AstNode, CompilerError> {
     // Move past the name
     token_stream.advance();
 
-    match reference_arg.value.data_type {
+    match declaration.value.data_type {
         // Function Call
         DataType::Function(_, ref signature) => parse_function_call(
             token_stream,
-            &reference_arg.id,
+            &declaration.id,
             context,
             signature,
             true,
@@ -60,19 +60,19 @@ pub fn create_reference(
 
         _ => {
             // This either becomes a reference or field access
-            parse_field_access(token_stream, reference_arg, context, string_table)
+            parse_field_access(token_stream, declaration, context, string_table)
         }
     }
 }
 
 pub fn new_declaration(
     token_stream: &mut FileTokens,
-    id: StringId,
+    symbol_id: StringId,
     context: &ScopeContext,
     warnings: &mut Vec<CompilerWarning>,
     string_table: &mut StringTable,
 ) -> Result<Declaration, CompilerError> {
-    let declaration_name = string_table.resolve(id).to_owned();
+    let declaration_name = string_table.resolve(symbol_id).to_owned();
     ensure_not_keyword_shadow_identifier(
         &declaration_name,
         token_stream.current_location(),
@@ -96,7 +96,7 @@ pub fn new_declaration(
     // Move past the name
     token_stream.advance();
 
-    let full_name = context.scope.to_owned().append(id);
+    let qualified_name = context.scope.to_owned().append(symbol_id);
 
     // ----------------------------
     //  Function declaration fast-path
@@ -112,18 +112,24 @@ pub fn new_declaration(
             context.emit_warning(warning);
         }
 
-        let func_sig =
-            FunctionSignature::new(token_stream, warnings, string_table, &full_name, context)?;
-        let func_context = context.new_child_function(id, func_sig.to_owned(), string_table);
+        let function_signature = FunctionSignature::new(
+            token_stream,
+            warnings,
+            string_table,
+            &qualified_name,
+            context,
+        )?;
+        let function_context =
+            context.new_child_function(symbol_id, function_signature.to_owned(), string_table);
 
         let function_body =
-            function_body_to_ast(token_stream, func_context, warnings, string_table)?;
+            function_body_to_ast(token_stream, function_context, warnings, string_table)?;
 
         return Ok(Declaration {
-            id: full_name,
+            id: qualified_name,
             value: Expression::function(
                 None,
-                func_sig,
+                function_signature,
                 function_body,
                 token_stream.current_location(),
             ),
@@ -137,7 +143,7 @@ pub fn new_declaration(
     // ----------------------------
     //  Parse declaration syntax
     // ----------------------------
-    let declaration_syntax = parse_declaration_syntax(token_stream, id, string_table)?;
+    let declaration_syntax = parse_declaration_syntax(token_stream, symbol_id, string_table)?;
     let naming_kind = if matches!(
         declaration_syntax
             .initializer_tokens
@@ -157,12 +163,12 @@ pub fn new_declaration(
         context.emit_warning(warning);
     }
 
-    resolve_declaration_syntax(declaration_syntax, full_name, context, string_table)
+    resolve_declaration_syntax(declaration_syntax, qualified_name, context, string_table)
 }
 
 pub fn resolve_declaration_syntax(
     declaration_syntax: DeclarationSyntax,
-    full_name: InternedPath,
+    qualified_name: InternedPath,
     context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> Result<Declaration, CompilerError> {
@@ -183,7 +189,7 @@ pub fn resolve_declaration_syntax(
     // ----------------------------
     //  Resolve declared type
     // ----------------------------
-    let mut data_type = declaration_syntax.semantic_type();
+    let mut resolved_type = declaration_syntax.semantic_type();
 
     let declaration_location = declaration_syntax.location.clone();
     let type_resolution_context = TypeResolutionContext::from_inputs(TypeResolutionContextInputs {
@@ -206,8 +212,8 @@ pub fn resolve_declaration_syntax(
         resolved_struct_fields_by_path: context.resolved_struct_fields_by_path.as_deref(),
         generic_nominal_instantiations: context.generic_nominal_instantiations.as_deref(),
     });
-    data_type = resolve_type(
-        &data_type,
+    resolved_type = resolve_type(
+        &resolved_type,
         &declaration_location,
         &type_resolution_context,
         string_table,
@@ -218,18 +224,19 @@ pub fn resolve_declaration_syntax(
         TokenKind::Eof,
         declaration_syntax.location.to_owned(),
     ));
-    let mut initializer_stream = FileTokens::new(full_name.to_owned(), initializer_tokens);
+    let mut initializer_stream = FileTokens::new(qualified_name.to_owned(), initializer_tokens);
 
     // Check if this whole expression is nested in brackets.
     // This is just so we don't wastefully call create_expression recursively right away.
-    let const_context = ScopeContext::new_constant(initializer_stream.src_path.to_owned(), context);
-    let mut parsed_expr = match initializer_stream.current_token_kind() {
+    let constant_context =
+        ScopeContext::new_constant(initializer_stream.src_path.to_owned(), context);
+    let mut parsed_initializer = match initializer_stream.current_token_kind() {
         // Struct Definition
         TokenKind::TypeParameterBracket => {
             let owner_path = initializer_stream.src_path.to_owned();
             let params = parse_struct_shell(
                 &mut initializer_stream,
-                &const_context,
+                &constant_context,
                 string_table,
                 &owner_path,
             )?;
@@ -251,19 +258,19 @@ pub fn resolve_declaration_syntax(
             // `none` and empty collection literals. Other expressions resolve
             // their natural type before this declaration boundary validates and
             // coerces them.
-            let declared_type = data_type.clone();
-            let mut expr_type = parse_expectation_for_target_type(&declared_type);
-            let mut expr_context =
+            let declared_type = resolved_type.clone();
+            let mut expression_type = parse_expectation_for_target_type(&declared_type);
+            let mut expression_context =
                 context.new_child_expression(if matches!(declared_type, DataType::Inferred) {
                     context.expected_result_types.clone()
                 } else {
                     vec![declared_type.clone()]
                 });
-            expr_context.kind = context.kind.clone();
-            let expr = create_expression(
+            expression_context.kind = context.kind.clone();
+            let expression = create_expression(
                 &mut initializer_stream,
-                &expr_context,
-                &mut expr_type,
+                &expression_context,
+                &mut expression_type,
                 &value_mode,
                 false,
                 string_table,
@@ -273,13 +280,13 @@ pub fn resolve_declaration_syntax(
             // is_declaration_compatible accepts exact matches and Int → Float;
             // it does not reuse ReturnSlot semantics.
             if !matches!(declared_type, DataType::Inferred)
-                && !is_declaration_compatible(&declared_type, &expr.data_type)
+                && !is_declaration_compatible(&declared_type, &expression.data_type)
             {
-                let declaration_name = full_name.name_str(string_table).unwrap_or("<value>");
+                let declaration_name = qualified_name.name_str(string_table).unwrap_or("<value>");
                 let suggestion = if should_report_regular_division_int_context(
                     &declared_type,
-                    &expr.data_type,
-                    &expr,
+                    &expression.data_type,
+                    &expression,
                 ) {
                     regular_division_int_context_guidance()
                 } else {
@@ -289,14 +296,14 @@ pub fn resolve_declaration_syntax(
                     format!(
                         "Declaration '{}' has incompatible initializer type. {} {}",
                         declaration_name,
-                        expected_found_clause(&declared_type, &expr.data_type, string_table),
-                        offending_value_clause(&expr, string_table)
+                        expected_found_clause(&declared_type, &expression.data_type, string_table),
+                        offending_value_clause(&expression, string_table)
                     ),
-                    expr.location.clone(),
+                    expression.location.clone(),
                     {
                         CompilationStage => "Expression Evaluation",
                         ExpectedType => declared_type.display_with_table(string_table),
-                        FoundType => expr.data_type.display_with_table(string_table),
+                        FoundType => expression.data_type.display_with_table(string_table),
                         PrimarySuggestion => suggestion,
                     }
                 );
@@ -304,7 +311,7 @@ pub fn resolve_declaration_syntax(
 
             // Apply contextual numeric coercion (e.g. Int → Float) when the
             // declared type requires it.
-            coerce_expression_to_declared_type(expr, &declared_type)
+            coerce_expression_to_declared_type(expression, &declared_type)
         }
     };
 
@@ -317,7 +324,7 @@ pub fn resolve_declaration_syntax(
             format!(
                 "Unexpected token '{:?}' in declaration initializer for '{}'.",
                 initializer_stream.current_token_kind(),
-                full_name.name_str(string_table).unwrap_or("<value>")
+                qualified_name.name_str(string_table).unwrap_or("<value>")
             ),
             initializer_stream.current_location(),
             {
@@ -332,18 +339,18 @@ pub fn resolve_declaration_syntax(
     // WHY: rvalue initializers (for example struct literals and collections) inherit ownership
     // from type defaults; preserving that ownership would incorrectly allow writes through
     // immutable bindings and mutable receiver calls.
-    parsed_expr.value_mode = value_mode.to_owned();
+    parsed_initializer.value_mode = value_mode.to_owned();
 
     ast_log!(
         "Created new ",
         Cyan #value_mode,
         " ",
-        data_type.display_with_table(string_table)
+        resolved_type.display_with_table(string_table)
     );
 
     Ok(Declaration {
-        id: full_name,
-        value: parsed_expr,
+        id: qualified_name,
+        value: parsed_initializer,
     })
 }
 

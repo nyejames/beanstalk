@@ -148,6 +148,7 @@ fn normalize_provided_style_argument_value(
                 )
             }
         },
+
         StyleDirectiveArgumentType::Template => match expression.kind {
             ExpressionKind::Template(template) => Ok(StyleDirectiveArgumentValue::Template(
                 Box::new(*template.to_owned()),
@@ -159,6 +160,7 @@ fn normalize_provided_style_argument_value(
                 )
             }
         },
+
         StyleDirectiveArgumentType::Number => match expression.kind {
             ExpressionKind::Int(value) => Ok(StyleDirectiveArgumentValue::Number(value as f64)),
             ExpressionKind::Float(value) => Ok(StyleDirectiveArgumentValue::Number(value)),
@@ -169,6 +171,7 @@ fn normalize_provided_style_argument_value(
                 )
             }
         },
+
         StyleDirectiveArgumentType::Bool => match expression.kind {
             ExpressionKind::Bool(value) => Ok(StyleDirectiveArgumentValue::Bool(value)),
             _ => {

@@ -382,18 +382,18 @@ pub(crate) fn resolve_call_argument_slots(
     let mut resolved: Vec<Option<CallArgument>> = vec![None; expectations.len()];
     let mut positional_cursor = 0usize;
     let mut saw_named_argument = false;
-    let mut name_to_slot: FxHashMap<StringId, usize> = FxHashMap::default();
+    let mut parameter_name_to_slot: FxHashMap<StringId, usize> = FxHashMap::default();
 
-    for (index, expectation) in expectations.iter().enumerate() {
+    for (slot_index, expectation) in expectations.iter().enumerate() {
         if let Some(name) = expectation.name {
-            name_to_slot.insert(name, index);
+            parameter_name_to_slot.insert(name, slot_index);
         }
     }
 
     for argument in args {
         let slot = if let Some(target_name) = argument.target_param {
             saw_named_argument = true;
-            let Some(slot) = name_to_slot.get(&target_name).copied() else {
+            let Some(slot) = parameter_name_to_slot.get(&target_name).copied() else {
                 let known_parameters = expectations
                     .iter()
                     .filter_map(|expectation| expectation.name)

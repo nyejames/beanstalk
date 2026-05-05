@@ -136,7 +136,7 @@ fn compound_assignment_operator(token_kind: &TokenKind) -> Option<(Operator, &'s
 fn evaluate_compound_assignment_value(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
-    variable_arg: &Declaration,
+    variable_declaration: &Declaration,
     target: &AstNode,
     target_type: &DataType,
     compound_assignment: (Operator, &str),
@@ -149,7 +149,7 @@ fn evaluate_compound_assignment_value(
         token_stream,
         context,
         &mut expr_type,
-        &variable_arg.value.value_mode,
+        &variable_declaration.value.value_mode,
         false,
         string_table,
     )?;
@@ -169,7 +169,7 @@ fn evaluate_compound_assignment_value(
         context,
         vec![target.clone(), rhs_node, operator_node],
         &mut inferred,
-        &variable_arg.value.value_mode,
+        &variable_declaration.value.value_mode,
         string_table,
     )?;
 
@@ -179,7 +179,7 @@ fn evaluate_compound_assignment_value(
 
 fn build_mutation_from_target(
     token_stream: &mut FileTokens,
-    variable_arg: &Declaration,
+    variable_declaration: &Declaration,
     target: AstNode,
     context: &ScopeContext,
     string_table: &mut StringTable,
@@ -193,10 +193,11 @@ fn build_mutation_from_target(
             ..
         }
     );
+
     ast_log!(
         "Handling mutation for ",
-        #variable_arg.value.value_mode, " ",
-        Blue variable_arg.id.to_string(string_table)
+        #variable_declaration.value.value_mode, " ",
+        Blue variable_declaration.id.to_string(string_table)
     );
 
     if !ast_node_is_place(&target) {
@@ -213,7 +214,7 @@ fn build_mutation_from_target(
 
     if !ast_node_is_mutable_place(&target) {
         return_rule_error!(
-            format!("Cannot mutate immutable variable '{}'. Use '~' to declare a mutable variable", variable_arg.id.to_string(string_table)),
+            format!("Cannot mutate immutable variable '{}'. Use '~' to declare a mutable variable", variable_declaration.id.to_string(string_table)),
             location,
             {
                 BorrowKind => "Mutable",
@@ -235,7 +236,6 @@ fn build_mutation_from_target(
         );
     }
 
-    // Determine the assignment type and handle accordingly
     let value = match token_stream.current_token_kind() {
         TokenKind::Assign => {
             // Simple mutation: variable = new_value. Parse-time context is
@@ -249,7 +249,7 @@ fn build_mutation_from_target(
                 token_stream,
                 context,
                 &mut expr_type,
-                &variable_arg.value.value_mode,
+                &variable_declaration.value.value_mode,
                 false,
                 string_table,
             )?;
@@ -266,7 +266,7 @@ fn build_mutation_from_target(
         compound_token => {
             let Some((operator, label)) = compound_assignment_operator(compound_token) else {
                 return_syntax_error!(
-                    format!("Expected assignment operator after variable '{}', found '{:?}'", variable_arg.id.to_string(string_table), token_stream.current_token_kind()),
+                    format!("Expected assignment operator after variable '{}', found '{:?}'", variable_declaration.id.to_string(string_table), token_stream.current_token_kind()),
                     location,
                     {
                         CompilationStage => "Expression Parsing",
@@ -278,7 +278,7 @@ fn build_mutation_from_target(
             evaluate_compound_assignment_value(
                 token_stream,
                 context,
-                variable_arg,
+                variable_declaration,
                 &target,
                 &target_type,
                 (operator, label),
@@ -299,24 +299,36 @@ fn build_mutation_from_target(
 
 pub(crate) fn handle_mutation_target(
     token_stream: &mut FileTokens,
-    variable_arg: &Declaration,
+    variable_declaration: &Declaration,
     target: AstNode,
     context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> Result<AstNode, CompilerError> {
-    build_mutation_from_target(token_stream, variable_arg, target, context, string_table)
+    build_mutation_from_target(
+        token_stream,
+        variable_declaration,
+        target,
+        context,
+        string_table,
+    )
 }
 
-/// Handle mutation of existing mutable variables
-/// Called when we encounter a variable reference followed by an assignment operator
+/// Handle mutation of existing mutable variables.
+/// Called when we encounter a variable reference followed by an assignment operator.
 pub fn handle_mutation(
     token_stream: &mut FileTokens,
-    variable_arg: &Declaration,
+    variable_declaration: &Declaration,
     context: &ScopeContext,
     string_table: &mut StringTable,
 ) -> Result<AstNode, CompilerError> {
-    let target = parse_field_access(token_stream, variable_arg, context, string_table)?;
-    build_mutation_from_target(token_stream, variable_arg, target, context, string_table)
+    let target = parse_field_access(token_stream, variable_declaration, context, string_table)?;
+    build_mutation_from_target(
+        token_stream,
+        variable_declaration,
+        target,
+        context,
+        string_table,
+    )
 }
 
 #[cfg(test)]

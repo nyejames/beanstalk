@@ -21,14 +21,12 @@ use crate::compiler_frontend::ast::statements::functions::{
 };
 use crate::compiler_frontend::ast::templates::template::TemplateConstValueKind;
 use crate::compiler_frontend::ast::templates::template_types::Template;
-use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::compiler_errors::CompilerMessages;
+use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_warnings::CompilerWarning;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::symbols::string_interning::StringId;
-use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::projects::settings;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 use rustc_hash::FxHashMap;
@@ -233,15 +231,14 @@ impl<'context, 'services> AstEmitter<'context, 'services> {
                     });
                 }
 
-                // --- Entry start function ---
+                // --------------------------
+                //  Emit start function bodies
+                // --------------------------
                 //
                 // WHAT: lowers the entry-file top-level body into the implicit `start` function.
                 // WHY: only the module entry file produces a start function. The body contains
                 // `PushStartRuntimeFragment` nodes for each top-level template. The function
                 // returns `Vec<String>` — the accumulated runtime fragment list. The HIR builder
-                // --------------------------
-                //  Emit start function bodies
-                // --------------------------
                 // adds the implicit return of the fragment vec.
                 // Start functions are build-system-only and are not importable or callable.
                 HeaderKind::StartFunction => {

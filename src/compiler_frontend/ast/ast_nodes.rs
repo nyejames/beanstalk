@@ -215,8 +215,8 @@ impl AstNode {
     pub fn get_expr(&self) -> Result<Expression, CompilerError> {
         match &self.kind {
             // Declarations and rvalues
-            NodeKind::VariableDeclaration(arg) => Ok(arg.value.to_owned()),
-            NodeKind::Rvalue(value, ..) => Ok(value.to_owned()),
+            NodeKind::VariableDeclaration(declaration) => Ok(declaration.value.to_owned()),
+            NodeKind::Rvalue(expression) => Ok(expression.to_owned()),
 
             // Call variants
             NodeKind::FunctionCall {
@@ -283,7 +283,7 @@ impl AstNode {
                 location.to_owned(),
                 ValueMode::MutableOwned,
             )),
-            // Compiler tried to get the expression of a node that cannot contain expressions
+            // Non-expression nodes — compiler invariant violation.
             _ => {
                 return_compiler_error!(
                     "Compiler tried to get the expression of a non-expression AST node: {:?}",
@@ -295,7 +295,7 @@ impl AstNode {
 
     pub fn get_precedence(&self) -> u32 {
         match &self.kind {
-            NodeKind::Operator(op) => match op {
+            NodeKind::Operator(operator) => match operator {
                 // Special Operators with the highest precedence
                 Operator::Range => 6,
                 Operator::Not => 6,
@@ -332,6 +332,6 @@ impl AstNode {
     }
 
     pub fn is_left_associative(&self) -> bool {
-        !matches!(self.kind, NodeKind::Operator(Operator::Exponent, ..))
+        !matches!(self.kind, NodeKind::Operator(Operator::Exponent))
     }
 }

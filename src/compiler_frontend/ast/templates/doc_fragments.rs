@@ -65,10 +65,10 @@ fn as_top_level_template_comment_declaration(node: &AstNode) -> Option<&Template
     // WHAT: match PushStartRuntimeFragment nodes containing Comment templates.
     // WHY: the old VariableDeclaration(#template) protocol is gone; doc comment templates
     //      in the entry start body are now PushStartRuntimeFragment nodes.
-    let NodeKind::PushStartRuntimeFragment(expr) = &node.kind else {
+    let NodeKind::PushStartRuntimeFragment(expression) = &node.kind else {
         return None;
     };
-    let ExpressionKind::Template(template) = &expr.kind else {
+    let ExpressionKind::Template(template) = &expression.kind else {
         return None;
     };
 

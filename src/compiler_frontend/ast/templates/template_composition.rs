@@ -68,9 +68,10 @@ fn wrap_direct_child_atom(
     Ok(wrapped_atom)
 }
 
-/// Wraps a single atom inside a child wrapper template. If the wrapper has
-/// slots, the atom is composed into those slots. Otherwise, the wrapper
-/// content is prepended.
+/// Wraps a single atom inside a child wrapper template.
+///
+/// If the wrapper has unresolved slots, the atom is composed into those slots.
+/// Otherwise, the wrapper content is prepended so the child atom follows the wrapper.
 fn wrap_atom_in_child_template(
     atom: &TemplateAtom,
     wrapper: &Template,
@@ -261,14 +262,17 @@ pub(crate) fn compose_template_head_chain(
     }
 
     let mut cache = rustc_hash::FxHashMap::default();
-    let atoms = resolve_pending_chain_items(
+    let resolved_atoms = resolve_pending_chain_items(
         &root_items,
         &layers,
         &mut atom_pool,
         &mut cache,
         string_table,
     )?;
-    Ok(TemplateContent { atoms })
+
+    Ok(TemplateContent {
+        atoms: resolved_atoms,
+    })
 }
 
 /// Routes a chain item to either the root list or the active receiving layer.
@@ -340,18 +344,18 @@ fn resolve_pending_chain_items(
     cache: &mut rustc_hash::FxHashMap<usize, Rc<Template>>,
     string_table: &StringTable,
 ) -> Result<Vec<TemplateAtom>, CompilerError> {
-    let mut atoms = Vec::with_capacity(items.len());
+    let mut resolved_atoms = Vec::with_capacity(items.len());
 
     for item in items {
         match item {
-            PendingChainItem::AtomRef(atom_id) => atoms.push(atom_pool.take(*atom_id)),
+            PendingChainItem::AtomRef(atom_id) => resolved_atoms.push(atom_pool.take(*atom_id)),
             PendingChainItem::LayerRef {
                 layer_index,
                 origin,
             } => {
                 let resolved_layer =
                     resolve_chain_layer(*layer_index, layers, atom_pool, cache, string_table)?;
-                atoms.push(TemplateAtom::Content(TemplateSegment::new(
+                resolved_atoms.push(TemplateAtom::Content(TemplateSegment::new(
                     Expression::template(
                         resolved_layer.as_ref().clone_for_composition(),
                         ValueMode::ImmutableOwned,
@@ -362,7 +366,7 @@ fn resolve_pending_chain_items(
         }
     }
 
-    Ok(atoms)
+    Ok(resolved_atoms)
 }
 
 /// Resolves a single chain layer by filling its wrapper's slots with the
@@ -389,11 +393,9 @@ fn resolve_chain_layer(
         return Ok(wrapper);
     }
 
-    let resolved_fill_atoms =
+    let fill_atoms =
         resolve_pending_chain_items(&layer.fill_items, layers, atom_pool, cache, string_table)?;
-    let resolved_fill = TemplateContent {
-        atoms: resolved_fill_atoms,
-    };
+    let resolved_fill = TemplateContent { atoms: fill_atoms };
     let composed_content = compose_template_with_slots(
         &layer.wrapper,
         resolved_fill,

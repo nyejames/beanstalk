@@ -19,11 +19,11 @@ use crate::return_rule_error;
 //  Helpers
 // --------------------------
 
-fn field_member(receiver_type: &DataType, field_id: StringId) -> Option<Declaration> {
+fn find_field_declaration(receiver_type: &DataType, field_name: StringId) -> Option<Declaration> {
     receiver_type.struct_fields().and_then(|fields| {
         fields
             .iter()
-            .find(|field| field.id.name() == Some(field_id))
+            .find(|field| field.id.name() == Some(field_name))
             .cloned()
     })
 }
@@ -85,7 +85,7 @@ pub(super) fn parse_field_member_access(
         ..
     } = context;
 
-    let Some(field) = field_member(receiver_type, member_name) else {
+    let Some(field) = find_field_declaration(receiver_type, member_name) else {
         return Ok(None);
     };
 
@@ -105,8 +105,10 @@ pub(super) fn parse_field_member_access(
         );
     }
 
-    let node = if scope_context.kind.is_constant_context() && field.value.is_compile_time_constant()
-    {
+    let should_inline =
+        scope_context.kind.is_constant_context() && field.value.is_compile_time_constant();
+
+    let result_node = if should_inline {
         let mut inlined_expression = field.value;
         inlined_expression.value_mode = ValueMode::ImmutableOwned;
         AstNode {
@@ -127,5 +129,5 @@ pub(super) fn parse_field_member_access(
         }
     };
 
-    Ok(Some(node))
+    Ok(Some(result_node))
 }

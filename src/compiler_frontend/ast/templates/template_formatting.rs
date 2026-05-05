@@ -68,7 +68,7 @@ pub(crate) fn apply_body_formatter(
     let has_text_pieces = plan
         .pieces
         .iter()
-        .any(|p| matches!(p, RenderPiece::Text(_)));
+        .any(|piece| matches!(piece, RenderPiece::Text(_)));
     if !has_text_pieces && formatter.is_none() {
         return Ok(BodyFormattingResult {
             plan,
@@ -326,14 +326,14 @@ fn representative_text_location_for_run(run: &[RenderPiece]) -> SourceLocation {
 /// - Length differences mean pieces were added or removed.
 /// - Text and head-content pieces are compared by interned string id.
 /// - Non-text pieces are assumed unchanged by formatting.
-fn render_pieces_changed(original: &[RenderPiece], new: &[RenderPiece]) -> bool {
-    if original.len() != new.len() {
+fn render_pieces_changed(original: &[RenderPiece], updated: &[RenderPiece]) -> bool {
+    if original.len() != updated.len() {
         return true;
     }
 
     original
         .iter()
-        .zip(new.iter())
+        .zip(updated.iter())
         .any(|(old, new)| match (old, new) {
             (RenderPiece::Text(old_t), RenderPiece::Text(new_t)) => old_t.text != new_t.text,
             (RenderPiece::HeadContent(old_t), RenderPiece::HeadContent(new_t)) => {
@@ -344,20 +344,20 @@ fn render_pieces_changed(original: &[RenderPiece], new: &[RenderPiece]) -> bool 
 }
 
 fn aggregate_text_piece_location(run: &[RenderPiece]) -> Option<SourceLocation> {
-    let mut first: Option<SourceLocation> = None;
-    let mut last: Option<SourceLocation> = None;
+    let mut first_location: Option<SourceLocation> = None;
+    let mut last_location: Option<SourceLocation> = None;
 
     for piece in run {
         if let RenderPiece::Text(text_piece) = piece {
-            if first.is_none() {
-                first = Some(text_piece.location.clone());
+            if first_location.is_none() {
+                first_location = Some(text_piece.location.clone());
             }
-            last = Some(text_piece.location.clone());
+            last_location = Some(text_piece.location.clone());
         }
     }
 
-    let start = first?;
-    let end = last?;
+    let start = first_location?;
+    let end = last_location?;
 
     if start.scope != end.scope {
         return Some(start);

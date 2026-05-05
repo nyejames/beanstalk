@@ -80,6 +80,10 @@ fn parses_nested_if_else_statements() {
     assert_eq!(else_block.as_ref().map(Vec::len), Some(1));
 }
 
+// --------------------------
+//  If-condition type checks
+// --------------------------
+
 #[test]
 fn rejects_non_boolean_if_condition_with_type_error_metadata() {
     let error = parse_single_file_ast_error("if 1:\n    io(\"bad\")\n;\n");
@@ -142,6 +146,10 @@ fn rejects_string_if_condition_with_type_error_metadata() {
         Some("String")
     );
 }
+
+// --------------------------
+//  Operator precedence in conditions
+// --------------------------
 
 #[test]
 fn precedence_not_binds_tighter_than_and_in_if_conditions() {
@@ -243,6 +251,10 @@ fn equality_and_or_precedence_stays_deterministic_in_if_conditions() {
     );
 }
 
+// --------------------------
+//  Match statements
+// --------------------------
+
 #[test]
 fn parses_match_statements_with_else_arm() {
     let (ast, string_table) = parse_single_file_ast(
@@ -252,7 +264,7 @@ fn parses_match_statements_with_else_arm() {
     let body = start_function_body(&ast, &string_table);
 
     let NodeKind::Match {
-        scrutinee: subject,
+        scrutinee,
         arms,
         default: else_block,
         exhaustiveness,
@@ -261,7 +273,7 @@ fn parses_match_statements_with_else_arm() {
         panic!("expected match statement in start body");
     };
 
-    assert_eq!(subject.data_type, DataType::Int);
+    assert_eq!(scrutinee.data_type, DataType::Int);
     assert_eq!(arms.len(), 2);
     assert!(matches!(
         arms[0].pattern,
@@ -360,7 +372,7 @@ fn parses_choice_match_arms_with_bare_and_qualified_variants() {
 
     let body = start_function_body(&ast, &string_table);
     let NodeKind::Match {
-        scrutinee: subject,
+        scrutinee,
         arms,
         default: else_block,
         exhaustiveness,
@@ -370,8 +382,8 @@ fn parses_choice_match_arms_with_bare_and_qualified_variants() {
     };
 
     assert!(
-        matches!(subject.data_type, DataType::Choices { .. }),
-        "choice match subject should preserve choice type identity"
+        matches!(scrutinee.data_type, DataType::Choices { .. }),
+        "choice match scrutinee should preserve choice type identity"
     );
     assert_eq!(arms.len(), 2);
     assert!(
@@ -492,6 +504,10 @@ fn rejects_guarded_choice_match_without_else() {
         error.msg
     );
 }
+
+// --------------------------
+//  Relational match patterns
+// --------------------------
 
 #[test]
 fn parses_relational_match_patterns() {

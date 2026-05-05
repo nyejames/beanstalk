@@ -33,15 +33,16 @@ pub fn new_collection(
         DataType::Inferred => None,
         explicit => Some(explicit.to_owned()),
     };
-    let has_explicit_element_type = inferred_inner_type.is_some();
+    let has_explicit_type = inferred_inner_type.is_some();
     let collection_location = token_stream.current_location();
     let mut consumed_close_curly = false;
 
     // The current token is an open curly brace; skip to the first value.
     token_stream.advance();
 
-    let mut next_item: bool = true;
+    let mut awaiting_item = true;
 
+    // Parse items until the closing curly brace.
     while token_stream.index < token_stream.length {
         match token_stream.current_token_kind() {
             TokenKind::CloseCurly => {
@@ -54,19 +55,19 @@ pub fn new_collection(
             }
 
             TokenKind::Comma => {
-                if next_item {
+                if awaiting_item {
                     return_syntax_error!(
                         "Expected a collection item after the comma",
                         token_stream.current_location()
                     )
                 }
 
-                next_item = true;
+                awaiting_item = true;
                 token_stream.advance();
             }
 
             _ => {
-                if !next_item {
+                if !awaiting_item {
                     return_syntax_error!(
                         "Expected a collection item after the comma",
                         token_stream.current_location()
@@ -75,30 +76,30 @@ pub fn new_collection(
 
                 let expected_item_type =
                     inferred_inner_type.as_ref().unwrap_or(&DataType::Inferred);
-                let mut expr_type = parse_expectation_for_target_type(expected_item_type);
-                let raw = create_expression(
+                let mut expression_type = parse_expectation_for_target_type(expected_item_type);
+                let raw_item = create_expression(
                     token_stream,
                     context,
-                    &mut expr_type,
+                    &mut expression_type,
                     &MutableOwned,
                     false,
                     string_table,
                 )?;
                 let expected_item_type =
-                    inferred_inner_type.get_or_insert_with(|| raw.data_type.to_owned());
+                    inferred_inner_type.get_or_insert_with(|| raw_item.data_type.to_owned());
 
                 validate_collection_item_type(
                     expected_item_type,
-                    &raw,
-                    has_explicit_element_type,
+                    &raw_item,
+                    has_explicit_type,
                     string_table,
                 )?;
 
-                let item = coerce_expression_to_declared_type(raw, expected_item_type);
+                let item = coerce_expression_to_declared_type(raw_item, expected_item_type);
 
                 items.push(item);
 
-                next_item = false;
+                awaiting_item = false;
             }
         }
     }
@@ -131,36 +132,36 @@ pub fn new_collection(
 
 fn validate_collection_item_type(
     expected: &DataType,
-    item: &Expression,
-    has_explicit_element_type: bool,
+    item_expression: &Expression,
+    has_explicit_type: bool,
     string_table: &StringTable,
 ) -> Result<(), CompilerError> {
-    if is_declaration_compatible(expected, &item.data_type) {
+    if is_declaration_compatible(expected, &item_expression.data_type) {
         return Ok(());
     }
 
-    let message = if has_explicit_element_type {
+    let message = if has_explicit_type {
         format!(
             "Collection literal item has incompatible type. {} {}",
-            expected_found_clause(expected, &item.data_type, string_table),
-            offending_value_clause(item, string_table)
+            expected_found_clause(expected, &item_expression.data_type, string_table),
+            offending_value_clause(item_expression, string_table)
         )
     } else {
         format!(
             "Collection literal has inconsistent item types. {} {}",
-            expected_found_clause(expected, &item.data_type, string_table),
-            offending_value_clause(item, string_table)
+            expected_found_clause(expected, &item_expression.data_type, string_table),
+            offending_value_clause(item_expression, string_table)
         )
     };
 
     return_type_error!(
         message,
-        item.location.clone(),
+        item_expression.location.clone(),
         {
             CompilationStage => "Collection Literal Parsing",
             ExpectedType => expected.display_with_table(string_table),
-            FoundType => item.data_type.display_with_table(string_table),
-            PrimarySuggestion => if has_explicit_element_type {
+            FoundType => item_expression.data_type.display_with_table(string_table),
+            PrimarySuggestion => if has_explicit_type {
                 "Use values that match the declared collection element type"
             } else {
                 "Use one element type in the collection literal or add an explicit collection type annotation"

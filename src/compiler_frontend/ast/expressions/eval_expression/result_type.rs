@@ -50,6 +50,7 @@ pub(super) fn resolve_expression_result_type(
                         string_table,
                     )?);
                 }
+
                 2 => {
                     let Some(rhs) = stack.pop() else {
                         return_syntax_error!(
@@ -77,6 +78,7 @@ pub(super) fn resolve_expression_result_type(
                         string_table,
                     )?);
                 }
+
                 _ => {
                     return_compiler_error!(format!(
                         "Unsupported operator arity during expression typing: {:?}",

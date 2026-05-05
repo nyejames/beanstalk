@@ -116,7 +116,7 @@ pub(crate) fn parse_return_statement(
         return Ok(());
     }
 
-    let return_values = if context.expected_result_types.is_empty() {
+    let returned_values = if context.expected_result_types.is_empty() {
         if is_return_terminator(token_stream.current_token_kind()) {
             Vec::new()
         } else {
@@ -147,7 +147,7 @@ pub(crate) fn parse_return_statement(
             )
         }
 
-        let parsed_returns = create_multiple_expressions(
+        let parsed_return_values = create_multiple_expressions(
             token_stream,
             context,
             "return values",
@@ -171,9 +171,11 @@ pub(crate) fn parse_return_statement(
             );
         }
 
-        let mut coerced_returns: Vec<Expression> = Vec::with_capacity(parsed_returns.len());
+        let mut coerced_values: Vec<Expression> = Vec::with_capacity(parsed_return_values.len());
 
-        for (index, (returned_value, expected_type)) in parsed_returns
+        // Validate each returned value against the corresponding expected type,
+        // applying numeric coercion when allowed.
+        for (slot_index, (returned_value, expected_type)) in parsed_return_values
             .into_iter()
             .zip(context.expected_result_types.iter())
             .enumerate()
@@ -181,13 +183,13 @@ pub(crate) fn parse_return_statement(
             let normalized_actual = normalize_return_expression_type(&returned_value.data_type);
 
             if &normalized_actual == expected_type {
-                coerced_returns.push(returned_value);
+                coerced_values.push(returned_value);
                 continue;
             }
 
             // Allow Int → Float at return sites and rewrite the expression.
             if is_numeric_coercible(&normalized_actual, expected_type) {
-                coerced_returns.push(coerce_expression_to_return_type(
+                coerced_values.push(coerce_expression_to_return_type(
                     returned_value,
                     expected_type,
                 ));
@@ -197,7 +199,7 @@ pub(crate) fn parse_return_statement(
             return_type_error!(
                 format!(
                     "Return value {} has incorrect type. {} {} Return values must match the function signature exactly.",
-                    index + 1,
+                    slot_index + 1,
                     expected_found_clause(expected_type, &normalized_actual, string_table),
                     offending_value_clause(&returned_value, string_table),
                 ),
@@ -216,11 +218,11 @@ pub(crate) fn parse_return_statement(
             );
         }
 
-        coerced_returns
+        coerced_values
     };
 
     ast.push(AstNode {
-        kind: NodeKind::Return(return_values),
+        kind: NodeKind::Return(returned_values),
         location: token_stream.current_location(),
         scope: context.scope.clone(),
     });

@@ -78,24 +78,24 @@ impl TemplateWhitespacePassProfile {
 /// and the char-index end of the leading boundary block.
 fn compute_leading_dedent_info(content: &str) -> (usize, usize) {
     let chars: Vec<char> = content.chars().collect();
-    let mut cursor = 0usize;
+    let mut char_index = 0usize;
 
     // Skip optional leading horizontal whitespace before the first newline.
-    while cursor < chars.len() && chars[cursor].is_non_newline_whitespace() {
-        cursor += 1;
+    while char_index < chars.len() && chars[char_index].is_non_newline_whitespace() {
+        char_index += 1;
     }
 
-    if cursor < chars.len() && chars[cursor] == '\n' {
-        cursor += 1;
-        let dedent_start = cursor;
+    if char_index < chars.len() && chars[char_index] == '\n' {
+        char_index += 1;
+        let dedent_start = char_index;
 
         // Measure the indentation after the first newline to establish dedent width.
-        while cursor < chars.len() && chars[cursor].is_non_newline_whitespace() {
-            cursor += 1;
+        while char_index < chars.len() && chars[char_index].is_non_newline_whitespace() {
+            char_index += 1;
         }
 
-        let dedent_width = cursor.saturating_sub(dedent_start);
-        (dedent_width, cursor)
+        let dedent_width = char_index.saturating_sub(dedent_start);
+        (dedent_width, char_index)
     } else {
         (0, 0)
     }
@@ -108,25 +108,25 @@ fn dedent_after_newlines(input: &str, dedent_width: usize) -> String {
 
     let chars: Vec<char> = input.chars().collect();
     let mut output = String::with_capacity(input.len());
-    let mut cursor = 0usize;
+    let mut char_index = 0usize;
 
-    while cursor < chars.len() {
-        let current = chars[cursor];
+    while char_index < chars.len() {
+        let current = chars[char_index];
         output.push(current);
-        cursor += 1;
+        char_index += 1;
 
         if current != '\n' {
             continue;
         }
 
         let mut removed = 0usize;
-        while cursor < chars.len() && removed < dedent_width {
-            let next = chars[cursor];
+        while char_index < chars.len() && removed < dedent_width {
+            let next = chars[char_index];
             if !next.is_non_newline_whitespace() {
                 break;
             }
 
-            cursor += 1;
+            char_index += 1;
             removed += 1;
         }
     }

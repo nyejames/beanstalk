@@ -54,13 +54,13 @@ enum LiteralPatternKey {
     Char(char),
 }
 
-fn extract_literal_key(expr: &Expression) -> Option<LiteralPatternKey> {
-    match &expr.kind {
-        ExpressionKind::Int(v) => Some(LiteralPatternKey::Int(*v)),
-        ExpressionKind::Float(v) => Some(LiteralPatternKey::Float(v.to_bits())),
+fn extract_literal_key(expression: &Expression) -> Option<LiteralPatternKey> {
+    match &expression.kind {
+        ExpressionKind::Int(value) => Some(LiteralPatternKey::Int(*value)),
+        ExpressionKind::Float(value) => Some(LiteralPatternKey::Float(value.to_bits())),
         ExpressionKind::StringSlice(id) => Some(LiteralPatternKey::StringSlice(*id)),
-        ExpressionKind::Bool(v) => Some(LiteralPatternKey::Bool(*v)),
-        ExpressionKind::Char(v) => Some(LiteralPatternKey::Char(*v)),
+        ExpressionKind::Bool(value) => Some(LiteralPatternKey::Bool(*value)),
+        ExpressionKind::Char(value) => Some(LiteralPatternKey::Char(*value)),
         _ => None,
     }
 }
@@ -80,7 +80,7 @@ pub fn create_branch(
     string_table: &mut StringTable,
 ) -> Result<Vec<AstNode>, CompilerError> {
     let mut condition_type = DataType::Inferred;
-    let then_condition = create_expression(
+    let condition = create_expression(
         token_stream,
         &context.new_child_control_flow(ContextKind::Condition, string_table),
         &mut condition_type,
@@ -92,17 +92,12 @@ pub fn create_branch(
     // `if value is:` starts a statement-style match arm block.
     if token_stream.current_token_kind() == &TokenKind::Is {
         token_stream.advance();
-        let match_statement = create_match_node(
-            then_condition,
-            token_stream,
-            context,
-            warnings,
-            string_table,
-        )?;
+        let match_statement =
+            create_match_node(condition, token_stream, context, warnings, string_table)?;
         return Ok(vec![match_statement]);
     }
 
-    ensure_if_statement_condition(&then_condition, string_table)?;
+    ensure_if_statement_condition(&condition, string_table)?;
 
     ast_log!("Creating If Statement");
     if token_stream.current_token_kind() != &TokenKind::Colon {
@@ -139,7 +134,7 @@ pub fn create_branch(
     };
 
     Ok(vec![AstNode {
-        kind: NodeKind::If(then_condition, then_block, else_block),
+        kind: NodeKind::If(condition, then_block, else_block),
         location: token_stream.current_location(),
         scope: then_scope,
     }])
@@ -152,7 +147,7 @@ pub fn create_branch(
 /// WHY: all match-level invariants (at least one case before else, no duplicates,
 /// exhaustiveness) are enforced here so downstream HIR lowering can assume valid input.
 fn create_match_node(
-    subject: Expression,
+    scrutinee: Expression,
     token_stream: &mut FileTokens,
     context: &mut ScopeContext,
     warnings: &mut Vec<CompilerWarning>,
@@ -282,7 +277,7 @@ fn create_match_node(
                     .get_or_insert(token_stream.current_location().start_pos.char_column);
 
                 let parsed_case = parse_case_arm(
-                    &subject,
+                    &scrutinee,
                     token_stream,
                     &match_context,
                     warnings,
@@ -352,7 +347,7 @@ fn create_match_node(
     //  Enforce exhaustiveness and build node
     // ----------------------------
     enforce_match_exhaustiveness(
-        &subject,
+        &scrutinee,
         &else_block,
         has_guarded_arms,
         &matched_choice_variants,
@@ -367,7 +362,7 @@ fn create_match_node(
 
     Ok(AstNode {
         kind: NodeKind::Match {
-            scrutinee: subject,
+            scrutinee,
             arms,
             default: else_block,
             exhaustiveness,
@@ -471,7 +466,7 @@ fn parse_match_guard(
 /// WHY: separating choice and literal paths here keeps each pattern parser focused
 /// on one concern while this function handles shared arm-level syntax validation.
 fn parse_case_arm(
-    subject: &Expression,
+    scrutinee: &Expression,
     token_stream: &mut FileTokens,
     match_context: &ScopeContext,
     warnings: &mut Vec<CompilerWarning>,
@@ -480,7 +475,7 @@ fn parse_case_arm(
     token_stream.advance();
     token_stream.skip_newlines();
 
-    let normalized_subject_type = normalized_subject_type(&subject.data_type);
+    let normalized_subject_type = normalized_subject_type(&scrutinee.data_type);
 
     // Choice scrutinees resolve symbols to variants; all other scrutinees stay literal-only.
     let (pattern, matched_choice_variant, pattern_location, arm_scope) =
@@ -515,7 +510,7 @@ fn parse_case_arm(
                         match_context,
                         capture_name,
                         &capture_location,
-                        &subject.data_type,
+                        &scrutinee.data_type,
                         string_table,
                     )?;
                     (pattern, None, capture_location.clone(), arm_scope)
@@ -543,7 +538,7 @@ fn parse_case_arm(
                         match_context,
                         name,
                         &location,
-                        &subject.data_type,
+                        &scrutinee.data_type,
                         string_table,
                     )?;
                     (pattern, None, location.clone(), arm_scope)
@@ -645,13 +640,13 @@ fn parse_case_arm(
 /// - No capture name shadows an existing visible local (Beanstalk no-shadowing rule).
 fn build_arm_scope_with_choice_captures(
     match_context: &ScopeContext,
-    parsed: ParsedChoicePattern,
+    parsed_pattern: ParsedChoicePattern,
     string_table: &mut StringTable,
 ) -> Result<(ScopeContext, MatchPattern), CompilerError> {
     let mut arm_scope = match_context.clone();
-    let mut captures = Vec::with_capacity(parsed.captures.len());
+    let mut captures = Vec::with_capacity(parsed_pattern.captures.len());
 
-    for capture in parsed.captures {
+    for capture in parsed_pattern.captures {
         let binding_name = capture.binding_name;
 
         // Enforce no-shadowing: the local binding name must not collide with any visible local.
@@ -697,11 +692,11 @@ fn build_arm_scope_with_choice_captures(
     Ok((
         arm_scope,
         MatchPattern::ChoiceVariant {
-            nominal_path: parsed.nominal_path,
-            variant: parsed.variant,
-            tag: parsed.tag,
+            nominal_path: parsed_pattern.nominal_path,
+            variant: parsed_pattern.variant,
+            tag: parsed_pattern.tag,
             captures,
-            location: parsed.location,
+            location: parsed_pattern.location,
         },
     ))
 }
@@ -769,13 +764,13 @@ fn build_arm_scope_with_capture(
 /// WHY: exhaustiveness at parse time prevents silent fallthrough bugs and gives users
 /// actionable diagnostics listing the specific missing variants.
 fn enforce_match_exhaustiveness(
-    subject: &Expression,
+    scrutinee: &Expression,
     else_block: &Option<Vec<AstNode>>,
     has_guarded_arms: bool,
     matched_choice_variants: &FxHashSet<StringId>,
     string_table: &StringTable,
 ) -> Result<(), CompilerError> {
-    let normalized_subject_type = normalized_subject_type(&subject.data_type);
+    let normalized_subject_type = normalized_subject_type(&scrutinee.data_type);
 
     match normalized_subject_type {
         DataType::Choices { variants, .. } => {
@@ -787,7 +782,7 @@ fn enforce_match_exhaustiveness(
             if has_guarded_arms {
                 return_rule_error!(
                     "Choice matches with guarded arms must include an explicit 'else =>' arm in Alpha.",
-                    subject.location.clone(),
+                    scrutinee.location.clone(),
                     {
                         CompilationStage => "Match Statement Parsing",
                         PrimarySuggestion => "Add an 'else =>' arm when any choice match arm uses a guard",
@@ -810,7 +805,7 @@ fn enforce_match_exhaustiveness(
                     "Non-exhaustive choice match. Missing variants: [{}].",
                     missing_variants.join(", ")
                 ),
-                subject.location.clone(),
+                scrutinee.location.clone(),
                 {
                     CompilationStage => "Match Statement Parsing",
                     PrimarySuggestion => "Add match arms for each missing variant, or add an 'else =>' arm",
@@ -828,7 +823,7 @@ fn enforce_match_exhaustiveness(
                     "Non-choice matches must include an 'else =>' arm in Alpha. Scrutinee type: '{}'.",
                     non_choice_type.display_with_table(string_table)
                 ),
-                subject.location.clone(),
+                scrutinee.location.clone(),
                 {
                     CompilationStage => "Match Statement Parsing",
                     PrimarySuggestion => "Add an 'else =>' arm to make this match exhaustive",

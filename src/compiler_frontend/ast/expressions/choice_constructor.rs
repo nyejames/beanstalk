@@ -163,19 +163,19 @@ pub(crate) fn parse_choice_construct(
 
         let instantiated_variants: Vec<_> = variants
             .iter()
-            .map(|v| {
-                let payload = match &v.payload {
+            .map(|variant| {
+                let payload = match &variant.payload {
                     ChoiceVariantPayload::Unit => ChoiceVariantPayload::Unit,
                     ChoiceVariantPayload::Record { fields } => {
                         let substituted_fields = fields
                             .iter()
                             .map(|field| {
-                                let mut resolved = field.clone();
-                                resolved.value.data_type = substitute_type_parameters(
+                                let mut instantiated_field = field.clone();
+                                instantiated_field.value.data_type = substitute_type_parameters(
                                     &field.value.data_type,
                                     &inference.substitution,
                                 );
-                                resolved
+                                instantiated_field
                             })
                             .collect();
                         ChoiceVariantPayload::Record {
@@ -184,9 +184,9 @@ pub(crate) fn parse_choice_construct(
                     }
                 };
                 crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant {
-                    id: v.id,
+                    id: variant.id,
                     payload,
-                    location: v.location.clone(),
+                    location: variant.location.clone(),
                 }
             })
             .collect();
@@ -206,9 +206,11 @@ pub(crate) fn parse_choice_construct(
     };
 
     let selected_variant = &instantiated_variants[variant_index];
+
     match &selected_variant.payload {
         ChoiceVariantPayload::Unit => {
             token_stream.advance();
+
             if has_parens {
                 token_stream.advance(); // past '('
                 if token_stream.current_token_kind() == &TokenKind::CloseParenthesis {
@@ -299,17 +301,16 @@ pub(crate) fn parse_choice_construct(
                 let mut value = coerce_expression_to_declared_type(arg.value.clone(), field_type);
 
                 if enforce_const {
-                    let is_placeholder_reference = if let ExpressionKind::Reference(path) =
-                        &value.kind
-                        && path.name().is_some_and(|name| {
-                            context
-                                .get_reference(&name)
-                                .is_some_and(Declaration::is_unresolved_constant_placeholder)
-                        }) {
-                        true
-                    } else {
-                        false
-                    };
+                    let is_placeholder_reference =
+                        if let ExpressionKind::Reference(path) = &value.kind {
+                            path.name().is_some_and(|name| {
+                                context
+                                    .get_reference(&name)
+                                    .is_some_and(Declaration::is_unresolved_constant_placeholder)
+                            })
+                        } else {
+                            false
+                        };
 
                     if !value.is_compile_time_constant() && !is_placeholder_reference {
                         let field_name = field.id.name_str(string_table).unwrap_or("<field>");

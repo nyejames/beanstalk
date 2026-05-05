@@ -90,29 +90,6 @@ fn parse_choice_pattern_captures(
 ) -> Result<Vec<ParsedChoicePayloadCapture>, CompilerError> {
     let variant_name_str = string_table.resolve(variant.id);
 
-    /// Resolve the leaf name of a choice payload field declaration.
-    ///
-    /// WHAT: extracts the terminal identifier from a payload field's interned path.
-    /// WHY: payload fields are declarations with interned paths; during match-pattern
-    ///      parsing we need the leaf string ID for capture-name validation.
-    ///      This is an internal invariant: every payload field must have a leaf name.
-    fn choice_payload_field_name(
-        field: &Declaration,
-        location: &SourceLocation,
-        string_table: &StringTable,
-    ) -> Result<StringId, CompilerError> {
-        field.id.name().ok_or_else(|| {
-            CompilerError::new(
-                format!(
-                    "Choice payload field '{}' has no leaf name during match-pattern parsing",
-                    field.id.to_string(string_table)
-                ),
-                location.clone(),
-                ErrorType::Compiler,
-            )
-        })
-    }
-
     match &variant.payload {
         ChoiceVariantPayload::Unit => {
             if token_stream.current_token_kind() == &TokenKind::OpenParenthesis {
@@ -133,16 +110,13 @@ fn parse_choice_pattern_captures(
 
         ChoiceVariantPayload::Record { fields } => {
             if token_stream.current_token_kind() != &TokenKind::OpenParenthesis {
-                let field_list: Vec<String> = fields
-                    .iter()
-                    .filter_map(|f| f.id.name().map(|n| string_table.resolve(n).to_owned()))
-                    .collect();
+                let field_list = format_payload_field_names(fields, string_table);
                 return_rule_error!(
                     format!(
                         "Payload variant '{}' requires capture bindings. Expected 'case {}({})'.",
                         variant_name_str,
                         variant_name_str,
-                        field_list.join(", ")
+                        field_list
                     ),
                     token_stream.current_location(),
                     {
@@ -150,7 +124,7 @@ fn parse_choice_pattern_captures(
                         PrimarySuggestion => format!(
                             "Use 'case {}({})' to bind payload fields",
                             variant_name_str,
-                            field_list.join(", ")
+                            field_list
                         ),
                     }
                 );
@@ -251,7 +225,7 @@ fn parse_choice_pattern_captures(
                 }
 
                 // Check duplicate capture binding name (uses the local alias when present)
-                if let Some(_first_loc) = seen_names.get(&binding_name) {
+                if seen_names.contains_key(&binding_name) {
                     return_rule_error!(
                         format!(
                             "Duplicate capture binding '{}' in pattern for variant '{}'.",
@@ -284,7 +258,7 @@ fn parse_choice_pattern_captures(
                             PrimarySuggestion => format!(
                                 "Use exactly {} capture(s): {}",
                                 expected_count,
-                                fields.iter().filter_map(|f| f.id.name().map(|n| string_table.resolve(n).to_owned())).collect::<Vec<_>>().join(", ")
+                                format_payload_field_names(fields, string_table)
                             ),
                         }
                     );
@@ -308,7 +282,7 @@ fn parse_choice_pattern_captures(
                                 "Use '{}' as the capture name: 'case {}({})'",
                                 string_table.resolve(expected_field_name),
                                 variant_name_str,
-                                fields.iter().filter_map(|f| f.id.name().map(|n| string_table.resolve(n).to_owned())).collect::<Vec<_>>().join(", ")
+                                format_payload_field_names(fields, string_table)
                             ),
                         }
                     );
@@ -369,7 +343,7 @@ fn parse_choice_pattern_captures(
                         PrimarySuggestion => format!(
                             "Use exactly {} capture(s): {}",
                             fields.len(),
-                            fields.iter().filter_map(|f| f.id.name().map(|n| string_table.resolve(n).to_owned())).collect::<Vec<_>>().join(", ")
+                            format_payload_field_names(fields, string_table)
                         ),
                     }
                 );
@@ -378,6 +352,43 @@ fn parse_choice_pattern_captures(
             Ok(captures)
         }
     }
+}
+
+/// Resolve the leaf name of a choice payload field declaration.
+///
+/// WHAT: extracts the terminal identifier from a payload field's interned path.
+/// WHY: payload fields are declarations with interned paths; during match-pattern
+///      parsing we need the leaf string ID for capture-name validation.
+///      This is an internal invariant: every payload field must have a leaf name.
+fn choice_payload_field_name(
+    field: &Declaration,
+    location: &SourceLocation,
+    string_table: &StringTable,
+) -> Result<StringId, CompilerError> {
+    field.id.name().ok_or_else(|| {
+        CompilerError::new(
+            format!(
+                "Choice payload field '{}' has no leaf name during match-pattern parsing",
+                field.id.to_string(string_table)
+            ),
+            location.clone(),
+            ErrorType::Compiler,
+        )
+    })
+}
+
+/// Format the declared payload field names as a comma-separated list for diagnostics.
+fn format_payload_field_names(fields: &[Declaration], string_table: &StringTable) -> String {
+    fields
+        .iter()
+        .filter_map(|field| {
+            field
+                .id
+                .name()
+                .map(|name| string_table.resolve(name).to_owned())
+        })
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// Parse a bare (`Ready`) or qualified (`Status::Ready`) variant name from the token stream.

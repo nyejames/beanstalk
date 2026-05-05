@@ -17,11 +17,11 @@ use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable}
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::value_mode::ValueMode;
 
-// Expressions represent anything that will turn into a value
-// Their kind will represent what their value is.
-// Runtime expressions (couldn't be folded) are represented as 'runtime' kinds.
-// These runtime expressions are small ASTs that must be represented at runtime.
-// Expression kinds are like a subset of the core datatypes because some data types don't return values or represent more complex structures.
+/// The kind determines the runtime shape and constant-foldability of the value.
+///
+/// `Runtime` carries a small AST fragment for expressions that could not be folded.
+/// `ExpressionKind` mirrors core datatypes that produce values, omitting structural
+/// types that do not represent first-class runtime values.
 #[derive(Clone, Debug)]
 pub struct Expression {
     pub kind: ExpressionKind,
@@ -514,6 +514,7 @@ impl Expression {
         )
         .with_regular_division_provenance(contains_regular_division)
     }
+
     pub fn struct_instance(
         nominal_path: InternedPath,
         args: Vec<Declaration>,
@@ -545,6 +546,7 @@ impl Expression {
         )
         .with_regular_division_provenance(contains_regular_division)
     }
+
     pub fn struct_definition(
         args: Vec<Declaration>,
         location: SourceLocation,
@@ -557,6 +559,7 @@ impl Expression {
             value_mode,
         )
     }
+
     pub fn template(template: Template, value_mode: ValueMode) -> Self {
         let location = template.location.to_owned();
         Self::new(
@@ -673,6 +676,7 @@ impl Expression {
                     ConstValueKind::NonConst
                 }
             }
+
             ExpressionKind::StructInstance(fields) => {
                 if fields
                     .iter()
@@ -690,6 +694,7 @@ impl Expression {
                     ConstValueKind::NonConst
                 }
             }
+
             ExpressionKind::Template(template) => match template.const_value_kind() {
                 TemplateConstValueKind::RenderableString => ConstValueKind::RenderableTemplate,
                 TemplateConstValueKind::WrapperTemplate => ConstValueKind::TemplateWrapper,
@@ -703,6 +708,7 @@ impl Expression {
                     ConstValueKind::NonConst
                 }
             }
+
             ExpressionKind::Reference(_)
             | ExpressionKind::Copy(_)
             | ExpressionKind::Runtime(_)
@@ -756,26 +762,20 @@ pub enum ExpressionKind {
     Bool(bool),
     Char(char),
 
-    // Compile-time path literal(s) — one or more resolved paths from grouped syntax.
+    /// Compile-time path literal(s) — one or more resolved paths from grouped syntax.
     #[allow(dead_code)] // Will be needed for path expressions in the future
     Path(Box<CompileTimePaths>),
 
-    // Reference to a variable by name
+    /// Reference to a variable by name.
     Reference(InternedPath),
 
-    // Explicitly materialize a fresh value from an aliasing place.
+    /// Explicitly materialize a fresh value from an aliasing place.
     Copy(Box<AstNode>),
 
-    // Because functions can all be values
-    Function(
-        FunctionSignature,
-        Vec<AstNode>, // body
-    ),
+    /// Functions are first-class values.
+    Function(FunctionSignature, Vec<AstNode>),
 
-    FunctionCall(
-        InternedPath,      // Function name
-        Vec<CallArgument>, // Arguments
-    ),
+    FunctionCall(InternedPath, Vec<CallArgument>),
 
     ResultHandledFunctionCall {
         name: InternedPath,
@@ -800,18 +800,16 @@ pub enum ExpressionKind {
 
     HostFunctionCall(ExternalFunctionId, Vec<CallArgument>),
 
-    // Also equivalent to a String if it folds into a string
-    Template(Box<Template>), // Template Body, Styles, ID
+    /// Equivalent to a string when folded at compile time.
+    Template(Box<Template>),
 
     Collection(Vec<Expression>),
 
     StructDefinition(Vec<Declaration>),
     StructInstance(Vec<Declaration>),
 
-    // This is a special case for the range operator
-    // This implementation will probably change in the future to be a more general operator
-    // Upper and lower bounds are inclusive.
-    // Instead of making this a function, it has its own special case to make constant folding easier
+    /// Inclusive range operator (`..`). Kept as a dedicated variant to simplify
+    /// constant folding; this may become a general operator in the future.
     Range(Box<Expression>, Box<Expression>),
 
     /// An implicit contextual coercion applied by the compiler at a declaration

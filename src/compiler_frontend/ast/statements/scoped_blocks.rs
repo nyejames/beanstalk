@@ -41,7 +41,7 @@ pub(crate) fn parse_scoped_block_statement(
 
     match token_stream.current_token_kind() {
         TokenKind::Colon => token_stream.advance(),
-        token if token.is_assignment_operator() => {
+        token_kind if token_kind.is_assignment_operator() => {
             return Err(reserved_block_keyword_as_name_error("block", location));
         }
         TokenKind::Symbol(_) => {

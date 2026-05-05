@@ -38,11 +38,8 @@ fn error_builtin_method_name(
 ) -> Option<ErrorBuiltinMethod> {
     match string_table.resolve(member_name) {
         ERROR_HELPER_WITH_LOCATION => Some(ErrorBuiltinMethod::WithLocation),
-
         ERROR_HELPER_PUSH_TRACE => Some(ErrorBuiltinMethod::PushTrace),
-
         ERROR_HELPER_BUBBLE => Some(ErrorBuiltinMethod::Bubble),
-
         _ => None,
     }
 }
@@ -50,9 +47,7 @@ fn error_builtin_method_name(
 fn error_builtin_path(builtin: ErrorBuiltinMethod, string_table: &mut StringTable) -> InternedPath {
     let builtin_name = match builtin {
         ErrorBuiltinMethod::WithLocation => ERROR_WITH_LOCATION_HOST_NAME,
-
         ErrorBuiltinMethod::PushTrace => ERROR_PUSH_TRACE_HOST_NAME,
-
         ErrorBuiltinMethod::Bubble => ERROR_BUBBLE_HOST_NAME,
     };
 
@@ -62,9 +57,7 @@ fn error_builtin_path(builtin: ErrorBuiltinMethod, string_table: &mut StringTabl
 fn error_builtin_kind(builtin: ErrorBuiltinMethod) -> BuiltinMethodKind {
     match builtin {
         ErrorBuiltinMethod::WithLocation => BuiltinMethodKind::WithLocation,
-
         ErrorBuiltinMethod::PushTrace => BuiltinMethodKind::PushTrace,
-
         ErrorBuiltinMethod::Bubble => BuiltinMethodKind::Bubble,
     }
 }

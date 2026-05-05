@@ -32,7 +32,7 @@ pub(crate) fn parse_template_body(
     foldable: &mut bool,
     string_table: &mut StringTable,
 ) -> Result<(), CompilerError> {
-    // The tokenizer only allows for strings, templates or slots inside the template body
+    // The tokenizer only allows for strings, templates or slots inside the template body.
     while token_stream.index < token_stream.tokens.len() {
         match &token_stream.current_token_kind() {
             TokenKind::Eof => {
@@ -113,7 +113,8 @@ fn parse_nested_template(
     let nested_inheritance = TemplateInheritance {
         direct_child_wrappers: template.style.child_templates.to_owned(),
     };
-    let nested_template = Template::new_nested_template(
+
+    let child_template = Template::new_nested_template(
         token_stream,
         context,
         nested_inheritance,
@@ -129,14 +130,14 @@ fn parse_nested_template(
         template.kind,
         TemplateType::Comment(CommentDirectiveKind::Doc)
     ) {
-        template.doc_children.push(nested_template);
+        template.doc_children.push(child_template);
         return Ok(());
     }
 
-    match &nested_template.kind {
+    match &child_template.kind {
         TemplateType::String
-            if !nested_template.has_unresolved_slots()
-                && !has_direct_child_template_outputs(&nested_template) =>
+            if !child_template.has_unresolved_slots()
+                && !has_direct_child_template_outputs(&child_template) =>
         {
             ast_log!(
                 "Found a compile time foldable template inside a template. Folding into a string slice..."
@@ -146,18 +147,18 @@ fn parse_nested_template(
                 string_table,
                 "nested compile-time template folding in body parser",
             )?;
-            let interned_child = nested_template.fold_into_stringid(&mut fold_context)?;
+            let folded_child_id = child_template.fold_into_stringid(&mut fold_context)?;
 
             template.content.atoms.push(
                 crate::compiler_frontend::ast::templates::template::TemplateAtom::Content(
                     crate::compiler_frontend::ast::templates::template::TemplateSegment::from_child_template_output(
                         Expression::string_slice(
-                            interned_child,
+                            folded_child_id,
                             token_stream.current_location(),
                             ValueMode::ImmutableOwned,
                         ),
                         TemplateSegmentOrigin::Body,
-                        nested_template.clone_for_composition(),
+                        child_template.clone_for_composition(),
                     ),
                 ),
             );
@@ -174,6 +175,7 @@ fn parse_nested_template(
         }
 
         TemplateType::String | TemplateType::SlotInsert(_) => {}
+
         TemplateType::SlotDefinition(slot_key) => {
             template.content.push_slot_with_child_wrappers(
                 slot_key.to_owned(),
@@ -185,8 +187,8 @@ fn parse_nested_template(
         }
     }
 
-    let expr = Expression::template(nested_template, ValueMode::ImmutableOwned);
-    template.content.add(expr);
+    let expression = Expression::template(child_template, ValueMode::ImmutableOwned);
+    template.content.add(expression);
     Ok(())
 }
 
@@ -218,6 +220,7 @@ fn consume_balanced_brackets_as_literal_text(
                     ValueMode::ImmutableOwned,
                 ));
             }
+
             TokenKind::TemplateClose => {
                 let bracket_id = string_table.intern("]");
                 template.content.add(Expression::string_slice(
@@ -226,6 +229,7 @@ fn consume_balanced_brackets_as_literal_text(
                     ValueMode::ImmutableOwned,
                 ));
             }
+
             TokenKind::RawStringLiteral(content) | TokenKind::StringSliceLiteral(content) => {
                 template.content.add(Expression::string_slice(
                     *content,
@@ -233,6 +237,7 @@ fn consume_balanced_brackets_as_literal_text(
                     ValueMode::ImmutableOwned,
                 ));
             }
+
             TokenKind::Newline => {
                 let newline_id = string_table.intern("\n");
                 template.content.add(Expression::string_slice(
@@ -241,6 +246,7 @@ fn consume_balanced_brackets_as_literal_text(
                     ValueMode::ImmutableOwned,
                 ));
             }
+
             TokenKind::Symbol(id) | TokenKind::StyleDirective(id) => {
                 let prefix = if matches!(token_kind, TokenKind::StyleDirective(_)) {
                     "$"
@@ -256,6 +262,7 @@ fn consume_balanced_brackets_as_literal_text(
                     ValueMode::ImmutableOwned,
                 ));
             }
+
             TokenKind::StartTemplateBody | TokenKind::Colon => {
                 let colon_id = string_table.intern(":");
                 template.content.add(Expression::string_slice(
@@ -264,6 +271,7 @@ fn consume_balanced_brackets_as_literal_text(
                     ValueMode::ImmutableOwned,
                 ));
             }
+
             TokenKind::Comma => {
                 let comma_id = string_table.intern(",");
                 template.content.add(Expression::string_slice(
@@ -272,6 +280,7 @@ fn consume_balanced_brackets_as_literal_text(
                     ValueMode::ImmutableOwned,
                 ));
             }
+
             TokenKind::OpenParenthesis => {
                 let paren_id = string_table.intern("(");
                 template.content.add(Expression::string_slice(
@@ -280,6 +289,7 @@ fn consume_balanced_brackets_as_literal_text(
                     ValueMode::ImmutableOwned,
                 ));
             }
+
             TokenKind::CloseParenthesis => {
                 let paren_id = string_table.intern(")");
                 template.content.add(Expression::string_slice(
@@ -288,6 +298,7 @@ fn consume_balanced_brackets_as_literal_text(
                     ValueMode::ImmutableOwned,
                 ));
             }
+
             _ => {}
         },
         |_location| (),
@@ -295,9 +306,11 @@ fn consume_balanced_brackets_as_literal_text(
 }
 
 /// Returns true if the template contains any direct child template output atoms.
-/// Folding such templates would merge those individual child outputs into one
-/// string slice, losing the structure needed for `$children(..)` wrapper
-/// application in slot composition.
+///
+/// WHY:
+/// - Folding such templates would merge those individual child outputs into one
+///   string slice, losing the structure needed for `$children(..)` wrapper
+///   application in slot composition.
 fn has_direct_child_template_outputs(template: &Template) -> bool {
     template.content.atoms.iter().any(|atom| match atom {
         TemplateAtom::Content(segment) => segment.is_child_template_output,

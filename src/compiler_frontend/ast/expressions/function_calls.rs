@@ -44,14 +44,14 @@ pub fn parse_function_call(
 ) -> Result<AstNode, CompilerError> {
     // External calls share the same argument parser, but they reject named targets until
     // external metadata carries stable public parameter names.
-    if let Some((func_id, host_func)) = id
+    if let Some((function_id, host_function)) = id
         .name()
         .and_then(|name| context.lookup_visible_external_function(name))
     {
         return parse_external_function_call(
             token_stream,
-            func_id,
-            host_func,
+            function_id,
+            host_function,
             context,
             string_table,
         );
@@ -229,6 +229,7 @@ pub fn parse_call_arguments(
     }
 
     let mut args: Vec<CallArgument> = Vec::new();
+
     loop {
         token_stream.skip_newlines();
         if token_stream.current_token_kind() == &TokenKind::CloseParenthesis {
@@ -237,6 +238,7 @@ pub fn parse_call_arguments(
         }
 
         let argument_location = token_stream.current_location();
+
         let named_target = match token_stream.current_token_kind() {
             TokenKind::Mutable
                 if matches!(token_stream.peek_next_token(), Some(TokenKind::Symbol(_)))

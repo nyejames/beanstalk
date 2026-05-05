@@ -38,33 +38,32 @@ pub(super) fn validate_receiver_access(
     receiver_node: &AstNode,
     access_mode: ReceiverAccessMode,
     location: &SourceLocation,
-    requirement: ReceiverAccessRequirement<'_>,
+    access_requirement: ReceiverAccessRequirement<'_>,
     string_table: &StringTable,
 ) -> Result<(), CompilerError> {
-    if requirement.requires_mutable {
-        if !ast_node_is_place(receiver_node) {
-            return reject_non_place_receiver(&requirement.diagnostic, location, string_table);
-        }
-
-        if !ast_node_is_mutable_place(receiver_node) {
-            return reject_immutable_receiver(&requirement.diagnostic, location, string_table);
-        }
-
-        if access_mode == ReceiverAccessMode::Shared {
-            return reject_missing_mutable_access_marker(
-                receiver_node,
-                &requirement.diagnostic,
+    if !access_requirement.requires_mutable {
+        if access_mode == ReceiverAccessMode::Mutable {
+            return reject_unneeded_mutable_access_marker(
+                &access_requirement.diagnostic,
                 location,
                 string_table,
             );
         }
-
         return Ok(());
     }
 
-    if access_mode == ReceiverAccessMode::Mutable {
-        return reject_unneeded_mutable_access_marker(
-            &requirement.diagnostic,
+    if !ast_node_is_place(receiver_node) {
+        return reject_non_place_receiver(&access_requirement.diagnostic, location, string_table);
+    }
+
+    if !ast_node_is_mutable_place(receiver_node) {
+        return reject_immutable_receiver(&access_requirement.diagnostic, location, string_table);
+    }
+
+    if access_mode == ReceiverAccessMode::Shared {
+        return reject_missing_mutable_access_marker(
+            receiver_node,
+            &access_requirement.diagnostic,
             location,
             string_table,
         );
@@ -78,11 +77,11 @@ pub(super) fn validate_receiver_access(
 // --------------------------
 
 fn reject_non_place_receiver(
-    diagnostic: &ReceiverAccessDiagnostic<'_>,
+    access_diagnostic: &ReceiverAccessDiagnostic<'_>,
     location: &SourceLocation,
     string_table: &StringTable,
 ) -> Result<(), CompilerError> {
-    match diagnostic {
+    match access_diagnostic {
         ReceiverAccessDiagnostic::CollectionBuiltin { method_name } => {
             return_rule_error!(
                 format!(
@@ -117,11 +116,11 @@ fn reject_non_place_receiver(
 }
 
 fn reject_immutable_receiver(
-    diagnostic: &ReceiverAccessDiagnostic<'_>,
+    access_diagnostic: &ReceiverAccessDiagnostic<'_>,
     location: &SourceLocation,
     string_table: &StringTable,
 ) -> Result<(), CompilerError> {
-    match diagnostic {
+    match access_diagnostic {
         ReceiverAccessDiagnostic::CollectionBuiltin { method_name } => {
             return_rule_error!(
                 format!(
@@ -157,11 +156,11 @@ fn reject_immutable_receiver(
 
 fn reject_missing_mutable_access_marker(
     receiver_node: &AstNode,
-    diagnostic: &ReceiverAccessDiagnostic<'_>,
+    access_diagnostic: &ReceiverAccessDiagnostic<'_>,
     location: &SourceLocation,
     string_table: &StringTable,
 ) -> Result<(), CompilerError> {
-    match diagnostic {
+    match access_diagnostic {
         ReceiverAccessDiagnostic::CollectionBuiltin { method_name } => {
             return_rule_error!(
                 format!(
@@ -198,11 +197,11 @@ fn reject_missing_mutable_access_marker(
 }
 
 fn reject_unneeded_mutable_access_marker(
-    diagnostic: &ReceiverAccessDiagnostic<'_>,
+    access_diagnostic: &ReceiverAccessDiagnostic<'_>,
     location: &SourceLocation,
     string_table: &StringTable,
 ) -> Result<(), CompilerError> {
-    match diagnostic {
+    match access_diagnostic {
         ReceiverAccessDiagnostic::CollectionBuiltin { method_name } => {
             return_rule_error!(
                 format!(

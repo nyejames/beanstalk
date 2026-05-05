@@ -141,20 +141,20 @@ fn is_top_level_template_contribution(atom: &TemplateAtom) -> bool {
 /// Extracts a `SlotInsertContribution` from an atom if it is a `$insert(...)`
 /// helper template.
 pub(super) fn slot_insert_from_atom(atom: &TemplateAtom) -> Option<SlotInsertContribution> {
-    match atom {
-        TemplateAtom::Slot(_) => None,
-        TemplateAtom::Content(segment) => match &segment.expression.kind {
-            ExpressionKind::Template(template) => match &template.kind {
-                TemplateType::SlotInsert(target) => Some(SlotInsertContribution {
-                    target: target.to_owned(),
-                    atoms: template.content.atoms.clone(),
-                    location: template.location.to_owned(),
-                }),
-                _ => None,
-            },
-            _ => None,
-        },
-    }
+    let TemplateAtom::Content(segment) = atom else {
+        return None;
+    };
+    let ExpressionKind::Template(template) = &segment.expression.kind else {
+        return None;
+    };
+    let TemplateType::SlotInsert(target) = &template.kind else {
+        return None;
+    };
+    Some(SlotInsertContribution {
+        target: target.to_owned(),
+        atoms: template.content.atoms.clone(),
+        location: template.location.to_owned(),
+    })
 }
 
 /// Splits a single fill atom into an optional loose atom and zero or more
@@ -206,11 +206,11 @@ pub(super) fn collect_direct_slot_insert_contributions(
     mut template: Template,
 ) -> (Template, Vec<SlotInsertContribution>) {
     let mut sanitized_atoms = Vec::with_capacity(template.content.atoms.len());
-    let mut extracted = Vec::new();
+    let mut extracted_inserts = Vec::new();
 
     for atom in template.content.atoms {
         if let Some(slot_insert) = slot_insert_from_atom(&atom) {
-            extracted.push(slot_insert);
+            extracted_inserts.push(slot_insert);
             continue;
         }
 
@@ -220,11 +220,11 @@ pub(super) fn collect_direct_slot_insert_contributions(
     template.content = TemplateContent {
         atoms: sanitized_atoms,
     };
-    if extracted.is_empty() {
-        return (template, extracted);
+    if extracted_inserts.is_empty() {
+        return (template, extracted_inserts);
     }
 
     template.resync_composition_metadata();
 
-    (template, extracted)
+    (template, extracted_inserts)
 }

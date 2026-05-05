@@ -29,18 +29,18 @@ use crate::{return_rule_error, return_syntax_error};
 // --------------------------
 
 fn push_accessed_symbol_statement(
-    accessed: AstNode,
+    accessed_node: AstNode,
     ast: &mut Vec<AstNode>,
     context: &ScopeContext,
     token_stream: &FileTokens,
     symbol_id: StringId,
     string_table: &StringTable,
 ) -> Result<(), CompilerError> {
-    match accessed.kind {
+    match accessed_node.kind {
         NodeKind::MethodCall { .. } | NodeKind::CollectionBuiltinCall { .. } => {
             ast.push(AstNode {
-                kind: NodeKind::Rvalue(accessed.get_expr()?),
-                location: accessed.location,
+                kind: NodeKind::Rvalue(accessed_node.get_expr()?),
+                location: accessed_node.location,
                 scope: context.scope.clone(),
             });
             Ok(())
@@ -84,7 +84,7 @@ pub(crate) fn parse_this_statement(
 ) -> Result<(), CompilerError> {
     let this_id = string_table.intern("this");
 
-    let Some(arg) = context.get_reference(&this_id) else {
+    let Some(this_reference) = context.get_reference(&this_id) else {
         return_rule_error!(
             "'this' can only be used inside the body of a receiver method.",
             token_stream.current_location(),
@@ -110,13 +110,14 @@ pub(crate) fn parse_this_statement(
 
         Some(TokenKind::Dot) => {
             token_stream.advance();
-            let accessed = parse_field_access(token_stream, arg, context, string_table)?;
+            let accessed_node =
+                parse_field_access(token_stream, this_reference, context, string_table)?;
 
             if token_stream.current_token_kind().is_assignment_operator() {
                 ast.push(handle_mutation_target(
                     token_stream,
-                    arg,
-                    accessed,
+                    this_reference,
+                    accessed_node,
                     context,
                     string_table,
                 )?);
@@ -124,7 +125,7 @@ pub(crate) fn parse_this_statement(
             }
 
             push_accessed_symbol_statement(
-                accessed,
+                accessed_node,
                 ast,
                 context,
                 token_stream,
@@ -135,7 +136,7 @@ pub(crate) fn parse_this_statement(
         }
 
         _ => {
-            let expr = parse_symbol_expression_statement_candidate(
+            let expression = parse_symbol_expression_statement_candidate(
                 token_stream,
                 context,
                 this_id,
@@ -143,7 +144,7 @@ pub(crate) fn parse_this_statement(
             )?;
 
             ast.push(AstNode {
-                kind: NodeKind::Rvalue(expr),
+                kind: NodeKind::Rvalue(expression),
                 location: token_stream.current_location(),
                 scope: context.scope.clone(),
             });
@@ -163,7 +164,7 @@ pub(crate) fn parse_symbol_statement(
     warnings: &mut Vec<CompilerWarning>,
     string_table: &mut StringTable,
 ) -> Result<(), CompilerError> {
-    let TokenKind::Symbol(id) = token_stream.current_token_kind().to_owned() else {
+    let TokenKind::Symbol(symbol_id) = token_stream.current_token_kind().to_owned() else {
         return_syntax_error!(
             "Expected a symbol-led statement.",
             token_stream.current_location(),
@@ -173,15 +174,15 @@ pub(crate) fn parse_symbol_statement(
         );
     };
 
-    if let Some(error) = check_mistaken_keyword_symbol(id, token_stream, string_table) {
+    if let Some(error) = check_mistaken_keyword_symbol(symbol_id, token_stream, string_table) {
         return Err(error);
     }
 
-    if is_reserved_builtin_symbol(string_table.resolve(id)) {
+    if is_reserved_builtin_symbol(string_table.resolve(symbol_id)) {
         return_rule_error!(
             format!(
                 "'{}' is reserved as a builtin language type.",
-                string_table.resolve(id)
+                string_table.resolve(symbol_id)
             ),
             token_stream.current_location(),
             {
@@ -191,28 +192,35 @@ pub(crate) fn parse_symbol_statement(
         );
     }
 
-    if let Some(multi_bind) = parse_multi_bind_statement(token_stream, context, string_table)? {
-        ast.push(multi_bind);
+    if let Some(multi_bind_node) = parse_multi_bind_statement(token_stream, context, string_table)?
+    {
+        ast.push(multi_bind_node);
         return Ok(());
     }
 
-    if let Some(arg) = context.get_reference(&id) {
+    if let Some(existing_declaration) = context.get_reference(&symbol_id) {
         match token_stream.peek_next_token() {
             Some(next_token) if next_token.is_assignment_operator() => {
                 token_stream.advance();
-                ast.push(handle_mutation(token_stream, arg, context, string_table)?);
+                ast.push(handle_mutation(
+                    token_stream,
+                    existing_declaration,
+                    context,
+                    string_table,
+                )?);
                 return Ok(());
             }
 
             Some(TokenKind::Dot) => {
                 token_stream.advance();
-                let accessed = parse_field_access(token_stream, arg, context, string_table)?;
+                let accessed_node =
+                    parse_field_access(token_stream, existing_declaration, context, string_table)?;
 
                 if token_stream.current_token_kind().is_assignment_operator() {
                     ast.push(handle_mutation_target(
                         token_stream,
-                        arg,
-                        accessed,
+                        existing_declaration,
+                        accessed_node,
                         context,
                         string_table,
                     )?);
@@ -220,11 +228,11 @@ pub(crate) fn parse_symbol_statement(
                 }
 
                 push_accessed_symbol_statement(
-                    accessed,
+                    accessed_node,
                     ast,
                     context,
                     token_stream,
-                    id,
+                    symbol_id,
                     string_table,
                 )?;
                 return Ok(());
@@ -237,7 +245,7 @@ pub(crate) fn parse_symbol_statement(
             | Some(TokenKind::DatatypeChar)
             | Some(TokenKind::Mutable) => {
                 return_rule_error!(
-                    format!("Variable '{}' is already declared. Shadowing is not supported in Beanstalk. Use '=' to mutate its value or choose a different variable name", string_table.resolve(id)),
+                    format!("Variable '{}' is already declared. Shadowing is not supported in Beanstalk. Use '=' to mutate its value or choose a different variable name", string_table.resolve(symbol_id)),
                     token_stream.current_location(), {
                         CompilationStage => "AST Construction",
                         PrimarySuggestion => "Use '=' to mutate the existing variable or choose a different name",
@@ -246,15 +254,15 @@ pub(crate) fn parse_symbol_statement(
             }
 
             _ => {
-                let expr = parse_symbol_expression_statement_candidate(
+                let expression = parse_symbol_expression_statement_candidate(
                     token_stream,
                     context,
-                    id,
+                    symbol_id,
                     string_table,
                 )?;
 
                 ast.push(AstNode {
-                    kind: NodeKind::Rvalue(expr),
+                    kind: NodeKind::Rvalue(expression),
                     location: token_stream.current_location(),
                     scope: context.scope.clone(),
                 });
@@ -263,12 +271,14 @@ pub(crate) fn parse_symbol_statement(
         }
     }
 
-    if let Some((func_id, host_func_call)) = context.lookup_visible_external_function(id) {
+    if let Some((function_id, host_function_call)) =
+        context.lookup_visible_external_function(symbol_id)
+    {
         if token_stream.peek_next_token() == Some(&TokenKind::TypeParameterBracket) {
             return_rule_error!(
                 format!(
                     "'{}' is a prelude/external function and cannot be redeclared.",
-                    string_table.resolve(id)
+                    string_table.resolve(symbol_id)
                 ),
                 token_stream.current_location(),
                 {
@@ -279,33 +289,35 @@ pub(crate) fn parse_symbol_statement(
         }
 
         token_stream.advance();
-        let host_call = parse_external_function_call(
+        let host_call_node = parse_external_function_call(
             token_stream,
-            func_id,
-            host_func_call,
+            function_id,
+            host_function_call,
             context,
             string_table,
         )?;
-        ast.push(host_call);
+        ast.push(host_call_node);
         return Ok(());
     }
 
     if token_stream.peek_next_token() == Some(&TokenKind::OpenParenthesis) {
-        if let Some(method_entry) = context.lookup_visible_receiver_method_by_name(id) {
+        if let Some(receiver_method_entry) =
+            context.lookup_visible_receiver_method_by_name(symbol_id)
+        {
             return Err(free_function_receiver_method_call_error(
-                id,
-                method_entry,
+                symbol_id,
+                receiver_method_entry,
                 token_stream.current_location(),
                 "AST Construction",
                 string_table,
             ));
         }
 
-        if context.lookup_visible_external_type(id).is_some() {
+        if context.lookup_visible_external_type(symbol_id).is_some() {
             return_rule_error!(
                 format!(
                     "Cannot construct external type '{}' with a struct literal. External types are opaque and can only be obtained from external function calls.",
-                    string_table.resolve(id)
+                    string_table.resolve(symbol_id)
                 ),
                 token_stream.current_location(),
                 {
@@ -318,7 +330,7 @@ pub(crate) fn parse_symbol_statement(
         return_rule_error!(
             format!(
                 "Call target '{}' is not declared in this scope and is not a registered host function.",
-                string_table.resolve(id)
+                string_table.resolve(symbol_id)
             ),
             token_stream.current_location(), {
                 CompilationStage => "AST Construction",
@@ -328,12 +340,12 @@ pub(crate) fn parse_symbol_statement(
         );
     }
 
-    let arg = new_declaration(token_stream, id, context, warnings, string_table)?;
+    let declaration = new_declaration(token_stream, symbol_id, context, warnings, string_table)?;
 
-    match arg.value.kind {
+    match declaration.value.kind {
         ExpressionKind::StructDefinition(ref params) => {
             ast.push(AstNode {
-                kind: NodeKind::StructDefinition(arg.id.to_owned(), params.to_owned()),
+                kind: NodeKind::StructDefinition(declaration.id.to_owned(), params.to_owned()),
                 location: token_stream.current_location(),
                 scope: context.scope.clone(),
             });
@@ -341,7 +353,11 @@ pub(crate) fn parse_symbol_statement(
 
         ExpressionKind::Function(ref signature, ref body) => {
             ast.push(AstNode {
-                kind: NodeKind::Function(arg.id.to_owned(), signature.to_owned(), body.to_owned()),
+                kind: NodeKind::Function(
+                    declaration.id.to_owned(),
+                    signature.to_owned(),
+                    body.to_owned(),
+                ),
                 location: token_stream.current_location(),
                 scope: context.scope.clone(),
             });
@@ -349,13 +365,13 @@ pub(crate) fn parse_symbol_statement(
 
         _ => {
             ast.push(AstNode {
-                kind: NodeKind::VariableDeclaration(arg.to_owned()),
+                kind: NodeKind::VariableDeclaration(declaration.to_owned()),
                 location: token_stream.current_location(),
                 scope: context.scope.clone(),
             });
         }
     }
 
-    context.add_var(arg);
+    context.add_var(declaration);
     Ok(())
 }

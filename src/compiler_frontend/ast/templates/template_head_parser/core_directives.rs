@@ -27,13 +27,13 @@ use crate::compiler_frontend::tokenizer::tokens::FileTokens;
 use crate::return_compiler_error;
 
 pub(super) fn maybe_parse_slot_or_insert_helper_directive(
-    spec_kind: &StyleDirectiveKind,
+    directive_kind: &StyleDirectiveKind,
     token_stream: &mut FileTokens,
     template: &mut Template,
     _string_table: &StringTable,
 ) -> Result<bool, CompilerError> {
     if matches!(
-        spec_kind,
+        directive_kind,
         StyleDirectiveKind::Core(CoreStyleDirectiveKind::Slot)
     ) {
         let slot_key = parse_optional_slot_target_argument(token_stream)?;
@@ -42,7 +42,7 @@ pub(super) fn maybe_parse_slot_or_insert_helper_directive(
     }
 
     if matches!(
-        spec_kind,
+        directive_kind,
         StyleDirectiveKind::Core(CoreStyleDirectiveKind::Insert)
     ) {
         let slot_name = parse_required_slot_name_argument(token_stream)?;
@@ -65,28 +65,34 @@ pub(super) fn parse_core_style_directive(
         CoreStyleDirectiveKind::Raw => {
             configure_raw_style(template);
         }
+
         CoreStyleDirectiveKind::Children => {
             parse_children_style_directive(token_stream, context, template, string_table)?;
         }
+
         CoreStyleDirectiveKind::Fresh => {
             // `$fresh` opt-outs this template from parent-applied `$children(..)`
             // wrappers while still allowing local directives/wrappers in the same head.
             template.apply_style_updates(|style| style.skip_parent_child_wrappers = true);
         }
+
         CoreStyleDirectiveKind::Note => {
             reject_unexpected_directive_arguments(token_stream, "note")?;
             template.kind = TemplateType::Comment(CommentDirectiveKind::Note);
             template.apply_style(Style::default());
         }
+
         CoreStyleDirectiveKind::Todo => {
             reject_unexpected_directive_arguments(token_stream, "todo")?;
             template.kind = TemplateType::Comment(CommentDirectiveKind::Todo);
             template.apply_style(Style::default());
         }
+
         CoreStyleDirectiveKind::Doc => {
             reject_unexpected_directive_arguments(token_stream, "doc")?;
             apply_doc_comment_defaults(template);
         }
+
         CoreStyleDirectiveKind::Slot | CoreStyleDirectiveKind::Insert => {
             return_compiler_error!(
                 "Core style directive '${}' reached generic style parsing but should have been handled by slot helper dispatch.",
@@ -101,6 +107,7 @@ pub(super) fn parse_core_style_directive(
 pub(crate) fn apply_doc_comment_defaults(template: &mut Template) {
     template.kind = TemplateType::Comment(CommentDirectiveKind::Doc);
     template.apply_style(Style::default());
+
     // Doc comments use Markdown formatting with balanced bracket escaping.
     // Nested child templates are suppressed — `[...]` brackets in the body are
     // treated as literal text.

@@ -24,8 +24,11 @@ use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation};
 use crate::compiler_frontend::value_mode::ValueMode;
 use crate::{ast_log, return_syntax_error};
 
-fn is_unresolved_constant_placeholder_reference(expr: &Expression, context: &ScopeContext) -> bool {
-    let ExpressionKind::Reference(path) = &expr.kind else {
+fn is_unresolved_constant_placeholder_reference(
+    expression: &Expression,
+    context: &ScopeContext,
+) -> bool {
+    let ExpressionKind::Reference(path) = &expression.kind else {
         return false;
     };
 
@@ -35,11 +38,11 @@ fn is_unresolved_constant_placeholder_reference(expr: &Expression, context: &Sco
 }
 
 fn validate_template_head_value_type(
-    expr: &Expression,
+    expression: &Expression,
     location: &SourceLocation,
     string_table: &StringTable,
 ) -> Result<(), CompilerError> {
-    if expr.data_type.is_result() {
+    if expression.data_type.is_result() {
         return_syntax_error!(
             "Template head expressions do not implicitly unwrap Result values.",
             location.to_owned(),
@@ -50,7 +53,7 @@ fn validate_template_head_value_type(
     }
 
     if matches!(
-        expr.data_type,
+        expression.data_type,
         DataType::StringSlice
             | DataType::Template
             | DataType::TemplateWrapper
@@ -66,7 +69,7 @@ fn validate_template_head_value_type(
     return_syntax_error!(
         format!(
             "Template head expressions only accept final scalar or textual values, found '{}'.",
-            expr.data_type.display_with_table(string_table)
+            expression.data_type.display_with_table(string_table)
         ),
         location.to_owned(),
         {
@@ -80,7 +83,7 @@ fn validate_template_head_value_type(
 pub(super) fn handle_template_value_in_template_head(
     value: &Template,
     context: &ScopeContext,
-    template: &mut Template,
+    parent_template: &mut Template,
     foldable: &mut bool,
     location: &SourceLocation,
     _string_table: &StringTable,
@@ -107,7 +110,7 @@ pub(super) fn handle_template_value_in_template_head(
         *foldable = false;
     }
 
-    template.content.add_with_origin(
+    parent_template.content.add_with_origin(
         Expression::template(value.to_owned(), ValueMode::ImmutableOwned),
         TemplateSegmentOrigin::Head,
     );
@@ -117,36 +120,36 @@ pub(super) fn handle_template_value_in_template_head(
 
 /// Pushes a non-template expression into the head content after validation.
 pub(super) fn push_template_head_expression(
-    expr: Expression,
+    expression: Expression,
     context: &ScopeContext,
-    template: &mut Template,
+    parent_template: &mut Template,
     foldable: &mut bool,
     location: &SourceLocation,
     string_table: &StringTable,
 ) -> Result<(), CompilerError> {
-    if let ExpressionKind::Template(template_value) = &expr.kind {
+    if let ExpressionKind::Template(template_value) = &expression.kind {
         return handle_template_value_in_template_head(
             template_value,
             context,
-            template,
+            parent_template,
             foldable,
             location,
             string_table,
         );
     }
 
-    let defer_inferred_type_validation = matches!(expr.data_type, DataType::Inferred)
+    let defer_inferred_type_validation = matches!(expression.data_type, DataType::Inferred)
         && context
             .top_level_declarations
             .has_unresolved_constant_placeholder();
 
     if !defer_inferred_type_validation {
-        validate_template_head_value_type(&expr, location, string_table)?;
+        validate_template_head_value_type(&expression, location, string_table)?;
     }
 
     if context.kind.is_constant_context()
-        && !expr.is_compile_time_constant()
-        && !is_unresolved_constant_placeholder_reference(&expr, context)
+        && !expression.is_compile_time_constant()
+        && !is_unresolved_constant_placeholder_reference(&expression, context)
     {
         return_syntax_error!(
             "Const templates can only capture compile-time values in the template head.",
@@ -154,14 +157,14 @@ pub(super) fn push_template_head_expression(
         );
     }
 
-    if !expr.kind.is_foldable() && !expr.is_compile_time_constant() {
+    if !expression.kind.is_foldable() && !expression.is_compile_time_constant() {
         ast_log!("Template is no longer foldable due to reference");
         *foldable = false;
     }
 
-    template
+    parent_template
         .content
-        .add_with_origin(expr, TemplateSegmentOrigin::Head);
+        .add_with_origin(expression, TemplateSegmentOrigin::Head);
     Ok(())
 }
 
@@ -171,7 +174,7 @@ pub(super) fn push_template_head_path_expression(
     paths: &[InternedPath],
     token_stream: &FileTokens,
     context: &ScopeContext,
-    template: &mut Template,
+    parent_template: &mut Template,
     string_table: &mut StringTable,
 ) -> Result<(), CompilerError> {
     if paths.is_empty() {
@@ -215,7 +218,7 @@ pub(super) fn push_template_head_path_expression(
     // Templates always fold to strings, so path text is eagerly formatted here.
     context.record_rendered_path_usages(recorded.usages);
     let interned = string_table.get_or_intern(recorded.rendered_text);
-    template.content.add_with_origin(
+    parent_template.content.add_with_origin(
         Expression::string_slice(
             interned,
             token_stream.current_location(),

@@ -63,8 +63,8 @@ pub(super) fn parse_builtin_method_args(
         })
         .collect::<Vec<_>>();
 
-    let raw_args = parse_call_arguments(token_stream, context, string_table)?;
-    if raw_args
+    let parsed_arguments = parse_call_arguments(token_stream, context, string_table)?;
+    if parsed_arguments
         .iter()
         .any(|argument| argument.target_param.is_some())
     {
@@ -77,9 +77,10 @@ pub(super) fn parse_builtin_method_args(
             }
         );
     }
+
     resolve_call_arguments(
         CallDiagnosticContext::builtin_member(member_name),
-        &raw_args,
+        &parsed_arguments,
         &expectations,
         member_location.to_owned(),
         string_table,
