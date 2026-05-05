@@ -6,11 +6,11 @@ Each plan or PR that is needed will be linked here.
 
 Use the language surface integration matrix as a reference for what is currently implemented: `docs/src/docs/progress/#page.bst`
 
+AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisation-benchmark-log.md`
+
 ---
 
 # Plans / Notes / TODOS
-- AST pipeline restructure and optimisation plan (continued): `docs/roadmap/plans/beanstalk_ast_refactor_continuation_plan_phase5_onward.md`
-- AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisation-benchmark-log.md`
 - Type environment redesign plan: `docs/roadmap/plans/type-environment-redesign-plan.md`
 - Parallel tokenization/header parsing and string table plan (after the major AST refactoring plans): `docs/roadmap/plans/parallel-tokenize-header-parse-string-table-plan.md`
 - Template optimisation follow-up: track measured finalization/template bottlenecks in the AST benchmark log before creating a separate plan.
