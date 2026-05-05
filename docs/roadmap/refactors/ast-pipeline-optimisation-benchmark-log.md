@@ -603,3 +603,37 @@ Regression classification: neutral / mixed within observed run-to-run variance. 
 Notes: `create_expression_until` now caps `FileTokens.length` to the delimiter index instead of copying tokens and creating a synthetic EOF. `FileTokens::peek_next_token` was fixed to respect `self.length` so bounded windows cannot peek past their cap. `constant_fold` returns `ConstantFoldResult::Unchanged` instead of cloning the input stack; `evaluate_expression` reuses the already-owned `output_queue` directly. Counters renamed: `BoundedExpressionTokenCopies` → `BoundedExpressionTokenWindows`, `BoundedExpressionTokensCopiedTotal` → `BoundedExpressionTokenCopiesAvoided`, `RuntimeRpnCloneCount` → `RuntimeRpnUnchangedFolds`. Added 6 new unit tests: 5 bounded-expression edge cases (empty delimiter, simple literal, nested parentheses, nested curly braces, missing delimiter) and 1 unchanged-fold detection test.
 
 Audit notes: bounded window API is narrow — no new parser abstraction, only a temporary `length` mutation local to `create_expression_until`. All expression parsing paths (match guards, loop ranges) continue to work. Shunting-yard/RPN pipeline is unchanged. `just validate` passed (1340 unit tests, 784/784 integration tests). No language behavior changed; progress matrix unchanged.
+
+
+### Phase 8 — Conservative Finalization and Template Cleanup
+
+Phase: Phase 8 / add finalization counters, review for obsolete code, record template/finalization cost
+
+Commit: pending (working tree)
+
+Before benchmark run directory: `benchmarks/results/2026-05-19_00-19-28`
+
+Before summary path: `benchmarks/results/2026-05-19_00-19-28/summary.md`
+
+After benchmark run directory: `benchmarks/results/2026-05-19_00-22-18`
+
+After summary path: `benchmarks/results/2026-05-19_00-22-18/summary.md`
+
+Key rows:
+
+| Case | Mean Before (ms) | Mean After (ms) | Delta | Median Before (ms) | Median After (ms) | Failures |
+|---|---:|---:|---:|---:|---:|---:|
+| check_benchmarks_speed-test_bst | 72.94 | 71.04 | -2.6% | 72.46 | 71.32 | 0 |
+| build_benchmarks_speed-test_bst | 73.79 | 73.22 | -0.8% | 73.53 | 72.66 | 0 |
+| check_docs | 69.61 | 68.46 | -1.6% | 69.35 | 68.36 | 0 |
+| check_benchmarks_template-stress_bst | 16.76 | 17.12 | +2.1% | 16.65 | 16.96 | 0 |
+| check_benchmarks_type-stress_bst | 11.89 | 12.06 | +1.4% | 11.87 | 12.01 | 0 |
+| check_benchmarks_fold-stress_bst | 13.50 | 13.01 | -3.6% | 13.14 | 13.02 | 0 |
+| check_benchmarks_pattern-stress_bst | 11.95 | 11.82 | -1.1% | 11.88 | 11.81 | 0 |
+| check_benchmarks_collection-stress_bst | 12.16 | 12.03 | -1.1% | 12.01 | 11.97 | 0 |
+
+Regression classification: neutral within ±3% for all tracked rows. The changes in this phase add two atomic counter increments in finalization paths (template folding and render plan rebuilds) and review finalization for obsolete code. No algorithmic or structural changes were introduced.
+
+Notes: Added `AstCounter::TemplatesFoldedDuringFinalization` and `AstCounter::RuntimeRenderPlansRebuilt` to `instrumentation.rs`. Instrumented `try_fold_template_to_string` in `template_helpers.rs` to count each successful template fold during finalization. Instrumented `normalize_template_for_hir` in `normalize_ast.rs` to count each `resync_runtime_metadata` call. Reviewed `finalizer.rs`, `normalize_ast.rs`, `normalize_constants.rs`, `template_helpers.rs`, and `validate_types.rs` for obsolete cleanup code or stale comments — none found. The codebase already has no remaining AST constant graph, retry loops, snapshot rebuilds, or duplicate declaration metadata. Finalization owns only: doc fragments, const top-level fragments, template normalization, module constant normalization, type boundary validation, builtin merge, choice definitions, final `Ast` construction. No broad template utility abstraction was created; the three recursive traversals (`normalize_ast.rs`, `normalize_constants.rs`, `validate_types.rs`) serve genuinely different purposes.
+
+Audit notes: `just validate` passed (1340 unit tests, 784/784 integration tests). No language behavior changed; progress matrix unchanged. Template normalization cost is not a major benchmark contributor relative to other phases based on current measurements.

@@ -13,6 +13,8 @@ pub(crate) enum AstCounter {
     RuntimeRpnUnchangedFolds,
     TemplateNormalizationNodesVisited,
     ModuleConstantNormalizationExpressionsVisited,
+    TemplatesFoldedDuringFinalization,
+    RuntimeRenderPlansRebuilt,
 }
 
 #[cfg(feature = "detailed_timers")]
@@ -27,6 +29,8 @@ mod detailed {
     static RUNTIME_RPN_UNCHANGED_FOLDS: AtomicUsize = AtomicUsize::new(0);
     static TEMPLATE_NORMALIZATION_NODES_VISITED: AtomicUsize = AtomicUsize::new(0);
     static MODULE_CONSTANT_NORMALIZATION_EXPRESSIONS_VISITED: AtomicUsize = AtomicUsize::new(0);
+    static TEMPLATES_FOLDED_DURING_FINALIZATION: AtomicUsize = AtomicUsize::new(0);
+    static RUNTIME_RENDER_PLANS_REBUILT: AtomicUsize = AtomicUsize::new(0);
 
     pub(crate) fn reset_ast_counters() {
         for counter in all_counters() {
@@ -55,6 +59,9 @@ mod detailed {
             counter_value(AstCounter::TemplateNormalizationNodesVisited);
         let module_constant_normalization_expressions_visited =
             counter_value(AstCounter::ModuleConstantNormalizationExpressionsVisited);
+        let templates_folded_during_finalization =
+            counter_value(AstCounter::TemplatesFoldedDuringFinalization);
+        let runtime_render_plans_rebuilt = counter_value(AstCounter::RuntimeRenderPlansRebuilt);
 
         saying::say!("AST/churn counters:");
         saying::say!(
@@ -82,9 +89,17 @@ mod detailed {
             "  module constant normalization expressions visited = ",
             Dark Green module_constant_normalization_expressions_visited
         );
+        saying::say!(
+            "  templates folded during finalization = ",
+            Dark Green templates_folded_during_finalization
+        );
+        saying::say!(
+            "  runtime render plans rebuilt = ",
+            Dark Green runtime_render_plans_rebuilt
+        );
     }
 
-    fn all_counters() -> [AstCounter; 7] {
+    fn all_counters() -> [AstCounter; 9] {
         [
             AstCounter::ScopeContextsCreated,
             AstCounter::ScopeLocalDeclarationsClonedTotal,
@@ -93,6 +108,8 @@ mod detailed {
             AstCounter::RuntimeRpnUnchangedFolds,
             AstCounter::TemplateNormalizationNodesVisited,
             AstCounter::ModuleConstantNormalizationExpressionsVisited,
+            AstCounter::TemplatesFoldedDuringFinalization,
+            AstCounter::RuntimeRenderPlansRebuilt,
         ]
     }
 
@@ -115,6 +132,10 @@ mod detailed {
             AstCounter::ModuleConstantNormalizationExpressionsVisited => {
                 &MODULE_CONSTANT_NORMALIZATION_EXPRESSIONS_VISITED
             }
+
+            AstCounter::TemplatesFoldedDuringFinalization => &TEMPLATES_FOLDED_DURING_FINALIZATION,
+
+            AstCounter::RuntimeRenderPlansRebuilt => &RUNTIME_RENDER_PLANS_REBUILT,
         }
     }
 

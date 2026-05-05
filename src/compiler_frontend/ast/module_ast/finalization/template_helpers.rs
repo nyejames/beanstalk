@@ -6,6 +6,7 @@
 //! WHY: Consolidates duplicated template folding logic to ensure consistent
 //! behavior across all normalization contexts.
 
+use crate::compiler_frontend::ast::instrumentation::{AstCounter, increment_ast_counter};
 use crate::compiler_frontend::ast::templates::template::TemplateConstValueKind;
 use crate::compiler_frontend::ast::templates::template_folding::TemplateFoldContext;
 use crate::compiler_frontend::ast::templates::template_types::Template;
@@ -39,7 +40,9 @@ pub(super) fn try_fold_template_to_string(
                 project_path_resolver,
                 string_table,
             );
-            Ok(Some(template.fold_into_stringid(&mut fold_context)?))
+            let result = template.fold_into_stringid(&mut fold_context)?;
+            increment_ast_counter(AstCounter::TemplatesFoldedDuringFinalization);
+            Ok(Some(result))
         }
 
         TemplateConstValueKind::SlotInsertHelper | TemplateConstValueKind::NonConst => Ok(None),

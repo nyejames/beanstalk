@@ -978,6 +978,7 @@ fn normalize_template_for_hir(
 
     // Rebuild final runtime metadata so HIR sees an authoritative post-normalization plan.
     template.resync_runtime_metadata();
+    increment_ast_counter(AstCounter::RuntimeRenderPlansRebuilt);
     Ok(())
 }
 
