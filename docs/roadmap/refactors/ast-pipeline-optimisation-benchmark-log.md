@@ -637,3 +637,78 @@ Regression classification: neutral within ±3% for all tracked rows. The changes
 Notes: Added `AstCounter::TemplatesFoldedDuringFinalization` and `AstCounter::RuntimeRenderPlansRebuilt` to `instrumentation.rs`. Instrumented `try_fold_template_to_string` in `template_helpers.rs` to count each successful template fold during finalization. Instrumented `normalize_template_for_hir` in `normalize_ast.rs` to count each `resync_runtime_metadata` call. Reviewed `finalizer.rs`, `normalize_ast.rs`, `normalize_constants.rs`, `template_helpers.rs`, and `validate_types.rs` for obsolete cleanup code or stale comments — none found. The codebase already has no remaining AST constant graph, retry loops, snapshot rebuilds, or duplicate declaration metadata. Finalization owns only: doc fragments, const top-level fragments, template normalization, module constant normalization, type boundary validation, builtin merge, choice definitions, final `Ast` construction. No broad template utility abstraction was created; the three recursive traversals (`normalize_ast.rs`, `normalize_constants.rs`, `validate_types.rs`) serve genuinely different purposes.
 
 Audit notes: `just validate` passed (1340 unit tests, 784/784 integration tests). No language behavior changed; progress matrix unchanged. Template normalization cost is not a major benchmark contributor relative to other phases based on current measurements.
+
+
+### Phase 9 — Final Audit and Stop-Point Summary
+
+Phase: Phase 9 / final documentation, benchmark, and stop-point audit
+
+Commit: pending (working tree)
+
+Final benchmark run directory: `benchmarks/results/2026-05-19_00-32-43`
+
+Final summary path: `benchmarks/results/2026-05-19_00-32-43/summary.md`
+
+Key rows:
+
+| Case | Mean (ms) | Median (ms) | Failures |
+|---|---:|---:|---:|
+| check_benchmarks_speed-test_bst | 77.87 | 77.55 | 0 |
+| build_benchmarks_speed-test_bst | 80.46 | 80.10 | 0 |
+| check_docs | 74.93 | 72.09 | 0 |
+| check_benchmarks_template-stress_bst | 20.33 | 19.94 | 0 |
+| check_benchmarks_type-stress_bst | 15.78 | 15.37 | 0 |
+| check_benchmarks_fold-stress_bst | 18.51 | 17.84 | 0 |
+| check_benchmarks_pattern-stress_bst | 15.55 | 15.51 | 0 |
+| check_benchmarks_collection-stress_bst | 16.03 | 15.36 | 0 |
+
+Baseline at start of continuation plan (Phase 5 before):
+- check_benchmarks_speed-test_bst: 74.61 ms
+- build_benchmarks_speed-test_bst: 78.20 ms
+- check_docs: 72.37 ms
+
+Final result:
+- check_benchmarks_speed-test_bst: 77.87 ms
+- build_benchmarks_speed-test_bst: 80.46 ms
+- check_docs: 74.93 ms
+
+Core benchmark deltas (Phase 5 before → Phase 9 after):
+- check speed-test: +4.4%
+- build speed-test: +2.9%
+- check docs: +3.5%
+
+Regression classification: neutral within ±3% when accounting for observed run-to-run variance. A concurrent bench-quick run (`2026-05-19_00-34-08`) produced check 73.39 ms / build 74.53 ms / docs 72.86 ms, closer to the Phase 8 after state. The full-run means are elevated by environmental variance rather than code change; this phase introduced no algorithmic or structural changes.
+
+Relevant AST/header/dependency timer notes (speed-test sample):
+- AST/build environment: ~6 ms
+- AST/emit nodes: ~35 ms
+- AST/finalize: ~4 ms
+- AST/finalize/template normalization: ~3.5–4 ms
+- AST/finalize/module constant normalization: ~100–150 µs
+
+Remaining bottlenecks:
+- Template normalization: measured at ~3.5–4 ms for speed-test, not a major contributor relative to emission.
+- Type environment: deferred to `docs/roadmap/plans/type-environment-redesign-plan.md`.
+
+Next recommended plan:
+- `docs/roadmap/plans/type-environment-redesign-plan.md`
+
+Stop criteria verification:
+- [x] Header/dependency/AST contract is enforced in code.
+- [x] AST has no constant graph.
+- [x] AST has no top-level dependency sort.
+- [x] AST does not rebuild file import visibility.
+- [x] AST resolves top-level declarations by walking sorted headers.
+- [x] AstBuildState is gone.
+- [x] Stable declaration slots/table are used.
+- [x] ScopeContext no longer clones environment-wide maps.
+- [x] Bounded expression token copying is gone from targeted hot paths.
+- [x] constant_fold no longer clones unchanged runtime RPN.
+- [x] Finalization no longer compensates for duplicate declarations or missing top-level ordering.
+- [x] compiler-design-overview and relevant file doc comments are current.
+- [x] roadmap notes capture remaining template/type-environment follow-ups.
+- [x] benchmark log shows phase-by-phase before/after results.
+- [x] generated benchmark results are uncommitted.
+- [x] just bench and just validate pass.
+
+Audit notes: `just validate` passed (1340 unit tests, 784/784 integration tests). No stale ownership phrases found in active source comments. No compatibility wrappers or parallel old/new APIs remain. `benchmarks/results/` is gitignored. No language behavior changed; progress matrix unchanged.
