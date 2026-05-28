@@ -650,7 +650,8 @@ fn resolve_target_explicit_type(
             &target_syntax.location,
             &mut type_resolution_context,
             string_table,
-        )?
+        )
+        .map_err(|diagnostic| *diagnostic)?
     };
 
     if matches!(resolved_type, DataType::Inferred) {
@@ -661,7 +662,8 @@ fn resolve_target_explicit_type(
         &resolved_type,
         type_interner.environment_mut_for_derived_types(),
         &target_syntax.location,
-    )?;
+    )
+    .map_err(|diagnostic| *diagnostic)?;
 
     Ok(Some((type_id, resolved_type)))
 }

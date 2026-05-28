@@ -223,7 +223,7 @@ pub(crate) fn emit_html_wasm_artifacts(
     )
     .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
     let page_metadata = extract_html_page_metadata(hir_module, string_table)
-        .map_err(|diagnostic| CompilerMessages::from_diagnostic_ref(diagnostic, string_table))?;
+        .map_err(|diagnostic| CompilerMessages::from_diagnostic_ref(*diagnostic, string_table))?;
     let html = render_wasm_html_document(
         document_config,
         &page_metadata,

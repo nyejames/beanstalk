@@ -17,11 +17,10 @@
 //! - parsed-ref walkers or dependency extraction (lives in `declaration_syntax::type_syntax`)
 //! - `parsed_ref_to_data_type` syntax-to-diagnostic spelling (lives in `declaration_syntax::type_syntax`)
 
-#![allow(clippy::result_large_err)]
-
 use crate::compiler_frontend::ast::TopLevelDeclarationTable;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::statements::functions::FunctionReturn;
+use crate::compiler_frontend::ast::type_resolution::TypeResolutionResult;
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, DeferredFeatureReason, InvalidGenericInstantiationReason,
     InvalidTypeAnnotationReason, NameNamespace, NamespaceTypeValueMisuseKind,
@@ -176,7 +175,7 @@ pub(crate) fn resolve_parsed_type_annotation(
     location: &SourceLocation,
     context: &mut TypeResolutionContext<'_>,
     string_table: &StringTable,
-) -> Result<ResolvedTypeAnnotation, CompilerDiagnostic> {
+) -> TypeResolutionResult<ResolvedTypeAnnotation> {
     let diagnostic_type = parsed_ref_to_data_type(&source_ref);
     let resolved_diagnostic_type = resolve_type(&diagnostic_type, location, context, string_table)?;
 
@@ -360,9 +359,9 @@ pub(crate) fn resolve_diagnostic_type_to_type_id_checked(
     data_type: &DataType,
     type_environment: &mut TypeEnvironment,
     location: &SourceLocation,
-) -> Result<TypeId, CompilerDiagnostic> {
+) -> TypeResolutionResult<TypeId> {
     resolve_diagnostic_type_to_type_id_opt(data_type, type_environment)
-        .ok_or_else(|| unresolved_type_id_diagnostic(data_type, location))
+        .ok_or_else(|| Box::new(unresolved_type_id_diagnostic(data_type, location)))
 }
 
 fn unresolved_type_id_diagnostic(
@@ -560,7 +559,7 @@ pub(crate) fn resolve_type(
     location: &SourceLocation,
     context: &mut TypeResolutionContext<'_>,
     string_table: &StringTable,
-) -> Result<DataType, CompilerDiagnostic> {
+) -> TypeResolutionResult<DataType> {
     match data_type {
         DataType::NamedType(type_name) => {
             resolve_named_type_from_context(*type_name, location, context, string_table)
@@ -681,13 +680,13 @@ pub(crate) fn resolve_type(
 fn reject_nested_option_type(
     resolved_inner: &DataType,
     location: &SourceLocation,
-) -> Result<(), CompilerDiagnostic> {
+) -> TypeResolutionResult<()> {
     if matches!(resolved_inner, DataType::Option(_)) {
-        return Err(CompilerDiagnostic::invalid_type_annotation(
+        return Err(Box::new(CompilerDiagnostic::invalid_type_annotation(
             TypeAnnotationContext::DeclarationTarget,
             InvalidTypeAnnotationReason::NestedOptional,
             location.to_owned(),
-        ));
+        )));
     }
 
     Ok(())
@@ -712,17 +711,17 @@ fn instantiate_generic_nominal(
     location: &SourceLocation,
     context: &mut TypeResolutionContext<'_>,
     _string_table: &StringTable,
-) -> Result<Option<DataType>, CompilerDiagnostic> {
+) -> TypeResolutionResult<Option<DataType>> {
     let param_count = metadata.parameters.len();
     if arguments.len() != param_count {
-        return Err(CompilerDiagnostic::invalid_generic_instantiation(
+        return Err(Box::new(CompilerDiagnostic::invalid_generic_instantiation(
             base_path.name(),
             InvalidGenericInstantiationReason::WrongArgumentCount {
                 expected: param_count,
                 found: arguments.len(),
             },
             location.to_owned(),
-        ));
+        )));
     }
 
     // Build argument identity keys for the HIR/diagnostic compatibility bridge.
@@ -807,7 +806,7 @@ fn resolve_named_type_from_context(
     location: &SourceLocation,
     context: &mut TypeResolutionContext<'_>,
     string_table: &StringTable,
-) -> Result<DataType, CompilerDiagnostic> {
+) -> TypeResolutionResult<DataType> {
     // 1) Generic parameter scope.
     if let Some(generic_scope) = context.generic_parameters
         && let Some(parameter) = generic_scope.resolve(type_name)
@@ -875,10 +874,10 @@ fn resolve_named_type_from_context(
         return Ok(builtin_type);
     }
 
-    Err(CompilerDiagnostic::unknown_type_name(
+    Err(Box::new(CompilerDiagnostic::unknown_type_name(
         type_name,
         location.to_owned(),
-    ))
+    )))
 }
 
 fn resolve_namespaced_type_from_context(
@@ -887,19 +886,19 @@ fn resolve_namespaced_type_from_context(
     location: &SourceLocation,
     context: &mut TypeResolutionContext<'_>,
     string_table: &StringTable,
-) -> Result<DataType, CompilerDiagnostic> {
+) -> TypeResolutionResult<DataType> {
     let Some(visible_namespace_records) = context.visible_namespace_records else {
-        return Err(CompilerDiagnostic::unknown_type_name(
+        return Err(Box::new(CompilerDiagnostic::unknown_type_name(
             name,
             location.to_owned(),
-        ));
+        )));
     };
 
     let Some(record) = visible_namespace_records.get(&namespace) else {
-        return Err(CompilerDiagnostic::unknown_type_name(
+        return Err(Box::new(CompilerDiagnostic::unknown_type_name(
             name,
             location.to_owned(),
-        ));
+        )));
     };
 
     match record.type_members.get(&name) {
@@ -916,26 +915,26 @@ fn resolve_namespaced_type_from_context(
                 )?;
                 return Ok(declaration.value.diagnostic_type.to_owned());
             }
-            Err(CompilerDiagnostic::unknown_type_name(
+            Err(Box::new(CompilerDiagnostic::unknown_type_name(
                 name,
                 location.to_owned(),
-            ))
+            )))
         }
         Some(NamespaceTypeMember::ExternalSymbol(ExternalSymbolId::Type(type_id))) => {
             Ok(DataType::External { type_id: *type_id })
         }
         _ if record.value_members.contains_key(&name) => {
-            Err(CompilerDiagnostic::namespace_type_value_misuse(
+            Err(Box::new(CompilerDiagnostic::namespace_type_value_misuse(
                 name,
                 NamespaceTypeValueMisuseKind::Type,
                 NamespaceTypeValueMisuseKind::Value,
                 location.to_owned(),
-            ))
+            )))
         }
-        _ => Err(CompilerDiagnostic::unknown_type_name(
+        _ => Err(Box::new(CompilerDiagnostic::unknown_type_name(
             name,
             location.to_owned(),
-        )),
+        ))),
     }
 }
 
@@ -945,25 +944,25 @@ fn resolve_generic_base_type(
     location: &SourceLocation,
     context: &TypeResolutionContext<'_>,
     string_table: &StringTable,
-) -> Result<GenericBaseType, CompilerDiagnostic> {
+) -> TypeResolutionResult<GenericBaseType> {
     match base {
         GenericBaseType::Named(type_name) => {
             if let Some(reason) = deferred_public_result_option_syntax(*type_name, string_table) {
-                return Err(CompilerDiagnostic::deferred_feature_reason(
+                return Err(Box::new(CompilerDiagnostic::deferred_feature_reason(
                     reason,
                     location.to_owned(),
-                ));
+                )));
             }
 
             if let Some(generic_scope) = context.generic_parameters
                 && generic_scope.contains_name(*type_name)
             {
-                return Err(CompilerDiagnostic::namespace_misuse(
+                return Err(Box::new(CompilerDiagnostic::namespace_misuse(
                     *type_name,
                     NameNamespace::Type,
                     NameNamespace::Value,
                     location.to_owned(),
-                ));
+                )));
             }
 
             if let Some(visible_source_bindings) = context.visible_source_bindings
@@ -997,11 +996,11 @@ fn resolve_generic_base_type(
             if let Some(visible_aliases) = context.visible_type_aliases
                 && visible_aliases.contains_key(type_name)
             {
-                return Err(CompilerDiagnostic::invalid_generic_instantiation(
+                return Err(Box::new(CompilerDiagnostic::invalid_generic_instantiation(
                     Some(*type_name),
                     InvalidGenericInstantiationReason::TypeDoesNotAcceptArguments,
                     location.to_owned(),
-                ));
+                )));
             }
 
             if let Some(external_symbols) = context.visible_external_symbols
@@ -1010,27 +1009,27 @@ fn resolve_generic_base_type(
                     Some(ExternalSymbolId::Type(_))
                 )
             {
-                return Err(CompilerDiagnostic::namespace_misuse(
+                return Err(Box::new(CompilerDiagnostic::namespace_misuse(
                     *type_name,
                     NameNamespace::Type,
                     NameNamespace::Value,
                     location.to_owned(),
-                ));
+                )));
             }
 
             if builtin_named_type(*type_name, string_table).is_some() {
-                return Err(CompilerDiagnostic::namespace_misuse(
+                return Err(Box::new(CompilerDiagnostic::namespace_misuse(
                     *type_name,
                     NameNamespace::Type,
                     NameNamespace::Value,
                     location.to_owned(),
-                ));
+                )));
             }
 
-            Err(CompilerDiagnostic::unknown_type_name(
+            Err(Box::new(CompilerDiagnostic::unknown_type_name(
                 *type_name,
                 location.to_owned(),
-            ))
+            )))
         }
         GenericBaseType::ResolvedNominal(path) => resolve_generic_base_path(
             path.name(),
@@ -1040,11 +1039,13 @@ fn resolve_generic_base_type(
             context,
             string_table,
         ),
-        GenericBaseType::External(_) => Err(CompilerDiagnostic::invalid_generic_instantiation(
-            None,
-            InvalidGenericInstantiationReason::TypeDoesNotAcceptArguments,
-            location.to_owned(),
-        )),
+        GenericBaseType::External(_) => {
+            Err(Box::new(CompilerDiagnostic::invalid_generic_instantiation(
+                None,
+                InvalidGenericInstantiationReason::TypeDoesNotAcceptArguments,
+                location.to_owned(),
+            )))
+        }
         GenericBaseType::Builtin(BuiltinGenericType::Collection) => {
             // Collection is the only builtin generic type allowed in source.
             // Its arguments are resolved separately by resolve_type.
@@ -1071,40 +1072,40 @@ fn resolve_generic_base_path(
     location: &SourceLocation,
     context: &TypeResolutionContext<'_>,
     _string_table: &StringTable,
-) -> Result<GenericBaseType, CompilerDiagnostic> {
+) -> TypeResolutionResult<GenericBaseType> {
     let Some(metadata) = context
         .generic_declarations_by_path
         .and_then(|generic_declarations| generic_declarations.get(canonical_path))
     else {
-        return Err(CompilerDiagnostic::invalid_generic_instantiation(
+        return Err(Box::new(CompilerDiagnostic::invalid_generic_instantiation(
             visible_name,
             InvalidGenericInstantiationReason::TypeDoesNotAcceptArguments,
             location.to_owned(),
-        ));
+        )));
     };
 
     if !matches!(
         metadata.kind,
         GenericDeclarationKind::Struct | GenericDeclarationKind::Choice
     ) {
-        return Err(CompilerDiagnostic::invalid_generic_instantiation(
+        return Err(Box::new(CompilerDiagnostic::invalid_generic_instantiation(
             visible_name,
             InvalidGenericInstantiationReason::TypeDoesNotAcceptArguments,
             location.to_owned(),
-        ));
+        )));
     }
 
     let expected = metadata.parameters.len();
     let actual = arguments.len();
     if actual != expected {
-        return Err(CompilerDiagnostic::invalid_generic_instantiation(
+        return Err(Box::new(CompilerDiagnostic::invalid_generic_instantiation(
             visible_name,
             InvalidGenericInstantiationReason::WrongArgumentCount {
                 expected,
                 found: actual,
             },
             location.to_owned(),
-        ));
+        )));
     }
 
     Ok(GenericBaseType::ResolvedNominal(canonical_path.to_owned()))
@@ -1116,7 +1117,7 @@ fn reject_bare_generic_type_name(
     location: &SourceLocation,
     context: &TypeResolutionContext<'_>,
     _string_table: &StringTable,
-) -> Result<(), CompilerDiagnostic> {
+) -> TypeResolutionResult<()> {
     let Some(metadata) = context
         .generic_declarations_by_path
         .and_then(|generic_declarations| generic_declarations.get(canonical_path))
@@ -1128,11 +1129,11 @@ fn reject_bare_generic_type_name(
         metadata.kind,
         GenericDeclarationKind::Struct | GenericDeclarationKind::Choice
     ) {
-        return Err(CompilerDiagnostic::invalid_generic_instantiation(
+        return Err(Box::new(CompilerDiagnostic::invalid_generic_instantiation(
             Some(visible_name),
             InvalidGenericInstantiationReason::MissingTypeArguments,
             location.to_owned(),
-        ));
+        )));
     }
 
     Ok(())

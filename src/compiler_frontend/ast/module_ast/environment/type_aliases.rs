@@ -59,7 +59,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                     string_table,
                 )
             }
-            .map_err(|diagnostic| self.diagnostic_messages(diagnostic, string_table))?;
+            .map_err(|diagnostic| self.diagnostic_messages(*diagnostic, string_table))?;
 
             // Reject aliases to external opaque types for Alpha.
             // WHAT: external types are opaque and cannot be aliased by user code.

@@ -166,7 +166,8 @@ pub fn new_declaration(
             &function_data_type,
             type_interner.environment_mut_for_derived_types(),
             &token_stream.current_location(),
-        )?;
+        )
+        .map_err(|diagnostic| *diagnostic)?;
 
         return Ok(Declaration {
             id: qualified_name,
@@ -294,7 +295,8 @@ pub fn resolve_declaration_syntax(
             &declaration_location,
             &mut type_resolution_context,
             string_table,
-        )?
+        )
+        .map_err(|diagnostic| *diagnostic)?
     };
 
     let mut initializer_tokens = declaration_syntax.initializer_tokens;

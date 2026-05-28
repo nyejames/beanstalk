@@ -25,18 +25,30 @@ use std::rc::Rc;
 use super::resolve_named_signature_type;
 
 pub(crate) enum StructFieldResolutionError {
-    Diagnostic(CompilerDiagnostic),
-    Infrastructure(CompilerError),
+    Diagnostic(Box<CompilerDiagnostic>),
+    Infrastructure(Box<CompilerError>),
 }
 
 impl From<CompilerDiagnostic> for StructFieldResolutionError {
     fn from(diagnostic: CompilerDiagnostic) -> Self {
+        StructFieldResolutionError::Diagnostic(Box::new(diagnostic))
+    }
+}
+
+impl From<Box<CompilerDiagnostic>> for StructFieldResolutionError {
+    fn from(diagnostic: Box<CompilerDiagnostic>) -> Self {
         StructFieldResolutionError::Diagnostic(diagnostic)
     }
 }
 
 impl From<CompilerError> for StructFieldResolutionError {
     fn from(error: CompilerError) -> Self {
+        StructFieldResolutionError::Infrastructure(Box::new(error))
+    }
+}
+
+impl From<Box<CompilerError>> for StructFieldResolutionError {
+    fn from(error: Box<CompilerError>) -> Self {
         StructFieldResolutionError::Infrastructure(error)
     }
 }
@@ -45,10 +57,10 @@ impl From<ExpressionTypingError> for StructFieldResolutionError {
     fn from(error: ExpressionTypingError) -> Self {
         match error {
             ExpressionTypingError::Diagnostic(diagnostic) => {
-                StructFieldResolutionError::Diagnostic(*diagnostic)
+                StructFieldResolutionError::Diagnostic(diagnostic)
             }
             ExpressionTypingError::Infrastructure(error) => {
-                StructFieldResolutionError::Infrastructure(*error)
+                StructFieldResolutionError::Infrastructure(error)
             }
         }
     }

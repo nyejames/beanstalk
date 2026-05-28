@@ -1,6 +1,7 @@
 //! Recursive generic and runtime struct validation for AST type resolution.
 
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
+use crate::compiler_frontend::ast::type_resolution::TypeResolutionResult;
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, InvalidDeclarationReason};
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::generic_identity_bridge::{
@@ -20,16 +21,16 @@ pub(crate) fn validate_no_recursive_generic_type(
     data_type: &DataType,
     location: &SourceLocation,
     _string_table: &StringTable,
-) -> Result<(), CompilerDiagnostic> {
+) -> TypeResolutionResult<()> {
     if !generic_type_references_nominal_path(data_type, declaration_path) {
         return Ok(());
     }
 
-    Err(CompilerDiagnostic::invalid_declaration(
+    Err(Box::new(CompilerDiagnostic::invalid_declaration(
         InvalidDeclarationReason::RecursiveGenericType,
         declaration_path.name(),
         location.to_owned(),
-    ))
+    )))
 }
 
 fn generic_type_references_nominal_path(
@@ -181,7 +182,7 @@ fn collect_runtime_struct_dependencies(
 pub(crate) fn validate_no_recursive_runtime_structs(
     struct_fields_by_path: &FxHashMap<InternedPath, Vec<Declaration>>,
     string_table: &StringTable,
-) -> Result<(), CompilerDiagnostic> {
+) -> TypeResolutionResult<()> {
     // WHY: V1 runtime structs do not support recursive layout semantics yet.
     // These cycles must fail in AST construction with a targeted rule error.
     fn visit(
@@ -190,7 +191,7 @@ pub(crate) fn validate_no_recursive_runtime_structs(
         string_table: &StringTable,
         visiting: &mut Vec<InternedPath>,
         visited: &mut FxHashSet<InternedPath>,
-    ) -> Result<(), CompilerDiagnostic> {
+    ) -> TypeResolutionResult<()> {
         if visited.contains(current) {
             return Ok(());
         }
@@ -208,11 +209,11 @@ pub(crate) fn validate_no_recursive_runtime_structs(
                 .map(|field| field.value.location.clone())
                 .unwrap_or_default();
 
-            return Err(CompilerDiagnostic::invalid_declaration(
+            return Err(Box::new(CompilerDiagnostic::invalid_declaration(
                 InvalidDeclarationReason::RecursiveRuntimeStruct { cycle },
                 None,
                 cycle_location,
-            ));
+            )));
         }
 
         visiting.push(current.to_owned());

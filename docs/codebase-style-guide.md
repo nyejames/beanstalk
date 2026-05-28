@@ -335,7 +335,14 @@ The diagnostic system has two paths:
 - Use `return_compiler_error!` **only** for internal compiler bugs or broken invariants.
 - Use `DiagnosticBag` for stage-local accumulation of multiple diagnostics.
 - Convert to `CompilerMessages` only at clear build/render boundaries.
-- When a local `Result` error boundary carries `CompilerDiagnostic` or `CompilerError` and Clippy reports `result_large_err`, box the payload variants inside that local boundary enum. Keep `DiagnosticBag` and `CompilerMessages` owning plain `CompilerDiagnostic` values at accumulation/render boundaries.
+- When a local `Result` error boundary carries `CompilerDiagnostic` or `CompilerError` and
+  Clippy reports `result_large_err`, box the payload inside the local boundary enum or use a
+  stage-local boxed diagnostic result alias. Keep `DiagnosticBag` and `CompilerMessages` owning
+  plain `CompilerDiagnostic` values at accumulation and render/build boundaries.
+- Prefer `Option<CompilerDiagnostic>` over `Result<(), CompilerDiagnostic>` for predicate-only
+  validation helpers that only need to report one diagnostic or continue.
+- Prefer explicit loops over iterator closures when the closure would infer
+  `Result<_, CompilerDiagnostic>`.
 - Include a `SourceLocation` for every user-facing diagnostic.
 - Keep paths interned until render time. Do not duplicate them as owned `PathBuf`s.
 - New type diagnostics must carry semantic `TypeId`s and context enums, not rendered type strings

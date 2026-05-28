@@ -2,6 +2,7 @@
 
 use crate::compiler_frontend::ast::TopLevelDeclarationTable;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
+use crate::compiler_frontend::ast::type_resolution::TypeResolutionResult;
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, InvalidDeclarationReason};
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::generic_parameters::{
@@ -36,7 +37,7 @@ pub(crate) struct GenericParameterScopeBuildInput<'a> {
 
 pub(crate) fn build_generic_parameter_scope(
     input: GenericParameterScopeBuildInput<'_>,
-) -> Result<Option<GenericParameterScope>, CompilerDiagnostic> {
+) -> TypeResolutionResult<Option<GenericParameterScope>> {
     let GenericParameterScopeBuildInput {
         generic_parameters,
         canonical_by_local,
@@ -74,6 +75,7 @@ pub(crate) fn build_generic_parameter_scope(
         string_table,
         "AST Construction",
     )
+    .map_err(Box::new)
     .map(Some)
 }
 
@@ -106,16 +108,16 @@ pub(crate) fn validate_generic_parameters_used(
     used_parameters: &FxHashSet<TypeParameterId>,
     declaration_path: &InternedPath,
     location: &SourceLocation,
-) -> Result<(), CompilerDiagnostic> {
+) -> TypeResolutionResult<()> {
     for parameter in &generic_parameters.parameters {
         if !used_parameters.contains(&parameter.id) {
-            return Err(CompilerDiagnostic::invalid_declaration(
+            return Err(Box::new(CompilerDiagnostic::invalid_declaration(
                 InvalidDeclarationReason::UnusedGenericParameter {
                     parameter_name: parameter.name,
                 },
                 declaration_path.name(),
                 location.to_owned(),
-            ));
+            )));
         }
     }
 

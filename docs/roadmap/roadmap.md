@@ -11,7 +11,6 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 ---
 
 # Plans / TODOS
-- Tidying up clippy errors for large error variants: `docs/roadmap/plans/clippy-boxed-error-implementation-plan-reviewed.md`
 - Basic template control flow statements (if expressions, loops and if statements)
 - Traits
 - Generic follow-ups after cross-module free-function support:

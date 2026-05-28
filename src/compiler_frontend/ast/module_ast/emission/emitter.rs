@@ -774,7 +774,7 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
             &mut self.environment.type_environment,
             &header.name_location,
         )
-        .map_err(|diagnostic| self.diagnostic_messages(diagnostic, string_table))?;
+        .map_err(|diagnostic| self.diagnostic_messages(*diagnostic, string_table))?;
         let start_signature = FunctionSignature {
             parameters: vec![],
             returns: vec![ReturnSlot {

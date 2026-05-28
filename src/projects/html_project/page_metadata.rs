@@ -32,7 +32,7 @@ pub(crate) struct HtmlPageMetadata {
 pub(crate) fn extract_html_page_metadata(
     hir_module: &HirModule,
     string_table: &mut StringTable,
-) -> Result<HtmlPageMetadata, CompilerDiagnostic> {
+) -> Result<HtmlPageMetadata, Box<CompilerDiagnostic>> {
     let entry_scope = hir_module
         .side_table
         .function_name_path(hir_module.start_function)
@@ -61,11 +61,11 @@ pub(crate) fn extract_html_page_metadata(
         let value = match &module_constant.value {
             HirConstValue::String(value) => value.to_owned(),
             _ => {
-                return Err(CompilerDiagnostic::invalid_page_metadata(
+                return Err(Box::new(CompilerDiagnostic::invalid_page_metadata(
                     key_id,
                     InvalidPageMetadataReason::NotAString,
                     error_location.clone(),
-                ));
+                )));
             }
         };
 
@@ -80,11 +80,11 @@ pub(crate) fn extract_html_page_metadata(
         };
 
         if target_slot.is_some() {
-            return Err(CompilerDiagnostic::invalid_page_metadata(
+            return Err(Box::new(CompilerDiagnostic::invalid_page_metadata(
                 key_id,
                 InvalidPageMetadataReason::DuplicateDeclaration,
                 error_location.clone(),
-            ));
+            )));
         }
 
         *target_slot = Some(value);

@@ -94,7 +94,7 @@ fn prepare_test_source_file(
         Err(diagnostic) => {
             return Err(FileFrontendPrepareError {
                 warnings: Vec::new(),
-                diagnostic,
+                diagnostic: Box::new(diagnostic),
             });
         }
     };
@@ -201,7 +201,7 @@ fn parse_single_file_headers_with_entry(
         Ok(output) => output,
         Err(error) => {
             return Err(HeaderTestDiagnostics {
-                diagnostics: vec![error.diagnostic],
+                diagnostics: vec![*error.diagnostic],
                 string_table,
             });
         }
@@ -1453,7 +1453,7 @@ fn parse_multi_file_headers_with_result(
             }
             Err(error) => {
                 warnings.extend(error.warnings);
-                diagnostic_bag.push(error.diagnostic);
+                diagnostic_bag.push(*error.diagnostic);
             }
         }
     }

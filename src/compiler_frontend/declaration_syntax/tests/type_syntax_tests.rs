@@ -52,10 +52,12 @@ fn token(kind: TokenKind) -> Token {
 }
 
 fn assert_diagnostic_payload(
-    diagnostic: CompilerDiagnostic,
+    diagnostic: impl std::borrow::Borrow<CompilerDiagnostic>,
     expected: impl FnOnce(&DiagnosticPayload) -> bool,
     expected_description: &str,
 ) {
+    let diagnostic = diagnostic.borrow();
+
     assert!(
         expected(&diagnostic.payload),
         "expected {expected_description}, got {:?}",
@@ -96,6 +98,8 @@ fn resolve_type_annotation_error(
         string_table,
     )
     .expect_err(expected_failure)
+    .as_ref()
+    .to_owned()
 }
 
 #[test]

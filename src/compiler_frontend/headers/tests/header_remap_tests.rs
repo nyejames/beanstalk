@@ -699,7 +699,7 @@ fn file_frontend_prepare_error_remaps_warnings_and_diagnostic() {
 
     let mut error = FileFrontendPrepareError {
         warnings: vec![warning_a, warning_b],
-        diagnostic,
+        diagnostic: Box::new(diagnostic),
     };
 
     let remap = global.merge_from(&local);

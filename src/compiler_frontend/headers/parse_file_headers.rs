@@ -1,5 +1,3 @@
-#![allow(clippy::result_large_err)]
-
 //! Header parser entry point.
 //!
 //! WHAT: parses individual token streams into per-file header outputs, then aggregates prepared

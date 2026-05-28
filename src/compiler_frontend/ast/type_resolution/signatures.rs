@@ -4,7 +4,7 @@ use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnSlot,
 };
 use crate::compiler_frontend::ast::type_resolution::{
-    TypeResolutionContext, resolve_diagnostic_type_to_type_id_checked,
+    TypeResolutionContext, TypeResolutionResult, resolve_diagnostic_type_to_type_id_checked,
 };
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidReceiverDeclarationReason, InvalidThisUsageReason,
@@ -24,7 +24,7 @@ pub(crate) fn resolve_function_signature(
     signature: &FunctionSignature,
     type_resolution_context: &mut TypeResolutionContext<'_>,
     string_table: &mut StringTable,
-) -> Result<ResolvedFunctionSignature, CompilerDiagnostic> {
+) -> TypeResolutionResult<ResolvedFunctionSignature> {
     let this_name = string_table.intern("this");
     let _function_name = function_path.name_str(string_table).unwrap_or("<function>");
     let function_name_id = function_path
@@ -65,21 +65,21 @@ pub(crate) fn resolve_function_signature(
 
         if resolved_parameter.id.name() == Some(this_name) {
             if receiver.is_some() {
-                return Err(CompilerDiagnostic::invalid_this_usage(
+                return Err(Box::new(CompilerDiagnostic::invalid_this_usage(
                     InvalidThisUsageReason::DuplicateThis {
                         function_name: function_name_id,
                     },
                     parameter.value.location.clone(),
-                ));
+                )));
             }
 
             if parameter_index != 0 {
-                return Err(CompilerDiagnostic::invalid_this_usage(
+                return Err(Box::new(CompilerDiagnostic::invalid_this_usage(
                     InvalidThisUsageReason::NotFirstParameter {
                         function_name: function_name_id,
                     },
                     parameter.value.location.clone(),
-                ));
+                )));
             }
 
             let Some(receiver_key) = resolved_parameter
@@ -102,13 +102,13 @@ pub(crate) fn resolve_function_signature(
                             .diagnostic_type
                             .display_with_table(string_table),
                     );
-                    return Err(CompilerDiagnostic::invalid_receiver_declaration(
+                    return Err(Box::new(CompilerDiagnostic::invalid_receiver_declaration(
                         InvalidReceiverDeclarationReason::GenericReceiverType {
                             function_name: function_name_id,
                             type_name,
                         },
                         parameter.value.location.clone(),
-                    ));
+                    )));
                 }
 
                 let type_name = string_table.intern(
@@ -117,13 +117,13 @@ pub(crate) fn resolve_function_signature(
                         .diagnostic_type
                         .display_with_table(string_table),
                 );
-                return Err(CompilerDiagnostic::invalid_receiver_declaration(
+                return Err(Box::new(CompilerDiagnostic::invalid_receiver_declaration(
                     InvalidReceiverDeclarationReason::UnsupportedType {
                         function_name: function_name_id,
                         type_name,
                     },
                     parameter.value.location.clone(),
-                ));
+                )));
             };
 
             receiver = Some(receiver_key);

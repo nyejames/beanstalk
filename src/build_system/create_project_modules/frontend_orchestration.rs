@@ -349,7 +349,7 @@ impl FrontendModuleBuildContext<'_> {
                 Err(mut error) => {
                     error.remap_string_ids(&remap);
                     warnings.extend(error.warnings);
-                    diagnostics.push(error.diagnostic);
+                    diagnostics.push(*error.diagnostic);
                 }
             }
         }

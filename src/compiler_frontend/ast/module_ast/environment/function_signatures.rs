@@ -73,13 +73,14 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 .map_err(|error| self.error_messages(error, string_table))?
                 .clone();
 
-            reject_generic_receiver_method(
+            if let Some(diagnostic) = generic_receiver_method_deferred_diagnostic(
                 generic_parameters,
                 signature,
                 &header.name_location,
                 string_table,
-            )
-            .map_err(|diagnostic| self.diagnostic_messages(diagnostic, string_table))?;
+            ) {
+                return Err(self.diagnostic_messages(diagnostic, string_table));
+            }
 
             let registered_generic_parameters = if generic_parameters.is_empty() {
                 None
@@ -103,7 +104,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                     generic_declarations_by_path: &self.module_symbols.generic_declarations_by_path,
                     string_table,
                 })
-                .map_err(|diagnostic| self.diagnostic_messages(diagnostic, string_table))?;
+                .map_err(|diagnostic| self.diagnostic_messages(*diagnostic, string_table))?;
 
             // ---------------------------------
             //  Parse unresolved signature
@@ -163,7 +164,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 &mut type_resolution_context,
                 string_table,
             )
-            .map_err(|diagnostic| self.diagnostic_messages(diagnostic, string_table))?;
+            .map_err(|diagnostic| self.diagnostic_messages(*diagnostic, string_table))?;
 
             let mut used_generic_parameters = rustc_hash::FxHashSet::default();
             collect_type_parameter_ids_from_declarations(
@@ -182,7 +183,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 &header.tokens.src_path,
                 &header.name_location,
             )
-            .map_err(|diagnostic| self.diagnostic_messages(diagnostic, string_table))?;
+            .map_err(|diagnostic| self.diagnostic_messages(*diagnostic, string_table))?;
 
             // ---------------------------------
             //  Update declaration table
@@ -448,30 +449,28 @@ fn build_generic_function_template(
     }
 }
 
-/// Rejects generic receiver methods with a deferred-feature diagnostic.
+/// Produces the deferred-feature diagnostic for generic receiver methods.
 ///
 /// WHY: generic receiver methods are not yet supported. Detecting them early prevents
 /// later stages from building invalid generic parameter scopes for receiver-shaped signatures.
-fn reject_generic_receiver_method(
+fn generic_receiver_method_deferred_diagnostic(
     generic_parameters: &GenericParameterList,
     signature: &FunctionSignatureSyntax,
     location: &SourceLocation,
     string_table: &StringTable,
-) -> Result<(), CompilerDiagnostic> {
+) -> Option<CompilerDiagnostic> {
     if generic_parameters.is_empty() {
-        return Ok(());
+        return None;
     }
 
-    let Some(first_parameter) = signature.parameters.first() else {
-        return Ok(());
-    };
+    let first_parameter = signature.parameters.first()?;
 
     if first_parameter.id.name_str(string_table) == Some("this") {
-        return Err(CompilerDiagnostic::deferred_feature_reason(
+        return Some(CompilerDiagnostic::deferred_feature_reason(
             DeferredFeatureReason::GenericReceiverMethod,
             location.to_owned(),
         ));
     }
 
-    Ok(())
+    None
 }

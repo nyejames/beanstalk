@@ -380,7 +380,7 @@ fn prepare_one_config_file(
                     error.diagnostic.primary_location.clone(),
                 ));
             } else {
-                errors.push(error.diagnostic);
+                errors.push(*error.diagnostic);
             }
             return Ok(None);
         }

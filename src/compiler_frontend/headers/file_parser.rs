@@ -43,7 +43,7 @@ pub(super) fn parse_headers_in_file(
         Ok(output) => Ok(output),
         Err(diagnostic) => Err(FileFrontendPrepareError {
             warnings: file_warnings,
-            diagnostic,
+            diagnostic: Box::new(diagnostic),
         }),
     }
 }

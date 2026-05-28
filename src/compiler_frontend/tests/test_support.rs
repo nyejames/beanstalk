@@ -68,7 +68,7 @@ pub(crate) fn test_source_location(line: i32) -> SourceLocation {
 
 fn parse_single_file_ast_result(
     source: &str,
-) -> Result<(Ast, StringTable), (CompilerDiagnostic, StringTable)> {
+) -> Result<(Ast, StringTable), Box<CompilerDiagnostic>> {
     let mut string_table = StringTable::new();
     let style_directives = StyleDirectiveRegistry::built_ins();
     let external_package_registry = ExternalPackageRegistry::new();
@@ -88,7 +88,7 @@ fn parse_single_file_ast_result(
         &mut string_table,
         None,
     )
-    .map_err(|diagnostic| (diagnostic, string_table.clone()))?;
+    .map_err(Box::new)?;
 
     let output = prepare_file_from_tokens(
         file_tokens,
@@ -99,7 +99,7 @@ fn parse_single_file_ast_result(
         0,
         0,
     )
-    .map_err(|error| (error.diagnostic, string_table.clone()))?;
+    .map_err(|error| error.diagnostic)?;
 
     let headers = parse_headers(
         vec![output],
@@ -109,33 +109,29 @@ fn parse_single_file_ast_result(
         &mut string_table,
     )
     .map_err(|bag| {
-        bag.into_diagnostics()
-            .into_iter()
-            .next()
-            .map(|diagnostic| (diagnostic, string_table.clone()))
-            .unwrap_or_else(|| {
-                (
+        Box::new(
+            bag.into_diagnostics()
+                .into_iter()
+                .next()
+                .unwrap_or_else(|| {
                     compiler_error_to_diagnostic(&CompilerError::compiler_error(
                         "unknown header parsing error",
-                    )),
-                    string_table.clone(),
-                )
-            })
+                    ))
+                }),
+        )
     })?;
 
     let sorted = resolve_module_dependencies(headers, &mut string_table).map_err(|bag| {
-        bag.into_diagnostics()
-            .into_iter()
-            .next()
-            .map(|diagnostic| (diagnostic, string_table.clone()))
-            .unwrap_or_else(|| {
-                (
+        Box::new(
+            bag.into_diagnostics()
+                .into_iter()
+                .next()
+                .unwrap_or_else(|| {
                     compiler_error_to_diagnostic(&CompilerError::compiler_error(
                         "unknown dependency sorting error",
-                    )),
-                    string_table.clone(),
-                )
-            })
+                    ))
+                }),
+        )
     })?;
 
     let entry_path = InternedPath::from_single_str("#page.bst", &mut string_table);
@@ -158,9 +154,8 @@ fn parse_single_file_ast_result(
     )
     .map_err(|messages| {
         // Prefer typed diagnostics over legacy errors.
-        let string_table = messages.string_table.clone();
         if let Some(diagnostic) = messages.first_error() {
-            (diagnostic.clone(), string_table)
+            Box::new(diagnostic.clone())
         } else {
             panic!("frontend parsing failed without an error diagnostic")
         }
@@ -176,7 +171,7 @@ pub(crate) fn parse_single_file_ast(source: &str) -> (Ast, StringTable) {
 pub(crate) fn parse_single_file_ast_diagnostic(source: &str) -> CompilerDiagnostic {
     match parse_single_file_ast_result(source) {
         Ok(_) => panic!("source should fail during frontend parsing"),
-        Err((diagnostic, _)) => diagnostic,
+        Err(diagnostic) => *diagnostic,
     }
 }
 

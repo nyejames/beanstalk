@@ -13,7 +13,6 @@ use crate::compiler_frontend::ast::module_ast::environment::constant_resolution:
 use crate::compiler_frontend::ast::module_ast::scope_context::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::statements::functions::signature_member_to_declaration;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
-use crate::compiler_frontend::ast::type_resolution::resolve_diagnostic_type_to_type_id_checked;
 use crate::compiler_frontend::ast::type_resolution::{
     GenericParameterScopeBuildInput, StructFieldResolutionError, build_generic_parameter_scope,
     collect_type_parameter_ids_from_choice_variants, collect_type_parameter_ids_from_declarations,
@@ -27,7 +26,7 @@ use crate::compiler_frontend::compiler_messages::{
 };
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::definitions::{
-    ChoiceTypeDefinition, ChoiceVariantDefinition, ChoiceVariantPayloadDefinition, FieldDefinition,
+    ChoiceTypeDefinition, ChoiceVariantDefinition, ChoiceVariantPayloadDefinition,
     StructTypeDefinition,
 };
 use crate::compiler_frontend::datatypes::ids::NominalTypeId;
@@ -279,7 +278,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                     generic_declarations_by_path: &self.module_symbols.generic_declarations_by_path,
                     string_table,
                 })
-                .map_err(|diagnostic| self.diagnostic_messages(diagnostic, string_table))?;
+                .map_err(|diagnostic| self.diagnostic_messages(*diagnostic, string_table))?;
             let unresolved_fields = self
                 .resolved_struct_fields_by_path
                 .get(&header.tokens.src_path)
@@ -303,34 +302,21 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             )
             .map_err(|error| match error {
                 StructFieldResolutionError::Diagnostic(diagnostic) => {
-                    self.diagnostic_messages(diagnostic, string_table)
+                    self.diagnostic_messages(*diagnostic, string_table)
                 }
                 StructFieldResolutionError::Infrastructure(error) => {
-                    self.error_messages(error, string_table)
+                    self.error_messages(*error, string_table)
                 }
             })?;
 
             // Write final canonical struct field definitions into the identity-only
             // TypeEnvironment registration.
-            let field_definitions: Vec<FieldDefinition> = resolved_fields
-                .iter()
-                .map(|field| {
-                    Ok(FieldDefinition {
-                        name: field.id.clone(),
-                        type_id: resolve_diagnostic_type_to_type_id_checked(
-                            &field.value.diagnostic_type,
-                            &mut self.type_environment,
-                            &field.value.location,
-                        )?,
-                        location: field.value.location.clone(),
-                    })
-                })
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|diagnostic| self.diagnostic_messages(diagnostic, string_table))?;
+            let field_definitions =
+                self.field_definitions_from_declarations(&resolved_fields, string_table)?;
 
             if let Some(&type_id) = self.nominal_type_ids_by_path.get(&header.tokens.src_path) {
                 self.type_environment
-                    .update_struct_fields(type_id, field_definitions.into_boxed_slice());
+                    .update_struct_fields(type_id, field_definitions);
             }
 
             // Update the AST-owned shell table with resolved fields so later stages
@@ -350,7 +336,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 &header.tokens.src_path,
                 &header.name_location,
             )
-            .map_err(|diagnostic| self.diagnostic_messages(diagnostic, string_table))?;
+            .map_err(|diagnostic| self.diagnostic_messages(*diagnostic, string_table))?;
 
             // Generic structs must not contain recursive field types that reference
             // the struct itself through generic parameters.
@@ -362,7 +348,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                         &field.value.location,
                         string_table,
                     )
-                    .map_err(|diagnostic| self.diagnostic_messages(diagnostic, string_table))?;
+                    .map_err(|diagnostic| self.diagnostic_messages(*diagnostic, string_table))?;
                 }
             }
 
@@ -411,7 +397,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                     generic_declarations_by_path: &self.module_symbols.generic_declarations_by_path,
                     string_table,
                 })
-                .map_err(|diagnostic| self.diagnostic_messages(diagnostic, string_table))?;
+                .map_err(|diagnostic| self.diagnostic_messages(*diagnostic, string_table))?;
             let unresolved_variants = self
                 .choice_variant_shells_by_path
                 .get(&header.tokens.src_path)
@@ -432,7 +418,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 &mut type_resolution_context,
                 string_table,
             )
-            .map_err(|diagnostic| self.diagnostic_messages(diagnostic, string_table))?;
+            .map_err(|diagnostic| self.diagnostic_messages(*diagnostic, string_table))?;
 
             // Every generic parameter declared on the choice must appear in at least one
             // variant payload type; unused parameters indicate a declaration error.
@@ -447,7 +433,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 &header.tokens.src_path,
                 &header.name_location,
             )
-            .map_err(|diagnostic| self.diagnostic_messages(diagnostic, string_table))?;
+            .map_err(|diagnostic| self.diagnostic_messages(*diagnostic, string_table))?;
 
             // Generic choices must not contain recursive payload types that reference
             // the choice itself through generic parameters.
@@ -462,7 +448,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                                 string_table,
                             )
                             .map_err(|diagnostic| {
-                                self.diagnostic_messages(diagnostic, string_table)
+                                self.diagnostic_messages(*diagnostic, string_table)
                             })?;
                         }
                     }
@@ -476,25 +462,10 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 let payload = match &variant.payload {
                     ChoiceVariantPayload::Unit => ChoiceVariantPayloadDefinition::Unit,
                     ChoiceVariantPayload::Record { fields } => {
-                        let field_defs: Vec<FieldDefinition> = fields
-                            .iter()
-                            .map(|field| {
-                                Ok(FieldDefinition {
-                                    name: field.id.clone(),
-                                    type_id: resolve_diagnostic_type_to_type_id_checked(
-                                        &field.value.diagnostic_type,
-                                        &mut self.type_environment,
-                                        &field.value.location,
-                                    )?,
-                                    location: field.value.location.clone(),
-                                })
-                            })
-                            .collect::<Result<Vec<_>, _>>()
-                            .map_err(|diagnostic| {
-                                self.diagnostic_messages(diagnostic, string_table)
-                            })?;
+                        let field_definitions =
+                            self.field_definitions_from_declarations(fields, string_table)?;
                         ChoiceVariantPayloadDefinition::Record {
-                            fields: field_defs.into_boxed_slice(),
+                            fields: field_definitions,
                         }
                     }
                 };
@@ -556,7 +527,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         // This check runs after all field types are resolved so the full graph is visible.
         let recursive_validation_start = Instant::now();
         validate_no_recursive_runtime_structs(&self.resolved_struct_fields_by_path, string_table)
-            .map_err(|diagnostic| self.diagnostic_messages(diagnostic, string_table))?;
+            .map_err(|diagnostic| self.diagnostic_messages(*diagnostic, string_table))?;
         timer_log!(
             recursive_validation_start,
             "AST/environment/nominal types/recursive struct validation in: "
@@ -604,7 +575,9 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                                 .generic_declarations_by_path,
                             string_table,
                         })
-                        .map_err(|diagnostic| self.diagnostic_messages(diagnostic, string_table))?;
+                        .map_err(|diagnostic| {
+                            self.diagnostic_messages(*diagnostic, string_table)
+                        })?;
 
                     let unresolved_fields = self
                         .resolved_struct_fields_by_path
@@ -633,10 +606,10 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                     }
                     .map_err(|error| match error {
                         StructFieldResolutionError::Diagnostic(diagnostic) => {
-                            self.diagnostic_messages(diagnostic, string_table)
+                            self.diagnostic_messages(*diagnostic, string_table)
                         }
                         StructFieldResolutionError::Infrastructure(error) => {
-                            self.error_messages(error, string_table)
+                            self.error_messages(*error, string_table)
                         }
                     })?;
 
@@ -670,7 +643,9 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                                 .generic_declarations_by_path,
                             string_table,
                         })
-                        .map_err(|diagnostic| self.diagnostic_messages(diagnostic, string_table))?;
+                        .map_err(|diagnostic| {
+                            self.diagnostic_messages(*diagnostic, string_table)
+                        })?;
 
                     let unresolved_variants = self
                         .choice_variant_shells_by_path
@@ -696,7 +671,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                             string_table,
                         )
                     }
-                    .map_err(|diagnostic| self.diagnostic_messages(diagnostic, string_table))?;
+                    .map_err(|diagnostic| self.diagnostic_messages(*diagnostic, string_table))?;
 
                     // Store resolved constructor shell types for constant parsing.
                     self.choice_variant_shells_by_path

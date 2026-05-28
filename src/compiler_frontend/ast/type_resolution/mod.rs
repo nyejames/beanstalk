@@ -18,6 +18,8 @@ use crate::compiler_frontend::datatypes::{DataType, ReceiverKey};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
+pub(crate) type TypeResolutionResult<T> = Result<T, Box<CompilerDiagnostic>>;
+
 /// Function signature after resolving all named types and receiver metadata.
 #[derive(Clone)]
 pub(crate) struct ResolvedFunctionSignature {
@@ -62,6 +64,6 @@ pub(crate) fn resolve_named_signature_type(
     location: &SourceLocation,
     type_resolution_context: &mut TypeResolutionContext<'_>,
     string_table: &StringTable,
-) -> Result<DataType, CompilerDiagnostic> {
+) -> TypeResolutionResult<DataType> {
     resolve_type(data_type, location, type_resolution_context, string_table)
 }

@@ -178,7 +178,7 @@ pub(crate) fn render_html_document(
         render_entry_fragments(input.const_fragments, input.entry_runtime_fragment_count);
     let page_metadata =
         extract_html_page_metadata(input.hir_module, input.string_table).map_err(|diagnostic| {
-            CompilerMessages::from_diagnostic_ref(diagnostic, input.string_table)
+            CompilerMessages::from_diagnostic_ref(*diagnostic, input.string_table)
         })?;
 
     let Some(start_function_name) = input.function_names.get(&input.hir_module.start_function)

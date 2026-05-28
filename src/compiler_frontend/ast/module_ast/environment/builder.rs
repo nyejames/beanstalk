@@ -284,26 +284,13 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 continue;
             };
 
-            let field_definitions: Vec<FieldDefinition> = fields
-                .iter()
-                .map(|field| {
-                    Ok(FieldDefinition {
-                        name: field.id.clone(),
-                        type_id: resolve_diagnostic_type_to_type_id_checked(
-                            &field.value.diagnostic_type,
-                            &mut self.type_environment,
-                            &field.value.location,
-                        )?,
-                        location: field.value.location.clone(),
-                    })
-                })
-                .collect::<Result<Vec<_>, CompilerDiagnostic>>()
-                .map_err(|diagnostic| self.diagnostic_messages(diagnostic, string_table))?;
+            let field_definitions =
+                self.field_definitions_from_declarations(&fields, string_table)?;
 
             let struct_def = StructTypeDefinition {
                 id: NominalTypeId(0),
                 path: path.clone(),
-                fields: field_definitions.into_boxed_slice(),
+                fields: field_definitions,
                 generic_parameters: None,
                 const_record: false,
             };
@@ -360,6 +347,41 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             context = context.with_generic_parameters(Some(gp));
         }
         context
+    }
+
+    /// Convert resolved AST member declarations into canonical type-environment fields.
+    ///
+    /// WHAT: struct fields and choice payload fields are resolved as AST `Declaration`s first,
+    /// then written into `TypeEnvironment` as compact semantic member definitions.
+    /// WHY: keeping the conversion on the environment builder centralizes diagnostic mapping
+    /// at the AST environment boundary and avoids repeated large-error iterator closures.
+    pub(crate) fn field_definitions_from_declarations(
+        &mut self,
+        fields: &[Declaration],
+        string_table: &StringTable,
+    ) -> Result<Box<[FieldDefinition]>, CompilerMessages> {
+        let mut definitions = Vec::with_capacity(fields.len());
+
+        for field in fields {
+            let type_id = match resolve_diagnostic_type_to_type_id_checked(
+                &field.value.diagnostic_type,
+                &mut self.type_environment,
+                &field.value.location,
+            ) {
+                Ok(type_id) => type_id,
+                Err(diagnostic) => {
+                    return Err(self.diagnostic_messages(*diagnostic, string_table));
+                }
+            };
+
+            definitions.push(FieldDefinition {
+                name: field.id.clone(),
+                type_id,
+                location: field.value.location.clone(),
+            });
+        }
+
+        Ok(definitions.into_boxed_slice())
     }
 
     pub(crate) fn error_messages(

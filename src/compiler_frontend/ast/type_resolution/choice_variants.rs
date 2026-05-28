@@ -1,9 +1,8 @@
 //! Choice variant payload type resolution for AST type resolution.
 
 use crate::compiler_frontend::ast::type_resolution::{
-    TypeResolutionContext, resolve_diagnostic_type_to_type_id_checked,
+    TypeResolutionContext, TypeResolutionResult, resolve_diagnostic_type_to_type_id_checked,
 };
-use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::declaration_syntax::choice::{ChoiceVariant, ChoiceVariantPayload};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
@@ -19,7 +18,7 @@ pub(crate) fn resolve_choice_variant_payload_types(
     variants: &[ChoiceVariant],
     type_resolution_context: &mut TypeResolutionContext<'_>,
     string_table: &StringTable,
-) -> Result<Vec<ChoiceVariant>, CompilerDiagnostic> {
+) -> TypeResolutionResult<Vec<ChoiceVariant>> {
     let mut resolved_variants = Vec::with_capacity(variants.len());
 
     for variant in variants {

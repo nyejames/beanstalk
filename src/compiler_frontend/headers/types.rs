@@ -357,7 +357,7 @@ pub struct FileFrontendPrepareOutput {
 #[derive(Debug)]
 pub struct FileFrontendPrepareError {
     pub warnings: Vec<CompilerDiagnostic>,
-    pub diagnostic: CompilerDiagnostic,
+    pub diagnostic: Box<CompilerDiagnostic>,
 }
 
 impl FileFrontendPrepareOutput {

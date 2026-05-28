@@ -190,7 +190,7 @@ impl CompilerFrontend {
             Err(diagnostic) => {
                 return Err(FileFrontendPrepareError {
                     warnings: Vec::new(),
-                    diagnostic,
+                    diagnostic: Box::new(diagnostic),
                 });
             }
         };
