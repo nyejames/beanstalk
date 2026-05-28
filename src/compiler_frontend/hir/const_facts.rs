@@ -1,0 +1,83 @@
+//! HIR advisory const fact metadata.
+//!
+//! WHAT: projects AST const facts into a smaller HIR-safe summary that carries
+//!       declaration path, scope, source, value kind, and source location.
+//! WHY: borrow checking and backend lowering may use these facts for optimization
+//!      in the future, but they are strictly advisory and must not affect semantic
+//!      lowering decisions today.
+//!
+//! HIR facts deliberately omit the full AST `Expression` payload. They are metadata
+//! for future optimization passes, not semantic inputs to HIR lowering or borrow
+//! validation.
+
+use crate::compiler_frontend::ast::const_values::facts::{
+    AstConstFacts, ConstBindingScope, ConstBindingSource, ConstFactValueKind,
+};
+use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::string_interning::StringIdRemap;
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
+use rustc_hash::FxHashMap;
+
+/// Collection of HIR advisory const facts for one module.
+#[derive(Clone, Debug, Default)]
+pub struct HirConstFacts {
+    pub declarations: FxHashMap<InternedPath, HirConstDeclarationFact>,
+}
+
+/// A single projected const fact in HIR.
+///
+/// WHAT: records the scope, source, value classification, and source location of a
+///       compile-time declaration without storing the full AST expression.
+/// WHY: keeps HIR lightweight while preserving the metadata needed by later
+///      optimization passes.
+#[derive(Clone, Debug)]
+pub struct HirConstDeclarationFact {
+    pub declaration_path: InternedPath,
+
+    /// NOTE: currently advisory; only read in tests until optimization passes consume it.
+    #[allow(dead_code)]
+    pub scope: ConstBindingScope,
+
+    /// NOTE: currently advisory; only read in tests until optimization passes consume it.
+    #[allow(dead_code)]
+    pub source: ConstBindingSource,
+
+    /// NOTE: currently advisory; only read in tests until optimization passes consume it.
+    #[allow(dead_code)]
+    pub value_kind: ConstFactValueKind,
+
+    pub location: SourceLocation,
+}
+
+impl HirConstFacts {
+    /// Remap interned string IDs after a string-table merge.
+    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
+        let declarations = std::mem::take(&mut self.declarations);
+
+        for (mut path, mut fact) in declarations {
+            path.remap_string_ids(remap);
+            fact.declaration_path.remap_string_ids(remap);
+            fact.location.remap_string_ids(remap);
+            self.declarations.insert(path, fact);
+        }
+    }
+}
+
+impl From<&AstConstFacts> for HirConstFacts {
+    fn from(ast_facts: &AstConstFacts) -> Self {
+        let mut declarations = FxHashMap::default();
+
+        for (path, fact) in &ast_facts.declarations {
+            let hir_fact = HirConstDeclarationFact {
+                declaration_path: fact.declaration_path.clone(),
+                scope: fact.scope,
+                source: fact.source,
+                value_kind: fact.value_kind,
+                location: fact.location.clone(),
+            };
+            declarations.insert(path.clone(), hir_fact);
+        }
+
+        Self { declarations }
+    }
+}

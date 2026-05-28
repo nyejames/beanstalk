@@ -1,0 +1,3 @@
+draw || -> String:
+    return "draw"
+;

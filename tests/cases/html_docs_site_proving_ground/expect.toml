@@ -1,0 +1,85 @@
+entry = "."
+
+[backends.html]
+mode = "success"
+warnings = "forbid"
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = ["/assets/site.css"]
+
+[[backends.html.artifact_assertions]]
+path = "docs/index.html"
+kind = "html"
+must_contain = ["../shared/docs.css"]
+
+[[backends.html.artifact_assertions]]
+path = "docs/getting-started/index.html"
+kind = "html"
+must_contain = ["../../shared/docs.css"]
+
+[[backends.html.artifact_assertions]]
+path = "assets/site.css"
+kind = "binary"
+
+[[backends.html.artifact_assertions]]
+path = "shared/docs.css"
+kind = "binary"
+
+[backends.html_wasm]
+mode = "success"
+warnings = "forbid"
+
+[[backends.html_wasm.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = ["/assets/site.css", "<script src=\"./page.js\"></script>"]
+
+[[backends.html_wasm.artifact_assertions]]
+path = "docs/index.html"
+kind = "html"
+must_contain = ["../shared/docs.css", "<script src=\"./page.js\"></script>"]
+
+[[backends.html_wasm.artifact_assertions]]
+path = "docs/getting-started/index.html"
+kind = "html"
+must_contain = ["../../shared/docs.css", "<script src=\"./page.js\"></script>"]
+
+[[backends.html_wasm.artifact_assertions]]
+path = "page.js"
+kind = "js"
+must_contain = ["__bst_instantiate_wasm", "\"./page.wasm\""]
+
+[[backends.html_wasm.artifact_assertions]]
+path = "docs/page.js"
+kind = "js"
+must_contain = ["__bst_instantiate_wasm", "\"./page.wasm\""]
+
+[[backends.html_wasm.artifact_assertions]]
+path = "docs/getting-started/page.js"
+kind = "js"
+must_contain = ["__bst_instantiate_wasm", "\"./page.wasm\""]
+
+[[backends.html_wasm.artifact_assertions]]
+path = "page.wasm"
+kind = "wasm"
+validate_wasm = true
+
+[[backends.html_wasm.artifact_assertions]]
+path = "docs/page.wasm"
+kind = "wasm"
+validate_wasm = true
+
+[[backends.html_wasm.artifact_assertions]]
+path = "docs/getting-started/page.wasm"
+kind = "wasm"
+validate_wasm = true
+
+[[backends.html_wasm.artifact_assertions]]
+path = "assets/site.css"
+kind = "binary"
+
+[[backends.html_wasm.artifact_assertions]]
+path = "shared/docs.css"
+kind = "binary"

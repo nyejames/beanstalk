@@ -1,0 +1,12 @@
+entry = "."
+
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["dispatcher_nested_loops_multi_break total=12"]
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = ["while (true)", "switch (", "continue;"]
+must_not_contain = ["break;"]

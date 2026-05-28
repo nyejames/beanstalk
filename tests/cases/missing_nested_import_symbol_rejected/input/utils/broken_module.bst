@@ -1,0 +1,3 @@
+helper || -> String:
+    return "helper"
+;

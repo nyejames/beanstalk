@@ -1,0 +1,3 @@
+import @html { h1 }
+
+project_name = h1

@@ -1,0 +1,30 @@
+# Benchmark cases for Beanstalk compiler
+# Format:
+#   # group: <name>
+#   <command> <arg1> <arg2> ...
+# Empty lines are ignored
+# Other comment lines are ignored
+
+# group: core
+check benchmarks/speed-test.bst
+build benchmarks/speed-test.bst
+
+# group: docs
+check docs
+
+# group: stress
+check benchmarks/template-stress.bst
+check benchmarks/type-stress.bst
+check benchmarks/fold-stress.bst
+check benchmarks/pattern-stress.bst
+check benchmarks/collection-stress.bst
+check benchmarks/environment-stress.bst
+
+# group: module
+check benchmarks/module-graph
+build benchmarks/module-graph
+check benchmarks/import-fanout
+build benchmarks/import-fanout
+
+# group: borrow
+check benchmarks/borrow-stress.bst

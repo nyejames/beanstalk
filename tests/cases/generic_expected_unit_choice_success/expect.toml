@@ -1,0 +1,10 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+golden_mode = "normalized"
+rendered_output_contains = ["expected unit choice generic"]
+
+[backends.html_wasm]
+mode = "failure"
+warnings = "forbid"
+diagnostic_codes = ["BST-INFRA-0001"]

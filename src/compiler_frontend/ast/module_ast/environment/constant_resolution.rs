@@ -1,0 +1,159 @@
+//! AST constant semantic resolution.
+//!
+//! WHAT: parses and folds constant initializer expressions in header dependency order.
+//! WHY: headers are already sorted by the dependency stage; AST owns expression semantics.
+//! MUST NOT: rebuild import visibility.
+
+use crate::compiler_frontend::FrontendBuildProfile;
+use crate::compiler_frontend::ast::ast_nodes::Declaration;
+use crate::compiler_frontend::ast::module_ast::environment::TopLevelDeclarationTable;
+use crate::compiler_frontend::ast::module_ast::scope_context::{ContextKind, ScopeContext};
+use crate::compiler_frontend::ast::statements::declarations::resolve_declaration_syntax;
+use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
+use crate::compiler_frontend::compiler_errors::{CompilerError, compiler_error_to_diagnostic};
+use crate::compiler_frontend::compiler_messages::{
+    CompileTimeEvaluationErrorReason, CompilerDiagnostic,
+};
+use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
+use crate::compiler_frontend::datatypes::ids::TypeId;
+use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant;
+use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
+use crate::compiler_frontend::external_packages::ExternalSymbolId;
+use crate::compiler_frontend::headers::module_symbols::GenericDeclarationMetadata;
+use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
+use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
+use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
+use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
+use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::type_coercion::compatibility::TypeCompatibilityCache;
+use rustc_hash::{FxHashMap, FxHashSet};
+use std::cell::RefCell;
+use std::rc::Rc;
+
+/// WHAT: Carries all mutable/immutable context needed to parse one constant header.
+/// WHY: Grouping these parameters keeps the resolver call sites explicit while avoiding
+/// overly-wide function signatures that are harder to maintain.
+pub(crate) struct ConstantHeaderParseContext<'a> {
+    pub top_level_declarations: Rc<TopLevelDeclarationTable>,
+    pub visible_declaration_ids: &'a FxHashSet<InternedPath>,
+    pub visible_external_symbols: &'a FxHashMap<StringId, ExternalSymbolId>,
+    pub visible_source_bindings: &'a FxHashMap<StringId, InternedPath>,
+    pub visible_type_aliases: &'a FxHashMap<StringId, InternedPath>,
+    pub resolved_type_aliases: Rc<FxHashMap<InternedPath, DataType>>,
+    pub generic_declarations_by_path: Rc<FxHashMap<InternedPath, GenericDeclarationMetadata>>,
+    pub resolved_struct_fields_by_path: Rc<FxHashMap<InternedPath, Vec<Declaration>>>,
+    pub choice_variant_shells_by_path: Rc<FxHashMap<InternedPath, Vec<ChoiceVariant>>>,
+    pub type_environment: &'a mut TypeEnvironment,
+    pub nominal_type_ids_by_path: Rc<FxHashMap<InternedPath, TypeId>>,
+    pub external_package_registry: &'a ExternalPackageRegistry,
+    pub style_directives: &'a StyleDirectiveRegistry,
+    pub project_path_resolver: Option<ProjectPathResolver>,
+    pub path_format_config: PathStringFormatConfig,
+    pub build_profile: FrontendBuildProfile,
+    pub warnings: &'a mut Vec<CompilerDiagnostic>,
+    pub rendered_path_usages: Rc<RefCell<Vec<RenderedPathUsage>>>,
+    pub string_table: &'a mut StringTable,
+}
+
+pub(crate) fn parse_constant_header_declaration(
+    header: &Header,
+    context: ConstantHeaderParseContext<'_>,
+) -> Result<Declaration, Box<CompilerDiagnostic>> {
+    // Destructure the context so each field can be moved into the builder
+    // and resolver calls without borrow-checker conflicts.
+    let ConstantHeaderParseContext {
+        top_level_declarations,
+        visible_declaration_ids,
+        visible_external_symbols,
+        visible_source_bindings,
+        visible_type_aliases,
+        resolved_type_aliases,
+        generic_declarations_by_path,
+        resolved_struct_fields_by_path,
+        choice_variant_shells_by_path,
+        type_environment,
+        nominal_type_ids_by_path,
+        external_package_registry,
+        style_directives,
+        project_path_resolver,
+        path_format_config,
+        build_profile,
+        warnings,
+        rendered_path_usages,
+        string_table,
+    } = context;
+
+    let HeaderKind::Constant { declaration, .. } = &header.kind else {
+        let error = CompilerError::compiler_error(
+            "Constant header resolver called for a non-constant header.",
+        );
+        return Err(Box::new(compiler_error_to_diagnostic(&error)));
+    };
+
+    // Derive the file scope from the canonical OS path when available,
+    // falling back to the header's source file identity.
+    let source_file_scope = header
+        .tokens
+        .canonical_os_path
+        .as_ref()
+        .map(|canonical_path| InternedPath::from_path_buf(canonical_path, string_table))
+        .unwrap_or_else(|| header.source_file.to_owned());
+
+    // Constant headers are parsed while the AST environment is still being
+    // assembled, so this context uses `ScopeContext::new` with explicit
+    // visibility/alias services instead of the completed `AstModuleLookups`
+    // package used by later body emission.
+    let mut scope_context = ScopeContext::new(
+        ContextKind::ConstantHeader,
+        header.tokens.src_path.to_owned(),
+        top_level_declarations,
+        external_package_registry.clone(),
+        vec![],
+    )
+    .with_style_directives(style_directives)
+    .with_build_profile(build_profile)
+    .with_project_path_resolver(project_path_resolver)
+    .with_path_format_config(path_format_config)
+    .with_rendered_path_usage_sink(rendered_path_usages)
+    // Keep full module declarations for path identity, but explicitly gate what this file
+    // can see to enforce import boundaries and prevent cross-file leakage.
+    .with_visible_declarations(visible_declaration_ids.to_owned())
+    .with_visible_external_symbols(visible_external_symbols.to_owned())
+    .with_visible_source_bindings(visible_source_bindings.to_owned())
+    .with_visible_type_aliases(visible_type_aliases.to_owned())
+    // Type resolution support
+    .with_resolved_type_aliases(Rc::clone(&resolved_type_aliases))
+    .with_generic_declarations(Rc::clone(&generic_declarations_by_path))
+    .with_resolved_struct_fields_by_path(Rc::clone(&resolved_struct_fields_by_path))
+    .with_choice_variant_shells_by_path(Rc::clone(&choice_variant_shells_by_path))
+    .with_nominal_type_ids_by_path(Rc::clone(&nominal_type_ids_by_path))
+    .with_source_file_scope(source_file_scope);
+
+    let mut compatibility_cache = TypeCompatibilityCache::new();
+    let mut type_interner = AstTypeInterner::new(type_environment, &mut compatibility_cache);
+
+    let declaration_result = resolve_declaration_syntax(
+        declaration.clone(),
+        header.tokens.src_path.to_owned(),
+        &mut scope_context,
+        &mut type_interner,
+        string_table,
+    );
+    warnings.extend(scope_context.take_emitted_warnings());
+    let declaration = declaration_result.map_err(Box::new)?;
+
+    // After resolution, the initializer must be fully foldable at compile time.
+    // Runtime expressions in constants are rejected here.
+    if !declaration.value.is_compile_time_constant() {
+        return Err(Box::new(CompilerDiagnostic::compile_time_evaluation_error(
+            CompileTimeEvaluationErrorReason::ConstantInitializerNotFoldable,
+            declaration.id.name(),
+            header.name_location.clone(),
+        )));
+    }
+
+    Ok(declaration)
+}

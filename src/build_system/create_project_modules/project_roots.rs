@@ -1,0 +1,131 @@
+//! Project root and path-resolver setup for Stage 0.
+//!
+//! WHAT: interprets config paths, canonicalizes the project/entry roots, wires source-library
+//! discovery, and constructs the shared `ProjectPathResolver`.
+//! WHY: config path interpretation is build-system input preparation, while the frontend path
+//! resolver should focus on resolving already-established project roots.
+
+use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
+use crate::compiler_frontend::compiler_messages::InvalidConfigReason;
+use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::libraries::SourceLibraryRegistry;
+use crate::projects::settings::Config;
+
+use std::fs;
+use std::path::PathBuf;
+
+use super::collision_detection::validate_project_structure_collisions;
+use super::facade_validation::validate_source_library_facades;
+use super::project_structure_diagnostics::{config_diagnostic_messages, path_id};
+use super::source_library_discovery::{
+    discover_project_local_source_libraries, merge_source_libraries,
+    validate_entry_root_library_prefix_collisions,
+};
+
+/// Canonical roots used to construct project-aware path resolution.
+pub(super) struct ProjectRootResolution {
+    pub(super) project_root: PathBuf,
+    pub(super) entry_root: PathBuf,
+}
+
+/// Build the canonical path resolver for a directory project.
+///
+/// WHY: both `project_root` and `entry_root` must be canonicalized before path resolution; doing
+/// this in one owner keeps config interpretation out of later module inventory and frontend paths.
+pub(super) fn build_project_path_resolver(
+    config: &Config,
+    builder_source_libraries: &SourceLibraryRegistry,
+    string_table: &mut StringTable,
+) -> Result<ProjectPathResolver, CompilerMessages> {
+    let roots = resolve_project_roots(config, string_table)?;
+
+    let project_local_libraries =
+        discover_project_local_source_libraries(config, &roots.project_root, string_table)?;
+
+    let merged_libraries = merge_source_libraries(
+        config,
+        builder_source_libraries,
+        &project_local_libraries,
+        string_table,
+    )?;
+
+    validate_entry_root_library_prefix_collisions(
+        &roots.entry_root,
+        &merged_libraries,
+        string_table,
+    )?;
+
+    let entry_root = roots.entry_root.clone();
+
+    let resolver =
+        ProjectPathResolver::new(roots.project_root, entry_root.clone(), &merged_libraries)
+            .map_err(|error| CompilerMessages::from_error_ref(error, string_table))?;
+
+    validate_source_library_facades(&resolver, string_table)?;
+
+    validate_project_structure_collisions(&entry_root, &merged_libraries, string_table)?;
+
+    Ok(resolver)
+}
+
+/// Resolve the directory configured as the project entry root.
+pub(crate) fn resolve_project_entry_root(config: &Config) -> PathBuf {
+    if config.entry_root.as_os_str().is_empty() {
+        return config.entry_dir.clone();
+    }
+
+    if config.entry_root.is_absolute() {
+        config.entry_root.clone()
+    } else {
+        config.entry_dir.join(&config.entry_root)
+    }
+}
+
+fn resolve_project_roots(
+    config: &Config,
+    string_table: &mut StringTable,
+) -> Result<ProjectRootResolution, CompilerMessages> {
+    let project_root = match fs::canonicalize(&config.entry_dir) {
+        Ok(path) => path,
+        Err(error) => {
+            let file_error = CompilerError::file_error(
+                &config.entry_dir,
+                format!("Failed to canonicalize project root: {error}"),
+                string_table,
+            );
+
+            return Err(CompilerMessages::from_error_ref(file_error, string_table));
+        }
+    };
+
+    let entry_root_path = resolve_project_entry_root(config);
+    if !entry_root_path.exists() {
+        return Err(config_diagnostic_messages(
+            config,
+            "entry_root",
+            InvalidConfigReason::ConfiguredEntryRootMissing {
+                entry_root: path_id(&entry_root_path, string_table),
+            },
+            string_table,
+        ));
+    }
+
+    let entry_root = match fs::canonicalize(&entry_root_path) {
+        Ok(path) => path,
+        Err(error) => {
+            let file_error = CompilerError::file_error(
+                &entry_root_path,
+                format!("Failed to canonicalize configured entry root: {error}"),
+                string_table,
+            );
+
+            return Err(CompilerMessages::from_error_ref(file_error, string_table));
+        }
+    };
+
+    Ok(ProjectRootResolution {
+        project_root,
+        entry_root,
+    })
+}

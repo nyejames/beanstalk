@@ -1,0 +1,5 @@
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+diagnostic_codes = ["BST-TYPE-0003"]
+message_contains = ["Generic parameter 'U' cannot be used with arithmetic operators before trait bounds are supported"]

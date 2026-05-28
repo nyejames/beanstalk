@@ -1,0 +1,669 @@
+//! Stateful AST-to-HIR lowering builder.
+//!
+//! WHAT: lowers typed AST nodes into backend-facing HIR by allocating IDs,
+//! registering declarations, constructing explicit blocks/regions/locals, and
+//! attaching source mappings to the HIR side table.
+//! WHY: HIR is the compiler boundary consumed by borrow validation and backend
+//! lowering, so this builder owns construction state but not borrow facts,
+//! ownership eligibility, or backend-specific output decisions.
+//!
+//! ## Diagnostic boundary
+//!
+//! `CompilerError` / `return_hir_transformation_error!` in this module means an internal
+//! HIR transformation or lowering invariant failure only. `HirLoweringError::Diagnostic`
+//! carries the rare source-level diagnostic that is discovered during CFG construction.
+//! Normal user-facing source failures must be emitted as `CompilerDiagnostic` from AST
+//! or earlier stages.
+
+use crate::compiler_frontend::ast::Ast;
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, SourceLocation};
+use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
+use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
+use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
+use crate::compiler_frontend::datatypes::ids::TypeId;
+use crate::compiler_frontend::hir::blocks::HirBlock;
+use crate::compiler_frontend::hir::const_facts::HirConstFacts;
+use crate::compiler_frontend::hir::functions::HirFunction;
+use crate::compiler_frontend::hir::hir_side_table::HirSideTable;
+use crate::compiler_frontend::hir::ids::{
+    BlockId, ChoiceId, FieldId, FunctionId, HirConstId, HirNodeId, HirValueId, LocalId, RegionId,
+    StructId,
+};
+use crate::compiler_frontend::hir::module::HirModule;
+use crate::compiler_frontend::hir::regions::HirRegion;
+use crate::compiler_frontend::hir::terminators::HirTerminator;
+use crate::compiler_frontend::hir::validation::validate_hir_module;
+use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::return_hir_transformation_error;
+use rustc_hash::{FxHashMap, FxHashSet};
+
+mod metadata;
+
+// -----------
+// Entry Point
+// -----------
+pub fn lower_module(
+    ast: Ast,
+    string_table: &mut StringTable,
+    path_format_config: PathStringFormatConfig,
+) -> Result<(HirModule, TypeEnvironment), CompilerMessages> {
+    let type_environment = ast.type_environment.clone();
+    let ctx = HirBuilder::new(string_table, path_format_config, type_environment);
+    ctx.build_hir_module(ast)
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(super) struct LoopTargets {
+    pub break_target: BlockId,
+    pub continue_target: BlockId,
+}
+
+#[cfg(test)]
+#[path = "tests/hir_builder_test_support.rs"]
+mod hir_builder_test_support;
+#[cfg(test)]
+pub(crate) use hir_builder_test_support::{
+    HirTestChoiceDefinition, assert_no_placeholder_terminators, build_ast, build_ast_with_choices,
+    lower_ast, validate_module_for_tests,
+};
+// -------------------
+// HIR Builder Context
+// -------------------
+//
+// This struct is the main entry point for the HIR builder. It manages the state of the builder
+// and provides the lowering logic for each AST node.
+//
+// The builder is stateful and re-entrant, so it's not safe to use concurrently.
+
+pub struct HirBuilder<'a> {
+    // === Result being built ===
+    pub(super) module: HirModule,
+
+    // === For variable name resolution ===
+    pub(super) string_table: &'a mut StringTable,
+
+    // === Path formatting config (origin, output style) ===
+    pub(super) path_format_config: PathStringFormatConfig,
+
+    // === ID Counters ===
+    next_block_id: u32,
+    next_local_id: u32,
+    next_node_id: u32,
+    next_value_id: u32,
+    next_region_id: u32,
+    next_function_id: u32,
+    next_struct_id: u32,
+    next_field_id: u32,
+    next_const_id: u32,
+    next_choice_id: u32,
+    pub(super) temp_local_counter: u32,
+    pub(super) template_function_counter: u32,
+
+    // === Frontend type environment ===
+    /// WHAT: carries the AST-built type environment while lowering one module.
+    /// WHY: HIR stores frontend `TypeId`s directly and queries this table for type facts.
+    pub(super) type_environment: TypeEnvironment,
+
+    // === Source / name side table ===
+    pub(super) side_table: HirSideTable,
+
+    // === Name resolution tables (filled during declaration pass) ===
+    // AST guarantees module-wide unique InternedPath symbol IDs. HIR keys symbol resolution
+    // by full paths, never by scope-local leaf strings.
+    pub(super) locals_by_name: FxHashMap<InternedPath, LocalId>,
+    pub(super) functions_by_name: FxHashMap<InternedPath, FunctionId>,
+    pub(super) structs_by_name: FxHashMap<InternedPath, StructId>,
+    pub(super) choices_by_name: FxHashMap<InternedPath, ChoiceId>,
+    /// Generic struct instantiations keyed by structured identity, not string paths.
+    /// WHAT: `Box of Int` and `Box of String` need distinct StructIds.
+    pub(super) generic_structs_by_key: FxHashMap<
+        crate::compiler_frontend::datatypes::generic_identity_bridge::GenericInstantiationKey,
+        StructId,
+    >,
+    /// Generic choice instantiations keyed by structured identity.
+    pub(super) generic_choices_by_key: FxHashMap<
+        crate::compiler_frontend::datatypes::generic_identity_bridge::GenericInstantiationKey,
+        ChoiceId,
+    >,
+    pub(super) fields_by_struct_and_name: FxHashMap<(StructId, InternedPath), FieldId>,
+    pub(super) module_constants_by_name: FxHashMap<InternedPath, Declaration>,
+    pub(super) local_const_records_by_name: FxHashMap<InternedPath, Declaration>,
+    pub(super) currently_lowering_constants: FxHashSet<InternedPath>,
+
+    // === Fast ID -> arena index maps ===
+    pub(super) block_index_by_id: FxHashMap<BlockId, usize>,
+    pub(super) function_index_by_id: FxHashMap<FunctionId, usize>,
+    pub(super) region_index_by_id: FxHashMap<RegionId, usize>,
+    pub(super) local_index_by_id: FxHashMap<LocalId, (usize, usize)>,
+    pub(super) struct_index_by_id: FxHashMap<StructId, usize>,
+    pub(super) field_index_by_id: FxHashMap<FieldId, (usize, usize)>,
+
+    // === Current Function State ===
+    current_function: Option<FunctionId>,
+    current_block: Option<BlockId>,
+    current_region: Option<RegionId>,
+    pub(super) loop_targets: Vec<LoopTargets>,
+
+    /// The runtime fragment vec local inside entry start(), if currently lowering it.
+    /// Set when entering entry start() and cleared on leave.
+    pub(super) entry_fragment_vec_local: Option<LocalId>,
+
+    /// Active target for value-block lowering.
+    ///
+    /// WHAT: when set, `ThenValue` statements inside the current statement-sequence lowering
+    ///       assign their produced value to `result_local` and jump to `merge_block`.
+    /// WHY: value-producing `if` branches use `ThenValue` to yield their result; HIR lowering
+    ///      needs to intercept those statements and wire them to a shared result local.
+    pub(super) active_value_block_target: Option<ValueBlockTarget>,
+}
+
+/// Target state for value-block lowering inside `HirBuilder`.
+///
+/// WHAT: carries the result locals and merge block that `ThenValue` statements should use
+///       when producing values inside a value-producing control-flow block.
+/// WHY: multi-return value blocks need one local per slot; single-return keeps one local.
+#[derive(Clone, Debug)]
+pub(super) struct ValueBlockTarget {
+    pub result_locals: Vec<LocalId>,
+    pub merge_block: BlockId,
+}
+
+/// Stage-local error boundary for HIR lowering.
+///
+/// WHAT: lets HIR report source-level diagnostics discovered during CFG construction while still
+/// carrying true lowering invariant failures as infrastructure errors.
+/// WHY: most HIR failures are compiler bugs, but checks such as non-unit function fallthrough are
+/// normal user-facing rule diagnostics and must not be forced through `CompilerError`.
+///
+/// ## Usage rule
+/// - `Diagnostic` — for normal user-facing rule diagnostics discovered during lowering.
+/// - `Infrastructure` — for compiler bugs, broken invariants, and impossible AST states.
+pub(super) enum HirLoweringError {
+    Diagnostic(CompilerDiagnostic),
+    Infrastructure(CompilerError),
+}
+
+impl From<CompilerError> for HirLoweringError {
+    fn from(error: CompilerError) -> Self {
+        Self::Infrastructure(error)
+    }
+}
+
+// WHAT: generates a typed `allocate_*_id` method for each HIR entity kind.
+// WHY: all nine allocators share identical logic — bump a u32 counter, wrap in a newtype, return.
+//      A module-level macro eliminates the repetition without changing the public API.
+//      To add a new entity type: add the counter field to HirBuilder, then invoke this macro.
+macro_rules! allocate_id {
+    ($method:ident, $counter_field:ident, $id_type:ident) => {
+        pub(crate) fn $method(&mut self) -> $id_type {
+            let id = $id_type(self.$counter_field);
+            self.$counter_field += 1;
+            id
+        }
+    };
+}
+
+impl<'a> HirBuilder<'a> {
+    // -------------------------
+    //  Constructor & Utilities
+    // -------------------------
+
+    pub fn new(
+        string_table: &'a mut StringTable,
+        path_format_config: PathStringFormatConfig,
+        type_environment: TypeEnvironment,
+    ) -> HirBuilder<'a> {
+        HirBuilder {
+            module: HirModule::new(),
+
+            string_table,
+            path_format_config,
+            type_environment,
+
+            next_block_id: 0,
+            next_local_id: 0,
+            next_node_id: 0,
+            next_value_id: 0,
+            next_region_id: 0,
+            next_function_id: 0,
+            next_struct_id: 0,
+            next_field_id: 0,
+            next_const_id: 0,
+            next_choice_id: 0,
+            temp_local_counter: 0,
+            template_function_counter: 0,
+
+            side_table: HirSideTable::default(),
+
+            locals_by_name: FxHashMap::default(),
+            functions_by_name: FxHashMap::default(),
+            structs_by_name: FxHashMap::default(),
+            choices_by_name: FxHashMap::default(),
+            generic_structs_by_key: FxHashMap::default(),
+            generic_choices_by_key: FxHashMap::default(),
+            fields_by_struct_and_name: FxHashMap::default(),
+            module_constants_by_name: FxHashMap::default(),
+            local_const_records_by_name: FxHashMap::default(),
+            currently_lowering_constants: FxHashSet::default(),
+
+            block_index_by_id: FxHashMap::default(),
+            function_index_by_id: FxHashMap::default(),
+            region_index_by_id: FxHashMap::default(),
+            local_index_by_id: FxHashMap::default(),
+            struct_index_by_id: FxHashMap::default(),
+            field_index_by_id: FxHashMap::default(),
+
+            current_function: None,
+            current_block: None,
+            current_region: None,
+            loop_targets: vec![],
+            entry_fragment_vec_local: None,
+            active_value_block_target: None,
+        }
+    }
+
+    fn lower_error_messages(&self, error: CompilerError) -> CompilerMessages {
+        CompilerMessages::from_error_with_warnings(
+            error,
+            self.module.warnings.to_owned(),
+            self.string_table,
+        )
+        .with_render_type_environment(self.type_environment.clone())
+    }
+
+    fn hir_lowering_error_messages(&self, error: HirLoweringError) -> CompilerMessages {
+        match error {
+            HirLoweringError::Diagnostic(diagnostic) => {
+                CompilerMessages::from_diagnostic_with_warnings(
+                    diagnostic,
+                    self.module.warnings.to_owned(),
+                    self.string_table,
+                )
+                .with_render_type_environment(self.type_environment.clone())
+            }
+            HirLoweringError::Infrastructure(error) => self.lower_error_messages(error),
+        }
+    }
+
+    // -------------------------
+    //  Main Build Pipeline
+    // -------------------------
+
+    /// Builds an HIR module from an AST.
+    /// This is the main entry point for HIR generation.
+    pub fn build_hir_module(
+        mut self,
+        ast: Ast,
+    ) -> Result<(HirModule, TypeEnvironment), CompilerMessages> {
+        self.module.warnings = ast.warnings.to_owned();
+        self.module.rendered_path_usages = ast.rendered_path_usages.to_owned();
+        self.module.const_facts = HirConstFacts::from(&ast.const_facts);
+
+        // 1. Prepare declarations (functions, structs, choices)
+        if let Err(error) = self.prepare_hir_declarations(&ast) {
+            return Err(self.lower_error_messages(error));
+        }
+
+        // 2. Lower module-level constants
+        if let Err(error) = self.lower_module_constants(&ast) {
+            return Err(self.lower_error_messages(error));
+        }
+
+        // 3. Resolve documentation fragments
+        if let Err(error) = self.resolve_doc_fragments(&ast) {
+            return Err(self.lower_error_messages(error));
+        }
+
+        // 4. Lower AST nodes to HIR expressions/statements
+        for node in &ast.nodes {
+            if let Err(error) = self.process_ast_node(node) {
+                return Err(self.hir_lowering_error_messages(error));
+            }
+        }
+
+        // 5. Assign semantic origins to functions
+        if let Err(error) = self.assign_function_origins() {
+            return Err(self.lower_error_messages(error));
+        }
+
+        let warnings = self.module.warnings.to_owned();
+        let string_table = &*self.string_table;
+        self.module.side_table = self.side_table;
+
+        // 6. Validate the final HIR module
+        if let Err(error) = validate_hir_module(&self.module, &self.type_environment) {
+            return Err(
+                CompilerMessages::from_error_with_warnings(error, warnings, string_table)
+                    .with_render_type_environment(self.type_environment.clone()),
+            );
+        }
+
+        Ok((self.module, self.type_environment))
+    }
+
+    /// Processes a single AST node and generates corresponding HIR.
+    fn process_ast_node(&mut self, node: &AstNode) -> Result<(), HirLoweringError> {
+        self.lower_top_level_node(node)
+    }
+
+    // -------------------------
+    //  ID Allocation
+    // -------------------------
+
+    allocate_id!(allocate_block_id, next_block_id, BlockId);
+    allocate_id!(allocate_function_id, next_function_id, FunctionId);
+    allocate_id!(allocate_region_id, next_region_id, RegionId);
+    allocate_id!(allocate_local_id, next_local_id, LocalId);
+    allocate_id!(allocate_node_id, next_node_id, HirNodeId);
+    allocate_id!(allocate_value_id, next_value_id, HirValueId);
+    allocate_id!(allocate_struct_id, next_struct_id, StructId);
+    allocate_id!(allocate_field_id, next_field_id, FieldId);
+    allocate_id!(allocate_const_id, next_const_id, HirConstId);
+    allocate_id!(allocate_choice_id, next_choice_id, ChoiceId);
+
+    // -------------------------
+    //  Module Assembly
+    // -------------------------
+
+    pub(super) fn push_region(&mut self, region: HirRegion) {
+        let index = self.module.regions.len();
+        self.region_index_by_id.insert(region.id(), index);
+        self.module.regions.push(region);
+    }
+
+    pub(super) fn push_block(&mut self, block: HirBlock) {
+        let index = self.module.blocks.len();
+        self.block_index_by_id.insert(block.id, index);
+        self.module.blocks.push(block);
+    }
+
+    pub(super) fn push_function(&mut self, function: HirFunction) {
+        let index = self.module.functions.len();
+        self.function_index_by_id.insert(function.id, index);
+        self.module.functions.push(function);
+    }
+
+    pub(super) fn push_struct(
+        &mut self,
+        hir_struct: crate::compiler_frontend::hir::structs::HirStruct,
+    ) {
+        let struct_index = self.module.structs.len();
+        self.struct_index_by_id.insert(hir_struct.id, struct_index);
+
+        for (field_index, field) in hir_struct.fields.iter().enumerate() {
+            self.field_index_by_id
+                .insert(field.id, (struct_index, field_index));
+        }
+
+        self.module.structs.push(hir_struct);
+    }
+
+    pub(super) fn register_local_in_block(
+        &mut self,
+        block_id: BlockId,
+        local: crate::compiler_frontend::hir::blocks::HirLocal,
+        location: &SourceLocation,
+    ) -> Result<(), CompilerError> {
+        let block_index = self.block_index_or_error(block_id, location)?;
+        let local_index = self.module.blocks[block_index].locals.len();
+        self.local_index_by_id
+            .insert(local.id, (block_index, local_index));
+        self.module.blocks[block_index].locals.push(local);
+        Ok(())
+    }
+
+    // -------------------------
+    //  Resolution & Queries
+    // -------------------------
+
+    pub(super) fn local_type_id_or_error(
+        &self,
+        local_id: LocalId,
+        location: &SourceLocation,
+    ) -> Result<TypeId, CompilerError> {
+        let Some((block_index, local_index)) = self.local_index_by_id.get(&local_id).copied()
+        else {
+            return_hir_transformation_error!(
+                format!("Local {:?} is not registered in HIR blocks", local_id),
+                location.clone()
+            );
+        };
+
+        Ok(self.module.blocks[block_index].locals[local_index].ty)
+    }
+
+    pub(super) fn field_type_id_or_error(
+        &self,
+        field_id: FieldId,
+        location: &SourceLocation,
+    ) -> Result<TypeId, CompilerError> {
+        let Some((struct_index, field_index)) = self.field_index_by_id.get(&field_id).copied()
+        else {
+            return_hir_transformation_error!(
+                format!("Field {:?} is not registered in HIR structs", field_id),
+                location.clone()
+            );
+        };
+
+        Ok(self.module.structs[struct_index].fields[field_index].ty)
+    }
+
+    pub(super) fn block_index_or_error(
+        &self,
+        block_id: BlockId,
+        location: &SourceLocation,
+    ) -> Result<usize, CompilerError> {
+        let Some(index) = self.block_index_by_id.get(&block_id).copied() else {
+            return_hir_transformation_error!(
+                format!("Block {:?} is not registered in HIR module", block_id),
+                location.clone()
+            );
+        };
+
+        Ok(index)
+    }
+
+    pub(super) fn function_index_or_error(
+        &self,
+        function_id: FunctionId,
+        location: &SourceLocation,
+    ) -> Result<usize, CompilerError> {
+        let Some(index) = self.function_index_by_id.get(&function_id).copied() else {
+            return_hir_transformation_error!(
+                format!("Function {:?} is not registered in HIR module", function_id),
+                location.clone()
+            );
+        };
+
+        Ok(index)
+    }
+
+    pub(super) fn block_by_id_or_error(
+        &self,
+        block_id: BlockId,
+        location: &SourceLocation,
+    ) -> Result<&HirBlock, CompilerError> {
+        let index = self.block_index_or_error(block_id, location)?;
+        Ok(&self.module.blocks[index])
+    }
+
+    pub(super) fn block_mut_by_id_or_error(
+        &mut self,
+        block_id: BlockId,
+        location: &SourceLocation,
+    ) -> Result<&mut HirBlock, CompilerError> {
+        let index = self.block_index_or_error(block_id, location)?;
+        Ok(&mut self.module.blocks[index])
+    }
+
+    pub(super) fn function_by_id_or_error(
+        &self,
+        function_id: FunctionId,
+        location: &SourceLocation,
+    ) -> Result<&HirFunction, CompilerError> {
+        let index = self.function_index_or_error(function_id, location)?;
+        Ok(&self.module.functions[index])
+    }
+
+    pub(super) fn function_mut_by_id_or_error(
+        &mut self,
+        function_id: FunctionId,
+        location: &SourceLocation,
+    ) -> Result<&mut HirFunction, CompilerError> {
+        let index = self.function_index_or_error(function_id, location)?;
+        Ok(&mut self.module.functions[index])
+    }
+
+    // -------------------------
+    //  State Management
+    // -------------------------
+
+    pub(crate) fn enter_function(
+        &mut self,
+        function_id: FunctionId,
+        location: &SourceLocation,
+    ) -> Result<(), CompilerError> {
+        let entry_block = self.function_by_id_or_error(function_id, location)?.entry;
+
+        self.current_function = Some(function_id);
+        self.locals_by_name.clear();
+        self.local_const_records_by_name.clear();
+        self.loop_targets.clear();
+        self.set_current_block(entry_block, location)
+    }
+
+    pub(crate) fn leave_function(&mut self) {
+        self.current_function = None;
+        self.current_block = None;
+        self.current_region = None;
+        self.locals_by_name.clear();
+        self.local_const_records_by_name.clear();
+        self.loop_targets.clear();
+        self.entry_fragment_vec_local = None;
+    }
+
+    pub(super) fn with_temporary_local_bindings<T>(
+        &mut self,
+        bindings: impl IntoIterator<Item = (InternedPath, LocalId)>,
+        f: impl FnOnce(&mut Self) -> Result<T, CompilerError>,
+    ) -> Result<T, CompilerError> {
+        let mut previous_bindings = Vec::new();
+        for (path, local_id) in bindings {
+            let previous = self.locals_by_name.insert(path.clone(), local_id);
+            previous_bindings.push((path, previous));
+        }
+
+        let result = f(self);
+
+        for (path, previous) in previous_bindings.into_iter().rev() {
+            self.locals_by_name.remove(&path);
+            if let Some(local_id) = previous {
+                self.locals_by_name.insert(path, local_id);
+            }
+        }
+
+        result
+    }
+
+    pub(crate) fn set_current_block(
+        &mut self,
+        block_id: BlockId,
+        location: &SourceLocation,
+    ) -> Result<(), CompilerError> {
+        let region = self.block_by_id_or_error(block_id, location)?.region;
+        self.current_block = Some(block_id);
+        self.current_region = Some(region);
+        Ok(())
+    }
+
+    pub(crate) fn current_block_id_or_error(
+        &self,
+        location: &SourceLocation,
+    ) -> Result<BlockId, CompilerError> {
+        let Some(block_id) = self.current_block else {
+            return_hir_transformation_error!("No current HIR block is active", location.clone());
+        };
+
+        Ok(block_id)
+    }
+
+    pub(crate) fn current_function_id_or_error(
+        &self,
+        location: &SourceLocation,
+    ) -> Result<FunctionId, CompilerError> {
+        let Some(function_id) = self.current_function else {
+            return_hir_transformation_error!(
+                "No current HIR function is active",
+                self.hir_error_location(location)
+            );
+        };
+
+        Ok(function_id)
+    }
+
+    pub(crate) fn current_region_or_error(
+        &self,
+        location: &SourceLocation,
+    ) -> Result<RegionId, CompilerError> {
+        let Some(region) = self.current_region else {
+            return_hir_transformation_error!(
+                "No current HIR region is active",
+                self.hir_error_location(location)
+            );
+        };
+
+        Ok(region)
+    }
+
+    // -------------------------
+    //  Terminator Management
+    // -------------------------
+
+    pub(crate) fn set_block_terminator(
+        &mut self,
+        block_id: BlockId,
+        terminator: HirTerminator,
+        source_location: &SourceLocation,
+    ) -> Result<(), CompilerError> {
+        {
+            let block = self.block_mut_by_id_or_error(block_id, source_location)?;
+            if !Self::is_placeholder_terminator(&block.terminator) {
+                return_hir_transformation_error!(
+                    format!("Block {} already has an explicit terminator", block_id),
+                    source_location.clone()
+                );
+            }
+
+            block.terminator = terminator;
+        }
+
+        self.side_table.map_terminator(source_location, block_id);
+        Ok(())
+    }
+
+    pub(crate) fn block_has_explicit_terminator(
+        &self,
+        block_id: BlockId,
+        location: &SourceLocation,
+    ) -> Result<bool, CompilerError> {
+        let block = self.block_by_id_or_error(block_id, location)?;
+        Ok(!Self::is_placeholder_terminator(&block.terminator))
+    }
+
+    fn is_placeholder_terminator(terminator: &HirTerminator) -> bool {
+        matches!(terminator, HirTerminator::Panic { message: None })
+    }
+
+    // -------------------------
+    //  Diagnostics Support
+    // -------------------------
+
+    pub(super) fn symbol_name_for_diagnostics(&self, symbol: &InternedPath) -> String {
+        symbol
+            .name_str(self.string_table)
+            .map(str::to_owned)
+            .unwrap_or_else(|| symbol.to_string(self.string_table))
+    }
+}

@@ -1,0 +1,19 @@
+//! AST finalization sub-modules.
+//!
+//! WHAT: groups final AST assembly, AST node normalization, module constant normalization, and
+//! shared template folding helpers.
+//!
+//! WHY: Separates finalization concerns from the entry-point orchestration in
+//! `ast/mod.rs`, making the high-level phase sequence and detailed normalization logic easier
+//! to understand independently.
+
+pub(in crate::compiler_frontend::ast) mod const_fact_collection;
+#[cfg(debug_assertions)]
+pub(super) mod debug_type_validation;
+pub(in crate::compiler_frontend::ast) mod finalizer;
+pub(super) mod normalize_ast;
+pub(super) mod normalize_constants;
+pub(super) mod template_helpers;
+pub(super) mod validate_types;
+
+pub(in crate::compiler_frontend::ast) use finalizer::AstFinalizer;

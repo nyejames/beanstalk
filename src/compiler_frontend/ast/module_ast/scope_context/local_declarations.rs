@@ -1,0 +1,37 @@
+//! Per-scope local declaration mutation for AST scope contexts.
+
+use super::*;
+
+impl ScopeContext {
+    // --------------------------
+    //  Local mutation
+    // --------------------------
+
+    pub(crate) fn set_local_declarations(&mut self, declarations: Vec<Declaration>) {
+        self.local_declarations_by_name = build_local_declarations_index(&declarations);
+        self.local_declarations = declarations;
+    }
+
+    pub(crate) fn with_pending_catch_assignment_targets(
+        &self,
+        target_names: &[StringId],
+    ) -> ScopeContext {
+        let mut context = self.clone();
+        context
+            .pending_catch_assignment_targets
+            .extend(target_names.iter().copied());
+        context
+    }
+
+    pub(crate) fn activate_pending_catch_assignment_targets(&self) -> ScopeContext {
+        let mut context = self.clone();
+        context
+            .unavailable_assignment_targets
+            .extend(self.pending_catch_assignment_targets.iter().copied());
+        context
+    }
+
+    pub(crate) fn is_assignment_target_unavailable(&self, name: StringId) -> bool {
+        self.unavailable_assignment_targets.contains(&name)
+    }
+}

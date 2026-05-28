@@ -1,0 +1,127 @@
+//! Stage 0 project-structure collision detection.
+//!
+//! WHAT: scans project source directories and source-library roots for sibling `.bst` file / folder
+//! name collisions and reports them as typed project-structure diagnostics.
+//! WHY: unambiguous import path segments are a prerequisite for correct import resolution. The
+//! collision rule is Stage 0-owned, not HTML-builder-specific.
+
+use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
+use crate::compiler_frontend::compiler_messages::InvalidConfigReason;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::libraries::SourceLibraryRegistry;
+use crate::projects::settings::BEANSTALK_FILE_EXTENSION;
+
+use std::collections::BTreeSet;
+use std::fs;
+use std::path::{Path, PathBuf};
+
+use super::project_structure_diagnostics::{path_id, project_structure_messages};
+
+/// Reject sibling `.bst` file stems and folder names that share the same import name.
+///
+/// WHAT: for every directory under `entry_root` and every source-library root, collects the set of
+/// `.bst` file stems (excluding `.js` files) and folder names. If any stem collides with a folder
+/// name, emits a typed diagnostic.
+/// WHY: Beanstalk imports resolve a path segment to either a `.bst` file or a folder; sharing the
+/// same stem makes the import name ambiguous.
+///
+/// The rule applies even when the folder is empty or contains no Beanstalk files.
+pub(super) fn validate_project_structure_collisions(
+    entry_root: &Path,
+    source_libraries: &SourceLibraryRegistry,
+    string_table: &mut StringTable,
+) -> Result<(), CompilerMessages> {
+    // Check the entry root tree.
+    validate_directory_tree_collisions(entry_root, string_table)?;
+
+    // Check each source-library root tree.
+    for library in source_libraries.iter() {
+        let crate::libraries::ProvidedSourceRoot::Filesystem(root) = &library.root;
+        if root.is_dir() {
+            validate_directory_tree_collisions(root, string_table)?;
+        }
+    }
+
+    Ok(())
+}
+
+/// Walk one directory tree and check every directory for sibling collisions.
+fn validate_directory_tree_collisions(
+    root: &Path,
+    string_table: &mut StringTable,
+) -> Result<(), CompilerMessages> {
+    let mut directories_to_scan = vec![root.to_path_buf()];
+
+    while let Some(directory) = directories_to_scan.pop() {
+        let entries = fs::read_dir(&directory).map_err(|error| {
+            CompilerMessages::from_error_ref(
+                CompilerError::file_error(
+                    &directory,
+                    format!(
+                        "Failed to read directory while checking import-name collisions: {error}"
+                    ),
+                    string_table,
+                ),
+                string_table,
+            )
+        })?;
+
+        let mut file_stems: BTreeSet<String> = BTreeSet::new();
+        let mut folder_names: BTreeSet<String> = BTreeSet::new();
+        let mut subdirectories: Vec<PathBuf> = Vec::new();
+
+        for entry in entries {
+            let entry = entry.map_err(|error| {
+                CompilerMessages::from_error_ref(
+                    CompilerError::file_error(
+                        &directory,
+                        format!(
+                            "Failed to read directory entry while checking import-name collisions: {error}"
+                        ),
+                        string_table,
+                    ),
+                    string_table,
+                )
+            })?;
+
+            let path = entry.path();
+            let name = match path.file_name().and_then(|n| n.to_str()) {
+                Some(name) => name,
+                None => continue,
+            };
+
+            if path.is_dir() {
+                folder_names.insert(name.to_owned());
+                subdirectories.push(path);
+            } else if let Some(extension) = path.extension().and_then(|e| e.to_str())
+                && extension == BEANSTALK_FILE_EXTENSION
+                && let Some(stem) = path.file_stem().and_then(|s| s.to_str())
+            {
+                file_stems.insert(stem.to_owned());
+            }
+        }
+
+        // Report the first collision found in this directory.
+        for stem in &file_stems {
+            if folder_names.contains(stem) {
+                let file_name_id = string_table.intern(&format!("{stem}.bst"));
+                let folder_name_id = string_table.intern(stem);
+
+                return Err(project_structure_messages(
+                    &directory,
+                    InvalidConfigReason::BstFileFolderCollision {
+                        file_name: file_name_id,
+                        folder_name: folder_name_id,
+                        directory: path_id(&directory, string_table),
+                    },
+                    string_table,
+                ));
+            }
+        }
+
+        subdirectories.sort();
+        directories_to_scan.extend(subdirectories);
+    }
+
+    Ok(())
+}

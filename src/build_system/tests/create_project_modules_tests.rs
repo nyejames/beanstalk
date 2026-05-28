@@ -1,0 +1,2806 @@
+use super::*;
+use crate::build_system::build::BackendBuilder;
+use crate::build_system::create_project_modules::resolve_project_entry_root;
+use crate::build_system::project_config::{ProjectConfigParseServices, parse_project_config_file};
+use crate::compiler_frontend::compiler_errors::CompilerMessages;
+use crate::compiler_frontend::compiler_messages::render::{DiagnosticRenderContext, terse};
+use crate::compiler_frontend::compiler_messages::{
+    CompilerDiagnostic, DiagnosticCategory, DiagnosticPayload, InvalidAssignmentTargetReason,
+    InvalidConfigReason, InvalidImportClauseReason, InvalidLibraryFolderReason,
+};
+use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
+use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
+use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_tests::test_support::temp_dir;
+use std::collections::HashSet;
+use std::ffi::OsStr;
+use std::path::PathBuf;
+
+fn configured_resolver(config: &Config) -> ProjectPathResolver {
+    // WHAT: rebuilds the same canonical resolver the real project build uses.
+    // WHY: module-discovery tests should exercise the exact path rules used in production.
+    let project_root = fs::canonicalize(&config.entry_dir).expect("project root should resolve");
+    let entry_root =
+        fs::canonicalize(resolve_project_entry_root(config)).expect("entry root should resolve");
+
+    ProjectPathResolver::new(
+        project_root,
+        entry_root,
+        &crate::libraries::SourceLibraryRegistry::default(),
+    )
+    .expect("project path resolver should build")
+}
+
+fn test_style_directives() -> StyleDirectiveRegistry {
+    StyleDirectiveRegistry::built_ins()
+}
+
+fn parse_project_config_for_test(
+    config: &mut Config,
+    config_path: &std::path::Path,
+    style_directives: &StyleDirectiveRegistry,
+) -> Result<(), CompilerMessages> {
+    let libraries = crate::libraries::LibrarySet::with_mandatory_core();
+    let mut string_table = StringTable::new();
+    let services = ProjectConfigParseServices {
+        style_directives,
+        libraries: &libraries,
+    };
+    parse_project_config_file(config, config_path, &services, &mut string_table)
+}
+
+fn parse_project_config_for_test_with_html_keys(
+    config: &mut Config,
+    config_path: &std::path::Path,
+    style_directives: &StyleDirectiveRegistry,
+) -> Result<(), CompilerMessages> {
+    let libraries =
+        crate::projects::html_project::html_project_builder::HtmlProjectBuilder::new().libraries();
+    let mut string_table = StringTable::new();
+    let services = ProjectConfigParseServices {
+        style_directives,
+        libraries: &libraries,
+    };
+    parse_project_config_file(config, config_path, &services, &mut string_table)
+}
+
+fn parse_project_config_for_test_with_libraries(
+    config: &mut Config,
+    config_path: &std::path::Path,
+    style_directives: &StyleDirectiveRegistry,
+    libraries: &crate::libraries::LibrarySet,
+) -> Result<(), CompilerMessages> {
+    let mut string_table = StringTable::new();
+    let services = ProjectConfigParseServices {
+        style_directives,
+        libraries,
+    };
+    parse_project_config_file(config, config_path, &services, &mut string_table)
+}
+
+fn discover_modules_for_test(
+    config: &Config,
+    resolver: &ProjectPathResolver,
+    style_directives: &StyleDirectiveRegistry,
+) -> Result<Vec<DiscoveredModule>, CompilerMessages> {
+    let mut string_table = StringTable::new();
+    let mut external_packages = ExternalPackageRegistry::new();
+    let external_import_providers =
+        crate::libraries::external_import_providers::registry::ExternalImportProviderRegistry::empty();
+    let mut external_import_cache =
+        crate::libraries::external_import_providers::cache::ExternalImportProviderCache::new();
+    let mut external_import_resolution_table =
+        crate::libraries::external_import_providers::resolution_table::ExternalImportResolutionTable::new();
+    let mut external_imports = super::reachable_file_discovery::ExternalImportDiscoveryState {
+        external_packages: &mut external_packages,
+        providers: &external_import_providers,
+        cache: &mut external_import_cache,
+        resolution_table: &mut external_import_resolution_table,
+    };
+    discover_all_modules_in_project(
+        config,
+        resolver,
+        style_directives,
+        &mut external_imports,
+        &mut string_table,
+    )
+}
+
+fn rendered_first_error(messages: &CompilerMessages) -> String {
+    let diagnostic = messages
+        .error_diagnostics()
+        .next()
+        .expect("expected one diagnostic");
+    terse::format_terse_diagnostic_with_context(
+        diagnostic,
+        DiagnosticRenderContext::new(&messages.string_table),
+    )
+}
+
+fn assert_has_config_error(messages: &CompilerMessages) {
+    assert!(
+        messages
+            .error_diagnostics()
+            .any(|diagnostic| diagnostic.kind.category() == DiagnosticCategory::Config),
+        "expected config-classified diagnostic"
+    );
+}
+
+fn first_invalid_config_reason(messages: &CompilerMessages) -> &InvalidConfigReason {
+    let diagnostic = messages
+        .error_diagnostics()
+        .next()
+        .expect("expected one diagnostic");
+
+    let DiagnosticPayload::InvalidConfig { reason, .. } = &diagnostic.payload else {
+        panic!(
+            "expected invalid config diagnostic, got {:?}",
+            diagnostic.payload
+        );
+    };
+
+    reason
+}
+
+fn discover_modules_for_test_messages(
+    config: &Config,
+    resolver: &ProjectPathResolver,
+    style_directives: &StyleDirectiveRegistry,
+) -> Result<Vec<DiscoveredModule>, CompilerMessages> {
+    discover_modules_for_test(config, resolver, style_directives)
+}
+
+fn first_error_diagnostic(messages: &CompilerMessages) -> &CompilerDiagnostic {
+    messages
+        .error_diagnostics()
+        .next()
+        .expect("expected at least one typed error diagnostic")
+}
+
+fn first_rendered_error_message(messages: &CompilerMessages) -> String {
+    let diagnostics = messages.error_diagnostics().cloned().collect::<Vec<_>>();
+    crate::compiler_frontend::compiler_messages::render::terse::format_terse_diagnostics(
+        &diagnostics,
+        &messages.string_table,
+    )
+    .into_iter()
+    .next()
+    .expect("expected at least one rendered diagnostic")
+}
+
+#[test]
+fn parses_config_constant_declarations() {
+    let root = temp_dir("config_constants");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(
+        &config_path,
+        "entry_root #= \"src\"\ndev_folder #= \"dev\"\noutput_folder #= \"release\"\nname #= \"docs\"\nversion #= \"1.2.3\"\nproject #= \"html\"\npage_url_style #= \"trailing_slash\"\nredirect_index_html #= true\nlibrary_folders #= { \"lib\", \"packages\" }\n",
+    )
+    .expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test_with_html_keys(&mut config, &config_path, &style_directives)
+        .expect("config should parse");
+
+    assert_eq!(config.entry_root, PathBuf::from("src"));
+    assert_eq!(config.dev_folder, PathBuf::from("dev"));
+    assert_eq!(config.release_folder, PathBuf::from("release"));
+    assert_eq!(config.project_name, "docs");
+    assert_eq!(config.version, "1.2.3");
+    assert_eq!(config.settings.get("project"), Some(&"html".to_string()));
+    assert_eq!(
+        config.settings.get("page_url_style"),
+        Some(&"trailing_slash".to_string())
+    );
+    assert_eq!(
+        config.settings.get("redirect_index_html"),
+        Some(&"true".to_string())
+    );
+    assert_eq!(
+        config.library_folders,
+        vec![PathBuf::from("lib"), PathBuf::from("packages")]
+    );
+    assert!(
+        config.has_explicit_library_folders,
+        "library_folders should be marked as explicitly configured"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn rejects_unknown_config_key() {
+    let root = temp_dir("config_unknown_key");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(&config_path, "custom_key = \"custom_value\"\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect_err("config should fail");
+
+    let diagnostic = first_error_diagnostic(&messages);
+    assert!(
+        matches!(
+            &diagnostic.payload,
+            DiagnosticPayload::InvalidConfig {
+                reason: InvalidConfigReason::UnknownKey { .. },
+                ..
+            }
+        ),
+        "unexpected diagnostic payload: {:?}",
+        diagnostic.payload
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn parses_config_plain_immutable_bindings() {
+    let root = temp_dir("config_plain_immutable");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(
+        &config_path,
+        "entry_root = \"src\"\ndev_folder = \"dev\"\noutput_folder = \"release\"\n",
+    )
+    .expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect("config should parse");
+
+    assert_eq!(config.entry_root, PathBuf::from("src"));
+    assert_eq!(config.dev_folder, PathBuf::from("dev"));
+    assert_eq!(config.release_folder, PathBuf::from("release"));
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn parses_config_explicit_hash_binding_mode() {
+    let root = temp_dir("config_hash_binding");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(
+        &config_path,
+        "entry_root #= \"src\"\nproject_name #String = \"docs\"\nversion #= \"1.0\"\n",
+    )
+    .expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect("config should parse");
+
+    assert_eq!(config.entry_root, PathBuf::from("src"));
+    assert_eq!(config.project_name, "docs");
+    assert_eq!(config.version, "1.0");
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn rejects_config_function_declarations() {
+    let root = temp_dir("config_function_rejected");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(&config_path, "helper ||:\n    entry_root = \"src\"\n;\n")
+        .expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect_err("config should fail");
+
+    let diagnostic = first_error_diagnostic(&messages);
+    assert!(
+        matches!(
+            &diagnostic.payload,
+            DiagnosticPayload::InvalidConfig {
+                reason: InvalidConfigReason::FunctionUnsupported,
+                ..
+            }
+        ),
+        "unexpected diagnostic payload: {:?}",
+        diagnostic.payload
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn accepts_config_type_declarations() {
+    let cases = [
+        (
+            "struct",
+            "Config = |\n    value String,\n|\nentry_root = \"src\"\n",
+        ),
+        ("choice", "Mode ::\n    Ready,\n;\nentry_root = \"src\"\n"),
+        (
+            "alias",
+            "EntryRoot as String\nentry_root EntryRoot = \"src\"\n",
+        ),
+    ];
+
+    for (case_name, source) in cases {
+        let root = temp_dir(&format!("config_{case_name}_accepted"));
+        fs::create_dir_all(&root).expect("should create root dir");
+        let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+        fs::write(&config_path, source).expect("should write config");
+
+        let mut config = Config::new(root.clone());
+        let style_directives = test_style_directives();
+        parse_project_config_for_test(&mut config, &config_path, &style_directives)
+            .expect("config should accept type declarations");
+
+        assert_eq!(
+            config.entry_root,
+            PathBuf::from("src"),
+            "config key should be parsed for {case_name}"
+        );
+
+        fs::remove_dir_all(&root).expect("should remove temp root");
+    }
+}
+
+#[test]
+fn rejects_config_mutable_bindings() {
+    let root = temp_dir("config_mutable_rejected");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(&config_path, "entry_root ~= \"src\"\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect_err("config should fail");
+
+    let diagnostic = first_error_diagnostic(&messages);
+    assert!(
+        matches!(
+            &diagnostic.payload,
+            DiagnosticPayload::InvalidConfig {
+                reason: InvalidConfigReason::MutableBindingUnsupported,
+                ..
+            }
+        ),
+        "unexpected diagnostic payload: {:?}",
+        diagnostic.payload
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn rejects_config_standalone_template() {
+    let root = temp_dir("config_standalone_template_rejected");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(&config_path, "[: hello]\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect_err("config should fail");
+
+    let diagnostic = first_error_diagnostic(&messages);
+    assert!(
+        matches!(
+            &diagnostic.payload,
+            DiagnosticPayload::InvalidConfig {
+                reason: InvalidConfigReason::StandaloneTemplateUnsupported,
+                ..
+            }
+        ),
+        "unexpected diagnostic payload: {:?}",
+        diagnostic.payload
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn rejects_config_const_page_fragment() {
+    let root = temp_dir("config_const_fragment_rejected");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(&config_path, "#[: hello]\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect_err("config should fail");
+
+    let diagnostic = first_error_diagnostic(&messages);
+    assert!(
+        matches!(
+            &diagnostic.payload,
+            DiagnosticPayload::InvalidConfig {
+                reason: InvalidConfigReason::StandaloneTemplateUnsupported,
+                ..
+            }
+        ),
+        "unexpected diagnostic payload: {:?}",
+        diagnostic.payload
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn rejects_project_local_config_import_even_when_module_facade_exists() {
+    let root = temp_dir("config_project_local_import_rejected");
+    fs::create_dir_all(&root).expect("should create root dir");
+    fs::create_dir_all(root.join("settings")).expect("should create settings module");
+    fs::write(root.join("settings/#mod.bst"), "value #= \"src\"\n")
+        .expect("should write settings facade");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(&config_path, "import @settings { value }\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect_err("config should fail");
+
+    let diagnostic = first_error_diagnostic(&messages);
+    assert!(
+        matches!(
+            &diagnostic.payload,
+            DiagnosticPayload::InvalidConfig {
+                reason: InvalidConfigReason::ConfigImportRootViolation,
+                ..
+            }
+        ),
+        "unexpected diagnostic payload: {:?}",
+        diagnostic.payload
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn rejects_relative_config_imports() {
+    let root = temp_dir("config_relative_import_rejected");
+    fs::create_dir_all(&root).expect("should create root dir");
+    fs::write(root.join("defaults.bst"), "value #= \"src\"\n").expect("should write defaults");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(&config_path, "import @./defaults { value }\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect_err("config should fail");
+
+    let diagnostic = first_error_diagnostic(&messages);
+    assert!(
+        matches!(
+            &diagnostic.payload,
+            DiagnosticPayload::InvalidConfig {
+                reason: InvalidConfigReason::ConfigImportRootViolation,
+                ..
+            }
+        ),
+        "unexpected diagnostic payload: {:?}",
+        diagnostic.payload
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn rejects_provider_backed_js_config_imports() {
+    let root = temp_dir("config_js_import_rejected");
+    fs::create_dir_all(&root).expect("should create root dir");
+    fs::write(root.join("drawing.js"), "export const root = 'src';\n").expect("should write js");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(&config_path, "import @./drawing.js { root }\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages =
+        parse_project_config_for_test_with_html_keys(&mut config, &config_path, &style_directives)
+            .expect_err("config should reject provider-backed JS imports");
+
+    let diagnostic = first_error_diagnostic(&messages);
+    assert!(
+        matches!(
+            &diagnostic.payload,
+            DiagnosticPayload::InvalidConfig {
+                reason: InvalidConfigReason::ConfigImportRootViolation,
+                ..
+            }
+        ),
+        "expected config import-root diagnostic for JS import, got: {:?}",
+        diagnostic.payload
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn accepts_config_imported_builder_source_library_constant() {
+    let root = temp_dir("config_builder_library_constant");
+    let library_root = root.join("builder/defaults");
+    fs::create_dir_all(&library_root).expect("should create builder library");
+    fs::write(
+        library_root.join("#mod.bst"),
+        "default_entry_root #= \"src\"\n",
+    )
+    .expect("should write builder facade");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+    fs::write(
+        &config_path,
+        "import @defaults { default_entry_root }\nentry_root = default_entry_root\n",
+    )
+    .expect("should write config");
+
+    let mut libraries = crate::libraries::LibrarySet::with_mandatory_core();
+    libraries
+        .source_libraries
+        .register_filesystem_root("defaults", library_root);
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test_with_libraries(
+        &mut config,
+        &config_path,
+        &style_directives,
+        &libraries,
+    )
+    .expect("config should resolve builder source-library constant");
+
+    assert_eq!(config.entry_root, PathBuf::from("src"));
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn accepts_config_imported_constant_that_depends_on_imported_constant() {
+    let root = temp_dir("config_builder_library_constant_chain");
+    let library_root = root.join("builder/defaults");
+    fs::create_dir_all(&library_root).expect("should create builder library");
+    fs::write(
+        library_root.join("#mod.bst"),
+        "root_folder #= \"src\"\ndefault_entry_root #= root_folder\n",
+    )
+    .expect("should write builder facade");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+    fs::write(
+        &config_path,
+        "import @defaults { default_entry_root }\nentry_root = default_entry_root\n",
+    )
+    .expect("should write config");
+
+    let mut libraries = crate::libraries::LibrarySet::with_mandatory_core();
+    libraries
+        .source_libraries
+        .register_filesystem_root("defaults", library_root);
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test_with_libraries(
+        &mut config,
+        &config_path,
+        &style_directives,
+        &libraries,
+    )
+    .expect("config should resolve imported constant dependency");
+
+    assert_eq!(config.entry_root, PathBuf::from("src"));
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn accepts_config_imported_constant_reexported_from_builder_source_library_file() {
+    let root = temp_dir("config_builder_library_reexport");
+    let library_root = root.join("builder/defaults");
+    fs::create_dir_all(&library_root).expect("should create builder library");
+    fs::write(
+        library_root.join("#mod.bst"),
+        "import @./values { root_folder as internal_root }\ndefault_entry_root #= internal_root\n",
+    )
+    .expect("should write builder facade");
+    fs::write(library_root.join("values.bst"), "root_folder #= \"src\"\n")
+        .expect("should write builder support file");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+    fs::write(
+        &config_path,
+        "import @defaults { default_entry_root }\nentry_root = default_entry_root\n",
+    )
+    .expect("should write config");
+
+    let mut libraries = crate::libraries::LibrarySet::with_mandatory_core();
+    libraries
+        .source_libraries
+        .register_filesystem_root("defaults", library_root);
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test_with_libraries(
+        &mut config,
+        &config_path,
+        &style_directives,
+        &libraries,
+    )
+    .expect("config should resolve re-exported builder source-library constant");
+
+    assert_eq!(config.entry_root, PathBuf::from("src"));
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn accepts_config_imported_type_declarations_as_support_surface() {
+    let root = temp_dir("config_builder_library_type_alias");
+    let library_root = root.join("builder/defaults");
+    fs::create_dir_all(&library_root).expect("should create builder library");
+    fs::write(
+        library_root.join("#mod.bst"),
+        "EntryRoot as String\nConfig = |\n    value String,\n|\nMode ::\n    Ready,\n;\ndefault_entry_root #= \"src\"\n",
+    )
+    .expect("should write builder facade");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+    fs::write(
+        &config_path,
+        "import @defaults { EntryRoot, Config, Mode, default_entry_root }\nentry_root EntryRoot = default_entry_root\n",
+    )
+    .expect("should write config");
+
+    let mut libraries = crate::libraries::LibrarySet::with_mandatory_core();
+    libraries
+        .source_libraries
+        .register_filesystem_root("defaults", library_root);
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test_with_libraries(
+        &mut config,
+        &config_path,
+        &style_directives,
+        &libraries,
+    )
+    .expect("config should allow imported type declarations as support surface");
+
+    assert_eq!(config.entry_root, PathBuf::from("src"));
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn imported_config_support_duplicate_keeps_normal_duplicate_diagnostic() {
+    let root = temp_dir("config_builder_library_duplicate");
+    let library_root = root.join("builder/defaults");
+    fs::create_dir_all(&library_root).expect("should create builder library");
+    fs::write(
+        library_root.join("#mod.bst"),
+        "default_entry_root #= \"src\"\ndefault_entry_root #= \"app\"\n",
+    )
+    .expect("should write duplicate builder facade");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+    fs::write(
+        &config_path,
+        "import @defaults { default_entry_root }\nentry_root = default_entry_root\n",
+    )
+    .expect("should write config");
+
+    let mut libraries = crate::libraries::LibrarySet::with_mandatory_core();
+    libraries
+        .source_libraries
+        .register_filesystem_root("defaults", library_root);
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_for_test_with_libraries(
+        &mut config,
+        &config_path,
+        &style_directives,
+        &libraries,
+    )
+    .expect_err("duplicate imported support declarations should fail");
+
+    let diagnostic = first_error_diagnostic(&messages);
+    assert!(
+        matches!(
+            &diagnostic.payload,
+            DiagnosticPayload::DuplicateDeclaration { .. }
+        ),
+        "expected normal duplicate declaration diagnostic, got: {:?}",
+        diagnostic.payload
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn rejects_config_call_to_imported_builder_source_library_function() {
+    let root = temp_dir("config_builder_library_function_call");
+    let library_root = root.join("builder/defaults");
+    fs::create_dir_all(&library_root).expect("should create builder library");
+    fs::write(
+        library_root.join("#mod.bst"),
+        "default_entry_root || -> String:\n    return \"src\"\n;\n",
+    )
+    .expect("should write builder facade");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+    fs::write(
+        &config_path,
+        "import @defaults { default_entry_root }\nentry_root = default_entry_root()\n",
+    )
+    .expect("should write config");
+
+    let mut libraries = crate::libraries::LibrarySet::with_mandatory_core();
+    libraries
+        .source_libraries
+        .register_filesystem_root("defaults", library_root);
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_for_test_with_libraries(
+        &mut config,
+        &config_path,
+        &style_directives,
+        &libraries,
+    )
+    .expect_err("config should reject imported function calls");
+
+    let diagnostic = first_error_diagnostic(&messages);
+    assert!(
+        matches!(
+            &diagnostic.payload,
+            DiagnosticPayload::InvalidConfig {
+                reason: InvalidConfigReason::NotCompileTimeConstant,
+                ..
+            }
+        ),
+        "expected not-compile-time-constant diagnostic for imported function call, got: {:?}",
+        diagnostic.payload
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn library_prefix_collision_with_entry_root_folder_rejected() {
+    let root = temp_dir("entry_root_lib_collision");
+    fs::create_dir_all(root.join("src/helper")).expect("should create src/helper");
+    fs::create_dir_all(root.join("lib/helper")).expect("should create lib/helper");
+    fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
+    fs::write(root.join("lib/helper/#mod.bst"), "foo #= 1\n").expect("should write facade");
+    fs::write(root.join("#config.bst"), "entry_root #= \"src\"\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+
+    let mut string_table = StringTable::new();
+    let result = super::project_roots::build_project_path_resolver(
+        &config,
+        &crate::libraries::SourceLibraryRegistry::default(),
+        &mut string_table,
+    );
+
+    assert!(
+        result.is_err(),
+        "entry-root folder colliding with source-library prefix should fail"
+    );
+    let messages = result.expect_err("checked above");
+    let error_text = rendered_first_error(&messages);
+    assert!(
+        error_text.contains("collides") || error_text.contains("Ambiguous"),
+        "error should mention collision or ambiguity: {error_text}"
+    );
+    assert_has_config_error(&messages);
+    assert!(matches!(
+        first_invalid_config_reason(&messages),
+        InvalidConfigReason::EntryRootLibraryPrefixCollision { .. }
+    ));
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn rejects_legacy_config_assignment_syntax() {
+    let root = temp_dir("config_invalid_assignment");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(&config_path, "#output_folder dist\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect_err("config should fail");
+
+    let error_message = first_rendered_error_message(&messages);
+    assert!(
+        error_message.contains("Use standard constant syntax: 'output_folder #= value'."),
+        "unexpected error message: {error_message}"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn rejects_deprecated_src_config_key() {
+    let root = temp_dir("config_src_rename");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(&config_path, "src #= \"src\"\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect_err("config should fail");
+
+    let diagnostic = first_error_diagnostic(&messages);
+    assert!(
+        matches!(
+            &diagnostic.payload,
+            DiagnosticPayload::InvalidConfig {
+                reason: InvalidConfigReason::DeprecatedSrcKey,
+                ..
+            }
+        ),
+        "unexpected diagnostic payload: {:?}",
+        diagnostic.payload
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn rejects_legacy_libraries_config_key() {
+    let root = temp_dir("config_libraries_rename");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(&config_path, "libraries #= { \"lib\" }\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect_err("config should fail");
+
+    let diagnostic = first_error_diagnostic(&messages);
+    assert!(
+        matches!(
+            &diagnostic.payload,
+            DiagnosticPayload::InvalidConfig {
+                reason: InvalidConfigReason::ReplacedLibrariesKey,
+                ..
+            }
+        ),
+        "unexpected diagnostic payload: {:?}",
+        diagnostic.payload
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn rejects_library_folder_absolute_path_entry() {
+    let root = temp_dir("invalid_library_folders_absolute");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(&config_path, "library_folders #= { \"/absolute/lib\" }\n")
+        .expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect_err("config should fail");
+
+    let diagnostic = first_error_diagnostic(&messages);
+    assert!(
+        matches!(
+            &diagnostic.payload,
+            DiagnosticPayload::InvalidConfig {
+                reason: InvalidConfigReason::InvalidLibraryFolder {
+                    reason: InvalidLibraryFolderReason::AbsolutePath,
+                    ..
+                },
+                ..
+            }
+        ),
+        "unexpected diagnostic payload: {:?}",
+        diagnostic.payload
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn rejects_library_folder_parent_directory_entry() {
+    let root = temp_dir("invalid_library_folders_dotdot");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(&config_path, "library_folders #= { \"../lib\" }\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect_err("config should fail");
+
+    let diagnostic = first_error_diagnostic(&messages);
+    assert!(
+        matches!(
+            &diagnostic.payload,
+            DiagnosticPayload::InvalidConfig {
+                reason: InvalidConfigReason::InvalidLibraryFolder {
+                    reason: InvalidLibraryFolderReason::ParentDirectorySegment,
+                    ..
+                },
+                ..
+            }
+        ),
+        "unexpected diagnostic payload: {:?}",
+        diagnostic.payload
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn rejects_duplicate_library_folder_entries() {
+    let root = temp_dir("duplicate_library_folders");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(&config_path, "library_folders #= { \"lib\", \"lib\" }\n")
+        .expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect_err("config should fail");
+
+    let diagnostic = first_error_diagnostic(&messages);
+    assert!(
+        matches!(
+            &diagnostic.payload,
+            DiagnosticPayload::InvalidConfig {
+                reason: InvalidConfigReason::DuplicateLibraryFolder { .. },
+                ..
+            }
+        ),
+        "unexpected diagnostic payload: {:?}",
+        diagnostic.payload
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn rejects_nested_library_folder_entry() {
+    let root = temp_dir("invalid_library_folders_nested");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(&config_path, "library_folders #= { \"lib/helpers\" }\n")
+        .expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect_err("config should fail");
+
+    let diagnostic = first_error_diagnostic(&messages);
+    assert!(
+        matches!(
+            &diagnostic.payload,
+            DiagnosticPayload::InvalidConfig {
+                reason: InvalidConfigReason::InvalidLibraryFolder {
+                    reason: InvalidLibraryFolderReason::NestedPath,
+                    ..
+                },
+                ..
+            }
+        ),
+        "unexpected diagnostic payload: {:?}",
+        diagnostic.payload
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn missing_default_library_folder_is_ignored() {
+    let root = temp_dir("missing_default_lib_ignored");
+    fs::create_dir_all(root.join("src")).expect("should create src");
+    fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
+    fs::write(root.join("#config.bst"), "entry_root #= \"src\"\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+
+    assert!(
+        !config.has_explicit_library_folders,
+        "default library folders should not be marked explicit"
+    );
+
+    let mut string_table = StringTable::new();
+    let resolver = super::project_roots::build_project_path_resolver(
+        &config,
+        &crate::libraries::SourceLibraryRegistry::default(),
+        &mut string_table,
+    )
+    .expect("resolver should build even when default /lib is missing");
+
+    assert!(
+        resolver.source_library_roots().is_empty(),
+        "no source libraries should be discovered when default /lib is missing"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn accepts_config_const_record_field_projection() {
+    let root = temp_dir("config_const_record_projection");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(
+        &config_path,
+        "Defaults = |\n    entry_root String = \"src\",\n|\n\nentry_root #= Defaults().entry_root\n",
+    )
+    .expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect("config with const-record field projection should succeed");
+
+    assert_eq!(
+        config.entry_root,
+        PathBuf::from("src"),
+        "entry_root should resolve through const-record field projection"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn malformed_import_syntax_keeps_precise_location_during_module_discovery() {
+    let root = temp_dir("malformed_import_location");
+    let src = root.join("src");
+    fs::create_dir_all(&src).expect("should create src dir");
+    fs::write(
+        root.join(settings::CONFIG_FILE_NAME),
+        "entry_root #= \"src\"\n",
+    )
+    .expect("should write config");
+    fs::write(src.join("#page.bst"), "import\n#[:ok]\n").expect("should write malformed entry");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+    let resolver = configured_resolver(&config);
+    let messages = match discover_modules_for_test_messages(&config, &resolver, &style_directives) {
+        Ok(_) => panic!("malformed import should fail discovery"),
+        Err(messages) => messages,
+    };
+
+    let diagnostics = messages.error_diagnostics().collect::<Vec<_>>();
+    assert_eq!(diagnostics.len(), 1);
+    let diagnostic = diagnostics[0];
+    assert_eq!(
+        diagnostic
+            .primary_location
+            .scope
+            .to_path_buf(&messages.string_table),
+        src.join("#page.bst")
+            .canonicalize()
+            .expect("entry file path should canonicalize")
+    );
+    assert_eq!(diagnostic.primary_location.start_pos.line_number, 1);
+    assert_eq!(diagnostic.primary_location.start_pos.char_column, 1);
+    assert!(
+        matches!(
+            &diagnostic.payload,
+            DiagnosticPayload::InvalidImportClause {
+                reason: InvalidImportClauseReason::ExpectedPath,
+                ..
+            }
+        ),
+        "unexpected diagnostic payload: {:?}",
+        diagnostic.payload
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn config_import_parse_failure_keeps_precise_location_in_compiler_messages() {
+    let root = temp_dir("config_import_location");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+    fs::write(&config_path, "import\n").expect("should write malformed config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect_err("config should fail");
+
+    let diagnostics = messages.error_diagnostics().collect::<Vec<_>>();
+    assert_eq!(diagnostics.len(), 1);
+    let diagnostic = diagnostics[0];
+    assert_eq!(
+        diagnostic
+            .primary_location
+            .scope
+            .to_path_buf(&messages.string_table),
+        config_path
+    );
+    assert_eq!(diagnostic.primary_location.start_pos.line_number, 1);
+    assert_eq!(diagnostic.primary_location.start_pos.char_column, 0);
+    assert!(
+        matches!(
+            &diagnostic.payload,
+            DiagnosticPayload::InvalidImportClause {
+                reason: InvalidImportClauseReason::ExpectedPath,
+                ..
+            }
+        ),
+        "unexpected diagnostic payload: {:?}",
+        diagnostic.payload
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn discover_modules_uses_reachable_files_only() {
+    let root = temp_dir("reachable_only");
+    let src = root.join("src");
+    fs::create_dir_all(src.join("libs")).expect("should create libs folder");
+    fs::create_dir_all(src.join("styles")).expect("should create styles folder");
+    fs::create_dir_all(src.join("docs")).expect("should create docs folder");
+
+    fs::write(
+        root.join(settings::CONFIG_FILE_NAME),
+        "entry_root #= \"src\"\n",
+    )
+    .expect("should write config");
+    fs::write(src.join("#page.bst"), "import @libs/html/basic\n#[:ok]\n")
+        .expect("should write entry");
+    fs::write(src.join("#404.bst"), "#[:404]\n").expect("should write 404");
+    fs::write(src.join("libs/html.bst"), "basic #= [:basic]\n").expect("should write lib");
+    fs::write(src.join("styles/docs.bst"), "navbar #= [:nav]\n").expect("should write style");
+    fs::write(src.join("docs/outdated.bst"), "this is invalid syntax")
+        .expect("should write outdated file");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config parse");
+    let resolver = configured_resolver(&config);
+
+    let modules = discover_modules_for_test(&config, &resolver, &style_directives)
+        .expect("module discovery should pass");
+
+    assert_eq!(modules.len(), 2);
+
+    let page_module = modules
+        .iter()
+        .find(|module| module.entry_point.file_name() == Some(OsStr::new("#page.bst")))
+        .expect("should include #page module");
+    let page_paths = page_module
+        .input_files
+        .iter()
+        .map(|file| {
+            file.source_path
+                .file_name()
+                .unwrap()
+                .to_string_lossy()
+                .to_string()
+        })
+        .collect::<HashSet<_>>();
+
+    assert!(page_paths.contains("#page.bst"));
+    assert!(page_paths.contains("html.bst"));
+    assert!(!page_paths.contains("outdated.bst"));
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn discover_modules_resolves_relative_child_imports() {
+    let root = temp_dir("relative_imports");
+    let src = root.join("src");
+    fs::create_dir_all(src.join("components")).expect("should create components folder");
+
+    fs::write(
+        root.join(settings::CONFIG_FILE_NAME),
+        "entry_root #= \"src\"\n",
+    )
+    .expect("should write config");
+    fs::write(
+        src.join("#page.bst"),
+        "import @./components/widget\nio(\"page\")\n",
+    )
+    .expect("should write page");
+    fs::write(
+        src.join("components/widget.bst"),
+        "import @./common\nio(\"widget\")\n",
+    )
+    .expect("should write widget file");
+    fs::write(src.join("components/common.bst"), "io(\"common\")\n").expect("should write common");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config parse");
+    let resolver = configured_resolver(&config);
+
+    let modules = discover_modules_for_test(&config, &resolver, &style_directives)
+        .expect("module discovery should pass");
+    assert_eq!(modules.len(), 1, "expected exactly one entry module");
+
+    let discovered = modules[0]
+        .input_files
+        .iter()
+        .map(|file| {
+            file.source_path
+                .file_name()
+                .and_then(OsStr::to_str)
+                .unwrap_or_default()
+                .to_string()
+        })
+        .collect::<HashSet<_>>();
+
+    assert!(discovered.contains("#page.bst"));
+    assert!(discovered.contains("widget.bst"));
+    assert!(discovered.contains("common.bst"));
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn entry_root_fallback_wins_for_unmatched_non_relative_imports() {
+    let root = temp_dir("entry_root_fallback");
+    let src = root.join("src");
+    let lib = root.join("lib");
+    fs::create_dir_all(src.join("helpers")).expect("should create source helpers");
+    fs::create_dir_all(lib.join("helpers")).expect("should create root-folder helpers");
+
+    fs::write(
+        root.join(settings::CONFIG_FILE_NAME),
+        "entry_root #= \"src\"\n",
+    )
+    .expect("should write config");
+    fs::write(
+        src.join("#page.bst"),
+        "import @helpers/theme\nio(\"page\")\n",
+    )
+    .expect("should write page");
+    fs::write(src.join("helpers/theme.bst"), "io(\"source\")\n").expect("should write source");
+    fs::write(lib.join("helpers/theme.bst"), "io(\"library\")\n")
+        .expect("should write root-folder helper");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config parse");
+    let resolver = configured_resolver(&config);
+
+    let modules = discover_modules_for_test(&config, &resolver, &style_directives)
+        .expect("module discovery should pass");
+    assert_eq!(modules.len(), 1, "expected exactly one entry module");
+
+    let source_theme = fs::canonicalize(src.join("helpers/theme.bst")).expect("canonical source");
+    let _library_theme =
+        fs::canonicalize(lib.join("helpers/theme.bst")).expect("canonical library");
+    let discovered_paths = modules[0]
+        .input_files
+        .iter()
+        .map(|file| file.source_path.clone())
+        .collect::<HashSet<_>>();
+
+    assert!(
+        discovered_paths.contains(&source_theme),
+        "unmatched non-relative imports should fall back to the entry root"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn discover_all_modules_finds_multiple_hash_entries_per_root() {
+    let root = temp_dir("multi_hash_entries");
+    let src = root.join("src");
+    fs::create_dir_all(src.join("nested")).expect("should create nested folder");
+
+    fs::write(
+        root.join(settings::CONFIG_FILE_NAME),
+        "entry_root #= \"src\"\n",
+    )
+    .expect("should write config");
+    fs::write(src.join("#page.bst"), "io(\"page\")\n").expect("should write #page");
+    fs::write(src.join("#layout.bst"), "io(\"layout\")\n").expect("should write #layout");
+    fs::write(src.join("nested/#lib.bst"), "io(\"lib\")\n").expect("should write nested #lib");
+    fs::write(src.join("nested/file.bst"), "io(\"regular\")\n").expect("should write regular");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config parse");
+    let resolver = configured_resolver(&config);
+
+    let modules = discover_modules_for_test(&config, &resolver, &style_directives)
+        .expect("module discovery should pass");
+    assert_eq!(
+        modules.len(),
+        3,
+        "expected one module per '#*.bst' root entry"
+    );
+
+    let entry_names = modules
+        .iter()
+        .map(|module| {
+            module
+                .entry_point
+                .file_name()
+                .and_then(OsStr::to_str)
+                .unwrap_or_default()
+                .to_string()
+        })
+        .collect::<HashSet<_>>();
+
+    assert!(entry_names.contains("#page.bst"));
+    assert!(entry_names.contains("#layout.bst"));
+    assert!(entry_names.contains("#lib.bst"));
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn detects_duplicate_config_keys() {
+    // Duplicate constants are caught by the header parser during parsing.
+    // This test verifies that config parsing properly reports the duplicate key error.
+    let root = temp_dir("config_duplicate_keys");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(
+        &config_path,
+        "entry_root #= \"src\"\ndev_folder #= \"dev\"\nentry_root #= \"other\"\n",
+    )
+    .expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect_err("config should fail");
+
+    let duplicate_diagnostic = messages.error_diagnostics().find(|diagnostic| {
+        matches!(
+            &diagnostic.payload,
+            DiagnosticPayload::InvalidConfig {
+                reason: InvalidConfigReason::DuplicateKey,
+                ..
+            }
+        )
+    });
+    assert!(
+        duplicate_diagnostic.is_some(),
+        "should have a duplicate config key diagnostic"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn accepts_folded_template_initializer_for_compile_time_config_binding() {
+    let root = temp_dir("config_folded_template");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(&config_path, "project #= [:html]\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect("folded template initializer should be accepted");
+
+    assert_eq!(
+        config.settings.get("project"),
+        Some(&"html".to_string()),
+        "folded template should become config string value"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn accepts_config_local_reference_to_earlier_private_const() {
+    let root = temp_dir("config_local_reference");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(
+        &config_path,
+        "output_folder = \"release\"\ndev_folder = output_folder\n",
+    )
+    .expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect("config with private const reference should succeed");
+
+    assert_eq!(
+        config.release_folder,
+        PathBuf::from("release"),
+        "output_folder should be set"
+    );
+    assert_eq!(
+        config.dev_folder,
+        PathBuf::from("release"),
+        "dev_folder should resolve through private const reference"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn rejects_config_template_with_unresolved_local_reference() {
+    let root = temp_dir("config_template_local_reference");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(
+        &config_path,
+        "entry_root = \"src\"\nproject = [: [entry_root]]\n",
+    )
+    .expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect_err("config should fail");
+
+    let diagnostic = first_error_diagnostic(&messages);
+    assert!(
+        matches!(
+            &diagnostic.payload,
+            DiagnosticPayload::InvalidConfig {
+                reason: InvalidConfigReason::NotCompileTimeConstant,
+                ..
+            }
+        ),
+        "unexpected diagnostic payload: {:?}",
+        diagnostic.payload
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn rejects_config_non_compile_time_constant_value() {
+    let root = temp_dir("config_non_foldable");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(&config_path, "project = Error(\"bad\").message\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect_err("config should fail");
+
+    let diagnostic = first_error_diagnostic(&messages);
+    assert!(
+        matches!(
+            &diagnostic.payload,
+            DiagnosticPayload::InvalidConfig {
+                reason: InvalidConfigReason::NotCompileTimeConstant,
+                ..
+            }
+        ),
+        "unexpected diagnostic payload: {:?}",
+        diagnostic.payload
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn accepts_config_private_key_referencing_explicit_const() {
+    let root = temp_dir("config_private_ref_explicit");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(
+        &config_path,
+        "output_folder #= \"release\"\ndev_folder = output_folder\n",
+    )
+    .expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect("private const referencing explicit constant should succeed");
+
+    assert_eq!(
+        config.release_folder,
+        PathBuf::from("release"),
+        "output_folder should be set"
+    );
+    assert_eq!(
+        config.dev_folder,
+        PathBuf::from("release"),
+        "dev_folder should resolve through private reference to explicit const"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn rejects_config_duplicate_private_keys() {
+    let root = temp_dir("config_duplicate_private");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(
+        &config_path,
+        "entry_root = \"src\"\nentry_root = \"other\"\n",
+    )
+    .expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect_err("config should fail");
+
+    let diagnostic = first_error_diagnostic(&messages);
+    // The frontend catches duplicate start-body declarations as assignments to immutable variables
+    // before config validation runs.
+    assert!(
+        matches!(
+            &diagnostic.payload,
+            DiagnosticPayload::InvalidAssignmentTarget {
+                reason: InvalidAssignmentTargetReason::ImmutableVariable,
+                ..
+            }
+        ),
+        "expected immutable-assignment diagnostic for duplicate private keys, got: {:?}",
+        diagnostic.payload
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn rejects_config_non_key_private_helper() {
+    let root = temp_dir("config_non_key_helper");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(&config_path, "helper = \"src\"\nentry_root = helper\n")
+        .expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect_err("config should fail");
+
+    let diagnostic = first_error_diagnostic(&messages);
+    assert!(
+        matches!(
+            &diagnostic.payload,
+            DiagnosticPayload::InvalidConfig {
+                reason: InvalidConfigReason::UnknownKey { .. },
+                ..
+            }
+        ),
+        "expected unknown key diagnostic for non-key helper, got: {:?}",
+        diagnostic.payload
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn rejects_config_non_key_explicit_helper() {
+    let root = temp_dir("config_non_key_explicit_helper");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(&config_path, "helper #= \"src\"\nentry_root = helper\n")
+        .expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect_err("config should fail");
+
+    let diagnostic = first_error_diagnostic(&messages);
+    assert!(
+        matches!(
+            &diagnostic.payload,
+            DiagnosticPayload::InvalidConfig {
+                reason: InvalidConfigReason::UnknownKey { .. },
+                ..
+            }
+        ),
+        "expected unknown key diagnostic for explicit non-key helper, got: {:?}",
+        diagnostic.payload
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn rejects_config_runtime_call_in_value() {
+    let root = temp_dir("config_runtime_call");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(&config_path, "project = io(\"hello\")\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect_err("config should fail");
+
+    let diagnostic = first_error_diagnostic(&messages);
+    assert!(
+        matches!(
+            &diagnostic.payload,
+            DiagnosticPayload::InvalidConfig {
+                reason: InvalidConfigReason::NotCompileTimeConstant,
+                ..
+            }
+        ),
+        "expected not-compile-time-constant diagnostic for runtime call, got: {:?}",
+        diagnostic.payload
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+// ── Config value shape enforcement tests ──────────────────────────────────────
+
+#[test]
+fn accepts_valid_bool_config_keys() {
+    let root = temp_dir("config_bool_shape_ok");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(
+        &config_path,
+        "redirect_index_html #= false\nhtml_inject_core_css #= true\n",
+    )
+    .expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test_with_html_keys(&mut config, &config_path, &style_directives)
+        .expect("valid boolean config values should parse");
+
+    assert_eq!(
+        config.settings.get("redirect_index_html"),
+        Some(&"false".to_string())
+    );
+    assert_eq!(
+        config.settings.get("html_inject_core_css"),
+        Some(&"true".to_string())
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn rejects_core_string_key_with_bool_value() {
+    let root = temp_dir("config_string_shape_bool_rejected");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(&config_path, "entry_root #= true\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect_err("config should fail");
+
+    let diagnostic = first_error_diagnostic(&messages);
+    assert!(
+        matches!(
+            &diagnostic.payload,
+            DiagnosticPayload::InvalidConfig {
+                reason: InvalidConfigReason::InvalidConfigValueShape { .. },
+                ..
+            }
+        ),
+        "unexpected diagnostic payload: {:?}",
+        diagnostic.payload
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn rejects_core_string_key_with_int_value() {
+    let root = temp_dir("config_string_shape_int_rejected");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(&config_path, "dev_folder #= 123\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect_err("config should fail");
+
+    let diagnostic = first_error_diagnostic(&messages);
+    assert!(
+        matches!(
+            &diagnostic.payload,
+            DiagnosticPayload::InvalidConfig {
+                reason: InvalidConfigReason::InvalidConfigValueShape { .. },
+                ..
+            }
+        ),
+        "unexpected diagnostic payload: {:?}",
+        diagnostic.payload
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn rejects_core_string_key_with_char_value() {
+    let root = temp_dir("config_string_shape_char_rejected");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(&config_path, "output_folder #= 'x'\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect_err("config should fail");
+
+    let diagnostic = first_error_diagnostic(&messages);
+    assert!(
+        matches!(
+            &diagnostic.payload,
+            DiagnosticPayload::InvalidConfig {
+                reason: InvalidConfigReason::InvalidConfigValueShape { .. },
+                ..
+            }
+        ),
+        "unexpected diagnostic payload: {:?}",
+        diagnostic.payload
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn rejects_backend_bool_key_with_string_value() {
+    let root = temp_dir("config_bool_shape_string_rejected");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(&config_path, "redirect_index_html #= \"false\"\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages =
+        parse_project_config_for_test_with_html_keys(&mut config, &config_path, &style_directives)
+            .expect_err("config should fail");
+
+    let diagnostic = first_error_diagnostic(&messages);
+    assert!(
+        matches!(
+            &diagnostic.payload,
+            DiagnosticPayload::InvalidConfig {
+                reason: InvalidConfigReason::InvalidConfigValueShape { .. },
+                ..
+            }
+        ),
+        "unexpected diagnostic payload: {:?}",
+        diagnostic.payload
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn rejects_backend_bool_key_with_int_value() {
+    let root = temp_dir("config_bool_shape_int_rejected");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(&config_path, "html_inject_core_css #= 1\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages =
+        parse_project_config_for_test_with_html_keys(&mut config, &config_path, &style_directives)
+            .expect_err("config should fail");
+
+    let diagnostic = first_error_diagnostic(&messages);
+    assert!(
+        matches!(
+            &diagnostic.payload,
+            DiagnosticPayload::InvalidConfig {
+                reason: InvalidConfigReason::InvalidConfigValueShape { .. },
+                ..
+            }
+        ),
+        "unexpected diagnostic payload: {:?}",
+        diagnostic.payload
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn rejects_backend_string_key_with_bool_value() {
+    let root = temp_dir("config_backend_string_shape_bool_rejected");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(&config_path, "html_lang #= false\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages =
+        parse_project_config_for_test_with_html_keys(&mut config, &config_path, &style_directives)
+            .expect_err("config should fail");
+
+    let diagnostic = first_error_diagnostic(&messages);
+    assert!(
+        matches!(
+            &diagnostic.payload,
+            DiagnosticPayload::InvalidConfig {
+                reason: InvalidConfigReason::InvalidConfigValueShape { .. },
+                ..
+            }
+        ),
+        "unexpected diagnostic payload: {:?}",
+        diagnostic.payload
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn rejects_library_folders_with_bool_value() {
+    let root = temp_dir("config_library_folders_bool_rejected");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(&config_path, "library_folders #= true\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect_err("config should fail");
+
+    let diagnostic = first_error_diagnostic(&messages);
+    assert!(
+        matches!(
+            &diagnostic.payload,
+            DiagnosticPayload::InvalidConfig {
+                reason: InvalidConfigReason::UnsupportedLibraryFoldersValue,
+                ..
+            }
+        ),
+        "unexpected diagnostic payload: {:?}",
+        diagnostic.payload
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn rejects_library_folders_with_mixed_collection() {
+    let root = temp_dir("config_library_folders_mixed_rejected");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(&config_path, "library_folders #= { \"lib\", 1 }\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    // A mixed collection fails during AST type checking before config shape validation.
+    // The important behavior is that it is rejected; the exact stage is an implementation detail.
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect_err("config should fail");
+
+    assert!(
+        messages.error_diagnostics().next().is_some(),
+        "expected at least one diagnostic"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn accepts_library_folders_single_string() {
+    let root = temp_dir("config_library_folders_single_string");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(&config_path, "library_folders #= \"lib\"\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect("single-string library_folders should parse");
+
+    assert_eq!(config.library_folders, vec![PathBuf::from("lib")]);
+    assert!(config.has_explicit_library_folders);
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn rejects_closed_string_set_config_key_with_unsupported_value() {
+    let root = temp_dir("config_closed_string_set_rejected");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(&config_path, "project #= \"html_wasm\"\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect_err("config should fail");
+
+    let diagnostic = first_error_diagnostic(&messages);
+    assert!(
+        matches!(
+            &diagnostic.payload,
+            DiagnosticPayload::InvalidConfig {
+                reason: InvalidConfigReason::InvalidConfigValueShape { .. },
+                ..
+            }
+        ),
+        "unexpected diagnostic payload: {:?}",
+        diagnostic.payload
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn deprecated_and_replaced_keys_still_diagnosed_before_shape_check() {
+    // WHY: validation ordering must stay stable — deprecated/replaced keys are rejected
+    // before shape extraction runs.
+    let root = temp_dir("config_deprecated_before_shape");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(&config_path, "src #= true\nlibraries #= 123\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect_err("config should fail");
+
+    let diagnostics: Vec<_> = messages.error_diagnostics().collect();
+    assert_eq!(diagnostics.len(), 2, "expected two errors");
+
+    assert!(
+        matches!(
+            &diagnostics[0].payload,
+            DiagnosticPayload::InvalidConfig {
+                reason: InvalidConfigReason::DeprecatedSrcKey,
+                ..
+            }
+        ),
+        "first error should be deprecated key: {:?}",
+        diagnostics[0].payload
+    );
+    assert!(
+        matches!(
+            &diagnostics[1].payload,
+            DiagnosticPayload::InvalidConfig {
+                reason: InvalidConfigReason::ReplacedLibrariesKey,
+                ..
+            }
+        ),
+        "second error should be replaced key: {:?}",
+        diagnostics[1].payload
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn accepts_config_local_reference_after_shape_enforcement() {
+    let root = temp_dir("config_local_ref_after_shape");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(
+        &config_path,
+        "entry_root = \"src\"\ndev_folder = entry_root\n",
+    )
+    .expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect("config with local const reference should succeed");
+
+    assert_eq!(
+        config.entry_root,
+        PathBuf::from("src"),
+        "entry_root should be set"
+    );
+    assert_eq!(
+        config.dev_folder,
+        PathBuf::from("src"),
+        "dev_folder should resolve through private const reference"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn detects_duplicate_config_keys_across_top_level_and_start_body() {
+    let root = temp_dir("config_duplicate_cross_surface");
+    fs::create_dir_all(&root).expect("should create root dir");
+    let config_path = root.join(settings::CONFIG_FILE_NAME);
+
+    fs::write(
+        &config_path,
+        "entry_root #= \"other\"\nentry_root = \"src\"\n",
+    )
+    .expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    let messages = parse_project_config_for_test(&mut config, &config_path, &style_directives)
+        .expect_err("config should fail");
+
+    let diagnostic = first_error_diagnostic(&messages);
+    assert!(
+        matches!(
+            &diagnostic.payload,
+            DiagnosticPayload::InvalidAssignmentTarget {
+                reason: InvalidAssignmentTargetReason::ImmutableVariable,
+                ..
+            }
+        ),
+        "expected assignment-to-immutable diagnostic for duplicate config key across surfaces, got: {:?}",
+        diagnostic.payload
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+// ── Source library root tests ─────────────────────────────────────────────────
+
+#[test]
+fn project_local_lib_directory_is_discovered_as_source_library_root() {
+    let root = temp_dir("project_local_lib");
+    fs::create_dir_all(&root).expect("should create root dir");
+    fs::create_dir_all(root.join("lib/helper")).expect("should create lib/helper");
+    fs::create_dir_all(root.join("src")).expect("should create src");
+    fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
+    fs::write(root.join("lib/helper/#mod.bst"), "foo #= 1\n").expect("should write facade");
+    fs::write(root.join("lib/helper/utils.bst"), "bar #= 2\n").expect("should write lib file");
+    fs::write(root.join("#config.bst"), "").expect("should write config");
+
+    let config = Config::new(root.clone());
+    let mut string_table = StringTable::new();
+    let resolver = super::project_roots::build_project_path_resolver(
+        &config,
+        &crate::libraries::SourceLibraryRegistry::default(),
+        &mut string_table,
+    )
+    .expect("resolver should build");
+
+    // Import path `@helper/utils` should resolve to the project-local lib root.
+    let mut path = crate::compiler_frontend::interned_path::InternedPath::new();
+    path.push_str("helper", &mut string_table);
+    path.push_str("utils", &mut string_table);
+
+    let importer = root.join("src/#page.bst");
+    let resolved = resolver
+        .resolve_import_to_file(&path, &importer, &mut string_table)
+        .expect("should resolve source library import");
+
+    assert_eq!(
+        resolved,
+        fs::canonicalize(root.join("lib/helper/utils.bst")).unwrap(),
+        "should resolve to project-local lib directory"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn library_prefix_collision_with_builder_library_rejected() {
+    let root = temp_dir("lib_collision");
+    fs::create_dir_all(&root).expect("should create root dir");
+    fs::create_dir_all(root.join("lib/html")).expect("should create lib/html");
+    fs::create_dir_all(root.join("src")).expect("should create src");
+    fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
+    fs::write(root.join("lib/html/#mod.bst"), "foo #= 1\n").expect("should write facade");
+    fs::write(root.join("#config.bst"), "").expect("should write config");
+
+    let config = Config::new(root.clone());
+    let mut string_table = StringTable::new();
+
+    let mut builder_libraries = crate::libraries::SourceLibraryRegistry::new();
+    builder_libraries.register_filesystem_root("html", root.join("builder/html"));
+
+    let result = super::project_roots::build_project_path_resolver(
+        &config,
+        &builder_libraries,
+        &mut string_table,
+    );
+
+    assert!(
+        result.is_err(),
+        "should fail when builder-provided and project-local libraries collide"
+    );
+    let messages = result.expect_err("checked above");
+    let error_text = rendered_first_error(&messages);
+    assert!(
+        error_text.contains("collide") || error_text.contains("html"),
+        "error should mention collision: {error_text}"
+    );
+    assert_has_config_error(&messages);
+    assert!(matches!(
+        first_invalid_config_reason(&messages),
+        InvalidConfigReason::SourceLibraryBuilderPrefixCollision { .. }
+    ));
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn configured_library_folder_is_discovered_as_source_library_root() {
+    let root = temp_dir("project_local_custom_library_folder");
+    fs::create_dir_all(&root).expect("should create root dir");
+    fs::create_dir_all(root.join("packages/helper")).expect("should create packages/helper");
+    fs::create_dir_all(root.join("src")).expect("should create src");
+    fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
+    fs::write(root.join("packages/helper/#mod.bst"), "foo #= 1\n").expect("should write facade");
+    fs::write(root.join("packages/helper/utils.bst"), "bar #= 2\n").expect("should write lib file");
+    fs::write(
+        root.join("#config.bst"),
+        "library_folders #= { \"packages\" }\n",
+    )
+    .expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+
+    let mut string_table = StringTable::new();
+    let resolver = super::project_roots::build_project_path_resolver(
+        &config,
+        &crate::libraries::SourceLibraryRegistry::default(),
+        &mut string_table,
+    )
+    .expect("resolver should build");
+
+    let mut path = crate::compiler_frontend::interned_path::InternedPath::new();
+    path.push_str("helper", &mut string_table);
+    path.push_str("utils", &mut string_table);
+
+    let importer = root.join("src/#page.bst");
+    let resolved = resolver
+        .resolve_import_to_file(&path, &importer, &mut string_table)
+        .expect("should resolve source library import");
+
+    assert_eq!(
+        resolved,
+        fs::canonicalize(root.join("packages/helper/utils.bst")).unwrap(),
+        "should resolve to configured library folder"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn missing_explicit_library_folder_is_error() {
+    let root = temp_dir("missing_explicit_library_folder");
+    fs::create_dir_all(root.join("src")).expect("should create src");
+    fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
+    fs::write(
+        root.join("#config.bst"),
+        "library_folders #= { \"packages\" }\n",
+    )
+    .expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+
+    let mut string_table = StringTable::new();
+    let result = super::project_roots::build_project_path_resolver(
+        &config,
+        &crate::libraries::SourceLibraryRegistry::default(),
+        &mut string_table,
+    );
+
+    assert!(
+        result.is_err(),
+        "missing explicitly configured library folder should fail"
+    );
+    let messages = result.expect_err("checked above");
+    let error_text = rendered_first_error(&messages);
+    assert!(
+        error_text.contains("Configured library folder 'packages' does not exist"),
+        "unexpected error message: {error_text}"
+    );
+    assert_has_config_error(&messages);
+    assert!(matches!(
+        first_invalid_config_reason(&messages),
+        InvalidConfigReason::ConfiguredLibraryFolderMissing { .. }
+    ));
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn explicit_library_folder_must_be_directory() {
+    let root = temp_dir("library_folder_not_directory");
+    fs::create_dir_all(root.join("src")).expect("should create src");
+    fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
+    fs::write(root.join("packages"), "").expect("should write file in place of folder");
+    fs::write(
+        root.join("#config.bst"),
+        "library_folders #= { \"packages\" }\n",
+    )
+    .expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+
+    let mut string_table = StringTable::new();
+    let result = super::project_roots::build_project_path_resolver(
+        &config,
+        &crate::libraries::SourceLibraryRegistry::default(),
+        &mut string_table,
+    );
+
+    let messages = result.expect_err("library scan root file should fail");
+    assert!(matches!(
+        first_invalid_config_reason(&messages),
+        InvalidConfigReason::ConfiguredLibraryFolderNotDirectory { .. }
+    ));
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn source_library_requires_mod_facade() {
+    let root = temp_dir("source_library_missing_facade");
+    fs::create_dir_all(root.join("src")).expect("should create src");
+    fs::create_dir_all(root.join("lib/helper")).expect("should create lib/helper");
+    fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
+    fs::write(root.join("#config.bst"), "entry_root #= \"src\"\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+
+    let mut string_table = StringTable::new();
+    let result = super::project_roots::build_project_path_resolver(
+        &config,
+        &crate::libraries::SourceLibraryRegistry::default(),
+        &mut string_table,
+    );
+
+    let messages = result.expect_err("source library without #mod.bst should fail");
+    assert!(matches!(
+        first_invalid_config_reason(&messages),
+        InvalidConfigReason::SourceLibraryMissingFacade { .. }
+    ));
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn library_prefix_collision_across_scan_roots_rejected() {
+    let root = temp_dir("duplicate_library_prefixes");
+    fs::create_dir_all(root.join("lib/helper")).expect("should create lib/helper");
+    fs::create_dir_all(root.join("vendor/helper")).expect("should create vendor/helper");
+    fs::create_dir_all(root.join("src")).expect("should create src");
+    fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
+    fs::write(root.join("lib/helper/#mod.bst"), "foo #= 1\n").expect("should write facade");
+    fs::write(root.join("vendor/helper/#mod.bst"), "bar #= 2\n").expect("should write facade");
+    fs::write(
+        root.join("#config.bst"),
+        "library_folders #= { \"lib\", \"vendor\" }\n",
+    )
+    .expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+
+    let mut string_table = StringTable::new();
+    let result = super::project_roots::build_project_path_resolver(
+        &config,
+        &crate::libraries::SourceLibraryRegistry::default(),
+        &mut string_table,
+    );
+
+    assert!(
+        result.is_err(),
+        "same source-library prefix discovered from two configured folders should fail"
+    );
+    let messages = result.expect_err("checked above");
+    let error_text = rendered_first_error(&messages);
+    assert!(
+        error_text.contains("Configured library folder collision"),
+        "unexpected error message: {error_text}"
+    );
+    assert_has_config_error(&messages);
+    assert!(matches!(
+        first_invalid_config_reason(&messages),
+        InvalidConfigReason::SourceLibraryPrefixCollision { .. }
+    ));
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn entry_root_requires_at_least_one_root_entry_file() {
+    let root = temp_dir("entry_root_without_entries");
+    fs::create_dir_all(root.join("src")).expect("should create src");
+    fs::write(root.join("#config.bst"), "entry_root #= \"src\"\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+
+    let resolver = configured_resolver(&config);
+    let Err(messages) = discover_modules_for_test(&config, &resolver, &style_directives) else {
+        panic!("entry root without #*.bst entries should fail");
+    };
+
+    assert!(matches!(
+        first_invalid_config_reason(&messages),
+        InvalidConfigReason::NoRootModuleEntries { .. }
+    ));
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+// ── Phase 4 project-structure collision tests ─────────────────────────────────
+
+#[test]
+fn rejects_bst_file_and_folder_collision_in_same_directory() {
+    let root = temp_dir("bst_folder_collision");
+    fs::create_dir_all(root.join("src/ui")).expect("should create src/ui");
+    fs::write(root.join("src/ui/#page.bst"), "x ~= 1\n").expect("should write entry");
+    fs::write(root.join("src/ui.bst"), "y ~= 2\n").expect("should write colliding file");
+    fs::write(root.join("#config.bst"), "entry_root #= \"src\"\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+
+    let mut string_table = StringTable::new();
+    let result = super::project_roots::build_project_path_resolver(
+        &config,
+        &crate::libraries::SourceLibraryRegistry::default(),
+        &mut string_table,
+    );
+
+    assert!(result.is_err(), "ui.bst + ui/ collision should be rejected");
+    let messages = result.expect_err("checked above");
+    assert_has_config_error(&messages);
+    assert!(matches!(
+        first_invalid_config_reason(&messages),
+        InvalidConfigReason::BstFileFolderCollision { .. }
+    ));
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn allows_same_stem_in_different_directories() {
+    let root = temp_dir("same_stem_different_dirs");
+    fs::create_dir_all(root.join("src/components")).expect("should create src/components");
+    fs::create_dir_all(root.join("src/pages")).expect("should create src/pages");
+    fs::write(root.join("src/components/card.bst"), "x ~= 1\n").expect("should write card");
+    fs::write(root.join("src/pages/card.bst"), "y ~= 2\n").expect("should write another card");
+    fs::write(root.join("src/#page.bst"), "z ~= 3\n").expect("should write entry");
+    fs::write(root.join("#config.bst"), "entry_root #= \"src\"\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+
+    let mut string_table = StringTable::new();
+    super::project_roots::build_project_path_resolver(
+        &config,
+        &crate::libraries::SourceLibraryRegistry::default(),
+        &mut string_table,
+    )
+    .expect("same stem in different directories should be allowed");
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn rejects_collision_with_empty_folder() {
+    let root = temp_dir("collision_empty_folder");
+    fs::create_dir_all(root.join("src/helper")).expect("should create src/helper");
+    fs::write(root.join("src/helper.bst"), "x ~= 1\n").expect("should write colliding file");
+    fs::write(root.join("src/#page.bst"), "y ~= 2\n").expect("should write entry");
+    fs::write(root.join("#config.bst"), "entry_root #= \"src\"\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+
+    let mut string_table = StringTable::new();
+    let result = super::project_roots::build_project_path_resolver(
+        &config,
+        &crate::libraries::SourceLibraryRegistry::default(),
+        &mut string_table,
+    );
+
+    assert!(
+        result.is_err(),
+        "collision with an empty folder should be rejected"
+    );
+    let messages = result.expect_err("checked above");
+    assert_has_config_error(&messages);
+    assert!(matches!(
+        first_invalid_config_reason(&messages),
+        InvalidConfigReason::BstFileFolderCollision { .. }
+    ));
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn js_file_with_same_stem_as_folder_does_not_trigger_collision() {
+    let root = temp_dir("js_same_stem_no_collision");
+    fs::create_dir_all(root.join("src/helper")).expect("should create src/helper");
+    fs::write(root.join("src/helper.js"), "// js\n").expect("should write js file");
+    fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
+    fs::write(root.join("#config.bst"), "entry_root #= \"src\"\n").expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+
+    let mut string_table = StringTable::new();
+    super::project_roots::build_project_path_resolver(
+        &config,
+        &crate::libraries::SourceLibraryRegistry::default(),
+        &mut string_table,
+    )
+    .expect(".js file with same stem as folder should not trigger collision");
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn rejects_bst_file_and_folder_collision_in_source_library() {
+    let root = temp_dir("source_library_bst_folder_collision");
+    fs::create_dir_all(root.join("src")).expect("should create src");
+    fs::create_dir_all(root.join("lib/helper/ui")).expect("should create lib/helper/ui");
+    fs::write(root.join("src/#page.bst"), "x ~= 1\n").expect("should write entry");
+    fs::write(root.join("lib/helper/#mod.bst"), "value #= 1\n").expect("should write facade");
+    fs::write(root.join("lib/helper/ui.bst"), "value #= 2\n")
+        .expect("should write colliding library file");
+    fs::write(
+        root.join("#config.bst"),
+        "entry_root #= \"src\"\nlibrary_folders #= { \"lib\" }\n",
+    )
+    .expect("should write config");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+
+    let mut string_table = StringTable::new();
+    let result = super::project_roots::build_project_path_resolver(
+        &config,
+        &crate::libraries::SourceLibraryRegistry::default(),
+        &mut string_table,
+    );
+
+    assert!(
+        result.is_err(),
+        "source library ui.bst + ui/ collision should be rejected"
+    );
+    let messages = result.expect_err("checked above");
+    assert_has_config_error(&messages);
+    assert!(matches!(
+        first_invalid_config_reason(&messages),
+        InvalidConfigReason::BstFileFolderCollision { .. }
+    ));
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn unsupported_js_import_without_provider_reports_bst_import_0021() {
+    let root = temp_dir("unsupported_js_import");
+    let src = root.join("src");
+    fs::create_dir_all(&src).expect("should create src dir");
+
+    fs::write(
+        root.join(settings::CONFIG_FILE_NAME),
+        "entry_root #= \"src\"\n",
+    )
+    .expect("should write config");
+
+    // Entry file imports a .js file explicitly.
+    fs::write(src.join("#page.bst"), "import @./drawing.js\n#[:ok]\n").expect("should write entry");
+
+    // The .js file actually exists on disk.
+    fs::write(src.join("drawing.js"), "export function draw() {}\n").expect("should write js file");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+    let resolver = configured_resolver(&config);
+
+    let messages = match discover_modules_for_test(&config, &resolver, &style_directives) {
+        Ok(_) => panic!("unsupported .js import should fail discovery"),
+        Err(messages) => messages,
+    };
+
+    let diagnostic = first_error_diagnostic(&messages);
+    assert_eq!(
+        diagnostic.kind.code(),
+        "BST-IMPORT-0021",
+        "expected unsupported external extension diagnostic, got {:?}",
+        diagnostic
+    );
+    if let DiagnosticPayload::UnsupportedExternalExtension { path, extension } = &diagnostic.payload
+    {
+        let path_text = path.to_portable_string(&messages.string_table);
+        assert_eq!(path_text, "./drawing.js", "unexpected path in diagnostic");
+        assert_eq!(
+            messages.string_table.resolve(*extension),
+            "js",
+            "unexpected extension in diagnostic"
+        );
+    } else {
+        panic!(
+            "expected UnsupportedExternalExtension payload, got {:?}",
+            diagnostic.payload
+        );
+    }
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn explicit_bst_extension_still_reports_bst_import_0020() {
+    let root = temp_dir("explicit_bst_extension");
+    let src = root.join("src");
+    fs::create_dir_all(&src).expect("should create src dir");
+
+    fs::write(
+        root.join(settings::CONFIG_FILE_NAME),
+        "entry_root #= \"src\"\n",
+    )
+    .expect("should write config");
+
+    fs::write(src.join("#page.bst"), "import @./helper.bst\n#[:ok]\n").expect("should write entry");
+
+    fs::write(
+        src.join("helper.bst"),
+        "greet || -> String:\n    return \"hi\"\n;\n",
+    )
+    .expect("should write helper");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+    let resolver = configured_resolver(&config);
+
+    let messages = match discover_modules_for_test(&config, &resolver, &style_directives) {
+        Ok(_) => panic!("explicit .bst extension should fail discovery"),
+        Err(messages) => messages,
+    };
+
+    let diagnostic = first_error_diagnostic(&messages);
+    assert_eq!(
+        diagnostic.kind.code(),
+        "BST-IMPORT-0020",
+        "expected explicit .bst extension diagnostic, got {:?}",
+        diagnostic
+    );
+    assert!(
+        matches!(
+            &diagnostic.payload,
+            DiagnosticPayload::ExplicitBstExtension { .. }
+        ),
+        "unexpected diagnostic payload: {:?}",
+        diagnostic.payload
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn extensionless_bst_import_and_virtual_package_import_still_work() {
+    let root = temp_dir("extensionless_and_virtual");
+    let src = root.join("src");
+    fs::create_dir_all(&src).expect("should create src dir");
+
+    fs::write(
+        root.join(settings::CONFIG_FILE_NAME),
+        "entry_root #= \"src\"\n",
+    )
+    .expect("should write config");
+
+    // Normal extensionless imports still resolve as Beanstalk source files, while virtual package
+    // imports continue to stay out of Stage 0 filesystem traversal.
+    fs::write(
+        src.join("#page.bst"),
+        "import @./helper\nimport @core/io { IO }\n#[:ok]\n",
+    )
+    .expect("should write entry");
+
+    fs::write(
+        src.join("helper.bst"),
+        "greet || -> String:\n    return \"hi\"\n;\n",
+    )
+    .expect("should write helper");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+    let resolver = configured_resolver(&config);
+
+    let modules = discover_modules_for_test(&config, &resolver, &style_directives)
+        .expect("module discovery should pass");
+    assert_eq!(modules.len(), 1);
+
+    let discovered = modules[0]
+        .input_files
+        .iter()
+        .map(|file| {
+            file.source_path
+                .file_name()
+                .and_then(OsStr::to_str)
+                .unwrap_or_default()
+                .to_string()
+        })
+        .collect::<HashSet<_>>();
+
+    assert!(discovered.contains("#page.bst"));
+    assert!(discovered.contains("helper.bst"));
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}

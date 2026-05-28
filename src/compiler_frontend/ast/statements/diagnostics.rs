@@ -1,0 +1,117 @@
+//! Statement-position diagnostic helpers.
+//!
+//! WHAT: builds typed `CompilerDiagnostic` values for unexpected tokens and scope
+//!       closes encountered during function-body statement dispatch.
+//! WHY: keeps `body_dispatch.rs` focused on parsing logic rather than diagnostic
+//!      construction, and ensures all statement-position errors emit structured
+//!      `CompilerDiagnostic` records instead of legacy `CompilerError`.
+
+use crate::compiler_frontend::compiler_messages::{
+    CompilerDiagnostic, InvalidStatementPositionReason,
+};
+use crate::compiler_frontend::reserved_trait_syntax::{
+    reserved_trait_keyword, reserved_trait_keyword_error,
+};
+use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::tokenizer::tokens::{SourceLocation, TokenKind};
+
+/// Produce a diagnostic for an unexpected token in statement position.
+///
+/// WHAT: maps each unexpected token kind to the most appropriate typed diagnostic.
+/// WHY: centralizes the decision about which constructor to use so the dispatch
+///      loop stays readable.
+pub(crate) fn unexpected_statement_token(
+    token_kind: &TokenKind,
+    location: SourceLocation,
+    _string_table: &mut StringTable,
+) -> CompilerDiagnostic {
+    match token_kind {
+        TokenKind::Comma => CompilerDiagnostic::invalid_statement_position(
+            InvalidStatementPositionReason::UnexpectedComma,
+            location,
+        ),
+
+        TokenKind::CloseParenthesis => CompilerDiagnostic::invalid_statement_position(
+            InvalidStatementPositionReason::UnexpectedCloseParenthesis,
+            location,
+        ),
+
+        TokenKind::CloseCurly => CompilerDiagnostic::invalid_statement_position(
+            InvalidStatementPositionReason::UnexpectedCloseCurly,
+            location,
+        ),
+
+        // The `|` token is only valid in type-parameter position, not as a statement.
+        TokenKind::TypeParameterBracket => CompilerDiagnostic::invalid_statement_position(
+            InvalidStatementPositionReason::UnexpectedPipe,
+            location,
+        ),
+
+        TokenKind::Arrow => CompilerDiagnostic::invalid_statement_position(
+            InvalidStatementPositionReason::UnexpectedArrow,
+            location,
+        ),
+
+        TokenKind::Wildcard => CompilerDiagnostic::invalid_statement_position(
+            InvalidStatementPositionReason::UnexpectedWildcard,
+            location,
+        ),
+
+        TokenKind::Case => CompilerDiagnostic::invalid_statement_position(
+            InvalidStatementPositionReason::UnexpectedCase,
+            location,
+        ),
+
+        // `type` in statement position looks like an attempt to declare a generic parameter.
+        TokenKind::Type => CompilerDiagnostic::invalid_statement_position(
+            InvalidStatementPositionReason::ReservedGenericDeclaration,
+            location,
+        ),
+
+        TokenKind::Of => CompilerDiagnostic::invalid_statement_position(
+            InvalidStatementPositionReason::UnexpectedOf,
+            location,
+        ),
+
+        TokenKind::Must | TokenKind::TraitThis => {
+            if let Some(keyword) = reserved_trait_keyword(token_kind) {
+                reserved_trait_keyword_error(keyword, location)
+            } else {
+                // Invariant: Must and TraitThis are always reserved trait keywords.
+                CompilerDiagnostic::unexpected_token(token_kind.to_owned(), location)
+            }
+        }
+
+        _ => CompilerDiagnostic::unexpected_token(token_kind.to_owned(), location),
+    }
+}
+
+/// Context for an unexpected scope-close (`;`) diagnostic.
+pub(crate) enum UnexpectedScopeCloseContext {
+    /// The scope close appeared inside an expression, where `;` is not valid.
+    Expression,
+
+    /// The scope close appeared inside a template literal, where `;` is not valid.
+    Template,
+}
+
+/// Produce a diagnostic for an unexpected scope-close (`;`) in expression or
+/// template context.
+///
+/// WHAT: expressions and templates are not terminated with `;`, so encountering
+///       `End` inside them needs a targeted explanation.
+pub(crate) fn unexpected_scope_close(
+    context: UnexpectedScopeCloseContext,
+    location: SourceLocation,
+) -> CompilerDiagnostic {
+    let reason = match context {
+        UnexpectedScopeCloseContext::Expression => {
+            InvalidStatementPositionReason::UnexpectedScopeCloseInExpression
+        }
+        UnexpectedScopeCloseContext::Template => {
+            InvalidStatementPositionReason::UnexpectedScopeCloseInTemplate
+        }
+    };
+
+    CompilerDiagnostic::invalid_statement_position(reason, location)
+}

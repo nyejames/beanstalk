@@ -1,0 +1,1 @@
+#[:<main>Script placement</main>]

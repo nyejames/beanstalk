@@ -1,0 +1,4 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["explicit_empty_collection_can_be_pushed first=1 len=2"]

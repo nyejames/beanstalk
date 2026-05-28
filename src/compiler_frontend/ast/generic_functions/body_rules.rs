@@ -1,0 +1,57 @@
+//! Template-aware generic function body validation.
+//!
+//! WHAT: parses generic function bodies against their unresolved generic parameter `TypeId`s
+//! without emitting executable AST/HIR nodes.
+//! WHY: local generic function instantiation must only be enabled after the original template
+//! has proven it does not depend on behavior that unconstrained generic parameters cannot
+//! guarantee before trait bounds exist.
+
+use crate::compiler_frontend::ast::function_body_to_ast;
+use crate::compiler_frontend::ast::generic_functions::GenericFunctionTemplate;
+use crate::compiler_frontend::ast::module_ast::scope_context::ScopeContext;
+use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
+use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
+
+/// Input bundle for generic body validation.
+///
+/// WHAT: keeps the mutable parser services together while the caller owns construction of the
+/// stage-appropriate `ScopeContext`.
+/// WHY: AST emission already knows file visibility, expected returns, and local parameters;
+/// this validator should only own the generic-template body rule itself.
+pub(crate) struct GenericFunctionBodyValidationInput<'a, 'environment> {
+    pub(crate) template: &'a GenericFunctionTemplate,
+    pub(crate) context: ScopeContext,
+    pub(crate) type_interner: &'a mut AstTypeInterner<'environment>,
+    pub(crate) warnings: &'a mut Vec<CompilerDiagnostic>,
+    pub(crate) string_table: &'a mut StringTable,
+}
+
+/// Parses the generic function template body for validation only.
+///
+/// The parsed nodes are intentionally discarded. Concrete instance emission reparses the same
+/// immutable template after call-site inference succeeds.
+#[allow(clippy::result_large_err)]
+pub(crate) fn validate_generic_function_body(
+    input: GenericFunctionBodyValidationInput<'_, '_>,
+) -> Result<(), CompilerDiagnostic> {
+    let GenericFunctionBodyValidationInput {
+        template,
+        mut context,
+        type_interner,
+        warnings,
+        string_table,
+    } = input;
+
+    context.generic_template_validation = true;
+    let mut token_stream = template.body_tokens.to_owned();
+    let _validated_nodes = function_body_to_ast(
+        &mut token_stream,
+        context,
+        type_interner,
+        warnings,
+        string_table,
+    )?;
+
+    Ok(())
+}

@@ -1,0 +1,14 @@
+entry = "."
+
+[backends.html]
+mode = "success"
+warnings = "forbid"
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = ["/assets/logo.png"]
+
+[[backends.html.artifact_assertions]]
+path = "assets/logo.png"
+kind = "binary"

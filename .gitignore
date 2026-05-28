@@ -1,0 +1,34 @@
+debug/
+target/
+docs/dev/
+test_output/
+benchmarks/local-data/
+benchmarks/old-benchmarks/
+benchmarks/results/
+benchmarks/module-graph/dev/
+benchmarks/module-graph/release/
+
+**/*.rs.bk
+*.pdb
+
+# Ignore all hidden files
+.*
+
+# But allow project metadata and GitHub Actions
+!.gitignore
+!.gitattributes
+!.github/
+!.github/workflows/**
+
+# These are created by compiler test files sometimes, and can be ignored
+/dev
+/test.html
+/index.html
+test.bst
+
+# Integration golden snapshots should remain versionable even when they
+# contain index.html artifacts.
+!tests/cases/**/golden/**
+
+# AI stuff
+AGENTS.md

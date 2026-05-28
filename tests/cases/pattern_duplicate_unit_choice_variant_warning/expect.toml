@@ -1,0 +1,5 @@
+[backends.html]
+mode = "success"
+warnings = "exact"
+warning_count = 1
+rendered_output_contains = ["pattern_duplicate_unit_choice_variant_warning result=busy"]

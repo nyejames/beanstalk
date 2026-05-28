@@ -1,0 +1,911 @@
+//! Type resolution for constants and nominal declarations.
+//!
+//! WHAT: parses constant values and resolves struct field types in header dependency order.
+//! WHY: headers are already dependency-sorted; constants are parsed linearly. Struct defaults
+//! can reference constants, so constants are resolved before struct fields.
+
+use super::builder::AstModuleEnvironmentBuilder;
+use crate::compiler_frontend::ast::ast_nodes::Declaration;
+use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler_frontend::ast::module_ast::environment::constant_resolution::{
+    ConstantHeaderParseContext, parse_constant_header_declaration,
+};
+use crate::compiler_frontend::ast::module_ast::scope_context::{ContextKind, ScopeContext};
+use crate::compiler_frontend::ast::statements::functions::signature_member_to_declaration;
+use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
+use crate::compiler_frontend::ast::type_resolution::resolve_diagnostic_type_to_type_id_checked;
+use crate::compiler_frontend::ast::type_resolution::{
+    GenericParameterScopeBuildInput, StructFieldResolutionError, build_generic_parameter_scope,
+    collect_type_parameter_ids_from_choice_variants, collect_type_parameter_ids_from_declarations,
+    resolve_choice_variant_payload_types, resolve_struct_constructor_shell_types,
+    resolve_struct_field_types, validate_generic_parameters_used,
+    validate_no_recursive_generic_type, validate_no_recursive_runtime_structs,
+};
+use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
+use crate::compiler_frontend::compiler_messages::{
+    CompileTimeEvaluationErrorReason, CompilerDiagnostic, DiagnosticPayload,
+};
+use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::datatypes::definitions::{
+    ChoiceTypeDefinition, ChoiceVariantDefinition, ChoiceVariantPayloadDefinition, FieldDefinition,
+    StructTypeDefinition,
+};
+use crate::compiler_frontend::datatypes::ids::NominalTypeId;
+use crate::compiler_frontend::declaration_syntax::choice::{
+    ChoiceVariant, ChoiceVariantPayload, ChoiceVariantPayloadSyntax, ChoiceVariantSyntax,
+};
+use crate::compiler_frontend::declaration_syntax::signature_members::SignatureMemberSyntax;
+
+use crate::compiler_frontend::headers::import_environment::FileVisibility;
+use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
+use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::type_coercion::compatibility::TypeCompatibilityCache;
+use crate::compiler_frontend::value_mode::ValueMode;
+use crate::timer_log;
+use rustc_hash::FxHashSet;
+use std::rc::Rc;
+use std::time::Instant;
+
+#[derive(Clone, Copy)]
+enum MemberShellSemanticContext {
+    StructField,
+    ChoicePayloadField,
+}
+
+fn member_shell_diagnostic_for_context(
+    diagnostic: CompilerDiagnostic,
+    member_context: MemberShellSemanticContext,
+) -> CompilerDiagnostic {
+    match member_context {
+        MemberShellSemanticContext::StructField
+            if is_non_constant_struct_default_diagnostic(&diagnostic) =>
+        {
+            CompilerDiagnostic::invalid_struct_default_value(diagnostic.primary_location.clone())
+        }
+
+        MemberShellSemanticContext::StructField
+        | MemberShellSemanticContext::ChoicePayloadField => diagnostic,
+    }
+}
+
+fn is_non_constant_struct_default_diagnostic(diagnostic: &CompilerDiagnostic) -> bool {
+    matches!(
+        diagnostic.payload,
+        DiagnosticPayload::CompileTimeEvaluationError {
+            reason: CompileTimeEvaluationErrorReason::NonConstantReferenceInConstant,
+            ..
+        }
+    )
+}
+
+impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
+    /// Resolves constants and nominal declaration types in header dependency order.
+    /// WHY: headers are already dependency-sorted; constants are parsed in that order.
+    /// Struct defaults require constant-context parsing and import gates.
+    pub(in crate::compiler_frontend::ast) fn resolve_types(
+        &mut self,
+        sorted_headers: &[Header],
+        string_table: &mut StringTable,
+    ) -> Result<(), CompilerMessages> {
+        // --------------------------------------------
+        //  Register struct and choice shells early
+        // --------------------------------------------
+        // WHAT: before constants are resolved, register every struct and choice in
+        // TypeEnvironment with nominal identity and generic metadata only, then keep
+        // constructor member shells in AST-owned side tables.
+        // WHY: constant expressions may contain struct constructors (e.g.
+        // `wrapper #= Wrapper(theme)`) or choice constructors (e.g.
+        // `status #= Status::Ready`). Constructor parsing needs member metadata before
+        // final canonical TypeEnvironment members are available, but TypeEnvironment
+        // should not carry unresolved placeholder field or variant types.
+        let struct_shell_registration_start = Instant::now();
+        for header in sorted_headers {
+            match &header.kind {
+                HeaderKind::Struct {
+                    fields,
+                    generic_parameters,
+                } => {
+                    let unresolved_fields = self.unresolved_member_syntax_to_declarations(
+                        header,
+                        fields,
+                        MemberShellSemanticContext::StructField,
+                        string_table,
+                    )?;
+
+                    let generic_param_list_id = if generic_parameters.is_empty() {
+                        None
+                    } else {
+                        let registered = self
+                            .type_environment
+                            .register_generic_parameter_list(generic_parameters);
+                        let list_id = registered.list_id;
+                        self.generic_parameter_lists_by_path
+                            .insert(header.tokens.src_path.clone(), registered);
+                        Some(list_id)
+                    };
+
+                    // Register the struct with an empty field list during early identity
+                    // registration. Canonical field types are resolved later in this function.
+                    // Constructor parsing during constant resolution uses AST-owned shell
+                    // metadata from `resolved_struct_fields_by_path` instead of placeholder
+                    // entries in `TypeEnvironment`.
+                    let struct_def = StructTypeDefinition {
+                        id: NominalTypeId(0),
+                        path: header.tokens.src_path.clone(),
+                        fields: Box::new([]),
+                        generic_parameters: generic_param_list_id,
+                        const_record: false,
+                    };
+                    let (_, struct_type_id) =
+                        self.type_environment.register_nominal_struct(struct_def);
+                    self.nominal_type_ids_by_path
+                        .insert(header.tokens.src_path.clone(), struct_type_id);
+
+                    // Make parsed field shells available for pre-constant semantic resolution.
+                    self.resolved_struct_fields_by_path
+                        .insert(header.tokens.src_path.to_owned(), unresolved_fields);
+
+                    self.replace_declaration(Declaration {
+                        id: header.tokens.src_path.to_owned(),
+                        value: Expression::new(
+                            ExpressionKind::NoValue,
+                            header.name_location.to_owned(),
+                            struct_type_id,
+                            DataType::runtime_struct(
+                                header.tokens.src_path.to_owned(),
+                                struct_type_id,
+                            ),
+                            ValueMode::ImmutableReference,
+                        ),
+                    })
+                    .map_err(|error| self.error_messages(error, string_table))?;
+                }
+                HeaderKind::Choice {
+                    variants,
+                    generic_parameters,
+                } => {
+                    let generic_param_list_id = if generic_parameters.is_empty() {
+                        None
+                    } else {
+                        let registered = self
+                            .type_environment
+                            .register_generic_parameter_list(generic_parameters);
+                        let list_id = registered.list_id;
+                        self.generic_parameter_lists_by_path
+                            .insert(header.tokens.src_path.clone(), registered);
+                        Some(list_id)
+                    };
+
+                    // Store unresolved choice variant shells in AST environment state so
+                    // constant constructor parsing can access constructor metadata before
+                    // canonical payload types are resolved. Register the choice with empty
+                    // variants in `TypeEnvironment`; final variants are written later in this
+                    // function.
+                    let unresolved_variants =
+                        self.unresolved_choice_variants_for_header(header, variants, string_table)?;
+                    self.choice_variant_shells_by_path
+                        .insert(header.tokens.src_path.to_owned(), unresolved_variants);
+
+                    let choice_def = ChoiceTypeDefinition {
+                        id: NominalTypeId(0),
+                        path: header.tokens.src_path.clone(),
+                        variants: Box::new([]),
+                        generic_parameters: generic_param_list_id,
+                    };
+                    let (_, choice_type_id) =
+                        self.type_environment.register_nominal_choice(choice_def);
+                    self.nominal_type_ids_by_path
+                        .insert(header.tokens.src_path.clone(), choice_type_id);
+
+                    self.replace_declaration(Declaration {
+                        id: header.tokens.src_path.to_owned(),
+                        value: Expression::new(
+                            ExpressionKind::NoValue,
+                            header.name_location.to_owned(),
+                            choice_type_id,
+                            DataType::Choices {
+                                nominal_path: header.tokens.src_path.to_owned(),
+                                type_id: choice_type_id,
+                                generic_instance_key: None,
+                            },
+                            ValueMode::ImmutableReference,
+                        ),
+                    })
+                    .map_err(|error| self.error_messages(error, string_table))?;
+                }
+                _ => {}
+            }
+        }
+        timer_log!(
+            struct_shell_registration_start,
+            "AST/environment/nominal types/struct+choice shells registered in: "
+        );
+        let _ = struct_shell_registration_start;
+
+        // -------------------------------------------------
+        //  Resolve constructor shell types for constants
+        // -------------------------------------------------
+        let constructor_shell_resolution_start = Instant::now();
+        self.resolve_constructor_shells_for_constants(sorted_headers, string_table)?;
+        timer_log!(
+            constructor_shell_resolution_start,
+            "AST/environment/nominal types/constructor shells resolved in: "
+        );
+        let _ = constructor_shell_resolution_start;
+
+        // -------------------
+        //  Resolve constants
+        // -------------------
+        let constant_resolution_start = Instant::now();
+        self.resolve_constant_headers(sorted_headers, string_table)?;
+        timer_log!(
+            constant_resolution_start,
+            "AST/environment/constants resolved in: "
+        );
+        let _ = constant_resolution_start;
+
+        // ----------------------------
+        //  Resolve struct field types
+        // ----------------------------
+        let struct_fields_resolution_start = Instant::now();
+        for header in sorted_headers {
+            let HeaderKind::Struct {
+                generic_parameters,
+                fields: _,
+            } = &header.kind
+            else {
+                continue;
+            };
+
+            let visibility = self
+                .import_environment
+                .visibility_for(&header.source_file)
+                .map_err(|error| self.error_messages(error, string_table))?
+                .clone();
+
+            let source_file_scope = header.canonical_source_file(string_table);
+            let generic_parameter_scope =
+                build_generic_parameter_scope(GenericParameterScopeBuildInput {
+                    generic_parameters,
+                    canonical_by_local: self
+                        .generic_parameter_lists_by_path
+                        .get(&header.tokens.src_path)
+                        .map(|registered| &registered.canonical_by_local),
+                    visible_source_bindings: &visibility.visible_source_names,
+                    visible_type_aliases: &visibility.visible_type_alias_names,
+                    visible_external_symbols: &visibility.visible_external_symbols,
+                    declaration_table: self.declaration_table.as_ref(),
+                    generic_declarations_by_path: &self.module_symbols.generic_declarations_by_path,
+                    string_table,
+                })
+                .map_err(|diagnostic| self.diagnostic_messages(diagnostic, string_table))?;
+            let unresolved_fields = self
+                .resolved_struct_fields_by_path
+                .get(&header.tokens.src_path)
+                .cloned()
+                .ok_or_else(|| {
+                    self.error_messages(
+                        CompilerError::compiler_error(
+                            "Struct fields were not registered before type resolution.",
+                        ),
+                        string_table,
+                    )
+                })?;
+            let mut type_resolution_context =
+                self.type_resolution_context_for(&visibility, generic_parameter_scope.as_ref());
+
+            let resolved_fields = resolve_struct_field_types(
+                &header.tokens.src_path,
+                &unresolved_fields,
+                &mut type_resolution_context,
+                string_table,
+            )
+            .map_err(|error| match error {
+                StructFieldResolutionError::Diagnostic(diagnostic) => {
+                    self.diagnostic_messages(diagnostic, string_table)
+                }
+                StructFieldResolutionError::Infrastructure(error) => {
+                    self.error_messages(error, string_table)
+                }
+            })?;
+
+            // Write final canonical struct field definitions into the identity-only
+            // TypeEnvironment registration.
+            let field_definitions: Vec<FieldDefinition> = resolved_fields
+                .iter()
+                .map(|field| {
+                    Ok(FieldDefinition {
+                        name: field.id.clone(),
+                        type_id: resolve_diagnostic_type_to_type_id_checked(
+                            &field.value.diagnostic_type,
+                            &mut self.type_environment,
+                            &field.value.location,
+                        )?,
+                        location: field.value.location.clone(),
+                    })
+                })
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|diagnostic| self.diagnostic_messages(diagnostic, string_table))?;
+
+            if let Some(&type_id) = self.nominal_type_ids_by_path.get(&header.tokens.src_path) {
+                self.type_environment
+                    .update_struct_fields(type_id, field_definitions.into_boxed_slice());
+            }
+
+            // Update the AST-owned shell table with resolved fields so later stages
+            // (including constant parsing) see canonical member metadata.
+            self.resolved_struct_fields_by_path.insert(
+                header.tokens.src_path.to_owned(),
+                resolved_fields.to_owned(),
+            );
+
+            // Every generic parameter declared on the struct must appear in at least one
+            // field type; unused parameters indicate a declaration error.
+            let mut used_parameters = FxHashSet::default();
+            collect_type_parameter_ids_from_declarations(&resolved_fields, &mut used_parameters);
+            validate_generic_parameters_used(
+                generic_parameters,
+                &used_parameters,
+                &header.tokens.src_path,
+                &header.name_location,
+            )
+            .map_err(|diagnostic| self.diagnostic_messages(diagnostic, string_table))?;
+
+            // Generic structs must not contain recursive field types that reference
+            // the struct itself through generic parameters.
+            if !generic_parameters.is_empty() {
+                for field in &resolved_fields {
+                    validate_no_recursive_generic_type(
+                        &header.tokens.src_path,
+                        &field.value.diagnostic_type,
+                        &field.value.location,
+                        string_table,
+                    )
+                    .map_err(|diagnostic| self.diagnostic_messages(diagnostic, string_table))?;
+                }
+            }
+
+            // Record the source file that owns this struct for later diagnostic rendering.
+            self.struct_source_by_path.insert(
+                header.tokens.src_path.to_owned(),
+                source_file_scope.to_owned(),
+            );
+        }
+        timer_log!(
+            struct_fields_resolution_start,
+            "AST/environment/nominal types/struct fields resolved in: "
+        );
+        let _ = struct_fields_resolution_start;
+
+        // --------------------------------------
+        //  Resolve choice variant payload types
+        // --------------------------------------
+        let choice_resolution_start = Instant::now();
+        for header in sorted_headers {
+            let HeaderKind::Choice {
+                generic_parameters,
+                variants: _,
+            } = &header.kind
+            else {
+                continue;
+            };
+
+            let visibility = self
+                .import_environment
+                .visibility_for(&header.source_file)
+                .map_err(|error| self.error_messages(error, string_table))?
+                .clone();
+
+            let generic_parameter_scope =
+                build_generic_parameter_scope(GenericParameterScopeBuildInput {
+                    generic_parameters,
+                    canonical_by_local: self
+                        .generic_parameter_lists_by_path
+                        .get(&header.tokens.src_path)
+                        .map(|registered| &registered.canonical_by_local),
+                    visible_source_bindings: &visibility.visible_source_names,
+                    visible_type_aliases: &visibility.visible_type_alias_names,
+                    visible_external_symbols: &visibility.visible_external_symbols,
+                    declaration_table: self.declaration_table.as_ref(),
+                    generic_declarations_by_path: &self.module_symbols.generic_declarations_by_path,
+                    string_table,
+                })
+                .map_err(|diagnostic| self.diagnostic_messages(diagnostic, string_table))?;
+            let unresolved_variants = self
+                .choice_variant_shells_by_path
+                .get(&header.tokens.src_path)
+                .cloned()
+                .ok_or_else(|| {
+                    self.error_messages(
+                        CompilerError::compiler_error(
+                            "Choice variant shells were not registered before type resolution.",
+                        ),
+                        string_table,
+                    )
+                })?;
+            let mut type_resolution_context =
+                self.type_resolution_context_for(&visibility, generic_parameter_scope.as_ref());
+
+            let resolved_variants = resolve_choice_variant_payload_types(
+                &unresolved_variants,
+                &mut type_resolution_context,
+                string_table,
+            )
+            .map_err(|diagnostic| self.diagnostic_messages(diagnostic, string_table))?;
+
+            // Every generic parameter declared on the choice must appear in at least one
+            // variant payload type; unused parameters indicate a declaration error.
+            let mut used_parameters = FxHashSet::default();
+            collect_type_parameter_ids_from_choice_variants(
+                &resolved_variants,
+                &mut used_parameters,
+            );
+            validate_generic_parameters_used(
+                generic_parameters,
+                &used_parameters,
+                &header.tokens.src_path,
+                &header.name_location,
+            )
+            .map_err(|diagnostic| self.diagnostic_messages(diagnostic, string_table))?;
+
+            // Generic choices must not contain recursive payload types that reference
+            // the choice itself through generic parameters.
+            if !generic_parameters.is_empty() {
+                for variant in &resolved_variants {
+                    if let ChoiceVariantPayload::Record { fields } = &variant.payload {
+                        for field in fields {
+                            validate_no_recursive_generic_type(
+                                &header.tokens.src_path,
+                                &field.value.diagnostic_type,
+                                &field.value.location,
+                                string_table,
+                            )
+                            .map_err(|diagnostic| {
+                                self.diagnostic_messages(diagnostic, string_table)
+                            })?;
+                        }
+                    }
+                }
+            }
+
+            // Write final canonical choice variant definitions into the identity-only
+            // TypeEnvironment registration.
+            let mut variant_definitions = Vec::with_capacity(resolved_variants.len());
+            for (tag, variant) in resolved_variants.iter().enumerate() {
+                let payload = match &variant.payload {
+                    ChoiceVariantPayload::Unit => ChoiceVariantPayloadDefinition::Unit,
+                    ChoiceVariantPayload::Record { fields } => {
+                        let field_defs: Vec<FieldDefinition> = fields
+                            .iter()
+                            .map(|field| {
+                                Ok(FieldDefinition {
+                                    name: field.id.clone(),
+                                    type_id: resolve_diagnostic_type_to_type_id_checked(
+                                        &field.value.diagnostic_type,
+                                        &mut self.type_environment,
+                                        &field.value.location,
+                                    )?,
+                                    location: field.value.location.clone(),
+                                })
+                            })
+                            .collect::<Result<Vec<_>, _>>()
+                            .map_err(|diagnostic| {
+                                self.diagnostic_messages(diagnostic, string_table)
+                            })?;
+                        ChoiceVariantPayloadDefinition::Record {
+                            fields: field_defs.into_boxed_slice(),
+                        }
+                    }
+                };
+
+                variant_definitions.push(ChoiceVariantDefinition {
+                    name: variant.id,
+                    tag,
+                    payload,
+                    location: variant.location.clone(),
+                });
+            }
+
+            let Some(&choice_type_id) = self.nominal_type_ids_by_path.get(&header.tokens.src_path)
+            else {
+                let error = CompilerError::compiler_error(format!(
+                    "Choice '{}' was not registered before resolved variant update",
+                    header.tokens.src_path.to_string(string_table)
+                ));
+                return Err(self.error_messages(error, string_table));
+            };
+
+            self.type_environment
+                .update_choice_variants(choice_type_id, variant_definitions.into_boxed_slice());
+
+            // Update the AST-owned shell table with resolved variants for later
+            // constant constructor parsing and body emission.
+            self.choice_variant_shells_by_path.insert(
+                header.tokens.src_path.to_owned(),
+                resolved_variants.to_owned(),
+            );
+
+            // Replace the placeholder declaration with the resolved choice type.
+            self.replace_declaration(Declaration {
+                id: header.tokens.src_path.to_owned(),
+                value: Expression::new(
+                    ExpressionKind::NoValue,
+                    header.name_location.to_owned(),
+                    choice_type_id,
+                    DataType::Choices {
+                        nominal_path: header.tokens.src_path.to_owned(),
+                        type_id: choice_type_id,
+                        generic_instance_key: None,
+                    },
+                    ValueMode::ImmutableReference,
+                ),
+            })
+            .map_err(|error| self.error_messages(error, string_table))?;
+        }
+        timer_log!(
+            choice_resolution_start,
+            "AST/environment/nominal types/choice variants resolved in: "
+        );
+        let _ = choice_resolution_start;
+
+        // ----------------------------
+        //  Validate no recursive runtime structs
+        // ----------------------------
+        // Ensure no runtime struct contains itself as a field type, directly or indirectly.
+        // This check runs after all field types are resolved so the full graph is visible.
+        let recursive_validation_start = Instant::now();
+        validate_no_recursive_runtime_structs(&self.resolved_struct_fields_by_path, string_table)
+            .map_err(|diagnostic| self.diagnostic_messages(diagnostic, string_table))?;
+        timer_log!(
+            recursive_validation_start,
+            "AST/environment/nominal types/recursive struct validation in: "
+        );
+        let _ = recursive_validation_start;
+
+        Ok(())
+    }
+
+    /// Resolve struct field and choice variant types needed for constant constructor parsing.
+    ///
+    /// WHAT: runs a lightweight type-resolution pass over struct fields and choice variant
+    /// payloads before constants are evaluated.
+    /// WHY: constant initializers may contain struct or choice constructors; those constructors
+    /// need resolved member types to validate arity and field compatibility at parse time.
+    fn resolve_constructor_shells_for_constants(
+        &mut self,
+        sorted_headers: &[Header],
+        string_table: &mut StringTable,
+    ) -> Result<(), CompilerMessages> {
+        for header in sorted_headers {
+            match &header.kind {
+                HeaderKind::Struct {
+                    generic_parameters, ..
+                } => {
+                    let visibility = self
+                        .import_environment
+                        .visibility_for(&header.source_file)
+                        .map_err(|error| self.error_messages(error, string_table))?
+                        .clone();
+
+                    let generic_parameter_scope =
+                        build_generic_parameter_scope(GenericParameterScopeBuildInput {
+                            generic_parameters,
+                            canonical_by_local: self
+                                .generic_parameter_lists_by_path
+                                .get(&header.tokens.src_path)
+                                .map(|registered| &registered.canonical_by_local),
+                            visible_source_bindings: &visibility.visible_source_names,
+                            visible_type_aliases: &visibility.visible_type_alias_names,
+                            visible_external_symbols: &visibility.visible_external_symbols,
+                            declaration_table: self.declaration_table.as_ref(),
+                            generic_declarations_by_path: &self
+                                .module_symbols
+                                .generic_declarations_by_path,
+                            string_table,
+                        })
+                        .map_err(|diagnostic| self.diagnostic_messages(diagnostic, string_table))?;
+
+                    let unresolved_fields = self
+                        .resolved_struct_fields_by_path
+                        .get(&header.tokens.src_path)
+                        .cloned()
+                        .ok_or_else(|| {
+                            self.error_messages(
+                                CompilerError::compiler_error(
+                                    "Struct constructor shells were not registered before constant resolution.",
+                                ),
+                                string_table,
+                            )
+                        })?;
+
+                    let resolved_fields = {
+                        let mut type_resolution_context = self.type_resolution_context_for(
+                            &visibility,
+                            generic_parameter_scope.as_ref(),
+                        );
+                        resolve_struct_constructor_shell_types(
+                            &header.tokens.src_path,
+                            &unresolved_fields,
+                            &mut type_resolution_context,
+                            string_table,
+                        )
+                    }
+                    .map_err(|error| match error {
+                        StructFieldResolutionError::Diagnostic(diagnostic) => {
+                            self.diagnostic_messages(diagnostic, string_table)
+                        }
+                        StructFieldResolutionError::Infrastructure(error) => {
+                            self.error_messages(error, string_table)
+                        }
+                    })?;
+
+                    // Store resolved constructor shell types for constant parsing.
+                    self.resolved_struct_fields_by_path
+                        .insert(header.tokens.src_path.to_owned(), resolved_fields);
+                }
+
+                HeaderKind::Choice {
+                    generic_parameters, ..
+                } => {
+                    let visibility = self
+                        .import_environment
+                        .visibility_for(&header.source_file)
+                        .map_err(|error| self.error_messages(error, string_table))?
+                        .clone();
+
+                    let generic_parameter_scope =
+                        build_generic_parameter_scope(GenericParameterScopeBuildInput {
+                            generic_parameters,
+                            canonical_by_local: self
+                                .generic_parameter_lists_by_path
+                                .get(&header.tokens.src_path)
+                                .map(|registered| &registered.canonical_by_local),
+                            visible_source_bindings: &visibility.visible_source_names,
+                            visible_type_aliases: &visibility.visible_type_alias_names,
+                            visible_external_symbols: &visibility.visible_external_symbols,
+                            declaration_table: self.declaration_table.as_ref(),
+                            generic_declarations_by_path: &self
+                                .module_symbols
+                                .generic_declarations_by_path,
+                            string_table,
+                        })
+                        .map_err(|diagnostic| self.diagnostic_messages(diagnostic, string_table))?;
+
+                    let unresolved_variants = self
+                        .choice_variant_shells_by_path
+                        .get(&header.tokens.src_path)
+                        .cloned()
+                        .ok_or_else(|| {
+                            self.error_messages(
+                                CompilerError::compiler_error(
+                                    "Choice variant shells were not registered before constant resolution.",
+                                ),
+                                string_table,
+                            )
+                        })?;
+
+                    let resolved_variants = {
+                        let mut type_resolution_context = self.type_resolution_context_for(
+                            &visibility,
+                            generic_parameter_scope.as_ref(),
+                        );
+                        resolve_choice_variant_payload_types(
+                            &unresolved_variants,
+                            &mut type_resolution_context,
+                            string_table,
+                        )
+                    }
+                    .map_err(|diagnostic| self.diagnostic_messages(diagnostic, string_table))?;
+
+                    // Store resolved constructor shell types for constant parsing.
+                    self.choice_variant_shells_by_path
+                        .insert(header.tokens.src_path.to_owned(), resolved_variants);
+                }
+
+                _ => {}
+            }
+        }
+
+        Ok(())
+    }
+
+    fn resolve_constant_headers(
+        &mut self,
+        sorted_headers: &[Header],
+        string_table: &mut StringTable,
+    ) -> Result<(), CompilerMessages> {
+        let constants_resolution_start = Instant::now();
+
+        let resolved_type_aliases = Rc::new(self.resolved_type_aliases_by_path.clone());
+        let generic_declarations =
+            Rc::new(self.module_symbols.generic_declarations_by_path.clone());
+
+        for header in sorted_headers {
+            let HeaderKind::Constant { .. } = &header.kind else {
+                continue;
+            };
+
+            let visibility = self
+                .import_environment
+                .visibility_for(&header.source_file)
+                .map_err(|error| self.error_messages(error, string_table))?;
+
+            let declaration = parse_constant_header_declaration(
+                header,
+                ConstantHeaderParseContext {
+                    top_level_declarations: Rc::clone(&self.declaration_table),
+                    visible_declaration_ids: &visibility.visible_declaration_paths,
+                    visible_external_symbols: &visibility.visible_external_symbols,
+                    visible_source_bindings: &visibility.visible_source_names,
+                    visible_type_aliases: &visibility.visible_type_alias_names,
+                    resolved_type_aliases: Rc::clone(&resolved_type_aliases),
+                    generic_declarations_by_path: Rc::clone(&generic_declarations),
+                    resolved_struct_fields_by_path: Rc::new(
+                        self.resolved_struct_fields_by_path.clone(),
+                    ),
+                    choice_variant_shells_by_path: Rc::new(
+                        self.choice_variant_shells_by_path.clone(),
+                    ),
+                    type_environment: &mut self.type_environment,
+                    nominal_type_ids_by_path: Rc::new(self.nominal_type_ids_by_path.clone()),
+                    external_package_registry: self.context.external_package_registry,
+                    style_directives: self.context.style_directives,
+                    project_path_resolver: self.context.project_path_resolver.clone(),
+                    path_format_config: self.context.path_format_config.clone(),
+                    build_profile: self.context.build_profile,
+                    warnings: &mut self.warnings,
+                    rendered_path_usages: self.rendered_path_usages.clone(),
+                    string_table,
+                },
+            )
+            .map_err(|diagnostic| self.diagnostic_messages(*diagnostic, string_table))?;
+
+            self.replace_declaration(declaration.clone())
+                .map_err(|error| self.error_messages(error, string_table))?;
+            self.module_constants.push(declaration);
+        }
+
+        timer_log!(
+            constants_resolution_start,
+            "AST/environment/constants resolved in: "
+        );
+        let _ = constants_resolution_start;
+
+        Ok(())
+    }
+
+    /// Convert parsed signature member syntax into unresolved `Declaration` shells.
+    ///
+    /// WHAT: produces `Declaration` values for struct fields or choice payload fields
+    /// from the shared signature-member parser.
+    /// WHY: struct and choice declarations use the same surface syntax for members,
+    /// but struct defaults require different diagnostics when they reference non-constant values.
+    fn unresolved_member_syntax_to_declarations(
+        &mut self,
+        header: &Header,
+        fields: &[SignatureMemberSyntax],
+        member_context: MemberShellSemanticContext,
+        string_table: &mut StringTable,
+    ) -> Result<Vec<Declaration>, CompilerMessages> {
+        let visibility = self
+            .import_environment
+            .visibility_for(&header.source_file)
+            .map_err(|error| self.error_messages(error, string_table))?
+            .clone();
+
+        let field_context = self.constant_header_scope_context(header, &visibility, string_table);
+
+        // Parse each field inside a temporary scope so that type-resolution errors
+        // can be remapped to the appropriate diagnostic for struct defaults vs choice payloads.
+        let conversion_result = (|| -> Result<Vec<Declaration>, CompilerDiagnostic> {
+            let mut compatibility_cache = TypeCompatibilityCache::new();
+            let mut type_interner =
+                AstTypeInterner::new(&mut self.type_environment, &mut compatibility_cache);
+
+            let mut declarations = Vec::with_capacity(fields.len());
+            for field in fields {
+                let declaration = signature_member_to_declaration(
+                    field,
+                    &field_context,
+                    &mut type_interner,
+                    string_table,
+                )
+                .map_err(|diagnostic| {
+                    member_shell_diagnostic_for_context(diagnostic, member_context)
+                })?;
+                declarations.push(declaration);
+            }
+
+            Ok(declarations)
+        })();
+
+        let declarations = conversion_result
+            .map_err(|diagnostic| self.diagnostic_messages(diagnostic, string_table))?;
+
+        self.warnings.extend(field_context.take_emitted_warnings());
+
+        Ok(declarations)
+    }
+
+    /// Convert parsed choice variant syntax into `ChoiceVariant` shells with unresolved payloads.
+    ///
+    /// WHAT: builds `ChoiceVariant` values from header-parsed syntax, keeping payload
+    /// field types as unresolved `Declaration` shells.
+    /// WHY: choice variants must record their shape early so constructor parsing can
+    /// check tag names and arity, while payload type resolution happens later.
+    fn unresolved_choice_variants_for_header(
+        &mut self,
+        header: &Header,
+        variants: &[ChoiceVariantSyntax],
+        string_table: &mut StringTable,
+    ) -> Result<Vec<ChoiceVariant>, CompilerMessages> {
+        let mut resolved_variants = Vec::with_capacity(variants.len());
+
+        for variant in variants {
+            let payload = match &variant.payload {
+                ChoiceVariantPayloadSyntax::Unit => ChoiceVariantPayload::Unit,
+
+                ChoiceVariantPayloadSyntax::Record { fields } => {
+                    let declarations = self.unresolved_member_syntax_to_declarations(
+                        header,
+                        fields,
+                        MemberShellSemanticContext::ChoicePayloadField,
+                        string_table,
+                    )?;
+                    ChoiceVariantPayload::Record {
+                        fields: declarations,
+                    }
+                }
+            };
+
+            resolved_variants.push(ChoiceVariant {
+                id: variant.id,
+                payload,
+                location: variant.location.clone(),
+            });
+        }
+
+        Ok(resolved_variants)
+    }
+
+    /// Build a `ScopeContext` suitable for parsing constant headers during environment construction.
+    ///
+    /// WHAT: assembles visibility, type aliases, and struct/choice metadata into a
+    /// `ScopeContext` that constant header parsing can use.
+    /// WHY: the full `AstModuleEnvironment` is not yet assembled when constants are
+    /// resolved, so this helper wires up the pieces that are already available.
+    fn constant_header_scope_context(
+        &self,
+        header: &Header,
+        visibility: &FileVisibility,
+        string_table: &mut StringTable,
+    ) -> ScopeContext {
+        let source_file_scope: InternedPath = header.canonical_source_file(string_table);
+
+        ScopeContext::new(
+            ContextKind::ConstantHeader,
+            header.tokens.src_path.to_owned(),
+            Rc::clone(&self.declaration_table),
+            self.context.external_package_registry.clone(),
+            vec![],
+        )
+        .with_style_directives(self.context.style_directives)
+        .with_build_profile(self.context.build_profile)
+        .with_project_path_resolver(self.context.project_path_resolver.clone())
+        .with_path_format_config(self.context.path_format_config.clone())
+        .with_rendered_path_usage_sink(Rc::clone(&self.rendered_path_usages))
+        .with_visible_declarations(visibility.visible_declaration_paths.clone())
+        .with_visible_external_symbols(visibility.visible_external_symbols.clone())
+        .with_visible_source_bindings(visibility.visible_source_names.clone())
+        .with_visible_type_aliases(visibility.visible_type_alias_names.clone())
+        .with_resolved_type_aliases(Rc::new(self.resolved_type_aliases_by_path.clone()))
+        .with_generic_declarations(Rc::new(
+            self.module_symbols.generic_declarations_by_path.clone(),
+        ))
+        .with_resolved_struct_fields_by_path(Rc::new(self.resolved_struct_fields_by_path.clone()))
+        .with_choice_variant_shells_by_path(Rc::new(self.choice_variant_shells_by_path.clone()))
+        .with_nominal_type_ids_by_path(Rc::new(self.nominal_type_ids_by_path.clone()))
+        .with_source_file_scope(source_file_scope)
+    }
+}

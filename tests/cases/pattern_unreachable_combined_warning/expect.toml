@@ -1,0 +1,5 @@
+[backends.html]
+mode = "success"
+warnings = "exact"
+warning_count = 4
+rendered_output_contains = ["pattern_unreachable_combined_warning result=one"]

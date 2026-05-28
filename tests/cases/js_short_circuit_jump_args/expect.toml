@@ -1,0 +1,12 @@
+entry = "."
+
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["js_short_circuit_jump_args value=false calls=0"]
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = ["__jump_arg_", "if (", "js_short_circuit_jump_args"]
+must_not_contain = ["switch (__bb"]

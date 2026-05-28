@@ -1,0 +1,11 @@
+entry = "."
+
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["option_contextual_wrapping_equality_success same=true same_reversed=true missing=false present=true missing_reversed=false"]
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = ["{ tag: \"some\", \"value\": \"Ana\" }", ".tag === \"some\"", ".tag === \"none\""]

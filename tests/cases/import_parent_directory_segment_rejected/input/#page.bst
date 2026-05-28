@@ -1,0 +1,3 @@
+import @../outside { value }
+
+[:unreachable]

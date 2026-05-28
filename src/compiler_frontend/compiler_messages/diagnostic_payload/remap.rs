@@ -1,0 +1,591 @@
+//! String-table remapping for diagnostic payload facts.
+//!
+//! WHAT: walks payload variants and updates every interned string-bearing field after
+//! string tables are merged.
+//! WHY: keeping this traversal outside the payload declarations makes the diagnostic data
+//! model easier to scan while preserving one canonical remap implementation.
+
+use super::*;
+
+impl DiagnosticPayload {
+    pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
+        match self {
+            DiagnosticPayload::None
+            | DiagnosticPayload::UnexpectedTrailingComma
+            | DiagnosticPayload::TypeMismatch { .. }
+            | DiagnosticPayload::UnreachableMatchArm
+            | DiagnosticPayload::OldPrefixDeclarationSyntax => {}
+
+            DiagnosticPayload::ExpectedToken { expected, found } => {
+                expected.remap_string_ids(remap);
+
+                if let Some(found) = found {
+                    found.remap_string_ids(remap);
+                }
+            }
+
+            DiagnosticPayload::UnexpectedToken { found } => {
+                found.remap_string_ids(remap);
+            }
+
+            DiagnosticPayload::UnknownName { name, .. }
+            | DiagnosticPayload::UnusedName { name }
+            | DiagnosticPayload::BstFilePathInTemplateOutput { path: name }
+            | DiagnosticPayload::LargeTrackedAsset { path: name, .. }
+            | DiagnosticPayload::IdentifierNamingConvention { name, .. }
+            | DiagnosticPayload::MalformedTemplate { message: name } => {
+                *name = remap.get(*name);
+            }
+
+            DiagnosticPayload::DuplicateDeclaration {
+                name,
+                first_location,
+            } => {
+                *name = remap.get(*name);
+                first_location.remap_string_ids(remap);
+            }
+
+            DiagnosticPayload::MissingImportTarget { path }
+            | DiagnosticPayload::AmbiguousImportTarget { path }
+            | DiagnosticPayload::BareFileImport { path }
+            | DiagnosticPayload::DirectSpecialFileImport { path }
+            | DiagnosticPayload::NotExportedBySourceFile { symbol_path: path }
+            | DiagnosticPayload::NotExportedByFacade {
+                requested_path: path,
+                ..
+            }
+            | DiagnosticPayload::MissingModuleFacade { symbol_path: path }
+            | DiagnosticPayload::CrossModuleImportNotExported { symbol_path: path } => {
+                remap_path_import_payload(path, remap);
+            }
+
+            DiagnosticPayload::InvalidImportPath { path, reason } => {
+                remap_invalid_import_path_payload(path, reason, remap);
+            }
+
+            DiagnosticPayload::ImportNameCollision {
+                name,
+                previous_location,
+            } => {
+                *name = remap.get(*name);
+                if let Some(location) = previous_location {
+                    location.remap_string_ids(remap);
+                }
+            }
+
+            DiagnosticPayload::MissingPackageSymbol {
+                symbol,
+                package_path,
+            } => {
+                *symbol = remap.get(*symbol);
+                *package_path = remap.get(*package_path);
+            }
+
+            DiagnosticPayload::BorrowConflict { place, .. }
+            | DiagnosticPayload::InvalidAccessAfterPossibleOwnershipTransfer { place }
+            | DiagnosticPayload::UseOfUninitializedLocal { place } => {
+                remap_single_place_borrow_payload(place, remap);
+            }
+
+            DiagnosticPayload::SharedMutableConflict {
+                place,
+                conflicting_place,
+                existing_location,
+                ..
+            } => {
+                remap_shared_mutable_conflict_payload(
+                    place,
+                    conflicting_place,
+                    existing_location,
+                    remap,
+                );
+            }
+
+            DiagnosticPayload::WholeObjectBorrowConflict {
+                whole_place,
+                part_place,
+                part_location,
+            } => {
+                remap_whole_object_borrow_conflict_payload(
+                    whole_place,
+                    part_place,
+                    part_location,
+                    remap,
+                );
+            }
+
+            DiagnosticPayload::MultipleMutableBorrows {
+                place,
+                existing_location,
+            } => {
+                remap_place_with_optional_location(place, existing_location, remap);
+            }
+
+            DiagnosticPayload::UseAfterPossibleMove {
+                place,
+                move_location,
+            } => {
+                remap_place_with_optional_location(place, move_location, remap);
+            }
+
+            DiagnosticPayload::MoveWhileBorrowed {
+                place,
+                borrow_location,
+                ..
+            } => {
+                remap_place_with_optional_location(place, borrow_location, remap);
+            }
+
+            DiagnosticPayload::InvalidMutableAccess {
+                place,
+                conflicting_place,
+                ..
+            } => {
+                remap_place_with_optional_conflict(place, conflicting_place, remap);
+            }
+
+            DiagnosticPayload::InvalidConfig { key, reason } => {
+                if let Some(key) = key {
+                    *key = remap.get(*key);
+                }
+                reason.remap_string_ids(remap);
+            }
+
+            DiagnosticPayload::DeferredFeature { reason } => {
+                reason.remap_string_ids(remap);
+            }
+
+            DiagnosticPayload::UnsupportedExternalFunction {
+                function_name,
+                package_path,
+                backend_name,
+            } => {
+                *function_name = remap.get(*function_name);
+                if let Some(package_path) = package_path {
+                    *package_path = remap.get(*package_path);
+                }
+                *backend_name = remap.get(*backend_name);
+            }
+
+            DiagnosticPayload::ImportAliasCaseMismatch { alias, symbol } => {
+                *alias = remap.get(*alias);
+                *symbol = remap.get(*symbol);
+            }
+
+            DiagnosticPayload::InvalidNumberLiteral { literal_text, .. } => {
+                *literal_text = remap.get(*literal_text);
+            }
+
+            DiagnosticPayload::InvalidStyleDirective {
+                directive_name,
+                supported_directives,
+            } => {
+                *directive_name = remap.get(*directive_name);
+                *supported_directives = remap.get(*supported_directives);
+            }
+
+            DiagnosticPayload::MissingClosingDelimiter { expected_delimiter } => {
+                *expected_delimiter = remap.get(*expected_delimiter);
+            }
+
+            DiagnosticPayload::UnexpectedEndOfFile { expected_delimiter } => {
+                if let Some(expected_delimiter) = expected_delimiter {
+                    *expected_delimiter = remap.get(*expected_delimiter);
+                }
+            }
+
+            DiagnosticPayload::InvalidCharacter { .. }
+            | DiagnosticPayload::InvalidGenericApplication { .. }
+            | DiagnosticPayload::InvalidPath { .. }
+            | DiagnosticPayload::InvalidImportClause { .. }
+            | DiagnosticPayload::InvalidCollectionType { .. }
+            | DiagnosticPayload::InvalidGenericParameter { .. }
+            | DiagnosticPayload::InvalidStructDefaultValue => {}
+
+            DiagnosticPayload::InvalidTemplateStructure { reason } => {
+                if let InvalidTemplateStructureReason::UnsupportedTypeInTemplateHead {
+                    type_name,
+                    ..
+                } = reason
+                {
+                    *type_name = remap.get(*type_name);
+                }
+            }
+
+            DiagnosticPayload::InvalidChoiceVariant {
+                choice_name,
+                variant_name,
+                available_variants,
+                ..
+            } => {
+                if let Some(name) = choice_name {
+                    *name = remap.get(*name);
+                }
+                if let Some(name) = variant_name {
+                    *name = remap.get(*name);
+                }
+                for variant in available_variants {
+                    *variant = remap.get(*variant);
+                }
+            }
+
+            DiagnosticPayload::InvalidTypeAnnotation { reason, .. } => {
+                if let InvalidTypeAnnotationReason::InvalidTokenAfterName { token }
+                | InvalidTypeAnnotationReason::ExpectedTypeAnnotation { found: token } = reason
+                {
+                    token.remap_string_ids(remap);
+                }
+            }
+
+            DiagnosticPayload::InvalidTemplateDirective { directive_name, .. } => {
+                if let Some(directive_name) = directive_name {
+                    *directive_name = remap.get(*directive_name);
+                }
+            }
+
+            DiagnosticPayload::InvalidSignatureMember { .. } => {}
+
+            DiagnosticPayload::InvalidFunctionSignature { reason } => {
+                if let InvalidFunctionSignatureReason::UnknownReturnAlias { name } = reason {
+                    *name = remap.get(*name);
+                }
+                if let InvalidFunctionSignatureReason::MissingArrowOrColon { found }
+                | InvalidFunctionSignatureReason::MissingCommaOrColon { found } = reason
+                {
+                    found.remap_string_ids(remap);
+                }
+            }
+
+            DiagnosticPayload::UninitializedVariable { name } => {
+                *name = remap.get(*name);
+            }
+
+            DiagnosticPayload::CircularDependency { path } => {
+                path.remap_string_ids(remap);
+            }
+
+            DiagnosticPayload::NamespaceMisuse { name, .. } => {
+                *name = remap.get(*name);
+            }
+
+            DiagnosticPayload::ShadowedName {
+                name,
+                first_location,
+            } => {
+                *name = remap.get(*name);
+                first_location.remap_string_ids(remap);
+            }
+
+            DiagnosticPayload::ReservedNameCollision { name, .. } => {
+                *name = remap.get(*name);
+            }
+
+            DiagnosticPayload::InvalidThisUsage { .. }
+            | DiagnosticPayload::InvalidReceiverDeclaration { .. }
+            | DiagnosticPayload::InvalidCopyTarget { .. } => {}
+
+            DiagnosticPayload::InvalidControlFlowStatement { .. }
+            | DiagnosticPayload::InvalidResultHandling { .. }
+            | DiagnosticPayload::CompileTimeEvaluationError { .. } => {}
+
+            DiagnosticPayload::InvalidDeclaration { name, reason } => {
+                if let Some(name) = name {
+                    *name = remap.get(*name);
+                }
+                match reason {
+                    InvalidDeclarationReason::UnusedGenericParameter { parameter_name }
+                    | InvalidDeclarationReason::InvalidGenericParameterName { parameter_name }
+                    | InvalidDeclarationReason::DuplicateGenericParameter { parameter_name }
+                    | InvalidDeclarationReason::GenericParameterNameCollision { parameter_name }
+                    | InvalidDeclarationReason::ReservedGenericParameterName { parameter_name }
+                    | InvalidDeclarationReason::ExternalTypeAlias {
+                        type_name: parameter_name,
+                    } => {
+                        *parameter_name = remap.get(*parameter_name);
+                    }
+                    _ => {}
+                }
+            }
+
+            DiagnosticPayload::InvalidAssignmentTarget {
+                target_name: name, ..
+            }
+            | DiagnosticPayload::InvalidMultiBind {
+                target_name: name, ..
+            }
+            | DiagnosticPayload::InvalidBuiltinCall {
+                builtin_name: name, ..
+            }
+            | DiagnosticPayload::InvalidFieldAccess {
+                field_name: name, ..
+            }
+            | DiagnosticPayload::InvalidTemplateSlot {
+                slot_name: name, ..
+            } => {
+                if let Some(name) = name {
+                    *name = remap.get(*name);
+                }
+            }
+
+            DiagnosticPayload::InvalidReceiverCall {
+                receiver_type,
+                method_name,
+                ..
+            } => {
+                if let Some(receiver_type) = receiver_type {
+                    *receiver_type = remap.get(*receiver_type);
+                }
+                if let Some(method_name) = method_name {
+                    *method_name = remap.get(*method_name);
+                }
+            }
+
+            DiagnosticPayload::InvalidMatchPattern {
+                variant_name,
+                scrutinee_name,
+                ..
+            } => {
+                if let Some(variant_name) = variant_name {
+                    *variant_name = remap.get(*variant_name);
+                }
+                if let Some(scrutinee_name) = scrutinee_name {
+                    *scrutinee_name = remap.get(*scrutinee_name);
+                }
+            }
+
+            DiagnosticPayload::NonExhaustiveMatch {
+                missing_variants, ..
+            } => {
+                for variant in missing_variants {
+                    *variant = remap.get(*variant);
+                }
+            }
+
+            DiagnosticPayload::EmptyCollectionTypeAmbiguity
+            | DiagnosticPayload::UnsupportedOperatorTypes { .. }
+            | DiagnosticPayload::InvalidResultOperand { .. }
+            | DiagnosticPayload::InvalidReturnShape { .. } => {}
+
+            DiagnosticPayload::InvalidGenericInstantiation { type_name, reason } => {
+                if let Some(type_name) = type_name {
+                    *type_name = remap.get(*type_name);
+                }
+                match reason {
+                    InvalidGenericInstantiationReason::CannotInferArguments {
+                        missing_parameters,
+                    }
+                    | InvalidGenericInstantiationReason::CannotInferFunctionArguments {
+                        missing_parameters,
+                    } => {
+                        for parameter in missing_parameters {
+                            *parameter = remap.get(*parameter);
+                        }
+                    }
+                    InvalidGenericInstantiationReason::ConflictingFunctionArgument {
+                        parameter_name,
+                    } => {
+                        *parameter_name = remap.get(*parameter_name);
+                    }
+                    InvalidGenericInstantiationReason::WrongArgumentCount { .. }
+                    | InvalidGenericInstantiationReason::TypeDoesNotAcceptArguments
+                    | InvalidGenericInstantiationReason::MissingTypeArguments
+                    | InvalidGenericInstantiationReason::RecursiveFunctionInstantiation
+                    | InvalidGenericInstantiationReason::GenericFunctionValueDeferred => {}
+                }
+            }
+
+            DiagnosticPayload::IncompatibleChoiceComparison { reason, .. } => {
+                if let IncompatibleChoiceComparisonReason::PayloadEqualityNotSupported {
+                    field_name,
+                    ..
+                } = reason
+                {
+                    *field_name = remap.get(*field_name);
+                }
+            }
+
+            DiagnosticPayload::InvalidCallShape {
+                reason,
+                callee_name,
+            } => {
+                if let Some(callee_name) = callee_name {
+                    *callee_name = remap.get(*callee_name);
+                }
+                match reason {
+                    InvalidCallShapeReason::MissingArgument { parameter_name, .. }
+                    | InvalidCallShapeReason::DuplicateArgument { parameter_name, .. }
+                    | InvalidCallShapeReason::MutableAccessRequired { parameter_name, .. }
+                    | InvalidCallShapeReason::MutableAccessNotAllowed { parameter_name, .. }
+                    | InvalidCallShapeReason::MutableAccessOnNonPlace { parameter_name, .. }
+                    | InvalidCallShapeReason::MutableAccessOnImmutablePlace {
+                        parameter_name,
+                        ..
+                    } => {
+                        if let Some(parameter_name) = parameter_name {
+                            *parameter_name = remap.get(*parameter_name);
+                        }
+                    }
+                    InvalidCallShapeReason::ExtraPositionalArgument { .. }
+                    | InvalidCallShapeReason::PositionalAfterNamed
+                    | InvalidCallShapeReason::NamedArgumentsNotSupported => {}
+                    InvalidCallShapeReason::NamedArgumentNotFound {
+                        name,
+                        known_parameters,
+                    } => {
+                        *name = remap.get(*name);
+                        for parameter_name in known_parameters {
+                            *parameter_name = remap.get(*parameter_name);
+                        }
+                    }
+                }
+            }
+
+            DiagnosticPayload::InvalidRangeOperand { .. } => {}
+
+            DiagnosticPayload::UnsupportedBuilderPackage { package_path } => {
+                *package_path = remap.get(*package_path);
+            }
+
+            DiagnosticPayload::InvalidPageMetadata { key, .. } => {
+                *key = remap.get(*key);
+            }
+
+            DiagnosticPayload::InvalidCompileTimePath { path, .. } => {
+                path.remap_string_ids(remap);
+            }
+
+            DiagnosticPayload::DirectSymbolPathImport { path }
+            | DiagnosticPayload::InvalidNamespaceDefaultName { path }
+            | DiagnosticPayload::ExplicitBstExtension { path } => {
+                path.remap_string_ids(remap);
+            }
+
+            DiagnosticPayload::UnsupportedExternalExtension { path, extension } => {
+                path.remap_string_ids(remap);
+                *extension = remap.get(*extension);
+            }
+
+            DiagnosticPayload::InvalidExternalLibrary { path, message } => {
+                path.remap_string_ids(remap);
+                *message = remap.get(*message);
+            }
+
+            DiagnosticPayload::DuplicateImportSurfaceMember {
+                surface_path,
+                member_name,
+            } => {
+                surface_path.remap_string_ids(remap);
+                *member_name = remap.get(*member_name);
+            }
+
+            DiagnosticPayload::ImportRecordUsedAsValue { record_name }
+            | DiagnosticPayload::ConstRecordUsedAsValue { record_name }
+            | DiagnosticPayload::NestedTraversal { record_name } => {
+                *record_name = remap.get(*record_name);
+            }
+            DiagnosticPayload::NamespaceTypeValueMisuse { name, .. } => {
+                *name = remap.get(*name);
+            }
+
+            DiagnosticPayload::InvalidExpression
+            | DiagnosticPayload::ExpectedSymbolStatement
+            | DiagnosticPayload::MissingCollectionItem => {}
+
+            DiagnosticPayload::MissingOperatorOperand { operator, .. } => {
+                *operator = remap.get(*operator);
+            }
+
+            DiagnosticPayload::InvalidStandaloneStatement { .. }
+            | DiagnosticPayload::InvalidMatchArm { .. }
+            | DiagnosticPayload::InvalidLoopHeader { .. }
+            | DiagnosticPayload::InvalidStatementPosition { .. } => {}
+
+            DiagnosticPayload::CommonSyntaxMistake { reason } => {
+                reason.remap_string_ids(remap);
+            }
+
+            DiagnosticPayload::InfrastructureError { .. } => {
+                // Infrastructure payloads carry rendered strings; no interned IDs to remap.
+            }
+
+            DiagnosticPayload::ReceiverMethodImportRequiresVisibleReceiverType {
+                method_name,
+                receiver_type_name,
+            } => {
+                *method_name = remap.get(*method_name);
+                if let Some(name) = receiver_type_name {
+                    *name = remap.get(*name);
+                }
+            }
+        }
+    }
+}
+
+fn remap_path_import_payload(path: &mut InternedPath, remap: &StringIdRemap) {
+    path.remap_string_ids(remap);
+}
+
+fn remap_invalid_import_path_payload(
+    path: &mut InternedPath,
+    reason: &mut InvalidImportPathReason,
+    remap: &StringIdRemap,
+) {
+    path.remap_string_ids(remap);
+    reason.remap_string_ids(remap);
+}
+
+fn remap_single_place_borrow_payload(place: &mut DiagnosticPlace, remap: &StringIdRemap) {
+    place.remap_string_ids(remap);
+}
+
+fn remap_shared_mutable_conflict_payload(
+    place: &mut DiagnosticPlace,
+    conflicting_place: &mut Option<DiagnosticPlace>,
+    existing_location: &mut Option<SourceLocation>,
+    remap: &StringIdRemap,
+) {
+    place.remap_string_ids(remap);
+    remap_optional_place(conflicting_place, remap);
+    remap_optional_location(existing_location, remap);
+}
+
+fn remap_whole_object_borrow_conflict_payload(
+    whole_place: &mut DiagnosticPlace,
+    part_place: &mut DiagnosticPlace,
+    part_location: &mut Option<SourceLocation>,
+    remap: &StringIdRemap,
+) {
+    whole_place.remap_string_ids(remap);
+    part_place.remap_string_ids(remap);
+    remap_optional_location(part_location, remap);
+}
+
+fn remap_place_with_optional_location(
+    place: &mut DiagnosticPlace,
+    location: &mut Option<SourceLocation>,
+    remap: &StringIdRemap,
+) {
+    place.remap_string_ids(remap);
+    remap_optional_location(location, remap);
+}
+
+fn remap_place_with_optional_conflict(
+    place: &mut DiagnosticPlace,
+    conflicting_place: &mut Option<DiagnosticPlace>,
+    remap: &StringIdRemap,
+) {
+    place.remap_string_ids(remap);
+    remap_optional_place(conflicting_place, remap);
+}
+
+fn remap_optional_place(place: &mut Option<DiagnosticPlace>, remap: &StringIdRemap) {
+    if let Some(place) = place {
+        place.remap_string_ids(remap);
+    }
+}
+
+fn remap_optional_location(location: &mut Option<SourceLocation>, remap: &StringIdRemap) {
+    if let Some(location) = location {
+        location.remap_string_ids(remap);
+    }
+}

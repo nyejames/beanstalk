@@ -1,0 +1,80 @@
+//! Markdown formatter data shapes.
+//!
+//! WHAT: stores the small parsed markdown records shared by block and inline rendering.
+//! WHY: keeping these shapes separate lets the formatter pipeline read as staged rendering
+//! instead of a long prelude of local structs.
+
+use super::*;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum MarkdownListKind {
+    Unordered,
+    Ordered,
+}
+
+impl MarkdownListKind {
+    pub(super) fn open_tag(self) -> &'static str {
+        match self {
+            Self::Unordered => "<ul>",
+            Self::Ordered => "<ol>",
+        }
+    }
+
+    pub(super) fn close_tag(self) -> &'static str {
+        match self {
+            Self::Unordered => "</ul>",
+            Self::Ordered => "</ol>",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum MarkdownInlineAtom {
+    Char(char),
+    Opaque(FormatterOpaquePiece),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(super) enum LeadingChildTemplateLine {
+    None,
+    Standalone,
+    InlineContinuation,
+}
+
+#[derive(Clone, Debug, Default)]
+pub(super) struct MarkdownLine {
+    pub(super) atoms: Vec<MarkdownInlineAtom>,
+}
+
+#[derive(Debug)]
+pub(super) struct ParsedMarkdownListItemLine {
+    pub(super) indent_width: usize,
+    pub(super) kind: MarkdownListKind,
+    pub(super) content: Vec<MarkdownInlineAtom>,
+}
+
+#[derive(Debug)]
+pub(super) struct ParsedMarkdownHeadingLine {
+    pub(super) level: usize,
+    pub(super) content: Vec<MarkdownInlineAtom>,
+}
+
+#[derive(Debug, Clone)]
+pub(super) enum MarkdownListItemFragment {
+    Line(Vec<MarkdownInlineAtom>),
+    NestedList(Vec<FormatterOutputPiece>),
+}
+
+#[derive(Debug, Clone)]
+pub(super) enum MarkdownListItemBlock {
+    Paragraph(Vec<Vec<MarkdownInlineAtom>>),
+    StandaloneInline(Vec<MarkdownInlineAtom>),
+    NestedList(Vec<FormatterOutputPiece>),
+}
+
+#[derive(Debug)]
+pub(super) struct ParsedMarkdownLink {
+    pub(super) target: String,
+    pub(super) label: String,
+    pub(super) consumed_atoms: usize,
+}

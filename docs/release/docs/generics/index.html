@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="color-scheme" content="light dark">
+    <title>Generics in Beanstalk | Beanstalk</title>
+    <meta name="description" content="Current Alpha generic type and generic function behavior.">
+    <style>
+/*!
+  BS CSS CORE (absolute basics CSS reset)
+  This is inspired by Pico.css, but is an even more minimal reset.
+
+  Actual style systems are intended to be built on top of this easily.
+*/
+
+:root {
+  color-scheme: light dark;
+
+  --bst-font-size: 100%;
+
+  --bst-font-family-emoji: "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --bst-font-family-sans-serif: system-ui, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, Helvetica, Arial, "Helvetica Neue", sans-serif, var(--bst-font-family-emoji);
+  --bst-font-family-monospace: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace, var(--bst-font-family-emoji);
+  --bst-font-family: var(--bst-font-family-sans-serif);
+
+  --bst-line-height: 1.5;
+  --bst-font-weight: 400;
+  --bst-font-size: 100%;
+  --bst-text-underline-offset: 0.1rem;
+  --bst-border-radius: 0.25rem;
+  --bst-border-width: 0.0625rem;
+  --bst-outline-width: 0.125rem;
+  --bst-transition: 0.2s ease-in-out;
+
+  --bst-spacing: 1rem;
+  --bst-spacing-small: 0.5rem;
+
+  /* Code block colours */
+  --comment-dark: #838c86;
+  --comment-light: #759061;
+  --keyword-dark: #ea943e;
+  --keyword-light: #ad590e;
+  --string-dark: #4fba11;
+  --string-light: #007130;
+  --number-dark: #96b5ed;
+  --number-light: #073f85;
+  --operator-dark: #9ec1ff;
+  --operator-light: #2b476a;
+  --struct-dark: #a17fbd;
+  --struct-light: #ac2187;
+  --type-dark: #54c5d3;
+  --type-light: #0d8db3;
+  --parenthesis-dark: #bcac52;
+  --parenthesis-light: #ad7e0d;
+}
+
+/* where: is used here for less specificity, allowing easier overriding */
+:where(:root) {
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  -moz-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  font-weight: var(--bst-font-weight);
+  font-size: var(--bst-font-size);
+  line-height: var(--bst-line-height);
+  font-family: var(--bst-font-family);
+  text-underline-offset: var(--bst-text-underline-offset);
+  text-rendering: optimizeLegibility;
+  overflow-wrap: break-word;
+  -moz-tab-size: 4;
+  -o-tab-size: 4;
+  tab-size: 4;
+
+}
+
+@media (min-width: 576px) {
+  :root {
+    --bst-font-size: 106.25%;
+  }
+}
+@media (min-width: 768px) {
+  :root {
+    --bst-font-size: 112.5%;
+  }
+}
+@media (min-width: 1024px) {
+  :root {
+    --bst-font-size: 118.75%;
+  }
+}
+@media (min-width: 1280px) {
+  :root {
+    --bst-font-size: 125%;
+  }
+}
+@media (min-width: 1536px) {
+  :root {
+    --bst-font-size: 131.25%;
+  }
+}
+
+body {
+  width: 100%;
+  margin: 0;
+}
+
+/* Code Style */
+.codeblock {
+  color: #222222;
+  color: light-dark(#222222, #ddd);
+  font-family: var(--bst-font-family-monospace);
+  white-space: break-spaces;
+  tab-size: 4;
+}
+.bs-code-comment,
+.bst-code-comment {
+  color: var(--comment-light);
+  color:light-dark(var(--comment-light), var(--comment-dark))
+}
+.bs-code-keyword,
+.bst-code-keyword {
+  color: var(--keyword-light);
+  color:light-dark( var(--keyword-light), var(--keyword-dark))
+}
+.bs-code-string,
+.bst-code-string {
+  color: var(--string-light);
+  color:light-dark( var(--string-light), var(--string-dark))
+}
+.bs-code-number,
+.bst-code-number {
+  color: var(--number-light);
+  color:light-dark( var(--number-light), var(--number-dark))
+}
+.bs-code-operator,
+.bst-code-operator {
+  color: var(--operator-light);
+  color:light-dark( var(--operator-light), var(--operator-dark))
+}
+.bs-code-struct,
+.bst-code-struct {
+  color: var(--struct-light);
+  color:light-dark( var(--struct-light), var(--struct-dark))
+}
+.bs-code-type,
+.bst-code-type {
+  color: var(--type-light);
+  color:light-dark( var(--type-light), var(--type-dark))
+}
+.bs-code-parenthesis,
+.bst-code-parenthesis {
+  color: var(--parenthesis-light);
+  color:light-dark( var(--parenthesis-light), var(--parenthesis-dark))
+}
+
+/* BASIC CSS RESET STUFF */
+
+/**
+ * Document
+ * Content-box & Responsive typography
+*/
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  background-repeat: no-repeat;
+}
+
+::before,
+::after {
+  text-decoration: inherit;
+  vertical-align: inherit;
+}
+    </style>
+    <style>body {
+        background-color: light-dark(hsl(125, 67%, 97%), hsl(203, 68%, 8%));
+    }
+
+    a {
+        color: light-dark(hsl(111, 96%, 26%), hsl(235, 87%, 67%));
+    }
+
+    .container {
+        width: 100%;
+        margin-right: auto;
+        margin-left: auto;
+        padding-right: var(--bst-spacing-small);
+        padding-left: var(--bst-spacing-small);
+    }
+
+    @media (min-width: 576px) {
+        .container {
+            max-width: 510px;
+            padding-right: var(--bst-spacing);
+            padding-left: var(--bst-spacing);
+            padding-bottom: var(--bst-spacing);
+        }
+    }
+
+    @media (min-width: 768px) {
+        .container {
+            max-width: 700px;
+        }
+    }
+
+    @media (min-width: 1024px) {
+        .container {
+            max-width: 950px;
+        }
+    }
+
+    @media (min-width: 1280px) {
+        .container {
+            max-width: 1200px;
+        }
+    }
+
+    @media (min-width: 1536px) {
+        .container {
+            max-width: 1450px;
+        }
+    }
+
+    .bst-nav-1 {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom-color: grey;
+        border-bottom-style: solid;
+        border-bottom-width: 1px;
+        padding: 0rem 2rem 0rem 2rem;
+    }</style>
+
+  </head>
+  <body style="">
+    <nav class="bst-nav-1" aria-label="Primary">
+        <a
+            href="/beanstalk/"
+            style="
+                display: flex;
+                align-items: center;
+                gap: 0.6rem;
+                padding: 0.9rem 0;
+                color: light-dark(var(--bst-text-lightmode), var(--bst-text-darkmode));
+                text-decoration: none;
+                font-weight: 700;
+                letter-spacing: 0.04rem;
+            "
+        >
+            <span
+                aria-hidden="true"
+                style="
+                    font-family: var(--bst-font-family-emoji);
+                    font-size: 1.4rem;
+                    line-height: 1;
+                "
+            >🌱</span>
+
+            <span>Beanstalk</span>
+        </a>
+
+        <div
+            style="
+                display: flex;
+                align-items: center;
+                gap: 1rem;
+            "
+        >
+            <a
+                href="/beanstalk/docs/"
+                style="
+                    color: light-dark(var(--bst-text-lightmode), var(--bst-text-darkmode));
+                    text-decoration: none;
+                    font-weight: 500;
+                    padding: 0.35rem 0;
+                "
+            >
+                Docs
+            </a>
+
+            <a
+                href="https://github.com/nyejames/beanstalk"
+                target="_blank"
+                rel="noreferrer"
+                aria-label="Beanstalk GitHub repository"
+                style="
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    color: light-dark(var(--bst-text-lightmode), var(--bst-text-darkmode));
+                    padding: 0.35rem 0;
+                "
+            >
+                <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    viewBox="0 0 16 16"
+                    width="22"
+                    height="22"
+                    fill="currentColor"
+                    aria-hidden="true"
+                >
+                    <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38
+                    0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52
+                    -.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07
+                    -1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21
+                    2.2.82a7.65 7.65 0 0 1 4 0c1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82
+                    1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2
+                    0 .21.15.46.55.38A8.01 8.01 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/>
+                </svg>
+            </a>
+        </div>
+    </nav>
+     <h1 style="font-size: 2em;text-align: center;"> GENERICS IN BEANSTALK</h1>
+    <section class="container"><p>Generics are partially implemented for the current Alpha compiler.</p><p>The supported surface is intentionally small:</p><ul><li>generic parameter declarations with <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">type</span> on top-level structs and choices</li><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">of</span> type application in type positions</li><li>concrete generic aliases to fully applied generic types</li><li>constructor inference for concrete generic structs and choices</li><li>collections as compiler-owned generic constructed types using <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">{T}</span></li><li>generic free-function calls across same-file use, visible same-module imports, and authored facades</li></ul><p>Generic function headers are parsed and tracked by the frontend, and their bodies are validated against unconstrained generic parameters before any concrete call is accepted. Same-file calls, grouped cross-file imports, namespace cross-file imports, and authored facade wrapper calls infer type arguments from immediate arguments and immediate expected result context. Facade wrappers resolve their bodies through the facade file&#39;s own imports, so private implementation helpers stay hidden behind real public wrapper declarations.</p></section>
+    <section class="container"><h1>Current status</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+        
+    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Surface</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Status</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Notes</th> 
+    </tr>
+
+            
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Generic structs</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Concrete instances such as <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Box of Int</span> have canonical frontend type identity and substituted field views.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Generic choices</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Concrete constructors and matching work for instantiated generic choice types.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Concrete generic aliases</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Aliases may target fully applied generic instances and remain transparent.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Generic functions</td>
+     <td style="padding: 0.2em 0.5em;  "> Partial</td>
+     <td style="padding: 0.2em 0.5em;  "> Same-file, same-module grouped or namespace, and authored facade wrapper free-function calls infer from immediate arguments and type context, then emit concrete executable instances. Generic optional and fallible returns work across visible imports.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Generic aliases with parameters</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> Alias only a fully concrete generic instance for now.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Trait bounds</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> Operators, equality, field access, formatting, and receiver calls on unconstrained generic parameters wait for traits or another constraint model.</td>
+        </tr>
+        
+    </table></section>
+    <section class="container"><h1>Generic type syntax</h1><p>Generic parameters are introduced with <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">type</span>.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>Box</span> type <span class='bst-code-struct'>T</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
+        value <span class='bst-code-struct'>T,</span>
+    <span class='bst-code-operator'>|</span>
+    </code></pre><p>Concrete type arguments are applied with <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">of</span> in type positions.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    number_box <span class='bst-code-struct'>Box</span> of <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Box</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>42</span><span class='bst-code-parenthesis'>)</span>
+    text_box <span class='bst-code-struct'>Box</span> of <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Box</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;hello&quot;</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">of</span> is type-position-only. It is not current Alpha syntax for explicit</p><p>generic function calls or runtime generic values.</p></section>
+    <section class="container"><h1>Generic choices</h1><p>Generic choices use the same <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">type</span> parameter list.</p><p>Payload variants use record payload syntax.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>Maybe</span> type <span class='bst-code-struct'>T</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-struct'>Some</span> <span class='bst-code-operator'>|</span> value <span class='bst-code-struct'>T</span> <span class='bst-code-operator'>|</span>,
+        <span class='bst-code-struct'>Empty,</span>
+    ;
+
+    name <span class='bst-code-struct'>Maybe</span> of <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Maybe</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Some</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Ana&quot;</span><span class='bst-code-parenthesis'>)</span>
+    missing <span class='bst-code-struct'>Maybe</span> of <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Maybe</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Empty</span>
+    </code></pre><p>Choice payload shorthand such as <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Some T</span> is not current Alpha syntax. Use record payload variants such as <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Some | value T |</span>.</p></section>
+    <section class="container"><h1>Concrete aliases</h1><p>Type aliases can name a fully applied generic instance.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>Box</span> type <span class='bst-code-struct'>T</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
+        value <span class='bst-code-struct'>T,</span>
+    <span class='bst-code-operator'>|</span>
+
+    <span class='bst-code-struct'>StringBox</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>Box</span> of <span class='bst-code-type'>String</span>
+
+    item <span class='bst-code-struct'>StringBox</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Box</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;docs&quot;</span><span class='bst-code-parenthesis'>)</span>
+    raw <span class='bst-code-struct'>Box</span> of <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> item
+    </code></pre><p>Generic aliases with their own parameters, partial application, and type-constructor composition are deferred. Name an intermediate concrete alias when a type would otherwise need deeper composition.</p></section>
+    <section class="container"><h1>Collections and constructed types</h1><p>Collections use the public <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">{T}</span> syntax and are compiler-owned constructed types. Capacity is allocation metadata and is not part of type identity.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    names <span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;Ana&quot;</span>, <span class='bst-code-string'>&quot;Nye&quot;</span><span class='bst-code-parenthesis'>}</span>
+    cached <span class='bst-code-parenthesis'>{</span><span class='bst-code-struct'>Box</span> of <span class='bst-code-type'>String</span> <span class='bst-code-number'>64</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>
+    </code></pre><p>Optional types <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">T?</span> and fallible return slots such as <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Error!</span> are also compiler-owned constructed forms. Public <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Option of T</span>, public <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Result of T, E</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Option.Some</span>, and</p><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Result.Ok</span> are not current Alpha syntax.</p><p>Generic functions can use final generic error slots, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">return!</span>, postfix propagation, and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">catch</span> when ordinary local inference can solve the generic parameters. The compiler still rejects body-side specialization of an abstract generic error slot.</p></section>
+    <section class="container"><h1>Nesting rule</h1><p>Alpha allows one inline <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">of</span> application per annotation.</p><p>Collection element annotations may contain that one application:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    boxes <span class='bst-code-parenthesis'>{</span><span class='bst-code-struct'>Box</span> of <span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>
+    </code></pre><p>Nested inline applications are deferred:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-comment'>-- deferred</span>
+    value <span class='bst-code-struct'>Box</span> of <span class='bst-code-struct'>Pair</span> of <span class='bst-code-struct'>String,</span> <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Box</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-struct'>Pair</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;count&quot;</span>, <span class='bst-code-number'>3</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>Use a concrete alias instead:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>StringCount</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>Pair</span> of <span class='bst-code-struct'>String,</span> <span class='bst-code-type'>Int</span>
+    value <span class='bst-code-struct'>Box</span> of <span class='bst-code-struct'>StringCount</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Box</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-struct'>Pair</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;count&quot;</span>, <span class='bst-code-number'>3</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre></section>
+    <section class="container"><h1>Generic functions</h1><p>Generic free functions are callable when their type arguments can be inferred from the call itself or from an immediate expected result type. The same inference rules apply for same-file calls, grouped imports, namespace imports, and authored facade wrappers.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    identity type <span class='bst-code-struct'>T</span> <span class='bst-code-operator'>|</span>value <span class='bst-code-struct'>T</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>T</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> value
+    ;
+
+    value <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> identity<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>42</span><span class='bst-code-parenthesis'>)</span>
+    text <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> identity<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;hello&quot;</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>Return type context can also fix otherwise ambiguous type parameters:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    empty_values type <span class='bst-code-struct'>T</span> <span class='bst-code-operator'>|</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-struct'>T</span><span class='bst-code-parenthesis'>}</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>
+    ;
+
+    numbers <span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>Int</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> empty_values<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>Immediate expected-result inference also works across visible imports:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-comment'>-- helpers.bst</span>
+    empty_values type <span class='bst-code-struct'>T</span> <span class='bst-code-operator'>|</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-struct'>T</span><span class='bst-code-parenthesis'>}</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>
+    ;
+
+    <span class='bst-code-comment'>-- #page.bst</span>
+    import <span class='bst-code-operator'>@</span>.<span class='bst-code-operator'>/</span>helpers <span class='bst-code-parenthesis'>{</span>empty_values<span class='bst-code-parenthesis'>}</span>
+
+    numbers <span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>Int</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> empty_values<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>Body validation currently allows pass-through behavior such as returning a value of the same generic parameter type, forwarding it to another generic function, or storing it in a generic wrapper. Local annotations inside the generic body may use the active generic parameters, including <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">T</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">{T}</span>, and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Box of T</span>. Behavior-dependent operations on <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">T</span> are rejected until trait bounds or another constraint model exists.</p><p>Inference is deliberately immediate. Beanstalk does not infer a generic function&#39;s type arguments from later uses of the resulting value:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-comment'>-- rejected: T is ambiguous at the declaration site</span>
+    values <span class='bst-code-operator'>=</span> empty_values<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>Generic functions may also return optional or fallible values, including across imports:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-comment'>-- helpers.bst</span>
+    wrap_optional type <span class='bst-code-struct'>T</span> <span class='bst-code-operator'>|</span>value <span class='bst-code-struct'>T</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>T</span><span class='bst-code-operator'>?</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> value
+    ;
+
+    read_or_raise type <span class='bst-code-struct'>T,</span> <span class='bst-code-struct'>E</span> <span class='bst-code-operator'>|</span>value <span class='bst-code-struct'>T,</span> err <span class='bst-code-struct'>E,</span> fail <span class='bst-code-type'>Bool</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>T,</span> <span class='bst-code-struct'>E</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>if</span> fail<span class='bst-code-operator'>:</span>
+            <span class='bst-code-keyword'>return</span><span class='bst-code-operator'>!</span> err
+        ;
+
+        <span class='bst-code-keyword'>return</span> value
+    ;
+
+    <span class='bst-code-comment'>-- #page.bst</span>
+    import <span class='bst-code-operator'>@</span>.<span class='bst-code-operator'>/</span>helpers <span class='bst-code-parenthesis'>{</span>read_or_raise, wrap_optional<span class='bst-code-parenthesis'>}</span>
+
+    maybe_name <span class='bst-code-type'>String</span><span class='bst-code-operator'>?</span> <span class='bst-code-operator'>=</span> wrap_optional<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Ana&quot;</span><span class='bst-code-parenthesis'>)</span>
+
+    value <span class='bst-code-operator'>=</span> read_or_raise<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>7</span>, <span class='bst-code-struct'>Error</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;bad&quot;</span><span class='bst-code-parenthesis'>)</span>, false<span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
+        then <span class='bst-code-number'>0</span>
+    ;
+    </code></pre><p>Generic optional and fallible support still depends on immediate evidence. A bare</p><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">none</span> cannot infer <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">T</span> by itself, and a concrete callee error type</p><p>cannot specialize an abstract surrounding <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">E!</span> from inside the generic body.</p><p>Same-module grouped imports can call generic free functions by their imported local name:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-comment'>-- helpers.bst</span>
+    identity type <span class='bst-code-struct'>T</span> <span class='bst-code-operator'>|</span>value <span class='bst-code-struct'>T</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>T</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> value
+    ;
+
+    <span class='bst-code-comment'>-- #page.bst</span>
+    import <span class='bst-code-operator'>@</span>.<span class='bst-code-operator'>/</span>helpers <span class='bst-code-parenthesis'>{</span>identity<span class='bst-code-parenthesis'>}</span>
+
+    value <span class='bst-code-operator'>=</span> identity<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>42</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>Namespace imports can call generic free functions through the shallow namespace record:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-comment'>-- #page.bst</span>
+    import <span class='bst-code-operator'>@</span>.<span class='bst-code-operator'>/</span>helpers <span class='bst-code-keyword'>as</span> helpers
+
+    value <span class='bst-code-operator'>=</span> helpers.identity<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>42</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>Public facade wrappers are ordinary authored generic functions in <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#mod.bst</span>. Normal imports inside the facade remain private and are only usable by the wrapper body:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-comment'>-- lib/utils/internal.bst</span>
+    identity_impl type <span class='bst-code-struct'>T</span> <span class='bst-code-operator'>|</span>value <span class='bst-code-struct'>T</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>T</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> value
+    ;
+
+    <span class='bst-code-comment'>-- lib/utils/#mod.bst</span>
+    import <span class='bst-code-operator'>@</span>.<span class='bst-code-operator'>/</span>internal <span class='bst-code-parenthesis'>{</span>identity_impl<span class='bst-code-parenthesis'>}</span>
+
+    identity type <span class='bst-code-struct'>T</span> <span class='bst-code-operator'>|</span>value <span class='bst-code-struct'>T</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>T</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> identity_impl<span class='bst-code-parenthesis'>(</span>value<span class='bst-code-parenthesis'>)</span>
+    ;
+
+    <span class='bst-code-comment'>-- src/#page.bst</span>
+    import <span class='bst-code-operator'>@</span>utils <span class='bst-code-parenthesis'>{</span>identity<span class='bst-code-parenthesis'>}</span>
+
+    value <span class='bst-code-operator'>=</span> identity<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>42</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>Namespace imports can call authored facade wrappers too:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-comment'>-- src/#page.bst</span>
+    import <span class='bst-code-operator'>@</span>utils <span class='bst-code-keyword'>as</span> utils
+
+    value <span class='bst-code-operator'>=</span> utils.identity<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;hello&quot;</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>Generic functions are still callable declarations only. They cannot be passed around as first-class values, including through namespace members such as <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">helpers.identity</span>. Direct facade re-export syntax is also deferred; expose imported behavior with real authored wrapper declarations.</p></section>
+    <section class="container"><h1>Deferred features</h1><p>The following are not current Alpha generics:</p><ul><li>explicit generic call syntax such as <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">identity of Int(42)</span></li><li>generic function values and higher-order generic functions</li><li>trait bounds and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">where</span> clauses</li><li>recursive generic structs or choices</li><li>generic receiver methods</li><li>receiver methods on instantiated generic types</li><li>direct facade re-export syntax and function alias exports through <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#mod.bst</span></li><li>generic JS or external package functions</li><li>generic aliases with parameters</li><li>partial type application</li><li>nested generic type application beyond the collection element exception</li><li>public <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Option of T</span> or <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Result of T, E</span></li><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Option.Some</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Result.Ok</span>, public <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Ok</span> or <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Err</span> constructors</li><li>higher-kinded types, const generics, lifetime parameters, specialization, associated types, and dynamic generic reification</li></ul></section>
+    <script>
+    function __bs_is_ref(value) {
+    return value !== null && typeof value === "object" && value.__bs_ref === true;
+    }
+
+    function __bs_binding(value) {
+    return { __bs_ref: true, __bs_kind: "binding", __bs_mode: "slot", __bs_slot: { value }, __bs_target: null };
+    }
+
+    function __bs_param_binding(value) {
+    if (!__bs_is_ref(value)) {
+    return __bs_binding(value);
+    }
+    if (value.__bs_kind === "binding") {
+    return value;
+    }
+    const binding = __bs_binding(undefined);
+    binding.__bs_mode = "alias";
+    binding.__bs_target = value;
+    return binding;
+    }
+
+    function __bs_resolve(ref) {
+    while (ref.__bs_kind === "binding" && ref.__bs_mode === "alias") {
+    ref = ref.__bs_target;
+    }
+    return ref;
+    }
+
+    function __bs_read(ref) {
+    const resolved = __bs_resolve(ref);
+    return resolved.__bs_kind === "binding" ? resolved.__bs_slot.value : resolved.__bs_get();
+    }
+
+    function __bs_write(ref, value) {
+    const resolved = __bs_resolve(ref);
+    if (resolved.__bs_kind === "binding") {
+    resolved.__bs_slot.value = value;
+    } else {
+    resolved.__bs_set(value);
+    }
+    return value;
+    }
+
+    function __bs_assign_borrow(binding, ref) {
+    if (binding.__bs_mode === "alias") {
+    return __bs_write(binding, __bs_read(ref));
+    }
+    binding.__bs_mode = "alias";
+    binding.__bs_target = ref;
+    return binding;
+    }
+
+    function __bs_assign_value(binding, value) {
+    if (binding.__bs_mode === "alias") {
+    return __bs_write(binding, value);
+    }
+    binding.__bs_mode = "slot";
+    binding.__bs_target = null;
+    binding.__bs_slot.value = value;
+    return binding;
+    }
+
+    function __bs_field(baseRef, field) {
+    return {
+    __bs_ref: true,
+    __bs_kind: "computed",
+    __bs_get() {
+    return __bs_read(baseRef)[field];
+    },
+    __bs_set(value) {
+    __bs_read(baseRef)[field] = value;
+    }
+    };
+    }
+
+    function __bs_index(baseRef, index) {
+    return {
+    __bs_ref: true,
+    __bs_kind: "computed",
+    __bs_get() {
+    return __bs_read(baseRef)[index];
+    },
+    __bs_set(value) {
+    __bs_read(baseRef)[index] = value;
+    }
+    };
+    }
+
+    function __bs_clone_value(value) {
+    if (Array.isArray(value)) {
+    return value.map(__bs_clone_value);
+    }
+    if (value !== null && typeof value === "object") {
+    const result = {};
+    for (const key of Object.keys(value)) {
+    result[key] = __bs_clone_value(value[key]);
+    }
+    return result;
+    }
+    return value;
+    }
+
+    function __bs_error_normalize_file(file) {
+    if (typeof file !== "string") {
+    return "";
+    }
+    if (file.startsWith("/")) {
+    const parts = file.split(/[\\/]/).filter(Boolean);
+    return parts.length > 0 ? parts[parts.length - 1] : file;
+    }
+    if (/^[A-Za-z]:[\\/]/.test(file)) {
+    const parts = file.split(/[\\/]/).filter(Boolean);
+    return parts.length > 0 ? parts[parts.length - 1] : file;
+    }
+    return file;
+    }
+
+    function __bs_make_error(message, code, location, trace) {
+    return {
+    message,
+    code,
+    __bst_location: location ?? null,
+    __bst_trace: trace ?? null
+    };
+    }
+
+    function __bs_error_with_location(error, location) {
+    return __bs_make_error(error.message, error.code, location, error.__bst_trace);
+    }
+
+    function __bs_error_push_trace(error, frame) {
+    const nextTrace = error.__bst_trace ? error.__bst_trace.concat([frame]) : [frame];
+    return __bs_make_error(error.message, error.code, error.__bst_location, nextTrace);
+    }
+
+    function __bs_error_bubble(error, file, line, column, functionName) {
+    const safeFunction = typeof functionName === "string" && functionName.length > 0 ? functionName : "<unknown>";
+    const location = {
+    file: __bs_error_normalize_file(file),
+    line,
+    column,
+    function: safeFunction === "<unknown>" ? null : safeFunction
+    };
+    const frame = { function: safeFunction, location };
+    const nextLocation = error.__bst_location ?? location;
+    const located = __bs_error_with_location(error, nextLocation);
+    return __bs_error_push_trace(located, frame);
+    }
+
+    function __bs_result_propagate(result) {
+    if (result && result.tag === "ok") {
+    return result.value;
+    }
+    if (result && result.tag === "err") {
+    throw { __bs_result_propagate: true, value: result.value };
+    }
+    throw new Error("Expected internal Result carrier during propagation");
+    }
+
+    function __bs_result_fallback(result, fallback) {
+    if (result && result.tag === "ok") {
+    return result.value;
+    }
+    if (result && result.tag === "err") {
+    return fallback();
+    }
+    throw new Error("Expected internal Result carrier during fallback handling");
+    }
+
+    function __bs_collection_get(collection, index) {
+    if (!Array.isArray(collection)) {
+    const err = __bs_make_error("Collection operation expects an ordered collection", 100, null, null);
+    return { tag: "err", value: err };
+    }
+    if (!Number.isInteger(index) || index < 0 || index >= collection.length) {
+    const err = __bs_make_error("Collection index out of bounds", 101, null, null);
+    return { tag: "err", value: err };
+    }
+    return { tag: "ok", value: collection[index] };
+    }
+
+    function __bs_collection_set(collection, index, value) {
+    if (!Array.isArray(collection)) {
+    const err = __bs_make_error("Collection operation expects an ordered collection", 100, null, null);
+    return { tag: "err", value: err };
+    }
+    if (!Number.isInteger(index) || index < 0 || index >= collection.length) {
+    const err = __bs_make_error("Collection index out of bounds", 101, null, null);
+    return { tag: "err", value: err };
+    }
+    collection[index] = value;
+    return { tag: "ok", value: null };
+    }
+
+    function __bs_collection_push(collection, value) {
+    collection.push(value);
+    }
+
+    function __bs_collection_remove(collection, index) {
+    if (!Array.isArray(collection)) {
+    const err = __bs_make_error("Collection operation expects an ordered collection", 100, null, null);
+    return { tag: "err", value: err };
+    }
+    if (!Number.isInteger(index) || index < 0 || index >= collection.length) {
+    const err = __bs_make_error("Collection index out of bounds", 101, null, null);
+    return { tag: "err", value: err };
+    }
+    const removed = collection.splice(index, 1)[0];
+    return { tag: "ok", value: removed };
+    }
+
+    function __bs_collection_length(collection) {
+    return collection.length;
+    }
+
+    function __bs_value_to_string(value) {
+    if (value === undefined || value === null) {
+    return "";
+    }
+    return String(value);
+    }
+
+    function __bs_io(value) {
+    console.log(__bs_value_to_string(value));
+    }
+
+    function __bs_normalize_numeric_text(value) {
+    return value.trim().replace(/_/g, "");
+    }
+
+    function __bs_cast_int(value) {
+    if (typeof value === "number") {
+    if (!Number.isFinite(value) || !Number.isSafeInteger(value)) {
+    return { tag: "err", value: __bs_make_error("Int value is out of supported range", 201, null, null) };
+    }
+    if (Number.isInteger(value)) {
+    return { tag: "ok", value };
+    }
+    return { tag: "err", value: __bs_make_error("Float value is not an exact integer", 200, null, null) };
+    }
+    if (typeof value === "string") {
+    const normalized = __bs_normalize_numeric_text(value);
+    if (/^[+-]?[0-9]+$/.test(normalized)) {
+    const parsed = Number.parseInt(normalized, 10);
+    if (!Number.isSafeInteger(parsed)) {
+    return { tag: "err", value: __bs_make_error("Int value is out of supported range", 201, null, null) };
+    }
+    return { tag: "ok", value: parsed };
+    }
+    if (/^[+-]?[0-9]+\.[0-9]+$/.test(normalized)) {
+    const parsed = Number.parseFloat(normalized);
+    if (Number.isInteger(parsed) && Number.isSafeInteger(parsed)) {
+    return { tag: "ok", value: parsed };
+    }
+    }
+    return { tag: "err", value: __bs_make_error("Cannot parse Int from text", 200, null, null) };
+    }
+    return { tag: "err", value: __bs_make_error("Int(...) only accepts Int, Float, or string values", 200, null, null) };
+    }
+
+    function __bs_cast_float(value) {
+    if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+    return { tag: "err", value: __bs_make_error("Float value is out of supported range", 211, null, null) };
+    }
+    return { tag: "ok", value };
+    }
+    if (typeof value === "string") {
+    const normalized = __bs_normalize_numeric_text(value);
+    if (/^[+-]?[0-9]+$/.test(normalized) || /^[+-]?[0-9]+\.[0-9]+$/.test(normalized)) {
+    const parsed = Number.parseFloat(normalized);
+    if (!Number.isFinite(parsed)) {
+    return { tag: "err", value: __bs_make_error("Float value is out of supported range", 211, null, null) };
+    }
+    return { tag: "ok", value: parsed };
+    }
+    return { tag: "err", value: __bs_make_error("Cannot parse Float from text", 210, null, null) };
+    }
+    return { tag: "err", value: __bs_make_error("Float(...) only accepts Int, Float, or string values", 210, null, null) };
+    }
+
+    function b_fn0() {
+    let b_l0 = __bs_binding(undefined);
+
+    __bs_assign_value(b_l0, []);
+    return __bs_read(b_l0);
+    }
+
+    </script>
+    <script>
+    (function () {
+      if (typeof b_fn0 === "function") b_fn0();
+    })();
+    </script>
+  </body>
+</html>

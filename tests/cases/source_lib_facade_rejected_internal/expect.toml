@@ -1,0 +1,6 @@
+entry = "."
+
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+diagnostic_codes = ["BST-IMPORT-0011"]

@@ -1,0 +1,9 @@
+import @helper { Counter, tick }
+
+run || -> String:
+    c = Counter(0)
+    result = c.tick()
+    return "source_visibility_ok"
+;
+
+io(run())

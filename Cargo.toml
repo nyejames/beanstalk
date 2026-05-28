@@ -1,0 +1,57 @@
+[package]
+name = "beanstalk"
+version = "0.1.12"
+edition = "2024"
+
+[workspace]
+members = [".", "xtask"]
+resolver = "2"
+
+[features]
+# These add println! macros for debugging and info when compiling
+detailed_timers = []
+show_tokens = []
+show_headers = []
+show_ast = []
+show_eval = []
+show_hir = []
+show_codegen = []
+show_borrow_checker = []
+checked_blocks = []
+async_blocks = []
+
+[[bin]]
+name = "bean"
+path = "src/main.rs"
+
+[dependencies]
+rayon = "1.12"
+rustc-hash = "2.1.1"
+saying = "0.1.8"
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+toml = "1.1.2"
+wasm-encoder = "0.247.0"
+wasmparser = "0.247.0"
+notify = "8.2.0"
+
+# For future release builds:
+# oxc_minifier = "0.115.0"
+
+[dev-dependencies]
+tempfile = "3"
+proptest = "1.5"
+
+[profile.dev]
+opt-level = 0
+debug = true
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+strip = true
+
+[profile.dev.package."*"]
+opt-level = 3  # Optimize dependencies in dev

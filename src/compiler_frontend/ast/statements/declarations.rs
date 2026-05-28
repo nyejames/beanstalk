@@ -1,0 +1,501 @@
+//! Body-local declaration parsing and lowering.
+//!
+//! WHAT: parses declarations that appear inside executable AST bodies, resolves their declared
+//! type boundary, parses the initializer, and emits the resulting local `Declaration`.
+//! WHY: top-level declaration discovery belongs to headers/environment construction; this module
+//! owns only source-order body declarations and the coercion boundary between an initializer
+//! expression and the declared local type.
+
+#![allow(clippy::result_large_err)]
+use crate::ast_log;
+use crate::compiler_frontend::ast::ast_nodes::AstNode;
+use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
+use crate::compiler_frontend::ast::expressions::expression::Expression;
+use crate::compiler_frontend::ast::expressions::function_calls::{
+    FunctionCallParseInput, parse_function_call,
+};
+use crate::compiler_frontend::ast::field_access::parse_field_access;
+use crate::compiler_frontend::ast::function_body_to_ast;
+use crate::compiler_frontend::ast::statements::fallible_handling::fallible_catch_allowed_in_context;
+use crate::compiler_frontend::ast::statements::functions::{
+    FunctionSignature, signature_member_to_declaration,
+};
+use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
+use crate::compiler_frontend::ast::type_resolution::{
+    TypeResolutionContext, TypeResolutionContextInputs, resolve_diagnostic_type_to_type_id_checked,
+    resolve_parsed_type_annotation,
+};
+use crate::compiler_frontend::ast::{
+    ContextKind, ScopeContext,
+    ast_nodes::Declaration,
+    expressions::parse_expression::create_expression,
+    statements::value_production::{ValueReceiverKind, try_parse_value_block_at_receiver},
+};
+use crate::compiler_frontend::builtins::error_type::is_reserved_builtin_symbol;
+use crate::compiler_frontend::compiler_messages::{
+    CompileTimeEvaluationErrorReason, CompilerDiagnostic, InvalidDeclarationReason,
+    InvalidResultHandlingReason, TypeMismatchContext,
+};
+use crate::compiler_frontend::datatypes::{DataType, ReceiverKey};
+use crate::compiler_frontend::declaration_syntax::declaration_shell::{
+    DeclarationSyntax, parse_declaration_syntax,
+};
+use crate::compiler_frontend::declaration_syntax::r#struct::{
+    parse_struct_shell, validate_struct_default_values,
+};
+use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::identifier_policy::{
+    IdentifierNamingKind, ensure_not_keyword_shadow_identifier, naming_warning_for_identifier,
+};
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::syntax_errors::signature_position::check_signature_common_mistake;
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, Token, TokenKind};
+use crate::compiler_frontend::type_coercion::compatibility::is_declaration_compatible;
+use crate::compiler_frontend::type_coercion::contextual::coerce_expression_to_declared_type;
+use crate::compiler_frontend::type_coercion::parse_context::{
+    ExpectedType, parse_expectation_for_type_id,
+};
+
+/// Create an AST reference node for an existing declaration.
+///
+/// Dispatches to function-call parsing when the declaration's diagnostic type is a function,
+/// otherwise falls through to field access.
+pub fn create_reference(
+    token_stream: &mut FileTokens,
+    declaration: &Declaration,
+    context: &ScopeContext,
+    type_interner: &mut AstTypeInterner<'_>,
+    string_table: &mut StringTable,
+) -> Result<AstNode, ExpressionParseError> {
+    // Move past the name
+    token_stream.advance();
+
+    // Note: `diagnostic_type` is used here as a parse-level shape check. The
+    // `DataType::Function` variant tells us that a bare reference to this
+    // declaration should be treated as a call parse, not a field access.
+    // Semantic type identity is `type_id`; this branch is syntax-directed.
+    match declaration.value.diagnostic_type {
+        // Function Call
+        DataType::Function(_, ref signature) => parse_function_call(FunctionCallParseInput {
+            token_stream,
+            id: &declaration.id,
+            context,
+            signature,
+            value_required: true,
+            allow_boundary_catch: fallible_catch_allowed_in_context(context),
+            warnings: None,
+            type_interner,
+            string_table,
+        }),
+
+        _ => parse_field_access(
+            token_stream,
+            declaration,
+            context,
+            type_interner,
+            string_table,
+        ),
+    }
+}
+
+/// Parse a new body-local declaration from the token stream.
+///
+/// Handles function declarations as a fast path (they use a dedicated signature/body syntax)
+/// before falling through to generic value declaration parsing via `resolve_declaration_syntax`.
+pub fn new_declaration(
+    token_stream: &mut FileTokens,
+    symbol_id: StringId,
+    context: &mut ScopeContext,
+    type_interner: &mut AstTypeInterner<'_>,
+    warnings: &mut Vec<CompilerDiagnostic>,
+    string_table: &mut StringTable,
+) -> Result<Declaration, CompilerDiagnostic> {
+    let declaration_name = string_table.resolve(symbol_id).to_owned();
+    ensure_not_keyword_shadow_identifier(symbol_id, token_stream.current_location(), string_table)?;
+
+    if is_reserved_builtin_symbol(&declaration_name) {
+        return Err(CompilerDiagnostic::invalid_declaration(
+            InvalidDeclarationReason::ReservedBuiltinName,
+            Some(symbol_id),
+            token_stream.current_location(),
+        ));
+    }
+
+    // Move past the name
+    token_stream.advance();
+
+    let qualified_name = context.scope.to_owned().append(symbol_id);
+
+    // ----------------------------
+    //  Function declaration fast-path
+    // ----------------------------
+    // Function declarations are parsed eagerly here because they use
+    // a dedicated signature/body syntax that does not fit value declarations.
+    if token_stream.current_token_kind() == &TokenKind::TypeParameterBracket {
+        if let Some(warning) = naming_warning_for_identifier(
+            symbol_id,
+            token_stream.current_location(),
+            IdentifierNamingKind::ValueLike,
+            string_table,
+        ) {
+            context.emit_warning(warning);
+        }
+
+        let function_signature = FunctionSignature::new(
+            token_stream,
+            warnings,
+            string_table,
+            &qualified_name,
+            context,
+            type_interner,
+        )?;
+        let function_context =
+            context.new_child_function(symbol_id, function_signature.to_owned(), string_table);
+
+        let function_body = function_body_to_ast(
+            token_stream,
+            function_context,
+            type_interner,
+            warnings,
+            string_table,
+        )?;
+        let receiver = function_signature_receiver(&function_signature, string_table);
+        let function_data_type =
+            DataType::Function(Box::new(receiver.clone()), function_signature.clone());
+        let function_type_id = resolve_diagnostic_type_to_type_id_checked(
+            &function_data_type,
+            type_interner.environment_mut_for_derived_types(),
+            &token_stream.current_location(),
+        )?;
+
+        return Ok(Declaration {
+            id: qualified_name,
+            value: Expression::function(
+                receiver,
+                function_signature,
+                function_body,
+                function_type_id,
+                token_stream.current_location(),
+            ),
+        });
+    }
+
+    if let Some(error) = check_signature_common_mistake(token_stream) {
+        return Err(error);
+    }
+
+    // ----------------------------
+    //  Parse declaration syntax
+    // ----------------------------
+    let declaration_syntax = parse_declaration_syntax(token_stream, symbol_id, string_table)?;
+
+    // Heuristic: a leading type-parameter pipe after the binding marker indicates
+    // a struct or generic type definition, which uses type-like naming conventions.
+    let naming_kind = if matches!(
+        declaration_syntax
+            .initializer_tokens
+            .first()
+            .map(|token| &token.kind),
+        Some(TokenKind::TypeParameterBracket)
+    ) {
+        IdentifierNamingKind::TypeLike
+    } else {
+        IdentifierNamingKind::ValueLike
+    };
+
+    if let Some(warning) = naming_warning_for_identifier(
+        symbol_id,
+        declaration_syntax.location.to_owned(),
+        naming_kind,
+        string_table,
+    ) {
+        context.emit_warning(warning);
+    }
+
+    resolve_declaration_syntax(
+        declaration_syntax,
+        qualified_name,
+        &mut *context,
+        type_interner,
+        string_table,
+    )
+}
+
+/// Extract the receiver key from a function signature when the first parameter is named `this`.
+fn function_signature_receiver(
+    signature: &FunctionSignature,
+    string_table: &mut StringTable,
+) -> Option<ReceiverKey> {
+    let this_name = string_table.intern("this");
+    signature
+        .parameters
+        .first()
+        .filter(|parameter| parameter.id.name() == Some(this_name))
+        .and_then(|parameter| parameter.value.diagnostic_type.receiver_key_from_type())
+}
+
+/// Resolve a parsed declaration syntax into a fully typed `Declaration`.
+///
+/// This is the main lowering path for body-local value and struct declarations.
+/// It resolves the declared type annotation, parses the initializer expression,
+/// validates type compatibility, and applies contextual coercion.
+pub fn resolve_declaration_syntax(
+    declaration_syntax: DeclarationSyntax,
+    qualified_name: InternedPath,
+    context: &mut ScopeContext,
+    type_interner: &mut AstTypeInterner<'_>,
+    string_table: &mut StringTable,
+) -> Result<Declaration, CompilerDiagnostic> {
+    // ----------------------------
+    //  Validate constant-context constraints
+    // ----------------------------
+    let value_mode = declaration_syntax.value_mode();
+    if declaration_syntax.binding_mode.is_mutable() && context.kind.is_constant_context() {
+        return Err(CompilerDiagnostic::invalid_declaration(
+            InvalidDeclarationReason::ConstantCannotBeMutable,
+            None,
+            declaration_syntax.location.clone(),
+        ));
+    }
+
+    // ----------------------------
+    //  Resolve declared type
+    // ----------------------------
+    let declaration_location = declaration_syntax.location.clone();
+    let resolved_annotation = {
+        let mut type_resolution_context =
+            TypeResolutionContext::from_inputs(TypeResolutionContextInputs {
+                declaration_table: &context.top_level_declarations,
+                visible_declaration_ids: context.visible_declaration_ids.as_ref(),
+                visible_external_symbols: context
+                    .file_visibility
+                    .as_ref()
+                    .map(|fv| &fv.visible_external_symbols),
+                visible_source_bindings: context
+                    .file_visibility
+                    .as_ref()
+                    .map(|fv| &fv.visible_source_names),
+                visible_type_aliases: context
+                    .file_visibility
+                    .as_ref()
+                    .map(|fv| &fv.visible_type_alias_names),
+                resolved_type_aliases: context.resolved_type_aliases.as_deref(),
+                generic_declarations_by_path: context.generic_declarations_by_path.as_deref(),
+                resolved_struct_fields_by_path: context.resolved_struct_fields_by_path.as_deref(),
+                type_environment: type_interner.environment_mut_for_derived_types(),
+                visible_namespace_records: context
+                    .file_visibility
+                    .as_ref()
+                    .map(|fv| &fv.visible_namespace_records),
+            })
+            .with_active_generic_type_context(context.active_generic_type_context());
+        resolve_parsed_type_annotation(
+            declaration_syntax.semantic_type(),
+            &declaration_location,
+            &mut type_resolution_context,
+            string_table,
+        )?
+    };
+
+    let mut initializer_tokens = declaration_syntax.initializer_tokens;
+    initializer_tokens.push(Token::new(
+        TokenKind::Eof,
+        declaration_syntax.location.to_owned(),
+    ));
+    let mut initializer_stream = FileTokens::new(qualified_name.to_owned(), initializer_tokens);
+
+    // Check the first token before dispatching so we don't wastefully call
+    // `create_expression` recursively when the initializer is a struct definition.
+    let mut parsed_initializer = match initializer_stream.current_token_kind() {
+        // Struct Definition
+        TokenKind::TypeParameterBracket => {
+            // Struct field defaults must be compile-time foldable, so they are parsed
+            // in a dedicated constant context.
+            let constant_context =
+                ScopeContext::new_constant(initializer_stream.src_path.to_owned(), context);
+            let owner_path = initializer_stream.src_path.to_owned();
+            let mut field_warnings = Vec::new();
+            let field_syntax = parse_struct_shell(
+                &mut initializer_stream,
+                string_table,
+                &mut field_warnings,
+                &owner_path,
+            )?;
+            for warning in field_warnings {
+                context.emit_warning(warning);
+            }
+
+            let mut params = Vec::with_capacity(field_syntax.len());
+            for field in &field_syntax {
+                params.push(signature_member_to_declaration(
+                    field,
+                    &constant_context,
+                    type_interner,
+                    string_table,
+                )?);
+            }
+
+            if let Err(bag) = validate_struct_default_values(&params) {
+                let diagnostics = bag.into_diagnostics();
+                if let Some(first) = diagnostics.into_iter().next() {
+                    return Err(first);
+                }
+            }
+
+            Expression::struct_definition(
+                params,
+                initializer_stream.current_location(),
+                value_mode.to_owned(),
+            )
+        }
+
+        _ => {
+            // Keep the canonical annotation TypeId beside the expression so
+            // compatibility and coercion do not re-derive semantic identity from
+            // diagnostic `DataType` spelling.
+            //
+            // Pass parse-time context only where syntax requires it, such as
+            // `none` and empty collection literals. Other expressions resolve
+            // their natural type before this declaration boundary validates and
+            // coerces them.
+            let declared_type_id = resolved_annotation.type_id;
+            let mut expression_type = declared_type_id
+                .map(|type_id| parse_expectation_for_type_id(type_id, type_interner.environment()))
+                .unwrap_or(ExpectedType::Infer);
+
+            // `DataType::Inferred` is a parse-level marker for omitted type annotations.
+            // When the type is inferred, the initializer expression inherits the parent
+            // context's expected result types; otherwise it is constrained to the
+            // resolved declared type.
+            let expression_expected_results = if let Some(declared_type_id) = declared_type_id {
+                vec![declared_type_id]
+            } else {
+                context.expected_result_type_ids.clone()
+            };
+            let mut expression_context = context.new_child_expression(expression_expected_results);
+
+            // Body-local compile-time constants need the same constant-reference rules
+            // as top-level constants, but top-level header constants must keep their
+            // stronger `ConstantHeader` context for const-record coercion.
+            if declaration_syntax.binding_mode.is_compile_time()
+                && !context.kind.is_constant_context()
+            {
+                expression_context.kind = ContextKind::Constant;
+            } else {
+                expression_context.kind = context.kind.clone();
+            }
+
+            let expression = if let Some(value_block_result) = try_parse_value_block_at_receiver(
+                &mut initializer_stream,
+                &expression_context,
+                type_interner,
+                &expression_context.expected_result_type_ids,
+                ValueReceiverKind::Declaration,
+                string_table,
+            ) {
+                value_block_result?
+            } else {
+                create_expression(
+                    &mut initializer_stream,
+                    &expression_context,
+                    type_interner,
+                    &mut expression_type,
+                    &value_mode,
+                    false,
+                    string_table,
+                )?
+            };
+
+            // Reject incompatible types (e.g. Bool → Float, Float → Int).
+            // is_declaration_compatible accepts exact matches and Int → Float;
+            // it does not reuse ReturnSlot semantics.
+            // `DataType::Inferred` is a parse-only marker; the semantic compatibility
+            // check uses canonical `TypeId`s in the `TypeEnvironment`.
+            if let Some(declared_type_id) = declared_type_id
+                && !is_declaration_compatible(
+                    declared_type_id,
+                    expression.type_id,
+                    type_interner.environment(),
+                )
+            {
+                return Err(CompilerDiagnostic::type_mismatch(
+                    declared_type_id,
+                    expression.type_id,
+                    TypeMismatchContext::Declaration,
+                    expression.location.clone(),
+                ));
+            }
+
+            // Apply contextual numeric coercion (e.g. Int → Float) when the
+            // declared type requires it.
+            if let Some(declared_type_id) = declared_type_id {
+                coerce_expression_to_declared_type(
+                    expression,
+                    declared_type_id,
+                    type_interner.environment(),
+                )
+            } else {
+                expression
+            }
+        }
+    };
+
+    // Body-local compile-time constants must fully fold after parsing and coercion.
+    // Top-level constants are validated by `parse_constant_header_declaration`;
+    // this check covers the body-local path through `resolve_declaration_syntax`.
+    if declaration_syntax.binding_mode.is_compile_time()
+        && !parsed_initializer.is_compile_time_constant()
+    {
+        return Err(CompilerDiagnostic::compile_time_evaluation_error(
+            CompileTimeEvaluationErrorReason::ConstantInitializerNotFoldable,
+            qualified_name.name(),
+            declaration_syntax.location.clone(),
+        ));
+    }
+
+    // Defensive: ensure the initializer parser consumed all tokens.
+    // If tokens remain, the parser stopped early (e.g. a newline broke the
+    // expression before it was complete). This prevents silent truncation.
+    initializer_stream.skip_newlines();
+    if initializer_stream.current_token_kind() == &TokenKind::Else
+        && type_interner
+            .environment()
+            .option_inner_type(parsed_initializer.type_id)
+            .is_some()
+    {
+        return Err(CompilerDiagnostic::invalid_result_handling(
+            InvalidResultHandlingReason::DirectOptionFallbackSyntax,
+            initializer_stream.current_location(),
+        ));
+    }
+
+    if initializer_stream.current_token_kind() != &TokenKind::Eof {
+        return Err(CompilerDiagnostic::unexpected_token(
+            initializer_stream.current_token_kind().to_owned(),
+            initializer_stream.current_location(),
+        ));
+    }
+
+    // WHAT: the binding marker (`~=` / `=`) is the single source of truth for whether the
+    // stored declaration is a mutable place.
+    // WHY: rvalue initializers (for example struct literals and collections) inherit ownership
+    // from type defaults; preserving that ownership would incorrectly allow writes through
+    // immutable bindings and mutable receiver calls.
+    parsed_initializer.value_mode = value_mode.to_owned();
+
+    ast_log!(
+        "Created new ",
+        Cyan #value_mode,
+        " ",
+        resolved_annotation.diagnostic_type.display_with_table(string_table)
+    );
+
+    Ok(Declaration {
+        id: qualified_name,
+        value: parsed_initializer,
+    })
+}
+
+#[cfg(test)]
+#[path = "tests/declaration_tests.rs"]
+mod declaration_tests;

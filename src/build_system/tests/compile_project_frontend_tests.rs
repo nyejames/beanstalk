@@ -1,0 +1,1488 @@
+use super::compile_project_frontend;
+use crate::build_system::build::BackendBuilder;
+use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
+use crate::compiler_frontend::compiler_messages::DiagnosticPayload;
+use crate::compiler_frontend::compiler_messages::render::{DiagnosticRenderContext, terse};
+use crate::compiler_frontend::datatypes::display::display_type;
+use crate::compiler_frontend::external_packages::{
+    CallTarget, ExternalAbiType, ExternalAccessKind, ExternalFunctionId, ExternalFunctionLowerings,
+    ExternalFunctionSpec, ExternalJsLowering, ExternalPackageOrigin, ExternalReturnSlot,
+    ExternalSignatureType, ExternalTypeId, ExternalTypeSpec,
+};
+use crate::compiler_frontend::hir::statements::HirStatementKind;
+use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_tests::test_support::temp_dir;
+use crate::libraries::LibrarySet;
+use crate::libraries::external_import_providers::provider::{
+    ExternalFileExtension, ExternalImportProvider, ExternalImportProviderContext,
+    ExternalImportProviderKind, ExternalImportRequest, ResolvedExternalImport,
+    RuntimeAssetIdentity,
+};
+use crate::projects::settings::Config;
+use std::fs;
+use std::path::Path;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+#[derive(Debug)]
+struct DummyJsImportProvider {
+    calls: Arc<AtomicUsize>,
+}
+
+impl DummyJsImportProvider {
+    fn with_counter(calls: Arc<AtomicUsize>) -> Arc<Self> {
+        Arc::new(Self { calls })
+    }
+}
+
+impl ExternalImportProvider for DummyJsImportProvider {
+    fn kind(&self) -> ExternalImportProviderKind {
+        ExternalImportProviderKind::new("dummy-js")
+    }
+
+    fn supported_extensions(&self) -> &[ExternalFileExtension] {
+        static SUPPORTED_EXTENSIONS: std::sync::OnceLock<Vec<ExternalFileExtension>> =
+            std::sync::OnceLock::new();
+        SUPPORTED_EXTENSIONS
+            .get_or_init(|| vec![ExternalFileExtension::from("js")])
+            .as_slice()
+    }
+
+    fn resolve_external_import(
+        &self,
+        request: ExternalImportRequest,
+        context: &mut ExternalImportProviderContext,
+    ) -> Result<Option<ResolvedExternalImport>, CompilerMessages> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+
+        let package_path = dummy_package_path(&request.canonical_source_path);
+        let package_id = register_dummy_package(context, package_path)?;
+        let widget_type_id = register_dummy_widget_type(context, package_id)?;
+        let draw_function_id = register_dummy_draw_function(context, package_id)?;
+        let make_widget_function_id =
+            register_dummy_make_widget_function(context, package_id, widget_type_id)?;
+        let use_widget_function_id =
+            register_dummy_use_widget_function(context, package_id, widget_type_id)?;
+
+        Ok(Some(ResolvedExternalImport {
+            package_id,
+            exported_types: vec![widget_type_id],
+            exported_free_functions: vec![
+                draw_function_id,
+                make_widget_function_id,
+                use_widget_function_id,
+            ],
+            exported_receiver_methods: Vec::new(),
+            runtime_asset: None,
+            diagnostics: Vec::new(),
+            required_runtime_imports: Vec::new(),
+        }))
+    }
+}
+
+fn dummy_package_path(canonical_source_path: &Path) -> String {
+    let sanitized = canonical_source_path
+        .to_string_lossy()
+        .chars()
+        .map(|character| {
+            if character.is_ascii_alphanumeric() {
+                character
+            } else {
+                '_'
+            }
+        })
+        .collect::<String>();
+
+    format!("@test/provider/{sanitized}")
+}
+
+fn register_dummy_package(
+    context: &mut ExternalImportProviderContext,
+    package_path: String,
+) -> Result<crate::compiler_frontend::external_packages::ExternalPackageId, CompilerMessages> {
+    context
+        .package_registry
+        .register_package(package_path, ExternalPackageOrigin::ProjectLocalJs)
+        .map_err(|error| provider_error_to_messages(error, context.string_table))
+}
+
+fn register_dummy_widget_type(
+    context: &mut ExternalImportProviderContext,
+    package_id: crate::compiler_frontend::external_packages::ExternalPackageId,
+) -> Result<ExternalTypeId, CompilerMessages> {
+    context
+        .package_registry
+        .register_external_type(
+            package_id,
+            ExternalTypeSpec {
+                name: "Widget".to_owned(),
+                abi_type: ExternalAbiType::Handle,
+            },
+        )
+        .map_err(|error| provider_error_to_messages(error, context.string_table))
+}
+
+fn register_dummy_draw_function(
+    context: &mut ExternalImportProviderContext,
+    package_id: crate::compiler_frontend::external_packages::ExternalPackageId,
+) -> Result<ExternalFunctionId, CompilerMessages> {
+    context
+        .package_registry
+        .register_external_function(
+            package_id,
+            ExternalFunctionSpec {
+                name: "draw".to_owned(),
+                parameters: Vec::new(),
+                returns: vec![ExternalReturnSlot::fresh(ExternalAbiType::I32)],
+                error_return_type: None,
+                receiver_type: None,
+                receiver_access: ExternalAccessKind::Shared,
+                lowerings: ExternalFunctionLowerings::default(),
+            },
+        )
+        .map_err(|error| provider_error_to_messages(error, context.string_table))
+}
+
+fn register_dummy_make_widget_function(
+    context: &mut ExternalImportProviderContext,
+    package_id: crate::compiler_frontend::external_packages::ExternalPackageId,
+    widget_type_id: ExternalTypeId,
+) -> Result<ExternalFunctionId, CompilerMessages> {
+    context
+        .package_registry
+        .register_external_function(
+            package_id,
+            ExternalFunctionSpec {
+                name: "make_widget".to_owned(),
+                parameters: Vec::new(),
+                returns: vec![ExternalReturnSlot::fresh(ExternalSignatureType::External(
+                    widget_type_id,
+                ))],
+                error_return_type: None,
+                receiver_type: None,
+                receiver_access: ExternalAccessKind::Shared,
+                lowerings: ExternalFunctionLowerings::default(),
+            },
+        )
+        .map_err(|error| provider_error_to_messages(error, context.string_table))
+}
+
+fn register_dummy_use_widget_function(
+    context: &mut ExternalImportProviderContext,
+    package_id: crate::compiler_frontend::external_packages::ExternalPackageId,
+    widget_type_id: ExternalTypeId,
+) -> Result<ExternalFunctionId, CompilerMessages> {
+    context
+        .package_registry
+        .register_external_function(
+            package_id,
+            ExternalFunctionSpec {
+                name: "use_widget".to_owned(),
+                parameters: vec![
+                    crate::compiler_frontend::external_packages::ExternalParameter {
+                        language_type: ExternalSignatureType::External(widget_type_id),
+                        access_kind: ExternalAccessKind::Shared,
+                    },
+                ],
+                returns: vec![ExternalReturnSlot::fresh(ExternalAbiType::I32)],
+                error_return_type: None,
+                receiver_type: None,
+                receiver_access: ExternalAccessKind::Shared,
+                lowerings: ExternalFunctionLowerings::default(),
+            },
+        )
+        .map_err(|error| provider_error_to_messages(error, context.string_table))
+}
+
+fn provider_error_to_messages(
+    error: CompilerError,
+    string_table: &StringTable,
+) -> CompilerMessages {
+    CompilerMessages::from_error_ref(error, string_table)
+}
+
+fn library_set_with_dummy_js_provider(calls: Arc<AtomicUsize>) -> LibrarySet {
+    let mut libraries = LibrarySet::with_mandatory_core();
+    libraries
+        .external_import_providers
+        .register(DummyJsImportProvider::with_counter(calls));
+    libraries
+}
+
+fn module_contains_external_call(module: &crate::build_system::build::Module) -> bool {
+    module.hir.blocks.iter().any(|block| {
+        block.statements.iter().any(|statement| {
+            matches!(
+                &statement.kind,
+                HirStatementKind::Call {
+                    target: CallTarget::ExternalFunction(_),
+                    ..
+                }
+            )
+        })
+    })
+}
+
+fn module_contains_external_module_export(
+    module: &crate::build_system::build::Module,
+    export_name: &str,
+) -> bool {
+    module.hir.blocks.iter().any(|block| {
+        block.statements.iter().any(|statement| {
+            let HirStatementKind::Call {
+                target: CallTarget::ExternalFunction(function_id),
+                ..
+            } = &statement.kind
+            else {
+                return false;
+            };
+
+            module
+                .external_package_registry
+                .get_function_by_id(*function_id)
+                .and_then(|definition| definition.lowerings.js.as_ref())
+                .is_some_and(|lowering| {
+                    matches!(
+                        lowering,
+                        ExternalJsLowering::ExternalModuleExport { export_name: registered }
+                            if registered == export_name
+                    )
+                })
+        })
+    })
+}
+
+// ── Single-file flow ──────────────────────────────────────────────────────────
+
+#[test]
+fn single_file_compiles_minimal_bst() {
+    let dir = temp_dir("single_file_ok");
+    fs::create_dir_all(&dir).expect("should create temp dir");
+    let bst_path = dir.join("test.bst");
+    fs::write(&bst_path, "x ~= 10\n").expect("should write .bst");
+
+    let mut config = Config::new(bst_path.clone());
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let mut string_table = StringTable::new();
+
+    let result = compile_project_frontend(
+        &mut config,
+        &[],
+        &style_directives,
+        &mut LibrarySet::with_mandatory_core(),
+        &mut string_table,
+    );
+
+    assert!(result.is_ok(), "expected Ok for minimal .bst file");
+    assert_eq!(
+        result.expect("checked above").len(),
+        1,
+        "expected exactly one module"
+    );
+
+    fs::remove_dir_all(&dir).expect("should remove temp dir");
+}
+
+// -------------------------
+//  Provider metadata carry
+// -------------------------
+
+#[derive(Debug)]
+struct DummyJsImportProviderWithLowering {
+    calls: Arc<AtomicUsize>,
+}
+
+impl DummyJsImportProviderWithLowering {
+    fn with_counter(calls: Arc<AtomicUsize>) -> Arc<Self> {
+        Arc::new(Self { calls })
+    }
+}
+
+impl ExternalImportProvider for DummyJsImportProviderWithLowering {
+    fn kind(&self) -> ExternalImportProviderKind {
+        ExternalImportProviderKind::new("dummy-js-with-lowering")
+    }
+
+    fn supported_extensions(&self) -> &[ExternalFileExtension] {
+        static SUPPORTED_EXTENSIONS: std::sync::OnceLock<Vec<ExternalFileExtension>> =
+            std::sync::OnceLock::new();
+        SUPPORTED_EXTENSIONS
+            .get_or_init(|| vec![ExternalFileExtension::from("js")])
+            .as_slice()
+    }
+
+    fn resolve_external_import(
+        &self,
+        request: ExternalImportRequest,
+        context: &mut ExternalImportProviderContext,
+    ) -> Result<Option<ResolvedExternalImport>, CompilerMessages> {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+
+        let package_path = dummy_package_path(&request.canonical_source_path);
+        let package_id = register_dummy_package(context, package_path)?;
+        let draw_function_id = register_dummy_draw_function_with_js_lowering(context, package_id)?;
+
+        Ok(Some(ResolvedExternalImport {
+            package_id,
+            exported_types: Vec::new(),
+            exported_free_functions: vec![draw_function_id],
+            exported_receiver_methods: Vec::new(),
+            runtime_asset: Some(RuntimeAssetIdentity {
+                canonical_source_path: request.canonical_source_path.clone(),
+                asset_kind: "js".to_owned(),
+            }),
+            diagnostics: Vec::new(),
+            required_runtime_imports: Vec::new(),
+        }))
+    }
+}
+
+fn register_dummy_draw_function_with_js_lowering(
+    context: &mut ExternalImportProviderContext,
+    package_id: crate::compiler_frontend::external_packages::ExternalPackageId,
+) -> Result<ExternalFunctionId, CompilerMessages> {
+    context
+        .package_registry
+        .register_external_function(
+            package_id,
+            ExternalFunctionSpec {
+                name: "draw".to_owned(),
+                parameters: Vec::new(),
+                returns: vec![ExternalReturnSlot::fresh(ExternalAbiType::I32)],
+                error_return_type: None,
+                receiver_type: None,
+                receiver_access: ExternalAccessKind::Shared,
+                lowerings: ExternalFunctionLowerings {
+                    js: Some(ExternalJsLowering::RuntimeFunction("draw".to_owned())),
+                    wasm: None,
+                },
+            },
+        )
+        .map_err(|error| provider_error_to_messages(error, context.string_table))
+}
+
+fn library_set_with_dummy_js_provider_with_lowering(calls: Arc<AtomicUsize>) -> LibrarySet {
+    let mut libraries = LibrarySet::with_mandatory_core();
+    libraries
+        .external_import_providers
+        .register(DummyJsImportProviderWithLowering::with_counter(calls));
+    libraries
+}
+
+#[test]
+fn provider_created_package_registry_survives_into_module() {
+    let dir = temp_dir("provider_registry_survives");
+    fs::create_dir_all(&dir).expect("should create temp dir");
+    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(
+        dir.join("#page.bst"),
+        "import @./drawing.js { draw }\nvalue = draw()\n",
+    )
+    .expect("should write page");
+    fs::write(dir.join("drawing.js"), "export function draw() {}\n").expect("should write js");
+
+    let mut config = Config::new(dir.clone());
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let mut string_table = StringTable::new();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let mut libraries = library_set_with_dummy_js_provider_with_lowering(Arc::clone(&calls));
+
+    let modules = compile_project_frontend(
+        &mut config,
+        &[],
+        &style_directives,
+        &mut libraries,
+        &mut string_table,
+    )
+    .expect("provider-backed import should compile");
+
+    let module = modules.into_iter().next().expect("expected one module");
+
+    assert!(
+        !module.module_external_imports.is_empty(),
+        "module should carry provider external imports"
+    );
+
+    for import in &module.module_external_imports {
+        let package = module
+            .external_package_registry
+            .get_package_by_id(import.package_id)
+            .expect(
+                "package referenced by module_external_imports should exist in module registry",
+            );
+        assert_eq!(
+            package.origin,
+            ExternalPackageOrigin::ProjectLocalJs,
+            "provider package should be ProjectLocalJs"
+        );
+    }
+
+    fs::remove_dir_all(&dir).expect("should remove temp dir");
+}
+
+#[test]
+fn provider_runtime_assets_deduped_for_repeated_imports() {
+    let dir = temp_dir("provider_runtime_assets_deduped");
+    fs::create_dir_all(&dir).expect("should create temp dir");
+    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(
+        dir.join("#page.bst"),
+        "import @./drawing.js { draw }\nimport @./other { run }\nvalue = draw()\nother_value = run()\n",
+    )
+    .expect("should write entry");
+    fs::write(
+        dir.join("other.bst"),
+        "import @./drawing.js { draw as render }\nrun || -> Int:\n    return render()\n;\n",
+    )
+    .expect("should write helper");
+    fs::write(dir.join("drawing.js"), "export function draw() {}\n").expect("should write js");
+
+    let mut config = Config::new(dir.clone());
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let mut string_table = StringTable::new();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let mut libraries = library_set_with_dummy_js_provider_with_lowering(Arc::clone(&calls));
+
+    let modules = compile_project_frontend(
+        &mut config,
+        &[],
+        &style_directives,
+        &mut libraries,
+        &mut string_table,
+    )
+    .expect("provider-backed imports should compile");
+
+    let module = modules.into_iter().next().expect("expected one module");
+
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        1,
+        "same canonical JS file should be resolved through the provider cache once"
+    );
+    assert_eq!(
+        module.module_external_imports.len(),
+        1,
+        "same JS file imported twice should produce one deduped module external import"
+    );
+    assert!(
+        module.module_external_imports[0].runtime_asset.is_some(),
+        "deduped import should carry runtime asset"
+    );
+
+    fs::remove_dir_all(&dir).expect("should remove temp dir");
+}
+
+#[test]
+fn provider_backed_import_with_js_lowering_passes_html_build() {
+    let dir = temp_dir("provider_js_lowering_html");
+    fs::create_dir_all(&dir).expect("should create temp dir");
+    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(
+        dir.join("#page.bst"),
+        "import @./drawing.js { draw }\nvalue = draw()\n",
+    )
+    .expect("should write page");
+    fs::write(dir.join("drawing.js"), "export function draw() {}\n").expect("should write js");
+
+    let mut config = Config::new(dir.clone());
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let mut string_table = StringTable::new();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let mut libraries = library_set_with_dummy_js_provider_with_lowering(Arc::clone(&calls));
+
+    let modules = compile_project_frontend(
+        &mut config,
+        &[],
+        &style_directives,
+        &mut libraries,
+        &mut string_table,
+    )
+    .expect("provider-backed import should compile");
+
+    let builder = crate::projects::html_project::html_project_builder::HtmlProjectBuilder::new();
+    let project = builder
+        .build_backend(modules, &config, &[], &mut string_table)
+        .expect("HTML build should succeed with module-owned registry");
+
+    assert!(
+        !project.output_files.is_empty(),
+        "HTML build should produce output files"
+    );
+
+    fs::remove_dir_all(&dir).expect("should remove temp dir");
+}
+
+#[test]
+fn single_file_remaps_module_type_environment_nominal_fields() {
+    let dir = temp_dir("single_file_type_env_remap");
+    fs::create_dir_all(&dir).expect("should create temp dir");
+    let bst_path = dir.join("test.bst");
+    fs::write(
+        &bst_path,
+        "Point = |\n    value Int,\n|\npoint = Point(1)\n",
+    )
+    .expect("should write .bst");
+
+    let mut config = Config::new(bst_path.clone());
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let mut string_table = StringTable::new();
+    string_table.intern("preexisting");
+
+    let modules = compile_project_frontend(
+        &mut config,
+        &[],
+        &style_directives,
+        &mut LibrarySet::with_mandatory_core(),
+        &mut string_table,
+    )
+    .expect("expected Ok for nominal type module");
+
+    let module = modules.first().expect("expected compiled module");
+    let point_path = InternedPath::from_single_str("test.bst", &mut string_table)
+        .join_str("Point", &mut string_table);
+    let nominal_id = module
+        .type_environment
+        .nominal_id_for_path(&point_path)
+        .expect("Point nominal path should be remapped into build string table");
+    let point_type_id = module
+        .type_environment
+        .type_id_for_nominal_id(nominal_id)
+        .expect("Point nominal type id should be registered");
+
+    assert_eq!(
+        display_type(point_type_id, &module.type_environment, &string_table),
+        "Point"
+    );
+    let fields = module
+        .type_environment
+        .fields_for(point_type_id)
+        .expect("Point fields should resolve through remapped TypeEnvironment");
+    assert_eq!(fields.len(), 1);
+    assert_eq!(fields[0].name.name_str(&string_table), Some("value"));
+    assert_eq!(
+        display_type(fields[0].type_id, &module.type_environment, &string_table),
+        "Int"
+    );
+
+    fs::remove_dir_all(&dir).expect("should remove temp dir");
+}
+
+#[test]
+fn single_file_rejects_wrong_extension() {
+    let dir = temp_dir("single_file_wrong_ext");
+    fs::create_dir_all(&dir).expect("should create temp dir");
+    let txt_path = dir.join("test.txt");
+    fs::write(&txt_path, "x ~= 10\n").expect("should write .txt");
+
+    let mut config = Config::new(txt_path);
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let mut string_table = StringTable::new();
+
+    let result = compile_project_frontend(
+        &mut config,
+        &[],
+        &style_directives,
+        &mut LibrarySet::with_mandatory_core(),
+        &mut string_table,
+    );
+
+    assert!(result.is_err(), "expected Err for wrong extension");
+    let messages = result.err().expect("checked above");
+    let diagnostic = messages
+        .error_diagnostics()
+        .next()
+        .expect("expected at least one error");
+    let error_text = terse::format_terse_diagnostic_with_context(
+        diagnostic,
+        DiagnosticRenderContext::new(&messages.string_table),
+    );
+    assert!(
+        error_text.contains(".bst"),
+        "expected error to mention .bst, got: {error_text}"
+    );
+
+    fs::remove_dir_all(&dir).expect("should remove temp dir");
+}
+
+#[test]
+fn single_file_rejects_missing_file() {
+    let dir = temp_dir("single_file_missing");
+    fs::create_dir_all(&dir).expect("should create temp dir");
+    let missing_path = dir.join("does_not_exist.bst");
+
+    let mut config = Config::new(missing_path);
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let mut string_table = StringTable::new();
+
+    let result = compile_project_frontend(
+        &mut config,
+        &[],
+        &style_directives,
+        &mut LibrarySet::with_mandatory_core(),
+        &mut string_table,
+    );
+
+    assert!(result.is_err(), "expected Err for missing file");
+    assert!(
+        result.err().expect("checked above").error_count() > 0,
+        "expected at least one error"
+    );
+
+    fs::remove_dir_all(&dir).expect("should remove temp dir");
+}
+
+#[test]
+fn single_file_rejects_optional_core_package_not_exposed_by_builder() {
+    let dir = temp_dir("single_file_optional_core_not_exposed");
+    fs::create_dir_all(&dir).expect("should create temp dir");
+    let bst_path = dir.join("test.bst");
+    fs::write(
+        &bst_path,
+        "import @core/text {length}\nvalue = length(\"abc\")\n",
+    )
+    .expect("should write .bst");
+
+    let mut config = Config::new(bst_path);
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let mut string_table = StringTable::new();
+
+    let result = compile_project_frontend(
+        &mut config,
+        &[],
+        &style_directives,
+        &mut LibrarySet::with_mandatory_core(),
+        &mut string_table,
+    );
+
+    assert!(
+        result.is_err(),
+        "optional core package should require builder opt-in"
+    );
+    let messages = result.err().expect("checked above");
+    let diagnostic = messages
+        .error_diagnostics()
+        .next()
+        .expect("expected one diagnostic");
+    let DiagnosticPayload::UnsupportedBuilderPackage { package_path } = diagnostic.payload else {
+        panic!("unexpected diagnostic payload: {:?}", diagnostic.payload);
+    };
+    assert_eq!(messages.string_table.resolve(package_path), "@core/text");
+
+    fs::remove_dir_all(&dir).expect("should remove temp dir");
+}
+
+// ── Directory-project flow ────────────────────────────────────────────────────
+
+#[test]
+fn directory_project_compiles_single_entry_module() {
+    let dir = temp_dir("dir_single_module");
+    fs::create_dir_all(&dir).expect("should create temp dir");
+    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(dir.join("#page.bst"), "x ~= 10\n").expect("should write entry");
+
+    let mut config = Config::new(dir.clone());
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let mut string_table = StringTable::new();
+
+    let result = compile_project_frontend(
+        &mut config,
+        &[],
+        &style_directives,
+        &mut LibrarySet::with_mandatory_core(),
+        &mut string_table,
+    );
+
+    assert!(
+        result.is_ok(),
+        "expected Ok for single-module directory project"
+    );
+    assert_eq!(
+        result.expect("checked above").len(),
+        1,
+        "expected exactly one module"
+    );
+
+    fs::remove_dir_all(&dir).expect("should remove temp dir");
+}
+
+#[test]
+fn directory_project_discovers_multiple_entry_modules() {
+    let dir = temp_dir("dir_multi_module");
+    fs::create_dir_all(&dir).expect("should create temp dir");
+    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(dir.join("#page.bst"), "x ~= 10\n").expect("should write page");
+    fs::write(dir.join("#layout.bst"), "y ~= 20\n").expect("should write layout");
+
+    let mut config = Config::new(dir.clone());
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let mut string_table = StringTable::new();
+
+    let result = compile_project_frontend(
+        &mut config,
+        &[],
+        &style_directives,
+        &mut LibrarySet::with_mandatory_core(),
+        &mut string_table,
+    );
+
+    assert!(
+        result.is_ok(),
+        "expected Ok for multi-module directory project"
+    );
+    assert_eq!(
+        result.expect("checked above").len(),
+        2,
+        "expected exactly two modules"
+    );
+
+    fs::remove_dir_all(&dir).expect("should remove temp dir");
+}
+
+#[test]
+fn directory_project_remaps_delta_collisions_across_modules() {
+    let dir = temp_dir("dir_delta_remap_collision");
+    fs::create_dir_all(&dir).expect("should create temp dir");
+    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(
+        dir.join("#a.bst"),
+        "Item = |\n    shared Int,\n    first_only String,\n|\nitem = Item(1, \"first\")\n",
+    )
+    .expect("should write first entry");
+    fs::write(
+        dir.join("#b.bst"),
+        "Item = |\n    shared Int,\n    second_only String,\n|\nitem = Item(1, \"second\")\n",
+    )
+    .expect("should write second entry");
+
+    let mut config = Config::new(dir.clone());
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let mut string_table = StringTable::new();
+
+    let modules = compile_project_frontend(
+        &mut config,
+        &[],
+        &style_directives,
+        &mut LibrarySet::with_mandatory_core(),
+        &mut string_table,
+    )
+    .expect("expected Ok for multi-module directory project");
+
+    let second_module = modules
+        .iter()
+        .find(|module| {
+            module
+                .entry_point
+                .file_name()
+                .and_then(|name| name.to_str())
+                == Some("#b.bst")
+        })
+        .expect("expected #b.bst module");
+    let item_path = InternedPath::from_single_str("#b.bst", &mut string_table)
+        .join_str("Item", &mut string_table);
+    let nominal_id = second_module
+        .type_environment
+        .nominal_id_for_path(&item_path)
+        .expect("Item nominal path should be remapped for the second module");
+    let item_type_id = second_module
+        .type_environment
+        .type_id_for_nominal_id(nominal_id)
+        .expect("Item nominal type should be registered");
+    let fields = second_module
+        .type_environment
+        .fields_for(item_type_id)
+        .expect("Item fields should resolve through remapped TypeEnvironment");
+    let field_names = fields
+        .iter()
+        .map(|field| field.name.name_str(&string_table))
+        .collect::<Vec<_>>();
+
+    assert_eq!(
+        display_type(item_type_id, &second_module.type_environment, &string_table),
+        "Item"
+    );
+    assert_eq!(field_names, vec![Some("shared"), Some("second_only")]);
+
+    fs::remove_dir_all(&dir).expect("should remove temp dir");
+}
+
+#[test]
+fn provider_backed_grouped_import_compiles_and_reuses_cache() {
+    let dir = temp_dir("provider_grouped_import_cache");
+    fs::create_dir_all(&dir).expect("should create temp dir");
+    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(
+        dir.join("#page.bst"),
+        "import @./drawing.js { draw as render }\nimport @./other { run }\nvalue = render()\nother_value = run()\n",
+    )
+    .expect("should write page");
+    fs::write(
+        dir.join("other.bst"),
+        "import @./drawing.js { draw as render_again }\nrun || -> Int:\n    return render_again()\n;\n",
+    )
+    .expect("should write helper source");
+    fs::write(dir.join("drawing.js"), "export function draw() {}\n").expect("should write js");
+
+    let mut config = Config::new(dir.clone());
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let mut string_table = StringTable::new();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let mut libraries = library_set_with_dummy_js_provider(Arc::clone(&calls));
+
+    let modules = compile_project_frontend(
+        &mut config,
+        &[],
+        &style_directives,
+        &mut libraries,
+        &mut string_table,
+    )
+    .expect("provider-backed grouped imports should compile");
+
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        1,
+        "same canonical JS file should be resolved through the provider once"
+    );
+    assert!(
+        modules.iter().any(module_contains_external_call),
+        "HIR should lower provider-backed grouped calls to external function IDs"
+    );
+
+    fs::remove_dir_all(&dir).expect("should remove temp dir");
+}
+
+#[test]
+fn provider_backed_namespace_import_exposes_function_and_type_members() {
+    let dir = temp_dir("provider_namespace_import");
+    fs::create_dir_all(&dir).expect("should create temp dir");
+    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(
+        dir.join("#page.bst"),
+        "import @./drawing.js\nwidget drawing.Widget = drawing.make_widget()\nvalue = drawing.draw()\n",
+    )
+    .expect("should write page");
+    fs::write(dir.join("drawing.js"), "export function draw() {}\n").expect("should write js");
+
+    let mut config = Config::new(dir.clone());
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let mut string_table = StringTable::new();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let mut libraries = library_set_with_dummy_js_provider(Arc::clone(&calls));
+
+    let modules = compile_project_frontend(
+        &mut config,
+        &[],
+        &style_directives,
+        &mut libraries,
+        &mut string_table,
+    )
+    .expect("provider-backed namespace import should compile");
+
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        1,
+        "namespace import should resolve the JS file once"
+    );
+    assert!(
+        modules.iter().any(module_contains_external_call),
+        "namespace member calls should lower to external function IDs"
+    );
+
+    fs::remove_dir_all(&dir).expect("should remove temp dir");
+}
+
+#[test]
+fn provider_backed_import_participates_in_visible_name_collisions() {
+    let dir = temp_dir("provider_import_name_collision");
+    fs::create_dir_all(&dir).expect("should create temp dir");
+    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(
+        dir.join("#page.bst"),
+        "draw #= 1\nimport @./drawing.js { draw }\nvalue = draw()\n",
+    )
+    .expect("should write page");
+    fs::write(dir.join("drawing.js"), "export function draw() {}\n").expect("should write js");
+
+    let mut config = Config::new(dir.clone());
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let mut string_table = StringTable::new();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let mut libraries = library_set_with_dummy_js_provider(calls);
+
+    let messages = match compile_project_frontend(
+        &mut config,
+        &[],
+        &style_directives,
+        &mut libraries,
+        &mut string_table,
+    ) {
+        Ok(_) => panic!("external import should collide with the local constant"),
+        Err(messages) => messages,
+    };
+
+    assert!(
+        messages.error_diagnostics().any(|diagnostic| {
+            matches!(
+                &diagnostic.payload,
+                DiagnosticPayload::ImportNameCollision { .. }
+            )
+        }),
+        "expected import name collision diagnostic, got {messages:?}"
+    );
+
+    fs::remove_dir_all(&dir).expect("should remove temp dir");
+}
+
+#[test]
+fn provider_backed_same_bare_name_from_different_directories_gets_distinct_packages() {
+    let dir = temp_dir("provider_same_bare_name_distinct_dirs");
+    fs::create_dir_all(dir.join("a")).expect("should create a dir");
+    fs::create_dir_all(dir.join("b")).expect("should create b dir");
+    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(
+        dir.join("#page.bst"),
+        "import @./a/use { run_a }\nimport @./b/use { run_b }\nvalue_a = run_a()\nvalue_b = run_b()\n",
+    )
+    .expect("should write page");
+    fs::write(
+        dir.join("a/use.bst"),
+        "import @./helper.js { draw as draw_a }\nrun_a || -> Int:\n    return draw_a()\n;\n",
+    )
+    .expect("should write a source");
+    fs::write(
+        dir.join("b/use.bst"),
+        "import @./helper.js { draw as draw_b }\nrun_b || -> Int:\n    return draw_b()\n;\n",
+    )
+    .expect("should write b source");
+    fs::write(dir.join("a/helper.js"), "export function draw() {}\n").expect("should write a js");
+    fs::write(dir.join("b/helper.js"), "export function draw() {}\n").expect("should write b js");
+
+    let mut config = Config::new(dir.clone());
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let mut string_table = StringTable::new();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let mut libraries = library_set_with_dummy_js_provider(Arc::clone(&calls));
+
+    let modules = compile_project_frontend(
+        &mut config,
+        &[],
+        &style_directives,
+        &mut libraries,
+        &mut string_table,
+    )
+    .expect("same bare JS filename in different directories should compile");
+
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        2,
+        "different canonical JS files with the same basename should get separate provider results"
+    );
+    assert!(
+        modules.iter().any(module_contains_external_call),
+        "calls through both provider-created packages should lower to external IDs"
+    );
+
+    fs::remove_dir_all(&dir).expect("should remove temp dir");
+}
+
+#[test]
+fn provider_backed_opaque_type_passes_to_same_package_function() {
+    let dir = temp_dir("provider_opaque_same_package");
+    fs::create_dir_all(&dir).expect("should create temp dir");
+    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(
+        dir.join("#page.bst"),
+        "import @./drawing.js { make_widget, use_widget }\nwidget = make_widget()\nvalue = use_widget(widget)\n",
+    )
+    .expect("should write page");
+    fs::write(dir.join("drawing.js"), "export function draw() {}\n").expect("should write js");
+
+    let mut config = Config::new(dir.clone());
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let mut string_table = StringTable::new();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let mut libraries = library_set_with_dummy_js_provider(Arc::clone(&calls));
+
+    let modules = compile_project_frontend(
+        &mut config,
+        &[],
+        &style_directives,
+        &mut libraries,
+        &mut string_table,
+    )
+    .expect("same-package opaque type should pass to function expecting that exact type");
+
+    assert!(
+        modules.iter().any(module_contains_external_call),
+        "HIR should contain external calls for make_widget and use_widget"
+    );
+
+    fs::remove_dir_all(&dir).expect("should remove temp dir");
+}
+
+#[test]
+fn provider_backed_opaque_type_from_different_package_is_rejected() {
+    let dir = temp_dir("provider_opaque_cross_package_rejected");
+    fs::create_dir_all(dir.join("a")).expect("should create a dir");
+    fs::create_dir_all(dir.join("b")).expect("should create b dir");
+    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(
+        dir.join("#page.bst"),
+        "import @./a/drawing.js { make_widget }\nimport @./b/drawing.js { use_widget }\nwidget = make_widget()\nvalue = use_widget(widget)\n",
+    )
+    .expect("should write page");
+    fs::write(dir.join("a/drawing.js"), "export function draw() {}\n").expect("should write a js");
+    fs::write(dir.join("b/drawing.js"), "export function draw() {}\n").expect("should write b js");
+
+    let mut config = Config::new(dir.clone());
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let mut string_table = StringTable::new();
+    let calls = Arc::new(AtomicUsize::new(0));
+    let mut libraries = library_set_with_dummy_js_provider(Arc::clone(&calls));
+
+    let messages = match compile_project_frontend(
+        &mut config,
+        &[],
+        &style_directives,
+        &mut libraries,
+        &mut string_table,
+    ) {
+        Ok(_) => panic!("cross-package opaque type mismatch should be rejected"),
+        Err(messages) => messages,
+    };
+
+    assert!(
+        messages.error_diagnostics().any(|diagnostic| {
+            matches!(&diagnostic.payload, DiagnosticPayload::TypeMismatch { .. })
+        }),
+        "expected type mismatch diagnostic for cross-package opaque type, got {messages:?}"
+    );
+
+    fs::remove_dir_all(&dir).expect("should remove temp dir");
+}
+
+#[test]
+fn directory_project_rejects_missing_entry_root() {
+    let dir = temp_dir("dir_missing_entry_root");
+    fs::create_dir_all(&dir).expect("should create temp dir");
+    // Config declares an entry_root that does not exist.
+    fs::write(dir.join("#config.bst"), "entry_root #= \"nonexistent\"\n")
+        .expect("should write config");
+
+    let mut config = Config::new(dir.clone());
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let mut string_table = StringTable::new();
+
+    // Parse config so entry_root is applied to Config.
+    let config_path = dir.join("#config.bst");
+    let libraries = crate::libraries::LibrarySet::with_mandatory_core();
+    let services = crate::build_system::project_config::ProjectConfigParseServices {
+        style_directives: &style_directives,
+        libraries: &libraries,
+    };
+    let parse_result = crate::build_system::project_config::parse_project_config_file(
+        &mut config,
+        &config_path,
+        &services,
+        &mut string_table,
+    );
+    assert!(parse_result.is_ok(), "config parse should succeed");
+
+    let result = compile_project_frontend(
+        &mut config,
+        &[],
+        &style_directives,
+        &mut LibrarySet::with_mandatory_core(),
+        &mut string_table,
+    );
+
+    assert!(result.is_err(), "expected Err for missing entry root");
+    assert!(
+        result.err().expect("checked above").has_errors(),
+        "expected at least one error"
+    );
+
+    fs::remove_dir_all(&dir).expect("should remove temp dir");
+}
+
+// ── Real HTML JS provider tests ───────────────────────────────────────────────
+
+fn library_set_with_html_js_provider() -> LibrarySet {
+    let mut libraries = LibrarySet::with_mandatory_core();
+    libraries
+        .external_import_providers
+        .register(std::sync::Arc::new(
+            crate::projects::html_project::external_js::js_import_provider::JsExternalImportProvider::new(),
+        ));
+    libraries
+}
+
+#[test]
+fn html_js_provider_namespace_import_resolves() {
+    let dir = temp_dir("html_js_provider_namespace");
+    fs::create_dir_all(&dir).expect("should create temp dir");
+    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(
+        dir.join("#page.bst"),
+        "import @./drawing.js\nvalue = drawing.draw()\n",
+    )
+    .expect("should write page");
+    fs::write(
+        dir.join("drawing.js"),
+        "/**\n * @bst.sig draw || -> Int\n */\nexport function draw() { return 1; }\n",
+    )
+    .expect("should write js");
+
+    let mut config = Config::new(dir.clone());
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let mut string_table = StringTable::new();
+    let mut libraries = library_set_with_html_js_provider();
+
+    let modules = compile_project_frontend(
+        &mut config,
+        &[],
+        &style_directives,
+        &mut libraries,
+        &mut string_table,
+    )
+    .expect("real JS provider namespace import should compile");
+
+    assert!(
+        modules
+            .iter()
+            .any(|module| module_contains_external_module_export(module, "draw")),
+        "HIR should preserve namespace JS call export metadata"
+    );
+
+    fs::remove_dir_all(&dir).expect("should remove temp dir");
+}
+
+#[test]
+fn html_js_provider_grouped_import_resolves() {
+    let dir = temp_dir("html_js_provider_grouped");
+    fs::create_dir_all(&dir).expect("should create temp dir");
+    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(
+        dir.join("#page.bst"),
+        "import @./drawing.js { draw as render }\nvalue = render()\n",
+    )
+    .expect("should write page");
+    fs::write(
+        dir.join("drawing.js"),
+        "/**\n * @bst.sig draw || -> Int\n */\nexport function draw() { return 1; }\n",
+    )
+    .expect("should write js");
+
+    let mut config = Config::new(dir.clone());
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let mut string_table = StringTable::new();
+    let mut libraries = library_set_with_html_js_provider();
+
+    let modules = compile_project_frontend(
+        &mut config,
+        &[],
+        &style_directives,
+        &mut libraries,
+        &mut string_table,
+    )
+    .expect("real JS provider grouped import should compile");
+
+    assert!(
+        modules
+            .iter()
+            .any(|module| module_contains_external_module_export(module, "draw")),
+        "HIR should preserve grouped alias JS export metadata"
+    );
+
+    fs::remove_dir_all(&dir).expect("should remove temp dir");
+}
+
+#[test]
+fn html_js_provider_grouped_alias_for_function_and_opaque_type_resolves() {
+    let dir = temp_dir("html_js_provider_grouped_alias");
+    fs::create_dir_all(&dir).expect("should create temp dir");
+    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(
+        dir.join("#page.bst"),
+        "import @./drawing.js { Widget as Canvas, draw as render }\nvalue = render()\n",
+    )
+    .expect("should write page");
+    fs::write(
+        dir.join("drawing.js"),
+        "/**\n * @bst.opaque Widget\n */\n/**\n * @bst.sig draw || -> Int\n */\nexport function draw() { return 1; }\n",
+    )
+    .expect("should write js");
+
+    let mut config = Config::new(dir.clone());
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let mut string_table = StringTable::new();
+    let mut libraries = library_set_with_html_js_provider();
+
+    let modules = compile_project_frontend(
+        &mut config,
+        &[],
+        &style_directives,
+        &mut libraries,
+        &mut string_table,
+    )
+    .expect("grouped alias for function and opaque type should compile");
+
+    assert!(
+        modules
+            .iter()
+            .any(|module| module_contains_external_module_export(module, "draw")),
+        "HIR should contain provider export metadata for aliased JS function"
+    );
+
+    fs::remove_dir_all(&dir).expect("should remove temp dir");
+}
+
+#[test]
+fn html_js_provider_receiver_method_resolves() {
+    let dir = temp_dir("html_js_provider_receiver_method");
+    fs::create_dir_all(&dir).expect("should create temp dir");
+    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(
+        dir.join("#page.bst"),
+        "import @./drawing.js { make_canvas, fill_rect }\ncanvas ~= make_canvas()\n~canvas.fill_rect(0.0, 0.0, 1.0, 1.0)\n",
+    )
+    .expect("should write page");
+    fs::write(
+        dir.join("drawing.js"),
+        "/**\n * @bst.opaque Canvas\n */\n/**\n * @bst.sig make_canvas || -> Canvas\n */\nexport function makeCanvas() {\n    return {};\n}\n/**\n * @bst.sig fill_rect |this ~Canvas, x Float, y Float, width Float, height Float|\n */\nexport function fillRect(ctx, x, y, width, height) {}\n",
+    )
+    .expect("should write js");
+
+    let mut config = Config::new(dir.clone());
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let mut string_table = StringTable::new();
+    let mut libraries = library_set_with_html_js_provider();
+
+    let modules = compile_project_frontend(
+        &mut config,
+        &[],
+        &style_directives,
+        &mut libraries,
+        &mut string_table,
+    )
+    .expect("receiver method from JS opaque type should compile");
+
+    assert!(
+        modules
+            .iter()
+            .any(|module| module_contains_external_module_export(module, "fillRect")),
+        "HIR should preserve receiver method JS export metadata"
+    );
+
+    fs::remove_dir_all(&dir).expect("should remove temp dir");
+}
+
+#[test]
+fn html_js_provider_repeated_imports_reuse_cache() {
+    let dir = temp_dir("html_js_provider_cache_reuse");
+    fs::create_dir_all(&dir).expect("should create temp dir");
+    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(
+        dir.join("#page.bst"),
+        "import @./drawing.js { draw }\nimport @./other { run }\nvalue = draw()\nother_value = run()\n",
+    )
+    .expect("should write entry");
+    fs::write(
+        dir.join("other.bst"),
+        "import @./drawing.js { draw as render_again }\nrun || -> Int:\n    return render_again()\n;\n",
+    )
+    .expect("should write helper source");
+    fs::write(
+        dir.join("drawing.js"),
+        "/**\n * @bst.sig draw || -> Int\n */\nexport function draw() { return 1; }\n",
+    )
+    .expect("should write js");
+
+    let mut config = Config::new(dir.clone());
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let mut string_table = StringTable::new();
+    let mut libraries = library_set_with_html_js_provider();
+
+    let modules = compile_project_frontend(
+        &mut config,
+        &[],
+        &style_directives,
+        &mut libraries,
+        &mut string_table,
+    )
+    .expect("repeated JS imports should compile");
+
+    let module = modules.into_iter().next().expect("expected one module");
+
+    assert_eq!(
+        module.module_external_imports.len(),
+        1,
+        "same JS file imported twice should produce one deduped module external import"
+    );
+
+    fs::remove_dir_all(&dir).expect("should remove temp dir");
+}
+
+#[test]
+fn html_js_provider_js_import_from_source_library_resolves() {
+    let dir = temp_dir("html_js_provider_source_library");
+    fs::create_dir_all(dir.join("lib").join("ui")).expect("should create lib/ui dir");
+    fs::write(dir.join("#config.bst"), "library_folders = {\"lib\"}\n")
+        .expect("should write config");
+    fs::write(dir.join("#page.bst"), "import @ui { run }\nvalue = run()\n")
+        .expect("should write page");
+    fs::write(
+        dir.join("lib/ui/#mod.bst"),
+        "import @./helper.js { draw }\n\nrun || -> Int:\n    return draw()\n;\n",
+    )
+    .expect("should write facade");
+    fs::write(
+        dir.join("lib/ui/helper.js"),
+        "/**\n * @bst.sig draw || -> Int\n */\nexport function draw() { return 1; }\n",
+    )
+    .expect("should write js");
+
+    let mut config = Config::new(dir.clone());
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let mut string_table = StringTable::new();
+    let mut libraries = library_set_with_html_js_provider();
+
+    let modules = compile_project_frontend(
+        &mut config,
+        &[],
+        &style_directives,
+        &mut libraries,
+        &mut string_table,
+    )
+    .expect("JS import from source library should compile");
+
+    assert!(
+        modules
+            .iter()
+            .any(|module| module_contains_external_module_export(module, "draw")),
+        "HIR should contain JS export metadata for source-library JS function"
+    );
+
+    fs::remove_dir_all(&dir).expect("should remove temp dir");
+}
+
+#[test]
+fn html_js_provider_invalid_js_file_surfaces_diagnostics() {
+    let dir = temp_dir("html_js_provider_invalid_js");
+    fs::create_dir_all(&dir).expect("should create temp dir");
+    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(
+        dir.join("#page.bst"),
+        "import @./drawing.js { draw }\nvalue = draw()\n",
+    )
+    .expect("should write page");
+    fs::write(
+        dir.join("drawing.js"),
+        "export function draw() { return 1; }\n",
+    )
+    .expect("should write unannotated js");
+
+    let mut config = Config::new(dir.clone());
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let mut string_table = StringTable::new();
+    let mut libraries = library_set_with_html_js_provider();
+
+    let messages = match compile_project_frontend(
+        &mut config,
+        &[],
+        &style_directives,
+        &mut libraries,
+        &mut string_table,
+    ) {
+        Ok(_) => panic!("unannotated JS export should produce a diagnostic"),
+        Err(messages) => messages,
+    };
+
+    assert!(
+        messages.has_errors(),
+        "expected at least one error diagnostic for invalid JS file"
+    );
+
+    fs::remove_dir_all(&dir).expect("should remove temp dir");
+}
+
+#[test]
+fn html_js_provider_malformed_receiver_signature_surfaces_diagnostics() {
+    let dir = temp_dir("html_js_provider_bad_receiver_signature");
+    fs::create_dir_all(&dir).expect("should create temp dir");
+    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(
+        dir.join("#page.bst"),
+        "import @./drawing.js { Canvas, bad }\n",
+    )
+    .expect("should write page");
+    fs::write(
+        dir.join("drawing.js"),
+        "/**\n * @bst.opaque Canvas\n */\n/**\n * @bst.sig bad |x Float, this ~Canvas|\n */\nexport function bad(x, ctx) {}\n",
+    )
+    .expect("should write malformed receiver js");
+
+    let mut config = Config::new(dir.clone());
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let mut string_table = StringTable::new();
+    let mut libraries = library_set_with_html_js_provider();
+
+    let messages = match compile_project_frontend(
+        &mut config,
+        &[],
+        &style_directives,
+        &mut libraries,
+        &mut string_table,
+    ) {
+        Ok(_) => panic!("malformed JS receiver signature should produce a diagnostic"),
+        Err(messages) => messages,
+    };
+
+    assert!(
+        messages.has_errors(),
+        "expected at least one error diagnostic for malformed receiver signature"
+    );
+
+    fs::remove_dir_all(&dir).expect("should remove temp dir");
+}
+
+#[test]
+fn html_js_provider_fallible_function_with_error_return_compiles() {
+    let dir = temp_dir("html_js_provider_fallible");
+    fs::create_dir_all(&dir).expect("should create temp dir");
+    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(
+        dir.join("#page.bst"),
+        "import @./drawing.js { Canvas, get_canvas }\nrun || -> Canvas, Error!:\n    return get_canvas(\"game\")!\n;\n",
+    )
+    .expect("should write page");
+    fs::write(
+        dir.join("drawing.js"),
+        "import { bstOk } from \"@beanstalk/runtime\";\n/**\n * @bst.opaque Canvas\n */\n/**\n * @bst.sig get_canvas |id String| -> Canvas, Error!\n */\nexport function getCanvas(id) {\n    return bstOk({});\n}\n",
+    )
+    .expect("should write js");
+
+    let mut config = Config::new(dir.clone());
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let mut string_table = StringTable::new();
+    let mut libraries = library_set_with_html_js_provider();
+
+    let modules = compile_project_frontend(
+        &mut config,
+        &[],
+        &style_directives,
+        &mut libraries,
+        &mut string_table,
+    )
+    .expect("fallible JS function with Error! should compile");
+
+    assert!(
+        modules
+            .iter()
+            .any(|module| module_contains_external_module_export(module, "getCanvas")),
+        "HIR should contain JS export metadata for fallible JS function"
+    );
+
+    fs::remove_dir_all(&dir).expect("should remove temp dir");
+}

@@ -1,0 +1,264 @@
+//! Tokenizer string-ID remapping tests.
+//!
+//! WHAT: verifies that token streams produced from local string tables can be remapped into a
+//! merged module/global table without losing source locations or path-token metadata.
+//! WHY: per-file frontend preparation depends on token outputs being safe to merge before
+//! module-wide header parsing and dependency sorting consume them.
+
+use crate::compiler_frontend::compiler_messages::source_location::{CharPosition, SourceLocation};
+use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, PathTokenItem, Token, TokenKind};
+
+fn make_location(scope: InternedPath) -> SourceLocation {
+    SourceLocation::new(scope, CharPosition::default(), CharPosition::default())
+}
+
+fn make_token(kind: TokenKind, scope: InternedPath) -> Token {
+    Token::new(kind, make_location(scope))
+}
+
+fn make_path_token_item(
+    path_components: &[&str],
+    alias: Option<&str>,
+    string_table: &mut StringTable,
+) -> PathTokenItem {
+    let components: Vec<StringId> = path_components
+        .iter()
+        .map(|c| string_table.intern(c))
+        .collect();
+    let path = InternedPath::from_components(components);
+    let alias = alias.map(|a| string_table.intern(a));
+    let path_scope = InternedPath::from_single_str("test.bst", string_table);
+
+    PathTokenItem {
+        path,
+        alias,
+        path_location: make_location(path_scope.clone()),
+        alias_location: alias.map(|_| make_location(path_scope)),
+        from_grouped: false,
+    }
+}
+
+#[test]
+fn flat_token_kinds_remap_correctly() {
+    let mut local_table = StringTable::new();
+    let mut global_table = StringTable::new();
+
+    let alpha_local = local_table.intern("alpha");
+    let beta_local = local_table.intern("beta");
+
+    global_table.intern("alpha");
+    let _gamma_global = global_table.intern("gamma");
+
+    let remap = global_table.merge_from(&local_table);
+
+    let mut symbol = TokenKind::Symbol(alpha_local);
+    symbol.remap_string_ids(&remap);
+    assert!(
+        matches!(symbol, TokenKind::Symbol(id) if global_table.resolve(id) == "alpha"),
+        "symbol should resolve to 'alpha' in global table"
+    );
+
+    let mut style = TokenKind::StyleDirective(beta_local);
+    style.remap_string_ids(&remap);
+    assert!(
+        matches!(style, TokenKind::StyleDirective(id) if global_table.resolve(id) == "beta"),
+        "style directive should resolve to 'beta' in global table"
+    );
+
+    let mut string_lit = TokenKind::StringSliceLiteral(alpha_local);
+    string_lit.remap_string_ids(&remap);
+    assert!(
+        matches!(string_lit, TokenKind::StringSliceLiteral(id) if global_table.resolve(id) == "alpha"),
+        "string slice literal should resolve to 'alpha' in global table"
+    );
+
+    let mut raw_lit = TokenKind::RawStringLiteral(beta_local);
+    raw_lit.remap_string_ids(&remap);
+    assert!(
+        matches!(raw_lit, TokenKind::RawStringLiteral(id) if global_table.resolve(id) == "beta"),
+        "raw string literal should resolve to 'beta' in global table"
+    );
+
+    let mut non_string_kind = TokenKind::IntLiteral(42);
+    non_string_kind.remap_string_ids(&remap);
+    assert!(
+        matches!(non_string_kind, TokenKind::IntLiteral(42)),
+        "non-string-bearing token kind should be unchanged"
+    );
+}
+
+#[test]
+fn path_token_item_remaps_all_fields() {
+    let mut local_table = StringTable::new();
+    let mut global_table = StringTable::new();
+
+    let item = make_path_token_item(&["components", "Button"], Some("Btn"), &mut local_table);
+
+    let _alpha_global = global_table.intern("alpha");
+
+    let remap = global_table.merge_from(&local_table);
+
+    let mut remapped_item = item.clone();
+    remapped_item.remap_string_ids(&remap);
+
+    let path_strings: Vec<&str> = remapped_item
+        .path
+        .as_components()
+        .iter()
+        .map(|id| global_table.resolve(*id))
+        .collect();
+    assert_eq!(path_strings, vec!["components", "Button"]);
+
+    let alias = remapped_item
+        .alias
+        .expect("alias should be present after remap");
+    assert_eq!(global_table.resolve(alias), "Btn");
+
+    let path_scope = remapped_item.path_location.scope.clone();
+    let path_scope_strings: Vec<&str> = path_scope
+        .as_components()
+        .iter()
+        .map(|id| global_table.resolve(*id))
+        .collect();
+    assert_eq!(path_scope_strings, vec!["test.bst"]);
+
+    let alias_location = remapped_item
+        .alias_location
+        .expect("alias location should be present after remap");
+    let alias_scope_strings: Vec<&str> = alias_location
+        .scope
+        .as_components()
+        .iter()
+        .map(|id| global_table.resolve(*id))
+        .collect();
+    assert_eq!(alias_scope_strings, vec!["test.bst"]);
+
+    assert_eq!(remapped_item.from_grouped, item.from_grouped);
+}
+
+#[test]
+fn file_tokens_remaps_src_path_and_tokens_preserves_canonical_os_path() {
+    let mut local_table = StringTable::new();
+    let mut global_table = StringTable::new();
+
+    let src_path_local = InternedPath::from_single_str("local.bst", &mut local_table);
+    let token_scope_local = InternedPath::from_single_str("local.bst", &mut local_table);
+
+    let symbol_local = local_table.intern("my_symbol");
+
+    let tokens = vec![
+        make_token(TokenKind::Symbol(symbol_local), token_scope_local.clone()),
+        make_token(TokenKind::IntLiteral(7), token_scope_local.clone()),
+    ];
+
+    let canonical_path = std::path::PathBuf::from("/absolute/local.bst");
+    let mut file_tokens = FileTokens::new_with_identity(
+        src_path_local.clone(),
+        None,
+        Some(canonical_path.clone()),
+        tokens,
+    );
+
+    global_table.intern("preexisting");
+
+    let remap = global_table.merge_from(&local_table);
+
+    file_tokens.remap_string_ids(&remap);
+
+    let src_path_strings: Vec<&str> = file_tokens
+        .src_path
+        .as_components()
+        .iter()
+        .map(|id| global_table.resolve(*id))
+        .collect();
+    assert_eq!(src_path_strings, vec!["local.bst"]);
+
+    assert_eq!(
+        file_tokens.canonical_os_path,
+        Some(canonical_path),
+        "canonical_os_path should be preserved by remap"
+    );
+
+    let first_token = file_tokens
+        .tokens
+        .first()
+        .expect("first token should exist");
+    assert!(
+        matches!(first_token.kind, TokenKind::Symbol(id) if global_table.resolve(id) == "my_symbol"),
+        "token symbol should resolve correctly after remap"
+    );
+
+    let first_location_strings: Vec<&str> = first_token
+        .location
+        .scope
+        .as_components()
+        .iter()
+        .map(|id| global_table.resolve(*id))
+        .collect();
+    assert_eq!(first_location_strings, vec!["local.bst"]);
+
+    let second_token = file_tokens
+        .tokens
+        .get(1)
+        .expect("second token should exist");
+    assert!(
+        matches!(second_token.kind, TokenKind::IntLiteral(7)),
+        "non-string token should be unchanged"
+    );
+}
+
+#[test]
+fn file_tokens_with_path_tokens_remaps_nested_items() {
+    let mut local_table = StringTable::new();
+    let mut global_table = StringTable::new();
+
+    let src_path_local = InternedPath::from_single_str("module.bst", &mut local_table);
+    let token_scope_local = InternedPath::from_single_str("module.bst", &mut local_table);
+
+    let path_items = vec![
+        make_path_token_item(&["ui", "Button"], Some("Btn"), &mut local_table),
+        make_path_token_item(&["utils", "helper"], None, &mut local_table),
+    ];
+
+    let tokens = vec![make_token(TokenKind::Path(path_items), token_scope_local)];
+
+    let mut file_tokens = FileTokens::new(src_path_local, tokens);
+
+    let remap = global_table.merge_from(&local_table);
+
+    file_tokens.remap_string_ids(&remap);
+
+    let path_token = file_tokens.tokens.first().expect("path token should exist");
+
+    let items = match &path_token.kind {
+        TokenKind::Path(items) => items,
+        _ => panic!("expected Path token kind"),
+    };
+
+    assert_eq!(items.len(), 2);
+
+    let first = &items[0];
+    let first_path: Vec<&str> = first
+        .path
+        .as_components()
+        .iter()
+        .map(|id| global_table.resolve(*id))
+        .collect();
+    assert_eq!(first_path, vec!["ui", "Button"]);
+    assert_eq!(
+        global_table.resolve(first.alias.expect("alias should exist")),
+        "Btn"
+    );
+
+    let second = &items[1];
+    let second_path: Vec<&str> = second
+        .path
+        .as_components()
+        .iter()
+        .map(|id| global_table.resolve(*id))
+        .collect();
+    assert_eq!(second_path, vec!["utils", "helper"]);
+    assert!(second.alias.is_none());
+}

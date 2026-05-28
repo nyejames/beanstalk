@@ -1,0 +1,16 @@
+[backends.html]
+mode = "success"
+warnings = "ignore"
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = [
+    "Math.sin(",
+    "Math.cos(",
+    "3.141592653589793",
+]
+must_not_contain = [
+    "function __bs_math_sin(",
+    "function __bs_math_cos(",
+]

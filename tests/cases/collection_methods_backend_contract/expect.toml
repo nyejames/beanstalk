@@ -1,0 +1,22 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["collection_methods_backend_contract first=99 removed=20 len=3"]
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = [
+    "__bs_collection_get",
+    "__bs_collection_set",
+    "__bs_collection_push",
+    "__bs_collection_remove",
+    "__bs_collection_length",
+    "collection_methods_backend_contract",
+]
+must_not_contain = [
+    "__bs_write(__bs_index(",
+    "__bs_result_propagate(__bs_collection_push(",
+    "__bs_result_propagate(__bs_collection_remove(",
+    "__bs_result_propagate(__bs_collection_length(",
+]

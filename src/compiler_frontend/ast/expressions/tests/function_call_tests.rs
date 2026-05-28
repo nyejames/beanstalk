@@ -1,0 +1,409 @@
+//! Function call argument parsing regression tests.
+//!
+//! WHAT: validates positional and named argument parsing, call-access mode classification, and
+//!       argument validation against signatures.
+//! WHY: call parsing spans syntax, dispatch, and access-mode intent; focused tests prevent
+//!      subtle regressions in how arguments are bound and passed.
+
+use crate::compiler_frontend::ast::expressions::call_argument::CallAccessMode;
+use crate::compiler_frontend::ast::expressions::function_calls::parse_call_arguments;
+use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
+use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationTable};
+use crate::compiler_frontend::compiler_messages::{
+    CompilerDiagnostic, DiagnosticKind, DiagnosticPayload, InvalidCallShapeReason,
+    SyntaxDiagnosticKind,
+};
+use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
+use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
+use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::tests::test_support::{
+    parse_single_file_ast, parse_single_file_ast_diagnostic,
+};
+use crate::compiler_frontend::tokenizer::lexer::tokenize;
+use crate::compiler_frontend::tokenizer::tokens::{TokenKind, TokenizeMode};
+use crate::compiler_frontend::type_coercion::compatibility::TypeCompatibilityCache;
+use std::rc::Rc;
+
+fn parse_args(
+    source: &str,
+) -> Vec<crate::compiler_frontend::ast::expressions::call_argument::CallArgument> {
+    let mut string_table = StringTable::new();
+    let file_path = InternedPath::from_single_str("#page.bst", &mut string_table);
+    let mut tokens = tokenize(
+        source,
+        &file_path,
+        TokenizeMode::Normal,
+        &crate::compiler_frontend::style_directives::StyleDirectiveRegistry::built_ins(),
+        &mut string_table,
+        None,
+    )
+    .expect("tokenization should succeed");
+
+    while tokens.current_token_kind() != &TokenKind::OpenParenthesis {
+        tokens.advance();
+    }
+
+    let context = ScopeContext::new(
+        ContextKind::Function,
+        InternedPath::new(),
+        Rc::new(TopLevelDeclarationTable::new(vec![])),
+        ExternalPackageRegistry::new(),
+        vec![],
+    );
+
+    let mut type_environment = TypeEnvironment::new();
+    let mut compatibility_cache = TypeCompatibilityCache::new();
+    let mut type_interner = AstTypeInterner::new(&mut type_environment, &mut compatibility_cache);
+    parse_call_arguments(&mut tokens, &context, &mut type_interner, &mut string_table)
+        .expect("call arguments should parse")
+}
+
+fn parse_args_diagnostic(source: &str) -> CompilerDiagnostic {
+    let mut string_table = StringTable::new();
+    let file_path = InternedPath::from_single_str("#page.bst", &mut string_table);
+    let mut tokens = tokenize(
+        source,
+        &file_path,
+        TokenizeMode::Normal,
+        &crate::compiler_frontend::style_directives::StyleDirectiveRegistry::built_ins(),
+        &mut string_table,
+        None,
+    )
+    .expect("tokenization should succeed");
+
+    while tokens.current_token_kind() != &TokenKind::OpenParenthesis {
+        tokens.advance();
+    }
+
+    let context = ScopeContext::new(
+        ContextKind::Function,
+        InternedPath::new(),
+        Rc::new(TopLevelDeclarationTable::new(vec![])),
+        ExternalPackageRegistry::new(),
+        vec![],
+    );
+
+    let mut type_environment = TypeEnvironment::new();
+    let mut compatibility_cache = TypeCompatibilityCache::new();
+    let mut type_interner = AstTypeInterner::new(&mut type_environment, &mut compatibility_cache);
+    let error = parse_call_arguments(&mut tokens, &context, &mut type_interner, &mut string_table)
+        .expect_err("call arguments should fail");
+
+    CompilerDiagnostic::from(error)
+}
+
+fn assert_invalid_call_shape(
+    source: &str,
+    reason_matches: impl FnOnce(&InvalidCallShapeReason) -> bool,
+) {
+    let diagnostic = parse_single_file_ast_diagnostic(source);
+
+    let DiagnosticPayload::InvalidCallShape { reason, .. } = &diagnostic.payload else {
+        panic!(
+            "expected InvalidCallShape diagnostic, got {:?}",
+            diagnostic.payload
+        );
+    };
+
+    assert!(reason_matches(reason));
+}
+
+// ── Parser-level tests (syntax / parse_call_arguments) ───────────────────────
+
+#[test]
+fn parses_positional_and_named_call_arguments_with_equals_syntax() {
+    let args = parse_args("sum(1, b = 2)");
+
+    assert_eq!(args.len(), 2);
+    assert!(args[0].target_param.is_none());
+    assert_eq!(args[0].access_mode, CallAccessMode::Shared);
+    assert!(args[1].target_param.is_some());
+}
+
+#[test]
+fn parses_named_mutable_argument_on_value_side() {
+    let args = parse_args("take(value = ~1)");
+
+    assert_eq!(args.len(), 1);
+    assert!(args[0].target_param.is_some());
+    assert_eq!(args[0].access_mode, CallAccessMode::Mutable);
+}
+
+#[test]
+fn parses_all_named_arguments() {
+    let args = parse_args("sum(a = 1, b = 2)");
+
+    assert_eq!(args.len(), 2);
+    assert!(args[0].target_param.is_some());
+    assert!(args[1].target_param.is_some());
+}
+
+#[test]
+fn parses_mixed_positional_then_named() {
+    let args = parse_args("sum(1, b = 2, c = 3)");
+
+    assert_eq!(args.len(), 3);
+    assert!(args[0].target_param.is_none());
+    assert!(args[1].target_param.is_some());
+    assert!(args[2].target_param.is_some());
+}
+
+#[test]
+fn rejects_mutable_marker_on_named_argument_target() {
+    let diagnostic = parse_single_file_ast_diagnostic(
+        r#"
+take |value ~Int|:
+;
+
+value ~= 1
+take(~value = value)
+"#,
+    );
+
+    assert!(matches!(
+        diagnostic.payload,
+        DiagnosticPayload::UnexpectedToken { .. }
+    ));
+}
+
+#[test]
+fn rejects_positional_after_named() {
+    assert_invalid_call_shape(
+        r#"
+sum |a Int, b Int| -> Int:
+    return a + b
+;
+
+sum(a = 1, 2)
+"#,
+        |reason| matches!(reason, InvalidCallShapeReason::PositionalAfterNamed),
+    );
+}
+
+#[test]
+fn rejects_duplicate_named_target() {
+    assert_invalid_call_shape(
+        r#"
+sum |a Int, b Int| -> Int:
+    return a + b
+;
+
+sum(a = 1, a = 2)
+"#,
+        |reason| matches!(reason, InvalidCallShapeReason::DuplicateArgument { .. }),
+    );
+}
+
+#[test]
+fn rejects_unknown_named_parameter() {
+    assert_invalid_call_shape(
+        r#"
+sum |a Int, b Int| -> Int:
+    return a + b
+;
+
+sum(a = 1, unknown = 2)
+"#,
+        |reason| matches!(reason, InvalidCallShapeReason::NamedArgumentNotFound { .. }),
+    );
+}
+
+#[test]
+fn rejects_missing_required_parameter() {
+    assert_invalid_call_shape(
+        r#"
+sum |a Int, b Int| -> Int:
+    return a + b
+;
+
+sum(a = 1)
+"#,
+        |reason| matches!(reason, InvalidCallShapeReason::MissingArgument { .. }),
+    );
+}
+
+#[test]
+fn rejects_tilde_on_left_side_of_named_arg() {
+    // ~name = value is explicitly rejected at the parse level
+    let diagnostic = parse_args_diagnostic("take(~value = 1)");
+
+    assert_eq!(
+        diagnostic.kind,
+        DiagnosticKind::Syntax(SyntaxDiagnosticKind::UnexpectedToken)
+    );
+    assert_eq!(diagnostic.kind.code(), "BST-SYNTAX-0002");
+    assert!(matches!(
+        diagnostic.payload,
+        DiagnosticPayload::UnexpectedToken {
+            found: TokenKind::Mutable
+        }
+    ));
+}
+
+#[test]
+fn rejects_missing_tilde_for_mutable_positional_parameter() {
+    assert_invalid_call_shape(
+        r#"
+mutate |value ~Int|:
+    value = 5
+;
+
+x ~= 1
+mutate(x)
+"#,
+        |reason| matches!(reason, InvalidCallShapeReason::MutableAccessRequired { .. }),
+    );
+}
+
+#[test]
+fn accepts_fresh_rvalue_for_mutable_positional_parameter() {
+    let _ = parse_single_file_ast(
+        r#"
+mutate |value ~Int|:
+    value = value + 1
+;
+
+mutate(1 + 2)
+"#,
+    );
+}
+
+#[test]
+fn accepts_fresh_rvalue_for_mutable_named_parameter() {
+    let _ = parse_single_file_ast(
+        r#"
+mutate |value ~Int|:
+    value = value + 1
+;
+
+mutate(value = 1 + 2)
+"#,
+    );
+}
+
+#[test]
+fn accepts_fresh_template_for_mutable_parameter() {
+    let _ = parse_single_file_ast(
+        r#"
+mutate |value ~String|:
+    value = [:updated]
+;
+
+mutate([:content])
+"#,
+    );
+}
+
+#[test]
+fn accepts_fresh_collection_for_mutable_parameter() {
+    let _ = parse_single_file_ast(
+        r#"
+mutate |values ~{Int}|:
+    ~values.push(4)
+;
+
+mutate({1, 2, 3})
+"#,
+    );
+}
+
+#[test]
+fn accepts_fresh_struct_constructor_for_mutable_parameter() {
+    let _ = parse_single_file_ast(
+        r#"
+Item = |
+    label String,
+|
+
+mutate |value ~Item|:
+;
+
+mutate(Item("x"))
+"#,
+    );
+}
+
+#[test]
+fn rejects_tilde_on_immutable_place_argument() {
+    assert_invalid_call_shape(
+        r#"
+mutate |value ~Int|:
+    value = 5
+;
+
+x = 1
+mutate(~x)
+"#,
+        |reason| {
+            matches!(
+                reason,
+                InvalidCallShapeReason::MutableAccessOnImmutablePlace { .. }
+            )
+        },
+    );
+}
+
+#[test]
+fn rejects_tilde_on_non_place_argument_literal() {
+    assert_invalid_call_shape(
+        r#"
+mutate |value ~Int|:
+    value = 5
+;
+
+mutate(~12)
+"#,
+        |reason| {
+            matches!(
+                reason,
+                InvalidCallShapeReason::MutableAccessOnNonPlace { .. }
+            )
+        },
+    );
+}
+
+#[test]
+fn rejects_missing_tilde_for_mutable_named_parameter() {
+    assert_invalid_call_shape(
+        r#"
+increment |value ~Int| -> Int:
+    value = value + 1
+    return value
+;
+
+x ~= 10
+result = increment(value = x)
+io(result)
+"#,
+        |reason| matches!(reason, InvalidCallShapeReason::MutableAccessRequired { .. }),
+    );
+}
+
+#[test]
+fn duplicate_named_parameter_uses_canonical_diagnostic_text() {
+    assert_invalid_call_shape(
+        r#"
+sum |a Int, b Int| -> Int:
+    return a + b
+;
+
+sum(a = 1, a = 2)
+"#,
+        |reason| matches!(reason, InvalidCallShapeReason::DuplicateArgument { .. }),
+    );
+}
+
+#[test]
+fn unknown_named_parameter_lists_known_parameter_hint() {
+    assert_invalid_call_shape(
+        r#"
+sum |a Int, b Int| -> Int:
+    return a + b
+;
+
+sum(a = 1, typo = 2)
+"#,
+        |reason| matches!(reason, InvalidCallShapeReason::NamedArgumentNotFound { .. }),
+    );
+}

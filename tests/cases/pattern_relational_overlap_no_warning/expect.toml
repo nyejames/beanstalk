@@ -1,0 +1,4 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["pattern_relational_overlap_no_warning result=less_than_ten"]

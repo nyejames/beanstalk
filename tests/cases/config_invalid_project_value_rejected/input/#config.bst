@@ -1,0 +1,1 @@
+project #= "html_wasm"

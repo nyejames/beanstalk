@@ -1,0 +1,1 @@
+C quoted path fixture.

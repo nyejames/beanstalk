@@ -1,0 +1,428 @@
+//! Diagnostic kind taxonomy and stable descriptor mapping.
+//!
+//! WHAT: groups diagnostics by compiler domain and derives category, code, title, and default
+//! severity from the kind.
+//! WHY: categories should not be stored redundantly on diagnostics; the kind is the source of
+//! truth for grouping and render metadata.
+
+use crate::compiler_frontend::compiler_messages::{DiagnosticDescriptor, DiagnosticSeverity};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum DiagnosticKind {
+    Syntax(SyntaxDiagnosticKind),
+    Type(TypeDiagnosticKind),
+    Rule(RuleDiagnosticKind),
+    Import(ImportDiagnosticKind),
+    Borrow(BorrowDiagnosticKind),
+    Config(ConfigDiagnosticKind),
+    Infrastructure(InfrastructureDiagnosticKind),
+    DeferredFeature(DeferredFeatureDiagnosticKind),
+}
+
+impl DiagnosticKind {
+    pub(crate) fn descriptor(self) -> DiagnosticDescriptor {
+        super::diagnostic_kind_descriptors::descriptor_for_kind(self)
+    }
+
+    pub(crate) fn category(self) -> DiagnosticCategory {
+        match self {
+            DiagnosticKind::Syntax(_) => DiagnosticCategory::Syntax,
+            DiagnosticKind::Type(_) => DiagnosticCategory::Type,
+            DiagnosticKind::Rule(_) => DiagnosticCategory::Rule,
+            DiagnosticKind::Import(_) => DiagnosticCategory::Import,
+            DiagnosticKind::Borrow(_) => DiagnosticCategory::Borrow,
+            DiagnosticKind::Config(_) => DiagnosticCategory::Config,
+            DiagnosticKind::Infrastructure(_) => DiagnosticCategory::Infrastructure,
+            DiagnosticKind::DeferredFeature(_) => DiagnosticCategory::DeferredFeature,
+        }
+    }
+
+    pub(crate) fn code(self) -> &'static str {
+        self.descriptor().code
+    }
+
+    pub(crate) fn default_severity(self) -> DiagnosticSeverity {
+        self.descriptor().default_severity
+    }
+
+    #[cfg(test)]
+    pub(crate) fn all() -> Vec<Self> {
+        let mut kinds = Vec::new();
+
+        kinds.extend(SyntaxDiagnosticKind::all().map(DiagnosticKind::Syntax));
+        kinds.extend(TypeDiagnosticKind::all().map(DiagnosticKind::Type));
+        kinds.extend(RuleDiagnosticKind::all().map(DiagnosticKind::Rule));
+        kinds.extend(ImportDiagnosticKind::all().map(DiagnosticKind::Import));
+        kinds.extend(BorrowDiagnosticKind::all().map(DiagnosticKind::Borrow));
+        kinds.extend(ConfigDiagnosticKind::all().map(DiagnosticKind::Config));
+        kinds.extend(InfrastructureDiagnosticKind::all().map(DiagnosticKind::Infrastructure));
+        kinds.extend(DeferredFeatureDiagnosticKind::all().map(DiagnosticKind::DeferredFeature));
+
+        kinds
+    }
+}
+
+// -------------------------
+//  Diagnostic Kind Enums
+// -------------------------
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub(crate) enum DiagnosticCategory {
+    Syntax,
+    Type,
+    Rule,
+    Import,
+    Borrow,
+    Config,
+    Infrastructure,
+    DeferredFeature,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum SyntaxDiagnosticKind {
+    ExpectedToken,
+    UnexpectedToken,
+    UnexpectedTrailingComma,
+    MalformedCssTemplate,
+    MalformedHtmlTemplate,
+    UnterminatedStringLiteral,
+    InvalidCharacter,
+    InvalidNumberLiteral,
+    InvalidCharLiteral,
+    InvalidStyleDirective,
+    InvalidIdentifier,
+    MissingClosingDelimiter,
+    UnexpectedTokenInDeclaration,
+    InvalidTypeAnnotation,
+    InvalidGenericApplication,
+    InvalidCollectionType,
+    UnexpectedEndOfFile,
+    InvalidPath,
+    InvalidImportClause,
+    InvalidGenericParameter,
+    InvalidTemplateDirective,
+    InvalidTemplateStructure,
+    InvalidExpression,
+    MissingOperatorOperand,
+    InvalidStandaloneStatement,
+    ExpectedSymbolStatement,
+    MissingCollectionItem,
+    InvalidMatchArm,
+    InvalidLoopHeader,
+    InvalidStatementPosition,
+    CommonSyntaxMistake,
+}
+
+#[cfg(test)]
+impl SyntaxDiagnosticKind {
+    pub(crate) fn all() -> impl Iterator<Item = Self> {
+        [
+            Self::ExpectedToken,
+            Self::UnexpectedToken,
+            Self::UnexpectedTrailingComma,
+            Self::MalformedCssTemplate,
+            Self::MalformedHtmlTemplate,
+            Self::UnterminatedStringLiteral,
+            Self::InvalidCharacter,
+            Self::InvalidNumberLiteral,
+            Self::InvalidCharLiteral,
+            Self::InvalidStyleDirective,
+            Self::InvalidIdentifier,
+            Self::MissingClosingDelimiter,
+            Self::UnexpectedTokenInDeclaration,
+            Self::InvalidTypeAnnotation,
+            Self::InvalidGenericApplication,
+            Self::InvalidCollectionType,
+            Self::UnexpectedEndOfFile,
+            Self::InvalidPath,
+            Self::InvalidImportClause,
+            Self::InvalidGenericParameter,
+            Self::InvalidTemplateDirective,
+            Self::InvalidTemplateStructure,
+            Self::InvalidExpression,
+            Self::MissingOperatorOperand,
+            Self::InvalidStandaloneStatement,
+            Self::ExpectedSymbolStatement,
+            Self::MissingCollectionItem,
+            Self::InvalidMatchArm,
+            Self::InvalidLoopHeader,
+            Self::InvalidStatementPosition,
+            Self::CommonSyntaxMistake,
+        ]
+        .into_iter()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum TypeDiagnosticKind {
+    TypeMismatch,
+    EmptyCollectionTypeAmbiguity,
+    UnsupportedOperatorTypes,
+    InvalidResultOperand,
+    IncompatibleChoiceComparison,
+}
+
+#[cfg(test)]
+impl TypeDiagnosticKind {
+    pub(crate) fn all() -> impl Iterator<Item = Self> {
+        [
+            Self::TypeMismatch,
+            Self::EmptyCollectionTypeAmbiguity,
+            Self::UnsupportedOperatorTypes,
+            Self::InvalidResultOperand,
+            Self::IncompatibleChoiceComparison,
+        ]
+        .into_iter()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum RuleDiagnosticKind {
+    UnknownName,
+    DuplicateDeclaration,
+    UnusedVariable,
+    UnusedFunction,
+    UnusedType,
+    UnusedConstant,
+    UnusedFunctionArgument,
+    UnusedFunctionReturnValue,
+    UnusedFunctionParameter,
+    UnusedFunctionParameterDefaultValue,
+    BstFilePathInTemplateOutput,
+    LargeTrackedAsset,
+    IdentifierNamingConvention,
+    UnreachableMatchArm,
+    InvalidTopLevelRuntimeStatement,
+    LegacyImportSyntax,
+    OldPrefixDeclarationSyntax,
+    RuntimeTemplateInModuleFacade,
+    ReservedBuiltinName,
+    InvalidSignatureMember,
+    InvalidChoiceVariant,
+    InvalidStructDefaultValue,
+    UninitializedVariable,
+    MissingImportTarget,
+    CircularDependency,
+    UnknownValueName,
+    UnknownTypeName,
+    ValueUsedAsType,
+    TypeUsedAsValue,
+    ShadowedName,
+    ReservedNameCollision,
+    InvalidThisUsage,
+    InvalidReceiverDeclaration,
+    InvalidControlFlowStatement,
+    InvalidDeclaration,
+    InvalidAssignmentTarget,
+    InvalidMultiBind,
+    InvalidBuiltinCall,
+    InvalidReceiverCall,
+    InvalidCopyTarget,
+    InvalidFieldAccess,
+    InvalidMatchPattern,
+    NonExhaustiveMatch,
+    InvalidResultHandling,
+    InvalidTemplateSlot,
+    CompileTimeEvaluationError,
+    InvalidCallShape,
+    InvalidReturnShape,
+    InvalidFunctionSignature,
+    InvalidGenericInstantiation,
+    UnsupportedExternalFunction,
+    InvalidRangeOperand,
+    UnsupportedBuilderPackage,
+    InvalidPageMetadata,
+    InvalidCompileTimePath,
+    ImportRecordUsedAsValue,
+    ConstRecordUsedAsValue,
+    NestedTraversal,
+    NamespaceTypeValueMisuse,
+}
+
+#[cfg(test)]
+impl RuleDiagnosticKind {
+    pub(crate) fn all() -> impl Iterator<Item = Self> {
+        [
+            Self::UnknownName,
+            Self::DuplicateDeclaration,
+            Self::UnusedVariable,
+            Self::UnusedFunction,
+            Self::UnusedType,
+            Self::UnusedConstant,
+            Self::UnusedFunctionArgument,
+            Self::UnusedFunctionReturnValue,
+            Self::UnusedFunctionParameter,
+            Self::UnusedFunctionParameterDefaultValue,
+            Self::BstFilePathInTemplateOutput,
+            Self::LargeTrackedAsset,
+            Self::IdentifierNamingConvention,
+            Self::UnreachableMatchArm,
+            Self::InvalidTopLevelRuntimeStatement,
+            Self::LegacyImportSyntax,
+            Self::OldPrefixDeclarationSyntax,
+            Self::RuntimeTemplateInModuleFacade,
+            Self::ReservedBuiltinName,
+            Self::InvalidSignatureMember,
+            Self::InvalidChoiceVariant,
+            Self::InvalidStructDefaultValue,
+            Self::UninitializedVariable,
+            Self::MissingImportTarget,
+            Self::CircularDependency,
+            Self::UnknownValueName,
+            Self::UnknownTypeName,
+            Self::ValueUsedAsType,
+            Self::TypeUsedAsValue,
+            Self::ShadowedName,
+            Self::ReservedNameCollision,
+            Self::InvalidThisUsage,
+            Self::InvalidReceiverDeclaration,
+            Self::InvalidControlFlowStatement,
+            Self::InvalidDeclaration,
+            Self::InvalidAssignmentTarget,
+            Self::InvalidMultiBind,
+            Self::InvalidBuiltinCall,
+            Self::InvalidReceiverCall,
+            Self::InvalidCopyTarget,
+            Self::InvalidFieldAccess,
+            Self::InvalidMatchPattern,
+            Self::NonExhaustiveMatch,
+            Self::InvalidResultHandling,
+            Self::InvalidTemplateSlot,
+            Self::CompileTimeEvaluationError,
+            Self::InvalidCallShape,
+            Self::InvalidReturnShape,
+            Self::InvalidFunctionSignature,
+            Self::InvalidGenericInstantiation,
+            Self::UnsupportedExternalFunction,
+            Self::InvalidRangeOperand,
+            Self::UnsupportedBuilderPackage,
+            Self::InvalidPageMetadata,
+            Self::InvalidCompileTimePath,
+            Self::ImportRecordUsedAsValue,
+            Self::ConstRecordUsedAsValue,
+            Self::NestedTraversal,
+            Self::NamespaceTypeValueMisuse,
+        ]
+        .into_iter()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ImportDiagnosticKind {
+    UnusedImport,
+    ImportAliasCaseMismatch,
+    MissingImportTarget,
+    AmbiguousImportTarget,
+    BareFileImport,
+    DirectSpecialFileImport,
+    ImportNameCollision,
+    NotExportedBySourceFile,
+    NotExportedByFacade,
+    MissingModuleFacade,
+    MissingPackageSymbol,
+    CrossModuleImportNotExported,
+    InvalidImportPath,
+    DirectSymbolPathImport,
+    InvalidNamespaceDefaultName,
+    DuplicateImportSurfaceMember,
+    ExplicitBstExtension,
+    UnsupportedExternalExtension,
+    InvalidExternalLibrary,
+    ReceiverMethodImportRequiresVisibleReceiverType,
+}
+
+#[cfg(test)]
+impl ImportDiagnosticKind {
+    pub(crate) fn all() -> impl Iterator<Item = Self> {
+        [
+            Self::UnusedImport,
+            Self::ImportAliasCaseMismatch,
+            Self::MissingImportTarget,
+            Self::AmbiguousImportTarget,
+            Self::BareFileImport,
+            Self::DirectSpecialFileImport,
+            Self::ImportNameCollision,
+            Self::NotExportedBySourceFile,
+            Self::NotExportedByFacade,
+            Self::MissingModuleFacade,
+            Self::MissingPackageSymbol,
+            Self::CrossModuleImportNotExported,
+            Self::InvalidImportPath,
+            Self::DirectSymbolPathImport,
+            Self::InvalidNamespaceDefaultName,
+            Self::DuplicateImportSurfaceMember,
+            Self::ExplicitBstExtension,
+            Self::UnsupportedExternalExtension,
+            Self::InvalidExternalLibrary,
+            Self::ReceiverMethodImportRequiresVisibleReceiverType,
+        ]
+        .into_iter()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum BorrowDiagnosticKind {
+    BorrowConflict,
+    MultipleMutableBorrows,
+    SharedMutableConflict,
+    UseAfterPossibleMove,
+    MoveWhileBorrowed,
+    WholeObjectBorrowConflict,
+    InvalidMutableAccess,
+    InvalidAccessAfterPossibleOwnershipTransfer,
+    UseOfUninitializedLocal,
+}
+
+#[cfg(test)]
+impl BorrowDiagnosticKind {
+    pub(crate) fn all() -> impl Iterator<Item = Self> {
+        [
+            Self::BorrowConflict,
+            Self::MultipleMutableBorrows,
+            Self::SharedMutableConflict,
+            Self::UseAfterPossibleMove,
+            Self::MoveWhileBorrowed,
+            Self::WholeObjectBorrowConflict,
+            Self::InvalidMutableAccess,
+            Self::InvalidAccessAfterPossibleOwnershipTransfer,
+            Self::UseOfUninitializedLocal,
+        ]
+        .into_iter()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ConfigDiagnosticKind {
+    InvalidConfig,
+}
+
+#[cfg(test)]
+impl ConfigDiagnosticKind {
+    pub(crate) fn all() -> impl Iterator<Item = Self> {
+        [Self::InvalidConfig].into_iter()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum InfrastructureDiagnosticKind {
+    InfrastructureFailure,
+}
+
+#[cfg(test)]
+impl InfrastructureDiagnosticKind {
+    pub(crate) fn all() -> impl Iterator<Item = Self> {
+        [Self::InfrastructureFailure].into_iter()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum DeferredFeatureDiagnosticKind {
+    DeferredFeature,
+}
+
+#[cfg(test)]
+impl DeferredFeatureDiagnosticKind {
+    pub(crate) fn all() -> impl Iterator<Item = Self> {
+        [Self::DeferredFeature].into_iter()
+    }
+}

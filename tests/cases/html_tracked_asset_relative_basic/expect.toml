@@ -1,0 +1,14 @@
+entry = "."
+
+[backends.html]
+mode = "success"
+warnings = "forbid"
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = ["./local_file.txt"]
+
+[[backends.html.artifact_assertions]]
+path = "local_file.txt"
+kind = "binary"

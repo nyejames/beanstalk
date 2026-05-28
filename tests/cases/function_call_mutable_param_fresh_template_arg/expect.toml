@@ -1,0 +1,4 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["function_call_mutable_param_fresh_template_arg out=content"]

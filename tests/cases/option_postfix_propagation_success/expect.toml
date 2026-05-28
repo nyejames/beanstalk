@@ -1,0 +1,11 @@
+entry = "."
+
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["option_postfix_propagation_success", "Hello Ada", "missing", "Fallible Ada", "fallible missing"]
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = [".tag === \"some\"", ".tag === \"none\""]

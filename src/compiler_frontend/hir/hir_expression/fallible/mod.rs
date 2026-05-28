@@ -1,0 +1,233 @@
+//! HIR fallible-expression lowering.
+//!
+//! WHAT: lowers postfix propagation, `catch` handling, and the temporary fallible carrier
+//! branches used at the HIR boundary.
+//! WHY: fallible calls are control flow, not ordinary call values. Keeping this code separate from
+//! plain call lowering makes the success/error CFG joins explicit and confines the temporary
+//! fallible carrier machinery to one HIR-owned lowering module.
+//!
+//! ## Diagnostic boundary
+//!
+//! `CompilerError` / `return_hir_transformation_error!` in this module means an internal
+//! HIR transformation or lowering invariant failure only.
+//!
+//! Submodule map:
+//! - `carrier`: carrier slot lookup, branch creation, success/error unwrap helpers, and postfix
+//!   error payload wrapping.
+//! - `propagation`: statement-position `call()!`, value-position `expr!`, and nested expression
+//!   propagation.
+//! - `catch`: catch handler CFG lowering, binding, merge behavior, and catch block fallthrough.
+//! - `external`: external fallible call carrier creation and metadata checks used only by HIR lowering.
+//! - `direct_return`: `return fallible_call()!` success/error direct return branches.
+
+use crate::compiler_frontend::ast::expressions::call_argument::CallArgument;
+use crate::compiler_frontend::ast::expressions::expression::{Expression, FallibleHandling};
+use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::datatypes::ids::TypeId;
+use crate::compiler_frontend::datatypes::ids::TypeId as FrontendTypeId;
+use crate::compiler_frontend::external_packages::CallTarget;
+use crate::compiler_frontend::hir::hir_builder::HirBuilder;
+use crate::compiler_frontend::hir::ids::{BlockId, LocalId};
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
+use crate::return_hir_transformation_error;
+
+use super::LoweredExpression;
+
+mod carrier;
+mod catch;
+mod direct_return;
+mod external;
+mod propagation;
+
+pub(crate) use self::external::ExternalFallibleCallLoweringInput;
+
+/// Shared fallible metadata used by branching lowering helpers.
+///
+/// WHAT: carries the resolved fallible carrier types, handler policy, and location metadata.
+/// WHY: both helper layers need the same bundle, and passing one struct keeps signatures short.
+pub(super) struct FallibleBranchingContext<'a> {
+    pub(super) result_type_ids: &'a [FrontendTypeId],
+    pub(super) handling: &'a FallibleHandling,
+    pub(super) carrier_type: TypeId,
+    pub(super) ok_type: TypeId,
+    pub(super) err_type: TypeId,
+    pub(super) value_required: bool,
+    pub(super) location: &'a SourceLocation,
+}
+
+/// Branch-entry metadata once the fallible expression has already produced a carrier local.
+///
+/// WHAT: extends fallible metadata with CFG entry block and temporary local identifiers.
+/// WHY: the carrier-branch helper should receive one coherent context instead of many scalars.
+pub(super) struct FallibleCarrierBranchingContext<'a> {
+    pub(super) current_block: BlockId,
+    pub(super) result_local: LocalId,
+    pub(super) handled_result: FallibleBranchingContext<'a>,
+}
+
+impl<'a> HirBuilder<'a> {
+    /// Lowers a handled fallible expression (value-position `expr!` or `expr catch:`).
+    pub(crate) fn lower_handled_fallible_expression(
+        &mut self,
+        value: &Expression,
+        handling: &FallibleHandling,
+        location: &SourceLocation,
+        expr_type_id: FrontendTypeId,
+    ) -> Result<LoweredExpression, CompilerError> {
+        let lowered = self.lower_expression(value)?;
+        let ok_type = match self
+            .type_environment
+            .fallible_carrier_slots(lowered.value.ty)
+        {
+            Some((ok, _)) => ok,
+            None => {
+                return_hir_transformation_error!(
+                    "Handled fallible expression reached HIR lowering without an internal carrier type",
+                    self.hir_error_location(location)
+                );
+            }
+        };
+
+        let result_type_ids = self.handled_expression_result_type_ids(expr_type_id);
+        let expected_ok_type = self.lower_call_result_type(&result_type_ids, location)?;
+        if expected_ok_type != ok_type {
+            return_hir_transformation_error!(
+                "Handled fallible expression lowered with mismatched success type",
+                self.hir_error_location(location)
+            );
+        }
+
+        if matches!(handling, FallibleHandling::Propagate) {
+            let result_carrier =
+                self.emit_lowered_result_expression_to_current_block(lowered, location)?;
+            let success_value =
+                self.lower_fallible_carrier_to_success_value(result_carrier, location)?;
+
+            return Ok(LoweredExpression {
+                prelude: vec![],
+                value: success_value,
+            });
+        }
+
+        let result_carrier =
+            self.emit_lowered_result_expression_to_current_block(lowered, location)?;
+        let current_block = self.current_block_id_or_error(location)?;
+
+        self.lower_fallible_carrier_with_branching(FallibleCarrierBranchingContext {
+            current_block,
+            result_local: result_carrier.result_local,
+            handled_result: FallibleBranchingContext {
+                result_type_ids: &result_type_ids,
+                handling,
+                carrier_type: result_carrier.carrier_type,
+                ok_type: result_carrier.ok_type,
+                err_type: result_carrier.err_type,
+                value_required: true,
+                location,
+            },
+        })
+    }
+
+    pub(crate) fn lower_handled_fallible_call_expression(
+        &mut self,
+        target: CallTarget,
+        args: &[CallArgument],
+        result_type_ids: &[FrontendTypeId],
+        handling: &FallibleHandling,
+        value_required: bool,
+        location: &SourceLocation,
+    ) -> Result<LoweredExpression, CompilerError> {
+        let (carrier_type, ok_type, err_type) =
+            self.result_call_carrier_slots(&target, location)?;
+
+        let requested_ok_type = self.lower_call_result_type(result_type_ids, location)?;
+        if requested_ok_type != ok_type {
+            return_hir_transformation_error!(
+                "Handled fallible call lowered with mismatched success type",
+                self.hir_error_location(location)
+            );
+        }
+
+        if matches!(handling, FallibleHandling::Propagate) {
+            let result_carrier = self.emit_result_call_carrier_to_current_block(
+                target,
+                args,
+                result_type_ids,
+                location,
+            )?;
+            let success_value =
+                self.lower_fallible_carrier_to_success_value(result_carrier, location)?;
+
+            self.log_call_result_binding(location, None, &success_value);
+
+            return Ok(LoweredExpression {
+                prelude: vec![],
+                value: success_value,
+            });
+        }
+
+        self.lower_handled_fallible_call_with_branching(
+            target,
+            args,
+            FallibleBranchingContext {
+                result_type_ids,
+                handling,
+                carrier_type,
+                ok_type,
+                err_type,
+                value_required,
+                location,
+            },
+        )
+    }
+
+    pub(crate) fn lower_handled_external_fallible_call_expression(
+        &mut self,
+        input: ExternalFallibleCallLoweringInput<'_>,
+    ) -> Result<LoweredExpression, CompilerError> {
+        let ExternalFallibleCallLoweringInput {
+            id,
+            args,
+            result_type_ids,
+            error_type_id,
+            handling,
+            value_required,
+            location,
+        } = input;
+        let (carrier_type, ok_type, err_type) =
+            self.fallible_call_carrier_from_slots(result_type_ids, error_type_id, location)?;
+
+        if matches!(handling, FallibleHandling::Propagate) {
+            let result_carrier = self.emit_external_result_call_carrier_to_current_block(
+                id,
+                args,
+                result_type_ids,
+                error_type_id,
+                location,
+            )?;
+            let success_value =
+                self.lower_fallible_carrier_to_success_value(result_carrier, location)?;
+
+            self.log_call_result_binding(location, None, &success_value);
+
+            return Ok(LoweredExpression {
+                prelude: vec![],
+                value: success_value,
+            });
+        }
+
+        self.lower_handled_fallible_call_with_branching(
+            CallTarget::ExternalFunction(id),
+            args,
+            FallibleBranchingContext {
+                result_type_ids,
+                handling,
+                carrier_type,
+                ok_type,
+                err_type,
+                value_required,
+                location,
+            },
+        )
+    }
+}

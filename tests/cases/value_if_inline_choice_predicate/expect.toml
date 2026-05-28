@@ -1,0 +1,5 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+
+rendered_output_contains = ["value_if_inline_choice_predicate", "bare ready 1", "qualified waiting 0"]

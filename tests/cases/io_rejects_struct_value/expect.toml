@@ -1,0 +1,7 @@
+# TODO(display): When io() accepts values through the Display-style coercion path,
+# replace this negative test with a positive struct display/coercion fixture.
+
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+diagnostic_codes = ["BST-TYPE-0001"]

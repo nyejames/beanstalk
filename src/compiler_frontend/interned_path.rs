@@ -1,0 +1,195 @@
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap, StringTable};
+use std::path::{Path, PathBuf};
+
+/// An efficient path representation using interned string components.
+///
+/// InternedPath stores path components as a Vec<StringId>, allowing for:
+/// - Memory-efficient storage when paths share common components
+/// - Fast path operations (append, parent, join_str) using vector operations
+/// - Efficient comparison and hashing using StringId equality
+/// - Conversion to/from standard PathBuf when needed for file system operations
+///
+/// This is particularly useful for scope tracking in the compiler_frontend where many
+/// paths share common prefixes (like module names or directory structures).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct InternedPath {
+    /// Path components stored as interned string IDs
+    /// Empty vector represents the root path
+    components: Vec<StringId>,
+}
+
+impl InternedPath {
+    /// Create a new empty path (equivalent to root)
+    pub fn new() -> Self {
+        Self {
+            components: Vec::new(),
+        }
+    }
+
+    /// Create an InternedPath from a PathBuf by interning each component
+    pub fn from_path_buf(path: &Path, string_table: &mut StringTable) -> Self {
+        let components = path
+            .components()
+            .filter_map(|component| {
+                component
+                    .as_os_str()
+                    .to_str()
+                    .map(|s| string_table.intern(s))
+            })
+            .collect();
+
+        Self { components }
+    }
+
+    /// Create an InternedPath from a vector of StringIds
+    pub fn from_components(components: Vec<StringId>) -> Self {
+        Self { components }
+    }
+
+    pub fn from_single_str(entry: &str, string_table: &mut StringTable) -> Self {
+        let interned = string_table.intern(entry);
+        Self {
+            components: vec![interned],
+        }
+    }
+
+    /// Convert this InternedPath back to a PathBuf
+    pub fn to_path_buf(&self, string_table: &StringTable) -> PathBuf {
+        if self.components.is_empty() {
+            return PathBuf::new();
+        }
+
+        let mut path = PathBuf::new();
+        for &component_id in &self.components {
+            let component_str = string_table.resolve(component_id);
+            path.push(component_str);
+        }
+        path
+    }
+
+    /// Push a string component to the end of this path (interns the string)
+    pub fn push_str(&mut self, component: &str, string_table: &mut StringTable) {
+        let component_id = string_table.intern(component);
+        self.components.push(component_id);
+    }
+
+    /// Get the parent path (all components except the last)
+    /// Returns None if this is the root path
+    pub fn parent(&self) -> Option<InternedPath> {
+        if self.components.is_empty() {
+            None
+        } else {
+            Some(InternedPath {
+                components: self.components[..self.components.len() - 1].to_vec(),
+            })
+        }
+    }
+
+    /// Test-only helper for verifying component concatenation semantics directly.
+    #[cfg(test)]
+    pub fn join(&self, other: &InternedPath) -> InternedPath {
+        let mut new_components = Vec::with_capacity(self.components.len() + other.components.len());
+        new_components.extend_from_slice(&self.components);
+        new_components.extend_from_slice(&other.components);
+        InternedPath {
+            components: new_components,
+        }
+    }
+
+    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
+        for component in &mut self.components {
+            *component = remap.get(*component);
+        }
+    }
+
+    pub fn append(&self, new: StringId) -> Self {
+        let mut new_components = Vec::with_capacity(self.components.len() + 1);
+        new_components.extend_from_slice(&self.components);
+        new_components.push(new);
+        Self {
+            components: new_components,
+        }
+    }
+
+    /// Join this path with a string component (interns the string)
+    pub fn join_str(&self, component: &str, string_table: &mut StringTable) -> InternedPath {
+        self.append(string_table.intern(component))
+    }
+
+    /// Get the number of components in this path
+    pub fn len(&self) -> usize {
+        self.components.len()
+    }
+
+    /// Test-only convenience helper for asserting empty-root behavior.
+    #[cfg(test)]
+    pub fn is_empty(&self) -> bool {
+        self.components.is_empty()
+    }
+
+    /// Get the last component of this path (the "file name")
+    pub fn name(&self) -> Option<StringId> {
+        self.components.last().copied()
+    }
+
+    /// Get the last component as a string
+    pub fn name_str<'a>(&self, string_table: &'a StringTable) -> Option<&'a str> {
+        self.name().map(|id| string_table.resolve(id))
+    }
+
+    /// Get the components as a slice
+    pub fn as_components(&self) -> &[StringId] {
+        &self.components
+    }
+
+    /// Check if this path starts with the given prefix path
+    pub fn starts_with(&self, prefix: &InternedPath) -> bool {
+        if prefix.components.len() > self.components.len() {
+            return false;
+        }
+
+        self.components
+            .iter()
+            .zip(prefix.components.iter())
+            .all(|(a, b)| a == b)
+    }
+
+    /// Check if this path ends with the given suffix path
+    pub fn ends_with(&self, suffix: &InternedPath) -> bool {
+        if suffix.components.len() > self.components.len() {
+            return false;
+        }
+
+        let start_idx = self.components.len() - suffix.components.len();
+        self.components[start_idx..]
+            .iter()
+            .zip(suffix.components.iter())
+            .all(|(a, b)| a == b)
+    }
+
+    /// Render with the platform-native path separator.
+    /// Use this only for diagnostics and filesystem-adjacent display.
+    pub fn to_native_string(&self, string_table: &StringTable) -> String {
+        self.to_path_buf(string_table).to_string_lossy().to_string()
+    }
+
+    /// Render with forward slashes so string output is deterministic across OSes.
+    /// This is the preferred renderer for compiler logic, snapshots, and tests.
+    pub fn to_portable_string(&self, string_table: &StringTable) -> String {
+        self.to_native_string(string_table).replace('\\', "/")
+    }
+
+    pub fn to_string(&self, string_table: &StringTable) -> String {
+        self.to_portable_string(string_table)
+    }
+}
+
+impl Default for InternedPath {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[cfg(test)]
+#[path = "tests/interned_path_tests.rs"]
+mod interned_path_tests;

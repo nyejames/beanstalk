@@ -1,0 +1,4 @@
+use beanstalk::projects::cli::start_cli;
+fn main() {
+    start_cli();
+}

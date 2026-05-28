@@ -1,0 +1,23 @@
+# Frontend benchmark cases for focused compiler-stage checks
+# Format:
+#   # group: <name>
+#   frontend <path>
+# Empty lines are ignored
+# Other comment lines are ignored
+
+# group: core
+frontend benchmarks/type-stress.bst
+
+# group: docs
+frontend docs
+
+# group: stress
+frontend benchmarks/collection-stress.bst
+frontend benchmarks/environment-stress.bst
+
+# group: module
+frontend benchmarks/module-graph
+frontend benchmarks/import-fanout
+
+# group: borrow
+frontend benchmarks/borrow-stress.bst

@@ -1,0 +1,3 @@
+foo || -> Int:
+    return this
+;

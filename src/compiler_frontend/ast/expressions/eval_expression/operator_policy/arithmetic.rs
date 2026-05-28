@@ -1,0 +1,116 @@
+//! Arithmetic and non-comparison binary operator typing policy.
+//!
+//! WHAT: resolves result types for arithmetic operators (+, -, *, /, //, %, **) on scalar operands
+//!       and for string concatenation via the `+` operator.
+//! WHY: arithmetic rules must stay explicit so implicit broad compatibility cannot quietly
+//!      weaken type safety; mixed numeric promotion is intentionally narrow.
+
+use super::super::result_type::ExpressionResultType;
+use super::diagnostics::invalid_operator_types;
+use super::shared::{both_plain_string_slices, is_mixed_int_float};
+use crate::compiler_frontend::ast::expressions::eval_expression::typing_error::ExpressionTypingError;
+use crate::compiler_frontend::ast::expressions::expression::Operator;
+use crate::compiler_frontend::compiler_errors::SourceLocation;
+use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
+
+pub(super) fn resolve_arithmetic_operator_type(
+    lhs: &ExpressionResultType,
+    rhs: &ExpressionResultType,
+    op: &Operator,
+    location: &SourceLocation,
+    type_environment: &TypeEnvironment,
+) -> Result<ExpressionResultType, ExpressionTypingError> {
+    let builtins = type_environment.builtins();
+
+    if lhs.type_id == rhs.type_id {
+        // Same-type operator handling stays explicit so broad "compatible" types cannot quietly
+        // weaken arithmetic rules.
+        if lhs.type_id == builtins.int {
+            return match op {
+                Operator::Add
+                | Operator::Subtract
+                | Operator::Multiply
+                | Operator::Modulus
+                | Operator::Exponent
+                | Operator::IntDivide => Ok(ExpressionResultType::from_type_id(
+                    builtins.int,
+                    type_environment,
+                )),
+
+                // Standard division always produces Float, even when both operands are Int.
+                Operator::Divide => Ok(ExpressionResultType::from_type_id(
+                    builtins.float,
+                    type_environment,
+                )),
+
+                // Range construction is only valid between two Int operands.
+                Operator::Range => Ok(ExpressionResultType::from_type_id(
+                    builtins.range,
+                    type_environment,
+                )),
+
+                _ => invalid_operator_types(lhs, rhs, op, location),
+            };
+        }
+
+        if lhs.type_id == builtins.float {
+            return match op {
+                Operator::Add
+                | Operator::Subtract
+                | Operator::Multiply
+                | Operator::Divide
+                | Operator::Modulus
+                | Operator::Exponent => Ok(ExpressionResultType::from_type_id(
+                    builtins.float,
+                    type_environment,
+                )),
+
+                _ => invalid_operator_types(lhs, rhs, op, location),
+            };
+        }
+
+        if lhs.type_id == builtins.decimal {
+            return match op {
+                Operator::Add
+                | Operator::Subtract
+                | Operator::Multiply
+                | Operator::Divide
+                | Operator::Modulus
+                | Operator::Exponent => Ok(ExpressionResultType::from_type_id(
+                    builtins.decimal,
+                    type_environment,
+                )),
+
+                _ => invalid_operator_types(lhs, rhs, op, location),
+            };
+        }
+
+        // String concatenation is only supported via the `+` operator on plain string slices.
+        if both_plain_string_slices(lhs, rhs, type_environment) && matches!(op, Operator::Add) {
+            return Ok(ExpressionResultType::from_type_id(
+                builtins.string,
+                type_environment,
+            ));
+        }
+    }
+
+    if is_mixed_int_float(lhs, rhs, type_environment) {
+        // Mixed numeric promotion is intentionally narrow: only Int/Float pairs mix implicitly,
+        // and only for numeric arithmetic/comparisons.
+        return match op {
+            Operator::Add
+            | Operator::Subtract
+            | Operator::Multiply
+            | Operator::Divide
+            | Operator::Modulus
+            | Operator::Exponent => Ok(ExpressionResultType::from_type_id(
+                builtins.float,
+                type_environment,
+            )),
+
+            _ => invalid_operator_types(lhs, rhs, op, location),
+        };
+    }
+
+    invalid_operator_types(lhs, rhs, op, location)
+}

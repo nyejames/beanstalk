@@ -1,0 +1,5 @@
+[backends.html]
+mode = "success"
+warnings = "exact"
+warning_count = 1
+rendered_output_contains = ["pattern_capture_whole_choice_value_success result=captured"]

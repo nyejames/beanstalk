@@ -1,0 +1,13 @@
+Response ::
+    Success,
+    Err |
+        message String,
+    |,
+;
+
+response = Response::Err("bad")
+
+if response is:
+    Err(text as error_message) => io(error_message)
+    Success => io("ok")
+;

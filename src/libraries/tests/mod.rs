@@ -1,0 +1,1 @@
+mod provider_registry_tests;

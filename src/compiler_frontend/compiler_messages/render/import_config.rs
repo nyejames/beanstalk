@@ -1,0 +1,476 @@
+//! Config, import, and path diagnostic prose.
+//!
+//! WHAT: renders diagnostics tied to project configuration, source imports, and compile-time paths.
+//! WHY: these messages share path/string-table formatting concerns and are separate from
+//! expression/type/rule diagnostic rendering.
+
+use super::*;
+
+pub(crate) fn invalid_config_message(
+    key: Option<StringId>,
+    reason: &InvalidConfigReason,
+    string_table: &StringTable,
+) -> String {
+    let key_name = key.map(|key| string_table.resolve(key).to_owned());
+    let key_label = key_name.as_deref().unwrap_or("config");
+
+    match reason {
+        InvalidConfigReason::MissingKey => "Config constant is missing a key name.".to_owned(),
+        InvalidConfigReason::ShorthandDeclaration => format!(
+            "Invalid config declaration '#{key_label} ...'. Use standard constant syntax: '{key_label} #= value'."
+        ),
+        InvalidConfigReason::DuplicateKey => {
+            if let Some(key_name) = key_name {
+                format!("Duplicate config key '{key_name}' found. Each config key must be unique.")
+            } else {
+                "Duplicate config key found. Each config key must be unique.".to_owned()
+            }
+        }
+        InvalidConfigReason::DeprecatedSrcKey => {
+            "Config key 'src' is deprecated. Use 'entry_root' instead.".to_owned()
+        }
+        InvalidConfigReason::ReplacedLibrariesKey => {
+            "Config key 'libraries' has been replaced. Use 'library_folders' instead.".to_owned()
+        }
+        InvalidConfigReason::ReplacedRootFoldersKey => {
+            "Config key 'root_folders' has been replaced. Use 'library_folders' instead."
+                .to_owned()
+        }
+        InvalidConfigReason::ConfigImportRootViolation => {
+            "Config files may only import from core or builder-provided libraries.".to_owned()
+        }
+        InvalidConfigReason::FunctionUnsupported => {
+            "`#config.bst` does not support user-defined functions. Use known setting declarations plus import/type support declarations only.".to_owned()
+        }
+        InvalidConfigReason::MutableBindingUnsupported => {
+            "`#config.bst` settings must be immutable declarations. Use `name = value` or `name #= value`.".to_owned()
+        }
+        InvalidConfigReason::UnsupportedStatement => {
+            "`#config.bst` supports known setting declarations plus import/type support declarations only.".to_owned()
+        }
+        InvalidConfigReason::StandaloneTemplateUnsupported => {
+            "`#config.bst` does not support standalone templates or page fragments. Assign a folded template to a known setting instead.".to_owned()
+        }
+        InvalidConfigReason::MissingValue => {
+            format!("Missing value for config constant '{key_label}'.")
+        }
+        InvalidConfigReason::UnsupportedScalarValue => {
+            format!("Unsupported value for config constant '{key_label}'.")
+        }
+        InvalidConfigReason::NotCompileTimeConstant => {
+            format!(
+                "Config value '{key_label}' must be a compile-time constant value. Config declarations cannot use runtime expressions, function calls, host calls, or references to non-constant bindings."
+            )
+        }
+        InvalidConfigReason::ValueCouldNotFold => {
+            format!(
+                "Config value '{key_label}' could not be fully evaluated at compile time. Config declarations must fold after AST construction and cannot require runtime evaluation."
+            )
+        }
+        InvalidConfigReason::UnsupportedLibraryFoldersValue => {
+            "Unsupported value in 'library_folders'. Use a string folder name or a collection of string folder names.".to_owned()
+        }
+        InvalidConfigReason::DuplicateLibraryFolder { folder } => format!(
+            "Duplicate 'library_folders' entries are not allowed: {}",
+            string_table.resolve(*folder)
+        ),
+        InvalidConfigReason::InvalidLibraryFolder { folder, reason } => {
+            invalid_library_folder_message(*folder, *reason, string_table)
+        }
+        InvalidConfigReason::EmptyProjectSetting => {
+            format!("Config setting '#{key_label}' cannot be empty.")
+        }
+        InvalidConfigReason::UnknownKey { key } => format!(
+            "Unknown config key '{}'. `#config.bst` currently accepts only known project config keys. Helper declarations are not supported yet.",
+            string_table.resolve(*key)
+        ),
+        InvalidConfigReason::InvalidConfigValueShape { expected } => format!(
+            "Invalid value shape for config constant '{key_label}'. Expected {}.",
+            string_table.resolve(*expected)
+        ),
+        InvalidConfigReason::InvalidProjectSettingValue { value, expected } => format!(
+            "Invalid value '{}' for config setting '#{key_label}'. Expected {}.",
+            string_table.resolve(*value),
+            string_table.resolve(*expected)
+        ),
+        InvalidConfigReason::MissingHtmlHomepage { entry_root } => format!(
+            "HTML project builds require a '#page.bst' homepage at the root of the configured entry root '{}'.",
+            string_table.resolve(*entry_root),
+        ),
+        InvalidConfigReason::DuplicateHtmlOutputPath {
+            output_path,
+            entry_point,
+            existing_entry_point,
+        } => format!(
+            "HTML builder produced duplicate output path '{}'. Entry '{}' conflicts with already-mapped entry '{}'. Ensure each '#*.bst' entry maps to a unique page output.",
+            string_table.resolve(*output_path),
+            string_table.resolve(*entry_point),
+            string_table.resolve(*existing_entry_point),
+        ),
+        InvalidConfigReason::TrackedAssetOutputConflict {
+            asset_path,
+            output_path,
+            existing_owner,
+        } => format!(
+            "Tracked asset '{}' would emit to '{}', but that output path is already claimed by '{}'.",
+            string_table.resolve(*asset_path),
+            string_table.resolve(*output_path),
+            string_table.resolve(*existing_owner),
+        ),
+        InvalidConfigReason::TrackedAssetBuilderOutputConflict {
+            asset_path,
+            output_path,
+        } => format!(
+            "Tracked asset '{}' would emit to '{}', but that output path is already claimed by another emitted HTML builder artifact.",
+            string_table.resolve(*asset_path),
+            string_table.resolve(*output_path),
+        ),
+        InvalidConfigReason::ConfiguredEntryRootMissing { entry_root } => format!(
+            "Configured entry root '{}' does not exist.",
+            string_table.resolve(*entry_root),
+        ),
+        InvalidConfigReason::ConfiguredLibraryFolderMissing { folder } => format!(
+            "Configured library folder '{}' does not exist.",
+            string_table.resolve(*folder),
+        ),
+        InvalidConfigReason::ConfiguredLibraryFolderNotDirectory { folder } => format!(
+            "Configured library folder '{}' is not a directory.",
+            string_table.resolve(*folder),
+        ),
+        InvalidConfigReason::SourceLibraryPrefixCollision {
+            prefix,
+            first_root,
+            second_root,
+        } => format!(
+            "Configured library folder collision: source library prefix '@{}' is defined by both '{}' and '{}'.",
+            string_table.resolve(*prefix),
+            string_table.resolve(*first_root),
+            string_table.resolve(*second_root),
+        ),
+        InvalidConfigReason::SourceLibraryBuilderPrefixCollision {
+            prefixes,
+            library_folders,
+        } => format!(
+            "Project-local source libraries collide with builder-provided libraries: {}. Rename or remove the conflicting project-local library prefix, or update 'library_folders' (currently: {}).",
+            string_table.resolve(*prefixes),
+            string_table.resolve(*library_folders),
+        ),
+        InvalidConfigReason::EntryRootLibraryPrefixCollision {
+            prefix,
+            entry_folder,
+        } => format!(
+            "Entry-root folder '{}' collides with source-library prefix '@{}'. Ambiguous imports are disallowed.",
+            string_table.resolve(*entry_folder),
+            string_table.resolve(*prefix),
+        ),
+        InvalidConfigReason::SourceLibraryMissingFacade { prefix, root } => format!(
+            "Source library '@{}' at '{}' is missing a #mod.bst facade file. Every source library must declare its public export surface through a #mod.bst facade.",
+            string_table.resolve(*prefix),
+            string_table.resolve(*root),
+        ),
+        InvalidConfigReason::NoRootModuleEntries { entry_root } => format!(
+            "No root module entries were found under '{}'. Expected at least one '#*.bst' file under the configured entry root.",
+            string_table.resolve(*entry_root),
+        ),
+        InvalidConfigReason::BstFileFolderCollision {
+            file_name,
+            folder_name,
+            directory,
+        } => format!(
+            "Project structure collision: '{}' and folder '{}' share the same import name in '{}'. Beanstalk requires .bst files and folders in the same directory to have unique import names. Rename one of them to keep import paths unambiguous.",
+            string_table.resolve(*file_name),
+            string_table.resolve(*folder_name),
+            string_table.resolve(*directory),
+        ),
+    }
+}
+
+fn invalid_library_folder_message(
+    folder: Option<StringId>,
+    reason: InvalidLibraryFolderReason,
+    string_table: &StringTable,
+) -> String {
+    let folder_name = folder.map(|folder| string_table.resolve(folder).to_owned());
+
+    match reason {
+        InvalidLibraryFolderReason::Empty => {
+            "Invalid 'library_folders' entry. Library folders cannot be empty.".to_owned()
+        }
+        InvalidLibraryFolderReason::AbsolutePath => {
+            let folder_name = folder_name.unwrap_or_else(|| "<empty>".to_owned());
+            format!(
+                "Invalid 'library_folders' entry '{folder_name}'. Library folders must be relative to the project root."
+            )
+        }
+        InvalidLibraryFolderReason::ParentDirectorySegment => {
+            let folder_name = folder_name.unwrap_or_else(|| "<empty>".to_owned());
+            format!(
+                "Invalid 'library_folders' entry '{folder_name}'. Parent-directory segments ('..') are not allowed."
+            )
+        }
+        InvalidLibraryFolderReason::NestedPath => {
+            let folder_name = folder_name.unwrap_or_else(|| "<empty>".to_owned());
+            format!(
+                "Invalid 'library_folders' entry '{folder_name}'. Library folders must be a single top-level folder name such as '@lib'."
+            )
+        }
+    }
+}
+
+pub(crate) fn invalid_import_path_message(
+    path: &InternedPath,
+    reason: InvalidImportPathReason,
+    string_table: &StringTable,
+) -> String {
+    match reason {
+        InvalidImportPathReason::ParentDirectorySegment => format!(
+            "Import paths containing '..' are not supported: '{}'",
+            path.to_portable_string(string_table)
+        ),
+        InvalidImportPathReason::EscapesProjectRoot => format!(
+            "Import escapes the project root and is not allowed: '{}'",
+            path.to_portable_string(string_table)
+        ),
+        InvalidImportPathReason::EscapesSourceLibraryRoot => format!(
+            "Import escapes the source library root and is not allowed: '{}'",
+            path.to_portable_string(string_table)
+        ),
+        InvalidImportPathReason::CaseMismatch { provided, expected } => format!(
+            "Import path case mismatch: '{}' should be '{}'.",
+            string_table.resolve(provided),
+            string_table.resolve(expected),
+        ),
+    }
+}
+
+pub(crate) fn invalid_compile_time_path_message(
+    path: &InternedPath,
+    reason: InvalidCompileTimePathReason,
+    string_table: &StringTable,
+) -> String {
+    let path_text = path.to_portable_string(string_table);
+
+    match reason {
+        InvalidCompileTimePathReason::MissingTarget => format!(
+            "Compile-time path '{path_text}' does not exist. Check that the file or directory exists relative to the configured path base."
+        ),
+        InvalidCompileTimePathReason::EscapesProjectRoot => format!(
+            "Compile-time path '{path_text}' escapes the project root. Use a path inside the project root or move the target into the project."
+        ),
+    }
+}
+
+pub(crate) fn invalid_path_message(path_kind: PathKind) -> &'static str {
+    match path_kind {
+        PathKind::Empty => {
+            "Path cannot be empty. Paths must start with a valid prefix such as './', '../', or '@name/'."
+        }
+        PathKind::TrailingSeparator => {
+            "Path cannot end with a trailing separator. Remove the final '/'."
+        }
+        PathKind::InvalidRoot => {
+            "Invalid path root. Paths must start with './', '../', '@name/', or '@/'."
+        }
+        PathKind::InvalidComponent => {
+            "Invalid path component. Use path components without syntax delimiters or cross-platform reserved filename characters."
+        }
+        PathKind::InvalidGroupedSyntax => "Invalid grouped path syntax.",
+        PathKind::OnlyRootSlashSupported => {
+            "Only exact \"@/\" is supported as the public root path. Use '@name/...' for rooted paths."
+        }
+        PathKind::SlashBeforeGroup => {
+            "Slash-before-group syntax is not supported. Use 'base { ... }'."
+        }
+        PathKind::EmptyComponent => "Empty path component. Consecutive separators are not allowed.",
+        PathKind::WhitespaceMustBeQuoted => {
+            "Path components with whitespace must be quoted. Wrap the component in double quotes."
+        }
+        PathKind::MissingSeparator => {
+            "Missing path separator. Path components must be separated by '/'."
+        }
+        PathKind::MissingClosingBrace => "Grouped path is missing a closing '}'.",
+        PathKind::MissingClosingQuote => {
+            "Unclosed quoted path component. Quoted components must end with a double quote."
+        }
+        PathKind::InvalidEscape => {
+            "Invalid escape in quoted path component. Only '\"' and '\\' are supported."
+        }
+        PathKind::EmptyGroupedBlock => "Grouped path requires at least one entry.",
+        PathKind::EntriesNeedCommas => "Grouped path entries must be separated by commas.",
+        PathKind::MultipleCommas => "Consecutive commas are not allowed in grouped paths.",
+        PathKind::AliasOnlyOnLeaf => "Path aliases are only valid on leaf entries.",
+        PathKind::NestedGroupNeedsPrefix => "Nested groups require a non-empty prefix.",
+        PathKind::GroupedEntryEmpty => "Grouped path entry cannot be empty.",
+        PathKind::GroupedPrefixTrailingSeparator => {
+            "Grouped path prefix cannot end with a separator."
+        }
+    }
+}
+
+pub(crate) fn direct_symbol_path_import_message(
+    path: &InternedPath,
+    string_table: &StringTable,
+) -> String {
+    let path_text = path.to_portable_string(string_table);
+    format!(
+        "Direct symbol-path imports are not supported: `@{path_text}`.\n\
+         Import from the containing surface with grouped syntax, such as `import @path/to/file {{ symbol }}`, \
+         or import the containing namespace and access a member with `namespace.symbol`.",
+    )
+}
+
+pub(crate) fn invalid_namespace_default_name_message(
+    path: &InternedPath,
+    string_table: &StringTable,
+) -> String {
+    let path_text = path.to_portable_string(string_table);
+    let stem = path.name().map(|n| string_table.resolve(n)).unwrap_or("");
+    format!(
+        "Cannot derive an import namespace name from `{stem}`.\n\
+         Use an explicit alias, for example `import {path_text} as my_name`.",
+    )
+}
+
+pub(crate) fn duplicate_import_surface_member_message(
+    surface_path: &InternedPath,
+    member_name: StringId,
+    string_table: &StringTable,
+) -> String {
+    let path_text = surface_path.to_portable_string(string_table);
+    let member = string_table.resolve(member_name);
+    format!(
+        "Import surface `{path_text}` exposes more than one member named `{member}`.\n\
+         Beanstalk import records require unique member names, even across value and type contexts.\n\
+         Rename or alias one of the exported members.",
+    )
+}
+
+pub(crate) fn explicit_bst_extension_message(
+    path: &InternedPath,
+    string_table: &StringTable,
+) -> String {
+    let path_text = path.to_portable_string(string_table);
+    let extensionless_path = path_text.strip_suffix(".bst").unwrap_or(&path_text);
+    format!(
+        "Import paths must not include the `.bst` extension: `@{path_text}`.\n\
+         Use `@{extensionless_path}` instead.",
+    )
+}
+
+pub(crate) fn unsupported_external_extension_message(
+    path: &InternedPath,
+    extension: StringId,
+    string_table: &StringTable,
+) -> String {
+    let path = path.to_portable_string(string_table);
+    let ext = string_table.resolve(extension);
+    format!(
+        "External file import `{path}` uses extension `.{ext}`, which is not supported by this builder.\n\
+         Register an external import provider for `.{ext}` or import a Beanstalk source file instead.",
+    )
+}
+
+pub(crate) fn invalid_external_library_message(
+    path: &InternedPath,
+    message: StringId,
+    string_table: &StringTable,
+) -> String {
+    let path = path.to_portable_string(string_table);
+    let message = string_table.resolve(message);
+    format!("External library `{path}` is invalid.\n{message}")
+}
+
+pub(crate) fn import_record_used_as_value_message(
+    record_name: StringId,
+    string_table: &StringTable,
+) -> String {
+    let name = string_table.resolve(record_name);
+    format!(
+        "Import records are field-access-only records and cannot be used as values.\n\
+         Access a member instead, for example `{name}.member` or `{name}.Type` in type position.",
+    )
+}
+
+pub(crate) fn const_record_used_as_value_message(
+    record_name: StringId,
+    string_table: &StringTable,
+) -> String {
+    let name = string_table.resolve(record_name);
+    format!(
+        "Records are compile-time field records and cannot be used as values.\n\
+         They are used to group named fields, module imports, and compile-time members.\n\
+         Access a field instead, for example `{name}.member`.",
+    )
+}
+
+pub(crate) fn namespace_type_value_misuse_message(
+    name: StringId,
+    expected: NamespaceTypeValueMisuseKind,
+    found: NamespaceTypeValueMisuseKind,
+    string_table: &StringTable,
+) -> String {
+    let name = string_table.resolve(name);
+    match (expected, found) {
+        (NamespaceTypeValueMisuseKind::Type, NamespaceTypeValueMisuseKind::Value) => {
+            format!("`{name}` is a value member of the import record and cannot be used as a type.")
+        }
+        (NamespaceTypeValueMisuseKind::Value, NamespaceTypeValueMisuseKind::Type) => {
+            format!("`{name}` is a type member of the import record and cannot be used as a value.")
+        }
+        _ => format!("`{name}` cannot be used in this context."),
+    }
+}
+
+pub(crate) fn nested_traversal_message(
+    _record_name: StringId,
+    _string_table: &StringTable,
+) -> String {
+    String::from(
+        "Import records do not expose nested filesystem paths as fields.\n\
+         Import the child path directly, for example `import @child/path as child`, or use a nested grouped import.",
+    )
+}
+
+pub(crate) fn receiver_method_import_requires_visible_receiver_type_message(
+    method_name: StringId,
+    receiver_type_name: Option<StringId>,
+    string_table: &StringTable,
+) -> String {
+    let method = string_table.resolve(method_name);
+    let type_hint = receiver_type_name
+        .map(|name| format!("'{}'", string_table.resolve(name)))
+        .unwrap_or_else(|| "its receiver type".to_owned());
+    format!(
+        "Receiver method import '{method}' requires {type_hint} to be visible. \
+         Import the receiver type or use a namespace import from the same surface."
+    )
+}
+
+pub(crate) fn invalid_import_clause_message(reason: InvalidImportClauseReason) -> &'static str {
+    match reason {
+        InvalidImportClauseReason::MissingPath => "Expected a path after the 'import' keyword.",
+        InvalidImportClauseReason::ExpectedPath => {
+            "Expected a path after the 'import' keyword, found something else."
+        }
+        InvalidImportClauseReason::MissingAlias => {
+            "Expected alias name after `as` in grouped import entry."
+        }
+        InvalidImportClauseReason::ExpectedAliasName => "Expected alias name after `as`.",
+        InvalidImportClauseReason::AliasNotValidIdentifier => {
+            "Import alias must be a valid local binding name."
+        }
+        InvalidImportClauseReason::AliasIsKeyword => "Import alias cannot be a reserved keyword.",
+        InvalidImportClauseReason::GroupedWithTrailingAlias => {
+            "Grouped imports cannot use a group-level alias. Add `as ...` to each grouped entry that needs renaming."
+        }
+        InvalidImportClauseReason::PerEntryAndTrailingAlias => {
+            "Cannot use both per-entry aliases and a group-level alias."
+        }
+        InvalidImportClauseReason::MultipleTrailingAliases => {
+            "Import clauses can only have one alias."
+        }
+        InvalidImportClauseReason::DoubleAliasInGroupedEntry => {
+            "Grouped import entries can only have one alias."
+        }
+    }
+}

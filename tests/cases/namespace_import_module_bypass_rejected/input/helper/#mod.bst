@@ -1,0 +1,1 @@
+-- Empty facade. `thing.bst` is private to the helper module.

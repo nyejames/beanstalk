@@ -1,0 +1,285 @@
+//! AST stage — Stage 4 of the frontend pipeline.
+//!
+//! WHAT: constructs a typed AST from pre-sorted, pre-shaped top-level headers produced by
+//! Stages 2–3 (header parsing and dependency sorting).
+//!
+//! WHY: separating executable-body parsing from header discovery keeps the pipeline
+//! deterministic and lets AST focus on semantic resolution, type checking, and body
+//! lowering without rediscovering top-level symbols.
+//!
+//! ## Ownership contract
+//!
+//! **Header parsing + dependency sorting own:**
+//! - top-level declaration discovery
+//! - top-level declaration shell parsing
+//! - strict top-level dependency ordering
+//! - appending implicit `start` header last (outside dependency graph)
+//!
+//! **AST owns:**
+//! - lowering sorted header payloads (no top-level shell reparsing)
+//! - resolving and validating top-level types/symbols
+//! - parsing function bodies and other executable/body-local declarations
+//! - template composition, compile-time folding, and runtime render-plan preparation
+//!
+//! ## Pipeline
+//!
+//! 1. `AstModuleEnvironmentBuilder::build` — resolves type aliases, nominal types, function
+//!    signatures, receiver catalog, and constants from sorted headers.
+//! 2. `AstEmitter::emit` — lowers function/start/template bodies into typed AST nodes.
+//! 3. `AstFinalizer::finalize` — normalizes templates/constants and assembles [`Ast`] output.
+//!
+//! Entry point: [`Ast::new`].
+
+// Internal AST implementation modules.
+//
+// `module_ast` contains the environment, emission, finalization, and scope-context helpers that
+// implement the AST pipeline. The rest of the AST surface is split by concern
+// (expressions, statements, templates, field access, etc.).
+pub(crate) mod ast_nodes;
+pub(crate) mod const_values;
+pub(crate) mod generic_functions;
+pub(crate) mod instrumentation;
+mod module_ast;
+mod receiver_methods;
+pub(crate) mod type_interner;
+pub(crate) mod type_resolution;
+
+pub(crate) mod expressions {
+    pub(crate) mod call_argument;
+    pub(crate) mod call_validation;
+    pub(crate) mod choice_constructor;
+    pub(crate) mod constructor_views;
+    pub(crate) mod error;
+    pub(crate) mod eval_expression;
+    pub(crate) mod expression;
+    pub(crate) mod expression_kind;
+    #[cfg(test)]
+    pub(crate) mod expression_test_support;
+    pub(crate) mod expression_types;
+    pub(crate) mod external_namespace_members;
+    pub(crate) mod function_calls;
+    pub(crate) mod generic_nominal_inference;
+    pub(crate) mod mutation;
+    pub(crate) mod namespace_member_access;
+    pub(crate) mod option_propagation;
+    pub(crate) mod parse_expression;
+    pub(crate) mod parse_expression_dispatch;
+    pub(crate) mod parse_expression_identifiers;
+    pub(crate) mod parse_expression_literals;
+    pub(crate) mod parse_expression_places;
+    pub(crate) mod parse_expression_templates;
+    pub(crate) mod source_function_calls;
+    pub(crate) mod struct_instance;
+}
+
+pub(crate) mod statements {
+    pub(crate) mod body_dispatch;
+    pub(crate) mod body_expr_stmt;
+    pub(crate) mod body_return;
+    pub(crate) mod body_symbol;
+    pub(crate) mod branching;
+    pub(crate) mod collections;
+    pub(crate) mod condition_validation;
+    pub(crate) mod declarations;
+    pub(crate) mod diagnostics;
+    pub(crate) mod fallible_handling;
+    pub(crate) mod functions;
+    pub(crate) mod loops;
+    pub(crate) mod match_arm_boundaries;
+    pub(crate) mod match_patterns;
+    pub(crate) mod multi_bind;
+    pub(crate) mod scoped_blocks;
+    pub(crate) mod value_production;
+}
+
+mod field_access;
+mod place_access;
+pub(crate) mod templates;
+
+// Public surface — minimal API consumed by later compiler stages.
+//
+// WHY: the AST module should expose one obvious entry surface. Internal helpers,
+// pass implementations, and parser submodules stay private to `ast/`.
+pub use module_ast::build_context::AstBuildContext;
+pub(crate) use module_ast::environment::TopLevelDeclarationTable;
+pub use module_ast::scope_context::{ContextKind, ScopeContext};
+pub use templates::top_level_templates::AstDocFragment;
+pub use templates::top_level_templates::AstDocFragmentKind;
+
+// Imports for the AST entry point and body-parsing helper.
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration};
+use crate::compiler_frontend::ast::const_values::facts::AstConstFacts;
+use crate::compiler_frontend::ast::instrumentation::{log_ast_counters, reset_ast_counters};
+use crate::compiler_frontend::ast::module_ast::build_context::AstPhaseContext;
+use crate::compiler_frontend::ast::module_ast::emission::AstEmitter;
+use crate::compiler_frontend::ast::module_ast::environment::{
+    AstEnvironmentInput, AstModuleEnvironmentBuilder,
+};
+use crate::compiler_frontend::ast::module_ast::finalization::AstFinalizer;
+use crate::compiler_frontend::ast::statements::body_dispatch::parse_function_body_statements;
+use crate::compiler_frontend::ast::templates::top_level_templates::AstConstTopLevelFragment;
+use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
+
+use crate::benchmark_timer_log;
+use crate::compiler_frontend::compiler_errors::CompilerMessages;
+use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
+use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
+use crate::compiler_frontend::headers::import_environment::HeaderImportEnvironment;
+use crate::compiler_frontend::headers::module_symbols::ModuleSymbols;
+use crate::compiler_frontend::headers::parse_file_headers::{Header, TopLevelConstFragment};
+use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::tokenizer::tokens::FileTokens;
+use std::time::Instant;
+
+/// Resolved choice definition carried from AST to HIR for pre-registration.
+///
+/// WHAT: identifies every concrete choice declaration by canonical path.
+/// WHY: HIR registers choice IDs from paths, then queries variant and payload
+/// metadata from the canonical `TypeEnvironment` instead of receiving a second
+/// AST-shaped copy of the same semantic data.
+#[derive(Clone, Debug)]
+pub struct AstChoiceDefinition {
+    pub nominal_path: InternedPath,
+}
+
+/// Unified AST output for all source files in one compilation unit.
+///
+/// WHAT: the fully resolved, typed AST produced by Stage 4, ready for HIR lowering.
+/// WHY: one container keeps the pipeline contract explicit — HIR receives exactly this
+/// struct and nothing else from the AST stage.
+pub struct Ast {
+    pub nodes: Vec<AstNode>,
+    pub module_constants: Vec<Declaration>,
+    pub doc_fragments: Vec<AstDocFragment>,
+
+    /// The path to the original entry point file.
+    pub entry_path: InternedPath,
+
+    /// Const top-level fragments with their runtime insertion indices.
+    /// Builders merge these with the runtime fragment list returned by entry `start()`.
+    pub const_top_level_fragments: Vec<AstConstTopLevelFragment>,
+    pub rendered_path_usages: Vec<RenderedPathUsage>,
+    pub warnings: Vec<CompilerDiagnostic>,
+
+    /// Resolved choice definitions for HIR pre-registration.
+    ///
+    /// WHAT: every choice declaration (local and imported) with fully resolved payload field types.
+    /// WHY: HIR registers choices deterministically before function lowering.
+    pub choice_definitions: Vec<AstChoiceDefinition>,
+
+    /// Frontend type environment with all interned types and substituted generic instance views.
+    ///
+    /// WHAT: carries the canonical TypeEnvironment from AST construction to HIR lowering.
+    /// WHY: HIR needs to query substituted fields/variants for generic struct/choice instances.
+    pub type_environment: TypeEnvironment,
+
+    /// Compile-time const facts for all declarations that resolve to constant values.
+    ///
+    /// WHAT: records explicit module constants, private inferred top-level constants
+    ///       (start body), and body-local constants discovered during AST finalization.
+    /// WHY: config validation and HIR metadata need one shared source of truth for
+    ///      const-ness without re-walking the AST.
+    pub const_facts: AstConstFacts,
+}
+
+/// Complete header-stage output consumed by AST construction.
+///
+/// WHAT: bundles everything produced by header parsing and dependency sorting that AST needs.
+/// WHY: `Ast::new` should receive one named contract, not a loose list of parameters.
+pub struct AstBuildInput {
+    pub headers: Vec<Header>,
+    pub module_symbols: ModuleSymbols,
+    pub import_environment: HeaderImportEnvironment,
+    pub top_level_const_fragments: Vec<TopLevelConstFragment>,
+}
+
+impl Ast {
+    /// Constructs a complete typed AST from header-stage outputs and build services.
+    ///
+    /// WHAT: Orchestrates all AST construction passes in sequence, consuming sorted headers
+    /// and header-built visibility through finalization, then assembles the final [`Ast`] output.
+    ///
+    /// WHY: Centralizes the pass sequence so the full compilation pipeline is readable in
+    /// one place without implementation details. Symbol discovery and import visibility are
+    /// owned by the header/dependency stages and passed in via `AstBuildInput`.
+    pub fn new(
+        input: AstBuildInput,
+        context: AstBuildContext<'_>,
+    ) -> Result<Ast, CompilerMessages> {
+        let AstBuildInput {
+            headers,
+            module_symbols,
+            import_environment,
+            top_level_const_fragments,
+        } = input;
+
+        reset_ast_counters();
+
+        let header_count = headers.len();
+        let (phase_context, string_table) = AstPhaseContext::from_build_context(context);
+
+        let mut environment = AstModuleEnvironmentBuilder::new(&phase_context).build(
+            &headers,
+            AstEnvironmentInput {
+                module_symbols,
+                import_environment,
+            },
+            string_table,
+        )?;
+
+        let node_emission_start = Instant::now();
+        let emitted = AstEmitter::new(&phase_context, &mut environment, header_count)
+            .emit(headers, string_table)?;
+        benchmark_timer_log!(
+            node_emission_start,
+            "ast_emit_nodes_ms",
+            "AST/emit nodes completed in: "
+        );
+        let _ = node_emission_start;
+
+        let finalization_start = Instant::now();
+        let ast = AstFinalizer::new(&phase_context, environment).finalize(
+            emitted,
+            &top_level_const_fragments,
+            string_table,
+        )?;
+        benchmark_timer_log!(
+            finalization_start,
+            "ast_finalize_ms",
+            "AST/finalize completed in: "
+        );
+        let _ = finalization_start;
+
+        log_ast_counters();
+
+        Ok(ast)
+    }
+}
+
+// WHAT: public(crate) entrypoint for function/start-function body parsing.
+// WHY: callers should import one obvious `ast`-root function while detailed statement parsing
+// lives in focused helper modules.
+#[allow(clippy::result_large_err)]
+pub(crate) fn function_body_to_ast(
+    token_stream: &mut FileTokens,
+    context: ScopeContext,
+    type_interner: &mut AstTypeInterner<'_>,
+    warnings: &mut Vec<CompilerDiagnostic>,
+    string_table: &mut StringTable,
+) -> Result<Vec<AstNode>, CompilerDiagnostic> {
+    parse_function_body_statements(token_stream, context, type_interner, warnings, string_table)
+}
+
+#[cfg(test)]
+#[path = "tests/const_fact_tests.rs"]
+mod const_fact_tests;
+
+#[cfg(test)]
+#[path = "tests/parser_error_recovery_tests.rs"]
+mod parser_error_recovery_tests;
+
+#[cfg(test)]
+#[path = "tests/type_resolution_tests.rs"]
+mod type_resolution_tests;

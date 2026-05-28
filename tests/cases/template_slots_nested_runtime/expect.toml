@@ -1,0 +1,9 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = [
+  "template_slots_nested_runtime",
+  "first slot lives here",
+  "in between",
+  "deeper scene",
+]

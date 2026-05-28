@@ -1,0 +1,4 @@
+[backends.html]
+mode = "success"
+warnings = "ignore"
+rendered_output_contains = ["3.141592653589793"]

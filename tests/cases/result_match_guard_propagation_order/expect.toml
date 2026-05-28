@@ -1,0 +1,12 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = [
+    "failing-guard",
+    "match guard propagation result=caught",
+]
+rendered_output_not_contains = [
+    "skipped-guard",
+    "match guard propagation result=two",
+    "match guard propagation result=fallback",
+]

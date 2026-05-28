@@ -1,0 +1,10 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["branch_f"]
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = ["if (", "else if (", "const __match_"]
+must_not_contain = ["while (true)", "switch (__bb"]

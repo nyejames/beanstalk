@@ -1,0 +1,10 @@
+app_name #= "Import Fanout Benchmark"
+app_version #= "1.0.0"
+build_timestamp #= "2026-05-20T10:00:00Z"
+max_items_per_page #= 25
+default_page_offset #= 0
+max_page_limit #= 100
+enable_cache #= true
+cache_ttl_seconds #= 300
+retry_count #= 3
+timeout_ms #= 5000

@@ -1,0 +1,5174 @@
+[[case]]
+id = "adversarial_borrow_after_result_handler"
+path = "adversarial_borrow_after_result_handler"
+tags = ["adversarial", "bug-hunt"]
+
+[[case]]
+id = "adversarial_borrow_nested_loop_aliases"
+path = "adversarial_borrow_nested_loop_aliases"
+tags = ["adversarial", "bug-hunt"]
+
+[[case]]
+id = "adversarial_entry_root_dot_segment_imports"
+path = "adversarial_entry_root_dot_segment_imports"
+tags = ["adversarial", "bug-hunt"]
+
+[[case]]
+id = "adversarial_html_wasm_multi_file_runtime_template"
+path = "adversarial_html_wasm_multi_file_runtime_template"
+tags = ["adversarial", "bug-hunt"]
+
+[[case]]
+id = "adversarial_html_wasm_runtime_loop_fragment"
+path = "adversarial_html_wasm_runtime_loop_fragment"
+tags = ["adversarial", "bug-hunt"]
+
+[[case]]
+id = "adversarial_loop_match_result_chain"
+path = "adversarial_loop_match_result_chain"
+tags = ["adversarial", "bug-hunt"]
+
+[[case]]
+id = "adversarial_match_result_control_flow_chain"
+path = "adversarial_match_result_control_flow_chain"
+tags = ["adversarial", "bug-hunt"]
+
+[[case]]
+id = "adversarial_match_result_option_flow"
+path = "adversarial_match_result_option_flow"
+tags = ["adversarial", "bug-hunt"]
+
+[[case]]
+id = "adversarial_choice_payload_control_flow"
+path = "adversarial_choice_payload_control_flow"
+tags = ["adversarial", "bug-hunt", "choices"]
+
+[[case]]
+id = "adversarial_multi_bind_in_loops"
+path = "adversarial_multi_bind_in_loops"
+tags = ["adversarial", "bug-hunt"]
+
+[[case]]
+id = "adversarial_multi_file_helper_chain"
+path = "adversarial_multi_file_helper_chain"
+tags = ["adversarial", "bug-hunt"]
+
+[[case]]
+id = "adversarial_nested_catch_handlers"
+path = "adversarial_nested_catch_handlers"
+tags = ["adversarial", "bug-hunt"]
+
+[[case]]
+id = "adversarial_nested_templates_with_borrowed_values"
+path = "adversarial_nested_templates_with_borrowed_values"
+tags = ["adversarial", "bug-hunt"]
+
+[[case]]
+id = "adversarial_path_template_head_grouped"
+path = "adversarial_path_template_head_grouped"
+tags = ["adversarial", "bug-hunt"]
+
+[[case]]
+id = "adversarial_struct_collection_result_interop"
+path = "adversarial_struct_collection_result_interop"
+tags = ["adversarial", "bug-hunt"]
+
+[[case]]
+id = "adversarial_template_children_fresh_chain"
+path = "adversarial_template_children_fresh_chain"
+tags = ["adversarial", "bug-hunt"]
+
+[[case]]
+id = "adversarial_template_runtime_const_slot_mix"
+path = "adversarial_template_runtime_const_slot_mix"
+tags = ["adversarial", "bug-hunt"]
+
+[[case]]
+id = "arithmetic_operator_precedence"
+path = "arithmetic_operator_precedence"
+tags = ["integration","language"]
+
+[[case]]
+id = "basic_page_output"
+path = "basic_page_output"
+tags = ["integration","language"]
+
+[[case]]
+id = "borrow_checker_alias_not_live_after_scope"
+path = "borrow_checker_alias_not_live_after_scope"
+tags = ["integration","borrows"]
+
+[[case]]
+id = "borrow_checker_basic_variables"
+path = "borrow_checker_basic_variables"
+tags = ["integration","borrows"]
+
+[[case]]
+id = "borrow_checker_function_calls"
+path = "borrow_checker_function_calls"
+tags = ["integration","borrows"]
+
+[[case]]
+id = "borrow_checker_loop_break_with_alias"
+path = "borrow_checker_loop_break_with_alias"
+tags = ["integration","borrows"]
+
+[[case]]
+id = "borrow_checker_multiple_mutable_borrows"
+path = "borrow_checker_multiple_mutable_borrows"
+tags = ["integration","borrows", "diagnostics"]
+
+[[case]]
+id = "borrow_checker_mutable_immutable_conflict"
+path = "borrow_checker_mutable_immutable_conflict"
+tags = ["integration","borrows", "diagnostics"]
+
+[[case]]
+id = "borrow_checker_duplicate_mutable_args"
+path = "borrow_checker_duplicate_mutable_args"
+tags = ["integration","borrows", "diagnostics"]
+
+[[case]]
+id = "function_call_mutable_param_requires_explicit_tilde"
+path = "function_call_mutable_param_requires_explicit_tilde"
+tags = ["integration","functions","diagnostics"]
+
+[[case]]
+id = "function_call_mutable_param_fresh_template_arg"
+path = "function_call_mutable_param_fresh_template_arg"
+tags = ["integration","functions"]
+
+[[case]]
+id = "function_call_mutable_param_fresh_collection_arg"
+path = "function_call_mutable_param_fresh_collection_arg"
+tags = ["integration","functions","collections"]
+
+[[case]]
+id = "function_call_mutable_param_fresh_struct_arg"
+path = "function_call_mutable_param_fresh_struct_arg"
+tags = ["integration","functions","structs"]
+
+[[case]]
+id = "function_call_tilde_on_immutable_place"
+path = "function_call_tilde_on_immutable_place"
+tags = ["integration","functions","diagnostics"]
+
+[[case]]
+id = "function_call_tilde_on_non_place_expression"
+path = "function_call_tilde_on_non_place_expression"
+tags = ["integration","functions","diagnostics"]
+
+[[case]]
+id = "function_call_named_args_mutable_success"
+path = "function_call_named_args_mutable_success"
+tags = ["integration","functions","named-args"]
+
+[[case]]
+id = "function_call_named_args_mutable_missing_tilde"
+path = "function_call_named_args_mutable_missing_tilde"
+tags = ["integration","functions","named-args","diagnostics"]
+
+[[case]]
+id = "borrow_checker_string_memory"
+path = "borrow_checker_string_memory"
+tags = ["integration","borrows"]
+
+[[case]]
+id = "borrow_checker_use_after_move"
+path = "borrow_checker_use_after_move"
+tags = ["integration","borrows", "diagnostics"]
+
+[[case]]
+id = "branch_inconsistent_ownership_merge"
+path = "branch_inconsistent_ownership_merge"
+tags = ["integration","borrows", "diagnostics"]
+
+[[case]]
+id = "branch_reborrow_after_last_use"
+path = "branch_reborrow_after_last_use"
+tags = ["integration","borrows"]
+
+[[case]]
+id = "builtin_error_reserved_symbol_rejected"
+path = "builtin_error_reserved_symbol_rejected"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "error_constructor_default_code"
+path = "error_constructor_default_code"
+tags = ["integration","results","structs"]
+
+[[case]]
+id = "error_constructor_named_args"
+path = "error_constructor_named_args"
+tags = ["integration","results","structs"]
+
+[[case]]
+id = "error_kind_name_user_available"
+path = "error_kind_name_user_available"
+tags = ["integration","results","structs"]
+
+[[case]]
+id = "choice_basic_declaration_and_use"
+path = "choice_basic_declaration_and_use"
+tags = ["integration","language","choices"]
+
+[[case]]
+id = "choice_payload_record_declaration_success"
+path = "choice_payload_record_declaration_success"
+tags = ["integration","language","choices"]
+
+[[case]]
+id = "choice_payload_shorthand_rejected"
+path = "choice_payload_shorthand_rejected"
+tags = ["integration","diagnostics","choices"]
+
+[[case]]
+id = "choice_payload_empty_record_rejected"
+path = "choice_payload_empty_record_rejected"
+tags = ["integration","diagnostics","choices"]
+
+[[case]]
+id = "choice_payload_duplicate_field_rejected"
+path = "choice_payload_duplicate_field_rejected"
+tags = ["integration","diagnostics","choices"]
+
+[[case]]
+id = "choice_payload_mutable_field_rejected"
+path = "choice_payload_mutable_field_rejected"
+tags = ["integration","diagnostics","choices"]
+
+[[case]]
+id = "choice_payload_field_default_rejected"
+path = "choice_payload_field_default_rejected"
+tags = ["integration","diagnostics","choices"]
+
+[[case]]
+id = "choice_payload_imported_field_type_success"
+path = "choice_payload_imported_field_type_success"
+tags = ["integration","language","choices"]
+
+[[case]]
+id = "choice_payload_constructor_positional_success"
+path = "choice_payload_constructor_positional_success"
+tags = ["integration","language","choices"]
+
+[[case]]
+id = "choice_payload_constructor_named_success"
+path = "choice_payload_constructor_named_success"
+tags = ["integration","language","choices"]
+
+[[case]]
+id = "choice_equality_positional_constructor_success"
+path = "choice_equality_positional_constructor_success"
+tags = ["integration","language","choices","equality","js-backend"]
+
+[[case]]
+id = "choice_equality_named_constructor_success"
+path = "choice_equality_named_constructor_success"
+tags = ["integration","language","choices","equality","js-backend"]
+
+[[case]]
+id = "choice_payload_constructor_mixed_success"
+path = "choice_payload_constructor_mixed_success"
+tags = ["integration","language","choices"]
+
+[[case]]
+id = "choice_payload_capture_reassignment_rejected"
+path = "choice_payload_capture_reassignment_rejected"
+tags = ["integration","diagnostics","choices","pattern-matching"]
+
+[[case]]
+id = "choice_payload_match_capture_success"
+path = "choice_payload_match_capture_success"
+tags = ["integration","language","choices"]
+
+[[case]]
+id = "choice_payload_match_qualified_capture_success"
+path = "choice_payload_match_qualified_capture_success"
+tags = ["integration","language","choices"]
+
+[[case]]
+id = "choice_payload_match_guard_uses_capture_success"
+path = "choice_payload_match_guard_uses_capture_success"
+tags = ["integration","language","choices"]
+
+[[case]]
+id = "choice_payload_match_exhaustive_tag_level_success"
+path = "choice_payload_match_exhaustive_tag_level_success"
+tags = ["integration","language","choices"]
+
+[[case]]
+id = "choice_payload_match_wrong_capture_name_rejected"
+path = "choice_payload_match_wrong_capture_name_rejected"
+tags = ["integration","diagnostics","choices","pattern-matching"]
+
+[[case]]
+id = "choice_payload_match_too_few_captures_rejected"
+path = "choice_payload_match_too_few_captures_rejected"
+tags = ["integration","diagnostics","choices","pattern-matching"]
+
+[[case]]
+id = "choice_payload_match_too_many_captures_rejected"
+path = "choice_payload_match_too_many_captures_rejected"
+tags = ["integration","diagnostics","choices","pattern-matching"]
+
+[[case]]
+id = "choice_payload_match_duplicate_capture_rejected"
+path = "choice_payload_match_duplicate_capture_rejected"
+tags = ["integration","diagnostics","choices","pattern-matching"]
+
+[[case]]
+id = "choice_payload_match_capture_shadowing_rejected"
+path = "choice_payload_match_capture_shadowing_rejected"
+tags = ["integration","diagnostics","choices","pattern-matching"]
+
+[[case]]
+id = "choice_payload_match_rename_success"
+path = "choice_payload_match_rename_success"
+tags = ["integration","language","choices"]
+
+[[case]]
+id = "choice_payload_match_rename_guard_success"
+path = "choice_payload_match_rename_guard_success"
+tags = ["integration","language","choices"]
+
+[[case]]
+id = "choice_payload_match_rename_wrong_original_rejected"
+path = "choice_payload_match_rename_wrong_original_rejected"
+tags = ["integration","diagnostics","choices","pattern-matching"]
+
+[[case]]
+id = "choice_payload_match_rename_duplicate_binding_rejected"
+path = "choice_payload_match_rename_duplicate_binding_rejected"
+tags = ["integration","diagnostics","choices","pattern-matching"]
+
+[[case]]
+id = "choice_payload_match_rename_shadowing_rejected"
+path = "choice_payload_match_rename_shadowing_rejected"
+tags = ["integration","diagnostics","choices","pattern-matching"]
+
+[[case]]
+id = "choice_payload_match_rename_missing_alias_rejected"
+path = "choice_payload_match_rename_missing_alias_rejected"
+tags = ["integration","diagnostics","choices","pattern-matching"]
+
+[[case]]
+id = "choice_payload_match_rename_non_symbol_alias_rejected"
+path = "choice_payload_match_rename_non_symbol_alias_rejected"
+tags = ["integration","diagnostics","choices","pattern-matching"]
+
+[[case]]
+id = "choice_payload_match_rename_original_not_visible_rejected"
+path = "choice_payload_match_rename_original_not_visible_rejected"
+tags = ["integration","diagnostics","choices","pattern-matching"]
+
+[[case]]
+id = "choice_payload_match_rename_self_alias_success"
+path = "choice_payload_match_rename_self_alias_success"
+tags = ["integration","language","choices"]
+
+[[case]]
+id = "as_in_expression_rejected"
+path = "as_in_expression_rejected"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "as_in_variable_declaration_rejected"
+path = "as_in_variable_declaration_rejected"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "as_in_function_signature_rejected"
+path = "as_in_function_signature_rejected"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "as_in_non_choice_match_pattern_rejected"
+path = "as_in_non_choice_match_pattern_rejected"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "as_in_match_pattern_lead_rejected"
+path = "as_in_match_pattern_lead_rejected"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "choice_payload_match_named_assignment_rejected"
+path = "choice_payload_match_named_assignment_rejected"
+tags = ["integration","diagnostics","choices","pattern-matching"]
+
+[[case]]
+id = "choice_payload_match_missing_payload_rejected"
+path = "choice_payload_match_missing_payload_rejected"
+tags = ["integration","diagnostics","choices","pattern-matching"]
+
+[[case]]
+id = "choice_payload_match_unit_parens_rejected"
+path = "choice_payload_match_unit_parens_rejected"
+tags = ["integration","diagnostics","choices","pattern-matching"]
+
+[[case]]
+id = "choice_payload_match_duplicate_variant_rejected"
+path = "choice_payload_match_duplicate_variant_rejected"
+tags = ["integration","diagnostics","choices","pattern-matching"]
+
+[[case]]
+id = "choice_payload_match_guard_requires_else"
+path = "choice_payload_match_guard_requires_else"
+tags = ["integration","diagnostics","choices","pattern-matching"]
+
+[[case]]
+id = "choice_payload_constructor_missing_field_rejected"
+path = "choice_payload_constructor_missing_field_rejected"
+tags = ["integration","diagnostics","choices"]
+
+[[case]]
+id = "choice_payload_constructor_unknown_field_rejected"
+path = "choice_payload_constructor_unknown_field_rejected"
+tags = ["integration","diagnostics","choices"]
+
+[[case]]
+id = "choice_payload_constructor_duplicate_field_rejected"
+path = "choice_payload_constructor_duplicate_field_rejected"
+tags = ["integration","diagnostics","choices"]
+
+[[case]]
+id = "choice_payload_constructor_positional_after_named_rejected"
+path = "choice_payload_constructor_positional_after_named_rejected"
+tags = ["integration","diagnostics","choices"]
+
+[[case]]
+id = "choice_payload_constructor_type_mismatch_rejected"
+path = "choice_payload_constructor_type_mismatch_rejected"
+tags = ["integration","diagnostics","choices"]
+
+[[case]]
+id = "choice_equality_constructor_wrong_arity_rejected"
+path = "choice_equality_constructor_wrong_arity_rejected"
+tags = ["integration","diagnostics","choices","equality"]
+
+[[case]]
+id = "choice_equality_constructor_wrong_field_rejected"
+path = "choice_equality_constructor_wrong_field_rejected"
+tags = ["integration","diagnostics","choices","equality"]
+
+[[case]]
+id = "choice_payload_constructor_without_args_rejected"
+path = "choice_payload_constructor_without_args_rejected"
+tags = ["integration","diagnostics","choices"]
+
+[[case]]
+id = "choice_const_unit_success"
+path = "choice_const_unit_success"
+tags = ["integration","language","choices"]
+
+[[case]]
+id = "choice_const_payload_success"
+path = "choice_const_payload_success"
+tags = ["integration","language","choices"]
+
+[[case]]
+id = "choice_payload_const_non_const_field_rejected"
+path = "choice_payload_const_non_const_field_rejected"
+tags = ["integration","diagnostics","choices"]
+
+[[case]]
+id = "choice_unit_equality_success"
+path = "choice_unit_equality_success"
+tags = ["integration","language","choices","equality"]
+
+[[case]]
+id = "choice_unit_equality_imported_variant_success"
+path = "choice_unit_equality_imported_variant_success"
+tags = ["integration","language","choices","equality","imports"]
+
+[[case]]
+id = "choice_equality_imported_constructor_success"
+path = "choice_equality_imported_constructor_success"
+tags = ["integration","language","choices","equality","imports","js-backend"]
+
+[[case]]
+id = "choice_equality_aliased_constructor_success"
+path = "choice_equality_aliased_constructor_success"
+tags = ["integration","language","choices","equality","imports","js-backend"]
+
+
+[[case]]
+id = "choice_unit_equality_aliased_import_success"
+path = "choice_unit_equality_aliased_import_success"
+tags = ["integration","language","choices","equality","imports"]
+
+[[case]]
+id = "choice_unit_equality_in_function_return"
+path = "choice_unit_equality_in_function_return"
+tags = ["integration","language","choices","equality"]
+
+[[case]]
+id = "choice_payload_equality_same_payload_true"
+path = "choice_payload_equality_same_payload_true"
+tags = ["integration","language","choices","equality","js-backend"]
+
+[[case]]
+id = "choice_payload_structural_equality_success"
+path = "choice_payload_structural_equality_success"
+tags = ["integration","language","choices","equality","js-backend"]
+
+[[case]]
+id = "choice_payload_equality_different_payload_false"
+path = "choice_payload_equality_different_payload_false"
+tags = ["integration","language","choices","equality","js-backend"]
+
+[[case]]
+id = "choice_payload_equality_unit_vs_payload_false"
+path = "choice_payload_equality_unit_vs_payload_false"
+tags = ["integration","language","choices","equality","js-backend"]
+
+[[case]]
+id = "choice_payload_equality_same_choice_different_variants_false"
+path = "choice_payload_equality_same_choice_different_variants_false"
+tags = ["integration","language","choices","equality","js-backend"]
+
+[[case]]
+id = "choice_payload_equality_nested_choice_true"
+path = "choice_payload_equality_nested_choice_true"
+tags = ["integration","language","choices","equality","js-backend"]
+
+[[case]]
+id = "choice_payload_equality_nested_choice_false"
+path = "choice_payload_equality_nested_choice_false"
+tags = ["integration","language","choices","equality","js-backend"]
+
+[[case]]
+id = "choice_payload_equality_side_effects_evaluated_once"
+path = "choice_payload_equality_side_effects_evaluated_once"
+tags = ["integration","language","choices","equality","js-backend"]
+
+[[case]]
+id = "choice_equality_different_choice_types_rejected"
+path = "choice_equality_different_choice_types_rejected"
+tags = ["integration","diagnostics","choices","equality"]
+
+[[case]]
+id = "choice_diagnostic_choice_vs_non_choice_rejected"
+path = "choice_diagnostic_choice_vs_non_choice_rejected"
+tags = ["integration","diagnostics","choices","equality"]
+
+[[case]]
+id = "choice_equality_payload_unsupported_struct_rejected"
+path = "choice_equality_payload_unsupported_struct_rejected"
+tags = ["integration","diagnostics","choices","equality"]
+
+[[case]]
+id = "choice_equality_payload_unsupported_collection_rejected"
+path = "choice_equality_payload_unsupported_collection_rejected"
+tags = ["integration","diagnostics","choices","equality"]
+
+[[case]]
+id = "choice_equality_payload_unsupported_external_rejected"
+path = "choice_equality_payload_unsupported_external_rejected"
+tags = ["integration","diagnostics","choices","equality"]
+
+[[case]]
+id = "choice_payload_direct_field_access_deferred"
+path = "choice_payload_direct_field_access_deferred"
+tags = ["integration","diagnostics","choices"]
+
+[[case]]
+id = "choice_payload_field_mutation_rejected"
+path = "choice_payload_field_mutation_rejected"
+tags = ["integration","diagnostics","choices"]
+
+[[case]]
+id = "choice_direct_field_access_imported_deferred"
+path = "choice_direct_field_access_imported_deferred"
+tags = ["integration","diagnostics","choices","pattern-matching"]
+
+[[case]]
+id = "choice_recursive_direct_declaration_deferred"
+path = "choice_recursive_direct_declaration_deferred"
+tags = ["integration","diagnostics","choices"]
+
+[[case]]
+id = "generic_choice_declaration_parse_success"
+path = "generic_choice_declaration_parse_success"
+tags = ["integration","generics","choices"]
+
+[[case]]
+id = "generic_function_declaration_parse_success"
+path = "generic_function_declaration_parse_success"
+tags = ["integration","generics","functions"]
+
+[[case]]
+id = "generic_function_identity_success"
+path = "generic_function_identity_success"
+tags = ["integration","generics","functions"]
+
+[[case]]
+id = "generic_function_wrapper_success"
+path = "generic_function_wrapper_success"
+tags = ["integration","generics","functions"]
+
+[[case]]
+id = "generic_function_expected_context_success"
+path = "generic_function_expected_context_success"
+tags = ["integration","generics","functions"]
+
+[[case]]
+id = "generic_constructed_types_success"
+path = "generic_constructed_types_success"
+tags = ["integration","generics","functions","collections","options"]
+
+[[case]]
+id = "generic_function_optional_return_success"
+path = "generic_function_optional_return_success"
+tags = ["integration","generics","functions","options"]
+
+[[case]]
+id = "generic_optional_none_inference_rejected"
+path = "generic_optional_none_inference_rejected"
+tags = ["integration","generics","functions","options","diagnostics"]
+
+[[case]]
+id = "generic_function_ambiguous_inference_rejected"
+path = "generic_function_ambiguous_inference_rejected"
+tags = ["integration","generics","functions","diagnostics"]
+
+[[case]]
+id = "generic_function_conflicting_inference_rejected"
+path = "generic_function_conflicting_inference_rejected"
+tags = ["integration","generics","functions","diagnostics"]
+
+[[case]]
+id = "generic_function_recursive_instantiation_rejected"
+path = "generic_function_recursive_instantiation_rejected"
+tags = ["integration","generics","functions","diagnostics"]
+
+[[case]]
+id = "generic_fn_cross_file_grouped_success"
+path = "generic_fn_cross_file_grouped_success"
+tags = ["integration","generics","functions","imports"]
+
+[[case]]
+id = "generic_fn_cross_file_grouped_alias_success"
+path = "generic_fn_cross_file_grouped_alias_success"
+tags = ["integration","generics","functions","imports"]
+
+[[case]]
+id = "generic_fn_alias_collision_behavior_unchanged"
+path = "generic_fn_alias_collision_behavior_unchanged"
+tags = ["integration","generics","functions","imports","diagnostics"]
+
+[[case]]
+id = "generic_fn_cross_file_conflicting_inference_rejected"
+path = "generic_fn_cross_file_conflicting_inference_rejected"
+tags = ["integration","generics","functions","imports","diagnostics"]
+
+[[case]]
+id = "generic_fn_cross_file_namespace_success"
+path = "generic_fn_cross_file_namespace_success"
+tags = ["integration","generics","functions","imports"]
+
+[[case]]
+id = "generic_fn_cross_file_namespace_expected_result_success"
+path = "generic_fn_cross_file_namespace_expected_result_success"
+tags = ["integration","generics","functions","imports"]
+
+[[case]]
+id = "generic_fn_value_use_namespace_rejected"
+path = "generic_fn_value_use_namespace_rejected"
+tags = ["integration","generics","functions","imports","diagnostics"]
+
+[[case]]
+id = "generic_fn_value_use_grouped_rejected"
+path = "generic_fn_value_use_grouped_rejected"
+tags = ["integration","generics","functions","imports","diagnostics"]
+
+[[case]]
+id = "generic_fn_value_use_collection_rejected"
+path = "generic_fn_value_use_collection_rejected"
+tags = ["integration","generics","functions","imports","diagnostics"]
+
+[[case]]
+id = "generic_fn_value_use_argument_rejected"
+path = "generic_fn_value_use_argument_rejected"
+tags = ["integration","generics","functions","imports","diagnostics"]
+
+[[case]]
+id = "generic_fn_value_use_return_rejected"
+path = "generic_fn_value_use_return_rejected"
+tags = ["integration","generics","functions","imports","diagnostics"]
+
+[[case]]
+id = "generic_fn_namespace_synthetic_instance_inaccessible_rejected"
+path = "generic_fn_namespace_synthetic_instance_inaccessible_rejected"
+tags = ["integration","generics","functions","imports","diagnostics"]
+
+[[case]]
+id = "generic_fn_cross_file_expected_result_collection_success"
+path = "generic_fn_cross_file_expected_result_collection_success"
+tags = ["integration","generics","functions","imports"]
+
+[[case]]
+id = "generic_fn_facade_expected_result_collection_success"
+path = "generic_fn_facade_expected_result_collection_success"
+tags = ["integration","generics","functions","imports"]
+
+[[case]]
+id = "generic_fn_cross_file_optional_return_success"
+path = "generic_fn_cross_file_optional_return_success"
+tags = ["integration","generics","functions","imports","options"]
+
+[[case]]
+id = "generic_fn_facade_optional_return_success"
+path = "generic_fn_facade_optional_return_success"
+tags = ["integration","generics","functions","imports","options"]
+
+[[case]]
+id = "generic_fn_cross_file_fallible_error_slot_success"
+path = "generic_fn_cross_file_fallible_error_slot_success"
+tags = ["integration","generics","functions","imports","results"]
+
+[[case]]
+id = "generic_fn_facade_fallible_error_slot_success"
+path = "generic_fn_facade_fallible_error_slot_success"
+tags = ["integration","generics","functions","imports","results"]
+
+[[case]]
+id = "generic_fn_uninferable_parameter_rejected"
+path = "generic_fn_uninferable_parameter_rejected"
+tags = ["integration","generics","functions","imports","diagnostics"]
+
+[[case]]
+id = "generic_fn_later_use_inference_rejected"
+path = "generic_fn_later_use_inference_rejected"
+tags = ["integration","generics","functions","imports","diagnostics"]
+
+[[case]]
+id = "generic_fn_multiple_substitutions_same_module_success"
+path = "generic_fn_multiple_substitutions_same_module_success"
+tags = ["integration","generics","functions","imports"]
+
+[[case]]
+id = "generic_fn_instance_body_type_error_rejected"
+path = "generic_fn_instance_body_type_error_rejected"
+tags = ["integration","generics","functions","diagnostics"]
+
+[[case]]
+id = "generic_function_body_validation_success"
+path = "generic_function_body_validation_success"
+tags = ["integration","generics","functions"]
+
+[[case]]
+id = "generic_fn_nested_generic_body_call_success"
+path = "generic_fn_nested_generic_body_call_success"
+tags = ["integration","generics","functions","imports"]
+
+[[case]]
+id = "generic_function_local_annotations_success"
+path = "generic_function_local_annotations_success"
+tags = ["integration","generics","functions","collections","choices"]
+
+[[case]]
+id = "generic_parameter_name_outside_scope_rejected"
+path = "generic_parameter_name_outside_scope_rejected"
+tags = ["integration","generics","functions","diagnostics"]
+
+[[case]]
+id = "generic_function_local_unknown_annotation_rejected"
+path = "generic_function_local_unknown_annotation_rejected"
+tags = ["integration","generics","functions","diagnostics"]
+
+[[case]]
+id = "generic_function_forward_reordered_success"
+path = "generic_function_forward_reordered_success"
+tags = ["integration","generics","functions"]
+
+[[case]]
+id = "generic_function_forward_conflict_rejected"
+path = "generic_function_forward_conflict_rejected"
+tags = ["integration","generics","functions","diagnostics"]
+
+[[case]]
+id = "generic_function_body_arithmetic_rejected"
+path = "generic_function_body_arithmetic_rejected"
+tags = ["integration","generics","functions","diagnostics"]
+
+[[case]]
+id = "generic_canonical_parameter_diagnostic_name"
+path = "generic_canonical_parameter_diagnostic_name"
+tags = ["integration","generics","functions","diagnostics"]
+
+[[case]]
+id = "generic_function_body_io_rejected"
+path = "generic_function_body_io_rejected"
+tags = ["integration","generics","functions","diagnostics"]
+
+[[case]]
+id = "generic_function_body_template_rejected"
+path = "generic_function_body_template_rejected"
+tags = ["integration","generics","functions","templates","diagnostics"]
+
+[[case]]
+id = "generic_function_body_field_access_rejected"
+path = "generic_function_body_field_access_rejected"
+tags = ["integration","generics","functions","diagnostics"]
+
+[[case]]
+id = "generic_fallible_function_success"
+path = "generic_fallible_function_success"
+tags = ["integration","generics","functions","results"]
+
+[[case]]
+id = "generic_fallible_body_specialization_rejected"
+path = "generic_fallible_body_specialization_rejected"
+tags = ["integration","generics","functions","results","diagnostics"]
+
+[[case]]
+id = "generic_unused_parameter_rejected"
+path = "generic_unused_parameter_rejected"
+tags = ["integration","generics","diagnostics"]
+
+[[case]]
+id = "generic_duplicate_parameter_rejected"
+path = "generic_duplicate_parameter_rejected"
+tags = ["integration","generics","diagnostics"]
+
+[[case]]
+id = "generic_parameter_invalid_name_rejected"
+path = "generic_parameter_invalid_name_rejected"
+tags = ["integration","generics","diagnostics"]
+
+[[case]]
+id = "generic_parameter_builtin_collision_rejected"
+path = "generic_parameter_builtin_collision_rejected"
+tags = ["integration","generics","diagnostics"]
+
+[[case]]
+id = "generic_parameter_visible_type_collision_rejected"
+path = "generic_parameter_visible_type_collision_rejected"
+tags = ["integration","generics","diagnostics"]
+
+[[case]]
+id = "generic_type_wrong_arity_rejected"
+path = "generic_type_wrong_arity_rejected"
+tags = ["integration","generics","diagnostics"]
+
+[[case]]
+id = "generic_recursive_type_deferred"
+path = "generic_recursive_type_deferred"
+tags = ["integration","generics","diagnostics"]
+
+[[case]]
+id = "generic_struct_instantiation_success"
+path = "generic_struct_instantiation_success"
+tags = ["integration","generics","structs"]
+
+[[case]]
+id = "generic_choice_instantiation_success"
+path = "generic_choice_instantiation_success"
+tags = ["integration","generics","choices"]
+
+[[case]]
+id = "generic_choice_match_success"
+path = "generic_choice_match_success"
+tags = ["integration","generics","choices"]
+
+[[case]]
+id = "generic_choice_equality_success"
+path = "generic_choice_equality_success"
+tags = ["integration","generics","choices","equality"]
+
+[[case]]
+id = "generic_choice_equality_unsupported_payload_rejected"
+path = "generic_choice_equality_unsupported_payload_rejected"
+tags = ["integration","generics","choices","equality","diagnostics"]
+
+[[case]]
+id = "generic_empty_collection_constructor_ambiguity"
+path = "generic_empty_collection_constructor_ambiguity"
+tags = ["integration","generics","structs"]
+
+[[case]]
+id = "generic_missing_args_rejected"
+path = "generic_missing_args_rejected"
+tags = ["integration","generics","choices"]
+
+[[case]]
+id = "generic_nongeneric_of_rejected"
+path = "generic_nongeneric_of_rejected"
+tags = ["integration","generics","diagnostics"]
+
+[[case]]
+id = "generic_imported_struct_choice_success"
+path = "generic_imported_struct_choice_success"
+tags = ["integration","generics","imports"]
+
+[[case]]
+id = "generic_named_struct_args_infer"
+path = "generic_named_struct_args_infer"
+tags = ["integration","generics","structs","named-args"]
+
+[[case]]
+id = "generic_named_choice_payload_infer"
+path = "generic_named_choice_payload_infer"
+tags = ["integration","generics","choices","named-args"]
+
+[[case]]
+id = "generic_conflicting_inference_rejected"
+path = "generic_conflicting_inference_rejected"
+tags = ["integration","generics","diagnostics"]
+
+[[case]]
+id = "generic_concrete_alias_success"
+path = "generic_concrete_alias_success"
+tags = ["integration","generics","aliases"]
+
+[[case]]
+id = "generic_import_alias_concrete_alias_success"
+path = "generic_import_alias_concrete_alias_success"
+tags = ["integration","generics","imports","aliases"]
+
+[[case]]
+id = "generic_nonexported_import_rejected"
+path = "generic_nonexported_import_rejected"
+tags = ["integration","generics","imports","diagnostics"]
+
+[[case]]
+id = "generic_alias_rejected"
+path = "generic_alias_rejected"
+tags = ["integration","generics","aliases","diagnostics"]
+
+[[case]]
+id = "generic_receiver_rejected"
+path = "generic_receiver_rejected"
+tags = ["integration","generics","receiver-methods","diagnostics"]
+
+[[case]]
+id = "generic_explicit_call_syntax_still_rejected"
+path = "generic_explicit_call_syntax_still_rejected"
+tags = ["integration","generics","functions","diagnostics"]
+
+[[case]]
+id = "generic_mutual_recursive_rejected"
+path = "generic_mutual_recursive_rejected"
+tags = ["integration","generics","diagnostics"]
+
+[[case]]
+id = "generic_default_only_inference_rejected"
+path = "generic_default_only_inference_rejected"
+tags = ["integration","generics","diagnostics"]
+
+[[case]]
+id = "generic_collection_element_success"
+path = "generic_collection_element_success"
+tags = ["integration","generics","collections"]
+
+[[case]]
+id = "generic_expected_unit_choice_success"
+path = "generic_expected_unit_choice_success"
+tags = ["integration","generics","choices"]
+
+[[case]]
+id = "generic_nested_alias_workaround"
+path = "generic_nested_alias_workaround"
+tags = ["integration","generics","aliases"]
+
+[[case]]
+id = "generic_nested_of_rejected"
+path = "generic_nested_of_rejected"
+tags = ["integration","generics","diagnostics"]
+
+[[case]]
+id = "choice_variant_default_value_deferred"
+path = "choice_variant_default_value_deferred"
+tags = ["integration","diagnostics","choices"]
+
+[[case]]
+id = "choice_nested_payload_pattern_deferred"
+path = "choice_nested_payload_pattern_deferred"
+tags = ["integration","diagnostics","choices"]
+
+[[case]]
+id = "choice_payload_js_carrier_shape"
+path = "choice_payload_js_carrier_shape"
+tags = ["integration","language","choices"]
+
+[[case]]
+id = "choice_payload_return_js_shape"
+path = "choice_payload_return_js_shape"
+tags = ["integration","language","choices"]
+
+[[case]]
+id = "choice_payload_assignment_js_shape"
+path = "choice_payload_assignment_js_shape"
+tags = ["integration","language","choices"]
+
+[[case]]
+id = "choice_payload_imported_js_shape"
+path = "choice_payload_imported_js_shape"
+tags = ["integration","language","choices"]
+
+[[case]]
+id = "choice_payload_match_import_alias_success"
+path = "choice_payload_match_import_alias_success"
+tags = ["integration","language","choices"]
+
+[[case]]
+id = "choice_imported_alias_payload_capture_success"
+path = "choice_imported_alias_payload_capture_success"
+tags = ["integration","language","choices","pattern-matching"]
+
+[[case]]
+id = "choice_imported_payload_constructor_success"
+path = "choice_imported_payload_constructor_success"
+tags = ["integration","language","choices"]
+
+[[case]]
+id = "choice_default_decl_deferred"
+path = "choice_default_decl_deferred"
+tags = ["integration","diagnostics","choices"]
+
+[[case]]
+id = "choice_unit_constructor_call_rejected"
+path = "choice_unit_constructor_call_rejected"
+tags = ["integration","diagnostics","choices"]
+
+[[case]]
+id = "choice_import_visibility_non_exported"
+path = "choice_import_visibility_non_exported"
+tags = ["integration","diagnostics","choices"]
+
+[[case]]
+id = "choice_import_visibility_exported"
+path = "choice_import_visibility_exported"
+tags = ["integration","language","choices"]
+
+[[case]]
+id = "choice_match_exhaustive_success"
+path = "choice_match_exhaustive_success"
+tags = ["integration","control-flow","language","choices"]
+
+[[case]]
+id = "choice_match_guard_without_else_failure"
+path = "choice_match_guard_without_else_failure"
+tags = ["integration","control-flow","diagnostics","choices","pattern-matching"]
+
+[[case]]
+id = "choice_match_non_exhaustive_failure"
+path = "choice_match_non_exhaustive_failure"
+tags = ["integration","control-flow","diagnostics","choices","pattern-matching"]
+
+[[case]]
+id = "choice_match_unknown_variant_failure"
+path = "choice_match_unknown_variant_failure"
+tags = ["integration","control-flow","diagnostics","choices","pattern-matching"]
+
+[[case]]
+id = "choice_match_exhaustive_merge_continuation"
+path = "choice_match_exhaustive_merge_continuation"
+tags = ["integration","control-flow","backend-contract","choices"]
+
+[[case]]
+id = "choice_function_return_flow"
+path = "choice_function_return_flow"
+tags = ["integration","language","choices"]
+
+[[case]]
+id = "choice_assignment_flow"
+path = "choice_assignment_flow"
+tags = ["integration","language","choices"]
+
+[[case]]
+id = "choice_nested_match_flow"
+path = "choice_nested_match_flow"
+tags = ["integration","language","control-flow","choices"]
+
+[[case]]
+id = "choice_template_control_flow_boundary"
+path = "choice_template_control_flow_boundary"
+tags = ["integration","language","control-flow","choices"]
+
+[[case]]
+id = "js_choice_carrier_shape"
+path = "js_choice_carrier_shape"
+tags = ["integration","backend-contract","choices"]
+
+[[case]]
+id = "js_choice_match_lowering_shape"
+path = "js_choice_match_lowering_shape"
+tags = ["integration","backend-contract","control-flow","choices"]
+
+[[case]]
+id = "js_choice_payload_carrier_shape"
+path = "js_choice_payload_carrier_shape"
+tags = ["integration","backend-contract","choices"]
+
+[[case]]
+id = "js_choice_payload_match_shape"
+path = "js_choice_payload_match_shape"
+tags = ["integration","backend-contract","control-flow","choices"]
+
+[[case]]
+id = "choice_imported_unit_constructor_call_rejected"
+path = "choice_imported_unit_constructor_call_rejected"
+tags = ["integration","diagnostics","choices"]
+
+[[case]]
+id = "choice_cross_file_runtime"
+path = "choice_cross_file_runtime"
+tags = ["integration","language","choices"]
+
+[[case]]
+id = "choice_cross_file_carrier_shape"
+path = "choice_cross_file_carrier_shape"
+tags = ["integration","backend-contract","choices"]
+
+[[case]]
+id = "circular_dependency"
+path = "circular_dependency"
+tags = ["integration","language", "diagnostics"]
+
+[[case]]
+id = "collection_alias_observes_mutation"
+path = "collection_alias_observes_mutation"
+tags = ["integration", "collections", "borrows"]
+
+[[case]]
+id = "collection_get_out_of_bounds"
+path = "collection_get_out_of_bounds"
+tags = ["integration","collections"]
+
+[[case]]
+id = "collection_helpers_strict_runtime_contract"
+path = "collection_helpers_strict_runtime_contract"
+tags = ["integration","collections","js-backend"]
+
+[[case]]
+id = "collection_indexed_write_removed"
+path = "collection_indexed_write_removed"
+tags = ["integration","collections","diagnostics"]
+
+[[case]]
+id = "collection_set_end_to_end"
+path = "collection_set_end_to_end"
+tags = ["integration","collections"]
+
+[[case]]
+id = "collection_set_readback_branch"
+path = "collection_set_readback_branch"
+tags = ["integration", "collections", "control-flow"]
+
+[[case]]
+id = "collection_literal_smoke"
+path = "collection_literal_smoke"
+tags = ["integration","collections"]
+
+[[case]]
+id = "empty_collection_requires_explicit_type"
+path = "empty_collection_requires_explicit_type"
+tags = ["integration","collections","diagnostics"]
+
+[[case]]
+id = "explicit_empty_collection_can_be_pushed"
+path = "explicit_empty_collection_can_be_pushed"
+tags = ["integration","collections"]
+
+[[case]]
+id = "mixed_collection_literal_rejected"
+path = "mixed_collection_literal_rejected"
+tags = ["integration","collections","diagnostics"]
+
+[[case]]
+id = "collection_methods_backend_contract"
+path = "collection_methods_backend_contract"
+tags = ["integration","collections","js-backend"]
+
+[[case]]
+id = "collection_methods_end_to_end"
+path = "collection_methods_end_to_end"
+tags = ["integration","collections"]
+
+[[case]]
+id = "collection_mutable_access_js_regression"
+path = "collection_mutable_access_js_regression"
+tags = ["integration", "collections", "js-backend", "regression"]
+
+[[case]]
+id = "cast_float_from_string_runtime_output"
+path = "cast_float_from_string_runtime_output"
+tags = ["integration","js-backend"]
+
+[[case]]
+id = "cast_float_invalid_format_fallback"
+path = "cast_float_invalid_format_fallback"
+tags = ["integration","js-backend","results"]
+
+[[case]]
+id = "cast_int_from_string_runtime_output"
+path = "cast_int_from_string_runtime_output"
+tags = ["integration","js-backend"]
+
+[[case]]
+id = "cast_int_invalid_format_fallback"
+path = "cast_int_invalid_format_fallback"
+tags = ["integration","js-backend","results"]
+
+[[case]]
+id = "collection_mutating_method_requires_explicit_receiver_tilde"
+path = "collection_mutating_method_requires_explicit_receiver_tilde"
+tags = ["integration","collections","diagnostics"]
+
+[[case]]
+id = "collection_mutating_method_temporary_receiver_rejected"
+path = "collection_mutating_method_temporary_receiver_rejected"
+tags = ["integration","collections","diagnostics"]
+
+[[case]]
+id = "collection_mutation_inside_branch"
+path = "collection_mutation_inside_branch"
+tags = ["integration", "collections", "control-flow"]
+
+[[case]]
+id = "collection_mutation_inside_loop"
+path = "collection_mutation_inside_loop"
+tags = ["integration", "collections", "control-flow"]
+
+[[case]]
+id = "collection_mutation_through_mutable_alias"
+path = "collection_mutation_through_mutable_alias"
+tags = ["integration", "collections", "borrows"]
+
+[[case]]
+id = "collection_negative_index_fallback"
+path = "collection_negative_index_fallback"
+tags = ["integration", "collections", "js-backend"]
+
+[[case]]
+id = "collection_pull_removed_syntax_rejected"
+path = "collection_pull_removed_syntax_rejected"
+tags = ["integration","collections","diagnostics"]
+
+[[case]]
+id = "collection_remove_requires_explicit_receiver_tilde"
+path = "collection_remove_requires_explicit_receiver_tilde"
+tags = ["integration","collections","diagnostics"]
+
+[[case]]
+id = "collection_set_requires_explicit_receiver_tilde"
+path = "collection_set_requires_explicit_receiver_tilde"
+tags = ["integration","collections","diagnostics"]
+
+[[case]]
+id = "commas"
+path = "commas"
+tags = ["integration","language"]
+
+[[case]]
+id = "comparison_and_logical"
+path = "comparison_and_logical"
+tags = ["integration","control-flow"]
+
+[[case]]
+id = "complex_borrow_violations"
+path = "complex_borrow_violations"
+tags = ["integration","borrows", "diagnostics"]
+
+[[case]]
+id = "complex_borrowing_scenarios"
+path = "complex_borrowing_scenarios"
+tags = ["integration","borrows"]
+
+[[case]]
+id = "missing_nested_import_symbol_rejected"
+path = "missing_nested_import_symbol_rejected"
+tags = ["integration","diagnostics","imports"]
+
+[[case]]
+id = "complex_module_structure"
+path = "complex_module_structure"
+tags = ["integration","structs","imports","entry-start", "dependency-resolution"]
+
+[[case]]
+id = "config_current_keys_success"
+path = "config_current_keys_success"
+tags = ["integration","config"]
+
+[[case]]
+id = "config_deprecated_src_key_rejected"
+path = "config_deprecated_src_key_rejected"
+tags = ["integration","config","diagnostics"]
+
+[[case]]
+id = "config_libraries_replaced_by_library_folders_rejected"
+path = "config_libraries_replaced_by_library_folders_rejected"
+tags = ["integration","config","diagnostics"]
+
+[[case]]
+id = "config_loading"
+path = "config_loading"
+tags = ["integration","config"]
+
+[[case]]
+id = "config_multi_error"
+path = "config_multi_error"
+tags = ["integration","config","diagnostics"]
+
+[[case]]
+id = "config_root_folders_replaced_by_library_folders_rejected"
+path = "config_root_folders_replaced_by_library_folders_rejected"
+tags = ["integration","config","diagnostics"]
+
+[[case]]
+id = "config_unknown_key_rejected"
+path = "config_unknown_key_rejected"
+tags = ["integration","config","diagnostics"]
+
+[[case]]
+id = "config_plain_immutable_success"
+path = "config_plain_immutable_success"
+tags = ["integration","config"]
+
+[[case]]
+id = "config_private_const_refs_success"
+path = "config_private_const_refs_success"
+tags = ["integration","config"]
+
+[[case]]
+id = "config_builder_imported_constant_success"
+path = "config_builder_imported_constant_success"
+tags = ["integration","config","imports"]
+
+[[case]]
+id = "config_const_record_field_projection_success"
+path = "config_const_record_field_projection_success"
+tags = ["integration","config","constants"]
+
+[[case]]
+id = "config_single_string_library_folders_success"
+path = "config_single_string_library_folders_success"
+tags = ["integration","config"]
+
+[[case]]
+id = "config_mutable_key_rejected"
+path = "config_mutable_key_rejected"
+tags = ["integration","config","diagnostics"]
+
+[[case]]
+id = "config_function_declaration_rejected"
+path = "config_function_declaration_rejected"
+tags = ["integration","config","diagnostics"]
+
+[[case]]
+id = "config_function_call_rejected"
+path = "config_function_call_rejected"
+tags = ["integration","config","diagnostics"]
+
+[[case]]
+id = "config_host_call_rejected"
+path = "config_host_call_rejected"
+tags = ["integration","config","diagnostics"]
+
+[[case]]
+id = "config_runtime_expression_rejected"
+path = "config_runtime_expression_rejected"
+tags = ["integration","config","diagnostics"]
+
+[[case]]
+id = "config_non_key_private_helper_rejected"
+path = "config_non_key_private_helper_rejected"
+tags = ["integration","config","diagnostics"]
+
+[[case]]
+id = "config_non_key_explicit_helper_rejected"
+path = "config_non_key_explicit_helper_rejected"
+tags = ["integration","config","diagnostics"]
+
+[[case]]
+id = "config_private_forward_reference_rejected"
+path = "config_private_forward_reference_rejected"
+tags = ["integration","config","diagnostics"]
+
+[[case]]
+id = "config_explicit_ref_private_rejected"
+path = "config_explicit_ref_private_rejected"
+tags = ["integration","config","diagnostics"]
+
+[[case]]
+id = "config_duplicate_private_keys_rejected"
+path = "config_duplicate_private_keys_rejected"
+tags = ["integration","config","diagnostics"]
+
+[[case]]
+id = "config_duplicate_private_explicit_rejected"
+path = "config_duplicate_private_explicit_rejected"
+tags = ["integration","config","diagnostics"]
+
+[[case]]
+id = "config_wrong_shape_string_rejected"
+path = "config_wrong_shape_string_rejected"
+tags = ["integration","config","diagnostics"]
+
+[[case]]
+id = "config_invalid_project_value_rejected"
+path = "config_invalid_project_value_rejected"
+tags = ["integration","config","diagnostics"]
+
+[[case]]
+id = "config_project_local_import_rejected"
+path = "config_project_local_import_rejected"
+tags = ["integration","config","diagnostics"]
+
+[[case]]
+id = "config_relative_import_rejected"
+path = "config_relative_import_rejected"
+tags = ["integration","config","diagnostics"]
+
+[[case]]
+id = "config_js_import_rejected"
+path = "config_js_import_rejected"
+tags = ["integration","config","diagnostics"]
+
+[[case]]
+id = "config_library_folders_import_rejected"
+path = "config_library_folders_import_rejected"
+tags = ["integration","config","diagnostics"]
+
+[[case]]
+id = "consistent_borrow_outcomes"
+path = "consistent_borrow_outcomes"
+tags = ["integration","borrows"]
+
+[[case]]
+id = "consistent_ownership_outcomes"
+path = "consistent_ownership_outcomes"
+tags = ["integration","borrows"]
+
+[[case]]
+id = "constant_fold_invalid_numeric_cast"
+path = "constant_fold_invalid_numeric_cast"
+tags = ["integration","diagnostics","constants"]
+
+[[case]]
+id = "constant_fold_integer_overflow"
+path = "constant_fold_integer_overflow"
+tags = ["integration","diagnostics","constants"]
+
+[[case]]
+id = "constant_host_call_rejected"
+path = "constant_host_call_rejected"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "constant_mutable_rejected"
+path = "constant_mutable_rejected"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "constant_non_constant_reference_rejected"
+path = "constant_non_constant_reference_rejected"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "old_prefix_constant_rejected"
+path = "old_prefix_constant_rejected"
+tags = ["integration","language", "diagnostics", "constants", "imports"]
+
+[[case]]
+id = "old_prefix_function_rejected"
+path = "old_prefix_function_rejected"
+tags = ["integration","language", "diagnostics", "functions", "imports"]
+
+[[case]]
+id = "old_prefix_struct_rejected"
+path = "old_prefix_struct_rejected"
+tags = ["integration","language", "diagnostics", "structs", "imports"]
+
+[[case]]
+id = "old_prefix_choice_rejected"
+path = "old_prefix_choice_rejected"
+tags = ["integration","language", "diagnostics", "choices", "imports"]
+
+[[case]]
+id = "old_prefix_type_alias_rejected"
+path = "old_prefix_type_alias_rejected"
+tags = ["integration","language", "diagnostics", "aliases", "imports"]
+
+[[case]]
+id = "constants"
+path = "constants"
+tags = ["integration","language"]
+
+[[case]]
+id = "control_flow"
+path = "control_flow"
+tags = ["integration","control-flow"]
+
+[[case]]
+id = "diagnostic_function_body_stray_comma"
+path = "diagnostic_function_body_stray_comma"
+tags = ["integration","functions","diagnostics"]
+
+[[case]]
+id = "diagnostic_match_arrow_separator"
+path = "diagnostic_match_arrow_separator"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "diagnostic_match_arm_must_start_new_line"
+path = "diagnostic_match_arm_must_start_new_line"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "diagnostic_match_deferred_capture_pattern"
+path = "diagnostic_match_deferred_capture_pattern"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "diagnostic_match_expected_arm_header"
+path = "diagnostic_match_expected_arm_header"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "diagnostic_match_negated_pattern"
+path = "diagnostic_match_negated_pattern"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "diagnostic_match_legacy_colon_syntax"
+path = "diagnostic_match_legacy_colon_syntax"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "diagnostic_match_removed_case_keyword"
+path = "diagnostic_match_removed_case_keyword"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "diagnostic_match_semicolon_between_arms"
+path = "diagnostic_match_semicolon_between_arms"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "pattern_relational_string_less_success"
+path = "pattern_relational_string_less_success"
+tags = ["integration","language","pattern-matching","js-backend"]
+
+[[case]]
+id = "pattern_relational_string_less_equal_success"
+path = "pattern_relational_string_less_equal_success"
+tags = ["integration","language","pattern-matching","js-backend"]
+
+[[case]]
+id = "pattern_relational_string_greater_success"
+path = "pattern_relational_string_greater_success"
+tags = ["integration","language","pattern-matching","js-backend"]
+
+[[case]]
+id = "pattern_relational_string_greater_equal_success"
+path = "pattern_relational_string_greater_equal_success"
+tags = ["integration","language","pattern-matching","js-backend"]
+
+[[case]]
+id = "pattern_relational_string_mixed_number_rejected"
+path = "pattern_relational_string_mixed_number_rejected"
+tags = ["integration","diagnostics","pattern-matching"]
+
+[[case]]
+id = "pattern_relational_string_bool_rejected"
+path = "pattern_relational_string_bool_rejected"
+tags = ["integration","diagnostics","pattern-matching"]
+
+[[case]]
+id = "pattern_relational_choice_rejected"
+path = "pattern_relational_choice_rejected"
+tags = ["integration","diagnostics","pattern-matching","choices"]
+
+[[case]]
+id = "pattern_relational_struct_rejected"
+path = "pattern_relational_struct_rejected"
+tags = ["integration","diagnostics","pattern-matching"]
+
+[[case]]
+id = "pattern_relational_collection_rejected"
+path = "pattern_relational_collection_rejected"
+tags = ["integration","diagnostics","pattern-matching","collections"]
+
+[[case]]
+id = "pattern_diagnostic_invalid_relational_type"
+path = "pattern_diagnostic_invalid_relational_type"
+tags = ["integration","diagnostics","pattern-matching"]
+
+[[case]]
+id = "pattern_diagnostic_capture_collision"
+path = "pattern_diagnostic_capture_collision"
+tags = ["integration","diagnostics","pattern-matching"]
+
+[[case]]
+id = "pattern_diagnostic_nested_payload_deferred"
+path = "pattern_diagnostic_nested_payload_deferred"
+tags = ["integration","diagnostics","pattern-matching","choices"]
+
+[[case]]
+id = "pattern_diagnostic_else_not_final_or_warned"
+path = "pattern_diagnostic_else_not_final_or_warned"
+tags = ["integration","diagnostics","pattern-matching","warnings"]
+
+[[case]]
+id = "pattern_diagnostic_wildcard_rejected"
+path = "pattern_diagnostic_wildcard_rejected"
+tags = ["integration","diagnostics","pattern-matching"]
+
+[[case]]
+id = "pattern_wildcard_rejected"
+path = "pattern_wildcard_rejected"
+tags = ["integration","diagnostics","pattern-matching"]
+
+[[case]]
+id = "pattern_wildcard_with_guard_rejected"
+path = "pattern_wildcard_with_guard_rejected"
+tags = ["integration","diagnostics","pattern-matching"]
+
+[[case]]
+id = "pattern_wildcard_after_choice_rejected"
+path = "pattern_wildcard_after_choice_rejected"
+tags = ["integration","diagnostics","pattern-matching","choices"]
+
+[[case]]
+id = "pattern_wildcard_not_capture_binding"
+path = "pattern_wildcard_not_capture_binding"
+tags = ["integration","diagnostics","pattern-matching","choices"]
+
+[[case]]
+id = "diagnostic_quality_test"
+path = "diagnostic_quality_test"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "diagnostic_signature_missing_arrow"
+path = "diagnostic_signature_missing_arrow"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "diagnostic_signature_missing_colon"
+path = "diagnostic_signature_missing_colon"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "diagnostic_undeclared_call_target"
+path = "diagnostic_undeclared_call_target"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "disjoint_field_borrows"
+path = "disjoint_field_borrows"
+tags = ["integration","borrows"]
+
+[[case]]
+id = "duplicate_function_names"
+path = "duplicate_function_names"
+tags = ["integration","functions","diagnostics"]
+
+[[case]]
+id = "duplicate_function_struct_names"
+path = "duplicate_function_struct_names"
+tags = ["integration","functions","diagnostics"]
+
+[[case]]
+id = "duplicate_struct_names"
+path = "duplicate_struct_names"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "dynamic_if_test"
+path = "dynamic_if_test"
+tags = ["integration","control-flow"]
+
+[[case]]
+id = "error_field_access_in_handler"
+path = "error_field_access_in_handler"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "error_helper_methods_removed_rejected"
+path = "error_helper_methods_removed_rejected"
+tags = ["integration","diagnostics","results"]
+
+[[case]]
+id = "error_location_name_user_available"
+path = "error_location_name_user_available"
+tags = ["integration","structs","results"]
+
+[[case]]
+id = "stack_frame_name_user_available"
+path = "stack_frame_name_user_available"
+tags = ["integration","structs","results"]
+
+[[case]]
+id = "float_literal_malformed"
+path = "float_literal_malformed"
+tags = ["integration","language", "diagnostics"]
+
+[[case]]
+id = "float_literals_and_arithmetic"
+path = "float_literals_and_arithmetic"
+tags = ["integration","language"]
+
+[[case]]
+id = "function_call_arg_type_correct"
+path = "function_call_arg_type_correct"
+tags = ["integration", "functions", "type-checking"]
+
+[[case]]
+id = "function_call_arg_type_rejected"
+path = "function_call_arg_type_rejected"
+tags = ["integration", "functions", "type-checking", "diagnostics"]
+
+[[case]]
+id = "function_call_arg_user_error_kind_struct"
+path = "function_call_arg_user_error_kind_struct"
+tags = ["integration", "functions", "type-checking", "compatibility"]
+
+[[case]]
+id = "function_call_named_args_success"
+path = "function_call_named_args_success"
+tags = ["integration", "functions"]
+
+[[case]]
+id = "function_call_named_args_host_rejected"
+path = "function_call_named_args_host_rejected"
+tags = ["integration", "functions", "diagnostics"]
+
+[[case]]
+id = "function_call_named_args_builtin_rejected"
+path = "function_call_named_args_builtin_rejected"
+tags = ["integration", "functions", "diagnostics"]
+
+[[case]]
+id = "function_call_named_args_all_named"
+path = "function_call_named_args_all_named"
+tags = ["integration", "functions", "named-args"]
+
+[[case]]
+id = "function_call_named_args_default_skip"
+path = "function_call_named_args_default_skip"
+tags = ["integration", "functions", "named-args"]
+
+[[case]]
+id = "function_call_named_args_positional_after_named"
+path = "function_call_named_args_positional_after_named"
+tags = ["integration", "functions", "named-args", "diagnostics"]
+
+[[case]]
+id = "function_call_named_args_duplicate"
+path = "function_call_named_args_duplicate"
+tags = ["integration", "functions", "named-args", "diagnostics"]
+
+[[case]]
+id = "function_call_named_args_unknown"
+path = "function_call_named_args_unknown"
+tags = ["integration", "functions", "named-args", "diagnostics"]
+
+[[case]]
+id = "function_call_named_args_missing_required"
+path = "function_call_named_args_missing_required"
+tags = ["integration", "functions", "named-args", "diagnostics"]
+
+[[case]]
+id = "struct_constructor_named_args_all_named"
+path = "struct_constructor_named_args_all_named"
+tags = ["integration", "structs", "named-args"]
+
+[[case]]
+id = "struct_constructor_named_args_mixed"
+path = "struct_constructor_named_args_mixed"
+tags = ["integration", "structs", "named-args"]
+
+[[case]]
+id = "struct_constructor_named_args_default_skip"
+path = "struct_constructor_named_args_default_skip"
+tags = ["integration", "structs", "named-args"]
+
+[[case]]
+id = "struct_constructor_named_args_positional_after_named"
+path = "struct_constructor_named_args_positional_after_named"
+tags = ["integration", "structs", "named-args", "diagnostics"]
+
+[[case]]
+id = "struct_constructor_named_args_duplicate"
+path = "struct_constructor_named_args_duplicate"
+tags = ["integration", "structs", "named-args", "diagnostics"]
+
+[[case]]
+id = "struct_constructor_named_args_unknown"
+path = "struct_constructor_named_args_unknown"
+tags = ["integration", "structs", "named-args", "diagnostics"]
+
+[[case]]
+id = "struct_constructor_named_args_missing_required"
+path = "struct_constructor_named_args_missing_required"
+tags = ["integration", "structs", "named-args", "diagnostics"]
+
+[[case]]
+id = "struct_constructor_field_type_mismatch_rejected"
+path = "struct_constructor_field_type_mismatch_rejected"
+tags = ["integration", "structs", "diagnostics"]
+
+[[case]]
+id = "function_if_loop_smoke"
+path = "function_if_loop_smoke"
+tags = ["integration","control-flow"]
+
+[[case]]
+id = "functions"
+path = "functions"
+tags = ["integration","functions"]
+
+[[case]]
+id = "host_function_error_scenarios"
+path = "host_function_error_scenarios"
+tags = ["integration","functions","diagnostics"]
+
+[[case]]
+id = "host_function_integration"
+path = "host_function_integration"
+tags = ["integration","functions"]
+
+[[case]]
+id = "host_function_with_control_flow"
+path = "host_function_with_control_flow"
+tags = ["integration","functions"]
+
+[[case]]
+id = "html_builder_body_style"
+path = "html_builder_body_style"
+tags = ["integration","html"]
+
+[[case]]
+id = "html_builder_default_shell"
+path = "html_builder_default_shell"
+tags = ["integration","html"]
+
+[[case]]
+id = "html_builder_invalid_config"
+path = "html_builder_invalid_config"
+tags = ["integration","html", "diagnostics"]
+
+[[case]]
+id = "html_builder_invalid_page_metadata"
+path = "html_builder_invalid_page_metadata"
+tags = ["integration","html", "diagnostics"]
+
+[[case]]
+id = "html_builder_js_script_inside_body"
+path = "html_builder_js_script_inside_body"
+tags = ["integration","html"]
+
+[[case]]
+id = "html_builder_page_head"
+path = "html_builder_page_head"
+tags = ["integration","html"]
+
+[[case]]
+id = "html_builder_page_title"
+path = "html_builder_page_title"
+tags = ["integration","html"]
+
+[[case]]
+id = "html_builder_wasm_script_inside_body"
+path = "html_builder_wasm_script_inside_body"
+tags = ["integration","html","wasm"]
+
+[[case]]
+id = "html_duplicate_route_reports_config_error"
+path = "html_duplicate_route_reports_config_error"
+tags = ["integration","html","diagnostics"]
+
+[[case]]
+id = "html_missing_homepage_reports_config_error"
+path = "html_missing_homepage_reports_config_error"
+tags = ["integration","html","diagnostics"]
+
+[[case]]
+id = "html_tracked_asset_entry_root_basic"
+path = "html_tracked_asset_entry_root_basic"
+tags = ["integration","html"]
+
+[[case]]
+id = "html_tracked_asset_large_warning"
+path = "html_tracked_asset_large_warning"
+tags = ["integration","html"]
+
+[[case]]
+id = "html_tracked_asset_origin_prefixed"
+path = "html_tracked_asset_origin_prefixed"
+tags = ["integration","html"]
+
+[[case]]
+id = "html_tracked_asset_relative_basic"
+path = "html_tracked_asset_relative_basic"
+tags = ["integration","html"]
+
+[[case]]
+id = "html_tracked_asset_relative_parent_normalization"
+path = "html_tracked_asset_relative_parent_normalization"
+tags = ["integration","html"]
+
+[[case]]
+id = "html_tracked_asset_root_folder_basic"
+path = "html_tracked_asset_root_folder_basic"
+tags = ["integration","html"]
+
+[[case]]
+id = "html_tracked_asset_unreferenced_not_emitted"
+path = "html_tracked_asset_unreferenced_not_emitted"
+tags = ["integration","html"]
+
+[[case]]
+id = "html_wasm_basic_string"
+path = "html_wasm_basic_string"
+tags = ["integration","html-wasm"]
+
+[[case]]
+id = "html_wasm_bool_conditional"
+path = "html_wasm_bool_conditional"
+tags = ["integration","html-wasm"]
+
+[[case]]
+id = "html_wasm_flag_off_js_only_regression"
+path = "html_wasm_flag_off_js_only_regression"
+tags = ["integration","html-wasm"]
+
+[[case]]
+id = "html_wasm_imported_start"
+path = "html_wasm_imported_start"
+tags = ["integration","html-wasm"]
+
+[[case]]
+id = "html_wasm_logging"
+path = "html_wasm_logging"
+tags = ["integration","html-wasm"]
+
+[[case]]
+id = "html_wasm_const_runtime_const_interleave"
+path = "html_wasm_const_runtime_const_interleave"
+tags = ["integration","html-wasm","templates"]
+
+[[case]]
+id = "html_wasm_multi_fragment_string"
+path = "html_wasm_multi_fragment_string"
+tags = ["integration","html-wasm"]
+
+[[case]]
+id = "html_wasm_multiple_runtime_fragments_order"
+path = "html_wasm_multiple_runtime_fragments_order"
+tags = ["integration","html-wasm","templates"]
+
+[[case]]
+id = "html_wasm_runtime_template"
+path = "html_wasm_runtime_template"
+tags = ["integration","html-wasm"]
+
+[[case]]
+id = "immutable_alias_while_borrowed"
+path = "immutable_alias_while_borrowed"
+tags = ["integration","borrows"]
+
+[[case]]
+id = "immutable_mutation_attempt"
+path = "immutable_mutation_attempt"
+tags = ["integration","language", "diagnostics"]
+
+[[case]]
+id = "implicit_borrowing"
+path = "implicit_borrowing"
+tags = ["integration","borrows"]
+
+[[case]]
+id = "implicit_main_call"
+path = "implicit_main_call"
+tags = ["integration","language","entry-start"]
+
+[[case]]
+id = "import_syntax_test"
+path = "import_syntax_test"
+tags = ["integration","language","imports", "dependency-resolution"]
+
+[[case]]
+id = "imported_start_function_callable_not_auto_run"
+path = "imported_start_function_callable_not_auto_run"
+tags = ["integration","functions","imports","entry-start", "dependency-resolution"]
+
+[[case]]
+id = "assignment_type_mismatch_rejected"
+path = "assignment_type_mismatch_rejected"
+tags = ["integration","language","diagnostics", "type-checking"]
+
+[[case]]
+id = "integer_literal_overflow"
+path = "integer_literal_overflow"
+tags = ["integration","language", "diagnostics"]
+
+[[case]]
+id = "invalid_reassignment_shadowing"
+path = "invalid_reassignment_shadowing"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "io_coerce_to_string"
+path = "io_coerce_to_string"
+tags = ["integration","language"]
+
+[[case]]
+id = "io_single_statement_smoke"
+path = "io_single_statement_smoke"
+tags = ["integration","language"]
+
+[[case]]
+id = "js_alias_write_through"
+path = "js_alias_write_through"
+tags = ["integration","js-backend"]
+
+[[case]]
+id = "js_dispatcher_loop_with_match"
+path = "js_dispatcher_loop_with_match"
+tags = ["integration","js-backend"]
+
+[[case]]
+id = "js_explicit_copy"
+path = "js_explicit_copy"
+tags = ["integration","js-backend"]
+
+[[case]]
+id = "js_function_param_passing"
+path = "js_function_param_passing"
+tags = ["integration","functions"]
+
+[[case]]
+id = "js_import_cross_module_bypass_rejected"
+path = "js_import_cross_module_bypass_rejected"
+tags = ["integration","imports","diagnostics","js-backend"]
+
+[[case]]
+id = "js_mutable_param_reassignment"
+path = "js_mutable_param_reassignment"
+tags = ["integration","js-backend"]
+
+[[case]]
+id = "js_nested_struct_field"
+path = "js_nested_struct_field"
+tags = ["integration","js-backend"]
+
+[[case]]
+id = "js_operator_mapping"
+path = "js_operator_mapping"
+tags = ["integration","js-backend"]
+
+[[case]]
+id = "js_sequential_mutable_assignments"
+path = "js_sequential_mutable_assignments"
+tags = ["integration","js-backend"]
+
+[[case]]
+id = "js_short_circuit_jump_args"
+path = "js_short_circuit_jump_args"
+tags = ["integration","js-backend","control-flow"]
+
+[[case]]
+id = "js_struct_field_mutation"
+path = "js_struct_field_mutation"
+tags = ["integration","js-backend"]
+
+[[case]]
+id = "js_structured_if_no_dispatcher"
+path = "js_structured_if_no_dispatcher"
+tags = ["integration","control-flow"]
+
+[[case]]
+id = "block_scoped_success"
+path = "block_scoped_success"
+tags = ["integration","control-flow"]
+
+[[case]]
+id = "block_outer_assignment"
+path = "block_outer_assignment"
+tags = ["integration","control-flow"]
+
+[[case]]
+id = "block_local_does_not_escape"
+path = "block_local_does_not_escape"
+tags = ["integration","diagnostics","control-flow"]
+
+[[case]]
+id = "labeled_scope_rejected"
+path = "labeled_scope_rejected"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "typescript_style_declaration_rejected"
+path = "typescript_style_declaration_rejected"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "checked_block_reserved"
+path = "checked_block_reserved"
+tags = ["integration","diagnostics","control-flow"]
+
+[[case]]
+id = "async_block_reserved"
+path = "async_block_reserved"
+tags = ["integration","diagnostics","control-flow"]
+
+[[case]]
+id = "block_keyword_declaration_rejected"
+path = "block_keyword_declaration_rejected"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "checked_keyword_declaration_rejected"
+path = "checked_keyword_declaration_rejected"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "async_keyword_declaration_rejected"
+path = "async_keyword_declaration_rejected"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "last_use_precision"
+path = "last_use_precision"
+tags = ["integration","language"]
+
+[[case]]
+id = "lifetime_inference_conflict_detection"
+path = "lifetime_inference_conflict_detection"
+tags = ["integration","borrows", "diagnostics"]
+
+[[case]]
+id = "lifetime_inference_control_flow"
+path = "lifetime_inference_control_flow"
+tags = ["integration","borrows"]
+
+[[case]]
+id = "lifetime_inference_drop_insertion"
+path = "lifetime_inference_drop_insertion"
+tags = ["integration","borrows"]
+
+[[case]]
+id = "lifetime_inference_error_precision"
+path = "lifetime_inference_error_precision"
+tags = ["integration","borrows","diagnostics"]
+
+[[case]]
+id = "lifetime_inference_integration_basic"
+path = "lifetime_inference_integration_basic"
+tags = ["integration","borrows"]
+
+[[case]]
+id = "lifetime_inference_move_refinement"
+path = "lifetime_inference_move_refinement"
+tags = ["integration","borrows"]
+
+[[case]]
+id = "lifetime_inference_use_after_move"
+path = "lifetime_inference_use_after_move"
+tags = ["integration","borrows", "diagnostics"]
+
+[[case]]
+id = "literal_match_requires_else_failure"
+path = "literal_match_requires_else_failure"
+tags = ["integration","control-flow","diagnostics"]
+
+[[case]]
+id = "literal_match_with_else_success"
+path = "literal_match_with_else_success"
+tags = ["integration","control-flow"]
+
+[[case]]
+id = "loop_bare_iteration_bindings"
+path = "loop_bare_iteration_bindings"
+tags = ["integration","control-flow", "diagnostics"]
+
+[[case]]
+id = "loop_bindingless_iteration"
+path = "loop_bindingless_iteration"
+tags = ["integration","control-flow"]
+
+[[case]]
+id = "loop_break_continue_control_flow"
+path = "loop_break_continue_control_flow"
+tags = ["integration","control-flow"]
+
+[[case]]
+id = "loop_borrow_mutation_conflict"
+path = "loop_borrow_mutation_conflict"
+tags = ["integration","control-flow","borrows","diagnostics"]
+
+[[case]]
+id = "loop_collection_iteration"
+path = "loop_collection_iteration"
+tags = ["integration","control-flow","collections"]
+
+[[case]]
+id = "loop_collection_iteration_with_index"
+path = "loop_collection_iteration_with_index"
+tags = ["integration","control-flow","collections"]
+
+[[case]]
+id = "loop_conditional_and_range"
+path = "loop_conditional_and_range"
+tags = ["integration","control-flow"]
+
+[[case]]
+id = "loop_float_range_requires_by"
+path = "loop_float_range_requires_by"
+tags = ["integration","control-flow","diagnostics"]
+
+[[case]]
+id = "loop_float_range_with_by"
+path = "loop_float_range_with_by"
+tags = ["integration","control-flow"]
+
+[[case]]
+id = "loop_invalid_bindings"
+path = "loop_invalid_bindings"
+tags = ["integration","control-flow","diagnostics"]
+
+[[case]]
+id = "loop_invalid_collection_source"
+path = "loop_invalid_collection_source"
+tags = ["integration","control-flow","diagnostics"]
+
+[[case]]
+id = "loop_invalid_condition_type"
+path = "loop_invalid_condition_type"
+tags = ["integration","control-flow","diagnostics"]
+
+[[case]]
+id = "loop_missing_range_end"
+path = "loop_missing_range_end"
+tags = ["integration","control-flow","diagnostics"]
+
+[[case]]
+id = "loop_nested_break_continue"
+path = "loop_nested_break_continue"
+tags = ["integration","control-flow"]
+
+[[case]]
+id = "loop_range_direction_and_step"
+path = "loop_range_direction_and_step"
+tags = ["integration","control-flow"]
+
+[[case]]
+id = "loop_zero_step"
+path = "loop_zero_step"
+tags = ["integration","control-flow","diagnostics"]
+
+[[case]]
+id = "match_guard_literal_success"
+path = "match_guard_literal_success"
+tags = ["integration","control-flow","language"]
+
+[[case]]
+id = "match_nested_in_branches"
+path = "match_nested_in_branches"
+tags = ["integration","control-flow","language"]
+
+[[case]]
+id = "match_value_merge_flow"
+path = "match_value_merge_flow"
+tags = ["integration","control-flow","language"]
+
+[[case]]
+id = "match_relational_int"
+path = "match_relational_int"
+tags = ["integration","control-flow","language"]
+
+[[case]]
+id = "match_relational_guard"
+path = "match_relational_guard"
+tags = ["integration","control-flow","language"]
+
+[[case]]
+id = "match_relational_else_fallback"
+path = "match_relational_else_fallback"
+tags = ["integration","control-flow","language"]
+
+[[case]]
+id = "match_relational_requires_default"
+path = "match_relational_requires_default"
+tags = ["integration","control-flow","diagnostics"]
+
+[[case]]
+id = "malformed_print_statement"
+path = "malformed_print_statement"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "missing_import"
+path = "missing_import"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "mixed_numeric_literals"
+path = "mixed_numeric_literals"
+tags = ["integration","language"]
+
+[[case]]
+id = "modulus_operator"
+path = "modulus_operator"
+tags = ["integration","language"]
+
+[[case]]
+id = "multi_bind_explicit_types_and_mutability"
+path = "multi_bind_explicit_types_and_mutability"
+tags = ["integration","results"]
+
+[[case]]
+id = "multi_bind_immutable_existing_target_rejected"
+path = "multi_bind_immutable_existing_target_rejected"
+tags = ["integration","results","diagnostics"]
+
+[[case]]
+id = "multi_bind_mixed_existing_and_new_targets"
+path = "multi_bind_mixed_existing_and_new_targets"
+tags = ["integration","results"]
+
+[[case]]
+id = "multi_bind_mutable_without_type_rejected"
+path = "multi_bind_mutable_without_type_rejected"
+tags = ["integration","results","diagnostics"]
+
+[[case]]
+id = "multi_bind_optional_slots"
+path = "multi_bind_optional_slots"
+tags = ["integration","results"]
+
+[[case]]
+id = "multi_bind_plain_multi_return"
+path = "multi_bind_plain_multi_return"
+tags = ["integration","results"]
+
+[[case]]
+id = "multi_bind_type_mismatch_rejected"
+path = "multi_bind_type_mismatch_rejected"
+tags = ["integration","results","diagnostics"]
+
+[[case]]
+id = "multi_bind_wrong_arity_rejected"
+path = "multi_bind_wrong_arity_rejected"
+tags = ["integration","results","diagnostics"]
+
+[[case]]
+id = "multi_file_fixture_only_counts_entry_case"
+path = "multi_file_fixture_only_counts_entry_case"
+tags = ["integration","language"]
+
+[[case]]
+id = "multi_file_module"
+path = "multi_file_module"
+tags = ["integration","language","imports", "dependency-resolution"]
+
+[[case]]
+id = "multiline_expressions"
+path = "multiline_expressions"
+tags = ["integration","language","diagnostics","regression"]
+
+[[case]]
+id = "multiple_print_statements"
+path = "multiple_print_statements"
+tags = ["integration","language"]
+
+[[case]]
+id = "mutable_reassignment_print"
+path = "mutable_reassignment_print"
+tags = ["integration","language"]
+
+[[case]]
+id = "mutable_reassignment_semantics"
+path = "mutable_reassignment_semantics"
+tags = ["integration","language"]
+
+[[case]]
+id = "nested_borrowing_patterns"
+path = "nested_borrowing_patterns"
+tags = ["integration","borrows"]
+
+[[case]]
+id = "none_declaration_success"
+path = "none_declaration_success"
+tags = ["integration","language","optionals"]
+
+[[case]]
+id = "none_mutation_success"
+path = "none_mutation_success"
+tags = ["integration","language","optionals"]
+
+[[case]]
+id = "none_return_success"
+path = "none_return_success"
+tags = ["integration","language","optionals"]
+
+[[case]]
+id = "none_without_context_rejected"
+path = "none_without_context_rejected"
+tags = ["integration","language","optionals","diagnostics"]
+
+[[case]]
+id = "option_contextual_wrapping_equality_success"
+path = "option_contextual_wrapping_equality_success"
+tags = ["integration","language","optionals"]
+
+[[case]]
+id = "option_none_equality_without_context_rejected"
+path = "option_none_equality_without_context_rejected"
+tags = ["integration","language","optionals","diagnostics"]
+
+[[case]]
+id = "option_match_patterns_success"
+path = "option_match_patterns_success"
+tags = ["integration","language","optionals","match"]
+
+[[case]]
+id = "option_present_capture_success"
+path = "option_present_capture_success"
+tags = ["integration","language","optionals","match"]
+
+[[case]]
+id = "option_postfix_propagation_success"
+path = "option_postfix_propagation_success"
+tags = ["integration","language","optionals","js-backend"]
+
+[[case]]
+id = "option_postfix_non_optional_function_rejected"
+path = "option_postfix_non_optional_function_rejected"
+tags = ["integration","language","optionals","diagnostics"]
+
+[[case]]
+id = "option_postfix_non_option_operand_rejected"
+path = "option_postfix_non_option_operand_rejected"
+tags = ["integration","language","optionals","diagnostics"]
+
+[[case]]
+id = "option_postfix_catch_conflict_rejected"
+path = "option_postfix_catch_conflict_rejected"
+tags = ["integration","language","optionals","diagnostics"]
+
+[[case]]
+id = "option_present_capture_bare_capture_rejected"
+path = "option_present_capture_bare_capture_rejected"
+tags = ["integration","language","optionals","match","diagnostics"]
+
+[[case]]
+id = "option_present_capture_non_option_rejected"
+path = "option_present_capture_non_option_rejected"
+tags = ["integration","language","optionals","match","diagnostics"]
+
+[[case]]
+id = "option_match_missing_else_rejected"
+path = "option_match_missing_else_rejected"
+tags = ["integration","language","optionals","match","diagnostics"]
+
+[[case]]
+id = "option_match_none_non_option_rejected"
+path = "option_match_none_non_option_rejected"
+tags = ["integration","language","optionals","match","diagnostics"]
+
+[[case]]
+id = "option_match_value_unsupported_inner_rejected"
+path = "option_match_value_unsupported_inner_rejected"
+tags = ["integration","language","optionals","match","diagnostics"]
+
+[[case]]
+id = "path_bst_template_warning"
+path = "path_bst_template_warning"
+tags = ["integration","paths"]
+
+[[case]]
+id = "path_dependent_reborrow"
+path = "path_dependent_reborrow"
+tags = ["integration","paths"]
+
+[[case]]
+id = "path_directory_trailing_slash"
+path = "path_directory_trailing_slash"
+tags = ["integration","paths"]
+
+[[case]]
+id = "path_escape_project_root_error"
+path = "path_escape_project_root_error"
+tags = ["integration","paths","diagnostics"]
+
+[[case]]
+id = "path_exists_directory"
+path = "path_exists_directory"
+tags = ["integration","paths"]
+
+[[case]]
+id = "path_exists_file"
+path = "path_exists_file"
+tags = ["integration","paths"]
+
+[[case]]
+id = "path_grouped_nested_expansion"
+path = "path_grouped_nested_expansion"
+tags = ["integration","paths"]
+
+[[case]]
+id = "path_in_template_head"
+path = "path_in_template_head"
+tags = ["integration","paths"]
+
+[[case]]
+id = "path_missing_error"
+path = "path_missing_error"
+tags = ["integration","paths","diagnostics"]
+
+[[case]]
+id = "path_origin_relative_stays_relative"
+path = "path_origin_relative_stays_relative"
+tags = ["integration","paths"]
+
+[[case]]
+id = "path_origin_root_based"
+path = "path_origin_root_based"
+tags = ["integration","paths"]
+
+[[case]]
+id = "path_public_root_custom_origin"
+path = "path_public_root_custom_origin"
+tags = ["integration","paths"]
+
+[[case]]
+id = "path_public_root_default_origin"
+path = "path_public_root_default_origin"
+tags = ["integration","paths"]
+
+[[case]]
+id = "path_root_folder_preserved"
+path = "path_root_folder_preserved"
+tags = ["integration","paths"]
+
+[[case]]
+id = "path_unquoted_whitespace_error"
+path = "path_unquoted_whitespace_error"
+tags = ["integration","paths","diagnostics"]
+
+[[case]]
+id = "print_special_chars"
+path = "print_special_chars"
+tags = ["integration","language"]
+
+[[case]]
+id = "print_with_variables"
+path = "print_with_variables"
+tags = ["integration","language"]
+
+[[case]]
+id = "public_option_type_syntax_deferred"
+path = "public_option_type_syntax_deferred"
+tags = ["integration","language","optionals","diagnostics"]
+
+[[case]]
+id = "public_result_type_syntax_deferred"
+path = "public_result_type_syntax_deferred"
+tags = ["integration","language","results","diagnostics"]
+
+[[case]]
+id = "receiver_method_basic_call"
+path = "receiver_method_basic_call"
+tags = ["integration","receivers"]
+
+[[case]]
+id = "receiver_method_cross_file_rejected"
+path = "receiver_method_cross_file_rejected"
+tags = ["integration","receivers","diagnostics"]
+
+[[case]]
+id = "receiver_method_field_name_conflict_rejected"
+path = "receiver_method_field_name_conflict_rejected"
+tags = ["integration","receivers","diagnostics"]
+
+[[case]]
+id = "receiver_method_free_function_call_rejected"
+path = "receiver_method_free_function_call_rejected"
+tags = ["integration","receivers","diagnostics"]
+
+[[case]]
+id = "relative_import_dot_segments"
+path = "relative_import_dot_segments"
+tags = ["integration","language","imports","paths", "dependency-resolution"]
+
+[[case]]
+id = "result_handler_without_fallback_fallthrough_rejected"
+path = "result_handler_without_fallback_fallthrough_rejected"
+tags = ["integration","results","diagnostics"]
+
+[[case]]
+id = "result_handler_propagation_vs_local_fallback"
+path = "result_handler_propagation_vs_local_fallback"
+tags = ["integration","results"]
+
+[[case]]
+id = "result_zero_success_statement_propagate"
+path = "result_zero_success_statement_propagate"
+tags = ["integration","results","js-backend"]
+
+[[case]]
+id = "result_empty_catch_zero_success_statement"
+path = "result_empty_catch_zero_success_statement"
+tags = ["integration","results"]
+
+[[case]]
+id = "result_handler_nested_control_flow"
+path = "result_handler_nested_control_flow"
+tags = ["integration","results","control-flow"]
+
+[[case]]
+id = "result_handler_if_match_termination"
+path = "result_handler_if_match_termination"
+tags = ["integration","results","control-flow", "diagnostics"]
+
+[[case]]
+id = "result_not_result_expression_suffix_rejected"
+path = "result_not_result_expression_suffix_rejected"
+tags = ["integration","results","diagnostics"]
+
+[[case]]
+id = "result_propagation_without_error_slot_rejected"
+path = "result_propagation_without_error_slot_rejected"
+tags = ["integration","results","diagnostics"]
+
+[[case]]
+id = "result_raw_carrier_return_rejected"
+path = "result_raw_carrier_return_rejected"
+tags = ["integration","results","diagnostics"]
+
+[[case]]
+id = "result_postfix_in_start_code_rejected"
+path = "result_postfix_in_start_code_rejected"
+tags = ["integration","results","diagnostics"]
+
+[[case]]
+id = "result_error_only_fallback_rejected"
+path = "result_error_only_fallback_rejected"
+tags = ["integration","results","diagnostics"]
+
+[[case]]
+id = "result_error_only_catch_handler_fallback_rejected"
+path = "result_error_only_catch_handler_fallback_rejected"
+tags = ["integration","results","diagnostics"]
+
+[[case]]
+id = "result_catch_handler_conflict_rejected"
+path = "result_catch_handler_conflict_rejected"
+tags = ["integration","results","diagnostics"]
+
+[[case]]
+id = "result_multi_bind_fallback"
+path = "result_multi_bind_fallback"
+tags = ["integration","results"]
+
+[[case]]
+id = "value_catch_block_recovery"
+path = "value_catch_block_recovery"
+tags = ["integration","results","value-blocks"]
+
+[[case]]
+id = "value_catch_inline_recovery"
+path = "value_catch_inline_recovery"
+tags = ["integration","results","value-blocks"]
+
+[[case]]
+id = "value_catch_nested_then_if"
+path = "value_catch_nested_then_if"
+tags = ["integration","results","value-blocks"]
+
+[[case]]
+id = "value_catch_multi_bind"
+path = "value_catch_multi_bind"
+tags = ["integration","results","value-blocks"]
+
+[[case]]
+id = "value_catch_inline_handler_chain_rejected"
+path = "value_catch_inline_handler_chain_rejected"
+tags = ["integration","results","value-blocks","diagnostics"]
+
+[[case]]
+id = "value_catch_missing_producing_path"
+path = "value_catch_missing_producing_path"
+tags = ["integration","results","value-blocks","diagnostics"]
+
+[[case]]
+id = "result_multi_bind_propagate"
+path = "result_multi_bind_propagate"
+tags = ["integration","results"]
+
+[[case]]
+id = "result_multi_success_postfix_call_arg_rejected"
+path = "result_multi_success_postfix_call_arg_rejected"
+tags = ["integration","results","diagnostics"]
+
+[[case]]
+id = "result_removed_err_bang_syntax_rejected"
+path = "result_removed_err_bang_syntax_rejected"
+tags = ["integration","results","diagnostics"]
+
+[[case]]
+id = "result_empty_catch_handler_binding_rejected"
+path = "result_empty_catch_handler_binding_rejected"
+tags = ["integration","results","diagnostics"]
+
+[[case]]
+id = "result_multiple_catch_handler_bindings_rejected"
+path = "result_multiple_catch_handler_bindings_rejected"
+tags = ["integration","results","diagnostics"]
+
+[[case]]
+id = "result_then_outside_catch_rejected"
+path = "result_then_outside_catch_rejected"
+tags = ["integration","results","diagnostics"]
+
+[[case]]
+id = "result_then_tail_unreachable"
+path = "result_then_tail_unreachable"
+tags = ["integration","results","value-blocks"]
+
+[[case]]
+id = "result_then_type_mismatch_rejected"
+path = "result_then_type_mismatch_rejected"
+tags = ["integration","results","diagnostics"]
+
+[[case]]
+id = "result_catch_handler_scope_bubbles_error"
+path = "result_catch_handler_scope_bubbles_error"
+tags = ["integration","results","diagnostics"]
+
+[[case]]
+id = "result_collection_get_fallback_output"
+path = "result_collection_get_fallback_output"
+tags = ["integration","results","collections","js-backend"]
+
+[[case]]
+id = "result_raw_carrier_collection_rejected"
+path = "result_raw_carrier_collection_rejected"
+tags = ["integration","results","collections","diagnostics"]
+
+[[case]]
+id = "result_receiver_base_propagation_order"
+path = "result_receiver_base_propagation_order"
+tags = ["integration","results","hir"]
+
+[[case]]
+id = "result_match_guard_propagation_order"
+path = "result_match_guard_propagation_order"
+tags = ["integration","results","hir","match"]
+
+[[case]]
+id = "result_catch_handler_scope_with_fallback"
+path = "result_catch_handler_scope_with_fallback"
+tags = ["integration","results"]
+
+[[case]]
+id = "result_operand_without_handler_in_operator"
+path = "result_operand_without_handler_in_operator"
+tags = ["integration","results","diagnostics"]
+
+[[case]]
+id = "result_raw_carrier_argument_rejected"
+path = "result_raw_carrier_argument_rejected"
+tags = ["integration","results","diagnostics"]
+
+[[case]]
+id = "result_propagation_nested_template_output"
+path = "result_propagation_nested_template_output"
+tags = ["integration","results","templates","js-backend"]
+
+[[case]]
+id = "result_propagation_error_type_mismatch_rejected"
+path = "result_propagation_error_type_mismatch_rejected"
+tags = ["integration","results","diagnostics"]
+
+[[case]]
+id = "result_postfix_error_wraps_into_optional"
+path = "result_postfix_error_wraps_into_optional"
+tags = ["integration","results","options","js-backend"]
+
+[[case]]
+id = "result_catch_then_none_optional_success"
+path = "result_catch_then_none_optional_success"
+tags = ["integration","results","options"]
+
+[[case]]
+id = "result_catch_then_string_optional_wrap"
+path = "result_catch_then_string_optional_wrap"
+tags = ["integration","results","options"]
+
+[[case]]
+id = "result_catch_optional_error_payload"
+path = "result_catch_optional_error_payload"
+tags = ["integration","results","options"]
+
+[[case]]
+id = "result_catch_nested_postfix_fallback"
+path = "result_catch_nested_postfix_fallback"
+tags = ["integration","results"]
+
+[[case]]
+id = "result_catch_nested_raw_fallible_rejected"
+path = "result_catch_nested_raw_fallible_rejected"
+tags = ["integration","results","diagnostics"]
+
+[[case]]
+id = "result_postfix_optional_error_to_plain_rejected"
+path = "result_postfix_optional_error_to_plain_rejected"
+tags = ["integration","results","options","diagnostics"]
+
+[[case]]
+id = "return_without_correct_signature_type"
+path = "return_without_correct_signature_type"
+tags = ["integration","language", "diagnostics"]
+
+[[case]]
+id = "return_value_type_mismatch_rejected"
+path = "return_value_type_mismatch_rejected"
+tags = ["integration","language","diagnostics"]
+
+[[case]]
+id = "scope_semantics"
+path = "scope_semantics"
+tags = ["integration","language"]
+
+[[case]]
+id = "simple_if_test"
+path = "simple_if_test"
+tags = ["integration","control-flow"]
+
+[[case]]
+id = "string_operations"
+path = "string_operations"
+tags = ["integration","language"]
+
+[[case]]
+id = "struct_field_borrowing"
+path = "struct_field_borrowing"
+tags = ["integration","borrows"]
+
+[[case]]
+id = "struct_using_constant"
+path = "struct_using_constant"
+tags = ["integration","structs","constants"]
+
+[[case]]
+id = "structs_and_collections"
+path = "structs_and_collections"
+tags = ["integration","structs"]
+
+[[case]]
+id = "template_copying_behavior"
+path = "template_copying_behavior"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_docs_examples_runtime_coverage"
+path = "template_docs_examples_runtime_coverage"
+tags = ["integration","templates","docs"]
+
+[[case]]
+id = "template_escaped_insert_helper_standalone_failure"
+path = "template_escaped_insert_helper_standalone_failure"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "template_frontend_builtins_normal_flow_success"
+path = "template_frontend_builtins_normal_flow_success"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_html_directives_html_project_success"
+path = "template_html_directives_html_project_success"
+tags = ["integration","html"]
+
+[[case]]
+id = "template_html_title_center_slot_chain"
+path = "template_html_title_center_slot_chain"
+tags = ["integration","html"]
+
+[[case]]
+id = "template_imported_style_wrapper_nested_helpers_runtime"
+path = "template_imported_style_wrapper_nested_helpers_runtime"
+tags = ["integration","templates","docs"]
+
+[[case]]
+id = "template_output_test"
+path = "template_output_test"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_positional_named_mixed"
+path = "template_positional_named_mixed"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_positional_slot_basic"
+path = "template_positional_slot_basic"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_positional_slot_overflow_error"
+path = "template_positional_slot_overflow_error"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "template_positional_slot_children_body"
+path = "template_positional_slot_children_body"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_slot_wrapper_runtime"
+path = "template_slot_wrapper_runtime"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_slots_const_folding"
+path = "template_slots_const_folding"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_slots_duplicate_default_failure"
+path = "template_slots_duplicate_default_failure"
+tags = ["integration","templates", "diagnostics"]
+
+[[case]]
+id = "template_slots_named_only_loose_content_failure"
+path = "template_slots_named_only_loose_content_failure"
+tags = ["integration","templates", "diagnostics"]
+
+[[case]]
+id = "template_slots_nested"
+path = "template_slots_nested"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_slots_nested_runtime"
+path = "template_slots_nested_runtime"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_slots_non_immediate_parent_failure"
+path = "template_slots_non_immediate_parent_failure"
+tags = ["integration","templates", "diagnostics"]
+
+[[case]]
+id = "template_slots_unknown_insert_target_failure"
+path = "template_slots_unknown_insert_target_failure"
+tags = ["integration","templates", "diagnostics"]
+
+[[case]]
+id = "template_style_code_success"
+path = "template_style_code_success"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_style_css_success"
+path = "template_style_css_success"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_style_formatter_unknown_failure"
+path = "template_style_formatter_unknown_failure"
+tags = ["integration","templates", "diagnostics"]
+
+[[case]]
+id = "template_style_markdown_success"
+path = "template_style_markdown_success"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_style_unknown_directive_failure"
+path = "template_style_unknown_directive_failure"
+tags = ["integration","templates", "diagnostics"]
+
+[[case]]
+id = "top_level_const_template"
+path = "top_level_const_template"
+tags = ["integration","templates"]
+
+[[case]]
+id = "top_level_const_template_multiple_ordered"
+path = "top_level_const_template_multiple_ordered"
+tags = ["integration","templates"]
+
+[[case]]
+id = "top_level_fragment_mixed_const_runtime_order"
+path = "top_level_fragment_mixed_const_runtime_order"
+tags = ["integration","templates"]
+
+[[case]]
+id = "top_level_const_template_non_entry_file_rejected"
+path = "top_level_const_template_non_entry_file_rejected"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "top_level_const_template_rejects_runtime_template"
+path = "top_level_const_template_rejects_runtime_template"
+tags = ["integration","templates", "diagnostics"]
+
+[[case]]
+id = "top_level_const_template_single_item"
+path = "top_level_const_template_single_item"
+tags = ["integration","templates"]
+
+[[case]]
+id = "trait_declaration_reserved"
+path = "trait_declaration_reserved"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "trait_this_reserved"
+path = "trait_this_reserved"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "trait_must_signature_parameter_reserved"
+path = "trait_must_signature_parameter_reserved"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "reserved_trait_keyword_in_postfix_member"
+path = "reserved_trait_keyword_in_postfix_member"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "trait_reserved_syntax_invalid_semicolons"
+path = "trait_reserved_syntax_invalid_semicolons"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "trait_reserved_syntax_invalid_trailing_comma"
+path = "trait_reserved_syntax_invalid_trailing_comma"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "function_trailing_comma_returns"
+path = "function_trailing_comma_returns"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "undefined_variable_mutation"
+path = "undefined_variable_mutation"
+tags = ["integration","diagnostics"]
+
+[[case]]
+id = "variable_and_expression_basics"
+path = "variable_and_expression_basics"
+tags = ["integration","language"]
+
+[[case]]
+id = "variable_redeclaration"
+path = "variable_redeclaration"
+tags = ["integration","language", "diagnostics"]
+
+[[case]]
+id = "variables_and_assignment"
+path = "variables_and_assignment"
+tags = ["integration","language"]
+
+[[case]]
+id = "wasm_arithmetic"
+path = "wasm_arithmetic"
+tags = ["integration","language","wasm"]
+
+[[case]]
+id = "white_space"
+path = "white_space"
+tags = ["integration","language"]
+
+[[case]]
+id = "int_promotion_to_float_declaration"
+path = "int_promotion_to_float_declaration"
+tags = ["integration", "type-coercion"]
+
+[[case]]
+id = "int_promotion_to_float_return"
+path = "int_promotion_to_float_return"
+tags = ["integration", "type-coercion"]
+
+[[case]]
+id = "int_promotion_to_float_via_function_call"
+path = "int_promotion_to_float_via_function_call"
+tags = ["integration", "type-coercion"]
+
+[[case]]
+id = "float_declaration_from_bool_rejected"
+path = "float_declaration_from_bool_rejected"
+tags = ["integration", "type-coercion", "diagnostics"]
+
+[[case]]
+id = "int_declaration_from_float_rejected"
+path = "int_declaration_from_float_rejected"
+tags = ["integration", "type-coercion", "diagnostics"]
+
+[[case]]
+id = "integer_division_real_and_int_output"
+path = "integer_division_real_and_int_output"
+tags = ["integration", "language"]
+
+[[case]]
+id = "int_declaration_regular_division_rejected"
+path = "int_declaration_regular_division_rejected"
+tags = ["integration", "diagnostics", "type-coercion"]
+
+[[case]]
+id = "int_return_regular_division_rejected"
+path = "int_return_regular_division_rejected"
+tags = ["integration", "diagnostics", "type-coercion"]
+
+[[case]]
+id = "int_declaration_and_return_integer_division_success"
+path = "int_declaration_and_return_integer_division_success"
+tags = ["integration", "language"]
+
+[[case]]
+id = "compound_assignment_division_success_matrix"
+path = "compound_assignment_division_success_matrix"
+tags = ["integration", "language"]
+
+[[case]]
+id = "compound_assignment_int_divide_assign_rejected"
+path = "compound_assignment_int_divide_assign_rejected"
+tags = ["integration", "diagnostics"]
+
+[[case]]
+id = "invalid_integer_division_mixed_numeric_rejected"
+path = "invalid_integer_division_mixed_numeric_rejected"
+tags = ["integration", "diagnostics"]
+
+
+[[case]]
+id = "char_basic"
+path = "char_basic"
+tags = ["integration", "char"]
+
+[[case]]
+id = "char_equality"
+path = "char_equality"
+tags = ["integration", "char"]
+
+[[case]]
+id = "char_ordering"
+path = "char_ordering"
+tags = ["integration", "char"]
+
+[[case]]
+id = "char_receiver_method"
+path = "char_receiver_method"
+tags = ["integration", "char"]
+
+[[case]]
+id = "char_in_template"
+path = "char_in_template"
+tags = ["integration", "char"]
+
+[[case]]
+id = "struct_field_mutation_immutable_binding_rejected"
+path = "struct_field_mutation_immutable_binding_rejected"
+tags = ["integration", "structs", "diagnostics"]
+
+[[case]]
+id = "struct_mutable_receiver_immutable_binding_rejected"
+path = "struct_mutable_receiver_immutable_binding_rejected"
+tags = ["integration", "structs", "receiver-methods", "diagnostics"]
+
+[[case]]
+id = "struct_field_mutation_through_temporary_rejected"
+path = "struct_field_mutation_through_temporary_rejected"
+tags = ["integration", "structs", "diagnostics"]
+
+[[case]]
+id = "struct_constructor_all_defaults"
+path = "struct_constructor_all_defaults"
+tags = ["integration", "structs"]
+
+[[case]]
+id = "struct_nominal_type_mismatch_rejected"
+path = "struct_nominal_type_mismatch_rejected"
+tags = ["integration", "structs", "diagnostics", "type-checking"]
+
+[[case]]
+id = "receiver_this_not_first_parameter_rejected"
+path = "receiver_this_not_first_parameter_rejected"
+tags = ["integration", "receiver-methods", "diagnostics"]
+
+[[case]]
+id = "receiver_unsupported_receiver_type_rejected"
+path = "receiver_unsupported_receiver_type_rejected"
+tags = ["integration", "receiver-methods", "diagnostics"]
+
+[[case]]
+id = "struct_nested_field_mutation_success"
+path = "struct_nested_field_mutation_success"
+tags = ["integration", "structs"]
+
+[[case]]
+id = "struct_chained_immutable_receiver_method_call"
+path = "struct_chained_immutable_receiver_method_call"
+tags = ["integration", "structs", "receiver-methods"]
+
+[[case]]
+id = "receiver_method_exported_cross_file_success"
+path = "receiver_method_exported_cross_file_success"
+tags = ["integration", "receiver-methods", "imports", "dependency-resolution"]
+
+[[case]]
+id = "receiver_method_mutable_struct_success"
+path = "receiver_method_mutable_struct_success"
+tags = ["integration", "receiver-methods", "structs"]
+
+[[case]]
+id = "receiver_method_nested_struct_success"
+path = "receiver_method_nested_struct_success"
+tags = ["integration", "receiver-methods", "structs"]
+
+[[case]]
+id = "receiver_method_scalar_int_success"
+path = "receiver_method_scalar_int_success"
+tags = ["integration", "receiver-methods", "scalars"]
+
+[[case]]
+id = "receiver_method_scalar_string_success"
+path = "receiver_method_scalar_string_success"
+tags = ["integration", "receiver-methods", "scalars"]
+
+[[case]]
+id = "receiver_method_chained_mutable_and_field_access"
+path = "receiver_method_chained_mutable_and_field_access"
+tags = ["integration", "receiver-methods", "structs"]
+
+[[case]]
+id = "receiver_method_field_write_then_mutable_call"
+path = "receiver_method_field_write_then_mutable_call"
+tags = ["integration", "receiver-methods", "structs"]
+
+[[case]]
+id = "receiver_method_alias_return_success"
+path = "receiver_method_alias_return_success"
+tags = ["integration", "receiver-methods", "borrows"]
+
+[[case]]
+id = "receiver_method_exported_cross_file_mutable_success"
+path = "receiver_method_exported_cross_file_mutable_success"
+tags = ["integration", "receiver-methods", "imports", "dependency-resolution"]
+
+[[case]]
+id = "receiver_namespace_import_method_success"
+path = "receiver_namespace_import_method_success"
+tags = ["integration", "receiver-methods", "imports", "namespace-imports"]
+
+[[case]]
+id = "receiver_namespace_record_method_field_rejected"
+path = "receiver_namespace_record_method_field_rejected"
+tags = ["integration", "receiver-methods", "imports", "namespace-imports", "diagnostics"]
+
+[[case]]
+id = "receiver_grouped_method_alias_success"
+path = "receiver_grouped_method_alias_success"
+tags = ["integration", "receiver-methods", "imports", "aliases"]
+
+[[case]]
+id = "receiver_type_import_auto_imports_methods"
+path = "receiver_type_import_auto_imports_methods"
+tags = ["integration", "receiver-methods", "imports"]
+
+[[case]]
+id = "receiver_facade_type_alias_no_private_method"
+path = "receiver_facade_type_alias_no_private_method"
+tags = ["integration", "receiver-methods", "imports", "facade", "diagnostics"]
+
+[[case]]
+id = "receiver_same_method_name_different_receivers_success"
+path = "receiver_same_method_name_different_receivers_success"
+tags = ["integration", "receiver-methods", "imports"]
+
+[[case]]
+id = "receiver_same_file_and_imported_same_name_success"
+path = "receiver_same_file_and_imported_same_name_success"
+tags = ["integration", "receiver-methods", "imports", "aliases"]
+
+[[case]]
+id = "receiver_method_import_without_type_rejected"
+path = "receiver_method_import_without_type_rejected"
+tags = ["integration", "receiver-methods", "imports", "diagnostics"]
+
+[[case]]
+id = "receiver_method_import_collision_rejected"
+path = "receiver_method_import_collision_rejected"
+tags = ["integration", "receiver-methods", "imports", "diagnostics"]
+
+[[case]]
+id = "receiver_method_html_wasm_basic"
+path = "receiver_method_html_wasm_basic"
+tags = ["integration", "receiver-methods", "html-wasm"]
+
+[[case]]
+id = "receiver_method_aliasing_borrow_after_mutable_call"
+path = "receiver_method_aliasing_borrow_after_mutable_call"
+tags = ["integration", "receiver-methods", "borrows"]
+
+[[case]]
+id = "struct_unknown_field_access_diagnostic"
+path = "struct_unknown_field_access_diagnostic"
+tags = ["integration", "structs", "diagnostics"]
+
+[[case]]
+id = "identifier_naming_warnings_mixed"
+path = "identifier_naming_warnings_mixed"
+tags = ["integration", "diagnostics"]
+
+[[case]]
+id = "identifier_keyword_shadow_header_error"
+path = "identifier_keyword_shadow_header_error"
+tags = ["integration", "diagnostics"]
+
+[[case]]
+id = "identifier_keyword_shadow_ast_error"
+path = "identifier_keyword_shadow_ast_error"
+tags = ["integration", "diagnostics"]
+
+[[case]]
+id = "if_logical_precedence"
+path = "if_logical_precedence"
+tags = ["integration", "control-flow"]
+
+[[case]]
+id = "if_nested_boolean_conditions"
+path = "if_nested_boolean_conditions"
+tags = ["integration", "control-flow"]
+
+[[case]]
+id = "logical_parenthesized_grouping"
+path = "logical_parenthesized_grouping"
+tags = ["integration", "control-flow"]
+
+[[case]]
+id = "logical_short_circuit_and"
+path = "logical_short_circuit_and"
+tags = ["integration", "control-flow"]
+
+[[case]]
+id = "logical_short_circuit_or"
+path = "logical_short_circuit_or"
+tags = ["integration", "control-flow"]
+
+[[case]]
+id = "short_circuit_mutable_rhs_later_plain_use"
+path = "short_circuit_mutable_rhs_later_plain_use"
+tags = ["integration", "control-flow", "borrows"]
+
+[[case]]
+id = "short_circuit_place_rhs_later_plain_use"
+path = "short_circuit_place_rhs_later_plain_use"
+tags = ["integration", "control-flow", "borrows"]
+
+[[case]]
+id = "short_circuit_mutable_rhs_later_runtime_capture"
+path = "short_circuit_mutable_rhs_later_runtime_capture"
+tags = ["integration", "control-flow", "borrows", "templates"]
+
+[[case]]
+id = "short_circuit_mutable_rhs_runtime_capture_dual"
+path = "short_circuit_mutable_rhs_runtime_capture_dual"
+tags = ["integration", "control-flow", "borrows", "templates"]
+
+[[case]]
+id = "short_circuit_mutable_rhs_no_later_use_inconsistent"
+path = "short_circuit_mutable_rhs_no_later_use_inconsistent"
+tags = ["integration", "control-flow", "borrows", "diagnostics"]
+
+[[case]]
+id = "runtime_fragment_mutable_reassignment_capture"
+path = "runtime_fragment_mutable_reassignment_capture"
+tags = ["integration", "templates", "borrows"]
+
+[[case]]
+id = "if_condition_requires_bool"
+path = "if_condition_requires_bool"
+tags = ["integration", "control-flow", "diagnostics"]
+
+[[case]]
+id = "logical_invalid_operand_types"
+path = "logical_invalid_operand_types"
+tags = ["integration", "diagnostics"]
+
+[[case]]
+id = "not_requires_bool"
+path = "not_requires_bool"
+tags = ["integration", "diagnostics"]
+
+[[case]]
+id = "html_wasm_vec_start_abi"
+path = "html_wasm_vec_start_abi"
+tags = ["html-wasm", "abi", "vec-runtime"]
+
+[[case]]
+id = "html_wasm_collection_runtime_coverage"
+path = "html_wasm_collection_runtime_coverage"
+tags = ["html-wasm", "collections", "runtime"]
+
+[[case]]
+id = "char_requires_char_literal_diagnostic"
+path = "char_requires_char_literal_diagnostic"
+tags = ["integration", "char", "diagnostics"]
+
+[[case]]
+id = "top_level_code_non_entry_file_rejected"
+path = "top_level_code_non_entry_file_rejected"
+tags = ["error", "frontend-contract"]
+
+[[case]]
+id = "top_level_runtime_template_non_entry_file_rejected"
+path = "top_level_runtime_template_non_entry_file_rejected"
+tags = ["error", "frontend-contract"]
+
+[[case]]
+id = "entry_start_sees_sorted_declarations"
+path = "entry_start_sees_sorted_declarations"
+tags = ["integration", "frontend-contract", "dependency-sort"]
+
+[[case]]
+id = "html_docs_site_proving_ground"
+path = "html_docs_site_proving_ground"
+tags = ["integration", "html-builder", "routes", "assets"]
+
+[[case]]
+id = "struct_mutable_receiver_temporary_receiver_rejected"
+path = "struct_mutable_receiver_temporary_receiver_rejected"
+tags = ["integration", "structs", "diagnostics"]
+
+[[case]]
+id = "struct_mutable_receiver_requires_explicit_receiver_tilde"
+path = "struct_mutable_receiver_requires_explicit_receiver_tilde"
+tags = ["integration", "structs", "diagnostics"]
+
+[[case]]
+id = "io_rejects_struct_value"
+path = "io_rejects_struct_value"
+tags = ["integration", "diagnostics", "string-coercion"]
+
+[[case]]
+id = "io_rejects_collection_value"
+path = "io_rejects_collection_value"
+tags = ["integration", "diagnostics", "string-coercion"]
+
+[[case]]
+id = "io_rejects_option_value"
+path = "io_rejects_option_value"
+tags = ["integration", "diagnostics", "string-coercion"]
+
+[[case]]
+id = "io_rejects_result_value"
+path = "io_rejects_result_value"
+tags = ["integration", "diagnostics", "string-coercion"]
+
+[[case]]
+id = "io_rejects_multiple_return_value"
+path = "io_rejects_multiple_return_value"
+tags = ["integration", "diagnostics", "string-coercion"]
+
+[[case]]
+id = "template_head_rejects_struct_value"
+path = "template_head_rejects_struct_value"
+tags = ["integration", "diagnostics", "string-coercion", "templates"]
+
+[[case]]
+id = "template_head_rejects_collection_value"
+path = "template_head_rejects_collection_value"
+tags = ["integration", "diagnostics", "string-coercion", "templates"]
+
+[[case]]
+id = "template_head_rejects_option_value"
+path = "template_head_rejects_option_value"
+tags = ["integration", "diagnostics", "string-coercion", "templates"]
+
+[[case]]
+id = "template_head_rejects_result_value"
+path = "template_head_rejects_result_value"
+tags = ["integration", "diagnostics", "string-coercion", "templates"]
+
+[[case]]
+id = "template_head_rejects_multiple_return_value"
+path = "template_head_rejects_multiple_return_value"
+tags = ["integration", "diagnostics", "string-coercion", "templates"]
+
+[[case]]
+id = "string_coercion_valid_paths_compile_invalid_fails_early"
+path = "string_coercion_valid_paths_compile_invalid_fails_early"
+tags = ["integration", "diagnostics", "string-coercion", "regression"]
+
+[[case]]
+id = "result_deep_propagation_stack"
+path = "result_deep_propagation_stack"
+tags = ["integration", "results", "js-backend"]
+
+[[case]]
+id = "result_fallback_in_branch"
+path = "result_fallback_in_branch"
+tags = ["integration", "results", "control-flow", "js-backend"]
+
+[[case]]
+id = "result_fallback_in_match_arm"
+path = "result_fallback_in_match_arm"
+tags = ["integration", "results", "control-flow", "js-backend"]
+
+[[case]]
+id = "error_rethrow_multilayer"
+path = "error_rethrow_multilayer"
+tags = ["integration", "results", "js-backend"]
+
+[[case]]
+id = "result_propagate_in_template_fragment"
+path = "result_propagate_in_template_fragment"
+tags = ["integration", "results", "templates", "js-backend"]
+
+[[case]]
+id = "dispatcher_nested_loops_multi_break"
+path = "dispatcher_nested_loops_multi_break"
+tags = ["integration", "control-flow", "js-backend", "dispatcher"]
+
+[[case]]
+id = "dispatcher_loop_match_result_fallback"
+path = "dispatcher_loop_match_result_fallback"
+tags = ["integration", "control-flow", "results", "js-backend", "dispatcher"]
+
+[[case]]
+id = "dispatcher_break_continue_chain"
+path = "dispatcher_break_continue_chain"
+tags = ["integration", "control-flow", "js-backend", "dispatcher"]
+
+[[case]]
+id = "dispatcher_branch_heavy_cyclic"
+path = "dispatcher_branch_heavy_cyclic"
+tags = ["integration", "control-flow", "js-backend", "dispatcher"]
+
+[[case]]
+id = "structured_nested_if_chain"
+path = "structured_nested_if_chain"
+tags = ["integration", "control-flow", "js-backend", "structured"]
+
+[[case]]
+id = "structured_match_converge"
+path = "structured_match_converge"
+tags = ["integration", "control-flow", "js-backend", "structured"]
+
+[[case]]
+id = "diagnostic_expression_and_and"
+path = "diagnostic_expression_and_and"
+tags = ["integration", "diagnostics"]
+
+[[case]]
+id = "diagnostic_expression_bang_equal"
+path = "diagnostic_expression_bang_equal"
+tags = ["integration", "diagnostics"]
+
+[[case]]
+id = "diagnostic_expression_bang_negation"
+path = "diagnostic_expression_bang_negation"
+tags = ["integration", "diagnostics"]
+
+[[case]]
+id = "diagnostic_expression_double_equal"
+path = "diagnostic_expression_double_equal"
+tags = ["integration", "diagnostics"]
+
+[[case]]
+id = "diagnostic_expression_or_or"
+path = "diagnostic_expression_or_or"
+tags = ["integration", "diagnostics"]
+
+[[case]]
+id = "diagnostic_expression_add_assign_rejected"
+path = "diagnostic_expression_add_assign_rejected"
+tags = ["integration", "diagnostics"]
+
+[[case]]
+id = "diagnostic_expression_stray_hash_rejected"
+path = "diagnostic_expression_stray_hash_rejected"
+tags = ["integration", "diagnostics"]
+
+[[case]]
+id = "diagnostic_expression_stray_pipe_rejected"
+path = "diagnostic_expression_stray_pipe_rejected"
+tags = ["integration", "diagnostics"]
+
+[[case]]
+id = "diagnostic_expression_wildcard_rejected"
+path = "diagnostic_expression_wildcard_rejected"
+tags = ["integration", "diagnostics"]
+
+[[case]]
+id = "diagnostic_signature_paren_parameters"
+path = "diagnostic_signature_paren_parameters"
+tags = ["integration", "diagnostics"]
+
+[[case]]
+id = "diagnostic_statement_comment_slash_slash"
+path = "diagnostic_statement_comment_slash_slash"
+tags = ["integration", "diagnostics"]
+
+[[case]]
+id = "diagnostic_statement_keyword_fn"
+path = "diagnostic_statement_keyword_fn"
+tags = ["integration", "diagnostics"]
+
+[[case]]
+id = "diagnostic_statement_keyword_let"
+path = "diagnostic_statement_keyword_let"
+tags = ["integration", "diagnostics"]
+
+[[case]]
+id = "diagnostic_statement_keyword_match"
+path = "diagnostic_statement_keyword_match"
+tags = ["integration", "diagnostics"]
+
+[[case]]
+id = "constant_same_file_forward_reference_rejected"
+path = "constant_same_file_forward_reference_rejected"
+tags = ["integration", "constants", "dependency-resolution", "diagnostics"]
+
+[[case]]
+id = "constant_compile_time_inferred"
+path = "constant_compile_time_inferred"
+tags = ["integration", "constants", "language"]
+
+[[case]]
+id = "constant_compile_time_explicit_type"
+path = "constant_compile_time_explicit_type"
+tags = ["integration", "constants", "language"]
+
+[[case]]
+id = "constant_compile_time_collection"
+path = "constant_compile_time_collection"
+tags = ["integration", "constants", "language", "collections"]
+
+[[case]]
+id = "constant_compile_time_optional"
+path = "constant_compile_time_optional"
+tags = ["integration", "constants", "language", "options"]
+
+[[case]]
+id = "constant_compile_time_spacing_error"
+path = "constant_compile_time_spacing_error"
+tags = ["integration", "constants", "diagnostics", "language"]
+
+[[case]]
+id = "constant_mutable_spacing_error"
+path = "constant_mutable_spacing_error"
+tags = ["integration", "diagnostics", "language"]
+
+[[case]]
+id = "constant_compile_time_body_local"
+path = "constant_compile_time_body_local"
+tags = ["integration", "constants", "language"]
+
+[[case]]
+id = "constant_compile_time_runtime_dependency_rejected"
+path = "constant_compile_time_runtime_dependency_rejected"
+tags = ["integration", "constants", "diagnostics", "language"]
+
+[[case]]
+id = "constant_compile_time_parameter_deferred"
+path = "constant_compile_time_parameter_deferred"
+tags = ["integration", "constants", "diagnostics", "language", "functions"]
+
+[[case]]
+id = "constant_cross_file_dependency_chain"
+path = "constant_cross_file_dependency_chain"
+tags = ["integration", "constants", "dependency-resolution", "imports"]
+
+[[case]]
+id = "constant_imported_non_constant_rejected"
+path = "constant_imported_non_constant_rejected"
+tags = ["integration", "constants", "dependency-resolution", "imports", "diagnostics"]
+
+[[case]]
+id = "constant_unknown_reference_rejected"
+path = "constant_unknown_reference_rejected"
+tags = ["integration", "constants", "dependency-resolution", "diagnostics"]
+
+[[case]]
+id = "constant_not_imported_reference_rejected"
+path = "constant_not_imported_reference_rejected"
+tags = ["integration", "constants", "dependency-resolution", "imports", "diagnostics"]
+
+[[case]]
+id = "constant_cycle_rejected"
+path = "constant_cycle_rejected"
+tags = ["integration", "constants", "dependency-resolution", "imports", "diagnostics"]
+
+[[case]]
+id = "const_template_uses_constants"
+path = "const_template_uses_constants"
+tags = ["integration", "constants", "dependency-resolution", "templates"]
+
+[[case]]
+id = "struct_placeholder_visible_before_resolution"
+path = "struct_placeholder_visible_before_resolution"
+tags = ["integration", "structs", "dependency-resolution"]
+
+[[case]]
+id = "exhaustive_choice_match_returns"
+path = "exhaustive_choice_match_returns"
+tags = ["integration", "control-flow", "language", "choices"]
+
+[[case]]
+id = "exhaustive_choice_match_partial_return_failure"
+path = "exhaustive_choice_match_partial_return_failure"
+tags = ["integration", "control-flow", "diagnostics", "choices"]
+
+[[case]]
+id = "external_package_prelude_works"
+path = "external_package_prelude_works"
+tags = ["integration", "language", "external-packages"]
+
+[[case]]
+id = "external_package_explicit_import"
+path = "external_package_explicit_import"
+tags = ["integration", "language", "external-packages"]
+
+[[case]]
+id = "external_package_unknown_package"
+path = "external_package_unknown_package"
+tags = ["integration", "language", "external-packages"]
+
+[[case]]
+id = "external_package_unknown_symbol"
+path = "external_package_unknown_symbol"
+tags = ["integration", "language", "external-packages"]
+
+[[case]]
+id = "external_package_bare_name_rejected"
+path = "external_package_bare_name_rejected"
+tags = ["integration", "language", "external-packages"]
+
+[[case]]
+id = "external_package_import_selects_correct_package"
+path = "external_package_import_selects_correct_package"
+tags = ["integration", "language", "external-packages"]
+
+[[case]]
+id = "external_fallible_catch_success"
+path = "external_fallible_catch_success"
+tags = ["integration", "language", "external-packages", "results"]
+
+[[case]]
+id = "external_fallible_catch_error_fallback"
+path = "external_fallible_catch_error_fallback"
+tags = ["integration", "language", "external-packages", "results"]
+
+[[case]]
+id = "external_fallible_postfix_propagates"
+path = "external_fallible_postfix_propagates"
+tags = ["integration", "language", "external-packages", "results"]
+
+[[case]]
+id = "external_fallible_custom_error_catch"
+path = "external_fallible_custom_error_catch"
+tags = ["integration", "language", "external-packages", "results"]
+
+[[case]]
+id = "external_fallible_custom_error_optional_postfix"
+path = "external_fallible_custom_error_optional_postfix"
+tags = ["integration", "results", "external-packages", "options"]
+
+[[case]]
+id = "external_fallible_unhandled_rejected"
+path = "external_fallible_unhandled_rejected"
+tags = ["integration", "language", "external-packages", "results", "diagnostics"]
+
+[[case]]
+id = "external_fallible_error_type_mismatch_rejected"
+path = "external_fallible_error_type_mismatch_rejected"
+tags = ["integration", "language", "external-packages", "results", "diagnostics"]
+
+[[case]]
+id = "external_package_duplicate_visible_names_conflict"
+path = "external_package_duplicate_visible_names_conflict"
+tags = ["integration", "language", "external-packages", "diagnostics"]
+
+[[case]]
+id = "external_type_construction_rejected"
+path = "external_type_construction_rejected"
+tags = ["integration", "language", "external-packages"]
+
+[[case]]
+id = "external_type_field_access_rejected"
+path = "external_type_field_access_rejected"
+tags = ["integration", "language", "external-packages", "diagnostics"]
+
+[[case]]
+id = "external_package_import_alias"
+path = "external_package_import_alias"
+tags = ["integration", "language", "external-packages", "aliases"]
+
+[[case]]
+id = "const_template_import_alias_dependency"
+path = "const_template_import_alias_dependency"
+tags = ["integration", "language", "aliases", "constants"]
+
+[[case]]
+id = "import_alias_collision_rejected"
+path = "import_alias_collision_rejected"
+tags = ["integration", "language", "external-packages", "aliases", "diagnostics"]
+
+[[case]]
+id = "source_import_alias"
+path = "source_import_alias"
+tags = ["integration", "language", "aliases"]
+
+[[case]]
+id = "source_import_alias_collision_with_local_rejected"
+path = "source_import_alias_collision_with_local_rejected"
+tags = ["integration", "language", "aliases", "diagnostics"]
+
+[[case]]
+id = "source_import_alias_duplicate_rejected"
+path = "source_import_alias_duplicate_rejected"
+tags = ["integration", "language", "aliases", "diagnostics"]
+
+[[case]]
+id = "source_import_alias_visible_only_in_file_rejected"
+path = "source_import_alias_visible_only_in_file_rejected"
+tags = ["integration", "language", "aliases", "diagnostics"]
+
+[[case]]
+id = "source_import_alias_case_warning"
+path = "source_import_alias_case_warning"
+tags = ["integration", "language", "aliases", "diagnostics"]
+
+[[case]]
+id = "source_import_constant_alias_success"
+path = "source_import_constant_alias_success"
+tags = ["integration", "language", "aliases"]
+
+[[case]]
+id = "source_import_type_alias_success"
+path = "source_import_type_alias_success"
+tags = ["integration", "language", "aliases"]
+
+[[case]]
+id = "external_import_constant_alias_success"
+path = "external_import_constant_alias_success"
+tags = ["integration", "language", "aliases", "external"]
+
+[[case]]
+id = "external_non_scalar_constant_rejected"
+path = "external_non_scalar_constant_rejected"
+tags = ["integration", "diagnostics", "external", "constants"]
+
+[[case]]
+id = "external_import_alias_collision_with_source_rejected"
+path = "external_import_alias_collision_with_source_rejected"
+tags = ["integration", "language", "aliases", "external", "diagnostics"]
+
+[[case]]
+id = "external_import_alias_collision_with_prelude_rejected"
+path = "external_import_alias_collision_with_prelude_rejected"
+tags = ["integration", "language", "aliases", "external", "diagnostics"]
+
+[[case]]
+id = "external_import_alias_case_warning"
+path = "external_import_alias_case_warning"
+tags = ["integration", "language", "aliases", "external", "diagnostics"]
+
+[[case]]
+id = "grouped_source_import_alias_success"
+path = "grouped_source_import_alias_success"
+tags = ["integration", "language", "aliases", "grouped", "source"]
+
+[[case]]
+id = "grouped_nested_source_import_alias_success"
+path = "grouped_nested_source_import_alias_success"
+tags = ["integration", "language", "aliases", "grouped", "source"]
+
+[[case]]
+id = "grouped_external_import_alias_success"
+path = "grouped_external_import_alias_success"
+tags = ["integration", "language", "aliases", "grouped", "external"]
+
+[[case]]
+id = "grouped_import_alias_collision_rejected"
+path = "grouped_import_alias_collision_rejected"
+tags = ["integration", "language", "aliases", "grouped", "diagnostics"]
+
+[[case]]
+id = "grouped_import_alias_case_warning"
+path = "grouped_import_alias_case_warning"
+tags = ["integration", "language", "aliases", "grouped", "diagnostics"]
+
+[[case]]
+id = "grouped_import_single_entry_trailing_alias_rejected"
+path = "grouped_import_single_entry_trailing_alias_rejected"
+tags = ["integration", "diagnostics", "aliases", "grouped", "imports"]
+
+[[case]]
+id = "grouped_import_multi_entry_trailing_alias_rejected"
+path = "grouped_import_multi_entry_trailing_alias_rejected"
+tags = ["integration", "diagnostics", "aliases", "grouped", "imports"]
+
+[[case]]
+id = "grouped_import_alias_invalid_dash_rejected"
+path = "grouped_import_alias_invalid_dash_rejected"
+tags = ["integration", "diagnostics", "aliases", "grouped", "imports"]
+
+[[case]]
+id = "grouped_import_alias_invalid_leading_digit_rejected"
+path = "grouped_import_alias_invalid_leading_digit_rejected"
+tags = ["integration", "diagnostics", "aliases", "grouped", "imports"]
+
+[[case]]
+id = "grouped_import_alias_missing_name_rejected"
+path = "grouped_import_alias_missing_name_rejected"
+tags = ["integration", "diagnostics", "aliases", "grouped", "imports"]
+
+[[case]]
+id = "grouped_import_alias_keyword_rejected"
+path = "grouped_import_alias_keyword_rejected"
+tags = ["integration", "diagnostics", "aliases", "grouped", "imports"]
+
+[[case]]
+id = "single_import_double_alias_rejected"
+path = "single_import_double_alias_rejected"
+tags = ["integration", "diagnostics", "aliases", "imports"]
+
+[[case]]
+id = "grouped_import_entry_double_alias_rejected"
+path = "grouped_import_entry_double_alias_rejected"
+tags = ["integration", "diagnostics", "aliases", "grouped", "imports"]
+
+[[case]]
+id = "grouped_import_per_entry_and_trailing_alias_rejected"
+path = "grouped_import_per_entry_and_trailing_alias_rejected"
+tags = ["integration", "diagnostics", "aliases", "grouped", "imports"]
+
+[[case]]
+id = "import_alias_collision_with_builtin_rejected"
+path = "import_alias_collision_with_builtin_rejected"
+tags = ["integration", "language", "aliases", "diagnostics", "builtins"]
+
+[[case]]
+id = "type_alias_basic"
+path = "type_alias_basic"
+tags = ["integration", "language", "aliases"]
+
+[[case]]
+id = "type_alias_collection"
+path = "type_alias_collection"
+tags = ["integration", "language", "aliases"]
+
+[[case]]
+id = "nested_option_alias_rejected"
+path = "nested_option_alias_rejected"
+tags = ["integration", "language", "aliases", "diagnostics"]
+
+[[case]]
+id = "type_alias_export_import"
+path = "type_alias_export_import"
+tags = ["integration", "language", "aliases"]
+
+[[case]]
+id = "type_alias_cycle_rejected"
+path = "type_alias_cycle_rejected"
+tags = ["integration", "language", "aliases", "diagnostics"]
+
+[[case]]
+id = "import_missing_alias_rejected"
+path = "import_missing_alias_rejected"
+tags = ["integration", "language", "aliases", "diagnostics"]
+
+[[case]]
+id = "type_alias_used_as_value_rejected"
+path = "type_alias_used_as_value_rejected"
+tags = ["integration", "language", "aliases", "diagnostics"]
+
+[[case]]
+id = "external_type_alias"
+path = "external_type_alias"
+tags = ["integration", "language", "aliases"]
+
+[[case]]
+id = "import_alias_of_type_alias"
+path = "import_alias_of_type_alias"
+tags = ["integration", "language", "aliases"]
+
+[[case]]
+id = "duplicate_type_alias_rejected"
+path = "duplicate_type_alias_rejected"
+tags = ["integration", "language", "aliases", "diagnostics"]
+
+[[case]]
+id = "type_alias_same_name_different_files"
+path = "type_alias_same_name_different_files"
+tags = ["integration", "language", "aliases"]
+
+[[case]]
+id = "type_alias_target_uses_import_alias"
+path = "type_alias_target_uses_import_alias"
+tags = ["integration", "language", "aliases"]
+
+[[case]]
+id = "source_type_import_alias_in_signature"
+path = "source_type_import_alias_in_signature"
+tags = ["integration", "language", "aliases"]
+
+[[case]]
+id = "source_type_import_alias_in_struct_field"
+path = "source_type_import_alias_in_struct_field"
+tags = ["integration", "language", "aliases"]
+
+[[case]]
+id = "type_alias_is_not_constructor"
+path = "type_alias_is_not_constructor"
+tags = ["integration", "language", "aliases", "diagnostics"]
+
+[[case]]
+id = "private_type_alias_import_rejected"
+path = "private_type_alias_import_rejected"
+tags = ["integration", "language", "aliases", "diagnostics"]
+
+[[case]]
+id = "prelude_does_not_override_alias"
+path = "prelude_does_not_override_alias"
+tags = ["integration", "language", "aliases"]
+
+[[case]]
+id = "method_receiver_this_success"
+path = "method_receiver_this_success"
+tags = ["integration", "language", "receiver-methods"]
+
+[[case]]
+id = "this_outside_method_body_error"
+path = "this_outside_method_body_error"
+tags = ["integration", "diagnostics", "receiver-methods"]
+
+[[case]]
+id = "this_local_declaration_error"
+path = "this_local_declaration_error"
+tags = ["integration", "diagnostics", "receiver-methods"]
+
+[[case]]
+id = "this_struct_field_error"
+path = "this_struct_field_error"
+tags = ["integration", "diagnostics", "receiver-methods"]
+
+[[case]]
+id = "this_second_parameter_error"
+path = "this_second_parameter_error"
+tags = ["integration", "diagnostics", "receiver-methods"]
+
+[[case]]
+id = "this_duplicate_receiver_error"
+path = "this_duplicate_receiver_error"
+tags = ["integration", "diagnostics", "receiver-methods"]
+
+[[case]]
+id = "this_unsupported_receiver_type_error"
+path = "this_unsupported_receiver_type_error"
+tags = ["integration", "diagnostics", "receiver-methods"]
+
+[[case]]
+id = "this_free_function_name_error"
+path = "this_free_function_name_error"
+tags = ["integration", "diagnostics", "receiver-methods"]
+
+[[case]]
+id = "source_alias_hides_original"
+path = "source_alias_hides_original"
+tags = ["integration", "imports", "aliases", "diagnostics"]
+
+[[case]]
+id = "external_alias_hides_original"
+path = "external_alias_hides_original"
+tags = ["integration", "imports", "aliases", "diagnostics"]
+
+[[case]]
+id = "two_package_symbols_same_name_aliases"
+path = "two_package_symbols_same_name_aliases"
+tags = ["integration", "imports", "aliases"]
+
+[[case]]
+id = "type_alias_via_imported_source_alias"
+path = "type_alias_via_imported_source_alias"
+tags = ["integration", "type-aliases", "imports"]
+
+[[case]]
+id = "type_alias_via_imported_external_type_alias"
+path = "type_alias_via_imported_external_type_alias"
+tags = ["integration", "type-aliases", "imports"]
+
+[[case]]
+id = "alias_to_struct_is_annotation_only"
+path = "alias_to_struct_is_annotation_only"
+tags = ["integration", "imports", "aliases", "diagnostics"]
+
+[[case]]
+id = "alias_to_choice_is_annotation_only"
+path = "alias_to_choice_is_annotation_only"
+tags = ["integration", "imports", "aliases", "diagnostics", "choices"]
+
+[[case]]
+id = "core_math_basic_functions"
+path = "core_math_basic_functions"
+tags = ["integration", "math", "js-backend"]
+
+[[case]]
+id = "core_inline_expression_lowering"
+path = "core_inline_expression_lowering"
+tags = ["integration", "math", "js-backend", "external-packages"]
+
+[[case]]
+id = "core_math_constants"
+path = "core_math_constants"
+tags = ["integration", "math", "constants"]
+
+[[case]]
+id = "core_math_grouped_import"
+path = "core_math_grouped_import"
+tags = ["integration", "math", "imports"]
+
+[[case]]
+id = "core_math_alias_import"
+path = "core_math_alias_import"
+tags = ["integration", "math", "imports", "aliases"]
+
+[[case]]
+id = "core_math_requires_import"
+path = "core_math_requires_import"
+tags = ["integration", "math", "imports", "diagnostics"]
+
+[[case]]
+id = "core_math_missing_symbol"
+path = "core_math_missing_symbol"
+tags = ["integration", "math", "imports", "diagnostics"]
+
+[[case]]
+id = "core_math_type_errors"
+path = "core_math_type_errors"
+tags = ["integration", "math", "diagnostics", "type-checking"]
+
+[[case]]
+id = "core_math_arity_error"
+path = "core_math_arity_error"
+tags = ["integration", "math", "diagnostics"]
+
+[[case]]
+id = "core_math_external_constants_const_context"
+path = "core_math_external_constants_const_context"
+tags = ["integration", "math", "constants"]
+
+[[case]]
+id = "core_math_old_std_namespace_rejected"
+path = "core_math_old_std_namespace_rejected"
+tags = ["integration", "math", "imports", "diagnostics"]
+
+
+[[case]]
+id = "source_lib_project_local"
+path = "source_lib_project_local"
+tags = ["integration", "source-libraries", "imports"]
+
+[[case]]
+id = "config_library_folder_default_lib_success"
+path = "config_library_folder_default_lib_success"
+tags = ["integration", "config", "libraries", "imports"]
+
+[[case]]
+id = "config_custom_library_folder_success"
+path = "config_custom_library_folder_success"
+tags = ["integration", "config", "libraries", "imports"]
+
+[[case]]
+id = "config_multiple_library_folders_success"
+path = "config_multiple_library_folders_success"
+tags = ["integration", "config", "libraries", "imports"]
+
+[[case]]
+id = "config_library_folder_missing_rejected"
+path = "config_library_folder_missing_rejected"
+tags = ["integration", "config", "libraries", "diagnostics"]
+
+[[case]]
+id = "config_library_folder_absolute_path_rejected"
+path = "config_library_folder_absolute_path_rejected"
+tags = ["integration", "config", "libraries", "diagnostics"]
+
+[[case]]
+id = "config_library_folder_dotdot_rejected"
+path = "config_library_folder_dotdot_rejected"
+tags = ["integration", "config", "libraries", "diagnostics"]
+
+[[case]]
+id = "config_library_folder_duplicate_rejected"
+path = "config_library_folder_duplicate_rejected"
+tags = ["integration", "config", "libraries", "diagnostics"]
+
+[[case]]
+id = "config_library_folder_builder_collision_rejected"
+path = "config_library_folder_builder_collision_rejected"
+tags = ["integration", "config", "libraries", "builder-libraries", "diagnostics"]
+
+[[case]]
+id = "config_library_folder_missing_default_ignored"
+path = "config_library_folder_missing_default_ignored"
+tags = ["integration", "config", "libraries"]
+
+[[case]]
+id = "config_library_folder_nested_path_rejected"
+path = "config_library_folder_nested_path_rejected"
+tags = ["integration", "config", "libraries", "diagnostics"]
+
+[[case]]
+id = "custom_library_import_resolves_through_mod"
+path = "custom_library_import_resolves_through_mod"
+tags = ["integration", "config", "libraries", "imports", "facades"]
+
+[[case]]
+id = "source_lib_and_external_package"
+path = "source_lib_and_external_package"
+tags = ["integration", "source-libraries", "imports", "external-packages"]
+
+[[case]]
+id = "source_lib_import_dotdot_rejected"
+path = "source_lib_import_dotdot_rejected"
+tags = ["integration", "source-libraries", "imports", "paths", "diagnostics"]
+
+[[case]]
+id = "source_lib_facade"
+path = "source_lib_facade"
+tags = ["integration", "source-libraries", "facades", "imports"]
+
+[[case]]
+id = "source_lib_facade_grouped"
+path = "source_lib_facade_grouped"
+tags = ["integration", "source-libraries", "facades", "imports"]
+
+[[case]]
+id = "source_lib_facade_rejected_internal"
+path = "source_lib_facade_rejected_internal"
+tags = ["integration", "source-libraries", "facades", "imports", "diagnostics"]
+
+[[case]]
+id = "source_lib_facade_private"
+path = "source_lib_facade_private"
+tags = ["integration", "source-libraries", "facades", "imports", "diagnostics"]
+
+[[case]]
+id = "source_lib_facade_sibling"
+path = "source_lib_facade_sibling"
+tags = ["integration", "source-libraries", "facades", "imports"]
+
+[[case]]
+id = "source_lib_facade_runtime_stmt"
+path = "source_lib_facade_runtime_stmt"
+tags = ["integration", "source-libraries", "facades", "diagnostics"]
+
+[[case]]
+id = "source_lib_facade_runtime_template"
+path = "source_lib_facade_runtime_template"
+tags = ["integration", "source-libraries", "facades", "diagnostics"]
+
+[[case]]
+id = "source_lib_facade_missing"
+path = "source_lib_facade_missing"
+tags = ["integration", "source-libraries", "facades", "diagnostics"]
+
+[[case]]
+id = "source_lib_facade_compile_time_constant_export"
+path = "source_lib_facade_compile_time_constant_export"
+tags = ["integration", "source-libraries", "facades"]
+
+[[case]]
+id = "source_lib_facade_unprefixed_function_export"
+path = "source_lib_facade_unprefixed_function_export"
+tags = ["integration", "source-libraries", "facades"]
+
+[[case]]
+id = "same_module_import_compile_time_constant"
+path = "same_module_import_compile_time_constant"
+tags = ["integration", "language", "imports", "constants"]
+
+[[case]]
+id = "module_facade_wrapper_import"
+path = "module_facade_wrapper_import"
+tags = ["integration", "language", "imports", "facades"]
+
+[[case]]
+id = "module_facade_import_not_auto_exported"
+path = "module_facade_import_not_auto_exported"
+tags = ["integration", "language", "imports", "facades", "diagnostics"]
+
+[[case]]
+id = "source_lib_reexport_single"
+path = "source_lib_reexport_single"
+tags = ["integration", "language", "imports", "facade"]
+
+[[case]]
+id = "source_lib_reexport_alias"
+path = "source_lib_reexport_alias"
+tags = ["integration", "language", "imports", "facade"]
+
+[[case]]
+id = "source_lib_reexport_grouped"
+path = "source_lib_reexport_grouped"
+tags = ["integration", "language", "imports", "facade"]
+
+[[case]]
+id = "source_lib_reexport_grouped_nested"
+path = "source_lib_reexport_grouped_nested"
+tags = ["integration", "language", "imports", "facade"]
+
+[[case]]
+id = "source_lib_reexport_external"
+path = "source_lib_reexport_external"
+tags = ["integration", "language", "imports", "facade"]
+
+[[case]]
+id = "source_lib_reexport_external_alias"
+path = "source_lib_reexport_external_alias"
+tags = ["integration", "language", "imports", "facade"]
+
+
+
+[[case]]
+id = "source_lib_reexport_duplicate"
+path = "source_lib_reexport_duplicate"
+tags = ["integration", "language", "imports", "facade", "diagnostics"]
+
+[[case]]
+id = "source_lib_reexport_collision_decl"
+path = "source_lib_reexport_collision_decl"
+tags = ["integration", "language", "imports", "facade", "diagnostics"]
+
+[[case]]
+id = "source_lib_reexport_outside_facade"
+path = "source_lib_reexport_outside_facade"
+tags = ["integration", "language", "imports", "facade", "diagnostics"]
+
+[[case]]
+id = "source_lib_reexport_invalid_declaration"
+path = "source_lib_reexport_invalid_declaration"
+tags = ["integration", "language", "imports", "facade", "diagnostics"]
+
+[[case]]
+id = "source_lib_reexport_not_exported"
+path = "source_lib_reexport_not_exported"
+tags = ["integration", "language", "imports", "facade", "diagnostics"]
+
+[[case]]
+id = "source_lib_reexport_no_local_binding"
+path = "source_lib_reexport_no_local_binding"
+tags = ["integration", "language", "imports", "facade", "diagnostics"]
+
+[[case]]
+id = "source_lib_reexport_cross_library_single"
+path = "source_lib_reexport_cross_library_single"
+tags = ["integration", "language", "imports", "facade", "source-libraries"]
+
+[[case]]
+id = "source_lib_reexport_cross_library_alias"
+path = "source_lib_reexport_cross_library_alias"
+tags = ["integration", "language", "imports", "facade", "source-libraries"]
+
+[[case]]
+id = "source_lib_reexport_cross_library_not_exported"
+path = "source_lib_reexport_cross_library_not_exported"
+tags = ["integration", "language", "imports", "facade", "source-libraries", "diagnostics"]
+
+[[case]]
+id = "source_lib_reexport_grouped_alias"
+path = "source_lib_reexport_grouped_alias"
+tags = ["integration", "language", "imports", "facade"]
+
+[[case]]
+id = "source_lib_facade_direct_mod_external_rejected"
+path = "source_lib_facade_direct_mod_external_rejected"
+tags = ["integration", "source-libraries", "facades", "imports", "diagnostics"]
+
+[[case]]
+id = "source_lib_facade_direct_mod_internal_rejected"
+path = "source_lib_facade_direct_mod_internal_rejected"
+tags = ["integration", "source-libraries", "facades", "imports", "diagnostics"]
+
+[[case]]
+id = "source_lib_builder_html"
+path = "source_lib_builder_html"
+tags = ["integration", "source-libraries", "builder-libraries", "html"]
+
+[[case]]
+id = "source_lib_builder_html_collision"
+path = "source_lib_builder_html_collision"
+tags = ["integration", "source-libraries", "builder-libraries", "diagnostics"]
+
+[[case]]
+id = "source_lib_builder_html_direct_internal_rejected"
+path = "source_lib_builder_html_direct_internal_rejected"
+tags = ["integration", "source-libraries", "builder-libraries", "facades", "diagnostics"]
+
+[[case]]
+id = "core_text_functions"
+path = "core_text_functions"
+tags = ["integration", "language", "external-packages", "core-libraries", "js", "wasm", "diagnostics"]
+
+[[case]]
+id = "core_text_type_error"
+path = "core_text_type_error"
+tags = ["integration", "language", "external-packages", "core-libraries", "diagnostics"]
+
+[[case]]
+id = "core_text_arity_error"
+path = "core_text_arity_error"
+tags = ["integration", "language", "external-packages", "core-libraries", "diagnostics"]
+
+[[case]]
+id = "core_text_edge_cases"
+path = "core_text_edge_cases"
+tags = ["integration", "language", "external-packages", "core-libraries", "js", "wasm"]
+
+[[case]]
+id = "prelude_name_declaration_rejected"
+path = "prelude_name_declaration_rejected"
+tags = ["integration", "language", "diagnostics"]
+
+[[case]]
+id = "prelude_name_body_declaration_rejected"
+path = "prelude_name_body_declaration_rejected"
+tags = ["integration", "language", "diagnostics"]
+
+[[case]]
+id = "core_random_functions"
+path = "core_random_functions"
+tags = ["integration", "language", "external-packages", "core-libraries", "js", "wasm", "diagnostics"]
+
+[[case]]
+id = "core_random_int_edge_cases"
+path = "core_random_int_edge_cases"
+tags = ["integration", "language", "external-packages", "core-libraries", "js", "wasm"]
+
+[[case]]
+id = "core_random_type_error"
+path = "core_random_type_error"
+tags = ["integration", "language", "external-packages", "core-libraries", "diagnostics"]
+
+[[case]]
+id = "core_random_arity_error"
+path = "core_random_arity_error"
+tags = ["integration", "language", "external-packages", "core-libraries", "diagnostics"]
+
+[[case]]
+id = "core_time_functions"
+path = "core_time_functions"
+tags = ["integration", "language", "external-packages", "core-libraries", "js", "wasm", "diagnostics"]
+
+[[case]]
+id = "core_time_arity_error"
+path = "core_time_arity_error"
+tags = ["integration", "language", "external-packages", "core-libraries", "diagnostics"]
+
+[[case]]
+id = "import_core_package_skips_filesystem_resolution"
+path = "import_core_package_skips_filesystem_resolution"
+tags = ["integration", "imports", "external-packages"]
+
+[[case]]
+id = "import_path_separator_normalized_diagnostic"
+path = "import_path_separator_normalized_diagnostic"
+tags = ["integration", "imports"]
+
+[[case]]
+id = "namespace_import_bare_file_success"
+path = "namespace_import_bare_file_success"
+tags = ["integration", "imports", "namespace-imports"]
+
+[[case]]
+id = "namespace_import_module_facade_success"
+path = "namespace_import_module_facade_success"
+tags = ["integration", "imports", "namespace-imports", "facade"]
+
+[[case]]
+id = "namespace_import_module_bypass_rejected"
+path = "namespace_import_module_bypass_rejected"
+tags = ["integration", "imports", "namespace-imports", "facade", "diagnostics"]
+
+[[case]]
+id = "namespace_import_source_type_member_success"
+path = "namespace_import_source_type_member_success"
+tags = ["integration", "imports", "namespace-imports", "types"]
+
+[[case]]
+id = "namespace_import_external_package_success"
+path = "namespace_import_external_package_success"
+tags = ["integration", "imports", "namespace-imports", "external-packages"]
+
+[[case]]
+id = "namespace_import_alias_success"
+path = "namespace_import_alias_success"
+tags = ["integration", "imports", "namespace-imports", "aliases"]
+
+[[case]]
+id = "namespace_import_record_value_rejected"
+path = "namespace_import_record_value_rejected"
+tags = ["integration", "imports", "namespace-imports", "diagnostics"]
+
+[[case]]
+id = "namespace_import_nested_traversal_rejected"
+path = "namespace_import_nested_traversal_rejected"
+tags = ["integration", "imports", "namespace-imports", "diagnostics"]
+
+[[case]]
+id = "namespace_import_direct_symbol_path_rejected"
+path = "namespace_import_direct_symbol_path_rejected"
+tags = ["integration", "imports", "namespace-imports", "diagnostics"]
+
+[[case]]
+id = "namespace_import_value_member_as_type_rejected"
+path = "namespace_import_value_member_as_type_rejected"
+tags = ["integration", "imports", "namespace-imports", "diagnostics"]
+
+[[case]]
+id = "namespace_import_type_member_as_value_rejected"
+path = "namespace_import_type_member_as_value_rejected"
+tags = ["integration", "imports", "namespace-imports", "diagnostics"]
+
+[[case]]
+id = "namespace_import_type_member_bare_rejected"
+path = "namespace_import_type_member_bare_rejected"
+tags = ["integration", "imports", "namespace-imports", "diagnostics"]
+
+[[case]]
+id = "namespace_import_invalid_default_name_rejected"
+path = "namespace_import_invalid_default_name_rejected"
+tags = ["integration", "imports", "namespace-imports", "diagnostics"]
+
+[[case]]
+id = "namespace_import_collision_rejected"
+path = "namespace_import_collision_rejected"
+tags = ["integration", "imports", "namespace-imports", "diagnostics"]
+
+[[case]]
+id = "namespace_import_explicit_bst_extension_rejected"
+path = "namespace_import_explicit_bst_extension_rejected"
+tags = ["integration", "imports", "namespace-imports", "diagnostics"]
+
+[[case]]
+id = "unsupported_external_js_import_rejected"
+path = "unsupported_external_js_import_rejected"
+tags = ["integration", "imports", "external-imports", "diagnostics"]
+
+[[case]]
+id = "module_boundary_same_module_allowed"
+path = "module_boundary_same_module_allowed"
+tags = ["integration", "imports", "module-privacy"]
+
+[[case]]
+id = "module_boundary_cross_module_blocked"
+path = "module_boundary_cross_module_blocked"
+tags = ["integration", "imports", "module-privacy", "diagnostics"]
+
+[[case]]
+id = "module_boundary_cross_module_facade_allowed"
+path = "module_boundary_cross_module_facade_allowed"
+tags = ["integration", "imports", "module-privacy"]
+
+[[case]]
+id = "module_boundary_no_facade_no_api"
+path = "module_boundary_no_facade_no_api"
+tags = ["integration", "imports", "module-privacy"]
+
+[[case]]
+id = "module_boundary_submodule_blocked"
+path = "module_boundary_submodule_blocked"
+tags = ["integration", "imports", "module-privacy", "diagnostics"]
+
+[[case]]
+id = "module_boundary_submodule_facade_allowed"
+path = "module_boundary_submodule_facade_allowed"
+tags = ["integration", "imports", "module-privacy"]
+
+[[case]]
+id = "pattern_capture_binds_scrutinee_success"
+path = "pattern_capture_binds_scrutinee_success"
+tags = ["integration","language","pattern-matching"]
+
+[[case]]
+id = "pattern_capture_arm_scope_only"
+path = "pattern_capture_arm_scope_only"
+tags = ["integration","language","pattern-matching"]
+
+[[case]]
+id = "pattern_capture_guard_success"
+path = "pattern_capture_guard_success"
+tags = ["integration","language","pattern-matching"]
+
+[[case]]
+id = "pattern_capture_immutable_binding"
+path = "pattern_capture_immutable_binding"
+tags = ["integration","language","pattern-matching","diagnostics"]
+
+[[case]]
+id = "pattern_capture_rejects_underscore"
+path = "pattern_capture_rejects_underscore"
+tags = ["integration","language","pattern-matching","diagnostics"]
+
+[[case]]
+id = "pattern_capture_name_collision_rejected"
+path = "pattern_capture_name_collision_rejected"
+tags = ["integration","language","pattern-matching","diagnostics"]
+
+[[case]]
+id = "pattern_capture_after_literal_warning_or_reachable"
+path = "pattern_capture_after_literal_warning_or_reachable"
+tags = ["integration","language","pattern-matching"]
+
+[[case]]
+id = "pattern_capture_before_else_makes_else_unreachable_warning"
+path = "pattern_capture_before_else_makes_else_unreachable_warning"
+tags = ["integration","language","pattern-matching"]
+
+[[case]]
+id = "pattern_duplicate_literal_warning"
+path = "pattern_duplicate_literal_warning"
+tags = ["integration","language","pattern-matching","diagnostics","warnings"]
+
+[[case]]
+id = "pattern_duplicate_unit_choice_variant_warning"
+path = "pattern_duplicate_unit_choice_variant_warning"
+tags = ["integration","language","pattern-matching","diagnostics","warnings","choices"]
+
+[[case]]
+id = "pattern_unreachable_after_else_warning"
+path = "pattern_unreachable_after_else_warning"
+tags = ["integration","language","pattern-matching","diagnostics","warnings"]
+
+[[case]]
+id = "pattern_unreachable_after_capture_warning"
+path = "pattern_unreachable_after_capture_warning"
+tags = ["integration","language","pattern-matching","diagnostics","warnings"]
+
+[[case]]
+id = "pattern_unreachable_combined_warning"
+path = "pattern_unreachable_combined_warning"
+tags = ["integration","language","pattern-matching","diagnostics","warnings"]
+
+[[case]]
+id = "pattern_capture_whole_choice_value_success"
+path = "pattern_capture_whole_choice_value_success"
+tags = ["integration","language","pattern-matching","choices"]
+
+[[case]]
+id = "pattern_choice_payload_existing_capture_alias_success"
+path = "pattern_choice_payload_existing_capture_alias_success"
+tags = ["integration","language","pattern-matching","choices"]
+
+[[case]]
+id = "pattern_nested_choice_payload_pattern_rejected"
+path = "pattern_nested_choice_payload_pattern_rejected"
+tags = ["integration","diagnostics","pattern-matching","choices"]
+
+[[case]]
+id = "pattern_capture_does_not_enable_nested_payload"
+path = "pattern_capture_does_not_enable_nested_payload"
+tags = ["integration","diagnostics","pattern-matching","choices"]
+
+[[case]]
+id = "pattern_relational_overlap_no_warning"
+path = "pattern_relational_overlap_no_warning"
+tags = ["integration","language","pattern-matching","js-backend"]
+
+[[case]]
+id = "constant_initializer_import_alias_dependency"
+path = "constant_initializer_import_alias_dependency"
+tags = ["integration", "constants", "dependency-resolution", "imports"]
+
+[[case]]
+id = "constant_self_reference_rejected"
+path = "constant_self_reference_rejected"
+tags = ["integration", "constants", "dependency-resolution", "diagnostics"]
+
+[[case]]
+id = "constant_constructor_like_valid"
+path = "constant_constructor_like_valid"
+tags = ["integration", "constants", "dependency-resolution", "structs"]
+
+[[case]]
+id = "linear_constant_resolution_order"
+path = "linear_constant_resolution_order"
+tags = ["integration", "constants", "dependency-resolution", "header-sorting"]
+
+[[case]]
+id = "const_template_head_imported_source_library"
+path = "const_template_head_imported_source_library"
+tags = ["integration", "constants", "templates", "source-libraries", "imports"]
+
+[[case]]
+id = "unknown_value_name_rejected"
+path = "unknown_value_name_rejected"
+tags = ["integration", "name-resolution", "diagnostics"]
+
+[[case]]
+id = "unknown_type_name_rejected"
+path = "unknown_type_name_rejected"
+tags = ["integration", "name-resolution", "diagnostics"]
+
+[[case]]
+id = "type_used_as_value_rejected"
+path = "type_used_as_value_rejected"
+tags = ["integration", "name-resolution", "namespace-misuse", "diagnostics"]
+
+[[case]]
+id = "value_used_as_type_rejected"
+path = "value_used_as_type_rejected"
+tags = ["integration", "name-resolution", "namespace-misuse", "diagnostics"]
+
+[[case]]
+id = "shadowed_variable_rejected"
+path = "shadowed_variable_rejected"
+tags = ["integration", "name-resolution", "shadowing", "diagnostics"]
+
+[[case]]
+id = "reserved_keyword_shadow_rejected"
+path = "reserved_keyword_shadow_rejected"
+tags = ["integration", "name-resolution", "reserved-names", "diagnostics"]
+
+[[case]]
+id = "invalid_this_usage_rejected"
+path = "invalid_this_usage_rejected"
+tags = ["integration", "name-resolution", "receiver-methods", "diagnostics"]
+
+[[case]]
+id = "import_parent_directory_segment_rejected"
+path = "import_parent_directory_segment_rejected"
+tags = ["integration", "imports", "diagnostics"]
+
+[[case]]
+id = "type_alias_as_generic_base_rejected"
+path = "type_alias_as_generic_base_rejected"
+tags = ["integration", "generics", "aliases", "diagnostics"]
+
+[[case]]
+id = "valid_receiver_method"
+path = "valid_receiver_method"
+tags = ["integration", "name-resolution", "receiver-methods", "positive"]
+
+[[case]]
+id = "direct_page_import_rejected"
+path = "direct_page_import_rejected"
+tags = ["integration", "imports", "diagnostics", "special-files"]
+
+[[case]]
+id = "direct_config_import_rejected"
+path = "direct_config_import_rejected"
+tags = ["integration", "imports", "diagnostics", "special-files"]
+
+[[case]]
+id = "module_facade_unprefixed_type_export"
+path = "module_facade_unprefixed_type_export"
+tags = ["integration", "imports", "visibility", "facade", "positive"]
+
+[[case]]
+id = "const_record_field_access_success"
+path = "const_record_field_access_success"
+tags = ["integration", "constants", "const-records", "field-access"]
+
+[[case]]
+id = "const_record_nested_field_access_success"
+path = "const_record_nested_field_access_success"
+tags = ["integration", "constants", "const-records", "field-access", "positive"]
+
+[[case]]
+id = "const_record_nested_field_value_rejected"
+path = "const_record_nested_field_value_rejected"
+tags = ["integration", "constants", "const-records", "diagnostics"]
+
+[[case]]
+id = "const_record_used_as_value_rejected"
+path = "const_record_used_as_value_rejected"
+tags = ["integration", "constants", "const-records", "diagnostics"]
+
+[[case]]
+id = "const_record_passed_to_function_rejected"
+path = "const_record_passed_to_function_rejected"
+tags = ["integration", "constants", "const-records", "diagnostics"]
+
+[[case]]
+id = "const_record_returned_rejected"
+path = "const_record_returned_rejected"
+tags = ["integration", "constants", "const-records", "diagnostics"]
+
+[[case]]
+id = "const_record_in_collection_rejected"
+path = "const_record_in_collection_rejected"
+tags = ["integration", "constants", "const-records", "diagnostics"]
+
+[[case]]
+id = "const_record_constant_copy_success"
+path = "const_record_constant_copy_success"
+tags = ["integration", "constants", "const-records", "positive"]
+
+[[case]]
+id = "const_record_body_local_field_access_success"
+path = "const_record_body_local_field_access_success"
+tags = ["integration", "constants", "const-records", "field-access", "positive"]
+
+[[case]]
+id = "const_record_body_local_used_as_value_rejected"
+path = "const_record_body_local_used_as_value_rejected"
+tags = ["integration", "constants", "const-records", "diagnostics"]
+
+[[case]]
+id = "web_canvas_namespace_import"
+path = "web_canvas_namespace_import"
+tags = ["integration", "external-imports", "web-canvas", "positive", "js-backend"]
+
+[[case]]
+id = "web_canvas_grouped_alias"
+path = "web_canvas_grouped_alias"
+tags = ["integration", "external-imports", "web-canvas", "positive", "js-backend", "aliases"]
+
+[[case]]
+id = "web_canvas_grouped_type_auto_method"
+path = "web_canvas_grouped_type_auto_method"
+tags = ["integration", "external-imports", "web-canvas", "positive", "js-backend", "receiver-methods"]
+
+[[case]]
+id = "web_canvas_missing_import_rejected"
+path = "web_canvas_missing_import_rejected"
+tags = ["integration", "external-imports", "web-canvas", "diagnostics"]
+
+[[case]]
+id = "web_canvas_wasm_unsupported"
+path = "web_canvas_wasm_unsupported"
+tags = ["integration", "external-imports", "web-canvas", "diagnostics", "html-wasm"]
+
+[[case]]
+id = "receiver_method_source_visibility_rejected"
+path = "receiver_method_source_visibility_rejected"
+tags = ["integration", "receiver-methods", "diagnostics", "import-visibility"]
+
+[[case]]
+id = "receiver_method_source_visibility_success"
+path = "receiver_method_source_visibility_success"
+tags = ["integration", "receiver-methods", "positive", "import-visibility"]
+
+[[case]]
+id = "receiver_method_source_type_alias_visibility_success"
+path = "receiver_method_source_type_alias_visibility_success"
+tags = ["integration", "receiver-methods", "positive", "import-visibility", "aliases"]
+
+[[case]]
+id = "receiver_method_duplicate_same_target_alias_success"
+path = "receiver_method_duplicate_same_target_alias_success"
+tags = ["integration", "receiver-methods", "positive", "imports", "aliases"]
+
+[[case]]
+id = "receiver_method_source_alias_collision_namespace"
+path = "receiver_method_source_alias_collision_namespace"
+tags = ["integration", "receiver-methods", "diagnostics", "imports", "aliases", "namespace-imports"]
+
+[[case]]
+id = "web_canvas_grouped_method_alias_collision_prelude"
+path = "web_canvas_grouped_method_alias_collision_prelude"
+tags = ["integration", "external-imports", "web-canvas", "diagnostics", "receiver-methods", "collision"]
+
+[[case]]
+id = "web_canvas_grouped_method_alias_collision_local"
+path = "web_canvas_grouped_method_alias_collision_local"
+tags = ["integration", "external-imports", "web-canvas", "diagnostics", "receiver-methods", "collision"]
+
+[[case]]
+id = "web_canvas_grouped_method_order_independent"
+path = "web_canvas_grouped_method_order_independent"
+tags = ["integration", "external-imports", "web-canvas", "positive", "receiver-methods", "import-visibility"]
+
+[[case]]
+id = "web_canvas_grouped_method_with_type_success"
+path = "web_canvas_grouped_method_with_type_success"
+tags = ["integration", "external-imports", "web-canvas", "positive", "receiver-methods", "import-visibility"]
+
+[[case]]
+id = "web_canvas_grouped_method_without_type_rejected"
+path = "web_canvas_grouped_method_without_type_rejected"
+tags = ["integration", "external-imports", "web-canvas", "diagnostics", "receiver-methods", "import-visibility"]
+
+[[case]]
+id = "generic_fn_facade_grouped_success"
+path = "generic_fn_facade_grouped_success"
+tags = ["integration", "generics", "functions", "imports", "facade"]
+
+[[case]]
+id = "generic_fn_facade_namespace_success"
+path = "generic_fn_facade_namespace_success"
+tags = ["integration", "generics", "functions", "imports", "facade"]
+
+[[case]]
+id = "generic_fn_facade_grouped_alias_success"
+path = "generic_fn_facade_grouped_alias_success"
+tags = ["integration", "generics", "functions", "imports", "facade"]
+
+[[case]]
+id = "generic_fn_facade_private_impl_nested_success"
+path = "generic_fn_facade_private_impl_nested_success"
+tags = ["integration", "generics", "functions", "imports", "facade"]
+
+[[case]]
+id = "generic_fn_facade_private_impl_import_rejected"
+path = "generic_fn_facade_private_impl_import_rejected"
+tags = ["integration", "generics", "functions", "imports", "facade", "diagnostics"]
+
+[[case]]
+id = "generic_fn_facade_direct_mod_import_rejected"
+path = "generic_fn_facade_direct_mod_import_rejected"
+tags = ["integration", "generics", "functions", "imports", "facade", "diagnostics"]
+
+[[case]]
+id = "generic_fn_direct_symbol_path_import_rejected"
+path = "generic_fn_direct_symbol_path_import_rejected"
+tags = ["integration", "generics", "functions", "imports", "diagnostics"]
+
+[[case]]
+id = "generic_fn_facade_import_alias_not_reexported_rejected"
+path = "generic_fn_facade_import_alias_not_reexported_rejected"
+tags = ["integration", "generics", "functions", "imports", "facade", "diagnostics"]
+
+[[case]]
+id = "constant_struct_user_nominal_field_success"
+path = "constant_struct_user_nominal_field_success"
+tags = ["integration", "language", "structs", "constants", "regression"]
+
+[[case]]
+id = "constant_choice_user_nominal_payload_success"
+path = "constant_choice_user_nominal_payload_success"
+tags = ["integration", "language", "choices", "constants", "regression"]
+
+[[case]]
+id = "generic_struct_facade_constructor_named_default_success"
+path = "generic_struct_facade_constructor_named_default_success"
+tags = ["integration", "generics", "structs", "imports", "facade", "named-args"]
+
+[[case]]
+id = "unresolved_type_in_struct_field_rejected"
+path = "unresolved_type_in_struct_field_rejected"
+tags = ["integration", "diagnostics", "structs", "type-resolution", "regression"]
+
+[[case]]
+id = "value_if_declaration_init"
+path = "value_if_declaration_init"
+tags = ["integration", "language", "value-blocks", "if", "regression"]
+
+[[case]]
+id = "value_if_assignment_rhs"
+path = "value_if_assignment_rhs"
+tags = ["integration", "language", "value-blocks", "if", "assignment"]
+
+[[case]]
+id = "value_if_block_declaration_init"
+path = "value_if_block_declaration_init"
+tags = ["integration", "language", "value-blocks", "if", "regression"]
+
+[[case]]
+id = "value_if_return_inline"
+path = "value_if_return_inline"
+tags = ["integration", "language", "value-blocks", "if", "return"]
+
+[[case]]
+id = "value_if_return_block"
+path = "value_if_return_block"
+tags = ["integration", "language", "value-blocks", "if", "return"]
+
+[[case]]
+id = "value_if_return_coerce"
+path = "value_if_return_coerce"
+tags = ["integration", "language", "value-blocks", "if", "return", "coercion"]
+
+[[case]]
+id = "value_if_return_multi_inline"
+path = "value_if_return_multi_inline"
+tags = ["integration", "language", "value-blocks", "if", "return", "multi-return"]
+
+[[case]]
+id = "value_if_return_multi_block"
+path = "value_if_return_multi_block"
+tags = ["integration", "language", "value-blocks", "if", "return", "multi-return"]
+
+[[case]]
+id = "value_if_return_multi_coerce"
+path = "value_if_return_multi_coerce"
+tags = ["integration", "language", "value-blocks", "if", "return", "multi-return", "coercion"]
+
+[[case]]
+id = "value_if_return_multi_arity_mismatch"
+path = "value_if_return_multi_arity_mismatch"
+tags = ["integration", "diagnostics", "value-blocks", "if", "return", "multi-return"]
+
+[[case]]
+id = "value_if_multi_bind_inline"
+path = "value_if_multi_bind_inline"
+tags = ["integration", "language", "value-blocks", "if", "multi-bind"]
+
+[[case]]
+id = "value_if_multi_bind_block"
+path = "value_if_multi_bind_block"
+tags = ["integration", "language", "value-blocks", "if", "multi-bind"]
+
+[[case]]
+id = "value_if_multi_bind_explicit_coerce"
+path = "value_if_multi_bind_explicit_coerce"
+tags = ["integration", "language", "value-blocks", "if", "multi-bind", "coercion"]
+
+[[case]]
+id = "value_if_multi_bind_arity_mismatch"
+path = "value_if_multi_bind_arity_mismatch"
+tags = ["integration", "diagnostics", "value-blocks", "if", "multi-bind"]
+
+[[case]]
+id = "value_if_multi_bind_type_mismatch"
+path = "value_if_multi_bind_type_mismatch"
+tags = ["integration", "diagnostics", "value-blocks", "if", "multi-bind"]
+
+[[case]]
+id = "value_if_multi_bind_block_terminating_branch"
+path = "value_if_multi_bind_block_terminating_branch"
+tags = ["integration", "language", "value-blocks", "if", "multi-bind"]
+
+[[case]]
+id = "value_if_inline_choice_predicate"
+path = "value_if_inline_choice_predicate"
+tags = ["integration", "language", "value-blocks", "if", "choice", "match"]
+
+[[case]]
+id = "option_value_if_inline_unwrap"
+path = "option_value_if_inline_unwrap"
+tags = ["integration", "language", "optionals", "value-blocks", "if", "match"]
+
+[[case]]
+id = "value_match_declaration_init"
+path = "value_match_declaration_init"
+tags = ["integration", "language", "value-blocks", "match", "declaration"]
+
+[[case]]
+id = "value_match_return"
+path = "value_match_return"
+tags = ["integration", "language", "value-blocks", "match", "return"]
+
+[[case]]
+id = "value_match_multi_bind"
+path = "value_match_multi_bind"
+tags = ["integration", "language", "value-blocks", "match", "multi-bind"]
+
+[[case]]
+id = "value_match_multi_bind_arity_mismatch"
+path = "value_match_multi_bind_arity_mismatch"
+tags = ["integration", "diagnostics", "value-blocks", "match", "multi-bind"]
+
+[[case]]
+id = "value_match_multi_bind_type_mismatch"
+path = "value_match_multi_bind_type_mismatch"
+tags = ["integration", "diagnostics", "value-blocks", "match", "multi-bind"]
+
+[[case]]
+id = "value_match_duplicate_warning"
+path = "value_match_duplicate_warning"
+tags = ["integration", "diagnostics", "value-blocks", "match", "warnings"]
+
+[[case]]
+id = "value_then_no_values_rejected"
+path = "value_then_no_values_rejected"
+tags = ["integration", "diagnostics", "value-blocks", "then"]
+
+[[case]]
+id = "value_then_crosses_loop_rejected"
+path = "value_then_crosses_loop_rejected"
+tags = ["integration", "diagnostics", "value-blocks", "then", "loop"]
+
+[[case]]
+id = "value_block_function_arg_rejected"
+path = "value_block_function_arg_rejected"
+tags = ["integration", "diagnostics", "value-blocks", "functions"]
+
+[[case]]
+id = "option_direct_fallback_rejected"
+path = "option_direct_fallback_rejected"
+tags = ["integration", "diagnostics", "language", "optionals", "value-blocks"]
+
+[[case]]
+id = "option_direct_fallback_assignment_rejected"
+path = "option_direct_fallback_assignment_rejected"
+tags = ["integration", "diagnostics", "language", "optionals", "value-blocks"]
+
+[[case]]
+id = "option_value_if_none_predicate_rejected"
+path = "option_value_if_none_predicate_rejected"
+tags = ["integration", "diagnostics", "language", "optionals", "value-blocks"]
+
+[[case]]
+id = "option_value_if_literal_predicate_rejected"
+path = "option_value_if_literal_predicate_rejected"
+tags = ["integration", "diagnostics", "language", "optionals", "value-blocks"]
+
+[[case]]
+id = "value_if_missing_else_rejected"
+path = "value_if_missing_else_rejected"
+tags = ["integration", "diagnostics", "value-blocks", "if"]
+
+[[case]]
+id = "value_if_inline_else_then_rejected"
+path = "value_if_inline_else_then_rejected"
+tags = ["integration", "diagnostics", "value-blocks", "if"]
+
+[[case]]
+id = "value_if_inline_multiline_rejected"
+path = "value_if_inline_multiline_rejected"
+tags = ["integration", "diagnostics", "value-blocks", "if"]
+
+[[case]]
+id = "value_catch_inline_return_bang_rejected"
+path = "value_catch_inline_return_bang_rejected"
+tags = ["integration", "diagnostics", "value-blocks", "catch", "results"]
+
+[[case]]
+id = "result_value_match_rejected"
+path = "result_value_match_rejected"
+tags = ["integration", "diagnostics", "value-blocks", "match", "results"]
+
+[[case]]
+id = "value_block_operator_operand_rejected"
+path = "value_block_operator_operand_rejected"
+tags = ["integration", "diagnostics", "value-blocks", "operators"]
+
+[[case]]
+id = "value_block_constructor_arg_rejected"
+path = "value_block_constructor_arg_rejected"
+tags = ["integration", "diagnostics", "value-blocks", "constructors"]
+
+[[case]]
+id = "value_block_collection_literal_rejected"
+path = "value_block_collection_literal_rejected"
+tags = ["integration", "diagnostics", "value-blocks", "collections"]
+
+[[case]]
+id = "value_block_template_interpolation_rejected"
+path = "value_block_template_interpolation_rejected"
+tags = ["integration", "diagnostics", "value-blocks", "templates"]
+
+[[case]]
+id = "value_then_crosses_statement_catch_rejected"
+path = "value_then_crosses_statement_catch_rejected"
+tags = ["integration", "diagnostics", "value-blocks", "catch", "then"]
+
+[[case]]
+id = "option_match_duplicate_none_warning"
+path = "option_match_duplicate_none_warning"
+tags = ["integration", "diagnostics", "optionals", "match", "warnings"]
+
+[[case]]
+id = "option_match_present_after_unguarded_warning"
+path = "option_match_present_after_unguarded_warning"
+tags = ["integration", "diagnostics", "optionals", "match", "warnings"]

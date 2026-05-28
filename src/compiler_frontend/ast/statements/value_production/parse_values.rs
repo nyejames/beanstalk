@@ -1,0 +1,325 @@
+//! Typed value-production parsing helpers.
+//!
+//! WHAT: parses one or more expressions after `then`, validating arity and applying
+//! contextual coercion against the active value-production target.
+//! WHY: this logic was previously catch-specific; generalising it lets value `if`,
+//! match, and catch share one arity/coercion path.
+
+use crate::compiler_frontend::ast::ScopeContext;
+use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
+use crate::compiler_frontend::ast::expressions::expression::Expression;
+use crate::compiler_frontend::ast::expressions::parse_expression::{
+    ExpressionTrailingPolicy, create_expression_with_trailing_newline_policy,
+    create_multiple_expressions,
+};
+use crate::compiler_frontend::ast::statements::value_production::types::{
+    ActiveValueProductionTarget, ValueReceiverKind,
+};
+use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
+use crate::compiler_frontend::compiler_messages::{
+    CompilerDiagnostic, DiagnosticPayload, InvalidResultHandlingReason, InvalidReturnShapeReason,
+    TypeMismatchContext,
+};
+use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
+use crate::compiler_frontend::datatypes::ids::TypeId;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::compiler_frontend::type_coercion::compatibility::is_declaration_compatible;
+use crate::compiler_frontend::type_coercion::contextual::coerce_expression_to_declared_type;
+use crate::compiler_frontend::type_coercion::parse_context::ExpectedType;
+use crate::compiler_frontend::value_mode::ValueMode;
+
+/// Input bundle for `parse_produced_values_typed`.
+///
+/// WHAT: avoids a long parameter list by grouping everything the parser needs.
+/// WHY: the caller already has all of these values on hand; a struct keeps call sites
+/// readable and makes future extension easier.
+pub struct ProducedValuesParseInput<'a, 'b> {
+    pub token_stream: &'a mut FileTokens,
+    pub context: &'a ScopeContext,
+    pub type_interner: &'a mut AstTypeInterner<'b>,
+    pub target: &'a ActiveValueProductionTarget,
+    pub label: &'a str,
+    pub string_table: &'a mut StringTable,
+}
+
+/// Parses a list of expressions that must match the target's expected type/arity.
+///
+/// WHAT: reads one or more expressions after `then`, validates that the count matches
+/// `target.result_type_ids`, and applies contextual coercion per position.
+/// WHY: every value-producing site (catch, future value `if`, match) needs identical
+/// arity and coercion validation.
+pub fn parse_produced_values_typed<'a, 'b>(
+    input: ProducedValuesParseInput<'a, 'b>,
+) -> Result<Vec<Expression>, ExpressionParseError> {
+    let ProducedValuesParseInput {
+        token_stream,
+        context,
+        type_interner,
+        target,
+        label,
+        string_table,
+    } = input;
+
+    if target.result_type_ids.is_empty() {
+        if target.receiver_kind == ValueReceiverKind::Declaration {
+            return parse_single_inferred_declaration_value(
+                token_stream,
+                context,
+                type_interner,
+                string_table,
+            );
+        }
+
+        if let Some(arity) = target.expected_arity {
+            return parse_fixed_arity_inferred_values(
+                token_stream,
+                context,
+                type_interner,
+                arity,
+                string_table,
+            );
+        }
+
+        return Err(CompilerDiagnostic::invalid_result_handling(
+            InvalidResultHandlingReason::FallbackValuesForErrorOnlyResult,
+            token_stream.current_location(),
+        )
+        .into());
+    }
+
+    let expression_context = context.new_child_expression(target.result_type_ids.clone());
+    let produced_values = match create_multiple_expressions(
+        token_stream,
+        &expression_context,
+        type_interner,
+        label,
+        false,
+        string_table,
+    ) {
+        Ok(values) => values,
+
+        // If create_multiple_expressions reports TooFewReturnValues but the current token
+        // is actually the start of another expression, the value list has more tokens
+        // than the expected shape can consume. Report the clearer arity error at
+        // the first extra value.
+        Err(ExpressionParseError::Diagnostic(diagnostic)) => {
+            // Detect the "too many values disguised as too few" case:
+            // the parser stopped early because the extra value overflowed
+            // the expected shape, but the next token is clearly an expression.
+            if let DiagnosticPayload::InvalidReturnShape {
+                reason: InvalidReturnShapeReason::TooFewReturnValues { expected_count, .. },
+            } = &diagnostic.payload
+                && is_expression_start_token(token_stream.current_token_kind())
+            {
+                return Err(CompilerDiagnostic::invalid_return_shape(
+                    InvalidReturnShapeReason::TooManyReturnValues {
+                        expected_count: *expected_count,
+                    },
+                    token_stream.current_location(),
+                )
+                .into());
+            }
+            return Err(diagnostic.into());
+        }
+
+        Err(err) => return Err(err),
+    };
+
+    // Explicit too-many check: comma after the expected count means an extra value follows.
+    if token_stream.current_token_kind() == &TokenKind::Comma {
+        return Err(CompilerDiagnostic::invalid_return_shape(
+            InvalidReturnShapeReason::TooManyReturnValues {
+                expected_count: target.result_type_ids.len(),
+            },
+            token_stream.current_location(),
+        )
+        .into());
+    }
+
+    // Defensive invariant: create_multiple_expressions should always return the expected count
+    // when it succeeds, but we verify locally so callers cannot silently miss arity errors.
+    if produced_values.len() != target.result_type_ids.len() {
+        return Err(CompilerDiagnostic::invalid_return_shape(
+            InvalidReturnShapeReason::TooFewReturnValues {
+                expected_count: target.result_type_ids.len(),
+                provided_count: produced_values.len(),
+            },
+            token_stream.current_location(),
+        )
+        .into());
+    }
+
+    validate_and_coerce_produced_values(
+        produced_values,
+        &target.result_type_ids,
+        type_interner.environment(),
+    )
+}
+
+// WHAT: parses the Phase 4A single-result inferred declaration case.
+// WHY: block-form declaration initializers such as `value = if condition: then 1 ...`
+//      do not know their receiver type until the branch `then` values have been parsed.
+//      Multi-result inference stays out of this slice because no receiver arity exists yet.
+fn parse_single_inferred_declaration_value(
+    token_stream: &mut FileTokens,
+    context: &ScopeContext,
+    type_interner: &mut AstTypeInterner<'_>,
+    string_table: &mut StringTable,
+) -> Result<Vec<Expression>, ExpressionParseError> {
+    let expression_context = context.new_child_expression(vec![]);
+    let mut expected_type = ExpectedType::Infer;
+    let expression = create_expression_with_trailing_newline_policy(
+        token_stream,
+        &expression_context,
+        type_interner,
+        &mut expected_type,
+        &ValueMode::ImmutableOwned,
+        ExpressionTrailingPolicy {
+            consume_closing_parenthesis: false,
+            skip_trailing_newlines: false,
+            allow_boundary_catch: true,
+        },
+        string_table,
+    )?;
+
+    if token_stream.current_token_kind() == &TokenKind::Comma {
+        return Err(CompilerDiagnostic::invalid_return_shape(
+            InvalidReturnShapeReason::TooManyReturnValues { expected_count: 1 },
+            token_stream.current_location(),
+        )
+        .into());
+    }
+
+    Ok(vec![expression])
+}
+
+/// Parses a fixed number of expressions after `then` when no expected types are known.
+///
+/// WHAT: reads exactly `arity` expressions, validating only that the count matches.
+/// WHY: multi-bind with inferred slot types needs to know how many values to read
+/// without knowing their types upfront.
+pub(crate) fn parse_fixed_arity_inferred_values(
+    token_stream: &mut FileTokens,
+    context: &ScopeContext,
+    type_interner: &mut AstTypeInterner<'_>,
+    arity: usize,
+    string_table: &mut StringTable,
+) -> Result<Vec<Expression>, ExpressionParseError> {
+    let expression_context = context.new_child_expression(vec![]);
+    let mut values = Vec::with_capacity(arity);
+
+    for index in 0..arity {
+        let mut expected_type = ExpectedType::Infer;
+        let expression = create_expression_with_trailing_newline_policy(
+            token_stream,
+            &expression_context,
+            type_interner,
+            &mut expected_type,
+            &ValueMode::ImmutableOwned,
+            ExpressionTrailingPolicy {
+                consume_closing_parenthesis: false,
+                skip_trailing_newlines: false,
+                allow_boundary_catch: true,
+            },
+            string_table,
+        )?;
+        values.push(expression);
+
+        if index + 1 < arity {
+            if token_stream.current_token_kind() != &TokenKind::Comma {
+                return Err(CompilerDiagnostic::invalid_return_shape(
+                    InvalidReturnShapeReason::TooFewReturnValues {
+                        expected_count: arity,
+                        provided_count: values.len(),
+                    },
+                    token_stream.current_location(),
+                )
+                .into());
+            }
+            token_stream.advance();
+        }
+    }
+
+    if token_stream.current_token_kind() == &TokenKind::Comma {
+        return Err(CompilerDiagnostic::invalid_return_shape(
+            InvalidReturnShapeReason::TooManyReturnValues {
+                expected_count: arity,
+            },
+            token_stream.current_location(),
+        )
+        .into());
+    }
+
+    Ok(values)
+}
+
+fn validate_and_coerce_produced_values(
+    produced_values: Vec<Expression>,
+    expected_type_ids: &[TypeId],
+    type_environment: &TypeEnvironment,
+) -> Result<Vec<Expression>, ExpressionParseError> {
+    let mut checked_values = Vec::with_capacity(produced_values.len());
+
+    // Validate each produced value against the corresponding expected type,
+    // coercing when compatible or reporting a mismatch when not.
+    for (produced_value, expected_type_id) in
+        produced_values.into_iter().zip(expected_type_ids.iter())
+    {
+        let actual_type_id = produced_value.type_id;
+
+        if actual_type_id == *expected_type_id {
+            checked_values.push(produced_value);
+            continue;
+        }
+
+        if is_declaration_compatible(*expected_type_id, actual_type_id, type_environment) {
+            checked_values.push(coerce_expression_to_declared_type(
+                produced_value,
+                *expected_type_id,
+                type_environment,
+            ));
+            continue;
+        }
+
+        return Err(CompilerDiagnostic::type_mismatch(
+            *expected_type_id,
+            actual_type_id,
+            TypeMismatchContext::General,
+            produced_value.location,
+        )
+        .into());
+    }
+
+    Ok(checked_values)
+}
+
+// WHAT: identifies tokens that can begin a new expression.
+// WHY: when create_multiple_expressions reports TooFewReturnValues, the token at which it
+// stopped may actually be the start of an extra produced value (user forgot a comma).
+// Distinguishing expression starts from statement keywords or terminators lets us report
+// TooManyReturnValues instead of the misleading TooFewReturnValues.
+fn is_expression_start_token(token: &TokenKind) -> bool {
+    matches!(
+        token,
+        TokenKind::Symbol(_)
+            | TokenKind::IntLiteral(_)
+            | TokenKind::FloatLiteral(_)
+            | TokenKind::StringSliceLiteral(_)
+            | TokenKind::RawStringLiteral(_)
+            | TokenKind::CharLiteral(_)
+            | TokenKind::BoolLiteral(_)
+            | TokenKind::NoneLiteral
+            | TokenKind::OpenCurly
+            | TokenKind::OpenParenthesis
+            | TokenKind::TemplateHead
+            | TokenKind::DatatypeInt
+            | TokenKind::DatatypeFloat
+            | TokenKind::DatatypeBool
+            | TokenKind::DatatypeString
+            | TokenKind::DatatypeChar
+            | TokenKind::Subtract
+            | TokenKind::Copy
+            | TokenKind::Mutable
+    )
+}

@@ -1,0 +1,15 @@
+entry = "."
+
+[backends.html]
+mode = "success"
+warnings = "exact"
+warning_count = 1
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = ["/assets/video.mp4"]
+
+[[backends.html.artifact_assertions]]
+path = "assets/video.mp4"
+kind = "binary"

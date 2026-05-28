@@ -1,0 +1,5 @@
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+diagnostic_codes = ["BST-SYNTAX-0028"]
+message_contains = ["`case` is no longer used in match arms"]

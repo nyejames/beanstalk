@@ -1,0 +1,13 @@
+get_values |condition Bool| -> Int, String:
+    first, second = if condition:
+        then 1, "yes"
+    else
+        then 0, "no"
+    ;
+    return first, second
+;
+
+a, b = get_values(false)
+io("block")
+io(a)
+io(b)

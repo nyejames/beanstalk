@@ -1,0 +1,1 @@
+-- Empty facade. `private.js` is private to the feature module.
