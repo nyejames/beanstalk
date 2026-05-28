@@ -194,6 +194,13 @@ impl<'a> ConstFactCollector<'a> {
                 }
             }
 
+            NodeKind::Assert {
+                condition,
+                message: _,
+            } => {
+                self.walk_expression_for_body_local(condition, env);
+            }
+
             NodeKind::Match {
                 scrutinee,
                 arms,

@@ -382,7 +382,9 @@ fn collect_reachable_blocks(
             HirTerminator::Return(_)
             | HirTerminator::ReturnSuccess(_)
             | HirTerminator::ReturnError(_)
-            | HirTerminator::Panic { .. } => {}
+            | HirTerminator::RuntimeFailure { .. }
+            | HirTerminator::Uninitialized
+            | HirTerminator::AssertFailure { .. } => {}
         }
     }
 
@@ -426,10 +428,16 @@ fn collect_terminator_values(terminator: &HirTerminator, out: &mut FxHashSet<Hir
         HirTerminator::Return(value)
         | HirTerminator::ReturnSuccess(value)
         | HirTerminator::ReturnError(value) => collect_expression_values(value, out),
-        HirTerminator::Panic { message } => {
-            if let Some(value) = message {
-                collect_expression_values(value, out);
-            }
+        HirTerminator::AssertFailure { .. } => {
+            // Assertion messages are compile-time text, not expressions.
+        }
+
+        HirTerminator::RuntimeFailure { .. } => {
+            // Runtime-failure messages are backend-facing text, not expressions.
+        }
+
+        HirTerminator::Uninitialized => {
+            // Internal placeholder — no expressions to visit.
         }
         HirTerminator::Jump { .. }
         | HirTerminator::Break { .. }

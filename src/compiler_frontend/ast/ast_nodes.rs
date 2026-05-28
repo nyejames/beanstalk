@@ -103,6 +103,17 @@ pub enum MatchExhaustiveness {
     ExhaustiveChoice,
 }
 
+/// Text payload for a failed assertion message.
+///
+/// WHAT: carries the literal string data and source location for an assertion message.
+/// WHY: assertion messages are compile-time text, not runtime expressions, so they are
+///      stored as resolved string data rather than as an `Expression` node.
+#[derive(Debug, Clone)]
+pub struct AssertMessage {
+    pub text: StringId,
+    pub location: SourceLocation,
+}
+
 #[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone)]
 pub enum NodeKind {
@@ -135,6 +146,17 @@ pub enum NodeKind {
     WhileLoop(Expression, Vec<AstNode>), // Condition, Body,
     Break,
     Continue,
+
+    /// Runtime assertion statement intrinsic.
+    ///
+    /// WHAT: `assert(condition)` and `assert(condition, "message")` are language-owned
+    ///       statement surfaces for runtime invariant checking.
+    /// WHY: keeping assert out of the ordinary function-call path prevents shadowing,
+    ///      named arguments, mutable markers, and result handling that do not apply.
+    Assert {
+        condition: Expression,
+        message: Option<AssertMessage>,
+    },
 
     /// Value-production terminator for active value-producing blocks.
     ///
@@ -542,6 +564,16 @@ impl MultiBindTarget {
     }
 }
 
+impl AssertMessage {
+    /// Remap the interned string ID in this assertion message.
+    // Called by per-file frontend output remapping before module-wide dependency sorting.
+    #[allow(dead_code)]
+    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
+        self.text = remap.get(self.text);
+        self.location.remap_string_ids(remap);
+    }
+}
+
 impl LoopBindings {
     /// Remap declaration names/expressions in loop bindings.
     // Called by per-file frontend output remapping before module-wide dependency sorting.
@@ -659,6 +691,13 @@ impl NodeKind {
                 condition.remap_string_ids(remap);
                 for node in body {
                     node.remap_string_ids(remap);
+                }
+            }
+
+            NodeKind::Assert { condition, message } => {
+                condition.remap_string_ids(remap);
+                if let Some(message) = message {
+                    message.remap_string_ids(remap);
                 }
             }
 

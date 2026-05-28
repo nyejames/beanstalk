@@ -153,7 +153,7 @@ Humans should validate, review and write the more declarative, creative and fun 
 
 This is one reason why readability is the primary goal of the language.
 
-The strict compiler and snappy, modular tooling enables LLMs to iterate fast and avoid bad patterns due to Beanstalk being opinionated, memory safe and panic avoidant. The language is simple and terse which is ideal for context limits and human validation.
+The strict compiler and snappy, modular tooling enables LLMs to iterate fast and avoid bad patterns due to Beanstalk being opinionated, memory safe, and designed to prefer typed error propagation over panics for expected failures. The language is simple and terse which is ideal for context limits and human validation.
 
 Even the way compiler errors are designed is to provide good metadata for LLMs right from the start, not just pretty human readable ones.
 

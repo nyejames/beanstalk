@@ -221,7 +221,9 @@ impl<'hir> JsEmitter<'hir> {
                 HirTerminator::Return(_)
                 | HirTerminator::ReturnSuccess(_)
                 | HirTerminator::ReturnError(_)
-                | HirTerminator::Panic { .. } => {}
+                | HirTerminator::RuntimeFailure { .. }
+                | HirTerminator::Uninitialized
+                | HirTerminator::AssertFailure { .. } => {}
             }
         }
 
@@ -307,7 +309,9 @@ impl<'hir> JsEmitter<'hir> {
                 HirTerminator::Return(_)
                 | HirTerminator::ReturnSuccess(_)
                 | HirTerminator::ReturnError(_)
-                | HirTerminator::Panic { .. } => {}
+                | HirTerminator::RuntimeFailure { .. }
+                | HirTerminator::Uninitialized
+                | HirTerminator::AssertFailure { .. } => {}
             }
         }
 
@@ -490,7 +494,15 @@ impl<'hir> JsEmitter<'hir> {
                 self.emit_success_return_terminator(expression)
             }
             HirTerminator::ReturnError(expression) => self.emit_error_return_terminator(expression),
-            HirTerminator::Panic { message } => self.emit_panic_terminator(message),
+            HirTerminator::Uninitialized => Err(CompilerError::compiler_error(
+                "JavaScript backend: structured lowering encountered Uninitialized terminator",
+            )),
+            HirTerminator::RuntimeFailure { message } => {
+                self.emit_runtime_failure_terminator(message)
+            }
+            HirTerminator::AssertFailure { message } => {
+                self.emit_assert_failure_terminator(message)
+            }
 
             HirTerminator::Break { .. } | HirTerminator::Continue { .. } => {
                 Err(CompilerError::compiler_error(
@@ -654,8 +666,13 @@ impl<'hir> JsEmitter<'hir> {
                 Ok(BranchTermination::Terminated)
             }
 
-            HirTerminator::Panic { message } => {
-                self.emit_panic_terminator(message)?;
+            HirTerminator::AssertFailure { message } => {
+                self.emit_assert_failure_terminator(message)?;
+                Ok(BranchTermination::Terminated)
+            }
+
+            HirTerminator::RuntimeFailure { message } => {
+                self.emit_runtime_failure_terminator(message)?;
                 Ok(BranchTermination::Terminated)
             }
 
@@ -677,7 +694,12 @@ impl<'hir> JsEmitter<'hir> {
             HirTerminator::Return(_)
             | HirTerminator::ReturnSuccess(_)
             | HirTerminator::ReturnError(_)
-            | HirTerminator::Panic { .. } => Ok(BranchTermination::Terminated),
+            | HirTerminator::RuntimeFailure { .. }
+            | HirTerminator::AssertFailure { .. } => Ok(BranchTermination::Terminated),
+
+            HirTerminator::Uninitialized => Err(CompilerError::compiler_error(
+                "JavaScript backend: branch inspection encountered Uninitialized terminator",
+            )),
 
             _ => Err(CompilerError::compiler_error(
                 "JavaScript backend: branch terminator is not simple enough for structured lowering",

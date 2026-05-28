@@ -516,6 +516,14 @@ pub enum TokenKind {
     Checked,
     Async,
 
+    /// Assertion statement intrinsic.
+    ///
+    /// WHAT: `assert(condition)` and `assert(condition, "message")` are language-owned
+    ///       statement surfaces for runtime invariant checking.
+    /// WHY: tokenizing it separately keeps the language-owned statement out of the
+    ///      ordinary symbol path, so it cannot be shadowed by user declarations.
+    Assert,
+
     // Loops
     Loop,
     By,

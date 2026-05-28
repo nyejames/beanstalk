@@ -3336,6 +3336,96 @@ path = "identifier_keyword_shadow_ast_error"
 tags = ["integration", "diagnostics"]
 
 [[case]]
+id = "assert_keyword_shadow_header_error"
+path = "assert_keyword_shadow_header_error"
+tags = ["integration", "diagnostics", "reserved-names"]
+
+[[case]]
+id = "assert_keyword_shadow_body_error"
+path = "assert_keyword_shadow_body_error"
+tags = ["integration", "diagnostics", "reserved-names"]
+
+[[case]]
+id = "assert_statement_success"
+path = "assert_statement_success"
+tags = ["integration", "language", "assert"]
+
+[[case]]
+id = "assert_statement_message_success"
+path = "assert_statement_message_success"
+tags = ["integration", "language", "assert"]
+
+[[case]]
+id = "assert_false_runtime_stop"
+path = "assert_false_runtime_stop"
+tags = ["integration", "language", "assert"]
+
+[[case]]
+id = "assert_false_message_runtime_stop"
+path = "assert_false_message_runtime_stop"
+tags = ["integration", "language", "assert"]
+
+[[case]]
+id = "assert_message_escaping_runtime_stop"
+path = "assert_message_escaping_runtime_stop"
+tags = ["integration", "language", "assert"]
+
+[[case]]
+id = "assert_false_terminal_function"
+path = "assert_false_terminal_function"
+tags = ["integration", "language", "assert", "control-flow"]
+
+[[case]]
+id = "assert_dynamic_not_terminal"
+path = "assert_dynamic_not_terminal"
+tags = ["integration", "language", "assert", "control-flow"]
+
+[[case]]
+id = "assert_condition_not_bool"
+path = "assert_condition_not_bool"
+tags = ["integration", "language", "assert", "diagnostics"]
+
+[[case]]
+id = "assert_missing_argument"
+path = "assert_missing_argument"
+tags = ["integration", "language", "assert", "diagnostics"]
+
+[[case]]
+id = "assert_too_many_arguments"
+path = "assert_too_many_arguments"
+tags = ["integration", "language", "assert", "diagnostics"]
+
+[[case]]
+id = "assert_non_string_message"
+path = "assert_non_string_message"
+tags = ["integration", "language", "assert", "diagnostics"]
+
+[[case]]
+id = "assert_named_argument_rejected"
+path = "assert_named_argument_rejected"
+tags = ["integration", "language", "assert", "diagnostics"]
+
+[[case]]
+id = "assert_mutable_marker_rejected"
+path = "assert_mutable_marker_rejected"
+tags = ["integration", "language", "assert", "diagnostics"]
+
+[[case]]
+id = "assert_expression_position"
+path = "assert_expression_position"
+tags = ["integration", "language", "assert", "diagnostics"]
+
+[[case]]
+id = "assert_bang_rejected"
+path = "assert_bang_rejected"
+tags = ["integration", "language", "assert", "diagnostics"]
+
+[[case]]
+id = "assert_catch_rejected"
+path = "assert_catch_rejected"
+tags = ["integration", "language", "assert", "diagnostics"]
+
+[[case]]
 id = "if_logical_precedence"
 path = "if_logical_precedence"
 tags = ["integration", "control-flow"]

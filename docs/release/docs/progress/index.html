@@ -435,6 +435,32 @@ body {
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Assertions</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad parser, diagnostics, HIR lowering, backend artifact, and integration coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> Frontend / HIR / JS / HTML; Wasm trap lowering</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">assert</span> is a language-owned statement keyword and cannot be shadowed, imported, assigned, passed, or used in expression position. <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">assert(condition)</span> and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">assert(condition, "message")</span> are always checked. Failed assertions are unrecoverable and cannot be caught. <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">assert(false, "message")</span> is the only current explicit source-level panic path. Expected failures should use <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Error!</span> and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">catch</span>. Messages are optional string literals; runtime and compile-time constant message expressions remain deferred.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Functions and calls</td>
      <td style="padding: 0.2em 0.5em;  "> Supported</td>
      <td style="padding: 0.2em 0.5em;  "> Broad function declaration, call validation, named/positional argument, default-argument, parameter passing, external-call, and return coverage.</td>
@@ -536,20 +562,44 @@ body {
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Results, options, multiple returns, and multi-bind</td>
-     <td style="padding: 0.2em 0.5em;  "> Supported</td>
-     <td style="padding: 0.2em 0.5em;  "> Broad result, option, <span style="
+     <td style="padding: 0.2em 0.5em;  "> Partial</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad current result, option, block and inline <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">catch:</span> fallback blocks with terminal <span style="
+    ">catch:</span> fallback forms with shared <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">then</span>, <span style="
+    ">then</span> value production, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">catch |err|:</span> handler blocks, postfix propagation including <span style="
+    ">catch |err|:</span> handler blocks, value-producing <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">E -> E?</span> error-slot wrapping, fallible external calls, cast, multi-bind, nested-option, contextual option wrapping, option-aware equality, limited option match patterns, and public <span style="
+    ">if</span> and full <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">if value is:</span> match blocks at declaration initializers, simple assignment RHS sites, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">return if</span> sites including multi-return, and multi-bind RHS sites, inline non-option choice-pattern value <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">if</span> predicates, inline option unwrap value <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">if</span> with present capture <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">|value|</span>, postfix result propagation including <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">E -> E?</span> error-slot wrapping, postfix option propagation <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">?</span>, fallible external calls, cast, multi-bind, nested-option, contextual option wrapping, option-aware equality, option present capture <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">|value|</span>, limited option match patterns, and public <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">Option of T</span> / <span style="
@@ -558,12 +608,45 @@ body {
     ">Result of T, E</span> deferred-syntax diagnostic coverage. Boundary-only <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">catch</span> coverage includes function-call arguments, collection items, loop headers, template interpolation, parenthesized arithmetic expressions, and field-access bases. Catch diagnostics cover empty and multiple handler bindings, terminal <span style="
+    ">catch</span> coverage includes function-call arguments, collection items, loop headers, template interpolation, parenthesized arithmetic expressions, and field-access bases. Catch diagnostics cover empty and multiple handler bindings, handler fallthrough, fallback arity, fallback type mismatch, multiline inline fallback rejection, and same-line inline catch chaining before HIR. Invalid-form diagnostics now include empty <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">then</span> placement, fallback arity, and fallback type mismatch before HIR.</td>
+    ">then</span>, blocked <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">then</span>, non-receiving value blocks, direct option fallback syntax, and unsupported optional <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">none</span> / literal single-predicate value <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">if</span> forms. Lower-level coverage includes value-production completeness, HIR value-block CFG/result locals, option-present capture extraction, JS option-present match conditions, and hidden-result materialization.</td>
      <td style="padding: 0.2em 0.5em;  "> JS / HTML</td>
-     <td style="padding: 0.2em 0.5em;  "> Multi-bind is limited to explicit multi-return function calls. It is not general destructuring. Built-in option nesting is rejected, including aliases that expand to an optional type. Contextual <span style="
+     <td style="padding: 0.2em 0.5em;  "> Multi-bind supports explicit multi-return function calls plus value-producing <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">if condition then a else b</span>, inline non-option choice-pattern predicates such as <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">if status is Ready then a else b</span>, inline option present-capture unwraps such as <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">if maybe is |value| then value else fallback</span>, block <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">if condition:</span> / <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">else</span>, full <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">if value is:</span> match, and block/inline <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">catch</span> recovery forms as RHS expressions. These value-producing forms are also accepted at declaration initializers, simple assignment RHS receivers, and return receivers; multi-return <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">return if</span> lowers through internal tuple construction. Inline non-option choice predicates and inline option unwraps reuse the full-match pattern parser and lower as one-arm value matches with an inline default. They lower through HIR CFG blocks with hidden result locals rather than a new backend expression form; produced places are materialized into result locals so value-block merges do not alias arm-local captures. Built-in option nesting is rejected, including aliases that expand to an optional type. Contextual <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">T -> T?</span> wrapping is supported at explicit typed boundaries including declarations, calls, constructors, collections, and return slots. Fallible calls use postfix <span style="
@@ -575,28 +658,55 @@ body {
     ">catch:</span> / <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">catch |err|:</span> blocks for recovery; value-producing recovery uses terminal <span style="
+    ">catch |err|:</span> blocks for recovery; value-producing catch recovery keeps <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">then</span> fallback values inside the catch block. Postfix error compatibility is exact <span style="
+    ">ThenValue</span> nodes in the handler body and lowers through shared value-block result locals. Inline catch is single-line expression/value-list sugar for the same model. Postfix error compatibility is exact <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">E -> E</span> or one-level optional wrapping <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">E -> E?</span> only. <span style="
+    ">E -> E?</span> only. Postfix option propagation <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">catch</span> is rejected in nested expression positions and loop headers, including function-call arguments, collection literal items, template interpolation, parenthesized arithmetic expressions, and field-access bases. Assignment targets are unavailable inside catch recovery subtrees for the same assignment. Fallback-bang expressions and postfix handler syntax are rejected. Option-aware <span style="
+    ">?</span> unwraps <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">T?</span> on the present path and returns <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">none</span> from the current function when absent; it works in optional-returning and fallible optional-success functions, and rejects non-option operands, non-optional return targets, and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">? catch</span>. <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">catch</span> is rejected in nested expression positions and loop headers, including function-call arguments, collection literal items, template interpolation, parenthesized arithmetic expressions, and field-access bases. Assignment targets are unavailable inside catch recovery subtrees for the same assignment. Empty <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">then</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">then</span> across blocked constructs, non-receiving value blocks, fallback-bang expressions, postfix handler syntax, direct option fallback syntax, and optional <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">none</span> / literal single-predicate value <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">if</span> forms are rejected with structured diagnostics. Option-aware <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">is</span> / <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">is not</span> supports presence checks and value comparisons when the inner type supports equality; option matches support <span style="
+    ">is not</span> supports presence checks and value comparisons when the inner type supports equality; current option matches support <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">none =></span> presence checks and literal present-value patterns without unwrapping or branch narrowing. <span style="
+    ">none =></span> presence checks, literal and relational present-value patterns, and present capture <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">|value| =></span> with exhaustiveness. Block-form option unwrap value blocks, arbitrary nested value blocks, value-producing loops, template control flow, user tuple values, option inner choice patterns, and polished diagnostics remain deferred. <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">none is none</span> remains invalid. Public <span style="
@@ -1265,15 +1375,15 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Fallible suffix handling</td>
      <td style="padding: 0.2em 0.5em;  "> Supported</td>
-     <td style="padding: 0.2em 0.5em;  "> Broad propagation, terminal <span style="
+     <td style="padding: 0.2em 0.5em;  "> Broad propagation, shared <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">then</span> fallback, catch handler, handler fallthrough rejection, template-boundary, explicit HIR fallible-branch, direct alias-return forwarding, nested call-argument propagation, runtime-operator propagation, receiver-base propagation, match-guard propagation, and obsolete HIR propagation-expression removal coverage.</td>
+    ">then</span> catch recovery, catch handler, handler fallthrough rejection, template-boundary, explicit HIR fallible-branch, direct alias-return forwarding, nested call-argument propagation, runtime-operator propagation, receiver-base propagation, match-guard propagation, and obsolete HIR propagation-expression removal coverage.</td>
      <td style="padding: 0.2em 0.5em;  "> JS / HTML</td>
-     <td style="padding: 0.2em 0.5em;  "> Statement, direct-return, declaration, assignment, multi-bind, call-argument, runtime-operator, compound-child, condition, loop-input, template-chunk, receiver-base, and match-guard propagation now lower through explicit success/error HIR edges. Catch recovery lowers <span style="
+     <td style="padding: 0.2em 0.5em;  "> Statement, direct-return, declaration, assignment, multi-bind, call-argument, runtime-operator, compound-child, condition, loop-input, template-chunk, receiver-base, and match-guard propagation now lower through explicit success/error HIR edges. Value-producing catch recovery lowers <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">then</span> fallback values through the same explicit fallible branch path after any handler statements. Success-producing catch handlers without <span style="
+    ">then</span> values through shared value-block result locals; nested ordinary branch paths may produce for the same catch block. Success-producing catch handlers without <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">then</span> must terminate explicitly; fallthrough is rejected before HIR. Collection <span style="
@@ -1350,7 +1460,7 @@ body {
         </tr>
         
     </table></section>
-    <section class="container"><h1>Deferred or reserved surfaces</h1><p>These are intentionally not counted as supported Alpha features. If syntax exists, it should fail with a structured diagnostic rather than panic or lower incorrectly.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+    <section class="container"><h1>Deferred or reserved surfaces</h1><p>These are intentionally not counted as supported Alpha features. If syntax exists, it should fail with a structured diagnostic rather than cause a compiler panic or lower incorrectly.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
         
     <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
          <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Surface</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Status</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Canonical diagnostic direction</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Notes</th> 
@@ -1454,6 +1564,109 @@ body {
         font-family: var(--bst-font-family-monospace);
     ">diagnostic_expression_bang_negation</span></td>
      <td style="padding: 0.2em 0.5em;  "> These are diagnostic-quality fixtures only. Do not treat compatibility syntax as planned Alpha surface.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> No public panic keyword/directive</td>
+     <td style="padding: 0.2em 0.5em;  "> Not supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Unknown names or ordinary invalid syntax</td>
+     <td style="padding: 0.2em 0.5em;  "> There is no <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">panic</span> keyword and no <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#panic</span> directive in current Beanstalk. Use <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">assert(false, "message")</span> for an intentional explicit panic.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Debug-only assertions</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> No accepted syntax</td>
+     <td style="padding: 0.2em 0.5em;  "> There is no <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">debug_assert</span>. <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">assert</span> is always checked in development and release builds.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Catchable / recoverable panics</td>
+     <td style="padding: 0.2em 0.5em;  "> Rejected / Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">assert</span> result-handling diagnostics</td>
+     <td style="padding: 0.2em 0.5em;  "> There is no <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">recover</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">catch_panic</span>, public panic payload, or Beanstalk <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">catch</span> support for assertion failure. Expected failures use <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Error!</span> and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">catch</span>.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Additional explicit stop helpers</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> No accepted syntax</td>
+     <td style="padding: 0.2em 0.5em;  "> There is no <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">todo</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">unreachable</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">fatal</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">abort</span>, or <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">precondition</span> builtin yet.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Runtime assertion-message expressions</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">invalid_builtin_call</span></td>
+     <td style="padding: 0.2em 0.5em;  "> Arbitrary runtime message expressions require lazy failure-only evaluation design. Current assertion messages must be string literals.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Compile-time constant assertion messages</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">invalid_builtin_call</span></td>
+     <td style="padding: 0.2em 0.5em;  "> Compile-time string constants are not normalized as assertion messages yet. This should use existing const facts rather than a new evaluator.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Wasm assertion messages</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred / Experimental</td>
+     <td style="padding: 0.2em 0.5em;  "> Wasm trap lowering</td>
+     <td style="padding: 0.2em 0.5em;  "> Wasm lowers assertion failure to a trap for now. Message materialization and trap payload support remain deferred.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -2312,10 +2525,13 @@ body {
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">option_match_patterns_success</span></td>
-     <td style="padding: 0.2em 0.5em;  "> General capture patterns (for example `captured =>`) are supported for both choice and non-choice scrutinees. Choice payload capture patterns with `field as local_name` aliases are also supported. Option matches support <span style="
+     <td style="padding: 0.2em 0.5em;  "> General capture patterns (for example `captured =>`) are supported for both choice and non-choice scrutinees. Choice payload capture patterns with `field as local_name` aliases are also supported. Current option matches support <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">none =></span> and literal present-value checks. Nested payload patterns, option unwrapping patterns, branch narrowing, and `|...|` tagged patterns remain deferred.</td>
+    ">none =></span>, literal and relational present-value checks, and option present capture with <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">|value|</span>. Nested payload patterns, option inner choice patterns, branch narrowing outside explicit captures, and general `|...|` tagged patterns remain deferred.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">

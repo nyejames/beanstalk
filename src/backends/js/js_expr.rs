@@ -482,7 +482,7 @@ impl<'hir> JsEmitter<'hir> {
     }
 }
 
-fn escape_js_string(value: &str) -> String {
+pub(crate) fn escape_js_string(value: &str) -> String {
     let mut escaped = String::from("\"");
 
     for ch in value.chars() {

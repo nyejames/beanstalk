@@ -287,6 +287,27 @@ Results remain call-site-only. `catch:` and `catch |err|:` are the supported
 result recovery forms, and public first-class `Result` values or result pattern
 matching remain deferred. Use `!` return slots and call-site handling instead.
 
+Assertions are statement-only invariant checks:
+
+```beanstalk
+assert(index < items.length)
+assert(index < items.length, "index must be in bounds")
+assert(false, "unimplemented backend path")
+```
+
+`assert` is a language-owned statement intrinsic, not a function. It cannot be
+assigned, passed as an argument, imported, aliased, or used in expression
+position. Assertions are always checked. Failed assertions are unrecoverable,
+do not return `Error!`, and cannot be caught with `catch`. Expected failures
+should use typed error propagation with `Error!` and `catch`; assertion failure
+is the current explicit panic path for programmer invariants.
+
+`assert(false)` and `assert(false, "message")` are statically terminal and may
+end a non-`Void` function. A dynamic `assert(condition)` is not statically
+terminal because the pass path continues normally. Assertion messages currently
+must be string literals; runtime and compile-time constant message expressions
+remain deferred.
+
 Options are regular values. The canonical value-recovery form is explicit
 present-value inspection:
 

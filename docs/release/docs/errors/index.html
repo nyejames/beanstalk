@@ -4,8 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
-    <title>Errors and Panics in Beanstalk | Beanstalk</title>
-    <meta name="description" content="Error values, error propagation, option values, and runtime panics in Beanstalk.">
+    <title>Errors, Options, and Assertions in Beanstalk | Beanstalk</title>
+    <meta name="description" content="Error values, error propagation, option values, and always-checked assertions in Beanstalk.">
     <style>
 /*!
   BS CSS CORE (absolute basics CSS reset)
@@ -311,7 +311,7 @@ body {
             </a>
         </div>
     </nav>
-     <h1 style="font-size: 2em;text-align: center;"> ERRORS AND PANICS IN BEANSTALK</h1>
+     <h1 style="font-size: 2em;text-align: center;"> ERRORS, OPTIONS, AND ASSERTIONS IN BEANSTALK</h1>
     <section class="container"><p>This page tracks Beanstalk&#39;s current error-handling surface. The public <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
@@ -358,16 +358,25 @@ body {
     ">return</span> returns through the success path</li></ul><p>The <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">!</span> marker does not mean panic.</p><p>It means this function has a typed error path that callers must handle.</p><p><span style="
+    ">!</span> marker does not mean panic.</p><p>It means this function has a typed error path that callers must handle. Expected failures should use <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Error!</span> and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">catch</span>. Assertions are for unrecoverable invariants and are the current explicit panic path.</p><p><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">catch:</span> and <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">catch |err|:</span> are the only supported catch forms.</p><p><span style="
+    ">catch |err|:</span> are the supported result recovery forms.</p><p><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">then</span> is reserved globally but is only implemented as the terminal fallback statement inside catch blocks.</p><p>Public first-class <span style="
+    ">then</span> produces local values for a surrounding value-receiving site. Value-producing <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">if</span> and full match receivers reuse that mechanism now; catch recovery still uses it inside catch handlers until catch is refactored onto the shared value-block model.</p><p>Public first-class <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">Result</span> values and raw fallible carrier storage remain deferred; use <span style="
@@ -501,13 +510,16 @@ body {
     ">catch:</span> runs a recovery block when the error value is not needed</li><li><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">catch |err|:</span> binds the error and runs a recovery block</li></ul><p>A catch block can recover with fallback success values by ending with <span style="
+    ">catch |err|:</span> binds the error and runs a recovery block</li></ul><p>A catch block can recover with fallback success values by producing values with <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">then</span>.</p><p><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">then</span> returns expressions from the catch block to the containing assignment,</p><p>return, or multi-bind site. It must be the final direct statement in the catch block.</p><pre style="
+    ">then</span> returns expressions from the catch block to the containing assignment,</p><p>return, or multi-bind site. Nested ordinary branch paths inside a value-producing catch can also target the same catch recovery block with <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">then</span>.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -545,7 +557,7 @@ body {
     <section class="container"><h1>Recovering with fallback values</h1><p>Use <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">catch:</span> with terminal <span style="
+    ">catch:</span> with <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">then</span> to recover from an error with fallback success values.</p><pre style="
@@ -795,8 +807,52 @@ body {
     ">T?</span> is expected.</p><p><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">none</span> requires an optional type context.</p></section>
-    <section class="container"><h1>Errors vs options</h1><p>Errors and options solve different problems.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+    ">none</span> requires an optional type context.</p><p>Option recovery uses explicit present-value inspection.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    display_name <span class='bst-code-operator'>=</span> <span class='bst-code-keyword'>if</span> maybe_name is <span class='bst-code-operator'>|</span>name<span class='bst-code-operator'>|</span> then name <span class='bst-code-keyword'>else</span> <span class='bst-code-string'>&quot;guest&quot;</span>
+    </code></pre><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">|name|</span> matches the present case and binds the inner value.</p><p>Absence checks remain statement-friendly:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-keyword'>if</span> maybe_name is none<span class='bst-code-operator'>:</span>
+        io<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;missing&quot;</span><span class='bst-code-parenthesis'>)</span>
+    ;
+    </code></pre><p>Direct option fallback syntax such as <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">maybe_name else then "guest"</span> is rejected in favour of <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">if option is |value| ... else ...</span>.</p><p>Postfix <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">?</span> propagates absence from functions that return an optional value.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    get_display_name <span class='bst-code-operator'>|</span>id <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>?</span><span class='bst-code-operator'>:</span>
+        user <span class='bst-code-operator'>=</span> find_user<span class='bst-code-parenthesis'>(</span>id<span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>?</span>
+        <span class='bst-code-keyword'>return</span> user.name
+    ;
+    </code></pre></section>
+    <section class="container"><h1>Errors, options, and assertions</h1><p>Errors, options, and assertions solve different problems.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
         
     <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
          <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Feature</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Use when</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Example</th> 
@@ -821,6 +877,15 @@ body {
      <td style="padding: 0.2em 0.5em;  "> Something failed and the caller needs failure information. </td>
      <td style="padding: 0.2em 0.5em;  "> Parsing text failed because the format was invalid. </td>
         </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">assert</span> </td>
+     <td style="padding: 0.2em 0.5em;  "> A required invariant is false and execution must stop. </td>
+     <td style="padding: 0.2em 0.5em;  "> An index must already be in bounds before unsafe work continues. </td>
+        </tr>
         
     </table><p>Use <span style="
         color: #c444aff9;
@@ -828,8 +893,11 @@ body {
     ">?</span> when missing data is ordinary.</p><p>Use <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">Error!</span> when failure details matter.</p></section>
-    <section class="container"><h1>Panics</h1><p>Panics are different from recoverable errors.</p><p>A panic means the program should not continue.</p><p>Panics are intended for cases such as:</p><ul><li>runtime assertions</li><li>impossible states</li><li>critical invariant violations</li><li>debugging unexpected state</li><li>stopping before unsafe or invalid behavior could continue</li></ul><p>Panic syntax:</p><pre style="
+    ">Error!</span> when failure details matter.</p><p>Use <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">assert</span> for broken assumptions, not regular failures.</p></section>
+    <section class="container"><h1>Assertions</h1><p>Assertions are different from recoverable errors.</p><p>A failed assertion means the program should not continue.</p><p>Assertions are intended for cases such as:</p><ul><li>impossible states</li><li>critical invariant violations</li><li>debugging unexpected state</li><li>stopping before unsafe or invalid behavior could continue</li></ul><p>Assertion syntax:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -837,15 +905,29 @@ body {
         white-space: pre;
         overflow-x: auto;
     "><code class='codeblock'>
-    <span class='bst-code-operator'>#</span>panic <span class='bst-code-string'>&quot;Message about the panic&quot;</span>
-    </code></pre><p>Panics should be rare.</p><p>Most expected failures should use <span style="
+    assert<span class='bst-code-parenthesis'>(</span>index <span class='bst-code-operator'>&lt;</span> items.length<span class='bst-code-parenthesis'>)</span>
+    assert<span class='bst-code-parenthesis'>(</span>index <span class='bst-code-operator'>&lt;</span> items.length, <span class='bst-code-string'>&quot;index must be in bounds&quot;</span><span class='bst-code-parenthesis'>)</span>
+    assert<span class='bst-code-parenthesis'>(</span>false, <span class='bst-code-string'>&quot;unimplemented backend path&quot;</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">assert</span> is a language-owned statement intrinsic, not a function.</p><p>It returns no value, cannot be assigned or passed as an argument, and cannot be used in template interpolation.</p><p>Assertions are always checked in development and release builds.</p><p>Failed assertions are unrecoverable in Beanstalk source. They do not return <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Error!</span>, and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">catch</span> cannot catch them.</p><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">assert(false, "message")</span> is the only explicit source-level spelling for an intentional unrecoverable stop for now.</p><p>Assertion messages currently must be string literals. Runtime message expressions and compile-time constant messages are deferred until failure-only message evaluation is designed.</p><p>Most expected failures should use <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">Error!</span> instead.</p></section>
-    <section class="container"><h1>Errors vs panics</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+    <section class="container"><h1>Assertion diagnostics</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
         
     <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Mechanism</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Meaning</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Caller responsibility</th> 
+         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Invalid form</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Diagnostic direction</th> 
     </tr>
 
             
@@ -854,30 +936,52 @@ body {
              <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">Error!</span> </td>
-     <td style="padding: 0.2em 0.5em;  "> Recoverable failure returned as a value. </td>
-     <td style="padding: 0.2em 0.5em;  "> Must catch, recover, or bubble. </td>
+    ">assert(1)</span> </td>
+     <td style="padding: 0.2em 0.5em;  "> The condition must be <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Bool</span>. </td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">T?</span> </td>
-     <td style="padding: 0.2em 0.5em;  "> Optional absence of a value. </td>
-     <td style="padding: 0.2em 0.5em;  "> Must handle according to optional-value rules. </td>
+    ">assert()</span> </td>
+     <td style="padding: 0.2em 0.5em;  "> The assertion condition is required. </td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">#panic</span> </td>
-     <td style="padding: 0.2em 0.5em;  "> Runtime stop caused by an unrecoverable condition. </td>
-     <td style="padding: 0.2em 0.5em;  "> Should not be used for normal control flow. </td>
+    ">assert(true, value)</span> </td>
+     <td style="padding: 0.2em 0.5em;  "> Assertion messages must be string literals for now. </td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">value = assert(true)</span> </td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">assert</span> is statement-only and cannot be used as a value. </td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">assert(true) catch:</span> </td>
+     <td style="padding: 0.2em 0.5em;  "> Assertion failure is not a recoverable <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Error!</span> path. </td>
         </tr>
         
-    </table><p>Use panics for broken assumptions, not regular failures.</p></section>
+    </table></section>
     <section class="container"><h1>Full example</h1><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
@@ -957,7 +1061,22 @@ body {
     ">none</span> without optional type context</li><li>using <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">#panic</span> where only declarations are allowed</li></ul><p>Error handling is part of the type system.</p><p>It should not be treated as a backend-only runtime behavior.</p></section>
+    ">assert</span> in expression position</li><li>using <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">assert</span> with a non-<span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Bool</span> condition</li><li>using <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">assert</span> with <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">!</span> or <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">catch</span></li></ul><p>Error handling is part of the type system.</p><p>It should not be treated as a backend-only runtime behavior.</p></section>
     <section class="container"><h1>Summary</h1><p>Beanstalk separates three kinds of failure or absence:</p><ul><li><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
@@ -970,7 +1089,7 @@ body {
     ">none</span> for optional values</li><li><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">#panic</span> for unrecoverable runtime stops</li></ul><p>The core rules are:</p><ul><li>functions that can fail mark one return slot with <span style="
+    ">assert</span> for always-checked unrecoverable invariant failures</li></ul><p>The core rules are:</p><ul><li>functions that can fail mark one return slot with <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">!</span></li><li>error-returning calls must be handled</li><li><span style="
@@ -982,7 +1101,7 @@ body {
     ">!</span> bubbles an error</li><li><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">catch:</span> with terminal <span style="
+    ">catch:</span> with <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">then</span> recovers with fallback success values</li><li><span style="
@@ -991,7 +1110,7 @@ body {
     ">catch |err|: ... return! err ;</span> catches, handles, and explicitly rethrows</li><li><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">catch |err|: ... then fallback ;</span> catches, handles, and recovers</li><li>panics should not be used for normal control flow</li></ul><p>The result is explicit, typed, and compiler-checkable error handling.</p></section>
+    ">catch |err|: ... then fallback ;</span> catches, handles, and recovers</li><li>failed assertions are not catchable and should not be used for normal control flow</li></ul><p>The result is explicit, typed, and compiler-checkable error handling.</p></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

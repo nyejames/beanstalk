@@ -653,7 +653,7 @@ impl<'a> HirBuilder<'a> {
     }
 
     fn is_placeholder_terminator(terminator: &HirTerminator) -> bool {
-        matches!(terminator, HirTerminator::Panic { message: None })
+        matches!(terminator, HirTerminator::Uninitialized)
     }
 
     // -------------------------

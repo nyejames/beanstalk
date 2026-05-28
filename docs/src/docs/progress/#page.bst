@@ -131,6 +131,14 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
         ]
 
         [data:
+            [: Assertions]
+            [: Supported]
+            [: Broad parser, diagnostics, HIR lowering, backend artifact, and integration coverage.]
+            [: Frontend / HIR / JS / HTML; Wasm trap lowering]
+            [: [codesnippet:assert] is a language-owned statement keyword and cannot be shadowed, imported, assigned, passed, or used in expression position. [codesnippet:assert(condition)] and [codesnippet, "assert(condition, \"message\")"] are always checked. Failed assertions are unrecoverable and cannot be caught. [codesnippet, "assert(false, \"message\")"] is the only current explicit source-level panic path. Expected failures should use [codesnippet:Error!] and [codesnippet:catch]. Messages are optional string literals; runtime and compile-time constant message expressions remain deferred.]
+        ]
+
+        [data:
             [: Functions and calls]
             [: Supported]
             [: Broad function declaration, call validation, named/positional argument, default-argument, parameter passing, external-call, and return coverage.]
@@ -474,7 +482,7 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
     # Deferred or reserved surfaces
 
     These are intentionally not counted as supported Alpha features.
-    If syntax exists, it should fail with a structured diagnostic rather than panic or lower incorrectly.
+    If syntax exists, it should fail with a structured diagnostic rather than cause a compiler panic or lower incorrectly.
 
     [styled_table:
         [header: [: Surface] [: Status] [: Canonical diagnostic direction] [: Notes] ]
@@ -512,6 +520,55 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
             [: Rejected / Reserved]
             [: [codesnippet:typescript_style_declaration_rejected], [codesnippet:diagnostic_statement_keyword_fn], [codesnippet:diagnostic_statement_keyword_let], [codesnippet:diagnostic_statement_keyword_match], [codesnippet:diagnostic_statement_comment_slash_slash], [codesnippet:diagnostic_expression_double_equal], [codesnippet:diagnostic_expression_bang_equal], [codesnippet:diagnostic_expression_and_and], [codesnippet:diagnostic_expression_or_or], [codesnippet:diagnostic_expression_bang_negation]]
             [: These are diagnostic-quality fixtures only. Do not treat compatibility syntax as planned Alpha surface.]
+        ]
+
+        [data:
+            [: No public panic keyword/directive]
+            [: Not supported]
+            [: Unknown names or ordinary invalid syntax]
+            [: There is no [codesnippet:panic] keyword and no [codesnippet:#panic] directive in current Beanstalk. Use [codesnippet, "assert(false, \"message\")"] for an intentional explicit panic.]
+        ]
+
+        [data:
+            [: Debug-only assertions]
+            [: Deferred]
+            [: No accepted syntax]
+            [: There is no [codesnippet:debug_assert]. [codesnippet:assert] is always checked in development and release builds.]
+        ]
+
+        [data:
+            [: Catchable / recoverable panics]
+            [: Rejected / Deferred]
+            [: [codesnippet:assert] result-handling diagnostics]
+            [: There is no [codesnippet:recover], [codesnippet:catch_panic], public panic payload, or Beanstalk [codesnippet:catch] support for assertion failure. Expected failures use [codesnippet:Error!] and [codesnippet:catch].]
+        ]
+
+        [data:
+            [: Additional explicit stop helpers]
+            [: Deferred]
+            [: No accepted syntax]
+            [: There is no [codesnippet:todo], [codesnippet:unreachable], [codesnippet:fatal], [codesnippet:abort], or [codesnippet:precondition] builtin yet.]
+        ]
+
+        [data:
+            [: Runtime assertion-message expressions]
+            [: Deferred]
+            [: [codesnippet:invalid_builtin_call]]
+            [: Arbitrary runtime message expressions require lazy failure-only evaluation design. Current assertion messages must be string literals.]
+        ]
+
+        [data:
+            [: Compile-time constant assertion messages]
+            [: Deferred]
+            [: [codesnippet:invalid_builtin_call]]
+            [: Compile-time string constants are not normalized as assertion messages yet. This should use existing const facts rather than a new evaluator.]
+        ]
+
+        [data:
+            [: Wasm assertion messages]
+            [: Deferred / Experimental]
+            [: Wasm trap lowering]
+            [: Wasm lowers assertion failure to a trap for now. Message materialization and trap payload support remain deferred.]
         ]
 
         [data:

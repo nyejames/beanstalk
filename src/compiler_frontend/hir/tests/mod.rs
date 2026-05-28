@@ -9,6 +9,7 @@ use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 
 mod hir_branch_lowering_tests;
 mod hir_const_facts_tests;
+mod hir_display_tests;
 mod hir_expression_lowering_tests;
 mod hir_function_origin_tests;
 mod hir_local_lowering_tests;

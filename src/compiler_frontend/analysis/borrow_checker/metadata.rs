@@ -881,10 +881,17 @@ fn collect_terminator_loaded_locals(terminator: &HirTerminator, visitor: &mut im
         | HirTerminator::ReturnError(value) => {
             collect_expression_loaded_locals(value, visitor);
         }
-        HirTerminator::Panic { message } => {
-            if let Some(message) = message {
-                collect_expression_loaded_locals(message, visitor);
-            }
+        HirTerminator::AssertFailure { .. } => {
+            // Assertion messages are compile-time text, not expressions, so no
+            // expression loaded locals to collect.
+        }
+
+        HirTerminator::RuntimeFailure { .. } => {
+            // Runtime-failure messages are backend-facing text, not HIR expressions.
+        }
+
+        HirTerminator::Uninitialized => {
+            // Internal placeholder — no expressions to visit.
         }
         HirTerminator::Break { .. } | HirTerminator::Continue { .. } => {}
     }

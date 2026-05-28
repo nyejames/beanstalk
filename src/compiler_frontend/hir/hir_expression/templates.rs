@@ -135,7 +135,7 @@ impl<'a> HirBuilder<'a> {
             region: entry_region,
             locals: vec![],
             statements: vec![],
-            terminator: HirTerminator::Panic { message: None },
+            terminator: HirTerminator::Uninitialized,
         };
         self.side_table.map_block(location, &entry_block);
         self.push_block(entry_block);

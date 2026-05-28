@@ -101,6 +101,13 @@ fn debug_validate_node_type_ids(node: &AstNode, type_environment: &TypeEnvironme
             }
         }
 
+        NodeKind::Assert {
+            condition,
+            message: _,
+        } => {
+            debug_validate_expression_type_id(condition, type_environment);
+        }
+
         NodeKind::Match {
             scrutinee,
             arms,

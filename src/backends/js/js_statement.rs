@@ -4,6 +4,7 @@
 //! control-flow edges explicit.
 
 use crate::backends::js::JsEmitter;
+use crate::backends::js::js_expr::escape_js_string;
 use crate::compiler_frontend::analysis::borrow_checker::LocalMode;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::external_packages::CallTarget;
@@ -403,16 +404,24 @@ impl<'hir> JsEmitter<'hir> {
         Ok(())
     }
 
-    pub(crate) fn emit_panic_terminator(
+    pub(crate) fn emit_assert_failure_terminator(
         &mut self,
-        message: &Option<HirExpression>,
+        message: &Option<String>,
     ) -> Result<(), CompilerError> {
-        if let Some(message) = message {
-            let message = self.lower_expr(message)?;
-            self.emit_line(&format!("throw new Error({message});"));
-        } else {
-            self.emit_line("throw new Error(\"panic\");");
-        }
+        let js_message = match message {
+            Some(text) => format!("throw new Error({});", escape_js_string(text)),
+            None => "throw new Error(\"assertion failed\");".to_string(),
+        };
+        self.emit_line(&js_message);
+
+        Ok(())
+    }
+
+    pub(crate) fn emit_runtime_failure_terminator(
+        &mut self,
+        message: &str,
+    ) -> Result<(), CompilerError> {
+        self.emit_line(&format!("throw new Error({});", escape_js_string(message)));
 
         Ok(())
     }
@@ -601,8 +610,18 @@ impl<'hir> JsEmitter<'hir> {
                 self.emit_error_return_terminator(value)?;
             }
 
-            HirTerminator::Panic { message } => {
-                self.emit_panic_terminator(message)?;
+            HirTerminator::Uninitialized => {
+                return Err(CompilerError::compiler_error(
+                    "Uninitialized terminator reached JS backend lowering",
+                ));
+            }
+
+            HirTerminator::RuntimeFailure { message } => {
+                self.emit_runtime_failure_terminator(message)?;
+            }
+
+            HirTerminator::AssertFailure { message } => {
+                self.emit_assert_failure_terminator(message)?;
             }
         }
 

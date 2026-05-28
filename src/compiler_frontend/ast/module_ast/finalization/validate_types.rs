@@ -230,6 +230,10 @@ fn validate_node(
             validate_nodes(body, type_environment, string_table)
         }
 
+        NodeKind::Assert { condition, .. } => {
+            validate_expression(condition, type_environment, string_table)
+        }
+
         // Terminal nodes that contain no type-carrying positions.
         NodeKind::Break | NodeKind::Continue | NodeKind::Operator(_) => Ok(()),
 

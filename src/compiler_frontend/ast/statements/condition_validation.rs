@@ -13,7 +13,7 @@ use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 ///
 /// WHY: all control-flow condition sites (`if`, `loop`, match guard) share one
 /// diagnostic path so the message, context label, and suggestion stay uniform.
-fn ensure_boolean_condition(
+pub(crate) fn ensure_boolean_condition(
     condition: &Expression,
     location: &SourceLocation,
     type_environment: &TypeEnvironment,

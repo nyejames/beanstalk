@@ -11,7 +11,6 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 ---
 
 # Plans / TODOS
-- Assert implementation as the only panic surface: `docs/roadmap/plans/assert_panic_implementation_plan.md`
 - Basic template control flow statements (if expressions, loops and if statements)
 - Traits
 - Generic follow-ups after cross-module free-function support:
@@ -34,6 +33,11 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 - Move to more specific explicit type declarations for numbers (I32, I64, F32, F64) - JS backend just makes all an F64 and accepts the precision loss, more for future Wasm backend
 
 # Notes
+- Assert/panic follow-ups after the always-checked `assert` implementation: debug-only assertions,
+  lazy runtime assertion-message expressions, compile-time constant assertion messages,
+  catchable/recoverable panic design, explicit stop helpers such as `todo` / `unreachable` /
+  `fatal` / `abort` / `precondition`, Wasm trap message support, and richer runtime failure
+  metadata or stack traces.
 - External non-scalar constant design: string slices, collections, and opaque-type external constants in const contexts are rejected for Alpha. Design compile-time representation and validation before enabling.
 - Private const/config follow-ups after the private const config refactor: consume HIR const metadata in borrow checking, temporary-local reduction, and lowering/constant propagation.
 - Typed config follow-ups after the private const config refactor: structured typed config values with choices/const records, future `project = Project::Html(...)` syntax, typed backend config schemas, optional config-local helper constants, config lock/cache metadata, numeric config shapes when keys need them, and private inferred `=` const-record config projection.

@@ -7,6 +7,7 @@
 use crate::ast_log;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::Expression;
+use crate::compiler_frontend::ast::statements::asserts::parse_assert_statement;
 use crate::compiler_frontend::ast::statements::body_expr_stmt::parse_expression_statement_candidate;
 use crate::compiler_frontend::ast::statements::body_return::parse_return_statement;
 use crate::compiler_frontend::ast::statements::body_symbol::{
@@ -206,6 +207,16 @@ pub(crate) fn parse_function_body_statements(
             }
 
             // Return, loop control, and result handling
+            TokenKind::Assert => {
+                parse_assert_statement(
+                    token_stream,
+                    &mut body_nodes,
+                    &context,
+                    type_interner,
+                    string_table,
+                )?;
+            }
+
             TokenKind::Return => {
                 parse_return_statement(
                     token_stream,

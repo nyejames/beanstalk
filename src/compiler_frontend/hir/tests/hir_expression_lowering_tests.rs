@@ -61,7 +61,7 @@ fn setup_builder(string_table: &'_ mut StringTable) -> HirBuilder<'_> {
         region,
         locals: vec![],
         statements: vec![],
-        terminator: HirTerminator::Panic { message: None },
+        terminator: HirTerminator::Uninitialized,
     };
 
     builder.test_push_block(block);

@@ -28,7 +28,7 @@ use crate::compiler_frontend::builtins::expression_parsing::{
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_messages::{
-    CompilerDiagnostic, InvalidControlFlowStatementReason,
+    CompilerDiagnostic, InvalidBuiltinCallReason, InvalidControlFlowStatementReason,
 };
 use crate::compiler_frontend::reserved_trait_syntax::{
     reserved_trait_keyword_error, reserved_trait_keyword_or_dispatch_mismatch,
@@ -447,6 +447,13 @@ pub(super) fn dispatch_expression_token(
         // -------------------------------
         TokenKind::If => Err(CompilerDiagnostic::invalid_control_flow_statement(
             InvalidControlFlowStatementReason::ValueBlockOutsideReceiver,
+            token_stream.current_location(),
+        )
+        .into()),
+
+        TokenKind::Assert => Err(CompilerDiagnostic::invalid_builtin_call(
+            InvalidBuiltinCallReason::ExpressionPositionNotAllowed,
+            Some(string_table.intern("assert")),
             token_stream.current_location(),
         )
         .into()),

@@ -262,7 +262,7 @@ impl<'a> HirBuilder<'a> {
     ///
     /// WHAT: allocates result locals, lowers the match with `ThenValue` targeting
     /// those locals, then resumes at the value-block merge.
-    /// WHY: pattern dispatch, guards, captures, defaults, and no-match panics are
+    /// WHY: pattern dispatch, guards, captures, defaults, and no-match runtime failures are
     /// already owned by statement match lowering; the value form only changes what
     /// `then` does inside each arm body.
     pub(crate) fn lower_value_block_match(
@@ -764,11 +764,10 @@ impl<'a> HirBuilder<'a> {
 
         if let Some(no_match_block_id) = no_match_block {
             self.set_current_block(no_match_block_id, location)?;
-            let message = self.no_match_selected_message(location)?;
             self.emit_terminator(
                 no_match_block_id,
-                HirTerminator::Panic {
-                    message: Some(message),
+                HirTerminator::RuntimeFailure {
+                    message: "No match arm selected".to_owned(),
                 },
                 location,
             )?;
@@ -804,7 +803,7 @@ impl<'a> HirBuilder<'a> {
         }
 
         return_hir_transformation_error!(
-            "Match dispatch had no next arm, default arm, or fallback panic block",
+            "Match dispatch had no next arm, default arm, or fallback runtime-failure block",
             self.hir_error_location(location)
         )
     }
@@ -1158,20 +1157,6 @@ impl<'a> HirBuilder<'a> {
         Ok(guard_value)
     }
 
-    fn no_match_selected_message(
-        &mut self,
-        location: &SourceLocation,
-    ) -> Result<HirExpression, CompilerError> {
-        let region = self.current_region_or_error(location)?;
-        Ok(self.make_expression(
-            location,
-            HirExpressionKind::StringLiteral("No match arm selected".to_owned()),
-            self.type_environment.builtins().string,
-            ValueKind::RValue,
-            region,
-        ))
-    }
-
     /// Lazily create the shared merge block on the first non-terminal arm that needs it.
     fn ensure_match_merge_block(
         &mut self,
@@ -1208,7 +1193,7 @@ impl<'a> HirBuilder<'a> {
             region,
             locals: vec![],
             statements: vec![],
-            terminator: HirTerminator::Panic { message: None },
+            terminator: HirTerminator::Uninitialized,
         };
 
         self.side_table.map_block(source_location, &block);

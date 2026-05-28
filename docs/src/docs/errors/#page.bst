@@ -1,12 +1,12 @@
 import @html {center}
 import @styles/docs {navbar, title, section, styled_table, header, data, codeblock, codesnippet, theme_head}
 
-page_title #= "Errors and Panics in Beanstalk"
-page_description #= "Error values, error propagation, option values, and runtime panics in Beanstalk."
+page_title #= "Errors, Options, and Assertions in Beanstalk"
+page_description #= "Error values, error propagation, option values, and always-checked assertions in Beanstalk."
 page_head #= theme_head
 
 #[navbar]
-#[title, center: ERRORS AND PANICS IN BEANSTALK]
+#[title, center: ERRORS, OPTIONS, AND ASSERTIONS IN BEANSTALK]
 
 #[section, $markdown:
     This page tracks Beanstalk's current error-handling surface.
@@ -50,6 +50,8 @@ page_head #= theme_head
     The [codesnippet:!] marker does not mean panic.
 
     It means this function has a typed error path that callers must handle.
+    Expected failures should use [codesnippet:Error!] and [codesnippet:catch].
+    Assertions are for unrecoverable invariants and are the current explicit panic path.
 
     [codesnippet:catch:] and [codesnippet, "catch |err|:"] are the supported result recovery forms.
     [codesnippet:then] produces local values for a surrounding value-receiving site. Value-producing [codesnippet:if] and full match receivers reuse that mechanism now; catch recovery still uses it inside catch handlers until catch is refactored onto the shared value-block model.
@@ -405,9 +407,9 @@ page_head #= theme_head
 ]
 
 #[section, $markdown:
-    # Errors vs options
+    # Errors, options, and assertions
 
-    Errors and options solve different problems.
+    Errors, options, and assertions solve different problems.
 
     [styled_table:
         [header: [: Feature] [: Use when] [: Example] ]
@@ -423,65 +425,90 @@ page_head #= theme_head
             [: Something failed and the caller needs failure information. ]
             [: Parsing text failed because the format was invalid. ]
         ]
+
+        [data:
+            [: [codesnippet:assert] ]
+            [: A required invariant is false and execution must stop. ]
+            [: An index must already be in bounds before unsafe work continues. ]
+        ]
     ]
 
     Use [codesnippet:?] when missing data is ordinary.
 
     Use [codesnippet:Error!] when failure details matter.
+
+    Use [codesnippet:assert] for broken assumptions, not regular failures.
 ]
 
 #[section, $markdown:
-    # Panics
+    # Assertions
 
-    Panics are different from recoverable errors.
+    Assertions are different from recoverable errors.
 
-    A panic means the program should not continue.
+    A failed assertion means the program should not continue.
 
-    Panics are intended for cases such as:
+    Assertions are intended for cases such as:
 
-    - runtime assertions
     - impossible states
     - critical invariant violations
     - debugging unexpected state
     - stopping before unsafe or invalid behavior could continue
 
-    Panic syntax:
+    Assertion syntax:
 
     [codeblock, $code("bst"):
-        #panic "Message about the panic"
+        assert(index < items.length)
+        assert(index < items.length, "index must be in bounds")
+        assert(false, "unimplemented backend path")
     ]
 
-    Panics should be rare.
+    [codesnippet:assert] is a language-owned statement intrinsic, not a function.
+    It returns no value, cannot be assigned or passed as an argument, and cannot be used in template interpolation.
+
+    Assertions are always checked in development and release builds.
+
+    Failed assertions are unrecoverable in Beanstalk source.
+    They do not return [codesnippet:Error!], and [codesnippet:catch] cannot catch them.
+
+    [codesnippet, "assert(false, \"message\")"] is the only explicit source-level spelling for an intentional unrecoverable stop for now.
+
+    Assertion messages currently must be string literals.
+    Runtime message expressions and compile-time constant messages are deferred until failure-only message evaluation is designed.
 
     Most expected failures should use [codesnippet:Error!] instead.
 ]
 
 #[section, $markdown:
-    # Errors vs panics
+    # Assertion diagnostics
 
     [styled_table:
-        [header: [: Mechanism] [: Meaning] [: Caller responsibility] ]
+        [header: [: Invalid form] [: Diagnostic direction] ]
 
         [data:
-            [: [codesnippet:Error!] ]
-            [: Recoverable failure returned as a value. ]
-            [: Must catch, recover, or bubble. ]
+            [: [codesnippet:assert(1)] ]
+            [: The condition must be [codesnippet:Bool]. ]
         ]
 
         [data:
-            [: [codesnippet:T?] ]
-            [: Optional absence of a value. ]
-            [: Must handle according to optional-value rules. ]
+            [: [codesnippet:assert()] ]
+            [: The assertion condition is required. ]
         ]
 
         [data:
-            [: [codesnippet:#panic] ]
-            [: Runtime stop caused by an unrecoverable condition. ]
-            [: Should not be used for normal control flow. ]
+            [: [codesnippet:assert(true, value)] ]
+            [: Assertion messages must be string literals for now. ]
+        ]
+
+        [data:
+            [: [codesnippet, "value = assert(true)"] ]
+            [: [codesnippet:assert] is statement-only and cannot be used as a value. ]
+        ]
+
+        [data:
+            [: [codesnippet, "assert(true) catch:"] ]
+            [: Assertion failure is not a recoverable [codesnippet:Error!] path. ]
         ]
     ]
-
-    Use panics for broken assumptions, not regular failures.
 ]
 
 #[section, $markdown:
@@ -545,7 +572,9 @@ page_head #= theme_head
     - using [codesnippet:then] fallback values with the wrong type or wrong count
     - using [codesnippet:return!] in a function that does not return [codesnippet:Error!]
     - using [codesnippet:none] without optional type context
-    - using [codesnippet:#panic] where only declarations are allowed
+    - using [codesnippet:assert] in expression position
+    - using [codesnippet:assert] with a non-[codesnippet:Bool] condition
+    - using [codesnippet:assert] with [codesnippet:!] or [codesnippet:catch]
 
     Error handling is part of the type system.
 
@@ -559,7 +588,7 @@ page_head #= theme_head
 
     - [codesnippet:Error!] for recoverable errors with structured information
     - [codesnippet:?] and [codesnippet:none] for optional values
-    - [codesnippet:#panic] for unrecoverable runtime stops
+    - [codesnippet:assert] for always-checked unrecoverable invariant failures
 
     The core rules are:
 
@@ -570,7 +599,7 @@ page_head #= theme_head
     - [codesnippet:catch:] with [codesnippet:then] recovers with fallback success values
     - [codesnippet:catch |err|: ... return! err ;] catches, handles, and explicitly rethrows
     - [codesnippet:catch |err|: ... then fallback ;] catches, handles, and recovers
-    - panics should not be used for normal control flow
+    - failed assertions are not catchable and should not be used for normal control flow
 
     The result is explicit, typed, and compiler-checkable error handling.
 ]

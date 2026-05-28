@@ -157,6 +157,8 @@ fn normalize_ast_node_templates(
             normalize_expression_templates(expression, context)
         }
 
+        NodeKind::Assert { condition, .. } => normalize_expression_templates(condition, context),
+
         // Terminal nodes (no templates to normalize)
         NodeKind::Break | NodeKind::Continue | NodeKind::Operator(_) => Ok(()),
         NodeKind::ThenValue(produced_values) => {

@@ -384,6 +384,10 @@ impl<'a> HirBuilder<'a> {
 
             NodeKind::Operator(_) => Ok(()),
 
+            NodeKind::Assert { condition, message } => {
+                self.lower_assert_statement(condition, message.as_ref(), &node.location)
+            }
+
             NodeKind::PushStartRuntimeFragment(expr) => {
                 // WHAT: lower a top-level runtime template push into a PushRuntimeFragment HIR statement.
                 // WHY: the fragment accumulator local was allocated at function entry; each
@@ -759,6 +763,74 @@ impl<'a> HirBuilder<'a> {
         }
 
         self.emit_statement_kind(HirStatementKind::Expr(lowered.value), location)
+    }
+
+    // -------------------------
+    //  Assert Statement
+    // -------------------------
+
+    /// Lower an `assert` statement into HIR control flow.
+    ///
+    /// WHAT: turns `assert(condition)` or `assert(condition, "message")` into explicit CFG.
+    /// WHY: `assert(false, ...)` must be statically terminal; dynamic conditions branch to a
+    ///      failure block that terminates with `AssertFailure`.
+    fn lower_assert_statement(
+        &mut self,
+        condition: &Expression,
+        message: Option<&crate::compiler_frontend::ast::ast_nodes::AssertMessage>,
+        location: &SourceLocation,
+    ) -> Result<(), CompilerError> {
+        let message_text = message.map(|msg| self.string_table.resolve(msg.text).to_owned());
+
+        // Statically known false → immediate assertion failure, no pass block needed.
+        if matches!(condition.kind, ExpressionKind::Bool(false)) {
+            let current_block = self.current_block_id_or_error(location)?;
+            return self.emit_terminator(
+                current_block,
+                HirTerminator::AssertFailure {
+                    message: message_text,
+                },
+                location,
+            );
+        }
+
+        // Statically known true → no runtime effect.
+        if matches!(condition.kind, ExpressionKind::Bool(true)) {
+            return Ok(());
+        }
+
+        // Dynamic condition: lower it, then branch to pass / failure blocks.
+        let condition_value = self.lower_expression_value_to_current_block(condition)?;
+        let condition_block = self.current_block_id_or_error(location)?;
+
+        let parent_region = self.current_region_or_error(location)?;
+        let pass_region = self.create_child_region(parent_region);
+        let failure_region = self.create_child_region(parent_region);
+        let pass_block = self.create_block(pass_region, location, "assert-pass")?;
+        let failure_block = self.create_block(failure_region, location, "assert-fail")?;
+
+        self.emit_terminator(
+            condition_block,
+            HirTerminator::If {
+                condition: condition_value,
+                then_block: pass_block,
+                else_block: failure_block,
+            },
+            location,
+        )?;
+        self.log_control_flow_edge(condition_block, pass_block, "assert.true");
+        self.log_control_flow_edge(condition_block, failure_block, "assert.false");
+
+        self.set_current_block(failure_block, location)?;
+        self.emit_terminator(
+            failure_block,
+            HirTerminator::AssertFailure {
+                message: message_text,
+            },
+            location,
+        )?;
+
+        self.set_current_block(pass_block, location)
     }
 
     // -------------------------

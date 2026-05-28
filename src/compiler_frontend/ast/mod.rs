@@ -73,6 +73,7 @@ pub(crate) mod expressions {
 }
 
 pub(crate) mod statements {
+    pub(crate) mod asserts;
     pub(crate) mod body_dispatch;
     pub(crate) mod body_expr_stmt;
     pub(crate) mod body_return;

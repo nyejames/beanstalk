@@ -360,7 +360,7 @@ body {
 
     <span class='bst-code-comment'>-- Fresh values can satisfy mutable parameters without &#39;~&#39;.</span>
     update<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>1</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><h2>Error-returning functions</h2><p>A function can mark one return slot with `!`. Error-returning calls must be handled with propagation or a catch block. A catch block returns fallback success values with a terminal `then` statement.</p><pre style="
+    </code></pre><h2>Error-returning functions</h2><p>A function can mark one return slot with `!`. Error-returning calls must be handled with propagation or a catch block. A value-producing catch block returns fallback success values with `then` on every reachable recovery path, or exits explicitly with `return` / `return!`.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;

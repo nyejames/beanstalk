@@ -207,6 +207,7 @@ pub(crate) fn token_kind_name(token_kind: &TokenKind, string_table: &StringTable
         TokenKind::ChannelSend => "`>>`".to_owned(),
         TokenKind::ChannelReceive => "`<<`".to_owned(),
         TokenKind::Yield => "`yield`".to_owned(),
+        TokenKind::Assert => "`assert`".to_owned(),
     }
 }
 

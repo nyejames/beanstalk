@@ -17,6 +17,9 @@ fn keyword_shadow_matching_ignores_case_and_leading_underscores() {
     assert_eq!(keyword_shadow_match("This"), Some("this"));
     assert_eq!(keyword_shadow_match("_This"), Some("this"));
     assert_eq!(keyword_shadow_match("THIS"), Some("this"));
+    assert_eq!(keyword_shadow_match("assert"), Some("assert"));
+    assert_eq!(keyword_shadow_match("ASSERT"), Some("assert"));
+    assert_eq!(keyword_shadow_match("_assert"), Some("assert"));
 }
 
 #[test]

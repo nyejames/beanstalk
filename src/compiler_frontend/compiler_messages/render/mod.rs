@@ -970,6 +970,19 @@ pub(crate) fn invalid_builtin_call_message(
         InvalidBuiltinCallReason::CastMissingClosingParenthesis => {
             format!("Expected ')' after {builtin_text} cast argument.")
         }
+        InvalidBuiltinCallReason::MissingArgument => {
+            format!("{builtin_text} requires at least one argument.")
+        }
+        InvalidBuiltinCallReason::TooManyArguments => {
+            format!("{builtin_text} takes too many arguments.")
+        }
+        InvalidBuiltinCallReason::RuntimeMessageExpressionDeferred => {
+            "Assertion messages must be string literals; runtime message expressions are deferred."
+                .to_string()
+        }
+        InvalidBuiltinCallReason::ExpressionPositionNotAllowed => {
+            format!("{builtin_text} is a statement and cannot be used in expression position.")
+        }
     }
 }
 

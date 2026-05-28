@@ -396,9 +396,13 @@ impl<'a> HirDisplayContext<'a> {
             HirTerminator::ReturnError(value) => {
                 format!("return! {}", self.render_expression(value))
             }
-            HirTerminator::Panic { message } => match message {
-                Some(msg) => format!("panic {}", self.render_expression(msg)),
-                None => "panic".to_owned(),
+            HirTerminator::Uninitialized => "uninitialized".to_owned(),
+            HirTerminator::RuntimeFailure { message } => {
+                format!("runtime_failure \"{}\"", message.escape_debug())
+            }
+            HirTerminator::AssertFailure { message } => match message {
+                Some(msg) => format!("assert_failure \"{}\"", msg.escape_debug()),
+                None => "assert_failure".to_owned(),
             },
         }
     }

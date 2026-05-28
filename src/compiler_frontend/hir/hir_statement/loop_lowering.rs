@@ -26,7 +26,7 @@ use crate::return_hir_transformation_error;
 struct RangeLoopBlocks {
     pre_header: BlockId,
     step_zero_check: BlockId,
-    step_zero_panic: BlockId,
+    step_zero_failure: BlockId,
     step_abs_check: BlockId,
     step_abs_negate: BlockId,
     direction_check: BlockId,
@@ -53,7 +53,6 @@ struct RangeLoopTypes {
     binding: TypeId,
     bool_type: TypeId,
     int_type: TypeId,
-    string_type: TypeId,
     float_type: TypeId,
 }
 
@@ -111,7 +110,8 @@ impl<'a> HirBuilder<'a> {
     ) -> Result<RangeLoopBlocks, CompilerError> {
         let pre_header = self.current_block_id_or_error(location)?;
         let step_zero_check = self.create_block(parent_region, location, "for-step-zero-check")?;
-        let step_zero_panic = self.create_block(parent_region, location, "for-step-zero-panic")?;
+        let step_zero_failure =
+            self.create_block(parent_region, location, "for-step-zero-failure")?;
         let step_abs_check = self.create_block(parent_region, location, "for-step-abs-check")?;
         let step_abs_negate = self.create_block(parent_region, location, "for-step-abs-negate")?;
         let direction_check = self.create_block(parent_region, location, "for-direction-check")?;
@@ -129,7 +129,7 @@ impl<'a> HirBuilder<'a> {
         Ok(RangeLoopBlocks {
             pre_header,
             step_zero_check,
-            step_zero_panic,
+            step_zero_failure,
             step_abs_check,
             step_abs_negate,
             direction_check,
@@ -164,7 +164,6 @@ impl<'a> HirBuilder<'a> {
             binding,
             bool_type: builtin_type_ids::BOOL,
             int_type: builtin_type_ids::INT,
-            string_type: builtin_type_ids::STRING,
             float_type: float_id,
         })
     }
@@ -341,14 +340,14 @@ impl<'a> HirBuilder<'a> {
             blocks.step_zero_check,
             HirTerminator::If {
                 condition: step_is_zero,
-                then_block: blocks.step_zero_panic,
+                then_block: blocks.step_zero_failure,
                 else_block: blocks.step_abs_check,
             },
             location,
         )?;
         self.log_control_flow_edge(
             blocks.step_zero_check,
-            blocks.step_zero_panic,
+            blocks.step_zero_failure,
             "for.step.zero",
         );
         self.log_control_flow_edge(
@@ -357,19 +356,11 @@ impl<'a> HirBuilder<'a> {
             "for.step.non_zero",
         );
 
-        self.set_current_block(blocks.step_zero_panic, location)?;
-        let panic_region = self.current_region_or_error(location)?;
-        let panic_message = self.make_expression(
-            location,
-            HirExpressionKind::StringLiteral("Loop step cannot be zero".to_owned()),
-            types.string_type,
-            ValueKind::Const,
-            panic_region,
-        );
+        self.set_current_block(blocks.step_zero_failure, location)?;
         self.emit_terminator(
-            blocks.step_zero_panic,
-            HirTerminator::Panic {
-                message: Some(panic_message),
+            blocks.step_zero_failure,
+            HirTerminator::RuntimeFailure {
+                message: "Loop step cannot be zero".to_owned(),
             },
             location,
         )

@@ -384,7 +384,7 @@ fn preserves_runtime_zero_step_guard_for_dynamic_step() {
 
     assert!(matches!(
         module.blocks[panic_block.0 as usize].terminator,
-        HirTerminator::Panic { message: Some(_) }
+        HirTerminator::RuntimeFailure { .. }
     ));
 }
 

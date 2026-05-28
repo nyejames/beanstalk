@@ -55,7 +55,11 @@ pub(crate) fn lower_terminator(
         HirTerminator::FallibleBranch { .. } => Err(lir_transformation_error(
             "Wasm lowering does not yet support fallible branch terminators",
         )),
-        HirTerminator::Panic { .. } => Ok(WasmLirTerminator::Trap),
+        HirTerminator::Uninitialized => Err(lir_transformation_error(
+            "Wasm lowering encountered Uninitialized terminator",
+        )),
+        HirTerminator::RuntimeFailure { .. } => Ok(WasmLirTerminator::Trap),
+        HirTerminator::AssertFailure { .. } => Ok(WasmLirTerminator::Trap),
         HirTerminator::Match { .. } => Err(lir_transformation_error(
             "Wasm lowering does not yet support this terminator",
         )),

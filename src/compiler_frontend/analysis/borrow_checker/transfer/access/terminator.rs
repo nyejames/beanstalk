@@ -120,25 +120,20 @@ pub(crate) fn transfer_terminator(
             )?;
         }
 
-        HirTerminator::Panic { message } => {
-            if let Some(message) = message {
-                let mut read_env = SharedReadEnv {
-                    context,
-                    layout,
-                    state,
-                    tracker: &mut tracker,
-                    location: location.clone(),
-                    current_order: terminator_order,
-                    stats,
-                    value_fact_buffer,
-                };
-                record_shared_reads_in_expression(
-                    &mut read_env,
-                    message,
-                    location.clone(),
-                    &mut RootSet::empty(layout.local_count()),
-                )?;
-            }
+        HirTerminator::AssertFailure { .. } => {
+            // Assertion messages are compile-time text, not expressions, so no
+            // borrow reads are needed here.
+        }
+
+        HirTerminator::RuntimeFailure { .. } => {
+            // Compiler-generated runtime-failure messages are text data, not expressions.
+        }
+
+        HirTerminator::Uninitialized => {
+            return Err(context.diagnostics.internal_error(
+                "Uninitialized terminator reached borrow validation",
+                location,
+            ));
         }
 
         HirTerminator::Break { .. } | HirTerminator::Continue { .. } => {}

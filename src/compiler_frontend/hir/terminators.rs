@@ -62,7 +62,29 @@ pub enum HirTerminator {
     /// validation and backend lowering do not need to infer error paths from variant values.
     ReturnError(HirExpression),
 
-    Panic {
-        message: Option<HirExpression>,
+    /// Internal placeholder for blocks that have not yet received a real terminator.
+    ///
+    /// WHAT: marks a block as incomplete during HIR construction.
+    /// WHY: the old panic terminator was previously overloaded as both a placeholder and a real
+    ///      runtime stop. This dedicated variant removes that ambiguity.
+    /// MUST NOT survive to validated HIR or backend lowering.
+    Uninitialized,
+
+    /// Compiler-generated unrecoverable runtime failure.
+    ///
+    /// WHAT: keeps internal runtime safety stops distinct from source-authored assertions.
+    /// WHY: range-loop runtime guards and exhaustive-match fallbacks are compiler lowering
+    ///      machinery, not the public `assert` statement surface.
+    RuntimeFailure {
+        message: String,
+    },
+
+    /// Assertion failure — unrecoverable runtime stop.
+    ///
+    /// WHAT: represents a failed `assert` statement.
+    /// WHY: this is the only source-level unrecoverable stop in Alpha Beanstalk.
+    /// `message: None` means the default "assertion failed" message.
+    AssertFailure {
+        message: Option<String>,
     },
 }

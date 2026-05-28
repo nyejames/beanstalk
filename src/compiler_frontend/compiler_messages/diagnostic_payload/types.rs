@@ -636,6 +636,10 @@ pub enum InvalidBuiltinCallReason {
     CastMissingArgument,
     CastTooManyArguments,
     CastMissingClosingParenthesis,
+    MissingArgument,
+    TooManyArguments,
+    RuntimeMessageExpressionDeferred,
+    ExpressionPositionNotAllowed,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

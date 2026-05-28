@@ -55,7 +55,9 @@ pub fn try_for_each_terminator_target<E>(
         HirTerminator::Return(_)
         | HirTerminator::ReturnSuccess(_)
         | HirTerminator::ReturnError(_)
-        | HirTerminator::Panic { .. } => {}
+        | HirTerminator::RuntimeFailure { .. }
+        | HirTerminator::Uninitialized
+        | HirTerminator::AssertFailure { .. } => {}
     }
 
     Ok(())

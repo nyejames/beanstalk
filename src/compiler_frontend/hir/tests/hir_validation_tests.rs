@@ -477,7 +477,7 @@ fn validator_rejects_placeholder_terminator() {
     let (mut module, type_environment) =
         lower_ast(ast, &mut string_table).expect("lowering should succeed");
     let entry = module.functions[module.start_function.0 as usize].entry;
-    module.blocks[entry.0 as usize].terminator = HirTerminator::Panic { message: None };
+    module.blocks[entry.0 as usize].terminator = HirTerminator::Uninitialized;
 
     let error = validate_module_for_tests(&module, &string_table, &type_environment)
         .expect_err("validator should reject placeholder terminators");

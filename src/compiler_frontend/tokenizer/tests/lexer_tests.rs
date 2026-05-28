@@ -312,6 +312,30 @@ fn tokenizes_statement_block_keywords_as_reserved_tokens() {
 }
 
 #[test]
+fn tokenizes_assert_as_reserved_keyword() {
+    let (file_tokens, _string_table) = tokenize_source("assert\n");
+
+    assert!(
+        matches!(file_tokens.tokens[1].kind, TokenKind::Assert),
+        "expected 'assert' to lex as a reserved keyword token"
+    );
+    assert!(
+        !matches!(file_tokens.tokens[1].kind, TokenKind::Symbol(_)),
+        "'assert' should not remain a user symbol"
+    );
+}
+
+#[test]
+fn tokenizes_panic_as_normal_symbol() {
+    let (file_tokens, string_table) = tokenize_source("panic\n");
+
+    assert!(
+        matches!(file_tokens.tokens[1].kind, TokenKind::Symbol(id) if string_table.resolve(id) == "panic"),
+        "expected 'panic' to tokenize as a normal symbol, not a keyword"
+    );
+}
+
+#[test]
 fn tokenizes_standalone_underscore_as_wildcard_but_prefixed_names_as_symbols() {
     let (file_tokens, string_table) = tokenize_source("_ _true __value\n");
 

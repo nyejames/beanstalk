@@ -402,7 +402,7 @@ impl<'a> HirBuilder<'a> {
             region: region_id,
             locals: vec![],
             statements: vec![],
-            terminator: HirTerminator::Panic { message: None },
+            terminator: HirTerminator::Uninitialized,
         };
 
         self.side_table.map_block(location, &entry_block);

@@ -50,10 +50,10 @@ impl<'a> HirValidator<'a> {
 
     pub(super) fn validate_blocks(&self) -> Result<(), CompilerError> {
         for block in &self.module.blocks {
-            if matches!(block.terminator, HirTerminator::Panic { message: None }) {
+            if matches!(block.terminator, HirTerminator::Uninitialized) {
                 return Err(self.error_with_hir(
                     format!(
-                        "Block {} still has placeholder terminator Panic(None) after HIR lowering",
+                        "Block {} still has placeholder terminator Uninitialized after HIR lowering",
                         block.id
                     ),
                     Some(HirLocation::Block(block.id)),
@@ -270,16 +270,22 @@ impl<'a> HirValidator<'a> {
                 )?;
             }
 
-            HirTerminator::Panic { message } => {
-                if message.is_none() {
-                    return Err(self.error_with_hir(
-                        "Placeholder Panic(None) terminators are not allowed in validated HIR",
-                        anchor,
-                    ));
-                }
-                if let Some(message) = message {
-                    self.validate_expression(message, anchor)?;
-                }
+            HirTerminator::Uninitialized => {
+                return Err(self.error_with_hir(
+                    "Placeholder Uninitialized terminators are not allowed in validated HIR",
+                    anchor,
+                ));
+            }
+
+            HirTerminator::RuntimeFailure { .. } => {
+                // Compiler-generated runtime failures are valid terminal terminators.
+                // They carry backend-facing text only, not HIR expressions.
+            }
+
+            HirTerminator::AssertFailure { .. } => {
+                // Assertion failure is a valid terminal terminator.
+                // Messages are compile-time text, not expressions, so no expression validation
+                // is required here.
             }
         }
 

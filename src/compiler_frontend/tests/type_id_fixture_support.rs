@@ -652,13 +652,13 @@ pub(crate) fn lower_ast(
     .build_hir_module(ast)
 }
 
-/// Assert that no block ends with a placeholder `Panic(None)` terminator.
+/// Assert that no block ends with a placeholder `Uninitialized` terminator.
 pub(crate) fn assert_no_placeholder_terminators(module: &HirModule) {
     assert!(
         module
             .blocks
             .iter()
-            .all(|block| !matches!(block.terminator, HirTerminator::Panic { message: None })),
-        "expected no placeholder Panic(None) terminators in lowered HIR"
+            .all(|block| !matches!(block.terminator, HirTerminator::Uninitialized)),
+        "expected no placeholder Uninitialized terminators in lowered HIR"
     );
 }
