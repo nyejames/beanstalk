@@ -906,7 +906,7 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
     /// warnings and the module type environment for render-time type-name resolution.
     fn error_messages(&self, error: CompilerError, string_table: &StringTable) -> CompilerMessages {
         CompilerMessages::from_error_with_warnings(error, self.warnings.clone(), string_table)
-            .with_render_type_environment(self.environment.type_environment.clone())
+            .with_type_context_for_all_diagnostics(self.environment.type_environment.clone())
     }
 
     /// Wraps a user-facing [`CompilerDiagnostic`] into [`CompilerMessages`], preserving current
@@ -921,7 +921,7 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
             self.warnings.clone(),
             string_table,
         )
-        .with_render_type_environment(self.environment.type_environment.clone())
+        .with_type_context_for_all_diagnostics(self.environment.type_environment.clone())
     }
 
     /// Converts a [`TemplateError`] (which may be user-facing or infrastructure) into the

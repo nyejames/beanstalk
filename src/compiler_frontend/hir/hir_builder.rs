@@ -270,7 +270,7 @@ impl<'a> HirBuilder<'a> {
             self.module.warnings.to_owned(),
             self.string_table,
         )
-        .with_render_type_environment(self.type_environment.clone())
+        .with_type_context_for_all_diagnostics(self.type_environment.clone())
     }
 
     fn hir_lowering_error_messages(&self, error: HirLoweringError) -> CompilerMessages {
@@ -281,7 +281,7 @@ impl<'a> HirBuilder<'a> {
                     self.module.warnings.to_owned(),
                     self.string_table,
                 )
-                .with_render_type_environment(self.type_environment.clone())
+                .with_type_context_for_all_diagnostics(self.type_environment.clone())
             }
             HirLoweringError::Infrastructure(error) => self.lower_error_messages(error),
         }
@@ -336,7 +336,7 @@ impl<'a> HirBuilder<'a> {
         if let Err(error) = validate_hir_module(&self.module, &self.type_environment) {
             return Err(
                 CompilerMessages::from_error_with_warnings(error, warnings, string_table)
-                    .with_render_type_environment(self.type_environment.clone()),
+                    .with_type_context_for_all_diagnostics(self.type_environment.clone()),
             );
         }
 

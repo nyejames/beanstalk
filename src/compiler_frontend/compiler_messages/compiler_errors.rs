@@ -10,7 +10,7 @@
 //! Frontend/compiler stages
 //!   -> CompilerDiagnostic { kind, severity, primary_location, labels, payload }
 //!   -> DiagnosticBag accumulates one or many diagnostics locally
-//!   -> CompilerMessages owns ordered diagnostics + StringTable + optional render TypeEnvironment
+//!   -> CompilerMessages owns ordered diagnostics + StringTable + range-bound render type contexts
 //!      at stage/build boundaries
 //!   -> renderers produce terminal/dev-server/terse output
 //!
@@ -86,6 +86,7 @@ use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringIdRemap, StringTable};
 use std::collections::HashMap;
+use std::ops::Range;
 use std::path::Path;
 
 // -----------------------
@@ -103,16 +104,22 @@ pub struct CompilerMessages {
 
     pub string_table: StringTable,
 
-    /// Optional module-local type table used only by diagnostic renderers.
+    /// Module-local type tables used only by diagnostic renderers.
     ///
-    /// WHAT: carries the semantic type lookup table beside diagnostics from one failed module.
-    /// WHY: type diagnostics store `TypeId`s. Renderers need the matching module environment to
-    /// turn those IDs into source-level names, but individual diagnostics must not own it.
+    /// WHAT: carries semantic type lookup tables beside the diagnostics produced with them.
+    /// WHY: type diagnostics store `TypeId`s. Renderers need the matching module environment for
+    /// each diagnostic index, but individual diagnostics must not own that environment.
     ///
-    /// Boundary shape: this is intentionally owned by `CompilerMessages` only on failed module
-    /// boundaries where diagnostics outlive the AST/HIR owner that still has the active
+    /// Boundary shape: this is intentionally owned by `CompilerMessages` only on failed module or
+    /// build boundaries where diagnostics outlive the AST/HIR owner that still has the active
     /// `TypeEnvironment`. Successful builds carry the module type table in `Module`, not here.
-    pub(crate) render_type_environment: Option<Box<TypeEnvironment>>,
+    pub(crate) render_type_contexts: Vec<RenderTypeContext>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct RenderTypeContext {
+    pub(crate) diagnostic_range: Range<usize>,
+    pub(crate) type_environment: TypeEnvironment,
 }
 
 impl CompilerMessages {
@@ -120,7 +127,7 @@ impl CompilerMessages {
         Self {
             diagnostics: Vec::new(),
             string_table,
-            render_type_environment: None,
+            render_type_contexts: Vec::new(),
         }
     }
 
@@ -131,7 +138,7 @@ impl CompilerMessages {
         Self {
             diagnostics,
             string_table,
-            render_type_environment: None,
+            render_type_contexts: Vec::new(),
         }
     }
 
@@ -190,11 +197,6 @@ impl CompilerMessages {
         self.diagnostics
     }
 
-    /// Take the optional type render context when aggregating message containers.
-    pub(crate) fn take_render_type_environment(&mut self) -> Option<TypeEnvironment> {
-        self.render_type_environment.take().map(|env| *env)
-    }
-
     /// Iterate over diagnostics with `Error` severity.
     #[cfg(test)]
     pub(crate) fn error_diagnostics(&self) -> impl Iterator<Item = &CompilerDiagnostic> {
@@ -239,7 +241,7 @@ impl CompilerMessages {
         Self {
             diagnostics: vec![diagnostic],
             string_table,
-            render_type_environment: None,
+            render_type_contexts: Vec::new(),
         }
     }
 
@@ -258,7 +260,7 @@ impl CompilerMessages {
         Self {
             diagnostics: vec![diagnostic],
             string_table,
-            render_type_environment: None,
+            render_type_contexts: Vec::new(),
         }
     }
 
@@ -287,7 +289,7 @@ impl CompilerMessages {
         Self {
             diagnostics,
             string_table: string_table.clone(),
-            render_type_environment: None,
+            render_type_contexts: Vec::new(),
         }
     }
 
@@ -308,7 +310,7 @@ impl CompilerMessages {
         Self {
             diagnostics,
             string_table: string_table.clone(),
-            render_type_environment: None,
+            render_type_contexts: Vec::new(),
         }
     }
 
@@ -324,26 +326,93 @@ impl CompilerMessages {
         Self::from_error(error, error_string_table)
     }
 
-    pub(crate) fn with_render_type_environment(
+    pub(crate) fn with_type_context_for_all_diagnostics(
         mut self,
         type_environment: TypeEnvironment,
     ) -> Self {
-        // Keep the type table as boundary-owned render context. Diagnostics still carry only
-        // `TypeId`s, and successful module results keep their `TypeEnvironment` on `Module`.
-        self.render_type_environment = Some(Box::new(type_environment));
+        if !self.diagnostics.is_empty() {
+            self.render_type_contexts.push(RenderTypeContext {
+                diagnostic_range: 0..self.diagnostics.len(),
+                type_environment,
+            });
+        }
         self
     }
 
-    pub(crate) fn render_type_environment(&self) -> Option<&TypeEnvironment> {
-        self.render_type_environment.as_deref()
+    /// Prepend diagnostics that were produced before this message set.
+    ///
+    /// WHAT: shifts every stored type-context range forward by the prepended length.
+    /// WHY: frontend/build aggregation often carries warnings from earlier stages into a later
+    /// failure. Those warnings must stay before the failure without disconnecting the failure's
+    /// diagnostics from their render type table.
+    pub(crate) fn prepend_diagnostics_preserving_context(
+        &mut self,
+        prior_diagnostics: impl IntoIterator<Item = CompilerDiagnostic>,
+    ) {
+        let mut prior_diagnostics = prior_diagnostics.into_iter().collect::<Vec<_>>();
+        let shift = prior_diagnostics.len();
+
+        if shift == 0 {
+            return;
+        }
+
+        prior_diagnostics.append(&mut self.diagnostics);
+        self.diagnostics = prior_diagnostics;
+
+        for type_context in &mut self.render_type_contexts {
+            type_context.diagnostic_range.start += shift;
+            type_context.diagnostic_range.end += shift;
+        }
+    }
+
+    /// Append another boundary message set while preserving its diagnostic type-context ranges.
+    ///
+    /// WHAT: moves diagnostics and render contexts from `messages` into this set and offsets the
+    /// appended ranges by the current diagnostic count.
+    /// WHY: directory builds aggregate failed modules into one ordered build failure. Each module
+    /// may have its own `TypeEnvironment`, so the render boundary must preserve all of them.
+    pub(crate) fn append_messages_preserving_context(&mut self, mut messages: CompilerMessages) {
+        let shift = self.diagnostics.len();
+        self.diagnostics.append(&mut messages.diagnostics);
+
+        for mut type_context in messages.render_type_contexts {
+            type_context.diagnostic_range.start += shift;
+            type_context.diagnostic_range.end += shift;
+            self.render_type_contexts.push(type_context);
+        }
+    }
+
+    pub(crate) fn type_environment_for_diagnostic(
+        &self,
+        diagnostic_index: usize,
+    ) -> Option<&TypeEnvironment> {
+        self.render_type_contexts
+            .iter()
+            .find(|type_context| type_context.diagnostic_range.contains(&diagnostic_index))
+            .map(|type_context| &type_context.type_environment)
+    }
+
+    pub(crate) fn diagnostic_render_context(
+        &self,
+        diagnostic_index: usize,
+    ) -> crate::compiler_frontend::compiler_messages::render::DiagnosticRenderContext<'_> {
+        crate::compiler_frontend::compiler_messages::render::DiagnosticRenderContext::new(
+            &self.string_table,
+        )
+        .with_optional_type_environment(self.type_environment_for_diagnostic(diagnostic_index))
+    }
+
+    #[cfg(test)]
+    pub(crate) fn render_type_contexts(&self) -> &[RenderTypeContext] {
+        &self.render_type_contexts
     }
 
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         for diagnostic in self.diagnostics.iter_mut() {
             diagnostic.remap_string_ids(remap);
         }
-        if let Some(type_environment) = self.render_type_environment.as_mut() {
-            type_environment.remap_string_ids(remap);
+        for type_context in &mut self.render_type_contexts {
+            type_context.type_environment.remap_string_ids(remap);
         }
     }
 }

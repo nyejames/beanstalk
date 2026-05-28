@@ -8,9 +8,7 @@ use super::{
     BackendId, CaseExecutionResult, ExpectedOutcome, FailureKind, FailureTriageEntry,
     FailureTriageReport, SEPARATOR_LINE_LENGTH, SummaryCounts, TestCaseSpec,
 };
-use crate::compiler_frontend::compiler_messages::render::{
-    DiagnosticRenderContext, terminal, terse,
-};
+use crate::compiler_frontend::compiler_messages::render::{terminal, terse};
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, DiagnosticCategory, DiagnosticSeverity,
 };
@@ -51,24 +49,32 @@ pub(crate) fn render_case_result(
     }
 
     if let Some(messages) = &result.messages {
-        let render_context = DiagnosticRenderContext::new(&messages.string_table)
-            .with_optional_type_environment(messages.render_type_environment());
-
-        for diagnostic in messages
+        for (diagnostic_index, diagnostic) in messages
             .diagnostics()
-            .filter(|diagnostic| diagnostic.severity == DiagnosticSeverity::Error)
+            .enumerate()
+            .filter(|(_, diagnostic)| diagnostic.severity == DiagnosticSeverity::Error)
         {
             if result.passed && matches!(case.expected, ExpectedOutcome::Failure(_)) {
                 say!(Yellow diagnostic_summary_label(diagnostic));
                 continue;
             }
 
-            terminal::print_diagnostic_with_context(diagnostic, render_context);
+            terminal::print_diagnostic_with_context(
+                diagnostic,
+                messages.diagnostic_render_context(diagnostic_index),
+            );
         }
 
         if show_warnings {
-            for warning in messages.warnings() {
-                terminal::print_diagnostic_with_context(warning, render_context);
+            for (diagnostic_index, warning) in messages
+                .diagnostics()
+                .enumerate()
+                .filter(|(_, diagnostic)| diagnostic.severity == DiagnosticSeverity::Warning)
+            {
+                terminal::print_diagnostic_with_context(
+                    warning,
+                    messages.diagnostic_render_context(diagnostic_index),
+                );
             }
         }
     } else if let Some(build_result) = &result.build_result
@@ -136,10 +142,15 @@ pub(crate) fn observed_failure_reason(result: &CaseExecutionResult) -> String {
             .failure_reason
             .as_deref()
             .unwrap_or("Compilation failed.");
-        let render_context = DiagnosticRenderContext::new(&messages.string_table)
-            .with_optional_type_environment(messages.render_type_environment());
-        let terse_line =
-            terse::format_terse_diagnostic_with_context(first_diagnostic, render_context);
+        let diagnostic_index = messages
+            .diagnostic_slice()
+            .iter()
+            .position(|diagnostic| std::ptr::eq(diagnostic, first_diagnostic))
+            .unwrap_or(0);
+        let terse_line = terse::format_terse_diagnostic_with_context(
+            first_diagnostic,
+            messages.diagnostic_render_context(diagnostic_index),
+        );
 
         return format!("{base} First diagnostic: {terse_line}");
     }

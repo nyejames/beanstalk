@@ -390,7 +390,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         string_table: &StringTable,
     ) -> CompilerMessages {
         CompilerMessages::from_error_with_warnings(error, self.warnings.clone(), string_table)
-            .with_render_type_environment(self.type_environment.clone())
+            .with_type_context_for_all_diagnostics(self.type_environment.clone())
     }
 
     pub(crate) fn diagnostic_messages(
@@ -403,6 +403,6 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             self.warnings.clone(),
             string_table,
         )
-        .with_render_type_environment(self.type_environment.clone())
+        .with_type_context_for_all_diagnostics(self.type_environment.clone())
     }
 }

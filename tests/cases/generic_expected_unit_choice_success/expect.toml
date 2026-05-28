@@ -7,4 +7,4 @@ rendered_output_contains = ["expected unit choice generic"]
 [backends.html_wasm]
 mode = "failure"
 warnings = "forbid"
-diagnostic_codes = ["BST-INFRA-0001"]
+diagnostic_codes = ["BST-RULE-0064"]

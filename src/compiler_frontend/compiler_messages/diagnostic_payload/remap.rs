@@ -446,6 +446,14 @@ impl DiagnosticPayload {
                 *package_path = remap.get(*package_path);
             }
 
+            DiagnosticPayload::UnsupportedBackendFeature {
+                backend_name,
+                feature,
+            } => {
+                *backend_name = remap.get(*backend_name);
+                *feature = remap.get(*feature);
+            }
+
             DiagnosticPayload::InvalidPageMetadata { key, .. } => {
                 *key = remap.get(*key);
             }

@@ -3,23 +3,17 @@ use crate::compiler_frontend::compiler_errors::{
     CompilerError, CompilerErrorMetadataKey, CompilerMessages, ErrorType,
 };
 use crate::compiler_frontend::compiler_messages::render::{
-    DiagnosticRenderContext, resolve_source_file_path, resolved_display_path,
+    resolve_source_file_path, resolved_display_path,
 };
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use saying::say;
 
 pub fn print_compiler_messages(messages: CompilerMessages) {
-    if let Some(type_environment) = messages.render_type_environment() {
-        let render_context = DiagnosticRenderContext::new(&messages.string_table)
-            .with_optional_type_environment(Some(type_environment));
-        crate::compiler_frontend::compiler_messages::render::terminal::print_diagnostics_with_context(
-            messages.diagnostic_slice(),
+    for (diagnostic_index, diagnostic) in messages.diagnostic_slice().iter().enumerate() {
+        let render_context = messages.diagnostic_render_context(diagnostic_index);
+        crate::compiler_frontend::compiler_messages::render::terminal::print_diagnostic_with_context(
+            diagnostic,
             render_context,
-        );
-    } else {
-        crate::compiler_frontend::compiler_messages::render::terminal::print_diagnostics(
-            messages.diagnostic_slice(),
-            &messages.string_table,
         );
     }
 }
@@ -31,19 +25,9 @@ pub fn print_terse_compiler_messages(messages: &CompilerMessages) {
 }
 
 pub fn format_terse_compiler_messages(messages: &CompilerMessages) -> Vec<String> {
-    if let Some(type_environment) = messages.render_type_environment() {
-        let render_context = DiagnosticRenderContext::new(&messages.string_table)
-            .with_optional_type_environment(Some(type_environment));
-        crate::compiler_frontend::compiler_messages::render::terse::format_terse_diagnostics_with_context(
-            messages.diagnostic_slice(),
-            render_context,
-        )
-    } else {
-        crate::compiler_frontend::compiler_messages::render::terse::format_terse_diagnostics(
-            messages.diagnostic_slice(),
-            &messages.string_table,
-        )
-    }
+    crate::compiler_frontend::compiler_messages::render::terse::format_terse_compiler_messages(
+        messages,
+    )
 }
 
 pub fn print_formatted_error(e: CompilerError, string_table: &StringTable) {

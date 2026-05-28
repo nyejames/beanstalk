@@ -2,7 +2,7 @@ set windows-shell := ["powershell", "-NoLogo", "-NoProfile", "-Command"]
 
 validate:
     @echo "clippy"
-    cargo clippy --quiet --all-targets --all-features -- -D warnings
+    just ci-clippy
     
     @echo "unit tests"
     cargo test --quiet -- --format terse
@@ -37,3 +37,16 @@ bench-check:
 
 bench-frontend-check:
     cargo run --package xtask --bin xtask -- bench-frontend-check
+
+ci-clippy:
+    rustc +1.95.0 -vV
+    cargo +1.95.0 clippy -V
+
+    @echo "clippy: native host"
+    CARGO_TARGET_DIR=target/ci-clippy-native cargo +1.95.0 clippy --all-targets --all-features -- -D warnings
+
+    @echo "clippy: linux x64"
+    CARGO_TARGET_DIR=target/ci-clippy-linux cargo +1.95.0 clippy --target x86_64-unknown-linux-gnu --all-targets --all-features -- -D warnings
+
+    @echo "clippy: windows x64"
+    CARGO_TARGET_DIR=target/ci-clippy-windows cargo +1.95.0 clippy --target x86_64-pc-windows-msvc --all-targets --all-features -- -D warnings

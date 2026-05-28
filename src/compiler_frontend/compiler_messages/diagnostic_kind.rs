@@ -231,6 +231,7 @@ pub enum RuleDiagnosticKind {
     UnsupportedExternalFunction,
     InvalidRangeOperand,
     UnsupportedBuilderPackage,
+    UnsupportedBackendFeature,
     InvalidPageMetadata,
     InvalidCompileTimePath,
     ImportRecordUsedAsValue,

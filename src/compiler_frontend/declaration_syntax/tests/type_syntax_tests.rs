@@ -1017,6 +1017,37 @@ fn rejects_negative_collection_capacity() {
 }
 
 #[test]
+fn rejects_collection_type_missing_close_curly_with_expected_token() {
+    let mut string_table = StringTable::new();
+    let mut stream = stream_from_tokens(
+        vec![
+            token(TokenKind::OpenCurly),
+            token(TokenKind::DatatypeInt),
+            token(TokenKind::Eof),
+        ],
+        &mut string_table,
+    );
+
+    let error =
+        parse_type_annotation_with_capacity(&mut stream, TypeAnnotationContext::DeclarationTarget)
+            .expect_err("missing collection close delimiter should fail");
+
+    assert_diagnostic_payload(
+        error,
+        |payload| {
+            matches!(
+                payload,
+                DiagnosticPayload::ExpectedToken {
+                    expected: TokenKind::CloseCurly,
+                    found: Some(TokenKind::Eof),
+                }
+            )
+        },
+        "ExpectedToken(CloseCurly)",
+    );
+}
+
+#[test]
 fn collection_type_identity_ignores_capacity() {
     let with_capacity = DataType::collection(DataType::Int);
     let without_capacity = DataType::collection(DataType::Int);

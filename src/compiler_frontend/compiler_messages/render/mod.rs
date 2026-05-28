@@ -11,11 +11,13 @@ pub(crate) mod terse;
 mod borrow;
 mod context;
 mod import_config;
+mod payload;
 mod syntax;
 
 pub(crate) use borrow::*;
 pub(crate) use context::*;
 pub(crate) use import_config::*;
+pub(crate) use payload::*;
 pub(crate) use syntax::*;
 
 use crate::compiler_frontend::basic_utility_functions::normalize_path;

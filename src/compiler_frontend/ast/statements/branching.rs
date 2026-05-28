@@ -1212,7 +1212,7 @@ fn enforce_match_exhaustiveness(
     has_guarded_arms: bool,
     matched_choice_variants: &FxHashSet<StringId>,
     option_state: OptionExhaustivenessState,
-    string_table: &StringTable,
+    _string_table: &StringTable,
     type_environment: &TypeEnvironment,
 ) -> Result<(), CompilerDiagnostic> {
     let is_choice = matches!(
@@ -1231,7 +1231,6 @@ fn enforce_match_exhaustiveness(
             return Err(CompilerDiagnostic::non_exhaustive_match(
                 NonExhaustiveMatchReason::GuardedArmsRequireElse,
                 vec![],
-                None,
                 scrutinee.location.clone(),
             ));
         }
@@ -1246,17 +1245,9 @@ fn enforce_match_exhaustiveness(
             return Ok(());
         }
 
-        let missing_variant_names: Vec<String> = missing_variants
-            .iter()
-            .map(|&v| string_table.resolve(v).to_owned())
-            .collect();
         return Err(CompilerDiagnostic::non_exhaustive_match(
             NonExhaustiveMatchReason::MissingVariants,
             missing_variants,
-            Some(format!(
-                "Non-exhaustive choice match. Missing variants: [{}].",
-                missing_variant_names.join(", ")
-            )),
             scrutinee.location.clone(),
         ));
     }
@@ -1283,7 +1274,6 @@ fn enforce_match_exhaustiveness(
     Err(CompilerDiagnostic::non_exhaustive_match(
         reason,
         vec![],
-        None,
         scrutinee.location.clone(),
     ))
 }

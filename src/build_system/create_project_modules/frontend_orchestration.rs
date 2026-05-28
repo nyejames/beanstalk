@@ -364,11 +364,10 @@ impl FrontendModuleBuildContext<'_> {
         );
 
         if !diagnostics.is_empty() {
-            diagnostics.extend(warnings);
-            return Err(CompilerMessages::from_diagnostics(
-                diagnostics,
-                compiler.string_table.clone(),
-            ));
+            let mut messages =
+                CompilerMessages::from_diagnostics(diagnostics, compiler.string_table.clone());
+            messages.prepend_diagnostics_preserving_context(warnings);
+            return Err(messages);
         }
 
         let headers = parse_headers(
@@ -379,9 +378,12 @@ impl FrontendModuleBuildContext<'_> {
             &mut compiler.string_table,
         )
         .map_err(|bag| {
-            let mut diagnostics = bag.into_diagnostics();
-            diagnostics.extend(warnings.iter().cloned());
-            CompilerMessages::from_diagnostics(diagnostics, compiler.string_table.clone())
+            let mut messages = CompilerMessages::from_diagnostics(
+                bag.into_diagnostics(),
+                compiler.string_table.clone(),
+            );
+            messages.prepend_diagnostics_preserving_context(warnings.iter().cloned());
+            messages
         })?;
 
         Ok((headers, warnings))
@@ -393,9 +395,12 @@ impl FrontendModuleBuildContext<'_> {
         warnings: &[CompilerDiagnostic],
     ) -> Result<SortedHeaders, CompilerMessages> {
         compiler.sort_headers(module_headers).map_err(|bag| {
-            let mut diagnostics = bag.into_diagnostics();
-            diagnostics.extend(warnings.iter().cloned());
-            CompilerMessages::from_diagnostics(diagnostics, compiler.string_table.clone())
+            let mut messages = CompilerMessages::from_diagnostics(
+                bag.into_diagnostics(),
+                compiler.string_table.clone(),
+            );
+            messages.prepend_diagnostics_preserving_context(warnings.iter().cloned());
+            messages
         })
     }
 
@@ -451,15 +456,9 @@ fn merge_stage_messages(
     string_table: &StringTable,
 ) -> CompilerMessages {
     let mut messages = messages;
-    let render_type_environment = messages.take_render_type_environment();
-    let mut all_diagnostics = messages.into_diagnostics();
-    all_diagnostics.extend(warnings.iter().cloned());
-    let merged = CompilerMessages::from_diagnostics(all_diagnostics, string_table.clone());
-
-    match render_type_environment {
-        Some(type_environment) => merged.with_render_type_environment(type_environment),
-        None => merged,
-    }
+    messages.prepend_diagnostics_preserving_context(warnings.iter().cloned());
+    messages.string_table = string_table.clone();
+    messages
 }
 
 fn collect_module_source_logical_paths(
@@ -547,7 +546,7 @@ mod tests {
     use crate::compiler_frontend::{FrontendFilePrepareContext, FrontendFilePrepareInput};
 
     #[test]
-    fn merge_stage_messages_preserves_render_type_environment_with_warnings() {
+    fn merge_stage_messages_preserves_render_type_context_with_warnings() {
         let string_table = StringTable::new();
         let type_environment = TypeEnvironment::new();
         let diagnostic = CompilerDiagnostic::type_mismatch(
@@ -558,15 +557,15 @@ mod tests {
         );
         let warning = CompilerDiagnostic::unreachable_match_arm(SourceLocation::default());
         let messages = CompilerMessages::from_diagnostics(vec![diagnostic], string_table.clone())
-            .with_render_type_environment(type_environment);
+            .with_type_context_for_all_diagnostics(type_environment);
 
         let merged = merge_stage_messages(messages, &[warning], &string_table);
         let rendered_lines = format_terse_compiler_messages(&merged);
 
-        assert!(merged.render_type_environment().is_some());
+        assert_eq!(merged.render_type_contexts().len(), 1);
         assert_eq!(rendered_lines.len(), 2);
-        assert!(rendered_lines[0].contains("expected Int, found String"));
-        assert!(!rendered_lines[0].contains("TypeId("));
+        assert!(rendered_lines[1].contains("expected Int, found String"));
+        assert!(!rendered_lines[1].contains("TypeId("));
     }
 
     #[test]

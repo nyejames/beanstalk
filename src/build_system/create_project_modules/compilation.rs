@@ -229,43 +229,23 @@ pub(crate) fn compile_directory_frontend(
     if !failures.is_empty() {
         let aggregation_fork = string_table_fork_source.fork_for_module();
         let (mut aggregated_table, _) = aggregation_fork.into_parts();
-        let mut all_diagnostics = Vec::new();
-        let preserve_render_type_environment = failures.len() == 1;
-        let mut render_type_environment = None;
+        let mut aggregated_messages = CompilerMessages::empty(aggregated_table.clone());
 
         for mut failure in failures {
             let remap = aggregated_table.merge_delta_from(
                 &failure.messages.string_table,
                 failure.string_table_base_len,
             );
-            let remap_is_identity = remap.is_identity();
 
-            let type_environment = failure.messages.take_render_type_environment();
-            for mut diagnostic in failure.messages.into_diagnostics() {
-                if !remap_is_identity {
-                    diagnostic.remap_string_ids(&remap);
-                }
-                all_diagnostics.push(diagnostic);
+            if !remap.is_identity() {
+                failure.messages.remap_string_ids(&remap);
             }
 
-            if preserve_render_type_environment && let Some(mut type_environment) = type_environment
-            {
-                if !remap_is_identity {
-                    type_environment.remap_string_ids(&remap);
-                }
-                render_type_environment = Some(type_environment);
-            }
+            aggregated_messages.append_messages_preserving_context(failure.messages);
         }
 
-        let aggregated_messages =
-            CompilerMessages::from_diagnostics(all_diagnostics, aggregated_table);
-
-        return Err(match render_type_environment {
-            Some(type_environment) => {
-                aggregated_messages.with_render_type_environment(type_environment)
-            }
-            None => aggregated_messages,
-        });
+        aggregated_messages.string_table = aggregated_table;
+        return Err(aggregated_messages);
     }
 
     // 7. All succeeded: merge each local table into the build table and remap.

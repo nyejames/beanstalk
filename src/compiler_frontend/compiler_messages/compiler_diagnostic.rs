@@ -580,6 +580,21 @@ impl CompilerDiagnostic {
         )
     }
 
+    pub(crate) fn unsupported_backend_feature(
+        backend_name: StringId,
+        feature: StringId,
+        location: SourceLocation,
+    ) -> Self {
+        Self::new(
+            DiagnosticKind::Rule(RuleDiagnosticKind::UnsupportedBackendFeature),
+            location,
+            DiagnosticPayload::UnsupportedBackendFeature {
+                backend_name,
+                feature,
+            },
+        )
+    }
+
     pub(crate) fn invalid_page_metadata(
         key: StringId,
         reason: InvalidPageMetadataReason,
@@ -1364,7 +1379,6 @@ impl CompilerDiagnostic {
     pub(crate) fn non_exhaustive_match(
         reason: crate::compiler_frontend::compiler_messages::NonExhaustiveMatchReason,
         missing_variants: Vec<StringId>,
-        detail: Option<String>,
         location: SourceLocation,
     ) -> Self {
         Self::new(
@@ -1373,7 +1387,6 @@ impl CompilerDiagnostic {
             DiagnosticPayload::NonExhaustiveMatch {
                 reason,
                 missing_variants,
-                detail,
             },
         )
     }

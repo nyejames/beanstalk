@@ -45,24 +45,11 @@ pub fn format_compiler_messages(messages: &CompilerMessages) -> String {
 }
 
 fn write_structured_diagnostic_summary(messages: &CompilerMessages, output: &mut String) {
-    let lines = if let Some(type_environment) = messages.render_type_environment() {
-        let render_context =
-            crate::compiler_frontend::compiler_messages::render::DiagnosticRenderContext::new(
-                &messages.string_table,
-            )
-            .with_optional_type_environment(Some(type_environment));
-        crate::compiler_frontend::compiler_messages::render::terse::format_terse_diagnostics_with_context(
-            messages.diagnostic_slice(),
-            render_context,
+    for line in
+        crate::compiler_frontend::compiler_messages::render::terse::format_terse_compiler_messages(
+            messages,
         )
-    } else {
-        crate::compiler_frontend::compiler_messages::render::terse::format_terse_diagnostics(
-            messages.diagnostic_slice(),
-            &messages.string_table,
-        )
-    };
-
-    for line in lines {
+    {
         let _ = writeln!(output, "{line}");
     }
 }
@@ -258,24 +245,10 @@ fn render_compiler_diagnostics(messages: &CompilerMessages, project_root: &Path)
         return diagnostics_html;
     }
 
-    if let Some(type_environment) = messages.render_type_environment() {
-        let render_context =
-            crate::compiler_frontend::compiler_messages::render::DiagnosticRenderContext::new(
-                &messages.string_table,
-            )
-            .with_optional_type_environment(Some(type_environment));
-        diagnostics_html.push_str(&dev_server::render_diagnostics_html_with_context(
-            messages.diagnostic_slice(),
-            project_root,
-            render_context,
-        ));
-    } else {
-        diagnostics_html.push_str(&dev_server::render_diagnostics_html(
-            messages.diagnostic_slice(),
-            project_root,
-            &messages.string_table,
-        ));
-    }
+    diagnostics_html.push_str(&dev_server::render_compiler_messages_html(
+        messages,
+        project_root,
+    ));
 
     diagnostics_html.push_str("</section>");
     diagnostics_html

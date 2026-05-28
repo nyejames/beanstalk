@@ -216,7 +216,7 @@ impl<'context, 'services> AstFinalizer<'context, 'services> {
         string_table: &StringTable,
     ) -> CompilerMessages {
         CompilerMessages::from_error_with_warnings(error, warnings.to_owned(), string_table)
-            .with_render_type_environment(self.environment.type_environment.clone())
+            .with_type_context_for_all_diagnostics(self.environment.type_environment.clone())
     }
 
     /// Converts a [`TemplateNormalizationError`] into [`CompilerMessages`], routing
@@ -234,7 +234,7 @@ impl<'context, 'services> AstFinalizer<'context, 'services> {
                     warnings.to_owned(),
                     string_table,
                 )
-                .with_render_type_environment(self.environment.type_environment.clone())
+                .with_type_context_for_all_diagnostics(self.environment.type_environment.clone())
             }
             TemplateNormalizationError::Infrastructure(error) => {
                 self.error_messages(error, warnings, string_table)

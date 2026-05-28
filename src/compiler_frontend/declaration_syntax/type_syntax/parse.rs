@@ -294,10 +294,10 @@ fn parse_collection_type(
     };
 
     if token_stream.current_token_kind() != &TokenKind::CloseCurly {
-        return Err(CompilerDiagnostic::new(
-            DiagnosticKind::Syntax(SyntaxDiagnosticKind::MissingClosingDelimiter),
+        return Err(CompilerDiagnostic::expected_token(
+            TokenKind::CloseCurly,
+            Some(token_stream.current_token_kind().clone()),
             token_stream.current_location(),
-            DiagnosticPayload::None,
         ));
     }
 

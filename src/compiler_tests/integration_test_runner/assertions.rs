@@ -12,9 +12,7 @@ use super::{
 };
 use crate::build_system::build::{BuildResult, FileKind, OutputFile};
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerMessages;
-use crate::compiler_frontend::compiler_messages::render::{
-    DiagnosticRenderContext, terminal, terse,
-};
+use crate::compiler_frontend::compiler_messages::render::{terminal, terse};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -134,12 +132,15 @@ pub(crate) fn validate_failure_result(
 
     // message_contains checks rendered diagnostic text at the diagnostic render boundary.
     if !expectation.message_contains.is_empty() {
-        let render_context = DiagnosticRenderContext::new(&messages.string_table)
-            .with_optional_type_environment(messages.render_type_environment());
         let mut rendered_messages: Vec<String> = messages
             .diagnostics()
-            .map(|diagnostic| {
-                terminal::format_payload_guidance(&diagnostic.payload, render_context).join("\n")
+            .enumerate()
+            .map(|(diagnostic_index, diagnostic)| {
+                terminal::format_payload_guidance(
+                    &diagnostic.payload,
+                    messages.diagnostic_render_context(diagnostic_index),
+                )
+                .join("\n")
             })
             .collect();
 
@@ -147,10 +148,7 @@ pub(crate) fn validate_failure_result(
             terminal::format_label_messages(diagnostic, &messages.string_table)
         }));
 
-        rendered_messages.extend(terse::format_terse_diagnostics_with_context(
-            messages.diagnostic_slice(),
-            render_context,
-        ));
+        rendered_messages.extend(terse::format_terse_compiler_messages(&messages));
 
         if !rendered_messages
             .iter()

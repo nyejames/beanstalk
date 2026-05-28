@@ -16,8 +16,9 @@ use crate::compiler_frontend::compiler_messages::render::{
     DiagnosticRenderContext, dev_server, terminal, terse,
 };
 use crate::compiler_frontend::compiler_messages::source_location::{CharPosition, SourceLocation};
+use crate::compiler_frontend::datatypes::definitions::StructTypeDefinition;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
-use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
+use crate::compiler_frontend::datatypes::ids::{NominalTypeId, builtin_type_ids};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{PathTokenItem, TokenKind};
@@ -352,6 +353,67 @@ fn compiler_messages_with_infrastructure_error_preserve_warning_production_order
         DiagnosticKind::Infrastructure(InfrastructureDiagnosticKind::InfrastructureFailure),
     );
     assert_eq!(messages.diagnostics[1].kind.code(), "BST-INFRA-0001");
+}
+
+#[test]
+fn compiler_messages_preserve_type_context_ranges_when_prepending_and_appending() {
+    let mut string_table = StringTable::new();
+    let point_path = InternedPath::from_single_str("Point", &mut string_table);
+    let status_path = InternedPath::from_single_str("Status", &mut string_table);
+
+    let mut first_environment = TypeEnvironment::new();
+    let (_, point_type) = first_environment.register_nominal_struct(StructTypeDefinition {
+        id: NominalTypeId(0),
+        path: point_path,
+        fields: Box::new([]),
+        generic_parameters: None,
+        const_record: false,
+    });
+    let first_error = CompilerDiagnostic::type_mismatch(
+        point_type,
+        first_environment.builtins().int,
+        TypeMismatchContext::Assignment,
+        SourceLocation::default(),
+    );
+    let warning = CompilerDiagnostic::unreachable_match_arm(SourceLocation::default());
+    let mut first_messages =
+        CompilerMessages::from_diagnostics(vec![first_error], string_table.clone())
+            .with_type_context_for_all_diagnostics(first_environment);
+    first_messages.prepend_diagnostics_preserving_context(vec![warning]);
+
+    let mut second_environment = TypeEnvironment::new();
+    let (_, status_type) = second_environment.register_nominal_struct(StructTypeDefinition {
+        id: NominalTypeId(0),
+        path: status_path,
+        fields: Box::new([]),
+        generic_parameters: None,
+        const_record: false,
+    });
+    let second_error = CompilerDiagnostic::type_mismatch(
+        status_type,
+        second_environment.builtins().string,
+        TypeMismatchContext::ReturnValue,
+        SourceLocation::default(),
+    );
+    let second_messages = CompilerMessages::from_diagnostics(vec![second_error], string_table)
+        .with_type_context_for_all_diagnostics(second_environment);
+
+    first_messages.append_messages_preserving_context(second_messages);
+    let rendered =
+        crate::compiler_frontend::compiler_messages::display_messages::format_terse_compiler_messages(
+            &first_messages,
+        );
+
+    assert_eq!(
+        first_messages.render_type_contexts()[0].diagnostic_range,
+        1..2
+    );
+    assert_eq!(
+        first_messages.render_type_contexts()[1].diagnostic_range,
+        2..3
+    );
+    assert!(rendered[1].contains("expected Point, found Int"));
+    assert!(rendered[2].contains("expected Status, found String"));
 }
 
 #[test]

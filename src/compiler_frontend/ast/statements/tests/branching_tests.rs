@@ -480,7 +480,6 @@ fn rejects_guarded_choice_match_without_else() {
         DiagnosticPayload::NonExhaustiveMatch {
             reason: NonExhaustiveMatchReason::GuardedArmsRequireElse,
             missing_variants: Vec::new(),
-            detail: None,
         }
     );
 }
@@ -698,7 +697,6 @@ fn relational_patterns_without_default_are_not_exhaustive() {
         DiagnosticPayload::NonExhaustiveMatch {
             reason: NonExhaustiveMatchReason::MissingElseArm,
             missing_variants: Vec::new(),
-            detail: None,
         }
     );
 }

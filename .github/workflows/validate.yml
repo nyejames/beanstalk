@@ -23,6 +23,13 @@ jobs:
           - macos-latest
 
     steps:
+      - name: Show checkout identity
+        run: |
+          git rev-parse HEAD
+          git status --short
+          git log -1 --oneline
+          rustc -vV
+          cargo clippy -V
       - name: Checkout
         uses: actions/checkout@v6
 

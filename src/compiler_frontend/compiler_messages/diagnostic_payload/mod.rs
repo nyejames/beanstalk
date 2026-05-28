@@ -401,7 +401,6 @@ pub enum DiagnosticPayload {
     NonExhaustiveMatch {
         reason: NonExhaustiveMatchReason,
         missing_variants: Vec<StringId>,
-        detail: Option<String>,
     },
 
     InvalidResultHandling {
@@ -459,6 +458,11 @@ pub enum DiagnosticPayload {
 
     UnsupportedBuilderPackage {
         package_path: StringId,
+    },
+
+    UnsupportedBackendFeature {
+        backend_name: StringId,
+        feature: StringId,
     },
 
     InvalidPageMetadata {

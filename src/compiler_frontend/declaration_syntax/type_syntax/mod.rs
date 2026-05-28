@@ -19,8 +19,8 @@
 
 use crate::compiler_frontend::compiler_errors::compiler_error_to_diagnostic;
 use crate::compiler_frontend::compiler_messages::{
-    CompilerDiagnostic, DiagnosticKind, DiagnosticPayload, GenericApplicationErrorReason,
-    InvalidCollectionTypeReason, InvalidTypeAnnotationReason, SyntaxDiagnosticKind,
+    CompilerDiagnostic, GenericApplicationErrorReason, InvalidCollectionTypeReason,
+    InvalidTypeAnnotationReason,
 };
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::generic_identity_bridge::GenericBaseType;

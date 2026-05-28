@@ -472,6 +472,11 @@ fn rule_descriptor(kind: RuleDiagnosticKind) -> DiagnosticDescriptor {
             "Unsupported builder package",
             DiagnosticSeverity::Error,
         ),
+        RuleDiagnosticKind::UnsupportedBackendFeature => DiagnosticDescriptor::new(
+            "BST-RULE-0064",
+            "Unsupported backend feature",
+            DiagnosticSeverity::Error,
+        ),
         RuleDiagnosticKind::InvalidPageMetadata => DiagnosticDescriptor::new(
             "BST-RULE-0061",
             "Invalid page metadata",

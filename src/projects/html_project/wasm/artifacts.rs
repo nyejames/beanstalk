@@ -8,8 +8,14 @@ use crate::backends::js::{JsLoweringConfig, lower_hir_to_js};
 use crate::backends::wasm::backend::lower_hir_to_wasm_module;
 use crate::backends::wasm::request::WasmBackendRequest;
 use crate::build_system::build::{FileKind, OutputFile};
-use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
+use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages, SourceLocation};
+use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
+use crate::compiler_frontend::datatypes::definitions::TypeDefinition;
+use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
+use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind};
 use crate::compiler_frontend::hir::module::HirModule;
+use crate::compiler_frontend::hir::statements::HirStatementKind;
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::projects::html_project::compile_input::HtmlModuleCompileInput;
 use crate::projects::html_project::document_config::HtmlDocumentConfig;
@@ -120,6 +126,8 @@ pub(crate) fn compile_html_module_wasm(
         .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
     build_plan.wasm_request.external_package_registry = input.external_package_registry.clone();
 
+    validate_html_wasm_generic_support(input, string_table)?;
+
     let wasm_result = lower_hir_to_wasm_module(
         input.hir_module,
         input.borrow_analysis.borrow_facts(),
@@ -173,6 +181,163 @@ pub(crate) fn compile_html_module_wasm(
         html_output_path: output_plan.html_path,
         debug: debug_outputs,
     })
+}
+
+fn validate_html_wasm_generic_support(
+    input: &HtmlModuleCompileInput<'_>,
+    string_table: &mut StringTable,
+) -> Result<(), CompilerMessages> {
+    let Some(location) =
+        first_generic_runtime_module_location(input.hir_module, input.type_environment)
+    else {
+        return Ok(());
+    };
+
+    let backend_name = string_table.intern("html_wasm");
+    let feature = string_table.intern("generic runtime values");
+    let diagnostic =
+        CompilerDiagnostic::unsupported_backend_feature(backend_name, feature, location);
+
+    Err(
+        CompilerMessages::from_diagnostic(diagnostic, string_table.clone())
+            .with_type_context_for_all_diagnostics(input.type_environment.clone()),
+    )
+}
+
+fn first_generic_runtime_module_location(
+    module: &HirModule,
+    type_environment: &TypeEnvironment,
+) -> Option<SourceLocation> {
+    for block in &module.blocks {
+        for statement in &block.statements {
+            if let Some(location) =
+                first_generic_runtime_statement_location(statement, module, type_environment)
+            {
+                return Some(location);
+            }
+        }
+
+        if let Some(location) =
+            first_generic_runtime_terminator_location(&block.terminator, module, type_environment)
+        {
+            return Some(location);
+        }
+    }
+
+    None
+}
+
+fn first_generic_runtime_statement_location(
+    statement: &crate::compiler_frontend::hir::statements::HirStatement,
+    module: &HirModule,
+    type_environment: &TypeEnvironment,
+) -> Option<SourceLocation> {
+    match &statement.kind {
+        HirStatementKind::Assign { value, .. }
+        | HirStatementKind::Expr(value)
+        | HirStatementKind::PushRuntimeFragment { value, .. } => {
+            first_generic_runtime_expression_location(value, module, type_environment)
+        }
+        HirStatementKind::Call { args, .. } => args.iter().find_map(|arg| {
+            first_generic_runtime_expression_location(arg, module, type_environment)
+        }),
+        HirStatementKind::Drop(_) => None,
+    }
+}
+
+fn first_generic_runtime_terminator_location(
+    terminator: &HirTerminator,
+    module: &HirModule,
+    type_environment: &TypeEnvironment,
+) -> Option<SourceLocation> {
+    match terminator {
+        HirTerminator::If { condition, .. } => {
+            first_generic_runtime_expression_location(condition, module, type_environment)
+        }
+        HirTerminator::FallibleBranch { result, .. }
+        | HirTerminator::Return(result)
+        | HirTerminator::ReturnSuccess(result)
+        | HirTerminator::ReturnError(result) => {
+            first_generic_runtime_expression_location(result, module, type_environment)
+        }
+        HirTerminator::Match { scrutinee, arms } => first_generic_runtime_expression_location(
+            scrutinee,
+            module,
+            type_environment,
+        )
+        .or_else(|| {
+            arms.iter().find_map(|arm| {
+                arm.guard.as_ref().and_then(|guard| {
+                    first_generic_runtime_expression_location(guard, module, type_environment)
+                })
+            })
+        }),
+        HirTerminator::Jump { .. }
+        | HirTerminator::Break { .. }
+        | HirTerminator::Continue { .. }
+        | HirTerminator::Uninitialized
+        | HirTerminator::RuntimeFailure { .. }
+        | HirTerminator::AssertFailure { .. } => None,
+    }
+}
+
+fn first_generic_runtime_expression_location(
+    expression: &HirExpression,
+    module: &HirModule,
+    type_environment: &TypeEnvironment,
+) -> Option<SourceLocation> {
+    if matches!(
+        type_environment.get(expression.ty),
+        Some(TypeDefinition::GenericInstance(_))
+    ) {
+        return Some(
+            module
+                .side_table
+                .value_source_location(expression.id)
+                .cloned()
+                .unwrap_or_default(),
+        );
+    }
+
+    match &expression.kind {
+        HirExpressionKind::BinOp { left, right, .. } => {
+            first_generic_runtime_expression_location(left, module, type_environment).or_else(
+                || first_generic_runtime_expression_location(right, module, type_environment),
+            )
+        }
+        HirExpressionKind::UnaryOp { operand, .. }
+        | HirExpressionKind::TupleGet { tuple: operand, .. }
+        | HirExpressionKind::FallibleUnwrapSuccess { result: operand }
+        | HirExpressionKind::FallibleUnwrapError { result: operand }
+        | HirExpressionKind::BuiltinCast { value: operand, .. }
+        | HirExpressionKind::VariantPayloadGet {
+            source: operand, ..
+        } => first_generic_runtime_expression_location(operand, module, type_environment),
+        HirExpressionKind::StructConstruct { fields, .. } => {
+            fields.iter().find_map(|(_, value)| {
+                first_generic_runtime_expression_location(value, module, type_environment)
+            })
+        }
+        HirExpressionKind::Collection(items)
+        | HirExpressionKind::TupleConstruct { elements: items } => items.iter().find_map(|item| {
+            first_generic_runtime_expression_location(item, module, type_environment)
+        }),
+        HirExpressionKind::Range { start, end } => {
+            first_generic_runtime_expression_location(start, module, type_environment).or_else(
+                || first_generic_runtime_expression_location(end, module, type_environment),
+            )
+        }
+        HirExpressionKind::VariantConstruct { fields, .. } => fields.iter().find_map(|field| {
+            first_generic_runtime_expression_location(&field.value, module, type_environment)
+        }),
+        HirExpressionKind::Int(_)
+        | HirExpressionKind::Float(_)
+        | HirExpressionKind::Bool(_)
+        | HirExpressionKind::Char(_)
+        | HirExpressionKind::StringLiteral(_)
+        | HirExpressionKind::Load(_)
+        | HirExpressionKind::Copy(_) => None,
+    }
 }
 
 /// Builds builder-local Wasm planning state before invoking the backend.
