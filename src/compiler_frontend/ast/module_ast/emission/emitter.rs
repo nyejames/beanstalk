@@ -933,9 +933,9 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
     ) -> CompilerMessages {
         match error {
             TemplateError::Diagnostic(diagnostic) => {
-                self.diagnostic_messages(diagnostic, string_table)
+                self.diagnostic_messages(*diagnostic, string_table)
             }
-            TemplateError::Infrastructure(error) => self.error_messages(error, string_table),
+            TemplateError::Infrastructure(error) => self.error_messages(*error, string_table),
         }
     }
 }

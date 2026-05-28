@@ -14,8 +14,8 @@ use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 
 #[derive(Debug)]
 pub(crate) enum ExpressionParseError {
-    Diagnostic(CompilerDiagnostic),
-    Infrastructure(CompilerError),
+    Diagnostic(Box<CompilerDiagnostic>),
+    Infrastructure(Box<CompilerError>),
 }
 
 impl ExpressionParseError {
@@ -24,7 +24,7 @@ impl ExpressionParseError {
     #[cfg(test)]
     pub(super) fn diagnostic(&self) -> Option<&CompilerDiagnostic> {
         match self {
-            ExpressionParseError::Diagnostic(diagnostic) => Some(diagnostic),
+            ExpressionParseError::Diagnostic(diagnostic) => Some(diagnostic.as_ref()),
             ExpressionParseError::Infrastructure(_) => None,
         }
     }
@@ -33,21 +33,23 @@ impl ExpressionParseError {
 impl From<ExpressionParseError> for CompilerDiagnostic {
     fn from(error: ExpressionParseError) -> Self {
         match error {
-            ExpressionParseError::Diagnostic(diagnostic) => diagnostic,
-            ExpressionParseError::Infrastructure(error) => compiler_error_to_diagnostic(&error),
+            ExpressionParseError::Diagnostic(diagnostic) => *diagnostic,
+            ExpressionParseError::Infrastructure(error) => {
+                compiler_error_to_diagnostic(error.as_ref())
+            }
         }
     }
 }
 
 impl From<CompilerDiagnostic> for ExpressionParseError {
     fn from(diagnostic: CompilerDiagnostic) -> Self {
-        ExpressionParseError::Diagnostic(diagnostic)
+        ExpressionParseError::Diagnostic(Box::new(diagnostic))
     }
 }
 
 impl From<CompilerError> for ExpressionParseError {
     fn from(error: CompilerError) -> Self {
-        ExpressionParseError::Infrastructure(error)
+        ExpressionParseError::Infrastructure(Box::new(error))
     }
 }
 

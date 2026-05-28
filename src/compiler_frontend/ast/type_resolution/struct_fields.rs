@@ -45,10 +45,10 @@ impl From<ExpressionTypingError> for StructFieldResolutionError {
     fn from(error: ExpressionTypingError) -> Self {
         match error {
             ExpressionTypingError::Diagnostic(diagnostic) => {
-                StructFieldResolutionError::Diagnostic(diagnostic)
+                StructFieldResolutionError::Diagnostic(*diagnostic)
             }
             ExpressionTypingError::Infrastructure(error) => {
-                StructFieldResolutionError::Infrastructure(error)
+                StructFieldResolutionError::Infrastructure(*error)
             }
         }
     }

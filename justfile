@@ -37,9 +37,3 @@ bench-check:
 
 bench-frontend-check:
     cargo run --package xtask --bin xtask -- bench-frontend-check
-
-audit-frontend-boundaries:
-    tools/audit_frontend_boundaries.sh
-
-audit-frontend-boundaries-self-test:
-    tools/audit_frontend_boundaries.sh --self-test

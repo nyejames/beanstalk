@@ -33,19 +33,19 @@ use crate::compiler_frontend::value_mode::ValueMode;
 
 #[derive(Debug)]
 pub(crate) enum ConstantFoldError {
-    Diagnostic(CompilerDiagnostic),
-    Infrastructure(CompilerError),
+    Diagnostic(Box<CompilerDiagnostic>),
+    Infrastructure(Box<CompilerError>),
 }
 
 impl From<CompilerDiagnostic> for ConstantFoldError {
     fn from(diagnostic: CompilerDiagnostic) -> Self {
-        ConstantFoldError::Diagnostic(diagnostic)
+        ConstantFoldError::Diagnostic(Box::new(diagnostic))
     }
 }
 
 impl From<CompilerError> for ConstantFoldError {
     fn from(error: CompilerError) -> Self {
-        ConstantFoldError::Infrastructure(error)
+        ConstantFoldError::Infrastructure(Box::new(error))
     }
 }
 
@@ -75,11 +75,10 @@ pub enum ConstantFoldResult {
 ///
 /// ## Error Handling
 ///
-/// Returns [`CompilerError`] for:
-/// - Malformed expressions (insufficient operands for operators)
-/// - Type mismatches in operations
-/// - Division by zero in constant expressions
-/// - Unsupported operations on constant types
+/// Returns [`ConstantFoldError`] so compile-time source failures stay as
+/// [`CompilerDiagnostic`] values while malformed internal RPN state remains an
+/// infrastructure [`CompilerError`]. This keeps constant-folding diagnostics on the
+/// AST-owned user-diagnostic path without hiding compiler invariants.
 pub fn constant_fold(
     output_stack: &[AstNode],
     string_table: &mut StringTable,
@@ -101,7 +100,8 @@ pub fn constant_fold(
         match &node.kind {
             NodeKind::Operator(op) => {
                 let required_values = op.required_values();
-                // Make sure there are at least 2 nodes on the stack if it's a binary operator
+                // Validate stack arity before popping operands so malformed RPN is reported as an
+                // internal compiler invariant failure instead of panicking.
                 if stack.len() < required_values {
                     return Err(CompilerError::new(
                         format!(

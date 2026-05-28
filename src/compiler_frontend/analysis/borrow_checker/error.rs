@@ -12,8 +12,8 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 #[derive(Debug, Clone)]
 pub(crate) enum BorrowCheckError {
-    Diagnostic(CompilerDiagnostic),
-    Infrastructure(CompilerError),
+    Diagnostic(Box<CompilerDiagnostic>),
+    Infrastructure(Box<CompilerError>),
 }
 
 impl BorrowCheckError {
@@ -21,15 +21,15 @@ impl BorrowCheckError {
         self,
     ) -> Result<CompilerDiagnostic, CompilerError> {
         match self {
-            BorrowCheckError::Diagnostic(diagnostic) => Ok(diagnostic),
-            BorrowCheckError::Infrastructure(error) => Err(error),
+            BorrowCheckError::Diagnostic(diagnostic) => Ok(*diagnostic),
+            BorrowCheckError::Infrastructure(error) => Err(*error),
         }
     }
 
     #[cfg(test)]
     pub(crate) fn diagnostic(&self) -> Option<&CompilerDiagnostic> {
         match self {
-            BorrowCheckError::Diagnostic(diagnostic) => Some(diagnostic),
+            BorrowCheckError::Diagnostic(diagnostic) => Some(diagnostic.as_ref()),
             BorrowCheckError::Infrastructure(_) => None,
         }
     }
@@ -38,7 +38,7 @@ impl BorrowCheckError {
     pub(crate) fn infrastructure(&self) -> Option<&CompilerError> {
         match self {
             BorrowCheckError::Diagnostic(_) => None,
-            BorrowCheckError::Infrastructure(error) => Some(error),
+            BorrowCheckError::Infrastructure(error) => Some(error.as_ref()),
         }
     }
 
@@ -46,6 +46,7 @@ impl BorrowCheckError {
     pub(crate) fn rendered_message_for_tests(&self, string_table: &StringTable) -> String {
         match self {
             BorrowCheckError::Diagnostic(diagnostic) => {
+                let diagnostic = diagnostic.as_ref();
                 crate::compiler_frontend::compiler_messages::render::terse::format_terse_diagnostics(
                     std::slice::from_ref(diagnostic),
                     string_table,
@@ -59,12 +60,12 @@ impl BorrowCheckError {
 
 impl From<CompilerError> for BorrowCheckError {
     fn from(error: CompilerError) -> Self {
-        BorrowCheckError::Infrastructure(error)
+        BorrowCheckError::Infrastructure(Box::new(error))
     }
 }
 
 impl From<CompilerDiagnostic> for BorrowCheckError {
     fn from(diagnostic: CompilerDiagnostic) -> Self {
-        BorrowCheckError::Diagnostic(diagnostic)
+        BorrowCheckError::Diagnostic(Box::new(diagnostic))
     }
 }

@@ -10,18 +10,18 @@ use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 
 #[derive(Debug)]
 pub(in crate::compiler_frontend::ast::templates) enum TemplateSlotError {
-    Diagnostic(CompilerDiagnostic),
-    Infrastructure(CompilerError),
+    Diagnostic(Box<CompilerDiagnostic>),
+    Infrastructure(Box<CompilerError>),
 }
 
 impl From<CompilerDiagnostic> for TemplateSlotError {
     fn from(diagnostic: CompilerDiagnostic) -> Self {
-        TemplateSlotError::Diagnostic(diagnostic)
+        TemplateSlotError::Diagnostic(Box::new(diagnostic))
     }
 }
 
 impl From<CompilerError> for TemplateSlotError {
     fn from(error: CompilerError) -> Self {
-        TemplateSlotError::Infrastructure(error)
+        TemplateSlotError::Infrastructure(Box::new(error))
     }
 }

@@ -11,10 +11,11 @@ Validate all changes with `just validate` which automatically runs:
 - `cargo test`
 - `cargo run tests`
 
-For frontend boundary cleanup work, also run `just audit-frontend-boundaries`.
-It checks for drift-prone AST/HIR diagnostic and type-representation patterns,
-hard-fails forbidden HIR and obsolete API hits, and reports allowlisted or
-review-only legacy spelling/invariant hits for human review.
+For frontend boundary cleanup work, perform an explicit manual stage-boundary review alongside
+`just validate`. Check that AST/HIR diagnostic and type-representation paths still respect their
+owners, that user-facing diagnostics stay on `CompilerDiagnostic`, that infrastructure failures
+stay on `CompilerError`, and that obsolete APIs or duplicated boundary paths have not been left
+behind.
 
 ## No user-input panics
 - Active frontend stages must reject unsupported syntax and malformed input with structured diagnostics, not `panic!`, `todo!`, or user-data-driven `.unwrap()`
@@ -334,6 +335,7 @@ The diagnostic system has two paths:
 - Use `return_compiler_error!` **only** for internal compiler bugs or broken invariants.
 - Use `DiagnosticBag` for stage-local accumulation of multiple diagnostics.
 - Convert to `CompilerMessages` only at clear build/render boundaries.
+- When a local `Result` error boundary carries `CompilerDiagnostic` or `CompilerError` and Clippy reports `result_large_err`, box the payload variants inside that local boundary enum. Keep `DiagnosticBag` and `CompilerMessages` owning plain `CompilerDiagnostic` values at accumulation/render boundaries.
 - Include a `SourceLocation` for every user-facing diagnostic.
 - Keep paths interned until render time. Do not duplicate them as owned `PathBuf`s.
 - New type diagnostics must carry semantic `TypeId`s and context enums, not rendered type strings

@@ -439,10 +439,10 @@ impl From<TemplateError> for TemplateNormalizationError {
     fn from(error: TemplateError) -> Self {
         match error {
             TemplateError::Diagnostic(diagnostic) => {
-                TemplateNormalizationError::Diagnostic(diagnostic)
+                TemplateNormalizationError::Diagnostic(*diagnostic)
             }
             TemplateError::Infrastructure(error) => {
-                TemplateNormalizationError::Infrastructure(error)
+                TemplateNormalizationError::Infrastructure(*error)
             }
         }
     }

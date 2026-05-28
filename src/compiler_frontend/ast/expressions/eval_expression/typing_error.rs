@@ -17,19 +17,19 @@ use crate::compiler_frontend::optimizers::constant_folding::ConstantFoldError;
 ///      operator policy and constant folding can stay diagnostic-first without losing the
 ///      ability to report internal failures.
 pub(crate) enum ExpressionTypingError {
-    Diagnostic(CompilerDiagnostic),
-    Infrastructure(CompilerError),
+    Diagnostic(Box<CompilerDiagnostic>),
+    Infrastructure(Box<CompilerError>),
 }
 
 impl From<CompilerDiagnostic> for ExpressionTypingError {
     fn from(diagnostic: CompilerDiagnostic) -> Self {
-        ExpressionTypingError::Diagnostic(diagnostic)
+        ExpressionTypingError::Diagnostic(Box::new(diagnostic))
     }
 }
 
 impl From<CompilerError> for ExpressionTypingError {
     fn from(error: CompilerError) -> Self {
-        ExpressionTypingError::Infrastructure(error)
+        ExpressionTypingError::Infrastructure(Box::new(error))
     }
 }
 

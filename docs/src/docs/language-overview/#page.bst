@@ -150,7 +150,7 @@ page_head #= theme_head
         concatenated_strings = [string_slice, a_mutable_string]
     ]
 
-    All copies are explicit and must use the [codesnippet:copy] keyword in place of a type.
+    All copies are explicit and must use the [codesnippet:copy] keyword in front of the value being copied.
 
     [codeblock, $code("bst"):
         -- Create a new collection of integers

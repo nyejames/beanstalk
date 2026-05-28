@@ -32,19 +32,19 @@ use crate::compiler_frontend::type_coercion::contextual::coerce_expression_to_de
 use rustc_hash::FxHashMap;
 
 pub(crate) enum CallValidationError {
-    Diagnostic(CompilerDiagnostic),
-    Infrastructure(CompilerError),
+    Diagnostic(Box<CompilerDiagnostic>),
+    Infrastructure(Box<CompilerError>),
 }
 
 impl From<CompilerDiagnostic> for CallValidationError {
     fn from(diagnostic: CompilerDiagnostic) -> Self {
-        CallValidationError::Diagnostic(diagnostic)
+        CallValidationError::Diagnostic(Box::new(diagnostic))
     }
 }
 
 impl From<CompilerError> for CallValidationError {
     fn from(error: CompilerError) -> Self {
-        CallValidationError::Infrastructure(error)
+        CallValidationError::Infrastructure(Box::new(error))
     }
 }
 
@@ -383,9 +383,7 @@ fn resolve_call_arguments_with_type_policy(
                 diagnostics.callable_title(),
                 diagnostics.callee_name
             );
-            return Err(CallValidationError::Infrastructure(
-                CompilerError::compiler_error(message),
-            ));
+            return Err(CompilerError::compiler_error(message).into());
         };
 
         let passing_mode = classify_call_passing_mode(

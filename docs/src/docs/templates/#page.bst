@@ -181,7 +181,4 @@ page_head #= theme_head
             [ text: plus some extra text in the same element as the variable text ]
         ]
     ]
-
-    ## Errors
-    If an error is added to a template at runtime, it will be displayed in the console, rather than injected into the template. 
 ]

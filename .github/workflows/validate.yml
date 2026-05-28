@@ -27,12 +27,16 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@master
         with:
+          toolchain: 1.95.0
           components: rustfmt, clippy
 
       - name: Cache Rust builds
         uses: Swatinem/rust-cache@v2
 
+      - name: Show Rust versions
+        run: rustc --version && cargo clippy --version
+
       - name: Run clippy
-        run: cargo clippy --all-targets --all-features -- -D warnings  
+        run: cargo clippy --all-targets --all-features -- -D warnings

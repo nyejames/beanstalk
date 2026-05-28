@@ -120,7 +120,7 @@ pub fn parse_produced_values_typed<'a, 'b>(
                 )
                 .into());
             }
-            return Err(diagnostic.into());
+            return Err(ExpressionParseError::Diagnostic(diagnostic));
         }
 
         Err(err) => return Err(err),

@@ -411,18 +411,19 @@ fn apply_library_folders(
 
     for folder_string in folder_strings {
         let folder = PathBuf::from(folder_string.value);
-        if let Err(error) =
-            validate_library_folder_path(folder.clone(), &folder_string.location, string_table)
-        {
-            errors.push(error);
-        } else {
+        let validated_folder = validate_library_folder_path(
+            folder,
+            &folder_string.location,
+            string_table,
+            &mut errors,
+        );
+
+        if let Some(folder) = validated_folder {
             folders.push(folder);
         }
     }
 
-    if let Err(error) = reject_duplicate_folder_entries(&folders, location, string_table) {
-        errors.push(error);
-    }
+    reject_duplicate_folder_entries(&folders, location, string_table, &mut errors);
 
     if !errors.is_empty() {
         return Err(errors);
@@ -441,7 +442,8 @@ fn reject_duplicate_folder_entries(
     folders: &[PathBuf],
     location: &SourceLocation,
     string_table: &mut StringTable,
-) -> Result<(), CompilerDiagnostic> {
+    errors: &mut Vec<CompilerDiagnostic>,
+) {
     let mut seen = HashSet::new();
     let mut duplicates = Vec::new();
 
@@ -452,20 +454,20 @@ fn reject_duplicate_folder_entries(
     }
 
     if duplicates.is_empty() {
-        return Ok(());
+        return;
     }
 
     duplicates.sort();
     duplicates.dedup();
     let duplicate_list = string_table.intern(&duplicates.join(", "));
 
-    Err(config_diagnostic(
+    errors.push(config_diagnostic(
         None,
         InvalidConfigReason::DuplicateLibraryFolder {
             folder: duplicate_list,
         },
         location.clone(),
-    ))
+    ));
 }
 
 /// Validate one `library_folders` entry and normalize it to the stored path form.
@@ -475,9 +477,10 @@ fn validate_library_folder_path(
     library_folder: PathBuf,
     location: &SourceLocation,
     string_table: &mut StringTable,
-) -> Result<PathBuf, CompilerDiagnostic> {
+    errors: &mut Vec<CompilerDiagnostic>,
+) -> Option<PathBuf> {
     if library_folder.as_os_str().is_empty() {
-        return Err(config_diagnostic(
+        errors.push(config_diagnostic(
             None,
             InvalidConfigReason::InvalidLibraryFolder {
                 folder: None,
@@ -485,6 +488,7 @@ fn validate_library_folder_path(
             },
             location.clone(),
         ));
+        return None;
     }
 
     let folder_name = library_folder.display().to_string();
@@ -496,7 +500,7 @@ fn validate_library_folder_path(
             .to_string_lossy()
             .starts_with('/')
     {
-        return Err(config_diagnostic(
+        errors.push(config_diagnostic(
             None,
             InvalidConfigReason::InvalidLibraryFolder {
                 folder: Some(folder_id),
@@ -504,13 +508,14 @@ fn validate_library_folder_path(
             },
             location.clone(),
         ));
+        return None;
     }
 
     if library_folder
         .components()
         .any(|component| component == std::path::Component::ParentDir)
     {
-        return Err(config_diagnostic(
+        errors.push(config_diagnostic(
             None,
             InvalidConfigReason::InvalidLibraryFolder {
                 folder: Some(folder_id),
@@ -518,11 +523,12 @@ fn validate_library_folder_path(
             },
             location.clone(),
         ));
+        return None;
     }
 
     let mut components = library_folder.components();
     let Some(first) = components.next() else {
-        return Err(config_diagnostic(
+        errors.push(config_diagnostic(
             None,
             InvalidConfigReason::InvalidLibraryFolder {
                 folder: None,
@@ -530,10 +536,11 @@ fn validate_library_folder_path(
             },
             location.clone(),
         ));
+        return None;
     };
 
     if !matches!(first, std::path::Component::Normal(_)) || components.next().is_some() {
-        return Err(config_diagnostic(
+        errors.push(config_diagnostic(
             None,
             InvalidConfigReason::InvalidLibraryFolder {
                 folder: Some(folder_id),
@@ -541,9 +548,10 @@ fn validate_library_folder_path(
             },
             location.clone(),
         ));
+        return None;
     }
 
-    Ok(library_folder)
+    Some(library_folder)
 }
 
 // -------------------------

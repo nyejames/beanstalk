@@ -406,13 +406,25 @@ body {
     ">CompilerError</span> / <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">ErrorType::HirTransformation</span> for invariant failures only. Executable AST and HIR call/result typing is <span style="
+    ">ErrorType::HirTransformation</span> for invariant failures only. Result-returning diagnostic boundary enums box large <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">CompilerDiagnostic</span> / <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">CompilerError</span> payloads and unbox them only at <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">DiagnosticBag</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">CompilerMessages</span>, or render boundaries so Clippy stays clean without weakening the typed diagnostic model. Executable AST and HIR call/result typing is <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">TypeId</span>-first, with <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">DataType</span> retained only for parse and diagnostic spelling. The frontend boundary audit guards against regression. Remaining future work is limited to JSON diagnostic output, LSP mapping, localization, and any new diagnostics required by future language features.</td>
+    ">DataType</span> retained only for parse and diagnostic spelling. Frontend boundary cleanup requires manual review of AST/HIR ownership, diagnostic routing, and type-representation paths. Remaining future work is limited to JSON diagnostic output, LSP mapping, localization, and any new diagnostics required by future language features.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">

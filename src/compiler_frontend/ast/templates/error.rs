@@ -11,28 +11,28 @@ use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 
 #[derive(Debug)]
 pub(crate) enum TemplateError {
-    Diagnostic(CompilerDiagnostic),
-    Infrastructure(CompilerError),
+    Diagnostic(Box<CompilerDiagnostic>),
+    Infrastructure(Box<CompilerError>),
 }
 
 impl TemplateError {
     pub(crate) fn into_diagnostic(self) -> CompilerDiagnostic {
         match self {
-            TemplateError::Diagnostic(diagnostic) => diagnostic,
-            TemplateError::Infrastructure(error) => compiler_error_to_diagnostic(&error),
+            TemplateError::Diagnostic(diagnostic) => *diagnostic,
+            TemplateError::Infrastructure(error) => compiler_error_to_diagnostic(error.as_ref()),
         }
     }
 }
 
 impl From<CompilerDiagnostic> for TemplateError {
     fn from(diagnostic: CompilerDiagnostic) -> Self {
-        TemplateError::Diagnostic(diagnostic)
+        TemplateError::Diagnostic(Box::new(diagnostic))
     }
 }
 
 impl From<CompilerError> for TemplateError {
     fn from(error: CompilerError) -> Self {
-        TemplateError::Infrastructure(error)
+        TemplateError::Infrastructure(Box::new(error))
     }
 }
 

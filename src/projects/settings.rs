@@ -142,18 +142,18 @@ impl Config {
 /// type that can still distinguish normal user config feedback from internal failures.
 #[derive(Debug, Clone)]
 pub enum ProjectConfigError {
-    Diagnostic(CompilerDiagnostic),
-    Infrastructure(CompilerError),
+    Diagnostic(Box<CompilerDiagnostic>),
+    Infrastructure(Box<CompilerError>),
 }
 
 impl ProjectConfigError {
     pub fn into_messages(self, string_table: StringTable) -> CompilerMessages {
         match self {
             ProjectConfigError::Diagnostic(diagnostic) => {
-                CompilerMessages::from_diagnostic(diagnostic, string_table)
+                CompilerMessages::from_diagnostic(*diagnostic, string_table)
             }
             ProjectConfigError::Infrastructure(error) => {
-                CompilerMessages::from_error(error, string_table)
+                CompilerMessages::from_error(*error, string_table)
             }
         }
     }
@@ -161,7 +161,7 @@ impl ProjectConfigError {
     #[cfg(test)]
     pub(crate) fn diagnostic(&self) -> Option<&CompilerDiagnostic> {
         match self {
-            ProjectConfigError::Diagnostic(diagnostic) => Some(diagnostic),
+            ProjectConfigError::Diagnostic(diagnostic) => Some(diagnostic.as_ref()),
             ProjectConfigError::Infrastructure(_) => None,
         }
     }
@@ -169,13 +169,13 @@ impl ProjectConfigError {
 
 impl From<CompilerDiagnostic> for ProjectConfigError {
     fn from(diagnostic: CompilerDiagnostic) -> Self {
-        ProjectConfigError::Diagnostic(diagnostic)
+        ProjectConfigError::Diagnostic(Box::new(diagnostic))
     }
 }
 
 impl From<CompilerError> for ProjectConfigError {
     fn from(error: CompilerError) -> Self {
-        ProjectConfigError::Infrastructure(error)
+        ProjectConfigError::Infrastructure(Box::new(error))
     }
 }
 
