@@ -23,13 +23,6 @@ jobs:
           - macos-latest
 
     steps:
-      - name: Show checkout identity
-        run: |
-          git rev-parse HEAD
-          git status --short
-          git log -1 --oneline
-          rustc -vV
-          cargo clippy -V
       - name: Checkout
         uses: actions/checkout@v6
 
@@ -39,11 +32,21 @@ jobs:
           toolchain: 1.95.0
           components: rustfmt, clippy
 
-      - name: Cache Rust builds
-        uses: Swatinem/rust-cache@v2
+      - name: Show checkout identity
+        run: |
+          pwd
+          ls -la
+          git rev-parse HEAD
+          git status --short
+          git log -1 --oneline
+          rustc -vV
+          cargo clippy -V
 
-      - name: Show Rust versions
-        run: rustc --version && cargo clippy --version
+      - name: Verify expected clippy cleanup is present
+        run: |
+          grep -n "field_definitions_from_declarations" src/compiler_frontend/ast/module_ast/environment/builder.rs || true
+          grep -n "generic_receiver_method_deferred_diagnostic" src/compiler_frontend/ast/module_ast/environment/function_signatures.rs || true
+          grep -n "pub diagnostic: Box<CompilerDiagnostic>" src/compiler_frontend/headers/types.rs || true
 
       - name: Run clippy
         run: cargo clippy --all-targets --all-features -- -D warnings
