@@ -1,0 +1,12 @@
+entry = "."
+
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = [
+    "runtime loop unaffected before",
+    "runtime-1;",
+    "runtime-2;",
+    "runtime-3;",
+    "runtime loop unaffected after",
+]

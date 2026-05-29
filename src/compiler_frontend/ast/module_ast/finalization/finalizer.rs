@@ -80,6 +80,7 @@ impl<'context, 'services> AstFinalizer<'context, 'services> {
             project_path_resolver,
             &self.context.path_format_config,
             string_table,
+            self.context.template_const_loop_iteration_limit,
         )
         .map_err(TemplateNormalizationError::from)
         .map_err(|error| {

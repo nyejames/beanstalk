@@ -90,12 +90,14 @@ pub(crate) fn collect_and_strip_comment_templates(
     project_path_resolver: &ProjectPathResolver,
     path_format_config: &PathStringFormatConfig,
     string_table: &mut StringTable,
+    template_const_loop_iteration_limit: usize,
 ) -> Result<Vec<AstDocFragment>, TemplateError> {
     doc_fragments::collect_and_strip_comment_templates(
         ast_nodes,
         project_path_resolver,
         path_format_config,
         string_table,
+        template_const_loop_iteration_limit,
     )
 }
 

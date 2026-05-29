@@ -503,11 +503,11 @@ body {
         let bst___hir_tmp_4_l13 = __bs_binding(undefined);
         let bst_fact5_l14 = __bs_binding(undefined);
         let bst___hir_tmp_5_l15 = __bs_binding(undefined);
-        let bst___hir_tmp_6_l25 = __bs_binding(undefined);
-        let bst___hir_tmp_7_l27 = __bs_binding(undefined);
-        let bst___hir_tmp_8_l29 = __bs_binding(undefined);
-        let bst___hir_tmp_9_l31 = __bs_binding(undefined);
-        let bst___hir_tmp_10_l32 = __bs_binding(undefined);
+        let bst___hir_tmp_6_l16 = __bs_binding(undefined);
+        let bst___hir_tmp_7_l17 = __bs_binding(undefined);
+        let bst___hir_tmp_8_l18 = __bs_binding(undefined);
+        let bst___hir_tmp_9_l19 = __bs_binding(undefined);
+        let bst___hir_tmp_10_l20 = __bs_binding(undefined);
         
         __bs_assign_value(bst___hir_tmp_1_l7, []);
         __bs_assign_value(bst___hir_tmp_2_l9, bst_add_fn0(__bs_binding(5), __bs_binding(3)));
@@ -518,55 +518,25 @@ body {
         __bs_assign_borrow(bst_message_l12, bst___hir_tmp_4_l13);
         __bs_assign_value(bst___hir_tmp_5_l15, bst_factorial_fn3(__bs_binding(5)));
         __bs_assign_borrow(bst_fact5_l14, bst___hir_tmp_5_l15);
-        __bs_assign_value(bst___hir_tmp_6_l25, bst___template_fn_1_fn6(bst_sum_l8));
-        __bs_assign_value(bst___hir_tmp_7_l27, bst___template_fn_2_fn7(bst_product_l10));
-        __bs_assign_value(bst___hir_tmp_8_l29, bst___template_fn_3_fn8(bst_message_l12));
-        __bs_assign_value(bst___hir_tmp_9_l31, bst___template_fn_4_fn9(bst_fact5_l14));
-        __bs_assign_value(bst___hir_tmp_10_l32, bst___template_fn_0_fn5(__bs_binding("functions sum="), bst___hir_tmp_6_l25, __bs_binding(" product="), bst___hir_tmp_7_l27, __bs_binding(" message="), bst___hir_tmp_8_l29, __bs_binding(" fact5="), bst___hir_tmp_9_l31));
-        __bs_read(bst___hir_tmp_1_l7).push(__bs_read(bst___hir_tmp_10_l32));
+        __bs_assign_value(bst___hir_tmp_6_l16, "");
+        __bs_assign_value(bst___hir_tmp_6_l16, (__bs_read(bst___hir_tmp_6_l16) + "functions sum="));
+        __bs_assign_value(bst___hir_tmp_7_l17, "");
+        __bs_assign_value(bst___hir_tmp_7_l17, (__bs_read(bst___hir_tmp_7_l17) + ("" + __bs_read(bst_sum_l8))));
+        __bs_assign_value(bst___hir_tmp_6_l16, (__bs_read(bst___hir_tmp_6_l16) + __bs_clone_value(__bs_read(bst___hir_tmp_7_l17))));
+        __bs_assign_value(bst___hir_tmp_6_l16, (__bs_read(bst___hir_tmp_6_l16) + " product="));
+        __bs_assign_value(bst___hir_tmp_8_l18, "");
+        __bs_assign_value(bst___hir_tmp_8_l18, (__bs_read(bst___hir_tmp_8_l18) + ("" + __bs_read(bst_product_l10))));
+        __bs_assign_value(bst___hir_tmp_6_l16, (__bs_read(bst___hir_tmp_6_l16) + __bs_clone_value(__bs_read(bst___hir_tmp_8_l18))));
+        __bs_assign_value(bst___hir_tmp_6_l16, (__bs_read(bst___hir_tmp_6_l16) + " message="));
+        __bs_assign_value(bst___hir_tmp_9_l19, "");
+        __bs_assign_value(bst___hir_tmp_9_l19, (__bs_read(bst___hir_tmp_9_l19) + __bs_read(bst_message_l12)));
+        __bs_assign_value(bst___hir_tmp_6_l16, (__bs_read(bst___hir_tmp_6_l16) + __bs_clone_value(__bs_read(bst___hir_tmp_9_l19))));
+        __bs_assign_value(bst___hir_tmp_6_l16, (__bs_read(bst___hir_tmp_6_l16) + " fact5="));
+        __bs_assign_value(bst___hir_tmp_10_l20, "");
+        __bs_assign_value(bst___hir_tmp_10_l20, (__bs_read(bst___hir_tmp_10_l20) + ("" + __bs_read(bst_fact5_l14))));
+        __bs_assign_value(bst___hir_tmp_6_l16, (__bs_read(bst___hir_tmp_6_l16) + __bs_clone_value(__bs_read(bst___hir_tmp_10_l20))));
+        __bs_read(bst___hir_tmp_1_l7).push(__bs_clone_value(__bs_read(bst___hir_tmp_6_l16)));
         return __bs_read(bst___hir_tmp_1_l7);
-    }
-
-    function bst___template_fn_0_fn5(bst_chunk_0_l16, bst_chunk_1_l17, bst_chunk_2_l18, bst_chunk_3_l19, bst_chunk_4_l20, bst_chunk_5_l21, bst_chunk_6_l22, bst_chunk_7_l23) {
-        
-        bst_chunk_0_l16 = __bs_param_binding(bst_chunk_0_l16);
-        bst_chunk_1_l17 = __bs_param_binding(bst_chunk_1_l17);
-        bst_chunk_2_l18 = __bs_param_binding(bst_chunk_2_l18);
-        bst_chunk_3_l19 = __bs_param_binding(bst_chunk_3_l19);
-        bst_chunk_4_l20 = __bs_param_binding(bst_chunk_4_l20);
-        bst_chunk_5_l21 = __bs_param_binding(bst_chunk_5_l21);
-        bst_chunk_6_l22 = __bs_param_binding(bst_chunk_6_l22);
-        bst_chunk_7_l23 = __bs_param_binding(bst_chunk_7_l23);
-        
-        return (((((((("" + __bs_read(bst_chunk_0_l16)) + __bs_read(bst_chunk_1_l17)) + __bs_read(bst_chunk_2_l18)) + __bs_read(bst_chunk_3_l19)) + __bs_read(bst_chunk_4_l20)) + __bs_read(bst_chunk_5_l21)) + __bs_read(bst_chunk_6_l22)) + __bs_read(bst_chunk_7_l23));
-    }
-
-    function bst___template_fn_1_fn6(bst_chunk_0_l24) {
-        
-        bst_chunk_0_l24 = __bs_param_binding(bst_chunk_0_l24);
-        
-        return ("" + ("" + __bs_read(bst_chunk_0_l24)));
-    }
-
-    function bst___template_fn_2_fn7(bst_chunk_0_l26) {
-        
-        bst_chunk_0_l26 = __bs_param_binding(bst_chunk_0_l26);
-        
-        return ("" + ("" + __bs_read(bst_chunk_0_l26)));
-    }
-
-    function bst___template_fn_3_fn8(bst_chunk_0_l28) {
-        
-        bst_chunk_0_l28 = __bs_param_binding(bst_chunk_0_l28);
-        
-        return ("" + __bs_read(bst_chunk_0_l28));
-    }
-
-    function bst___template_fn_4_fn9(bst_chunk_0_l30) {
-        
-        bst_chunk_0_l30 = __bs_param_binding(bst_chunk_0_l30);
-        
-        return ("" + ("" + __bs_read(bst_chunk_0_l30)));
     }
 
     </script>

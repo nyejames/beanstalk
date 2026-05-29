@@ -158,6 +158,7 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
         ))
         .with_project_path_resolver(self.context.project_path_resolver.clone())
         .with_path_format_config(self.context.path_format_config.clone())
+        .with_template_const_loop_iteration_limit(self.context.template_const_loop_iteration_limit)
         .with_rendered_path_usage_sink(Rc::clone(&self.environment.lookups.rendered_path_usages))
         .with_generic_function_instantiation_sink(Rc::clone(
             &self.generic_function_instantiation_requests,
@@ -256,7 +257,7 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
                 // Constants and choices are fully handled during environment construction.
                 HeaderKind::Constant { .. } | HeaderKind::Choice { .. } => {}
 
-                HeaderKind::ConstTemplate => {
+                HeaderKind::ConstTemplate { .. } => {
                     let mut template_tokens = header.tokens;
                     let context = self.build_base_scope_context(BaseScopeContextInput {
                         kind: ContextKind::Constant,
@@ -840,7 +841,7 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
             &mut self.environment.type_environment,
             &mut self.compatibility_cache,
         );
-        let template_result = Template::new_with_type_interner(
+        let template_result = Template::new_const_required_with_type_interner(
             template_tokens,
             context,
             &mut type_interner,

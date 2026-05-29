@@ -266,7 +266,7 @@ fn register_header_symbol(
             );
         }
 
-        HeaderKind::ConstTemplate => {}
+        HeaderKind::ConstTemplate { .. } => {}
     }
 }
 

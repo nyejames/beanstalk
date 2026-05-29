@@ -13,13 +13,16 @@ use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
 use crate::compiler_frontend::external_packages::{CallTarget, ExternalFunctionId};
+use crate::compiler_frontend::hir::blocks::HirLocal;
 use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, ValueKind};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
+use crate::compiler_frontend::hir::hir_side_table::{HirLocalOriginKind, HirLocation};
 use crate::compiler_frontend::hir::ids::{BlockId, LocalId, RegionId};
 use crate::compiler_frontend::hir::operators::HirBinOp;
 use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::statements::HirStatementKind;
 use crate::compiler_frontend::hir::terminators::HirTerminator;
+use crate::compiler_frontend::interned_path::InternedPath;
 use crate::return_hir_transformation_error;
 
 #[derive(Clone, Copy)]
@@ -64,12 +67,97 @@ struct RangeLoopRuntime {
 }
 
 impl<'a> HirBuilder<'a> {
+    pub(super) fn lower_while_statement_impl(
+        &mut self,
+        condition: &Expression,
+        body: &[AstNode],
+        location: &SourceLocation,
+    ) -> Result<(), CompilerError> {
+        self.lower_while_with_body_emitter(condition, location, |builder| {
+            builder.lower_statement_sequence(body)
+        })
+    }
+
+    /// Lowers a conditional loop into CFG while letting callers choose the body emitter.
+    ///
+    /// Runtime template loops need the same while-header/body/backedge shape as
+    /// statement loops, but their body appends render units instead of lowering
+    /// statement nodes. Keeping the CFG owner here avoids a second conditional
+    /// loop lowering path in the template HIR code.
+    pub(crate) fn lower_while_with_body_emitter(
+        &mut self,
+        condition: &Expression,
+        location: &SourceLocation,
+        emit_body: impl FnOnce(&mut HirBuilder<'_>) -> Result<(), CompilerError>,
+    ) -> Result<(), CompilerError> {
+        let pre_header_block = self.current_block_id_or_error(location)?;
+        let parent_region = self.current_region_or_error(location)?;
+
+        let header_block = self.create_block(parent_region, location, "while-header")?;
+        let body_region = self.create_child_region(parent_region);
+        let body_block = self.create_block(body_region, location, "while-body")?;
+        let exit_block = self.create_block(parent_region, location, "while-exit")?;
+
+        self.emit_jump_to(pre_header_block, header_block, location, "while.enter")?;
+
+        self.set_current_block(header_block, location)?;
+        let condition_value = self.lower_expression_value_to_current_block(condition)?;
+        let condition_block = self.current_block_id_or_error(location)?;
+
+        self.emit_terminator(
+            condition_block,
+            HirTerminator::If {
+                condition: condition_value,
+                then_block: body_block,
+                else_block: exit_block,
+            },
+            location,
+        )?;
+
+        self.log_control_flow_edge(condition_block, body_block, "while.true");
+        self.log_control_flow_edge(condition_block, exit_block, "while.false");
+
+        self.set_current_block(body_block, location)?;
+        self.push_loop_targets(exit_block, header_block);
+        let body_result = emit_body(self);
+        self.pop_loop_targets();
+        body_result?;
+
+        let body_tail_block = self.current_block_id_or_error(location)?;
+        if !self.block_has_explicit_terminator(body_tail_block, location)? {
+            let backedge_block = self.create_block(parent_region, location, "while-backedge")?;
+            self.emit_jump_to(
+                body_tail_block,
+                backedge_block,
+                location,
+                "while.body.backedge",
+            )?;
+
+            self.set_current_block(backedge_block, location)?;
+            self.emit_jump_to(backedge_block, header_block, location, "while.backedge")?;
+        }
+
+        self.set_current_block(exit_block, location)
+    }
+
     pub(super) fn lower_range_loop_statement_impl(
         &mut self,
         bindings: &LoopBindings,
         range: &RangeLoopSpec,
         body: &[AstNode],
         location: &SourceLocation,
+    ) -> Result<(), CompilerError> {
+        self.lower_range_loop_with_body_emitter(bindings, range, location, |builder| {
+            builder.lower_statement_sequence(body)
+        })
+    }
+
+    pub(crate) fn lower_range_loop_with_body_emitter(
+        &mut self,
+        bindings: &LoopBindings,
+        range: &RangeLoopSpec,
+        location: &SourceLocation,
+        mut emit_body: impl FnMut(&mut HirBuilder<'_>) -> Result<(), CompilerError>,
     ) -> Result<(), CompilerError> {
         // Build an explicit CFG pipeline so runtime range semantics are deterministic:
         // zero-step guard -> step normalization -> direction dispatch -> bounds checks.
@@ -97,8 +185,11 @@ impl<'a> HirBuilder<'a> {
         self.emit_range_loop_step_magnitude_normalization(runtime, location)?;
         self.emit_range_loop_direction_dispatch(runtime, location)?;
         self.emit_range_loop_header_checks(range, runtime, location)?;
-        self.lower_range_loop_body(bindings, body, runtime, location)?;
-        self.emit_range_loop_step(runtime, location)?;
+        let step_block_is_reachable =
+            self.lower_range_loop_body_with_emitter(bindings, runtime, location, &mut emit_body)?;
+        if step_block_is_reachable {
+            self.emit_range_loop_step(runtime, location)?;
+        }
 
         self.set_current_block(runtime.blocks.exit, location)
     }
@@ -663,13 +754,13 @@ impl<'a> HirBuilder<'a> {
         Ok(())
     }
 
-    fn lower_range_loop_body(
+    fn lower_range_loop_body_with_emitter(
         &mut self,
         bindings: &LoopBindings,
-        body: &[AstNode],
         runtime: RangeLoopRuntime,
         location: &SourceLocation,
-    ) -> Result<(), CompilerError> {
+        emit_body: &mut impl FnMut(&mut HirBuilder<'_>) -> Result<(), CompilerError>,
+    ) -> Result<bool, CompilerError> {
         let RangeLoopRuntime {
             blocks,
             locals,
@@ -678,14 +769,9 @@ impl<'a> HirBuilder<'a> {
 
         self.set_current_block(blocks.body, location)?;
         let body_region_id = self.current_region_or_error(location)?;
+        let mut visible_bindings = Vec::new();
 
         if let Some(item_binding) = &bindings.item {
-            let binding_local = self.allocate_named_local(
-                item_binding.id.clone(),
-                types.binding,
-                false,
-                Some(location.clone()),
-            )?;
             let body_current_value = self.make_expression(
                 location,
                 HirExpressionKind::Load(HirPlace::Local(locals.current)),
@@ -693,22 +779,17 @@ impl<'a> HirBuilder<'a> {
                 ValueKind::Place,
                 body_region_id,
             );
-            self.emit_statement_kind(
-                HirStatementKind::Assign {
-                    target: HirPlace::Local(binding_local),
-                    value: body_current_value,
-                },
+            let binding = self.register_loop_binding_local(
+                item_binding,
+                types.binding,
+                body_current_value,
+                &visible_bindings,
                 location,
             )?;
+            visible_bindings.push(binding);
         }
 
         if let Some(index_binding) = &bindings.index {
-            let index_local = self.allocate_named_local(
-                index_binding.id.clone(),
-                types.int_type,
-                false,
-                Some(location.clone()),
-            )?;
             let index_value = self.make_expression(
                 location,
                 HirExpressionKind::Load(HirPlace::Local(locals.iteration_index)),
@@ -716,25 +797,28 @@ impl<'a> HirBuilder<'a> {
                 ValueKind::Place,
                 body_region_id,
             );
-            self.emit_statement_kind(
-                HirStatementKind::Assign {
-                    target: HirPlace::Local(index_local),
-                    value: index_value,
-                },
+            let binding = self.register_loop_binding_local(
+                index_binding,
+                types.int_type,
+                index_value,
+                &visible_bindings,
                 location,
             )?;
+            visible_bindings.push(binding);
         }
 
         self.push_loop_targets(blocks.exit, blocks.step);
-        self.lower_statement_sequence(body)?;
+        let body_result =
+            self.with_temporary_local_bindings(visible_bindings, |builder| emit_body(builder));
         self.pop_loop_targets();
+        body_result?;
 
         let body_tail_block = self.current_block_id_or_error(location)?;
         if !self.block_has_explicit_terminator(body_tail_block, location)? {
             self.emit_jump_to(body_tail_block, blocks.step, location, "for.body.step")?;
         }
 
-        Ok(())
+        Ok(!self.discard_unreachable_empty_block(blocks.step, location)?)
     }
 
     fn emit_range_loop_step(
@@ -856,6 +940,18 @@ impl<'a> HirBuilder<'a> {
         body: &[AstNode],
         location: &SourceLocation,
     ) -> Result<(), CompilerError> {
+        self.lower_collection_loop_with_body_emitter(bindings, iterable, location, |builder| {
+            builder.lower_statement_sequence(body)
+        })
+    }
+
+    pub(crate) fn lower_collection_loop_with_body_emitter(
+        &mut self,
+        bindings: &LoopBindings,
+        iterable: &Expression,
+        location: &SourceLocation,
+        mut emit_body: impl FnMut(&mut HirBuilder<'_>) -> Result<(), CompilerError>,
+    ) -> Result<(), CompilerError> {
         let pre_header_block = self.current_block_id_or_error(location)?;
         let parent_region = self.current_region_or_error(location)?;
 
@@ -962,13 +1058,9 @@ impl<'a> HirBuilder<'a> {
 
         self.set_current_block(body_block, location)?;
         let body_region_id = self.current_region_or_error(location)?;
+        let mut visible_bindings = Vec::new();
+
         if let Some(item_binding) = &bindings.item {
-            let item_local = self.allocate_named_local(
-                item_binding.id.clone(),
-                element_type,
-                false,
-                Some(location.to_owned()),
-            )?;
             let item_index = self.make_expression(
                 location,
                 HirExpressionKind::Load(HirPlace::Local(iteration_index_local)),
@@ -987,22 +1079,17 @@ impl<'a> HirBuilder<'a> {
                 ValueKind::Place,
                 body_region_id,
             );
-            self.emit_statement_kind(
-                HirStatementKind::Assign {
-                    target: HirPlace::Local(item_local),
-                    value: item_value,
-                },
+            let binding = self.register_loop_binding_local(
+                item_binding,
+                element_type,
+                item_value,
+                &visible_bindings,
                 location,
             )?;
+            visible_bindings.push(binding);
         }
 
         if let Some(index_binding) = &bindings.index {
-            let user_index_local = self.allocate_named_local(
-                index_binding.id.clone(),
-                int_ty,
-                false,
-                Some(location.to_owned()),
-            )?;
             let user_index_value = self.make_expression(
                 location,
                 HirExpressionKind::Load(HirPlace::Local(iteration_index_local)),
@@ -1010,18 +1097,21 @@ impl<'a> HirBuilder<'a> {
                 ValueKind::Place,
                 body_region_id,
             );
-            self.emit_statement_kind(
-                HirStatementKind::Assign {
-                    target: HirPlace::Local(user_index_local),
-                    value: user_index_value,
-                },
+            let binding = self.register_loop_binding_local(
+                index_binding,
+                int_ty,
+                user_index_value,
+                &visible_bindings,
                 location,
             )?;
+            visible_bindings.push(binding);
         }
 
         self.push_loop_targets(exit_block, step_block);
-        self.lower_statement_sequence(body)?;
+        let body_result =
+            self.with_temporary_local_bindings(visible_bindings, |builder| emit_body(builder));
         self.pop_loop_targets();
+        body_result?;
 
         let body_tail_block = self.current_block_id_or_error(location)?;
         if !self.block_has_explicit_terminator(body_tail_block, location)? {
@@ -1031,6 +1121,10 @@ impl<'a> HirBuilder<'a> {
                 location,
                 "loop.collection.body.step",
             )?;
+        }
+
+        if self.discard_unreachable_empty_block(step_block, location)? {
+            return self.set_current_block(exit_block, location);
         }
 
         self.set_current_block(step_block, location)?;
@@ -1075,6 +1169,59 @@ impl<'a> HirBuilder<'a> {
         )?;
 
         self.set_current_block(exit_block, location)
+    }
+
+    fn register_loop_binding_local(
+        &mut self,
+        binding: &crate::compiler_frontend::ast::ast_nodes::Declaration,
+        ty: TypeId,
+        value: HirExpression,
+        visible_bindings: &[(InternedPath, LocalId)],
+        location: &SourceLocation,
+    ) -> Result<(InternedPath, LocalId), CompilerError> {
+        // AST scopes already enforce no-shadowing. This guard keeps HIR honest if a
+        // malformed AST ever tries to bind a loop name over an already-visible local.
+        if self.locals_by_name.contains_key(&binding.id)
+            || visible_bindings.iter().any(|(path, _)| path == &binding.id)
+        {
+            return_hir_transformation_error!(
+                format!(
+                    "Local '{}' is already declared in this function scope",
+                    self.symbol_name_for_diagnostics(&binding.id)
+                ),
+                self.hir_error_location(location)
+            );
+        }
+
+        let region = self.current_region_or_error(location)?;
+        let block_id = self.current_block_id_or_error(location)?;
+        let local_id = self.allocate_local_id();
+        let local = HirLocal {
+            id: local_id,
+            ty,
+            mutable: false,
+            region,
+            source_info: Some(location.clone()),
+        };
+
+        self.side_table.map_local_source(&local);
+        self.register_local_in_block(block_id, local, location)?;
+        self.side_table
+            .bind_local_name(local_id, binding.id.clone());
+        self.side_table
+            .bind_local_origin(local_id, HirLocalOriginKind::User, None, None);
+        self.side_table
+            .map_ast_to_hir(location, HirLocation::Local(local_id));
+
+        self.emit_statement_kind(
+            HirStatementKind::Assign {
+                target: HirPlace::Local(local_id),
+                value,
+            },
+            location,
+        )?;
+
+        Ok((binding.id.clone(), local_id))
     }
 
     fn range_iteration_type(

@@ -494,7 +494,7 @@ fn top_level_const_template_tokens_keep_close_and_eof_for_ast_parser() {
     let const_template_header = headers
         .headers
         .iter()
-        .find(|header| matches!(header.kind, HeaderKind::ConstTemplate))
+        .find(|header| matches!(header.kind, HeaderKind::ConstTemplate { .. }))
         .expect("expected top-level const template header");
 
     assert!(
@@ -529,6 +529,37 @@ fn top_level_const_template_tokens_keep_close_and_eof_for_ast_parser() {
         ),
         "const template token stream should end with EOF sentinel"
     );
+}
+
+#[test]
+fn top_level_const_template_collects_if_condition_dependency_refs() {
+    let (headers, string_table) = parse_single_file_headers_with_table(
+        "#[if show_banner:
+            [if maybe_name is |name|:
+                [name]
+            ]
+        ]\n",
+    );
+
+    let const_template_header = headers
+        .headers
+        .iter()
+        .find(|header| matches!(header.kind, HeaderKind::ConstTemplate { .. }))
+        .expect("expected top-level const template header");
+    let HeaderKind::ConstTemplate {
+        condition_references,
+        ..
+    } = &const_template_header.kind
+    else {
+        panic!("expected const template header");
+    };
+
+    let names = condition_references
+        .iter()
+        .map(|reference| string_table.resolve(reference.name))
+        .collect::<Vec<_>>();
+
+    assert_eq!(names, vec!["show_banner", "maybe_name"]);
 }
 
 #[test]

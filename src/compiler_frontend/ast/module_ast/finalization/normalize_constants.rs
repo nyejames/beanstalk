@@ -34,6 +34,7 @@ use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::instrumentation::{AstCounter, increment_ast_counter};
 use crate::compiler_frontend::ast::templates::template::TemplateConstValueKind;
+use crate::compiler_frontend::ast::templates::template_control_flow::validate_const_required_template_control_flow;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -120,36 +121,41 @@ impl AstFinalizer<'_, '_> {
 
         let mut normalized = expression.to_owned();
         normalized.kind = match &expression.kind {
-            ExpressionKind::Template(template) => match template.const_value_kind() {
-                TemplateConstValueKind::RenderableString
-                | TemplateConstValueKind::WrapperTemplate => {
-                    let Some(folded) = try_fold_template_to_string(
-                        template,
-                        source_file_scope,
-                        &self.context.path_format_config,
-                        project_path_resolver,
-                        string_table,
-                    )?
-                    else {
+            ExpressionKind::Template(template) => {
+                validate_const_required_template_control_flow(template, &template.location)?;
+
+                match template.const_value_kind() {
+                    TemplateConstValueKind::RenderableString
+                    | TemplateConstValueKind::WrapperTemplate => {
+                        let Some(folded) = try_fold_template_to_string(
+                            template,
+                            source_file_scope,
+                            &self.context.path_format_config,
+                            project_path_resolver,
+                            string_table,
+                            self.context.template_const_loop_iteration_limit,
+                        )?
+                        else {
+                            return Err(CompilerError::compiler_error(
+                                "Foldable module-constant template did not produce a folded string.",
+                            )
+                            .into());
+                        };
+                        normalized.diagnostic_type = DataType::StringSlice;
+                        ExpressionKind::StringSlice(folded)
+                    }
+
+                    // Preserve helper templates so wrapper composition can still reference them.
+                    TemplateConstValueKind::SlotInsertHelper => expression.kind.to_owned(),
+
+                    TemplateConstValueKind::NonConst => {
                         return Err(CompilerError::compiler_error(
-                            "Foldable module-constant template did not produce a folded string.",
+                            "Non-constant template reached AST finalization in module constant metadata.",
                         )
                         .into());
-                    };
-                    normalized.diagnostic_type = DataType::StringSlice;
-                    ExpressionKind::StringSlice(folded)
+                    }
                 }
-
-                // Preserve helper templates so wrapper composition can still reference them.
-                TemplateConstValueKind::SlotInsertHelper => expression.kind.to_owned(),
-
-                TemplateConstValueKind::NonConst => {
-                    return Err(CompilerError::compiler_error(
-                        "Non-constant template reached AST finalization in module constant metadata.",
-                    )
-                    .into());
-                }
-            },
+            }
 
             ExpressionKind::Collection(items) => ExpressionKind::Collection(
                 items

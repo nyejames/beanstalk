@@ -6,8 +6,8 @@ warnings = "forbid"
 path = "index.html"
 kind = "html"
 must_contain = [
-  "__bs_binding(\" count=\")",
-  "__bs_binding(\", ratio=\")",
+  "\" count=\"",
+  "\", ratio=\"",
   "Math.trunc(__lhs / __rhs);",
   "Integer division by zero",
 ]

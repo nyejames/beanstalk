@@ -24,6 +24,8 @@ pub enum ConfigKeyOwner {
 pub enum ConfigValueShape {
     /// A single string value (string literal or folded template).
     String,
+    /// A single integer value.
+    Int,
     /// A collection of string values, or a single string treated as a one-element collection.
     StringCollection,
     /// A boolean literal (`true` or `false`).
@@ -39,6 +41,7 @@ pub enum ConfigValueShape {
 pub fn config_value_shape_name(shape: ConfigValueShape) -> &'static str {
     match shape {
         ConfigValueShape::String => "a string value",
+        ConfigValueShape::Int => "an integer value",
         ConfigValueShape::StringCollection => "a collection of strings",
         ConfigValueShape::Bool => "a boolean value",
         ConfigValueShape::ClosedStringSet { .. } => "one of the allowed values",
@@ -78,6 +81,11 @@ impl ProjectConfigKeyRegistry {
     /// Register a core-owned string key.
     pub fn register_core_string(&mut self, name: &'static str) {
         self.register(name, ConfigKeyOwner::Core, ConfigValueShape::String);
+    }
+
+    /// Register a core-owned integer key.
+    pub fn register_core_int(&mut self, name: &'static str) {
+        self.register(name, ConfigKeyOwner::Core, ConfigValueShape::Int);
     }
 
     /// Register a core-owned string-collection key.

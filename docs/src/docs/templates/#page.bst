@@ -135,6 +135,35 @@ page_head #= theme_head
     If a slot receives no content, it expands to an empty string.
     Repeated slots, such as two occurrences of [codesnippet:[$slot(1)]], will replay the same content in both places.
 
+    Slot applications may contain runtime-producing content. Runtime-capable
+    templates support default, named, positional, and loose contributions from
+    template [codesnippet:if] branches and template [codesnippet:loop] bodies.
+    Valid runtime slot applications are routed during AST preparation, then
+    lowered through ordinary runtime string accumulators. Missing slots still
+    render as empty strings, and repeated slots replay the same accumulated
+    contribution.
+
+    [codeblock, $code("bst"):
+        card = [:
+            <h1>[$slot("title")]</h1>
+            <section>[$slot]</section>
+        ]
+
+        [card:
+            [$insert("title"):
+                [if maybe_title is |title|:
+                    [title]
+                [else]
+                    Untitled
+                ]
+            ]
+
+            [loop items |item|:
+                [item]
+            ]
+        ]
+    ]
+
     Because [codesnippet:$children(..)] only applies to direct child templates, nested helpers can scope row and cell wrappers independently.
 
     A child template is treated as an opaque contribution after it has been selected as a direct child.
@@ -169,16 +198,140 @@ page_head #= theme_head
     Then [codesnippet:row] wraps each direct cell child in [codesnippet:<td>].
     The nested [codesnippet:codesnippet] helper inside a cell remains inline content inside that cell; it does not become another table cell.
 
-    ## Template control flow examples
-    [codeblock, $code("bst"):
-        [head_of_element: content of element that renders as text (markdown / metadata / alt tag / code ..etc)]
+    ## Template head suffix control flow
 
-        [ loop text_array |text|:
-            [text]
+    Template control flow is written as the final suffix in the template head,
+    immediately before the body colon. If the head already contains a value,
+    helper, or directive, put a comma before [codesnippet:if] or [codesnippet:loop].
+
+    [codeblock, $code("bst"):
+        [if show:
+            Visible
         ]
 
-        [if not text.isBlank():
-            [ text: plus some extra text in the same element as the variable text ]
+        [card, if show:
+            Visible inside card
         ]
     ]
+
+    Boolean [codesnippet:if] conditions choose one branch lazily at runtime.
+    [codesnippet, "[else if ...]"] adds more branches in source order.
+    [codesnippet, "[else]"] is optional, must be standalone, and binds to the nearest
+    active template [codesnippet:if].
+
+    [codeblock, $code("bst"):
+        show_summary = false
+        show_details = true
+
+        [if show_summary:
+            Summary
+        [else if show_details]
+            Details
+        [else]
+            Empty
+        ]
+    ]
+
+    Option-present captures use the normal [codesnippet:is |name|] form. The
+    captured value is visible only inside the selected branch.
+
+    [codeblock, $code("bst"):
+        maybe_name String? = none
+        maybe_backup String? = "Ada"
+
+        [if maybe_name is |name|:
+            Hello [name]
+        [else if maybe_backup is |backup|]
+            Hello [backup]
+        [else]
+            Hello guest
+        ]
+    ]
+
+    Full pattern-match branch chains belong to ordinary statement/value
+    [codesnippet, "if value is:"] blocks, not template heads.
+
+    Template loops support conditional loops, collection loops, and numeric range
+    loops using the same header syntax as statement loops. Conditional template
+    loops do not take bindings. Collection and range loops can use a second
+    binding for the zero-based index. Loops concatenate iterations directly;
+    there is no implicit separator. Standalone [codesnippet, "[break]"] and
+    [codesnippet, "[continue]"] sentinels are valid inside template loop bodies,
+    including nested template [codesnippet:if], [codesnippet, "[else if ...]"],
+    and [codesnippet, "[else]"] bodies. They target the nearest active template
+    loop and are structural control signals, not rendered output.
+
+    [codeblock, $code("bst"):
+        [loop has_next():
+            [next_item()]
+        ]
+
+        [loop items |item|:
+            [item]
+        ]
+
+        [loop items |item, index|:
+            [index]: [item]
+        ]
+
+        [loop 0 to 10 |i|:
+            [i]
+        ]
+
+        [loop items |item|:
+            [if item.skip:
+                [continue]
+            ]
+            [if item.done:
+                [break]
+            ]
+            [item]
+        ]
+    ]
+
+    Head values and wrappers apply to the selected or generated output. For a
+    loop, the owning head wraps the whole aggregate once. Put per-iteration
+    wrappers inside the loop body.
+
+    [codeblock, $code("bst"):
+        [list, loop items |item|:
+            [row: [item]]
+        ]
+    ]
+
+    A false [codesnippet:if] with no [codesnippet, "[else]"] produces structural
+    no-output. A false conditional loop and zero-iteration collection or range
+    loop also produce no-output. In those cases, shared head wrappers and parent
+    [codesnippet:$children(..)] wrappers are skipped. A selected branch with an
+    empty body is still selected, so its head wrappers may render an empty wrapper.
+    A loop iteration that reaches [codesnippet, "[break]"] or
+    [codesnippet, "[continue]"] before any output also does not count as emitted.
+    Output before a loop-control sentinel is preserved.
+
+    Top-level [codesnippet, "#[if ...:]"] and [codesnippet, "#[loop ...:]"] fragments
+    must fully fold at compile time. Const-required template [codesnippet:if]
+    forms validate every branch body, even when one path is inactive.
+    Const-required conditional template loops fold to no-output when their
+    condition is compile-time [codesnippet:false]. Compile-time [codesnippet:true]
+    and unknown/runtime conditional-loop conditions are rejected because the
+    compiler does not perform template loop termination analysis. Const range
+    and collection template loops can fold structural [codesnippet, "[break]"]
+    and [codesnippet, "[continue]"], and use the
+    [codesnippet:template_const_loop_iteration_limit] project config guard. The
+    default is [codesnippet:10_000] iterations per const template loop, and the
+    configured value must be a positive folded [codesnippet:Int] no greater than
+    [codesnippet:1_000_000].
+
+    Runtime template control flow stays lazy. Only the selected [codesnippet:if]
+    branch is evaluated. Range and collection loop sources are evaluated once
+    before iteration; conditional loop conditions are evaluated before every
+    iteration.
+    Expression-level [codesnippet:!] inside selected branch or loop content
+    propagates from the enclosing function.
+
+    Runtime slot applications are valid inside template control flow after
+    normal slot routing. Escaped helper artifacts that still leave unresolved
+    [codesnippet:[$slot]] or [codesnippet:$insert(...)] output inside runtime
+    control-flow bodies are invalid template structure.
+
 ]

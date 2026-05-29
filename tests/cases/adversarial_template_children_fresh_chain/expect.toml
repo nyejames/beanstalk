@@ -1,0 +1,5 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["<li>first</li>", "middle-fresh", "<li>third</li>"]
+rendered_output_not_contains = ["<li>middle-fresh</li>"]

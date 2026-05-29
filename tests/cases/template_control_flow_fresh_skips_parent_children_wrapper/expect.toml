@@ -1,0 +1,5 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["fresh child"]
+rendered_output_not_contains = ["parent-wrapper"]

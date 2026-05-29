@@ -20,7 +20,7 @@ use crate::compiler_frontend::tests::test_support::{
 };
 use crate::compiler_frontend::tokenizer::tokens::{CharPosition, SourceLocation};
 use crate::compiler_frontend::value_mode::ValueMode;
-use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
+use crate::projects::settings::{DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS, IMPLICIT_START_FUNC_NAME};
 
 fn test_location(line: i32) -> SourceLocation {
     SourceLocation {
@@ -100,6 +100,7 @@ fn collect_and_strip_comment_templates_for_tests(
         &resolver,
         &PathStringFormatConfig::default(),
         string_table,
+        DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
     )
 }
 

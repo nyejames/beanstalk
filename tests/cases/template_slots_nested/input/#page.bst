@@ -2,3 +2,5 @@ complex_nested_slots #= [: before [: another scene inside [$slot("inner")]] afte
 even_more_complex #= [: BEFORE [: another scene inside [$slot("first")] [$slot] after the nested slot [: another nested scene [$slot("second")]]] AFTER]
 
 using_slots = [even_more_complex:[$insert("first"): first] in between [$insert("second"): second]]
+
+io(using_slots)

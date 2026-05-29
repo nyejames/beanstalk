@@ -1,0 +1,19 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = [
+  "<li class=\"wrapped\">",
+  "first runtime",
+  "fresh runtime",
+]
+rendered_output_not_contains = ["<li class=\"wrapped\">fresh runtime</li>"]
+
+[backends.html_wasm]
+mode = "success"
+warnings = "forbid"
+
+[[backends.html_wasm.artifact_assertions]]
+path = "page.wasm"
+kind = "wasm"
+validate_wasm = true
+must_export = ["memory", "bst_str_ptr", "bst_str_len", "bst_release"]

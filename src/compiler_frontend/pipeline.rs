@@ -36,6 +36,7 @@ pub struct CompilerFrontend {
     pub(crate) string_table: StringTable,
     pub(crate) project_path_resolver: Option<ProjectPathResolver>,
     pub(crate) path_format_config: PathStringFormatConfig,
+    pub(crate) template_const_loop_iteration_limit: usize,
     pub(crate) source_files: SourceFileTable,
 }
 
@@ -88,6 +89,7 @@ impl CompilerFrontend {
             string_table,
             project_path_resolver,
             path_format_config,
+            template_const_loop_iteration_limit: project_config.template_const_loop_iteration_limit,
             source_files: SourceFileTable::empty(),
         }
     }
@@ -245,6 +247,7 @@ impl CompilerFrontend {
                 build_profile,
                 project_path_resolver: self.project_path_resolver.clone(),
                 path_format_config: self.path_format_config.clone(),
+                template_const_loop_iteration_limit: self.template_const_loop_iteration_limit,
             },
         )
     }

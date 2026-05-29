@@ -52,6 +52,7 @@ pub(crate) struct ConstantHeaderParseContext<'a> {
     pub style_directives: &'a StyleDirectiveRegistry,
     pub project_path_resolver: Option<ProjectPathResolver>,
     pub path_format_config: PathStringFormatConfig,
+    pub template_const_loop_iteration_limit: usize,
     pub build_profile: FrontendBuildProfile,
     pub warnings: &'a mut Vec<CompilerDiagnostic>,
     pub rendered_path_usages: Rc<RefCell<Vec<RenderedPathUsage>>>,
@@ -80,6 +81,7 @@ pub(crate) fn parse_constant_header_declaration(
         style_directives,
         project_path_resolver,
         path_format_config,
+        template_const_loop_iteration_limit,
         build_profile,
         warnings,
         rendered_path_usages,
@@ -117,6 +119,7 @@ pub(crate) fn parse_constant_header_declaration(
     .with_build_profile(build_profile)
     .with_project_path_resolver(project_path_resolver)
     .with_path_format_config(path_format_config)
+    .with_template_const_loop_iteration_limit(template_const_loop_iteration_limit)
     .with_rendered_path_usage_sink(rendered_path_usages)
     // Keep full module declarations for path identity, but explicitly gate what this file
     // can see to enforce import boundaries and prevent cross-file leakage.

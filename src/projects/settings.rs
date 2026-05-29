@@ -15,6 +15,9 @@ pub const BS_VAR_PREFIX: &str = "bst_";
 pub const TOP_LEVEL_TEMPLATE_NAME: &str = "#template";
 pub const TOP_LEVEL_CONST_TEMPLATE_NAME: &str = "#const_template";
 pub const IMPLICIT_START_FUNC_NAME: &str = "start";
+pub const TEMPLATE_CONST_LOOP_ITERATION_LIMIT_KEY: &str = "template_const_loop_iteration_limit";
+pub const DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS: usize = 10_000;
+pub const MAX_TEMPLATE_CONST_LOOP_ITERATIONS: usize = 1_000_000;
 
 // This is a guess about how much should be initially allocated for vecs in the compiler.
 // This should be a rough guess to help avoid too many allocations
@@ -63,6 +66,8 @@ pub struct Config {
     pub library_folders: Vec<PathBuf>,
     /// Whether `library_folders` was explicitly configured in `#config.bst`.
     pub has_explicit_library_folders: bool,
+    /// Per-loop expansion limit for compile-time template loops.
+    pub template_const_loop_iteration_limit: usize,
     pub version: String,
     pub author: String,
     pub license: String,
@@ -83,6 +88,7 @@ impl Config {
 
             library_folders: vec![PathBuf::from("lib")], // Default convention for project-local source libraries
             has_explicit_library_folders: false,
+            template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
             project_name: String::new(),
             version: String::from("0.1.0"),
             author: String::new(),
@@ -188,6 +194,7 @@ impl Default for Config {
             release_folder: PathBuf::from("release"),
             library_folders: vec![PathBuf::from("lib")],
             has_explicit_library_folders: false,
+            template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
             project_name: String::from("html_project"),
             version: String::from("0.1.0"),
             author: String::new(),

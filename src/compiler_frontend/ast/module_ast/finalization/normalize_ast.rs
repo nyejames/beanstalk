@@ -65,6 +65,7 @@ struct TemplateNormalizationContext<'a, 'strings> {
     source_file_scope: &'a InternedPath,
     path_format_config: &'a PathStringFormatConfig,
     project_path_resolver: &'a ProjectPathResolver,
+    template_const_loop_iteration_limit: usize,
     string_table: &'strings mut StringTable,
 }
 
@@ -99,6 +100,9 @@ impl AstFinalizer<'_, '_> {
                 source_file_scope: &source_file_scope,
                 path_format_config,
                 project_path_resolver,
+                template_const_loop_iteration_limit: self
+                    .context
+                    .template_const_loop_iteration_limit,
                 string_table,
             };
             normalize_ast_node_templates(node, &mut normalization_context)?;
@@ -556,6 +560,7 @@ fn normalize_expression_templates_with_context(
                     context.path_format_config,
                     context.project_path_resolver,
                     context.string_table,
+                    context.template_const_loop_iteration_limit,
                 )?
             } else {
                 // Nested helper-owned contribution structure can be legal inside wrapper

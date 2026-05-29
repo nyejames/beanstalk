@@ -30,16 +30,23 @@ mod composition;
 mod contributions;
 mod diagnostics;
 mod error;
+mod runtime_plan;
 mod schema;
 
 // -------------------------
 //  Re-exports
 // -------------------------
 
-pub(in crate::compiler_frontend::ast::templates) use composition::{
-    compose_template_with_slots, ensure_no_slot_insertions_remain,
-};
+pub(in crate::compiler_frontend::ast::templates) use composition::ensure_no_slot_insertions_remain;
 pub(in crate::compiler_frontend::ast::templates) use error::TemplateSlotError;
+pub(crate) use runtime_plan::{RuntimeSlotApplicationPlan, RuntimeSlotContributionContent};
+#[cfg(test)]
+pub(crate) use runtime_plan::{RuntimeSlotContribution, RuntimeSlotContributionPlan};
+pub(in crate::compiler_frontend::ast::templates) use runtime_plan::{
+    SlotResolutionMode, SlotResolutionOutcome, resolve_slot_application,
+};
+#[cfg(test)]
+pub(crate) use schema::SlotSchema;
 
 #[cfg(test)]
 #[path = "../tests/slots_tests.rs"]

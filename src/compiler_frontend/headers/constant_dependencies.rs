@@ -93,6 +93,7 @@ pub(crate) fn add_constant_initializer_dependencies(
             HeaderKind::Struct { .. } | HeaderKind::Choice { .. } => {
                 struct_or_choice_paths.insert(header.tokens.src_path.clone());
             }
+            HeaderKind::ConstTemplate { .. } => {}
             _ => {}
         }
     }
@@ -103,12 +104,20 @@ pub(crate) fn add_constant_initializer_dependencies(
     let mut edges_to_add: Vec<(usize, InternedPath)> = Vec::new();
 
     for (header_index, header) in headers.iter().enumerate() {
-        let HeaderKind::Constant {
-            declaration,
-            source_order,
-        } = &header.kind
-        else {
-            continue;
+        let (references, source_order) = match &header.kind {
+            HeaderKind::Constant {
+                declaration,
+                source_order,
+            } => (&declaration.initializer_references, *source_order),
+
+            HeaderKind::ConstTemplate {
+                condition_references,
+                source_order,
+            } => (condition_references, *source_order),
+
+            _ => {
+                continue;
+            }
         };
 
         let visibility = match import_environment.visibility_for(&header.source_file) {
@@ -123,7 +132,7 @@ pub(crate) fn add_constant_initializer_dependencies(
 
         let current_path = header.tokens.src_path.clone();
 
-        for reference in &declaration.initializer_references {
+        for reference in references {
             let resolution = classify_reference(
                 reference,
                 visibility,
@@ -145,7 +154,7 @@ pub(crate) fn add_constant_initializer_dependencies(
                     let current_canonical_source = header.canonical_source_file(string_table);
                     if source_file == current_canonical_source {
                         let target_order = constant_source_orders.get(&path).copied().unwrap_or(0);
-                        if target_order > *source_order {
+                        if target_order > source_order {
                             diagnostic_bag.push(same_file_forward_reference_error(
                                 &current_path,
                                 &path,

@@ -11,8 +11,9 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::ast::templates::template::{
     TemplateAtom, TemplateContent, TemplateSegment, TemplateSegmentOrigin, TemplateType,
 };
+use crate::compiler_frontend::ast::templates::template_render_units::prepare_conditional_child_wrapper_render_plan;
 use crate::compiler_frontend::ast::templates::template_slots::{
-    TemplateSlotError, compose_template_with_slots,
+    SlotResolutionMode, SlotResolutionOutcome, TemplateSlotError, resolve_slot_application,
 };
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -31,6 +32,7 @@ pub(in crate::compiler_frontend::ast::templates) fn apply_inherited_child_templa
     content: TemplateContent,
     inherited_templates: &[Template],
     string_table: &StringTable,
+    resolution_mode: SlotResolutionMode,
 ) -> Result<TemplateContent, TemplateSlotError> {
     if inherited_templates.is_empty() {
         return Ok(content);
@@ -39,11 +41,19 @@ pub(in crate::compiler_frontend::ast::templates) fn apply_inherited_child_templa
     let mut wrapped_atoms = Vec::with_capacity(content.atoms.len());
 
     for atom in content.atoms {
+        if let Some(control_flow_atom) =
+            attach_conditional_child_wrappers(&atom, inherited_templates, string_table)?
+        {
+            wrapped_atoms.push(control_flow_atom);
+            continue;
+        }
+
         if atom.is_direct_child_template_atom() {
             wrapped_atoms.push(wrap_direct_child_atom(
                 &atom,
                 inherited_templates,
                 string_table,
+                resolution_mode,
             )?);
         } else {
             wrapped_atoms.push(atom);
@@ -55,17 +65,70 @@ pub(in crate::compiler_frontend::ast::templates) fn apply_inherited_child_templa
     })
 }
 
-/// Wraps a direct child atom in all inherited wrapper templates (applied
-/// outermost-first by iterating in reverse).
-fn wrap_direct_child_atom(
+/// Attaches parent `$children(..)` wrappers to control-flow children without
+/// externally wrapping the child expression.
+///
+/// A template `if` or `loop` may emit no output. Wrapping the child as soon as
+/// the parent sees it would render wrappers on skipped branches or empty loops.
+/// Storing the inherited wrappers on the child lets later folding/lowering apply
+/// them only after the child structurally emits output.
+fn attach_conditional_child_wrappers(
     atom: &TemplateAtom,
     inherited_templates: &[Template],
     string_table: &StringTable,
+) -> Result<Option<TemplateAtom>, TemplateSlotError> {
+    let TemplateAtom::Content(segment) = atom else {
+        return Ok(None);
+    };
+
+    if segment.origin != TemplateSegmentOrigin::Body {
+        return Ok(None);
+    }
+
+    let ExpressionKind::Template(template) = &segment.expression.kind else {
+        return Ok(None);
+    };
+
+    if !template.is_control_flow_template() {
+        return Ok(None);
+    }
+
+    if template.style.skip_parent_child_wrappers || inherited_templates.is_empty() {
+        return Ok(Some(atom.to_owned()));
+    }
+
+    let mut child_template = template.as_ref().clone_for_composition();
+    child_template
+        .conditional_child_wrappers
+        .extend(inherited_templates.iter().cloned());
+    child_template.conditional_child_wrapper_plan =
+        Some(prepare_conditional_child_wrapper_render_plan(
+            &child_template.conditional_child_wrappers,
+            string_table,
+        )?);
+
+    let mut expression = segment.expression.to_owned();
+    expression.kind = ExpressionKind::Template(Box::new(child_template));
+
+    let mut segment = segment.to_owned();
+    segment.expression = expression;
+
+    Ok(Some(TemplateAtom::Content(segment)))
+}
+
+/// Wraps a direct child atom in all inherited wrapper templates (applied
+/// outermost-first by iterating in reverse).
+pub(in crate::compiler_frontend::ast::templates) fn wrap_direct_child_atom(
+    atom: &TemplateAtom,
+    inherited_templates: &[Template],
+    string_table: &StringTable,
+    resolution_mode: SlotResolutionMode,
 ) -> Result<TemplateAtom, TemplateSlotError> {
     let mut wrapped_atom = atom.to_owned();
 
     for wrapper in inherited_templates.iter().rev() {
-        wrapped_atom = wrap_atom_in_child_template(&wrapped_atom, wrapper, string_table)?;
+        wrapped_atom =
+            wrap_atom_in_child_template(&wrapped_atom, wrapper, string_table, resolution_mode)?;
     }
 
     Ok(wrapped_atom)
@@ -79,6 +142,7 @@ fn wrap_atom_in_child_template(
     atom: &TemplateAtom,
     wrapper: &Template,
     string_table: &StringTable,
+    resolution_mode: SlotResolutionMode,
 ) -> Result<TemplateAtom, TemplateSlotError> {
     let origin = match atom {
         TemplateAtom::Content(segment) => segment.origin,
@@ -90,13 +154,27 @@ fn wrap_atom_in_child_template(
             atoms: vec![atom.to_owned()],
         };
 
-        let composed_content =
-            compose_template_with_slots(wrapper, fill_content, &wrapper.location, string_table)?;
-
-        let mut wrapped_template = wrapper.clone_for_composition();
-        wrapped_template.content = composed_content;
-        wrapped_template.resync_composition_metadata();
-        wrapped_template
+        match resolve_slot_application(
+            wrapper,
+            fill_content,
+            &wrapper.location,
+            string_table,
+            resolution_mode,
+        )? {
+            SlotResolutionOutcome::Composed(composed_content) => {
+                let mut wrapped_template = wrapper.clone_for_composition();
+                wrapped_template.content = composed_content;
+                wrapped_template.resync_composition_metadata();
+                wrapped_template
+            }
+            SlotResolutionOutcome::Runtime(runtime_plan) => {
+                let mut wrapped_template = Template::empty();
+                wrapped_template.runtime_slot_application = Some(runtime_plan);
+                wrapped_template.location = wrapper.location.to_owned();
+                wrapped_template.resync_runtime_metadata();
+                wrapped_template
+            }
+        }
     } else {
         let mut wrapped_template = Template::empty();
         wrapped_template.location = wrapper.location.to_owned();
@@ -196,6 +274,7 @@ pub(in crate::compiler_frontend::ast::templates) fn compose_template_head_chain(
     content: &TemplateContent,
     foldable: &mut bool,
     string_table: &StringTable,
+    resolution_mode: SlotResolutionMode,
 ) -> Result<TemplateContent, TemplateSlotError> {
     // Cheap pre-scan: if no head atoms exist, composition is a no-op.
     let has_head_atoms = content.atoms.iter().any(is_head_content_atom);
@@ -286,6 +365,7 @@ pub(in crate::compiler_frontend::ast::templates) fn compose_template_head_chain(
         &mut atom_pool,
         &mut cache,
         string_table,
+        resolution_mode,
     )?;
 
     Ok(TemplateContent {
@@ -365,6 +445,7 @@ fn resolve_pending_chain_items(
     atom_pool: &mut PendingAtomPool,
     cache: &mut rustc_hash::FxHashMap<usize, Arc<Template>>,
     string_table: &StringTable,
+    resolution_mode: SlotResolutionMode,
 ) -> Result<Vec<TemplateAtom>, TemplateSlotError> {
     let mut resolved_atoms = Vec::with_capacity(items.len());
 
@@ -376,8 +457,14 @@ fn resolve_pending_chain_items(
                 layer_index,
                 origin,
             } => {
-                let resolved_layer =
-                    resolve_chain_layer(*layer_index, layers, atom_pool, cache, string_table)?;
+                let resolved_layer = resolve_chain_layer(
+                    *layer_index,
+                    layers,
+                    atom_pool,
+                    cache,
+                    string_table,
+                    resolution_mode,
+                )?;
 
                 resolved_atoms.push(TemplateAtom::Content(TemplateSegment::new(
                     Expression::template(
@@ -401,6 +488,7 @@ fn resolve_chain_layer(
     atom_pool: &mut PendingAtomPool,
     cache: &mut rustc_hash::FxHashMap<usize, Arc<Template>>,
     string_table: &StringTable,
+    resolution_mode: SlotResolutionMode,
 ) -> Result<Arc<Template>, TemplateSlotError> {
     if let Some(cached) = cache.get(&layer_index) {
         return Ok(Arc::clone(cached));
@@ -418,21 +506,40 @@ fn resolve_chain_layer(
         return Ok(wrapper);
     }
 
-    let fill_atoms =
-        resolve_pending_chain_items(&layer.fill_items, layers, atom_pool, cache, string_table)?;
+    let fill_atoms = resolve_pending_chain_items(
+        &layer.fill_items,
+        layers,
+        atom_pool,
+        cache,
+        string_table,
+        resolution_mode,
+    )?;
 
     let resolved_fill = TemplateContent { atoms: fill_atoms };
 
-    let composed_content = compose_template_with_slots(
+    let outcome = resolve_slot_application(
         &layer.wrapper,
         resolved_fill,
         &layer.wrapper.location,
         string_table,
+        resolution_mode,
     )?;
 
-    let mut resolved_wrapper = layer.wrapper.clone_for_composition();
-    resolved_wrapper.content = composed_content;
-    resolved_wrapper.resync_composition_metadata();
+    let resolved_wrapper = match outcome {
+        SlotResolutionOutcome::Composed(composed_content) => {
+            let mut resolved_wrapper = layer.wrapper.clone_for_composition();
+            resolved_wrapper.content = composed_content;
+            resolved_wrapper.resync_composition_metadata();
+            resolved_wrapper
+        }
+        SlotResolutionOutcome::Runtime(runtime_plan) => {
+            let mut resolved_wrapper = Template::empty();
+            resolved_wrapper.runtime_slot_application = Some(runtime_plan);
+            resolved_wrapper.location = layer.wrapper.location.clone();
+            resolved_wrapper.resync_runtime_metadata();
+            resolved_wrapper
+        }
+    };
 
     let resolved_wrapper = Arc::new(resolved_wrapper);
     cache.insert(layer_index, Arc::clone(&resolved_wrapper));

@@ -1,0 +1,4 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["template_loop_collection_runtime", "0=red;", "1=green;", "2=blue;"]

@@ -9,7 +9,11 @@
 use crate::compiler_frontend::ast::templates::template::{
     Style, TemplateConstValueKind, TemplateContent, TemplateType,
 };
+use crate::compiler_frontend::ast::templates::template_control_flow::{
+    TemplateControlFlow, TemplateLoopAggregateRenderPlan,
+};
 use crate::compiler_frontend::ast::templates::template_render_plan::TemplateRenderPlan;
+use crate::compiler_frontend::ast::templates::template_slots::RuntimeSlotApplicationPlan;
 use crate::compiler_frontend::symbols::string_interning::StringIdRemap;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
@@ -46,12 +50,33 @@ use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 #[derive(Clone, Debug)]
 pub struct Template {
     pub content: TemplateContent,
+    pub(crate) control_flow: Option<TemplateControlFlow>,
     pub unformatted_content: TemplateContent,
     pub content_needs_formatting: bool,
     pub render_plan: Option<TemplateRenderPlan>,
     pub kind: TemplateType,
     pub doc_children: Vec<Template>,
     pub style: Style,
+    /// Parent `$children(..)` wrappers attached to control-flow children.
+    ///
+    /// Control-flow composition consumes these conditionally so skipped branches
+    /// or zero-iteration loops do not receive wrappers merely because the child
+    /// template exists.
+    pub(crate) conditional_child_wrappers: Vec<Template>,
+
+    /// AST-prepared wrapper plan for maybe-empty control-flow child output.
+    ///
+    /// HIR lowers control-flow children into a temporary accumulator, then applies
+    /// this plan only if the child structurally emitted output.
+    pub(crate) conditional_child_wrapper_plan: Option<TemplateLoopAggregateRenderPlan>,
+
+    /// Runtime slot application plan for templates that should lower through HIR
+    /// accumulators rather than being fully expanded at AST time.
+    ///
+    /// WHEN SET: The template represents a wrapper fill site whose contributions
+    /// contain runtime content. The `content` field is typically empty; the
+    /// wrapper plan and routed contributions live here.
+    pub(crate) runtime_slot_application: Option<RuntimeSlotApplicationPlan>,
 
     pub id: String,
     pub location: SourceLocation,
@@ -87,12 +112,16 @@ impl Template {
     pub fn empty() -> Template {
         Template {
             content: TemplateContent::default(),
+            control_flow: None,
             unformatted_content: TemplateContent::default(),
             content_needs_formatting: false,
             render_plan: None,
             kind: TemplateType::StringFunction,
             doc_children: vec![],
             style: Style::default(),
+            conditional_child_wrappers: vec![],
+            conditional_child_wrapper_plan: None,
+            runtime_slot_application: None,
             id: String::new(),
             location: SourceLocation::default(),
         }
@@ -110,7 +139,30 @@ impl Template {
 
     /// Returns true if this template's content contains unresolved slot placeholders.
     pub fn has_unresolved_slots(&self) -> bool {
+        if self.runtime_slot_application.is_some() {
+            // Runtime plans account for all slots; there are no unresolved placeholders.
+            return false;
+        }
+
         self.content.has_unresolved_slots()
+            || self
+                .control_flow
+                .as_ref()
+                .is_some_and(TemplateControlFlow::has_unresolved_slots)
+    }
+
+    /// Returns true if this template contains slot-insertion helper templates.
+    pub(crate) fn contains_slot_insertions(&self) -> bool {
+        if self.runtime_slot_application.is_some() {
+            // Runtime plans consume all inserts during routing.
+            return false;
+        }
+
+        self.content.contains_slot_insertions()
+            || self
+                .control_flow
+                .as_ref()
+                .is_some_and(TemplateControlFlow::contains_slot_insertions)
     }
 
     /// Returns true if this template can be fully evaluated at compile time.
@@ -158,6 +210,12 @@ impl Template {
         self.content_needs_formatting = false;
         self.refresh_kind_from_content();
 
+        if let Some(plan) = &mut self.runtime_slot_application {
+            // Runtime slot application templates use the wrapper plan directly.
+            self.render_plan = Some(plan.wrapper_plan.clone());
+            return;
+        }
+
         let should_materialize_plan =
             force_full_plan || matches!(self.kind, TemplateType::StringFunction);
         self.render_plan =
@@ -169,15 +227,21 @@ impl Template {
     /// WHY:
     /// - composition frequently clones wrapper/intermediate templates for structural rewrites.
     ///   Carrying cloned render plans in those intermediates is unnecessary and expensive.
+    /// - runtime slot application plans are already finalized AST handoff objects, so dropping
+    ///   them would turn the expression into an empty template during later composition passes.
     pub(crate) fn clone_for_composition(&self) -> Template {
         Template {
             content: self.content.to_owned(),
+            control_flow: self.control_flow.to_owned(),
             unformatted_content: self.unformatted_content.to_owned(),
             content_needs_formatting: self.content_needs_formatting,
             render_plan: None,
             kind: self.kind.to_owned(),
             doc_children: self.doc_children.to_owned(),
             style: self.style.to_owned(),
+            conditional_child_wrappers: self.conditional_child_wrappers.to_owned(),
+            conditional_child_wrapper_plan: self.conditional_child_wrapper_plan.to_owned(),
+            runtime_slot_application: self.runtime_slot_application.to_owned(),
 
             id: self.id.to_owned(),
             location: self.location.to_owned(),
@@ -190,6 +254,11 @@ impl Template {
     /// - slot/comment helper kinds are semantic markers and must not be rewritten by generic
     ///   post-composition cleanup.
     pub(crate) fn refresh_kind_from_content(&mut self) {
+        if self.runtime_slot_application.is_some() {
+            self.kind = TemplateType::StringFunction;
+            return;
+        }
+
         if matches!(
             self.kind,
             TemplateType::SlotInsert(_)
@@ -199,13 +268,24 @@ impl Template {
             return;
         }
 
-        self.kind = if self.content.is_const_evaluable_value()
-            && !self.content.contains_slot_insertions()
-        {
+        self.kind = if self.is_shape_const_evaluable() && !self.contains_slot_insertions() {
             TemplateType::String
         } else {
             TemplateType::StringFunction
         };
+    }
+
+    /// Returns true when the template carries structured control flow.
+    pub(crate) fn is_control_flow_template(&self) -> bool {
+        self.control_flow.is_some()
+    }
+
+    fn is_shape_const_evaluable(&self) -> bool {
+        self.content.is_const_evaluable_value()
+            && self
+                .control_flow
+                .as_ref()
+                .is_none_or(TemplateControlFlow::is_const_evaluable_value)
     }
 
     /// Classifies template const-ness in one place.
@@ -218,14 +298,18 @@ impl Template {
     ///   still be legal inside a reusable wrapper value.
     /// - Runtime-vs-const lowering decisions must use the final template value shape.
     pub fn const_value_kind(&self) -> TemplateConstValueKind {
-        if !self.content.is_const_evaluable_value() {
+        if self.runtime_slot_application.is_some() {
+            return TemplateConstValueKind::NonConst;
+        }
+
+        if !self.is_shape_const_evaluable() {
             return TemplateConstValueKind::NonConst;
         }
 
         if matches!(self.kind, TemplateType::SlotInsert(_)) {
             // Slot insertion templates are compile-time helper values and are only
             // valid when consumed by an active wrapper fill site.
-            if self.content.contains_slot_insertions() {
+            if self.contains_slot_insertions() {
                 return TemplateConstValueKind::NonConst;
             }
             return TemplateConstValueKind::SlotInsertHelper;
@@ -243,7 +327,7 @@ impl Template {
             return TemplateConstValueKind::WrapperTemplate;
         }
 
-        if self.content.contains_slot_insertions() {
+        if self.contains_slot_insertions() {
             return TemplateConstValueKind::NonConst;
         }
 
@@ -255,6 +339,9 @@ impl Template {
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         self.location.remap_string_ids(remap);
         self.content.remap_string_ids(remap);
+        if let Some(control_flow) = &mut self.control_flow {
+            control_flow.remap_string_ids(remap);
+        }
         self.unformatted_content.remap_string_ids(remap);
         self.kind.remap_string_ids(remap);
         if let Some(render_plan) = &mut self.render_plan {
@@ -265,6 +352,15 @@ impl Template {
         }
         for child in &mut self.style.child_templates {
             child.remap_string_ids(remap);
+        }
+        for child in &mut self.conditional_child_wrappers {
+            child.remap_string_ids(remap);
+        }
+        if let Some(plan) = &mut self.conditional_child_wrapper_plan {
+            plan.remap_string_ids(remap);
+        }
+        if let Some(plan) = &mut self.runtime_slot_application {
+            plan.remap_string_ids(remap);
         }
     }
 }

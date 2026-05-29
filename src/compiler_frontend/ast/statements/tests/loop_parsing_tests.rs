@@ -5,10 +5,12 @@
 
 use super::*;
 use crate::compiler_frontend::ast::Ast;
+use crate::compiler_frontend::ast::ast_nodes::RangeEndKind;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::compiler_messages::{
     DiagnosticPayload, InvalidLoopHeaderReason, ReservedNameOwner, TypeMismatchContext,
 };
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::tests::test_support::{
     function_body_by_name, parse_single_file_ast, parse_single_file_ast_diagnostic,
 };

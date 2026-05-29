@@ -535,7 +535,6 @@ pub enum TokenKind {
     Ampersand, // &
 
     // Pattern matching
-    Case,     // case
     FatArrow, // =>
     Wildcard, // _
 

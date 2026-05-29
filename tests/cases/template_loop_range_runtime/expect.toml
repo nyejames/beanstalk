@@ -1,0 +1,4 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["template_loop_range_runtime", "range-1;", "range-2;", "range-3;"]

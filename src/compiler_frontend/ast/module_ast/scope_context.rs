@@ -68,6 +68,7 @@ use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
+use crate::projects::settings::DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS;
 use crate::return_compiler_error;
 
 use rustc_hash::{FxHashMap, FxHashSet};
@@ -165,6 +166,7 @@ pub struct ScopeShared {
     pub(crate) project_path_resolver: Option<ProjectPathResolver>,
     pub(crate) source_file_scope: Option<InternedPath>,
     pub(crate) path_format_config: PathStringFormatConfig,
+    pub(crate) template_const_loop_iteration_limit: usize,
 
     // Receiver method catalog for dispatch.
     pub(crate) receiver_methods: Rc<ReceiverMethodCatalog>,
@@ -381,6 +383,7 @@ impl ScopeContext {
             project_path_resolver: lookups.project_path_resolver.clone(),
             source_file_scope: None,
             path_format_config: lookups.path_format_config.clone(),
+            template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
             receiver_methods: Rc::clone(&lookups.receiver_methods),
             nominal_type_ids_by_path: Rc::clone(&lookups.nominal_type_ids_by_path),
         });

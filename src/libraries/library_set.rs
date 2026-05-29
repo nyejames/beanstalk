@@ -47,6 +47,7 @@ impl LibrarySet {
         config_keys.register_core_string("entry_root");
         config_keys.register_core_string("dev_folder");
         config_keys.register_core_string("output_folder");
+        config_keys.register_core_int("template_const_loop_iteration_limit");
         config_keys.register_core_string_collection("library_folders");
         config_keys.register_core_string("name");
         config_keys.register_core_string("project_name");

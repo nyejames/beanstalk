@@ -1,0 +1,10 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = [
+    "template_copying result=world number=42 final=world",
+    "world world!",
+    "42 is the answer",
+    "world updated",
+    "42 is new",
+]

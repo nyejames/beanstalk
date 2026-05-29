@@ -319,7 +319,7 @@ impl TemplateAtom {
             TemplateAtom::Content(segment) => match &segment.expression.kind {
                 ExpressionKind::Template(template) => {
                     matches!(template.kind, TemplateType::SlotInsert(_))
-                        || template.content.contains_slot_insertions()
+                        || template.contains_slot_insertions()
                 }
 
                 _ => false,

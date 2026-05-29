@@ -587,11 +587,7 @@ impl<'a> HirBuilder<'a> {
                 .iter()
                 .any(|node| self.ast_node_needs_current_block_lowering(node)),
             ExpressionKind::Template(template) => {
-                template.render_plan.as_ref().is_some_and(|plan| {
-                    plan.flatten_expressions()
-                        .iter()
-                        .any(|chunk| self.expression_needs_current_block_lowering(chunk))
-                })
+                template.render_plan.is_some() || template.control_flow.is_some()
             }
             ExpressionKind::ValueBlock { .. } => true,
 

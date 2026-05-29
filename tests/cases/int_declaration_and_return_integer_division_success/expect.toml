@@ -6,7 +6,7 @@ warnings = "forbid"
 path = "index.html"
 kind = "html"
 must_contain = [
-  "__bs_binding(\" decl=\")",
-  "__bs_binding(\", ret=\")",
+  "\" decl=\"",
+  "\", ret=\"",
   "return 2;",
 ]

@@ -12,6 +12,7 @@
 #![allow(clippy::result_large_err)]
 #![allow(clippy::needless_return)]
 
+use super::control_flow_suffix::{parse_if_suffix, parse_loop_suffix};
 use super::core_directives::{
     mark_template_body_whitespace_style_controlled, maybe_parse_slot_or_insert_helper_directive,
     parse_core_style_directive,
@@ -24,6 +25,9 @@ use super::head_expressions::{
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
+use crate::compiler_frontend::ast::templates::template_control_flow::{
+    TemplateBodyParseMode, TemplateControlFlowValidationMode,
+};
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 
@@ -35,10 +39,16 @@ use crate::compiler_frontend::style_directives::{
     StyleDirectiveKind, StyleDirectiveSpec, TemplateHeadCompatibility, TemplateHeadTag,
 };
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::token_scan::NestingDepth;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind, path_token_paths};
 use crate::compiler_frontend::type_coercion::parse_context::ExpectedType;
 use crate::compiler_frontend::value_mode::ValueMode;
 use crate::projects::settings::BS_VAR_PREFIX;
+
+/// Result of parsing a template head.
+pub(crate) struct ParsedTemplateHead {
+    pub(crate) body_mode: TemplateBodyParseMode,
+}
 
 #[derive(Clone, Copy, Debug, Default)]
 struct TemplateHeadState {
@@ -88,11 +98,9 @@ pub fn parse_template_head(
     type_interner: &mut AstTypeInterner<'_>,
     template: &mut Template,
     foldable: &mut bool,
+    control_flow_validation: TemplateControlFlowValidationMode,
     string_table: &mut StringTable,
-) -> Result<(), CompilerDiagnostic> {
-    // Control-flow directives in template heads are intentionally deferred.
-    // Current head parsing accepts style/settings directives and expressions only.
-
+) -> Result<ParsedTemplateHead, CompilerDiagnostic> {
     template.id = format!("{BS_VAR_PREFIX}templateID_{}", token_stream.index);
 
     // Each expression must be separated with a comma.
@@ -116,7 +124,9 @@ pub fn parse_template_head(
         // of not having to explicitly close the template head from a repl session.
         // This can lead to overly forgiving behavior (not warning about an unclosed template head)
         if token == TokenKind::TemplateClose || token == TokenKind::Eof {
-            return Ok(());
+            return Ok(ParsedTemplateHead {
+                body_mode: TemplateBodyParseMode::Normal,
+            });
         }
 
         if token == TokenKind::StartTemplateBody {
@@ -131,11 +141,30 @@ pub fn parse_template_head(
             }
 
             token_stream.advance();
-            return Ok(());
+            return Ok(ParsedTemplateHead {
+                body_mode: TemplateBodyParseMode::Normal,
+            });
+        }
+
+        if expecting_comma
+            && !matches!(token, TokenKind::If | TokenKind::Loop)
+            && let Some(control_flow_location) = find_unseparated_control_flow_suffix(token_stream)
+        {
+            return Err(CompilerDiagnostic::invalid_template_structure(
+                InvalidTemplateStructureReason::MissingCommaBeforeControlFlowSuffix,
+                control_flow_location,
+            ));
         }
 
         // Make sure there is a comma before the next token.
         if !expecting_comma {
+            if matches!(token, TokenKind::If | TokenKind::Loop) {
+                return Err(CompilerDiagnostic::invalid_template_structure(
+                    InvalidTemplateStructureReason::MissingCommaBeforeControlFlowSuffix,
+                    token_stream.current_location(),
+                ));
+            }
+
             if token != TokenKind::Comma {
                 return Err(CompilerDiagnostic::expected_token(
                     TokenKind::Comma,
@@ -152,6 +181,55 @@ pub fn parse_template_head(
         let mut defer_comma_advance = false;
 
         match token {
+            TokenKind::If => {
+                if head_state
+                    .seen_tags
+                    .intersects(TemplateHeadTag::SLOT_DIRECTIVE)
+                {
+                    return Err(CompilerDiagnostic::invalid_template_structure(
+                        InvalidTemplateStructureReason::SlotInHead,
+                        token_stream.current_location(),
+                    ));
+                }
+
+                let body_mode = parse_if_suffix(
+                    token_stream,
+                    context,
+                    type_interner,
+                    control_flow_validation,
+                    string_table,
+                )?;
+                return Ok(ParsedTemplateHead { body_mode });
+            }
+
+            TokenKind::Loop => {
+                if head_state
+                    .seen_tags
+                    .intersects(TemplateHeadTag::SLOT_DIRECTIVE)
+                {
+                    return Err(CompilerDiagnostic::invalid_template_structure(
+                        InvalidTemplateStructureReason::SlotInHead,
+                        token_stream.current_location(),
+                    ));
+                }
+
+                let body_mode = parse_loop_suffix(
+                    token_stream,
+                    context,
+                    type_interner,
+                    control_flow_validation,
+                    string_table,
+                )?;
+                return Ok(ParsedTemplateHead { body_mode });
+            }
+
+            TokenKind::Else => {
+                return Err(CompilerDiagnostic::invalid_template_structure(
+                    InvalidTemplateStructureReason::ElseInTemplateHead,
+                    token_stream.current_location(),
+                ));
+            }
+
             // Variable and template references
             TokenKind::Symbol(name) => {
                 // Check if it's a regular template reference or variable reference.
@@ -421,19 +499,25 @@ pub fn parse_template_head(
         // Valid streams should include a close/eof boundary, but avoid panicking
         // if expression parsing advanced exactly to the stream end.
         if token_stream.index >= token_stream.length {
-            return Ok(());
+            return Ok(ParsedTemplateHead {
+                body_mode: TemplateBodyParseMode::Normal,
+            });
         }
 
         if token_stream.current_token_kind() == &TokenKind::StartTemplateBody {
             token_stream.advance();
-            return Ok(());
+            return Ok(ParsedTemplateHead {
+                body_mode: TemplateBodyParseMode::Normal,
+            });
         }
 
         if matches!(
             token_stream.current_token_kind(),
             TokenKind::TemplateClose | TokenKind::Eof
         ) {
-            return Ok(());
+            return Ok(ParsedTemplateHead {
+                body_mode: TemplateBodyParseMode::Normal,
+            });
         }
 
         expecting_comma = false;
@@ -442,7 +526,9 @@ pub fn parse_template_head(
         }
     }
 
-    Ok(())
+    Ok(ParsedTemplateHead {
+        body_mode: TemplateBodyParseMode::Normal,
+    })
 }
 
 /// Dispatches a `$directive` token using the already-resolved registry spec.
@@ -486,4 +572,32 @@ fn parse_style_directive_from_spec(
     }
 
     directive_result.map(|_| false)
+}
+
+fn find_unseparated_control_flow_suffix(
+    token_stream: &FileTokens,
+) -> Option<crate::compiler_frontend::tokenizer::tokens::SourceLocation> {
+    let mut nesting_depth = NestingDepth::default();
+    let mut index = token_stream.index + 1;
+
+    while index < token_stream.length {
+        let token = &token_stream.tokens[index];
+
+        if nesting_depth.is_top_level() {
+            match token.kind {
+                TokenKind::Comma | TokenKind::StartTemplateBody | TokenKind::TemplateClose => {
+                    return None;
+                }
+                TokenKind::If | TokenKind::Loop => {
+                    return Some(token.location.clone());
+                }
+                _ => {}
+            }
+        }
+
+        nesting_depth.step(&token.kind);
+        index += 1;
+    }
+
+    None
 }

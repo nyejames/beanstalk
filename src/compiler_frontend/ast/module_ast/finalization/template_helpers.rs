@@ -31,6 +31,7 @@ pub(super) fn try_fold_template_to_string(
     path_format_config: &PathStringFormatConfig,
     project_path_resolver: &ProjectPathResolver,
     string_table: &mut StringTable,
+    template_const_loop_iteration_limit: usize,
 ) -> Result<Option<StringId>, TemplateNormalizationError> {
     match template.const_value_kind() {
         TemplateConstValueKind::RenderableString | TemplateConstValueKind::WrapperTemplate => {
@@ -39,6 +40,7 @@ pub(super) fn try_fold_template_to_string(
                 path_format_config,
                 project_path_resolver,
                 string_table,
+                template_const_loop_iteration_limit,
             );
             let result = template.fold_into_stringid(&mut fold_context)?;
             increment_ast_counter(AstCounter::TemplatesFoldedDuringFinalization);
@@ -59,11 +61,14 @@ pub(super) fn make_fold_context<'a>(
     path_format_config: &'a PathStringFormatConfig,
     project_path_resolver: &'a ProjectPathResolver,
     string_table: &'a mut StringTable,
+    template_const_loop_iteration_limit: usize,
 ) -> TemplateFoldContext<'a> {
     TemplateFoldContext {
         string_table,
         project_path_resolver,
         path_format_config,
         source_file_scope,
+        template_const_loop_iteration_limit,
+        bindings: Vec::new(),
     }
 }

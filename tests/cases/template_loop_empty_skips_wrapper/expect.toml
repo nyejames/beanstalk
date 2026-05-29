@@ -1,0 +1,9 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = ["template_loop_empty_skips_wrapper before", "after"]
+must_not_contain = ["empty-loop-shell"]

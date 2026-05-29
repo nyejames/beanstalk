@@ -35,7 +35,7 @@ use crate::compiler_frontend::tokenizer::lexer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::{CharPosition, TokenizeMode};
 use crate::compiler_frontend::value_mode::ValueMode;
 use crate::libraries::external_import_providers::resolution_table::ExternalImportResolutionTable;
-use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
+use crate::projects::settings::{DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS, IMPLICIT_START_FUNC_NAME};
 
 pub(crate) fn test_project_path_resolver() -> ProjectPathResolver {
     let cwd = std::env::temp_dir();
@@ -150,6 +150,7 @@ fn parse_single_file_ast_result(
             build_profile: FrontendBuildProfile::Dev,
             project_path_resolver: Some(test_project_path_resolver()),
             path_format_config: PathStringFormatConfig::default(),
+            template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
         },
     )
     .map_err(|messages| {

@@ -85,7 +85,7 @@ page_head #= theme_head
         }
     ]
 
-    Config keys are strict about value shape. String settings accept string literals and folded templates, [codesnippet:project] currently accepts only [codesnippet:"html"], [codesnippet:library_folders] accepts one string or a collection of strings, and boolean HTML settings such as [codesnippet:redirect_index_html] require real [codesnippet:true] / [codesnippet:false] values rather than strings.
+    Config keys are strict about value shape. String settings accept string literals and folded templates, [codesnippet:project] currently accepts only [codesnippet:"html"], [codesnippet:library_folders] accepts one string or a collection of strings, [codesnippet:template_const_loop_iteration_limit] requires a positive folded [codesnippet:Int] no greater than [codesnippet:1_000_000], and boolean HTML settings such as [codesnippet:redirect_index_html] require real [codesnippet:true] / [codesnippet:false] values rather than strings.
 
     Config values must resolve to compile-time constants. Plain immutable key declarations and explicit [codesnippet:#=] key constants are accepted, and they may reference earlier compile-time config keys or constants imported from core/builder source libraries. [codesnippet:#config.bst] may contain imports, type aliases, structs, and choices as support declarations, but every authored value-producing declaration must still be a known config key. Config-local helper constants, functions, calls, runtime statements, project-local imports, relative config imports, and [codesnippet, "#[...]"] page fragments are rejected. Const-record field projection is supported for explicit [codesnippet:#=] config keys and deferred for plain [codesnippet:=] keys.
 
@@ -117,6 +117,11 @@ page_head #= theme_head
         [data:
             [: [codesnippet:library_folders]]
             [: Configures source-library scan roots. Each direct child directory of a scan root becomes an import prefix. `/lib` is the default when omitted.]
+        ]
+
+        [data:
+            [: [codesnippet:template_const_loop_iteration_limit]]
+            [: Sets the per-loop compile-time template expansion guard. The default is [codesnippet:10_000].]
         ]
 
         [data:

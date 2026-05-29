@@ -9,7 +9,9 @@ use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::datatypes::generic_parameters::GenericParameterList;
 use crate::compiler_frontend::datatypes::parsed::ParsedTypeRef;
 use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariantSyntax;
-use crate::compiler_frontend::declaration_syntax::declaration_shell::DeclarationSyntax;
+use crate::compiler_frontend::declaration_syntax::declaration_shell::{
+    DeclarationSyntax, InitializerReference,
+};
 use crate::compiler_frontend::declaration_syntax::signature_members::{
     FunctionSignatureSyntax, SignatureMemberSyntax,
 };
@@ -100,7 +102,10 @@ pub enum HeaderKind {
         target: ParsedTypeRef,
     },
 
-    ConstTemplate,
+    ConstTemplate {
+        condition_references: Vec<InitializerReference>,
+        source_order: usize,
+    },
 
     /// The entry-file start function for non-header top-level statements.
     ///
@@ -242,7 +247,16 @@ impl HeaderKind {
                 target.remap_string_ids(remap);
             }
 
-            HeaderKind::ConstTemplate | HeaderKind::StartFunction => {}
+            HeaderKind::ConstTemplate {
+                condition_references,
+                ..
+            } => {
+                for reference in condition_references {
+                    reference.remap_string_ids(remap);
+                }
+            }
+
+            HeaderKind::StartFunction => {}
         }
     }
 }

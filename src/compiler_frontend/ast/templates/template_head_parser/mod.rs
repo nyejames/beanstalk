@@ -13,6 +13,7 @@
 // -------------------------
 
 mod children_directive;
+mod control_flow_suffix;
 mod core_directives;
 pub(crate) mod directive_args;
 mod handler_directives;

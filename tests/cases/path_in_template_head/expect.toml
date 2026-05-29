@@ -3,3 +3,8 @@ entry = "."
 [backends.html]
 mode = "success"
 warnings = "forbid"
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain_in_order = ["/subdir/#test_file.txt", "/subdir/end_of_path.txt"]

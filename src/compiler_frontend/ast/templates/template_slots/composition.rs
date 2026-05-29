@@ -1,14 +1,18 @@
 //! Slot composition: expanding wrapper templates with filled contributions.
 //!
 //! WHAT:
-//! - `compose_template_with_slots` is the main entry point.
+//! - `route_slot_contributions` extracts reusable routing used by both composition
+//!   and runtime planning.
+//! - `compose_wrapper_atoms_recursive` expands slot placeholders for the compile-time
+//!   `Composed` path.
 //! - Recursively replaces `SlotPlaceholder` atoms with matched contributions.
-//! - Applies `$children(..)` child wrappers to slot contributions where
-//!   configured.
+//! - Applies `$children(..)` child wrappers to slot contributions where configured.
 //!
 //! WHY:
 //! - Keeps the structural rewrite logic separate from contribution bucketing
 //!   and schema discovery, so each submodule has one clear responsibility.
+//! - Runtime planning in `runtime_plan.rs` consumes the same routed data without
+//!   duplicating target validation or loose routing.
 
 use super::contributions::{
     SlotContributions, SlotInsertContribution, collect_loose_contributions,
@@ -31,24 +35,41 @@ use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, InvalidTem
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::value_mode::ValueMode;
 
-/// Composes a wrapper template by filling its slots with the provided content.
+// -------------------------
+//  Routed Contributions
+// -------------------------
+
+/// Result of routing fill atoms against a wrapper's slot schema.
+///
+/// WHY: Both compile-time expansion and runtime planning need the same
+/// partitioned contributions. Extracting this shape prevents duplication.
+pub(super) struct RoutedSlotContributions {
+    pub schema: super::schema::SlotSchema,
+    pub contributions: SlotContributions,
+}
+
+// -------------------------
+//  Routing
+// -------------------------
+
+/// Routes fill content against a wrapper's slot schema.
 ///
 /// WHAT:
-/// - Scans the wrapper for available slot targets (`Default`, `Named`, `Positional`).
-/// - Partitions the authored `fill_content` into explicit `$insert` contributions and loose atoms.
+/// - Discovers the wrapper's declared slot targets.
+/// - Partitions fill atoms into explicit `$insert(...)` contributions and loose atoms.
 /// - Routes loose atoms to positional slots first, then the default slot.
-/// - Recursively replaces `SlotPlaceholder` atoms inside the wrapper with the matched contributions.
+/// - Produces actionable diagnostics for unknown targets or invalid loose content.
 ///
-/// WHY:
-/// - Connects the structural AST nodes generated during parsing into their final composed tree,
-///   handling inheritance, ordering, and validation in one centralized pass.
-pub(in crate::compiler_frontend::ast::templates) fn compose_template_with_slots(
+/// WHY: Shared routing keeps validation and ordering deterministic whether the
+/// caller expands at AST time or builds a runtime lowering plan.
+pub(super) fn route_slot_contributions(
     wrapper: &Template,
     fill_content: TemplateContent,
     location: &SourceLocation,
     string_table: &StringTable,
-) -> Result<TemplateContent, TemplateSlotError> {
+) -> Result<RoutedSlotContributions, TemplateSlotError> {
     let slot_schema = collect_slot_schema(wrapper, location)?;
+
     if !slot_schema.has_any_slots() {
         return Err(CompilerError::compiler_error(
             "Internal template wrapper state error: expected at least one '$slot' while composing.",
@@ -71,8 +92,9 @@ pub(in crate::compiler_frontend::ast::templates) fn compose_template_with_slots(
                 atoms,
                 location,
             } = slot_insert;
+
             if !slot_schema.accepts_target(&target) {
-                return unknown_slot_target_error(&target, &location, string_table);
+                return Err(unknown_slot_target_error(&target, &location, string_table));
             }
 
             match target {
@@ -110,21 +132,31 @@ pub(in crate::compiler_frontend::ast::templates) fn compose_template_with_slots(
         }
 
         if !slot_schema.positional_slots.is_empty() {
-            return extra_loose_content_without_default_slot_error(location);
+            return Err(extra_loose_content_without_default_slot_error(location));
         }
 
-        return loose_content_without_default_slot_error(location);
+        return Err(loose_content_without_default_slot_error(location));
     }
 
-    let atoms =
-        compose_wrapper_atoms_recursive(&wrapper.content.atoms, &contributions, string_table)?;
-    Ok(TemplateContent { atoms })
+    Ok(RoutedSlotContributions {
+        schema: slot_schema,
+        contributions,
+    })
 }
 
-fn compose_wrapper_atoms_recursive(
+// -------------------------
+//  Recursive Expansion
+// -------------------------
+
+/// Recursively replaces slot placeholders in wrapper atoms with routed contributions.
+///
+/// WHY: Kept as a separate reusable helper so `runtime_plan.rs` can call it for
+/// the `Composed` path without duplicating the recursive walk.
+pub(super) fn compose_wrapper_atoms_recursive(
     wrapper_atoms: &[TemplateAtom],
     contributions: &SlotContributions,
     string_table: &StringTable,
+    resolution_mode: super::runtime_plan::SlotResolutionMode,
 ) -> Result<Vec<TemplateAtom>, TemplateSlotError> {
     let mut composed = Vec::with_capacity(wrapper_atoms.len());
 
@@ -133,7 +165,12 @@ fn compose_wrapper_atoms_recursive(
             TemplateAtom::Slot(slot) => {
                 // Slot replacement is intentionally non-consuming, so duplicate named
                 // slot declarations replay the same aggregated contribution in each place.
-                composed.extend(expand_slot_placeholder(slot, contributions, string_table)?);
+                composed.extend(expand_slot_placeholder(
+                    slot,
+                    contributions,
+                    string_table,
+                    resolution_mode,
+                )?);
             }
             TemplateAtom::Content(segment) => {
                 // Nested templates can carry slot definitions too. Recursively resolve
@@ -147,6 +184,7 @@ fn compose_wrapper_atoms_recursive(
                             &nested_template.content.atoms,
                             contributions,
                             string_table,
+                            resolution_mode,
                         )?,
                     };
                     nested_template.resync_composition_metadata();
@@ -168,26 +206,36 @@ fn compose_wrapper_atoms_recursive(
     Ok(composed)
 }
 
-fn expand_slot_placeholder(
+pub(super) fn expand_slot_placeholder(
     placeholder: &SlotPlaceholder,
     contributions: &SlotContributions,
     string_table: &StringTable,
+    resolution_mode: super::runtime_plan::SlotResolutionMode,
 ) -> Result<Vec<TemplateAtom>, TemplateSlotError> {
     let slot_atoms = contributions.atoms_for_slot(&placeholder.key);
+
     if placeholder.applied_child_wrappers.is_empty() && placeholder.child_wrappers.is_empty() {
         return Ok(slot_atoms.to_owned());
     }
 
     let mut expanded = Vec::with_capacity(slot_atoms.len());
+
     for source_atom in slot_atoms {
-        let wrapped_atom = if placeholder.child_wrappers.is_empty() {
+        let wrapped_atom = if placeholder.child_wrappers.is_empty()
+            || contribution_skips_parent_child_wrappers(source_atom)
+        {
             source_atom.clone()
         } else if contribution_is_child_template_output(source_atom)
             || contribution_template_ref(source_atom).is_some()
         {
             // `$children(..)` applies to this direct slot contribution as a whole.
             // It must not descend into the contribution and wrap grandchildren.
-            wrap_child_slot_contribution(source_atom, &placeholder.child_wrappers, string_table)?
+            wrap_child_slot_contribution(
+                source_atom,
+                &placeholder.child_wrappers,
+                string_table,
+                resolution_mode,
+            )?
         } else {
             source_atom.clone()
         };
@@ -200,6 +248,7 @@ fn expand_slot_placeholder(
                 &wrapped_atom,
                 &placeholder.applied_child_wrappers,
                 string_table,
+                resolution_mode,
             )?);
         } else {
             expanded.push(wrapped_atom);
@@ -222,6 +271,7 @@ fn wrap_child_slot_contribution(
     atom: &TemplateAtom,
     child_wrappers: &[Template],
     string_table: &StringTable,
+    resolution_mode: super::runtime_plan::SlotResolutionMode,
 ) -> Result<TemplateAtom, TemplateSlotError> {
     let wrapped_content = apply_inherited_child_templates_to_content(
         TemplateContent {
@@ -229,7 +279,12 @@ fn wrap_child_slot_contribution(
         },
         child_wrappers,
         string_table,
+        resolution_mode,
     )?;
+
+    if let Some(control_flow_atom) = single_control_flow_child_atom(&wrapped_content) {
+        return Ok(control_flow_atom);
+    }
 
     let origin = contribution_origin(atom);
     let mut wrapped_template = Template::empty();
@@ -241,6 +296,22 @@ fn wrap_child_slot_contribution(
         Expression::template(wrapped_template, ValueMode::ImmutableOwned),
         origin,
     )))
+}
+
+fn single_control_flow_child_atom(content: &TemplateContent) -> Option<TemplateAtom> {
+    let [atom] = content.atoms.as_slice() else {
+        return None;
+    };
+
+    let TemplateAtom::Content(segment) = atom else {
+        return None;
+    };
+
+    let ExpressionKind::Template(template) = &segment.expression.kind else {
+        return None;
+    };
+
+    template.is_control_flow_template().then(|| atom.to_owned())
 }
 
 fn contribution_template_ref(atom: &TemplateAtom) -> Option<&Template> {
@@ -256,6 +327,11 @@ fn contribution_template_ref(atom: &TemplateAtom) -> Option<&Template> {
         ExpressionKind::Template(template) => Some(template.as_ref()),
         _ => None,
     }
+}
+
+fn contribution_skips_parent_child_wrappers(atom: &TemplateAtom) -> bool {
+    contribution_template_ref(atom)
+        .is_some_and(|template| template.style.skip_parent_child_wrappers)
 }
 
 /// Returns true when the atom is a child template output that was folded into a
@@ -289,15 +365,14 @@ fn contribution_location(atom: &TemplateAtom) -> SourceLocation {
 /// template. Once composition is complete, any remaining inserts are out of
 /// scope and must produce a clear error.
 pub(in crate::compiler_frontend::ast::templates) fn ensure_no_slot_insertions_remain(
-    content: &TemplateContent,
-    location: &SourceLocation,
+    template: &Template,
     _string_table: &StringTable,
 ) -> Result<(), TemplateSlotError> {
-    if content.contains_slot_insertions() {
+    if template.contains_slot_insertions() {
         return Err(CompilerDiagnostic::invalid_template_slot(
             InvalidTemplateSlotReason::InsertOutsideParentSlot,
             None,
-            location.clone(),
+            template.location.clone(),
         )
         .into());
     }

@@ -19,7 +19,10 @@ use crate::libraries::config_key_registry::{
     ConfigKeyEntry, ConfigKeyOwner, ConfigValueShape, ProjectConfigKeyRegistry,
     config_value_shape_name,
 };
-use crate::projects::settings::{Config, IMPLICIT_START_FUNC_NAME};
+use crate::projects::settings::{
+    Config, IMPLICIT_START_FUNC_NAME, MAX_TEMPLATE_CONST_LOOP_ITERATIONS,
+    TEMPLATE_CONST_LOOP_ITERATION_LIMIT_KEY,
+};
 
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -264,6 +267,7 @@ fn extract_config_declaration(
 /// without re-inspecting the AST expression.
 enum ValidatedConfigValue {
     String(String),
+    Int(i64),
     Bool(bool),
     StringCollection(Vec<ValidatedConfigString>),
 }
@@ -288,6 +292,10 @@ fn extract_config_value_for_shape(
     match shape {
         ConfigValueShape::String => extract_string_value(expression, string_table)
             .map(ValidatedConfigValue::String)
+            .ok_or_else(|| invalid_shape_reason(shape, string_table)),
+
+        ConfigValueShape::Int => extract_int_value(expression)
+            .map(ValidatedConfigValue::Int)
             .ok_or_else(|| invalid_shape_reason(shape, string_table)),
 
         ConfigValueShape::ClosedStringSet { allowed } => {
@@ -349,6 +357,18 @@ fn format_closed_string_set_expected(allowed: &[&str]) -> String {
     } else {
         let quoted: Vec<String> = allowed.iter().map(|s| format!("\"{}\"", s)).collect();
         format!("one of: {}", quoted.join(", "))
+    }
+}
+
+/// Extract an integer value.
+///
+/// WHY: numeric config keys must not accept floats, bools, or strings through coercion or
+/// stringification. Config validation consumes the AST-folded scalar directly.
+fn extract_int_value(expression: &Expression) -> Option<i64> {
+    match &expression.kind {
+        ExpressionKind::Int(value) => Some(*value),
+        ExpressionKind::Coerced { value, .. } => extract_int_value(value),
+        _ => None,
     }
 }
 
@@ -575,6 +595,10 @@ fn apply_validated_config_value(
             Ok(())
         }
 
+        (ConfigKeyOwner::Core, ValidatedConfigValue::Int(value)) => {
+            apply_core_int_config_entry(config, key, value, location, string_table)
+        }
+
         (ConfigKeyOwner::Core, ValidatedConfigValue::StringCollection(values)) => {
             if key == "library_folders" {
                 apply_library_folders(config, values, location, string_table)
@@ -593,6 +617,11 @@ fn apply_validated_config_value(
 
         (ConfigKeyOwner::Backend, ValidatedConfigValue::String(value)) => {
             config.settings.insert(key.to_string(), value);
+            Ok(())
+        }
+
+        (ConfigKeyOwner::Backend, ValidatedConfigValue::Int(value)) => {
+            config.settings.insert(key.to_string(), value.to_string());
             Ok(())
         }
 
@@ -618,6 +647,59 @@ fn apply_validated_config_value(
             Ok(())
         }
     }
+}
+
+fn apply_core_int_config_entry(
+    config: &mut Config,
+    key: &str,
+    value: i64,
+    location: &SourceLocation,
+    string_table: &mut StringTable,
+) -> Result<(), Vec<CompilerDiagnostic>> {
+    match key {
+        TEMPLATE_CONST_LOOP_ITERATION_LIMIT_KEY => {
+            let limit =
+                validate_template_const_loop_iteration_limit(value, location, string_table)?;
+            config.template_const_loop_iteration_limit = limit;
+            Ok(())
+        }
+
+        _ => {
+            // Defensive fallback for future core integer keys without a typed field.
+            config.settings.insert(key.to_string(), value.to_string());
+            Ok(())
+        }
+    }
+}
+
+fn validate_template_const_loop_iteration_limit(
+    value: i64,
+    location: &SourceLocation,
+    string_table: &mut StringTable,
+) -> Result<usize, Vec<CompilerDiagnostic>> {
+    if value <= 0 {
+        return Err(vec![config_diagnostic(
+            Some(string_table.intern(TEMPLATE_CONST_LOOP_ITERATION_LIMIT_KEY)),
+            InvalidConfigReason::InvalidProjectSettingValue {
+                value: string_table.intern(&value.to_string()),
+                expected: string_table.intern("a positive integer"),
+            },
+            location.clone(),
+        )]);
+    }
+
+    if value > MAX_TEMPLATE_CONST_LOOP_ITERATIONS as i64 {
+        return Err(vec![config_diagnostic(
+            Some(string_table.intern(TEMPLATE_CONST_LOOP_ITERATION_LIMIT_KEY)),
+            InvalidConfigReason::InvalidProjectSettingValue {
+                value: string_table.intern(&value.to_string()),
+                expected: string_table.intern("an integer no greater than 1000000"),
+            },
+            location.clone(),
+        )]);
+    }
+
+    Ok(value as usize)
 }
 
 fn apply_core_string_config_entry(config: &mut Config, key: &str, value: &str) {

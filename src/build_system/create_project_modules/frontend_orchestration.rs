@@ -713,7 +713,7 @@ mod tests {
         let const_template_header = headers
             .headers
             .iter()
-            .find(|h| matches!(h.kind, HeaderKind::ConstTemplate));
+            .find(|h| matches!(h.kind, HeaderKind::ConstTemplate { .. }));
         assert!(
             const_template_header.is_some(),
             "const template header should exist"
@@ -890,7 +890,7 @@ mod tests {
         let const_template_header = headers
             .headers
             .iter()
-            .find(|h| matches!(h.kind, HeaderKind::ConstTemplate));
+            .find(|h| matches!(h.kind, HeaderKind::ConstTemplate { .. }));
         assert!(
             const_template_header.is_some(),
             "const template header should exist"

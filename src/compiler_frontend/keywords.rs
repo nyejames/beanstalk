@@ -9,11 +9,10 @@ use crate::compiler_frontend::tokenizer::tokens::TokenKind;
 
 /// Keywords that may not be shadowed by identifiers after case folding and
 /// stripping leading underscores.
-pub(crate) const RESERVED_KEYWORD_SHADOWS: [&str; 36] = [
-    "import", "if", "case", "return", "yield", "else", "block", "checked", "async", "as", "copy",
-    "type", "of", "must", "this", "catch", "then", "loop", "to", "by", "break", "continue", "is",
-    "not", "and", "or", "true", "false", "none", "fn", "float", "int", "string", "bool", "char",
-    "assert",
+pub(crate) const RESERVED_KEYWORD_SHADOWS: [&str; 35] = [
+    "import", "if", "return", "yield", "else", "block", "checked", "async", "as", "copy", "type",
+    "of", "must", "this", "catch", "then", "loop", "to", "by", "break", "continue", "is", "not",
+    "and", "or", "true", "false", "none", "fn", "float", "int", "string", "bool", "char", "assert",
 ];
 
 /// Returns the tokenizer token kind for an exact source keyword spelling.
@@ -23,7 +22,6 @@ pub(crate) fn keyword_token_kind(text: &str) -> Option<TokenKind> {
 
         // Control flow
         "if" => Some(TokenKind::If),
-        "case" => Some(TokenKind::Case),
         "return" => Some(TokenKind::Return),
         "catch" => Some(TokenKind::Catch),
         "then" => Some(TokenKind::Then),

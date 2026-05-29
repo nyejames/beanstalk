@@ -4,6 +4,16 @@ entry = "."
 mode = "success"
 warnings = "forbid"
 
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = ["Beanstalk docs"]
+
 [backends.html_wasm]
 mode = "success"
 warnings = "forbid"
+
+[[backends.html_wasm.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = ["Beanstalk docs"]

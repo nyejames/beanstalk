@@ -163,7 +163,7 @@ pub fn parse_declaration_syntax(
     })
 }
 
-fn collect_initializer_references(tokens: &[Token]) -> Vec<InitializerReference> {
+pub(crate) fn collect_initializer_references(tokens: &[Token]) -> Vec<InitializerReference> {
     let mut references = Vec::new();
 
     for (index, token) in tokens.iter().enumerate() {

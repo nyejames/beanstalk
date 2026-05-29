@@ -17,7 +17,9 @@ use crate::compiler_frontend::declaration_syntax::binding_mode::BindingMode;
 use crate::compiler_frontend::declaration_syntax::choice::{
     ChoiceVariantPayloadSyntax, ChoiceVariantSyntax,
 };
-use crate::compiler_frontend::declaration_syntax::declaration_shell::DeclarationSyntax;
+use crate::compiler_frontend::declaration_syntax::declaration_shell::{
+    DeclarationSyntax, InitializerReference,
+};
 use crate::compiler_frontend::declaration_syntax::signature_members::{
     FunctionSignatureSyntax, SignatureMemberSyntax,
 };
@@ -387,14 +389,33 @@ fn header_kind_type_alias_remaps_generic_parameters_and_target() {
 }
 
 #[test]
-fn header_kind_const_template_is_no_op() {
-    let mut kind = HeaderKind::ConstTemplate;
-    let identity_remap = {
-        let mut global = StringTable::new();
-        global.merge_from(&StringTable::new())
+fn header_kind_const_template_remaps_condition_references() {
+    let mut global = StringTable::new();
+    let mut local = StringTable::new();
+    let show_banner = local.intern("show_banner");
+
+    let mut kind = HeaderKind::ConstTemplate {
+        condition_references: vec![InitializerReference {
+            name: show_banner,
+            location: make_location("test.bst", &mut local),
+            followed_by_call: false,
+            followed_by_choice_namespace: false,
+        }],
+        source_order: 0,
     };
-    kind.remap_string_ids(&identity_remap);
-    // No panic and no fields to assert.
+
+    let remap = global.merge_from(&local);
+    kind.remap_string_ids(&remap);
+
+    let HeaderKind::ConstTemplate {
+        condition_references,
+        ..
+    } = kind
+    else {
+        panic!("expected ConstTemplate kind");
+    };
+    assert_eq!(global.resolve(condition_references[0].name), "show_banner");
+    assert_location_resolves_to(&condition_references[0].location, "test.bst", &global);
 }
 
 #[test]

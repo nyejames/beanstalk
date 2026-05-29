@@ -99,22 +99,6 @@ fn reports_unterminated_match_scope_at_end_of_file() {
 }
 
 #[test]
-fn reports_case_outside_match_scope() {
-    let diagnostic = parse_single_file_ast_diagnostic("case 1 => io(\"one\")\n");
-
-    assert_eq!(
-        diagnostic.kind,
-        DiagnosticKind::Syntax(SyntaxDiagnosticKind::InvalidStatementPosition)
-    );
-    assert_eq!(
-        diagnostic.payload,
-        DiagnosticPayload::InvalidStatementPosition {
-            reason: InvalidStatementPositionReason::UnexpectedCase
-        }
-    );
-}
-
-#[test]
 fn reports_multi_bind_malformed_comma_sequence() {
     let diagnostic = parse_single_file_ast_diagnostic(
         "pair || -> Int, Int:\n    return 1, 2\n;\n\na, , b = pair()\n",

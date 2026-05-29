@@ -540,7 +540,7 @@ img = [:
 ]
 
 [img, "logo.png": Site logo]
-````
+```
 
 In this example, `"logo.png"` fills the first positional slot `[$slot(1)]`, and `"Site logo"` fills the default slot `[$slot]`.
 
@@ -565,6 +565,34 @@ If a template has named or positional slots but no default slot, any loose body 
 If a slot receives no content, it expands to an empty string.
 Repeated slots, such as two occurrences of `[$slot(1)]`, will replay the same content in both places.
 
+Slot applications may contain runtime-producing content. Runtime-capable
+templates support default, named, positional, and loose contributions from
+template `if` branches and template `loop` bodies. Valid runtime slot
+applications are routed during AST preparation, then lowered through ordinary
+runtime string accumulators. Missing slots still render as empty strings, and
+repeated slots replay the same accumulated contribution.
+
+```beanstalk
+card = [:
+    <h1>[$slot("title")]</h1>
+    <section>[$slot]</section>
+]
+
+[card:
+    [$insert("title"):
+        [if maybe_title is |title|:
+            [title]
+        [else]
+            Untitled
+        ]
+    ]
+
+    [loop items |item|:
+        [item]
+    ]
+]
+```
+
 Because `$children(..)` only applies to direct children, nested helpers can scope row and cell wrappers independently:
 
 ```beanstalk
@@ -581,6 +609,99 @@ table #= [$children([:<tr>[$slot]</tr>]):
 ```
 
 In that example, each direct child of `table` becomes a row, while each direct child of a row becomes a cell. The outer `<tr>` wrapper does not leak into the inner cell templates.
+
+### Template Head Suffix Control Flow
+Templates support `if` and `loop` as final head suffixes immediately before the
+body colon. If the head already contains a value, helper, or directive, the
+control-flow suffix requires a comma.
+
+```beanstalk
+[if show:
+    Visible
+]
+
+[card, if show:
+    Visible inside card
+]
+```
+
+Template `if` supports `Bool` conditions, option-present capture, and
+standalone `[else if ...]` sentinels. `[else]` is optional, must be standalone,
+and belongs to the nearest active template `if`. Full pattern-match branch
+chains belong to ordinary statement/value `if value is:` blocks, not template
+heads.
+
+```beanstalk
+maybe_name String? = none
+use_fallback = true
+
+[if maybe_name is |name|:
+    Hello [name]
+[else if use_fallback]
+    Hello fallback
+[else]
+    Hello guest
+]
+```
+
+Template `loop` supports conditional loops, collection iteration, and numeric
+range iteration using the normal loop-header syntax. Conditional template loops
+do not take bindings. Collection and range loops can use a second binding for
+the zero-based index. Iterations concatenate directly with no implicit
+separator. Standalone `[break]` and `[continue]` sentinels are valid inside
+template loop bodies, including nested template `if` and `else if` bodies. They
+target the nearest active template loop and are structural control
+signals, not renderable output.
+
+```beanstalk
+[loop has_next():
+    [next_item()]
+]
+
+[loop items |item, index|:
+    [index]: [item]
+]
+
+[loop 0 to 10 |i|:
+    [i]
+]
+
+[loop items |item|:
+    [if item.skip:
+        [continue]
+    ]
+    [if item.done:
+        [break]
+    ]
+    [item]
+]
+```
+
+Head values and wrappers apply to selected/generated output. For
+`[head, loop ...:]`, the head wraps the whole aggregate once. Put
+per-iteration wrappers inside the loop body. False/no-else branches and
+false conditional loops or zero-iteration range/collection loops produce
+structural no-output and skip shared wrappers. Loop iterations that `continue`
+or `break` before any output also do not count as structurally emitted, while
+output before a loop-control sentinel is preserved.
+
+Top-level `#[if ...:]` and `#[loop ...:]` fragments must fully fold at compile
+time. Const-required template `if` validates every branch body.
+Const-required conditional template loops fold to no-output when their condition
+is compile-time `false`; compile-time `true` and unknown/runtime conditions are
+rejected because no template loop termination analysis is performed. Const range
+and collection template loops can fold structural `[break]` and `[continue]`,
+and use the `template_const_loop_iteration_limit` project config guard. The
+default is `10_000` iterations per const template loop, and the configured value
+must be a positive folded `Int` no greater than `1_000_000`. Runtime template
+control flow is lazy: only the selected `if` branch evaluates, range and
+collection loop sources are evaluated once before iteration, and conditional
+loop conditions are evaluated before every iteration.
+
+Runtime slot applications are valid inside template control flow after normal
+slot routing. Escaped helper artifacts that still leave unresolved `[$slot]` or
+`$insert(...)` output inside runtime control-flow bodies are invalid template
+structure.
 
 ### If Statements / Pattern Matching
 If statements are non-exhaustive and don't have 'else if'.
@@ -1036,7 +1157,9 @@ Known keys have strict value shapes before they are applied or stored:
 - string settings accept string literals and folded templates;
 - `project` is currently a closed string set accepting only `"html"`;
 - boolean HTML settings such as `redirect_index_html` require folded `Bool` values, not strings such as `"false"`;
-- `library_folders` accepts either one string folder name or a collection of string folder names.
+- `library_folders` accepts either one string folder name or a collection of string folder names;
+- `template_const_loop_iteration_limit` requires a positive folded `Int`, defaults to `10_000`,
+  and is capped at `1_000_000`.
 
 Explicit `#` config-key constants can use const-record field projection when the expression fully folds, for example `entry_root #= Defaults().entry_root`.
 The same projection in a plain `=` config key is deferred.

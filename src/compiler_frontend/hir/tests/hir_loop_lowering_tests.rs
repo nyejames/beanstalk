@@ -66,8 +66,13 @@ fn lowers_while_to_header_body_exit_shape() {
         _ => panic!("expected if in while header"),
     };
 
+    let backedge_block = match module.blocks[body_block.0 as usize].terminator {
+        HirTerminator::Jump { target, .. } => target,
+        _ => panic!("expected while body to jump to the parent-region backedge"),
+    };
+
     assert!(matches!(
-        module.blocks[body_block.0 as usize].terminator,
+        module.blocks[backedge_block.0 as usize].terminator,
         HirTerminator::Jump { target, .. } if target == header_block
     ));
 }

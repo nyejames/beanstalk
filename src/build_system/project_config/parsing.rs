@@ -29,6 +29,7 @@ use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable}
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::{Token, TokenKind, TokenizeMode};
 use crate::libraries::external_import_providers::resolution_table::ExternalImportResolutionTable;
+use crate::projects::settings::DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS;
 
 use std::collections::{BTreeSet, VecDeque};
 use std::path::{Path, PathBuf};
@@ -213,6 +214,7 @@ pub(super) fn parse_config_file(
             build_profile: crate::compiler_frontend::FrontendBuildProfile::Dev,
             project_path_resolver: Some(project_path_resolver),
             path_format_config: PathStringFormatConfig::default(),
+            template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
         },
     )?;
 
@@ -414,7 +416,9 @@ fn validate_authored_config_surface(headers: &[Header]) -> Vec<CompilerDiagnosti
     for header in headers {
         let reason = match &header.kind {
             HeaderKind::Function { .. } => Some(InvalidConfigReason::FunctionUnsupported),
-            HeaderKind::ConstTemplate => Some(InvalidConfigReason::StandaloneTemplateUnsupported),
+            HeaderKind::ConstTemplate { .. } => {
+                Some(InvalidConfigReason::StandaloneTemplateUnsupported)
+            }
             HeaderKind::Constant { .. }
             | HeaderKind::StartFunction
             | HeaderKind::Struct { .. }

@@ -11,7 +11,7 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 ---
 
 # Plans / TODOS
-- Basic template control flow statements (if expressions, loops and if statements)
+- Benchmarks improvement plan: `docs/roadmap/plans/benchmarking-implementation-plan.md`
 - Traits
 - Generic follow-ups after cross-module free-function support:
   - Decide explicit generic call syntax. Current rejected examples include `identity of Int(42)`, `identity[Int](42)`, and `identity<Int>(42)`.
@@ -33,6 +33,12 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 - Move to more specific explicit type declarations for numbers (I32, I64, F32, F64) - JS backend just makes all an F64 and accepts the precision loss, more for future Wasm backend
 
 # Notes
+- Template head suffix control flow is implemented for source-authored Bool `if`, option-present
+  `if`, range `loop`, collection `loop`, standalone `[else]`, standalone `[else if ...]`,
+  structural `[break]` / `[continue]`, const folding where supported, lazy runtime HIR
+  lowering, and runtime slot applications with branch/loop contributions plus `$children(...)`
+  / `$fresh` wrapper behavior. Remaining template follow-ups are deliberate future surfaces,
+  not part of the completed control-flow/runtime-slot implementation plan.
 - Assert/panic follow-ups after the always-checked `assert` implementation: debug-only assertions,
   lazy runtime assertion-message expressions, compile-time constant assertion messages,
   catchable/recoverable panic design, explicit stop helpers such as `todo` / `unreachable` /

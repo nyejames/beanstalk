@@ -746,24 +746,6 @@ fn relational_pattern_accepts_string() {
 }
 
 #[test]
-fn rejects_legacy_case_keyword_in_match_arm() {
-    let diagnostic = parse_single_file_ast_diagnostic(
-        "value = 1\nif value is:\n    case 1 => io(\"one\")\n    else => io(\"other\")\n;\n",
-    );
-
-    assert_eq!(
-        diagnostic.kind,
-        DiagnosticKind::Syntax(SyntaxDiagnosticKind::InvalidMatchArm)
-    );
-    assert_eq!(
-        diagnostic.payload,
-        DiagnosticPayload::InvalidMatchArm {
-            reason: InvalidMatchArmReason::RemovedCaseKeyword
-        }
-    );
-}
-
-#[test]
 fn parses_multi_statement_match_arm_body_delimited_by_next_arm() {
     let (ast, string_table) = parse_single_file_ast(
         "value = 1\n\
@@ -835,5 +817,22 @@ fn rejects_missing_match_arm_header() {
         DiagnosticPayload::InvalidMatchArm {
             reason: InvalidMatchArmReason::ExpectedArmHeader
         }
+    );
+}
+
+#[test]
+fn case_is_valid_as_normal_identifier() {
+    let (ast, string_table) = parse_single_file_ast("case = 42\nio(case)\n");
+
+    let body = start_function_body(&ast, &string_table);
+    assert_eq!(
+        body.len(),
+        2,
+        "should parse declaration and call without treating `case` as a keyword"
+    );
+
+    assert!(
+        matches!(&body[0].kind, NodeKind::VariableDeclaration { .. }),
+        "should parse `case = 42` as a normal variable declaration"
     );
 }

@@ -31,6 +31,7 @@ use crate::compiler_frontend::hir::patterns::{HirMatchArm, HirPattern, HirRelati
 use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::regions::HirRegion;
 use crate::compiler_frontend::hir::terminators::HirTerminator;
+use crate::compiler_frontend::hir::utils::terminator_targets;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::return_hir_transformation_error;
 
@@ -86,6 +87,33 @@ impl<'a> HirBuilder<'a> {
         else_body: Option<&[AstNode]>,
         location: &SourceLocation,
     ) -> Result<(), CompilerError> {
+        self.lower_if_with_body_emitters(
+            condition,
+            location,
+            |builder| builder.lower_statement_sequence(then_body),
+            |builder| {
+                if let Some(else_nodes) = else_body {
+                    builder.lower_statement_sequence(else_nodes)?;
+                }
+
+                Ok(())
+            },
+        )
+    }
+
+    /// Lowers a Bool `if` into branch blocks while delegating body emission to callers.
+    ///
+    /// WHAT: constructs the condition branch, then/else regions, terminal-path handling,
+    ///       and merge block once for every HIR producer that needs ordinary `if` CFG.
+    /// WHY: runtime template `if` needs the same lazy branch/merge shape as statement `if`,
+    ///      but branch bodies append render pieces instead of lowering statement nodes.
+    pub(crate) fn lower_if_with_body_emitters(
+        &mut self,
+        condition: &Expression,
+        location: &SourceLocation,
+        emit_then: impl FnOnce(&mut HirBuilder<'_>) -> Result<(), CompilerError>,
+        emit_else: impl FnOnce(&mut HirBuilder<'_>) -> Result<(), CompilerError>,
+    ) -> Result<(), CompilerError> {
         let condition_value = self.lower_expression_value_to_current_block(condition)?;
         let condition_block = self.current_block_id_or_error(location)?;
 
@@ -111,7 +139,7 @@ impl<'a> HirBuilder<'a> {
         let mut terminated_anchor: Option<BlockId> = None;
 
         self.set_current_block(then_block, location)?;
-        self.lower_statement_sequence(then_body)?;
+        emit_then(self)?;
         let then_tail_block = self.current_block_id_or_error(location)?;
         let then_terminated = self.block_has_explicit_terminator(then_tail_block, location)?;
         if then_terminated {
@@ -119,9 +147,7 @@ impl<'a> HirBuilder<'a> {
         }
 
         self.set_current_block(else_block, location)?;
-        if let Some(else_nodes) = else_body {
-            self.lower_statement_sequence(else_nodes)?;
-        }
+        emit_else(self)?;
 
         let else_tail_block = self.current_block_id_or_error(location)?;
         let else_terminated = self.block_has_explicit_terminator(else_tail_block, location)?;
@@ -131,7 +157,13 @@ impl<'a> HirBuilder<'a> {
 
         if then_terminated && else_terminated {
             // No continuation path exists after this branch.
-            return self.set_current_block(terminated_anchor.unwrap_or(then_block), location);
+            let anchor_block = if let Some(anchor) = terminated_anchor {
+                anchor
+            } else {
+                then_block
+            };
+
+            return self.set_current_block(anchor_block, location);
         }
 
         let merge_block = self.create_block(parent_region, location, "if-merge")?;
@@ -352,6 +384,13 @@ impl<'a> HirBuilder<'a> {
         &mut self,
         location: &SourceLocation,
     ) -> Result<(), CompilerError> {
+        self.emit_break_to_current_loop(location)
+    }
+
+    pub(crate) fn emit_break_to_current_loop(
+        &mut self,
+        location: &SourceLocation,
+    ) -> Result<(), CompilerError> {
         let current_block = self.current_block_id_or_error(location)?;
         let targets = self.current_loop_targets_or_error("break", location)?;
 
@@ -368,6 +407,13 @@ impl<'a> HirBuilder<'a> {
     }
 
     pub(super) fn lower_continue_statement(
+        &mut self,
+        location: &SourceLocation,
+    ) -> Result<(), CompilerError> {
+        self.emit_continue_to_current_loop(location)
+    }
+
+    pub(crate) fn emit_continue_to_current_loop(
         &mut self,
         location: &SourceLocation,
     ) -> Result<(), CompilerError> {
@@ -392,44 +438,7 @@ impl<'a> HirBuilder<'a> {
         body: &[AstNode],
         location: &SourceLocation,
     ) -> Result<(), CompilerError> {
-        let pre_header_block = self.current_block_id_or_error(location)?;
-        let parent_region = self.current_region_or_error(location)?;
-
-        let header_block = self.create_block(parent_region, location, "while-header")?;
-        let body_region = self.create_child_region(parent_region);
-        let body_block = self.create_block(body_region, location, "while-body")?;
-        let exit_block = self.create_block(parent_region, location, "while-exit")?;
-
-        self.emit_jump_to(pre_header_block, header_block, location, "while.enter")?;
-
-        self.set_current_block(header_block, location)?;
-        let condition_value = self.lower_expression_value_to_current_block(condition)?;
-        let condition_block = self.current_block_id_or_error(location)?;
-
-        self.emit_terminator(
-            condition_block,
-            HirTerminator::If {
-                condition: condition_value,
-                then_block: body_block,
-                else_block: exit_block,
-            },
-            location,
-        )?;
-
-        self.log_control_flow_edge(condition_block, body_block, "while.true");
-        self.log_control_flow_edge(condition_block, exit_block, "while.false");
-
-        self.set_current_block(body_block, location)?;
-        self.push_loop_targets(exit_block, header_block);
-        self.lower_statement_sequence(body)?;
-        self.pop_loop_targets();
-
-        let body_tail_block = self.current_block_id_or_error(location)?;
-        if !self.block_has_explicit_terminator(body_tail_block, location)? {
-            self.emit_jump_to(body_tail_block, header_block, location, "while.backedge")?;
-        }
-
-        self.set_current_block(exit_block, location)
+        self.lower_while_statement_impl(condition, body, location)
     }
 
     /// Lower an AST match statement into explicit CFG blocks and a `Match` terminator.
@@ -1053,7 +1062,7 @@ impl<'a> HirBuilder<'a> {
     }
 
     /// Lower an AST match pattern into its HIR counterpart.
-    fn lower_match_pattern(
+    pub(crate) fn lower_match_pattern(
         &mut self,
         pattern: &MatchPattern,
         scrutinee_type_id: TypeId,
@@ -1202,6 +1211,58 @@ impl<'a> HirBuilder<'a> {
         let id = block.id;
         self.push_block(block);
         Ok(id)
+    }
+
+    /// Removes a preallocated block when body lowering proved that no CFG edge can reach it.
+    ///
+    /// WHAT: range and collection loops preallocate their step block so `continue`
+    /// statements have a target while the body is lowered. If every body path exits
+    /// through `break`, `return`, or another terminal edge, that step block remains
+    /// empty and unreachable.
+    ///
+    /// WHY: HIR validation intentionally rejects ownerless blocks. Pruning the unused
+    /// step block keeps loop lowering strict without inventing a semantic edge that
+    /// would execute unreachable step work.
+    pub(crate) fn discard_unreachable_empty_block(
+        &mut self,
+        block_id: BlockId,
+        location: &SourceLocation,
+    ) -> Result<bool, CompilerError> {
+        if self.block_has_incoming_terminator_edge(block_id) {
+            return Ok(false);
+        }
+
+        let Some(index) = self.block_index_by_id.get(&block_id).copied() else {
+            return_hir_transformation_error!(
+                format!("Cannot discard unknown HIR block {block_id}."),
+                self.hir_error_location(location)
+            );
+        };
+
+        let block = &self.module.blocks[index];
+        if !block.locals.is_empty()
+            || !block.statements.is_empty()
+            || !matches!(block.terminator, HirTerminator::Uninitialized)
+        {
+            return Ok(false);
+        }
+
+        self.module.blocks.remove(index);
+        self.block_index_by_id.remove(&block_id);
+        for position in index..self.module.blocks.len() {
+            let remaining_id = self.module.blocks[position].id;
+            self.block_index_by_id.insert(remaining_id, position);
+        }
+
+        Ok(true)
+    }
+
+    fn block_has_incoming_terminator_edge(&self, target: BlockId) -> bool {
+        self.module.blocks.iter().any(|block| {
+            terminator_targets(&block.terminator)
+                .into_iter()
+                .any(|successor| successor == target)
+        })
     }
 
     pub(super) fn expression_from_return_values(

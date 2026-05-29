@@ -1,0 +1,12 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = [
+  "<ol>",
+  "data-copy=\"one\"",
+  "> one</li>",
+  "data-copy=\"two\"",
+  "> two</li>",
+  "<footer>",
+  "done",
+]

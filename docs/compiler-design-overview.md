@@ -374,7 +374,7 @@ AST owns:
 - generic declaration/type validation at the frontend level
 - generic free-function template storage, body validation, immediate local call inference, and concrete instance emission before HIR
 - constant folding and const-only validation
-- template composition, compile-time folding, helper elimination, and runtime render-plan preparation
+- template composition, compile-time folding, control-flow validation, helper elimination, and runtime render-plan preparation
 
 AST should be described by this ownership and data-flow contract, not by a fixed internal pass count.
 The internal substeps inside each phase are implementation details and may change as the stage is simplified.
@@ -422,11 +422,19 @@ It:
 
 * composes slots, inserts, wrappers, and child templates
 * folds fully constant templates into string literals
+* preserves structured template `if` / `loop` bodies for runtime lazy lowering
+* prepares runtime slot application plans after AST-owned schema extraction and contribution routing
+* validates const-required template control flow before HIR
+* rejects escaped slot/insert helper artifacts that are invalid after composition/routing
 * preserves runtime templates as runtime expressions
 * removes helper-only template artifacts before HIR
 * emits builder-facing const top-level fragment metadata
 
-HIR only lowers finalized runtime templates that remain after AST folding.
+HIR only lowers finalized runtime templates that remain after AST folding. Runtime
+template control flow lowers inline as ordinary HIR branches, loops, accumulator
+appends, and runtime slot-application plans in the enclosing function, not as
+backend-specific template control-flow nodes. HIR consumes AST-prepared slot
+plans only; it does not parse directives or validate slot schemas.
 Compile-time page fragments stay outside HIR.
 
 ## Stage 5: HIR Generation
@@ -442,6 +450,8 @@ HIR owns:
 * block, jump, terminator, loop, branch, return, and match representation
 * explicit locals and call targets
 * lowered runtime template expressions
+* inline runtime template control flow as ordinary CFG
+* runtime slot application plans as ordinary string accumulators and appends
 * module constants as compile-time metadata
 * advisory private const-fact metadata projected from AST for future optimization consumers
 * stable external function IDs selected during AST resolution
@@ -451,6 +461,7 @@ HIR does not:
 
 * fold templates
 * reconstruct missing template plans
+* carry backend-specific template control-flow nodes
 * carry compile-time top-level page fragments
 * use private const facts to change semantics in this plan
 * solve generic functions or carry unresolved generic parameter executable types

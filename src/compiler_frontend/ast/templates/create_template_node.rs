@@ -19,30 +19,34 @@
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::template::{
-    CommentDirectiveKind, TemplateAtom, TemplateParsingMode, TemplateSegmentOrigin, TemplateType,
+    CommentDirectiveKind, TemplateParsingMode, TemplateType,
 };
-use crate::compiler_frontend::ast::templates::template_body_parser::parse_template_body;
-use crate::compiler_frontend::ast::templates::template_composition::compose_template_head_chain;
-use crate::compiler_frontend::ast::templates::template_formatting::{
-    BodyFormattingResult, apply_body_formatter,
+use crate::compiler_frontend::ast::templates::template_body_parser::{
+    NestedTemplateParseOptions, TemplateBodyParseRequest, parse_template_body,
+};
+use crate::compiler_frontend::ast::templates::template_control_flow::{
+    TemplateControlFlowValidationMode, validate_const_required_template_control_flow,
+    validate_runtime_template_control_flow_slot_artifacts,
 };
 use crate::compiler_frontend::ast::templates::template_head_parser::{
     apply_doc_comment_defaults, parse_template_head,
 };
-use crate::compiler_frontend::ast::templates::template_render_plan::TemplateRenderPlan;
-use crate::compiler_frontend::ast::templates::template_slots::ensure_no_slot_insertions_remain;
+use crate::compiler_frontend::ast::templates::template_render_units::{
+    prepare_control_flow_render_units, prepare_template_render_unit, template_contains_control_flow,
+};
+use crate::compiler_frontend::ast::templates::template_slots::{
+    SlotResolutionMode, ensure_no_slot_insertions_remain,
+};
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
-use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_messages::{
-    CompilerDiagnostic, DiagnosticSeverity, InvalidTemplateStructureReason,
+    CompilerDiagnostic, InvalidTemplateStructureReason,
 };
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::FileTokens;
 #[cfg(test)]
 use crate::compiler_frontend::type_coercion::compatibility::TypeCompatibilityCache;
 
-use crate::compiler_frontend::ast::templates::template_composition::apply_inherited_child_templates_to_content;
 pub(crate) use crate::compiler_frontend::ast::templates::template_types::TemplateInheritance;
 
 // -------------------------
@@ -73,8 +77,36 @@ impl Template {
             type_interner,
             inheritance,
             string_table,
-            TemplateParsingMode::Standard,
+            NestedTemplateParseOptions::runtime_capable(),
         )
+    }
+
+    /// Creates a template for a context that must fold during AST construction.
+    ///
+    /// Const-required callers need the structured control-flow template so AST
+    /// folding can select branches and produce source diagnostics before the
+    /// template reaches runtime lowering.
+    #[allow(clippy::result_large_err)]
+    pub(crate) fn new_const_required_with_type_interner(
+        token_stream: &mut FileTokens,
+        context: &ScopeContext,
+        type_interner: &mut AstTypeInterner<'_>,
+        templates_inherited: Vec<Template>,
+        string_table: &mut StringTable,
+    ) -> Result<Template, CompilerDiagnostic> {
+        let inheritance = TemplateInheritance::from_parent_wrappers(templates_inherited);
+        let template = Self::new_nested_template(
+            token_stream,
+            context,
+            type_interner,
+            inheritance,
+            string_table,
+            NestedTemplateParseOptions::const_required(),
+        )?;
+
+        validate_const_required_template_control_flow(&template, &template.location)?;
+
+        Ok(template)
     }
 
     #[cfg(test)]
@@ -99,6 +131,28 @@ impl Template {
         )
     }
 
+    #[cfg(test)]
+    #[allow(clippy::result_large_err)]
+    pub fn new_const_required(
+        token_stream: &mut FileTokens,
+        context: &ScopeContext,
+        templates_inherited: Vec<Template>,
+        string_table: &mut StringTable,
+    ) -> Result<Template, CompilerDiagnostic> {
+        let mut type_environment =
+            crate::compiler_frontend::datatypes::environment::TypeEnvironment::new();
+        let mut compatibility_cache = TypeCompatibilityCache::new();
+        let mut type_interner =
+            AstTypeInterner::new(&mut type_environment, &mut compatibility_cache);
+        Self::new_const_required_with_type_interner(
+            token_stream,
+            context,
+            &mut type_interner,
+            templates_inherited,
+            string_table,
+        )
+    }
+
     /// Internal constructor that supports doc comment context propagation.
     /// Called recursively for nested templates in the body parser.
     #[allow(clippy::result_large_err)]
@@ -108,9 +162,21 @@ impl Template {
         type_interner: &mut AstTypeInterner<'_>,
         inheritance: TemplateInheritance,
         string_table: &mut StringTable,
-        parsing_mode: TemplateParsingMode,
+        parse_options: NestedTemplateParseOptions,
     ) -> Result<Template, CompilerDiagnostic> {
+        let NestedTemplateParseOptions {
+            parsing_mode,
+            control_flow_validation,
+            control_context,
+        } = parse_options;
+
         let direct_child_wrappers = inheritance.direct_child_wrappers.to_owned();
+        let slot_resolution_mode = match control_flow_validation {
+            TemplateControlFlowValidationMode::RuntimeCapable => {
+                SlotResolutionMode::AllowRuntimePlans
+            }
+            TemplateControlFlowValidationMode::ConstRequired => SlotResolutionMode::ComposeOnly,
+        };
 
         // These are variables or special keywords passed into the template head.
         // Nested templates do not inherit formatter/style state by default.
@@ -126,14 +192,17 @@ impl Template {
         let mut can_fold = true;
 
         // Stage 1: Parse the template head (directives, expressions, style config)
-        parse_template_head(
+        let parsed_head = parse_template_head(
             token_stream,
             context,
             type_interner,
             &mut template,
             &mut can_fold,
+            control_flow_validation,
             string_table,
         )?;
+
+        let body_mode = parsed_head.body_mode;
 
         if parsing_mode == TemplateParsingMode::DocComment {
             apply_doc_comment_defaults(&mut template);
@@ -142,46 +211,70 @@ impl Template {
         // Stage 2: Parse the template body (strings, nested templates, slots)
         parse_template_body(
             token_stream,
-            context,
-            type_interner,
             &mut template,
-            &direct_child_wrappers,
-            &mut can_fold,
-            string_table,
+            TemplateBodyParseRequest {
+                context,
+                type_interner,
+                body_mode,
+                direct_child_wrappers: &direct_child_wrappers,
+                control_flow_validation,
+                control_context,
+                foldable: &mut can_fold,
+                string_table,
+            },
         )?;
 
-        let requires_post_format_recomposition =
-            template_requires_post_format_recomposition(&template);
-
-        // Stage 3: build the composed pre-format snapshot.
-        build_unformatted_template_content(
-            &mut template,
-            &mut can_fold,
-            string_table,
-            requires_post_format_recomposition,
-        )
-        .map_err(TemplateError::into_diagnostic)?;
-
-        // Stage 4: format body-origin text and produce a structured render plan.
-        let BodyFormattingResult {
-            plan: render_plan,
-            content_changed,
-            ..
-        } = format_template_body(&template, context, string_table)
+        // Stage 3-5: render-unit shaping.
+        //
+        // Linear templates produce one finalized render unit. Control-flow templates
+        // keep branch/body units structured so later folding/lowering can stay lazy.
+        if let Some(control_flow) = &mut template.control_flow {
+            let shared_head_prefix = template.content.to_owned();
+            prepare_control_flow_render_units(
+                control_flow,
+                &shared_head_prefix,
+                &template.style,
+                context,
+                &mut can_fold,
+                string_table,
+                slot_resolution_mode,
+            )
             .map_err(TemplateError::into_diagnostic)?;
 
-        // Stage 5: rebuild formatted content and re-run composition.
-        finalize_template_after_formatting(
-            &mut template,
-            render_plan,
-            content_changed,
-            &mut can_fold,
-            string_table,
-            requires_post_format_recomposition,
-        )
-        .map_err(TemplateError::into_diagnostic)?;
+            // Keep the shared head prefix on the control-flow owner. Template `loop`
+            // applies it once around the aggregate in later folding/lowering; template
+            // `if` branches already carry their selected-branch prefix units.
+            let prepared_head = prepare_template_render_unit(
+                shared_head_prefix,
+                &template.style,
+                context,
+                &mut can_fold,
+                string_table,
+                slot_resolution_mode,
+            )
+            .map_err(TemplateError::into_diagnostic)?;
+
+            template.content = prepared_head.content;
+            template.unformatted_content = prepared_head.unformatted_content;
+            template.render_plan = Some(prepared_head.render_plan);
+        } else {
+            let prepared = prepare_template_render_unit(
+                template.content.to_owned(),
+                &template.style,
+                context,
+                &mut can_fold,
+                string_table,
+                slot_resolution_mode,
+            )
+            .map_err(TemplateError::into_diagnostic)?;
+
+            template.content = prepared.content;
+            template.unformatted_content = prepared.unformatted_content;
+            template.render_plan = Some(prepared.render_plan);
+        }
 
         template.content_needs_formatting = false;
+        template.refresh_kind_from_content();
 
         // Stage 6: Post-parse validation
         if matches!(
@@ -195,13 +288,22 @@ impl Template {
             ));
         }
 
+        if template_contains_control_flow(&template)
+            && matches!(
+                control_flow_validation,
+                TemplateControlFlowValidationMode::RuntimeCapable
+            )
+        {
+            validate_runtime_template_control_flow_slot_artifacts(&template)?;
+        }
+
         // `$insert(...)` helpers are allowed to survive while a template still has
         // unresolved `$slot` markers, because that template may later compose into
         // an immediate parent and contribute upward. Once a template has no slots
         // left, any remaining `$insert(...)` is out of scope and must error.
         if !matches!(template.kind, TemplateType::SlotInsert(_)) && !template.has_unresolved_slots()
         {
-            ensure_no_slot_insertions_remain(&template.content, &template.location, string_table)
+            ensure_no_slot_insertions_remain(&template, string_table)
                 .map_err(TemplateError::from)
                 .map_err(TemplateError::into_diagnostic)?;
         }
@@ -219,171 +321,6 @@ impl Template {
 
         Ok(template)
     }
-}
-
-// -------------------------
-//  Pipeline Stage Helpers
-// -------------------------
-
-/// Stage 3 helper: compute the composed pre-format content snapshot.
-///
-/// WHAT:
-/// - Applies inherited `$children(..)` wrappers and head-chain composition to the parsed
-///   content and stores the result in `template.unformatted_content`.
-///
-/// WHY:
-/// - `template.unformatted_content` is the authoritative pre-formatting structure used
-///   when later stages need the original composed shape (for example, debugging or
-///   future reformat/recomposition workflows).
-fn build_unformatted_template_content(
-    template: &mut Template,
-    can_fold: &mut bool,
-    string_table: &StringTable,
-    requires_post_format_recomposition: bool,
-) -> Result<(), TemplateError> {
-    if !requires_post_format_recomposition {
-        template.unformatted_content = template.content.to_owned();
-        return Ok(());
-    }
-
-    template.unformatted_content = apply_inherited_child_templates_to_content(
-        template.content.clone(),
-        &template.style.child_templates,
-        string_table,
-    )?;
-
-    template.unformatted_content =
-        compose_template_head_chain(&template.unformatted_content, can_fold, string_table)?;
-
-    Ok(())
-}
-
-/// Stage 4 helper: run template formatting and return the produced render plan.
-///
-/// WHAT:
-/// - Runs formatter/whitespace passes over body-origin text only.
-/// - Emits formatter warnings via the shared AST context.
-///
-/// WHY:
-/// - `template.content` still contains parsed source segments at this point, and the
-///   frontend formatting pipeline is responsible for building the structured render plan
-///   that drives post-format reconstruction.
-fn format_template_body(
-    template: &Template,
-    context: &ScopeContext,
-    string_table: &mut StringTable,
-) -> Result<BodyFormattingResult, TemplateError> {
-    let formatter_result =
-        match apply_body_formatter(&template.content, &template.style, string_table) {
-            Ok(result) => result,
-
-            Err(messages) => {
-                let mut error_diagnostic = None;
-                for diagnostic in messages.into_diagnostics() {
-                    if diagnostic.severity == DiagnosticSeverity::Warning {
-                        context.emit_warning(diagnostic);
-                    } else if diagnostic.severity == DiagnosticSeverity::Error
-                        && error_diagnostic.is_none()
-                    {
-                        error_diagnostic = Some(diagnostic);
-                    }
-                }
-
-                return Err(error_diagnostic
-                    .map(TemplateError::from)
-                    .unwrap_or_else(|| {
-                        CompilerError::compiler_error(
-                            "Template formatter failed without returning a compiler error.",
-                        )
-                        .into()
-                    }));
-            }
-        };
-
-    for warning in &formatter_result.warnings {
-        context.emit_warning(warning.clone());
-    }
-
-    Ok(formatter_result)
-}
-
-/// Stage 5 helper: rebuild formatted content and finalize the template outputs.
-///
-/// WHAT:
-/// - Rebuilds `template.content` from the formatter render plan.
-/// - Re-applies wrapper/head composition to account for slot/child-template composition
-///   that can reintroduce content after formatting.
-/// - Stores final `template.render_plan` from the finalized content stream.
-///
-/// WHY:
-/// - The pipeline intentionally uses compose -> format -> rebuild -> compose so formatters
-///   only rewrite direct body-origin text while structural template composition remains
-///   authoritative for the final render order.
-///
-/// ## Metadata invariant on exit
-///
-/// When this function returns, `template.render_plan` is guaranteed to match
-/// `template.content`. HIR lowering trusts this invariant for runtime templates.
-fn finalize_template_after_formatting(
-    template: &mut Template,
-    render_plan: TemplateRenderPlan,
-    content_changed: bool,
-    can_fold: &mut bool,
-    string_table: &StringTable,
-    requires_post_format_recomposition: bool,
-) -> Result<(), TemplateError> {
-    // If formatting made no changes and no post-format recomposition is needed,
-    // skip the expensive content -> plan -> content round-trip.
-    if content_changed || requires_post_format_recomposition {
-        template.content = render_plan.rebuild_content();
-
-        if requires_post_format_recomposition {
-            template.content = apply_inherited_child_templates_to_content(
-                template.content.clone(),
-                &template.style.child_templates,
-                string_table,
-            )?;
-
-            template.content =
-                compose_template_head_chain(&template.content, can_fold, string_table)?;
-        }
-
-        template.render_plan = Some(TemplateRenderPlan::from_content(&template.content));
-    } else {
-        // Formatting was a no-op; keep the original content and use the plan directly.
-        template.render_plan = Some(render_plan);
-    }
-
-    // `template.render_plan` must always match the finalized content stream before HIR sees
-    // the template. AST owns both piece ordering and runtime-template planning.
-    template.content_needs_formatting = false;
-    template.refresh_kind_from_content();
-
-    Ok(())
-}
-
-// -------------------------
-//  Composition Predicates
-// -------------------------
-
-/// Returns true when the template contains head-origin atoms or child wrappers
-/// that require recomposition after formatting.
-///
-/// WHY:
-/// - Formatting may rewrite body text, but head-origin segments and `$children(..)`
-///   wrappers are structural and must be reapplied to the rebuilt content.
-fn template_requires_post_format_recomposition(template: &Template) -> bool {
-    if !template.style.child_templates.is_empty() {
-        return true;
-    }
-
-    template.content.atoms.iter().any(|atom| {
-        matches!(
-            atom,
-            TemplateAtom::Content(segment)
-                if segment.origin == TemplateSegmentOrigin::Head
-        )
-    })
 }
 
 #[cfg(test)]

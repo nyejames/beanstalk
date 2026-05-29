@@ -123,6 +123,9 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 .with_build_profile(self.context.build_profile)
                 .with_project_path_resolver(self.context.project_path_resolver.clone())
                 .with_path_format_config(self.context.path_format_config.clone())
+                .with_template_const_loop_iteration_limit(
+                    self.context.template_const_loop_iteration_limit,
+                )
                 .with_rendered_path_usage_sink(Rc::clone(&self.rendered_path_usages))
                 .with_visible_declarations(visibility.visible_declaration_paths.clone())
                 .with_visible_external_symbols(visibility.visible_external_symbols.clone())

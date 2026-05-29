@@ -1,0 +1,5 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["template_if_without_else_empty_output before", "after"]
+rendered_output_not_contains = ["unexpected output"]

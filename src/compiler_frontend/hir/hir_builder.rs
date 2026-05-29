@@ -99,7 +99,6 @@ pub struct HirBuilder<'a> {
     next_const_id: u32,
     next_choice_id: u32,
     pub(super) temp_local_counter: u32,
-    pub(super) template_function_counter: u32,
 
     // === Frontend type environment ===
     /// WHAT: carries the AST-built type environment while lowering one module.
@@ -233,7 +232,6 @@ impl<'a> HirBuilder<'a> {
             next_const_id: 0,
             next_choice_id: 0,
             temp_local_counter: 0,
-            template_function_counter: 0,
 
             side_table: HirSideTable::default(),
 

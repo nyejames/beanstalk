@@ -58,6 +58,8 @@ impl ScopeContext {
             project_path_resolver: resolver,
             path_format_config: &self.path_format_config,
             source_file_scope,
+            template_const_loop_iteration_limit: self.shared.template_const_loop_iteration_limit,
+            bindings: Vec::new(),
         })
     }
 }

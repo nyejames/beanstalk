@@ -87,10 +87,8 @@ pub(crate) fn parse_function_body_statements(
                 break;
             }
 
-            if !matches!(
-                token_stream.current_token_kind(),
-                TokenKind::Else | TokenKind::Case
-            ) && current_line_contains_top_level_fat_arrow(token_stream)
+            if token_stream.current_token_kind() != &TokenKind::Else
+                && current_line_contains_top_level_fat_arrow(token_stream)
             {
                 return Err(CompilerDiagnostic::invalid_match_arm(
                     InvalidMatchArmReason::ArmMustStartNewLine,
@@ -173,21 +171,6 @@ pub(crate) fn parse_function_body_statements(
                     warnings,
                     string_table,
                 )?);
-            }
-
-            TokenKind::Case if context.kind == ContextKind::MatchArm => {
-                return Err(CompilerDiagnostic::invalid_match_arm(
-                    InvalidMatchArmReason::RemovedCaseKeyword,
-                    token_stream.current_location(),
-                ));
-            }
-
-            TokenKind::Case => {
-                return Err(unexpected_statement_token(
-                    token_stream.current_token_kind(),
-                    token_stream.current_location(),
-                    string_table,
-                ));
             }
 
             TokenKind::Else => {

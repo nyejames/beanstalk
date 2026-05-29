@@ -209,6 +209,11 @@ impl ScopeContext {
         self
     }
 
+    pub fn with_template_const_loop_iteration_limit(mut self, limit: usize) -> ScopeContext {
+        Rc::make_mut(&mut self.shared).template_const_loop_iteration_limit = limit;
+        self
+    }
+
     /// Attach a sink for tracking rendered path usages.
     ///
     /// WHAT: collects path references that appear in template output so the

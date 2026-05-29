@@ -8,6 +8,9 @@ use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::ast::templates::template::{
     SlotPlaceholder, TemplateAtom, TemplateContent, TemplateSegmentOrigin,
 };
+use crate::compiler_frontend::ast::templates::template_control_flow::{
+    TemplateControlFlow, TemplateLoopControlSignal,
+};
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
@@ -34,6 +37,8 @@ pub enum RenderPiece {
     ChildTemplate(RenderChildPiece),
     /// Runtime expression that cannot be folded at compile time.
     DynamicExpression(RenderExpressionPiece),
+    /// Structural template-loop control marker consumed by the nearest active loop.
+    LoopControl(TemplateLoopControlSignal),
     /// Unresolved slot placeholder that will be filled later.
     Slot(SlotPlaceholder),
 }
@@ -82,6 +87,10 @@ impl RenderPiece {
 
             RenderPiece::DynamicExpression(dynamic) => {
                 dynamic.remap_string_ids(remap);
+            }
+
+            RenderPiece::LoopControl(signal) => {
+                signal.location.remap_string_ids(remap);
             }
 
             RenderPiece::Slot(placeholder) => {
@@ -224,6 +233,14 @@ impl TemplateRenderPlan {
                 }
 
                 TemplateAtom::Content(segment) => {
+                    if let ExpressionKind::Template(template) = &segment.expression.kind
+                        && let Some(TemplateControlFlow::LoopControl(signal)) =
+                            &template.control_flow
+                    {
+                        pieces.push(RenderPiece::LoopControl(signal.clone()));
+                        continue;
+                    }
+
                     if segment.is_child_template_output && segment.source_child_template.is_some() {
                         pieces.push(RenderPiece::ChildTemplate(RenderChildPiece {
                             expression: segment.expression.clone(),
@@ -326,6 +343,17 @@ impl TemplateRenderPlan {
                     )));
                 }
 
+                RenderPiece::LoopControl(signal) => {
+                    let mut template =
+                        crate::compiler_frontend::ast::templates::template_types::Template::empty();
+                    template.control_flow = Some(TemplateControlFlow::LoopControl(signal.clone()));
+                    template.location = signal.location.clone();
+                    atoms.push(TemplateAtom::Content(TemplateSegment::new(
+                        Expression::template(template, ValueMode::ImmutableOwned),
+                        TemplateSegmentOrigin::Body,
+                    )));
+                }
+
                 RenderPiece::Slot(placeholder) => {
                     atoms.push(TemplateAtom::Slot(placeholder.clone()));
                 }
@@ -348,6 +376,7 @@ impl TemplateRenderPlan {
                 ),
                 RenderPiece::ChildTemplate(p) => Some(p.expression.clone()),
                 RenderPiece::DynamicExpression(p) => Some(p.expression.clone()),
+                RenderPiece::LoopControl(_) => None,
                 RenderPiece::Slot(_) => None,
             })
             .collect()

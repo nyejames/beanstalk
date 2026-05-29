@@ -48,6 +48,9 @@ pub struct AstBuildContext<'a> {
 
     /// Formatting rules for rendering interned paths in diagnostics and output.
     pub path_format_config: PathStringFormatConfig,
+
+    /// Per-loop expansion limit for compile-time template loops.
+    pub template_const_loop_iteration_limit: usize,
 }
 
 /// Narrowed phase-local view of `AstBuildContext` without the mutable `StringTable`.
@@ -63,6 +66,7 @@ pub(crate) struct AstPhaseContext<'a> {
     pub(crate) build_profile: FrontendBuildProfile,
     pub(crate) project_path_resolver: Option<ProjectPathResolver>,
     pub(crate) path_format_config: PathStringFormatConfig,
+    pub(crate) template_const_loop_iteration_limit: usize,
 }
 
 impl<'a> AstPhaseContext<'a> {
@@ -81,6 +85,7 @@ impl<'a> AstPhaseContext<'a> {
             build_profile,
             project_path_resolver,
             path_format_config,
+            template_const_loop_iteration_limit,
         } = context;
 
         (
@@ -91,6 +96,7 @@ impl<'a> AstPhaseContext<'a> {
                 build_profile,
                 project_path_resolver,
                 path_format_config,
+                template_const_loop_iteration_limit,
             },
             string_table,
         )

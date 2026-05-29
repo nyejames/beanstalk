@@ -28,13 +28,23 @@ pub(super) fn parse_template_expression(
     string_table: &mut StringTable,
 ) -> Result<Option<Expression>, ExpressionParseError> {
     let template_context = context.new_template_parsing_context();
-    let template = Template::new_with_type_interner(
-        token_stream,
-        &template_context,
-        type_interner,
-        vec![],
-        string_table,
-    )
+    let template = if context.kind.is_constant_context() {
+        Template::new_const_required_with_type_interner(
+            token_stream,
+            &template_context,
+            type_interner,
+            vec![],
+            string_table,
+        )
+    } else {
+        Template::new_with_type_interner(
+            token_stream,
+            &template_context,
+            type_interner,
+            vec![],
+            string_table,
+        )
+    }
     .map_err(ExpressionParseError::from)?;
 
     match template.kind {

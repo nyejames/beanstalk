@@ -3,7 +3,9 @@
 //! WHAT: covers how typed AST expressions become HIR values, preludes, and places.
 //! WHY: expression lowering is broad and subtle enough that behavior changes need focused regression tests.
 
-use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
+use crate::compiler_frontend::ast::ast_nodes::{
+    AstNode, Declaration, LoopBindings, NodeKind, RangeEndKind, RangeLoopSpec,
+};
 use crate::compiler_frontend::ast::expressions::call_argument::{
     CallAccessMode, CallArgument, CallPassingMode,
 };
@@ -11,8 +13,23 @@ use crate::compiler_frontend::ast::expressions::expression::{
     ConstRecordState, Expression, ExpressionKind,
     FallibleCarrierVariant as AstFallibleCarrierVariant, FallibleHandling, Operator,
 };
+use crate::compiler_frontend::ast::statements::match_patterns::MatchPattern;
 use crate::compiler_frontend::ast::statements::value_production::ProducedValues;
-use crate::compiler_frontend::ast::templates::template::{SlotKey, SlotPlaceholder, TemplateAtom};
+use crate::compiler_frontend::ast::templates::template::{
+    SlotKey, SlotPlaceholder, TemplateAtom, TemplateContent,
+};
+use crate::compiler_frontend::ast::templates::template_control_flow::{
+    TemplateBranchChain, TemplateBranchSelector, TemplateConditionalBranch, TemplateControlFlow,
+    TemplateFallbackBranch, TemplateLoopAggregatePiece, TemplateLoopAggregateRenderPlan,
+    TemplateLoopControlFlow, TemplateLoopHeader,
+};
+use crate::compiler_frontend::ast::templates::template_render_plan::{
+    RenderPiece, TemplateRenderPlan,
+};
+use crate::compiler_frontend::ast::templates::template_slots::{
+    RuntimeSlotApplicationPlan, RuntimeSlotContribution, RuntimeSlotContributionContent,
+    RuntimeSlotContributionPlan, SlotSchema,
+};
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::builtins::CollectionBuiltinOp;
 use crate::compiler_frontend::compiler_errors::ErrorType;
@@ -26,18 +43,22 @@ use crate::compiler_frontend::datatypes::ids::{
 use crate::compiler_frontend::declaration_syntax::choice::{ChoiceVariant, ChoiceVariantPayload};
 use crate::compiler_frontend::external_packages::{CallTarget, ExternalFunctionId};
 use crate::compiler_frontend::hir::blocks::{HirBlock, HirLocal};
-use crate::compiler_frontend::hir::expressions::{HirExpressionKind, HirVariantCarrier, ValueKind};
+use crate::compiler_frontend::hir::expressions::{
+    HirExpressionKind, HirVariantCarrier, OPTION_SOME_VARIANT_INDEX, ValueKind,
+};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_side_table::HirLocalOriginKind;
 use crate::compiler_frontend::hir::ids::{
     BlockId, ChoiceId, FieldId, FunctionId, LocalId, RegionId, StructId,
 };
 use crate::compiler_frontend::hir::operators::{HirBinOp, HirUnaryOp};
+use crate::compiler_frontend::hir::patterns::HirPattern;
 use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::statements::HirStatementKind;
 use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
+use crate::compiler_frontend::symbols::string_interning::StringId;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::type_id_fixture_support::{
     choice_construct_expr, const_record_reference_expr, field_access_node, handled_result_expr,
@@ -147,6 +168,239 @@ fn runtime_template_expression(location: SourceLocation, content: Vec<Expression
     Expression::template(template, ValueMode::ImmutableOwned)
 }
 
+fn template_content_from_expressions(expressions: Vec<Expression>) -> TemplateContent {
+    let mut content = TemplateContent::default();
+    for expression in expressions {
+        content.add(expression);
+    }
+
+    content
+}
+
+fn runtime_template_bool_if_expression(
+    condition: Expression,
+    then_content: TemplateContent,
+    else_content: Option<TemplateContent>,
+    location: SourceLocation,
+) -> Expression {
+    let then_render_plan = TemplateRenderPlan::from_content(&then_content);
+    let else_render_plan = else_content.as_ref().map(TemplateRenderPlan::from_content);
+
+    let mut template = Template::empty();
+    template.location = location.clone();
+    template.kind =
+        crate::compiler_frontend::ast::templates::template::TemplateType::StringFunction;
+    template.control_flow = Some(TemplateControlFlow::BranchChain(Box::new(
+        TemplateBranchChain {
+            branches: vec![TemplateConditionalBranch {
+                selector: TemplateBranchSelector::Bool(condition),
+                content: then_content,
+                render_plan: Some(then_render_plan),
+                location: location.clone(),
+            }],
+            fallback: else_content.map(|content| TemplateFallbackBranch {
+                content,
+                render_plan: else_render_plan,
+                location: location.clone(),
+            }),
+            location,
+        },
+    )));
+    template.resync_runtime_metadata();
+
+    Expression::template(template, ValueMode::ImmutableOwned)
+}
+
+fn runtime_template_option_capture_expression(
+    scrutinee: Expression,
+    capture_name: crate::compiler_frontend::symbols::string_interning::StringId,
+    capture_path: InternedPath,
+    inner_type_id: TypeId,
+    then_content: TemplateContent,
+    else_content: Option<TemplateContent>,
+    location: SourceLocation,
+) -> Expression {
+    let then_render_plan = TemplateRenderPlan::from_content(&then_content);
+    let else_render_plan = else_content.as_ref().map(TemplateRenderPlan::from_content);
+
+    let mut template = Template::empty();
+    template.location = location.clone();
+    template.kind =
+        crate::compiler_frontend::ast::templates::template::TemplateType::StringFunction;
+    template.control_flow = Some(TemplateControlFlow::BranchChain(Box::new(
+        TemplateBranchChain {
+            branches: vec![TemplateConditionalBranch {
+                selector: TemplateBranchSelector::OptionPresentCapture {
+                    scrutinee,
+                    pattern: Box::new(MatchPattern::OptionPresentCapture {
+                        name: capture_name,
+                        binding_path: capture_path,
+                        inner_type_id,
+                        location: location.clone(),
+                        binding_location: location.clone(),
+                    }),
+                },
+                content: then_content,
+                render_plan: Some(then_render_plan),
+                location: location.clone(),
+            }],
+            fallback: else_content.map(|content| TemplateFallbackBranch {
+                content,
+                render_plan: else_render_plan,
+                location: location.clone(),
+            }),
+            location,
+        },
+    )));
+    template.resync_runtime_metadata();
+
+    Expression::template(template, ValueMode::ImmutableOwned)
+}
+
+fn runtime_template_range_loop_expression(
+    bindings: LoopBindings,
+    range: RangeLoopSpec,
+    body_content: TemplateContent,
+    aggregate_plan: TemplateLoopAggregateRenderPlan,
+    location: SourceLocation,
+) -> Expression {
+    let body_render_plan = TemplateRenderPlan::from_content(&body_content);
+
+    let mut template = Template::empty();
+    template.location = location.clone();
+    template.kind =
+        crate::compiler_frontend::ast::templates::template::TemplateType::StringFunction;
+    template.control_flow = Some(TemplateControlFlow::Loop(Box::new(
+        TemplateLoopControlFlow {
+            header: TemplateLoopHeader::Range {
+                bindings: Box::new(bindings),
+                range: Box::new(range),
+            },
+            body_content,
+            body_render_plan: Some(body_render_plan),
+            aggregate_render_plan: Some(aggregate_plan),
+            location,
+        },
+    )));
+    template.resync_runtime_metadata();
+
+    Expression::template(template, ValueMode::ImmutableOwned)
+}
+
+fn runtime_template_collection_loop_expression(
+    bindings: LoopBindings,
+    iterable: Expression,
+    body_content: TemplateContent,
+    aggregate_plan: TemplateLoopAggregateRenderPlan,
+    location: SourceLocation,
+) -> Expression {
+    let body_render_plan = TemplateRenderPlan::from_content(&body_content);
+
+    let mut template = Template::empty();
+    template.location = location.clone();
+    template.kind =
+        crate::compiler_frontend::ast::templates::template::TemplateType::StringFunction;
+    template.control_flow = Some(TemplateControlFlow::Loop(Box::new(
+        TemplateLoopControlFlow {
+            header: TemplateLoopHeader::Collection {
+                bindings: Box::new(bindings),
+                iterable: Box::new(iterable),
+            },
+            body_content,
+            body_render_plan: Some(body_render_plan),
+            aggregate_render_plan: Some(aggregate_plan),
+            location,
+        },
+    )));
+    template.resync_runtime_metadata();
+
+    Expression::template(template, ValueMode::ImmutableOwned)
+}
+
+fn runtime_template_conditional_loop_expression(
+    condition: Expression,
+    body_content: TemplateContent,
+    aggregate_plan: TemplateLoopAggregateRenderPlan,
+    location: SourceLocation,
+) -> Expression {
+    let body_render_plan = TemplateRenderPlan::from_content(&body_content);
+
+    let mut template = Template::empty();
+    template.location = location.clone();
+    template.kind =
+        crate::compiler_frontend::ast::templates::template::TemplateType::StringFunction;
+    template.control_flow = Some(TemplateControlFlow::Loop(Box::new(
+        TemplateLoopControlFlow {
+            header: TemplateLoopHeader::Conditional {
+                condition: Box::new(condition),
+            },
+            body_content,
+            body_render_plan: Some(body_render_plan),
+            aggregate_render_plan: Some(aggregate_plan),
+            location,
+        },
+    )));
+    template.resync_runtime_metadata();
+
+    Expression::template(template, ValueMode::ImmutableOwned)
+}
+
+fn runtime_slot_application_template_expression(
+    wrapper_content: TemplateContent,
+    contribution_plan: RuntimeSlotContributionPlan,
+    location: SourceLocation,
+) -> Expression {
+    let wrapper_plan = TemplateRenderPlan::from_content(&wrapper_content);
+
+    let mut template = Template::empty();
+    template.location = location.clone();
+    template.runtime_slot_application = Some(RuntimeSlotApplicationPlan {
+        wrapper_plan,
+        contribution_plan,
+        location,
+    });
+    template.resync_runtime_metadata();
+
+    Expression::template(template, ValueMode::ImmutableOwned)
+}
+
+fn aggregate_plan_around_body(
+    prefix: StringId,
+    suffix: StringId,
+    location: SourceLocation,
+) -> TemplateLoopAggregateRenderPlan {
+    TemplateLoopAggregateRenderPlan {
+        pieces: vec![
+            TemplateLoopAggregatePiece::Render(Box::new(RenderPiece::Text(
+                crate::compiler_frontend::ast::templates::template_render_plan::RenderTextPiece {
+                    text: prefix,
+                    location: location.clone(),
+                },
+            ))),
+            TemplateLoopAggregatePiece::Aggregate,
+            TemplateLoopAggregatePiece::Render(Box::new(RenderPiece::Text(
+                crate::compiler_frontend::ast::templates::template_render_plan::RenderTextPiece {
+                    text: suffix,
+                    location,
+                },
+            ))),
+        ],
+    }
+}
+
+fn loop_binding(name: &str, type_id: TypeId, string_table: &mut StringTable) -> Declaration {
+    Declaration {
+        id: InternedPath::from_single_str(name, string_table),
+        value: Expression::new(
+            ExpressionKind::NoValue,
+            SourceLocation::default(),
+            type_id,
+            crate::compiler_frontend::datatypes::DataType::Inferred,
+            ValueMode::ImmutableOwned,
+        ),
+    }
+}
+
 #[test]
 fn compile_time_wrapper_templates_lower_as_runtime_templates_when_they_reach_hir() {
     let mut string_table = StringTable::new();
@@ -178,20 +432,17 @@ fn compile_time_wrapper_templates_lower_as_runtime_templates_when_they_reach_hir
         .lower_expression(&Expression::template(template, ValueMode::ImmutableOwned))
         .expect("wrapper-shaped runtime templates should lower in HIR");
 
-    assert_eq!(lowered.prelude.len(), 1);
-    let call_args = match &lowered.prelude[0].kind {
-        HirStatementKind::Call { args, .. } => args,
-        other => panic!("expected template call prelude, got {other:?}"),
-    };
-    assert_eq!(call_args.len(), 2);
-    assert!(matches!(
-        call_args[0].kind,
-        HirExpressionKind::StringLiteral(ref value) if value == "before "
-    ));
-    assert!(matches!(
-        call_args[1].kind,
-        HirExpressionKind::StringLiteral(ref value) if value == "after"
-    ));
+    assert!(lowered.prelude.is_empty());
+    assert!(builder.module.functions.is_empty());
+
+    let entry_block = builder
+        .module
+        .blocks
+        .iter()
+        .find(|block| block.id == BlockId(0))
+        .expect("entry block should exist");
+    assert!(block_assigns_string_literal(entry_block, "before "));
+    assert!(block_assigns_string_literal(entry_block, "after"));
 }
 
 #[test]
@@ -1261,7 +1512,7 @@ fn malformed_runtime_rpn_reports_hir_transformation_error() {
 }
 
 #[test]
-fn runtime_template_expression_lowers_to_synthetic_function_call() {
+fn runtime_template_expression_lowers_inline_to_accumulator() {
     let mut string_table = StringTable::new();
     let hello = string_table.intern("hello");
     let location = location(10);
@@ -1279,31 +1530,25 @@ fn runtime_template_expression_lowers_to_synthetic_function_call() {
     let lowered = builder
         .lower_expression(&expr)
         .expect("runtime template lowering should succeed");
-    assert_eq!(lowered.prelude.len(), 1);
 
-    let template_target = match &lowered.prelude[0].kind {
-        HirStatementKind::Call {
-            target: CallTarget::UserFunction(function_id),
-            result: Some(_),
-            ..
-        } => *function_id,
-        other => panic!("expected synthetic template call, got {other:?}"),
-    };
-
-    assert!(
-        builder
-            .side_table
-            .resolve_function_name(template_target, &string_table)
-            .is_some_and(|name| name.starts_with("__template_fn_"))
-    );
+    assert!(lowered.prelude.is_empty());
+    assert!(builder.module.functions.is_empty());
     assert!(matches!(
         lowered.value.kind,
-        HirExpressionKind::Load(HirPlace::Local(_))
+        HirExpressionKind::Copy(HirPlace::Local(_))
     ));
+
+    let entry_block = builder
+        .module
+        .blocks
+        .iter()
+        .find(|block| block.id == BlockId(0))
+        .expect("entry block should exist");
+    assert!(block_assigns_string_literal(entry_block, "hello"));
 }
 
 #[test]
-fn runtime_template_generated_function_coerces_non_string_segments() {
+fn runtime_template_inline_accumulator_coerces_non_string_segments() {
     let mut string_table = StringTable::new();
     let location = location(11);
     let mut builder = setup_builder(&mut string_table);
@@ -1316,62 +1561,17 @@ fn runtime_template_generated_function_coerces_non_string_segments() {
     let lowered = builder
         .lower_expression(&expr)
         .expect("runtime template lowering should succeed");
-    assert_eq!(lowered.prelude.len(), 1);
 
-    let template_target = match &lowered.prelude[0].kind {
-        HirStatementKind::Call {
-            target: CallTarget::UserFunction(function_id),
-            ..
-        } => *function_id,
-        other => panic!("expected synthetic template call, got {other:?}"),
-    };
+    assert!(lowered.prelude.is_empty());
+    assert!(builder.module.functions.is_empty());
 
-    let template_function = builder
-        .module
-        .functions
-        .iter()
-        .find(|function| function.id == template_target)
-        .expect("synthetic template function should be present");
-    let template_entry = builder
+    let entry_block = builder
         .module
         .blocks
         .iter()
-        .find(|block| block.id == template_function.entry)
-        .expect("synthetic template entry block should exist");
-
-    let returned = match &template_entry.terminator {
-        HirTerminator::Return(value) => value,
-        other => panic!("expected template function return terminator, got {other:?}"),
-    };
-
-    let coerced_chunk = match &returned.kind {
-        HirExpressionKind::BinOp {
-            op: HirBinOp::Add,
-            right,
-            ..
-        } => right,
-        other => {
-            panic!("expected template return to concatenate accumulated string, got {other:?}")
-        }
-    };
-
-    let (left, right) = match &coerced_chunk.kind {
-        HirExpressionKind::BinOp {
-            op: HirBinOp::Add,
-            left,
-            right,
-        } => (left, right),
-        other => panic!("expected coercion concat for non-string template segment, got {other:?}"),
-    };
-
-    assert!(matches!(
-        left.kind,
-        HirExpressionKind::StringLiteral(ref value) if value.is_empty()
-    ));
-    assert!(matches!(
-        right.kind,
-        HirExpressionKind::Load(HirPlace::Local(_))
-    ));
+        .find(|block| block.id == BlockId(0))
+        .expect("entry block should exist");
+    assert!(block_assigns_coerced_int_chunk(entry_block, 5));
 }
 
 #[test]
@@ -1404,44 +1604,1008 @@ fn runtime_template_lowers_nested_templates_in_order() {
     let lowered = builder
         .lower_expression(&expr)
         .expect("nested runtime template lowering should succeed");
-    assert_eq!(lowered.prelude.len(), 2);
 
-    assert!(matches!(
-        lowered.prelude[0].kind,
-        HirStatementKind::Call {
-            target: CallTarget::UserFunction(_),
-            result: Some(_),
-            ..
-        }
-    ));
-    assert!(matches!(
-        lowered.prelude[1].kind,
-        HirStatementKind::Call {
-            target: CallTarget::UserFunction(_),
-            result: Some(_),
-            ..
-        }
-    ));
+    assert!(lowered.prelude.is_empty());
+    assert!(builder.module.functions.is_empty());
 
-    let outer_call_args = match &lowered.prelude[1].kind {
-        HirStatementKind::Call { args, .. } => args,
-        other => panic!("expected outer template call statement, got {other:?}"),
+    let entry_block = builder
+        .module
+        .blocks
+        .iter()
+        .find(|block| block.id == BlockId(0))
+        .expect("entry block should exist");
+    assert!(block_assigns_string_literal(entry_block, "A"));
+    assert!(block_assigns_string_literal(entry_block, "B"));
+    assert!(block_assigns_string_literal(entry_block, "C"));
+    assert!(block_appends_local_string(entry_block));
+}
+
+#[test]
+fn runtime_slot_application_replays_repeated_slot_accumulator() {
+    let mut string_table = StringTable::new();
+    let slot_text = string_table.intern("slot");
+    let location = location(12);
+    let mut builder = setup_builder(&mut string_table);
+
+    let wrapper_content = TemplateContent {
+        atoms: vec![
+            TemplateAtom::Slot(SlotPlaceholder::new(SlotKey::Default)),
+            TemplateAtom::Slot(SlotPlaceholder::new(SlotKey::Default)),
+        ],
     };
-    assert_eq!(outer_call_args.len(), 3);
+    let contribution_content = template_content_from_expressions(vec![Expression::string_slice(
+        slot_text,
+        location.clone(),
+        ValueMode::ImmutableOwned,
+    )]);
+    let contribution_plan = RuntimeSlotContributionPlan {
+        schema: SlotSchema::from_keys_for_test([SlotKey::Default]),
+        contributions: vec![RuntimeSlotContribution {
+            target: SlotKey::Default,
+            content: RuntimeSlotContributionContent::Static(contribution_content),
+            location: location.clone(),
+        }],
+    };
+    let expr =
+        runtime_slot_application_template_expression(wrapper_content, contribution_plan, location);
+
+    let lowered = builder
+        .lower_expression(&expr)
+        .expect("runtime slot application should lower through slot accumulators");
+
+    assert!(lowered.prelude.is_empty());
+    assert!(builder.module.functions.is_empty());
     assert!(matches!(
-        outer_call_args[0].kind,
-        HirExpressionKind::StringLiteral(ref value) if value == "A"
-    ));
-    assert!(matches!(
-        outer_call_args[1].kind,
-        HirExpressionKind::Load(HirPlace::Local(_))
-    ));
-    assert!(matches!(
-        outer_call_args[2].kind,
-        HirExpressionKind::StringLiteral(ref value) if value == "C"
+        lowered.value.kind,
+        HirExpressionKind::Copy(HirPlace::Local(_))
     ));
 
-    assert_eq!(builder.module.functions.len(), 2);
+    let entry_block = builder
+        .module
+        .blocks
+        .iter()
+        .find(|block| block.id == BlockId(0))
+        .expect("entry block should exist");
+    assert!(block_assigns_string_literal(entry_block, "slot"));
+    assert!(
+        count_block_appends_local_string(entry_block) >= 2,
+        "repeated slot placeholders should append the same slot accumulator at each site"
+    );
+}
+
+#[test]
+fn runtime_slot_application_missing_slot_appends_empty_accumulator() {
+    let mut string_table = StringTable::new();
+    let title_slot = string_table.intern("title");
+    let location = location(12);
+    let mut builder = setup_builder(&mut string_table);
+
+    let wrapper_content = TemplateContent {
+        atoms: vec![TemplateAtom::Slot(SlotPlaceholder::new(SlotKey::Named(
+            title_slot,
+        )))],
+    };
+    let contribution_plan = RuntimeSlotContributionPlan {
+        schema: SlotSchema::from_keys_for_test([SlotKey::Named(title_slot)]),
+        contributions: vec![],
+    };
+    let expr =
+        runtime_slot_application_template_expression(wrapper_content, contribution_plan, location);
+
+    let lowered = builder
+        .lower_expression(&expr)
+        .expect("runtime missing slot should lower as an empty slot accumulator");
+
+    assert!(lowered.prelude.is_empty());
+    assert!(builder.module.functions.is_empty());
+    assert!(matches!(
+        lowered.value.kind,
+        HirExpressionKind::Copy(HirPlace::Local(_))
+    ));
+
+    let entry_block = builder
+        .module
+        .blocks
+        .iter()
+        .find(|block| block.id == BlockId(0))
+        .expect("entry block should exist");
+    assert!(
+        count_block_appends_local_string(entry_block) >= 1,
+        "missing slots should still append their initialized empty accumulator"
+    );
+}
+
+#[test]
+fn runtime_slot_application_preserves_slot_context_inside_nested_control_flow() {
+    let mut string_table = StringTable::new();
+    let slot_text = string_table.intern("slot");
+    let location = location(12);
+    let mut builder = setup_builder(&mut string_table);
+
+    let branch_expression = runtime_template_bool_if_expression(
+        Expression::bool(true, location.clone(), ValueMode::ImmutableOwned),
+        TemplateContent {
+            atoms: vec![TemplateAtom::Slot(SlotPlaceholder::new(SlotKey::Default))],
+        },
+        None,
+        location.clone(),
+    );
+    let wrapper_content = template_content_from_expressions(vec![branch_expression]);
+    let contribution_content = template_content_from_expressions(vec![Expression::string_slice(
+        slot_text,
+        location.clone(),
+        ValueMode::ImmutableOwned,
+    )]);
+    let contribution_plan = RuntimeSlotContributionPlan {
+        schema: SlotSchema::from_keys_for_test([SlotKey::Default]),
+        contributions: vec![RuntimeSlotContribution {
+            target: SlotKey::Default,
+            content: RuntimeSlotContributionContent::Static(contribution_content),
+            location: location.clone(),
+        }],
+    };
+    let expr =
+        runtime_slot_application_template_expression(wrapper_content, contribution_plan, location);
+
+    let lowered = builder
+        .lower_expression(&expr)
+        .expect("runtime slot application should lower nested control-flow placeholders");
+
+    assert!(lowered.prelude.is_empty());
+    assert!(matches!(
+        lowered.value.kind,
+        HirExpressionKind::Copy(HirPlace::Local(_))
+    ));
+    assert!(
+        builder.module.blocks.iter().any(block_appends_local_string),
+        "slot placeholders inside nested control flow should append the active slot accumulator"
+    );
+}
+
+#[test]
+fn runtime_template_control_flow_bool_if_lowers_inline_without_helper_call() {
+    let mut string_table = StringTable::new();
+    let show_name = InternedPath::from_single_str("show", &mut string_table);
+    let shown = string_table.intern("shown");
+    let hidden = string_table.intern("hidden");
+    let location = location(13);
+    let mut builder = setup_builder(&mut string_table);
+    register_local(
+        &mut builder,
+        show_name.clone(),
+        LocalId(10),
+        builtin_type_ids::BOOL,
+        location.clone(),
+    );
+
+    let condition = reference_expr(
+        show_name,
+        builtin_type_ids::BOOL,
+        location.clone(),
+        ValueMode::ImmutableOwned,
+    );
+    let then_content = template_content_from_expressions(vec![Expression::string_slice(
+        shown,
+        location.clone(),
+        ValueMode::ImmutableOwned,
+    )]);
+    let else_content = template_content_from_expressions(vec![Expression::string_slice(
+        hidden,
+        location.clone(),
+        ValueMode::ImmutableOwned,
+    )]);
+    let expr =
+        runtime_template_bool_if_expression(condition, then_content, Some(else_content), location);
+
+    let lowered = builder
+        .lower_expression(&expr)
+        .expect("runtime Bool template if should lower inline");
+
+    assert!(lowered.prelude.is_empty());
+    assert!(builder.module.functions.is_empty());
+    assert!(matches!(
+        lowered.value.kind,
+        HirExpressionKind::Copy(HirPlace::Local(_))
+    ));
+
+    let entry_block = builder
+        .module
+        .blocks
+        .iter()
+        .find(|block| block.id == BlockId(0))
+        .expect("entry block should exist");
+    assert_eq!(entry_block.statements.len(), 1);
+
+    let (then_block, else_block) = match &entry_block.terminator {
+        HirTerminator::If {
+            then_block,
+            else_block,
+            ..
+        } => (*then_block, *else_block),
+        other => panic!("expected inline template if terminator, got {other:?}"),
+    };
+
+    let then_block = builder
+        .module
+        .blocks
+        .iter()
+        .find(|block| block.id == then_block)
+        .expect("then block should exist");
+    let else_block = builder
+        .module
+        .blocks
+        .iter()
+        .find(|block| block.id == else_block)
+        .expect("else block should exist");
+
+    assert!(block_assigns_string_literal(then_block, "shown"));
+    assert!(block_assigns_string_literal(else_block, "hidden"));
+}
+
+#[test]
+fn runtime_template_control_flow_bool_if_branch_preserves_fallible_propagation_cfg() {
+    let mut string_table = StringTable::new();
+    let enclosing_name = InternedPath::from_single_str("__expr_test_fn", &mut string_table);
+    let can_fail_name = InternedPath::from_single_str("can_fail", &mut string_table);
+    let show_name = InternedPath::from_single_str("show", &mut string_table);
+    let fallback = string_table.intern("fallback");
+    let location = location(14);
+    let mut builder = setup_builder(&mut string_table);
+
+    let enclosing_return_type = result_carrier_type_id(
+        &mut builder.type_environment,
+        builtin_type_ids::STRING,
+        builtin_type_ids::STRING,
+    );
+    let callee_return_type = result_carrier_type_id(
+        &mut builder.type_environment,
+        builtin_type_ids::STRING,
+        builtin_type_ids::STRING,
+    );
+
+    builder.test_register_function_with_return_type(
+        enclosing_name,
+        FunctionId(0),
+        enclosing_return_type,
+    );
+    builder.test_register_function_with_return_type(
+        can_fail_name.clone(),
+        FunctionId(7),
+        callee_return_type,
+    );
+    register_local(
+        &mut builder,
+        show_name.clone(),
+        LocalId(11),
+        builtin_type_ids::BOOL,
+        location.clone(),
+    );
+
+    let condition = reference_expr(
+        show_name,
+        builtin_type_ids::BOOL,
+        location.clone(),
+        ValueMode::ImmutableOwned,
+    );
+    let propagated_call = Expression::handled_fallible_function_call_with_typed_arguments(
+        can_fail_name,
+        vec![],
+        vec![builtin_type_ids::STRING],
+        FallibleHandling::Propagate,
+        &mut builder.type_environment,
+        location.clone(),
+    );
+    let then_content = template_content_from_expressions(vec![propagated_call]);
+    let else_content = template_content_from_expressions(vec![Expression::string_slice(
+        fallback,
+        location.clone(),
+        ValueMode::ImmutableOwned,
+    )]);
+    let expr =
+        runtime_template_bool_if_expression(condition, then_content, Some(else_content), location);
+
+    builder
+        .lower_expression(&expr)
+        .expect("fallible runtime template branch should lower inline");
+
+    assert_eq!(
+        builder.module.functions.len(),
+        2,
+        "control-flow template lowering must not synthesize a helper that could intercept `!`"
+    );
+
+    let entry_block = builder
+        .module
+        .blocks
+        .iter()
+        .find(|block| block.id == BlockId(0))
+        .expect("entry block should exist");
+    let then_block_id = match &entry_block.terminator {
+        HirTerminator::If { then_block, .. } => *then_block,
+        other => panic!("expected inline template if terminator, got {other:?}"),
+    };
+    let then_block = builder
+        .module
+        .blocks
+        .iter()
+        .find(|block| block.id == then_block_id)
+        .expect("then block should exist");
+
+    let HirTerminator::FallibleBranch { error_block, .. } = then_block.terminator else {
+        panic!("selected template branch should preserve expression-level fallible propagation");
+    };
+    let error_block = builder
+        .module
+        .blocks
+        .iter()
+        .find(|block| block.id == error_block)
+        .expect("fallible branch error block should exist");
+    assert!(
+        matches!(error_block.terminator, HirTerminator::ReturnError(_)),
+        "template branch `!` should return through the enclosing function error slot"
+    );
+}
+
+#[test]
+fn runtime_template_control_flow_bool_if_without_else_appends_nothing_on_false_path() {
+    let mut string_table = StringTable::new();
+    let show_name = InternedPath::from_single_str("show", &mut string_table);
+    let shown = string_table.intern("shown");
+    let location = location(14);
+    let mut builder = setup_builder(&mut string_table);
+    register_local(
+        &mut builder,
+        show_name.clone(),
+        LocalId(11),
+        builtin_type_ids::BOOL,
+        location.clone(),
+    );
+
+    let condition = reference_expr(
+        show_name,
+        builtin_type_ids::BOOL,
+        location.clone(),
+        ValueMode::ImmutableOwned,
+    );
+    let then_content = template_content_from_expressions(vec![Expression::string_slice(
+        shown,
+        location.clone(),
+        ValueMode::ImmutableOwned,
+    )]);
+    let expr = runtime_template_bool_if_expression(condition, then_content, None, location);
+
+    builder
+        .lower_expression(&expr)
+        .expect("runtime Bool template if without else should lower inline");
+
+    let entry_block = builder
+        .module
+        .blocks
+        .iter()
+        .find(|block| block.id == BlockId(0))
+        .expect("entry block should exist");
+    let (then_block, else_block) = match &entry_block.terminator {
+        HirTerminator::If {
+            then_block,
+            else_block,
+            ..
+        } => (*then_block, *else_block),
+        other => panic!("expected inline template if terminator, got {other:?}"),
+    };
+
+    let then_block = builder
+        .module
+        .blocks
+        .iter()
+        .find(|block| block.id == then_block)
+        .expect("then block should exist");
+    let else_block = builder
+        .module
+        .blocks
+        .iter()
+        .find(|block| block.id == else_block)
+        .expect("else block should exist");
+
+    assert!(block_assigns_string_literal(then_block, "shown"));
+    assert!(
+        else_block.statements.is_empty(),
+        "false/no-else path should not append to the runtime template accumulator"
+    );
+}
+
+#[test]
+fn runtime_template_control_flow_bool_if_coerces_dynamic_branch_chunks() {
+    let mut string_table = StringTable::new();
+    let show_name = InternedPath::from_single_str("show", &mut string_table);
+    let location = location(15);
+    let mut builder = setup_builder(&mut string_table);
+    register_local(
+        &mut builder,
+        show_name.clone(),
+        LocalId(12),
+        builtin_type_ids::BOOL,
+        location.clone(),
+    );
+
+    let condition = reference_expr(
+        show_name,
+        builtin_type_ids::BOOL,
+        location.clone(),
+        ValueMode::ImmutableOwned,
+    );
+    let then_content = template_content_from_expressions(vec![Expression::int(
+        5,
+        location.clone(),
+        ValueMode::ImmutableOwned,
+    )]);
+    let expr = runtime_template_bool_if_expression(condition, then_content, None, location);
+
+    builder
+        .lower_expression(&expr)
+        .expect("runtime Bool template if should coerce dynamic branch chunks");
+
+    let entry_block = builder
+        .module
+        .blocks
+        .iter()
+        .find(|block| block.id == BlockId(0))
+        .expect("entry block should exist");
+    let then_block = match &entry_block.terminator {
+        HirTerminator::If { then_block, .. } => *then_block,
+        other => panic!("expected inline template if terminator, got {other:?}"),
+    };
+    let then_block = builder
+        .module
+        .blocks
+        .iter()
+        .find(|block| block.id == then_block)
+        .expect("then block should exist");
+
+    assert!(block_assigns_coerced_int_chunk(then_block, 5));
+}
+
+#[test]
+fn runtime_template_control_flow_option_capture_lowers_match_and_payload_binding() {
+    let mut string_table = StringTable::new();
+    let maybe_name = InternedPath::from_single_str("maybe_name", &mut string_table);
+    let capture_name = string_table.intern("name");
+    let capture_path = InternedPath::from_single_str("name", &mut string_table);
+    let hidden = string_table.intern("hidden");
+    let location = location(16);
+    let mut builder = setup_builder(&mut string_table);
+    let option_string = builder
+        .type_environment
+        .intern_option(builtin_type_ids::STRING);
+    register_local(
+        &mut builder,
+        maybe_name.clone(),
+        LocalId(12),
+        option_string,
+        location.clone(),
+    );
+
+    let scrutinee = reference_expr(
+        maybe_name,
+        option_string,
+        location.clone(),
+        ValueMode::ImmutableOwned,
+    );
+    let then_content = template_content_from_expressions(vec![reference_expr(
+        capture_path.clone(),
+        builtin_type_ids::STRING,
+        location.clone(),
+        ValueMode::ImmutableReference,
+    )]);
+    let else_content = template_content_from_expressions(vec![Expression::string_slice(
+        hidden,
+        location.clone(),
+        ValueMode::ImmutableOwned,
+    )]);
+    let expr = runtime_template_option_capture_expression(
+        scrutinee,
+        capture_name,
+        capture_path,
+        builtin_type_ids::STRING,
+        then_content,
+        Some(else_content),
+        location,
+    );
+
+    let lowered = builder
+        .lower_expression(&expr)
+        .expect("runtime option-present template if should lower inline");
+
+    assert!(lowered.prelude.is_empty());
+    assert!(builder.module.functions.is_empty());
+
+    let entry_block = builder
+        .module
+        .blocks
+        .iter()
+        .find(|block| block.id == BlockId(0))
+        .expect("entry block should exist");
+    assert_eq!(
+        entry_block.statements.len(),
+        2,
+        "entry block should initialize the accumulator and materialize the option scrutinee once"
+    );
+
+    let (present_block_id, absent_block_id) = match &entry_block.terminator {
+        HirTerminator::Match { arms, .. } => {
+            assert_eq!(arms.len(), 2);
+            assert!(matches!(arms[0].pattern, HirPattern::OptionPresent));
+            assert!(matches!(arms[1].pattern, HirPattern::OptionNone));
+            (arms[0].body, arms[1].body)
+        }
+        other => panic!("expected option-present template if match terminator, got {other:?}"),
+    };
+
+    let present_block = builder
+        .module
+        .blocks
+        .iter()
+        .find(|block| block.id == present_block_id)
+        .expect("present block should exist");
+    let absent_block = builder
+        .module
+        .blocks
+        .iter()
+        .find(|block| block.id == absent_block_id)
+        .expect("absent block should exist");
+
+    assert!(
+        present_block
+            .locals
+            .iter()
+            .any(|local| local.ty == builtin_type_ids::STRING),
+        "present branch should register the capture as an ordinary branch local"
+    );
+    assert!(
+        present_block.statements.iter().any(|statement| {
+            matches!(
+                &statement.kind,
+                HirStatementKind::Assign {
+                    target: HirPlace::Local(_),
+                    value,
+                } if matches!(
+                    &value.kind,
+                    HirExpressionKind::VariantPayloadGet {
+                        carrier: HirVariantCarrier::Option,
+                        variant_index: OPTION_SOME_VARIANT_INDEX,
+                        field_index: 0,
+                        ..
+                    }
+                )
+            )
+        }),
+        "present branch should assign the option some payload into the capture local"
+    );
+    assert!(
+        absent_block.locals.is_empty(),
+        "absent branch must not bind the option capture local"
+    );
+    assert!(block_assigns_string_literal(absent_block, "hidden"));
+}
+
+#[test]
+fn runtime_template_control_flow_option_capture_without_else_appends_nothing_when_absent() {
+    let mut string_table = StringTable::new();
+    let maybe_name = InternedPath::from_single_str("maybe_name", &mut string_table);
+    let capture_name = string_table.intern("name");
+    let capture_path = InternedPath::from_single_str("name", &mut string_table);
+    let location = location(17);
+    let mut builder = setup_builder(&mut string_table);
+    let option_string = builder
+        .type_environment
+        .intern_option(builtin_type_ids::STRING);
+    register_local(
+        &mut builder,
+        maybe_name.clone(),
+        LocalId(13),
+        option_string,
+        location.clone(),
+    );
+
+    let scrutinee = reference_expr(
+        maybe_name,
+        option_string,
+        location.clone(),
+        ValueMode::ImmutableOwned,
+    );
+    let then_content = template_content_from_expressions(vec![reference_expr(
+        capture_path.clone(),
+        builtin_type_ids::STRING,
+        location.clone(),
+        ValueMode::ImmutableReference,
+    )]);
+    let expr = runtime_template_option_capture_expression(
+        scrutinee,
+        capture_name,
+        capture_path,
+        builtin_type_ids::STRING,
+        then_content,
+        None,
+        location,
+    );
+
+    builder
+        .lower_expression(&expr)
+        .expect("runtime option-present template if without else should lower inline");
+
+    let entry_block = builder
+        .module
+        .blocks
+        .iter()
+        .find(|block| block.id == BlockId(0))
+        .expect("entry block should exist");
+    let absent_block_id = match &entry_block.terminator {
+        HirTerminator::Match { arms, .. } => arms[1].body,
+        other => panic!("expected option-present template if match terminator, got {other:?}"),
+    };
+    let absent_block = builder
+        .module
+        .blocks
+        .iter()
+        .find(|block| block.id == absent_block_id)
+        .expect("absent block should exist");
+
+    assert!(
+        absent_block.statements.is_empty(),
+        "absent/no-else branch should not append to the runtime template accumulator"
+    );
+    assert!(
+        absent_block.locals.is_empty(),
+        "absent branch must not bind the option capture local"
+    );
+}
+
+#[test]
+fn runtime_template_control_flow_loop_range_lowers_inline_and_wraps_aggregate_when_emitted() {
+    let mut string_table = StringTable::new();
+    let prefix = string_table.intern("<card>");
+    let suffix = string_table.intern("</card>");
+    let location = location(18);
+    let limit_path = InternedPath::from_single_str("limit", &mut string_table);
+    let item_binding = loop_binding("i", builtin_type_ids::INT, &mut string_table);
+    let item_path = item_binding.id.clone();
+    let mut builder = setup_builder(&mut string_table);
+    register_local(
+        &mut builder,
+        limit_path.clone(),
+        LocalId(20),
+        builtin_type_ids::INT,
+        location.clone(),
+    );
+    let body_content = template_content_from_expressions(vec![reference_expr(
+        item_path,
+        builtin_type_ids::INT,
+        location.clone(),
+        ValueMode::ImmutableReference,
+    )]);
+    let range = RangeLoopSpec {
+        start: Expression::int(0, location.clone(), ValueMode::ImmutableOwned),
+        end: reference_expr(
+            limit_path,
+            builtin_type_ids::INT,
+            location.clone(),
+            ValueMode::ImmutableReference,
+        ),
+        end_kind: RangeEndKind::Exclusive,
+        step: None,
+    };
+    let expr = runtime_template_range_loop_expression(
+        LoopBindings {
+            item: Some(item_binding),
+            index: None,
+        },
+        range,
+        body_content,
+        aggregate_plan_around_body(prefix, suffix, location.clone()),
+        location,
+    );
+
+    builder
+        .lower_expression(&expr)
+        .expect("runtime range template loop should lower inline");
+
+    assert!(builder.module.functions.is_empty());
+    assert!(
+        builder.module.blocks.iter().any(block_marks_loop_emitted),
+        "range template loop body should mark that at least one iteration emitted"
+    );
+    assert!(
+        builder
+            .module
+            .blocks
+            .iter()
+            .any(|block| block_assigns_string_literal(block, "<card>")),
+        "emitted loop aggregate should apply the owning head before the aggregate"
+    );
+    assert!(
+        builder
+            .module
+            .blocks
+            .iter()
+            .any(|block| block_assigns_string_literal(block, "</card>")),
+        "emitted loop aggregate should apply the owning head after the aggregate"
+    );
+    assert!(
+        builder.module.blocks.iter().any(block_appends_local_string),
+        "emitted loop aggregate should append the loop-local aggregate string"
+    );
+}
+
+#[test]
+fn runtime_template_control_flow_loop_collection_materializes_iterable_and_length_once() {
+    let mut string_table = StringTable::new();
+    let prefix = string_table.intern("");
+    let suffix = string_table.intern("");
+    let location = location(19);
+    let items_path = InternedPath::from_single_str("items", &mut string_table);
+    let item_binding = loop_binding("item", builtin_type_ids::INT, &mut string_table);
+    let item_path = item_binding.id.clone();
+    let mut builder = setup_builder(&mut string_table);
+    let collection_type = builder
+        .type_environment
+        .intern_collection(builtin_type_ids::INT);
+    register_local(
+        &mut builder,
+        items_path.clone(),
+        LocalId(21),
+        collection_type,
+        location.clone(),
+    );
+    let body_content = template_content_from_expressions(vec![reference_expr(
+        item_path,
+        builtin_type_ids::INT,
+        location.clone(),
+        ValueMode::ImmutableReference,
+    )]);
+    let iterable = reference_expr(
+        items_path,
+        collection_type,
+        location.clone(),
+        ValueMode::ImmutableReference,
+    );
+    let expr = runtime_template_collection_loop_expression(
+        LoopBindings {
+            item: Some(item_binding),
+            index: None,
+        },
+        iterable,
+        body_content,
+        aggregate_plan_around_body(prefix, suffix, location.clone()),
+        location,
+    );
+
+    builder
+        .lower_expression(&expr)
+        .expect("runtime collection template loop should lower inline");
+
+    let length_calls = builder
+        .module
+        .blocks
+        .iter()
+        .flat_map(|block| &block.statements)
+        .filter(|statement| {
+            matches!(
+                statement.kind,
+                HirStatementKind::Call {
+                    target: CallTarget::ExternalFunction(ExternalFunctionId::CollectionLength),
+                    ..
+                }
+            )
+        })
+        .count();
+
+    assert_eq!(
+        length_calls, 1,
+        "collection template loop should compute iterable length once before iteration"
+    );
+    assert!(
+        builder.module.blocks.iter().any(block_marks_loop_emitted),
+        "collection template loop body should mark emitted iterations independently from string length"
+    );
+}
+
+#[test]
+fn runtime_template_control_flow_conditional_loop_rechecks_condition_and_wraps_when_emitted() {
+    let mut string_table = StringTable::new();
+    let prefix = string_table.intern("<wrap>");
+    let suffix = string_table.intern("</wrap>");
+    let tick = string_table.intern("tick");
+    let location = location(20);
+    let keep_going_path = InternedPath::from_single_str("keep_going", &mut string_table);
+    let mut builder = setup_builder(&mut string_table);
+    register_local(
+        &mut builder,
+        keep_going_path.clone(),
+        LocalId(22),
+        builtin_type_ids::BOOL,
+        location.clone(),
+    );
+    let body_content = template_content_from_expressions(vec![Expression::string_slice(
+        tick,
+        location.clone(),
+        ValueMode::ImmutableOwned,
+    )]);
+    let condition = reference_expr(
+        keep_going_path,
+        builtin_type_ids::BOOL,
+        location.clone(),
+        ValueMode::ImmutableReference,
+    );
+    let expr = runtime_template_conditional_loop_expression(
+        condition,
+        body_content,
+        aggregate_plan_around_body(prefix, suffix, location.clone()),
+        location,
+    );
+
+    builder
+        .lower_expression(&expr)
+        .expect("runtime conditional template loop should lower inline");
+
+    assert!(builder.module.functions.is_empty());
+    assert!(
+        builder.module.blocks.iter().any(block_marks_loop_emitted),
+        "conditional template loop body should mark emitted output when its body has render pieces"
+    );
+    assert!(
+        builder
+            .module
+            .blocks
+            .iter()
+            .any(|block| block_assigns_string_literal(block, "<wrap>")),
+        "emitted conditional loop aggregate should apply the owning wrapper"
+    );
+}
+
+#[test]
+fn runtime_template_control_flow_loop_empty_body_does_not_mark_iteration_emitted() {
+    let mut string_table = StringTable::new();
+    let prefix = string_table.intern("<wrap>");
+    let suffix = string_table.intern("</wrap>");
+    let location = location(21);
+    let limit_path = InternedPath::from_single_str("limit", &mut string_table);
+    let mut builder = setup_builder(&mut string_table);
+    register_local(
+        &mut builder,
+        limit_path.clone(),
+        LocalId(23),
+        builtin_type_ids::INT,
+        location.clone(),
+    );
+    let body_content = TemplateContent::default();
+    let range = RangeLoopSpec {
+        start: Expression::int(0, location.clone(), ValueMode::ImmutableOwned),
+        end: reference_expr(
+            limit_path,
+            builtin_type_ids::INT,
+            location.clone(),
+            ValueMode::ImmutableReference,
+        ),
+        end_kind: RangeEndKind::Exclusive,
+        step: None,
+    };
+    let expr = runtime_template_range_loop_expression(
+        LoopBindings {
+            item: None,
+            index: None,
+        },
+        range,
+        body_content,
+        aggregate_plan_around_body(prefix, suffix, location.clone()),
+        location,
+    );
+
+    builder
+        .lower_expression(&expr)
+        .expect("runtime empty-body template loop should lower without marking output");
+
+    assert!(
+        !builder.module.blocks.iter().any(block_marks_loop_emitted),
+        "empty loop bodies should not mark the aggregate as structurally emitted"
+    );
+}
+
+fn block_assigns_string_literal(block: &HirBlock, expected: &str) -> bool {
+    block.statements.iter().any(|statement| {
+        let HirStatementKind::Assign { value, .. } = &statement.kind else {
+            return false;
+        };
+
+        let HirExpressionKind::BinOp {
+            op: HirBinOp::Add,
+            right,
+            ..
+        } = &value.kind
+        else {
+            return false;
+        };
+
+        matches!(
+            right.kind,
+            HirExpressionKind::StringLiteral(ref value) if value == expected
+        )
+    })
+}
+
+fn block_marks_loop_emitted(block: &HirBlock) -> bool {
+    block.statements.iter().any(|statement| {
+        matches!(
+            statement.kind,
+            HirStatementKind::Assign {
+                value: crate::compiler_frontend::hir::expressions::HirExpression {
+                    kind: HirExpressionKind::Bool(true),
+                    ..
+                },
+                ..
+            }
+        )
+    })
+}
+
+fn block_appends_local_string(block: &HirBlock) -> bool {
+    count_block_appends_local_string(block) > 0
+}
+
+fn count_block_appends_local_string(block: &HirBlock) -> usize {
+    block
+        .statements
+        .iter()
+        .filter(|statement| {
+            let HirStatementKind::Assign { value, .. } = &statement.kind else {
+                return false;
+            };
+
+            let HirExpressionKind::BinOp {
+                op: HirBinOp::Add,
+                right,
+                ..
+            } = &value.kind
+            else {
+                return false;
+            };
+
+            matches!(
+                right.kind,
+                HirExpressionKind::Load(HirPlace::Local(_))
+                    | HirExpressionKind::Copy(HirPlace::Local(_))
+            )
+        })
+        .count()
+}
+
+fn block_assigns_coerced_int_chunk(block: &HirBlock, expected: i64) -> bool {
+    block.statements.iter().any(|statement| {
+        let HirStatementKind::Assign { value, .. } = &statement.kind else {
+            return false;
+        };
+
+        let HirExpressionKind::BinOp {
+            op: HirBinOp::Add,
+            right,
+            ..
+        } = &value.kind
+        else {
+            return false;
+        };
+
+        let HirExpressionKind::BinOp {
+            op: HirBinOp::Add,
+            left,
+            right,
+        } = &right.kind
+        else {
+            return false;
+        };
+
+        matches!(
+            left.kind,
+            HirExpressionKind::StringLiteral(ref value) if value.is_empty()
+        ) && matches!(right.kind, HirExpressionKind::Int(value) if value == expected)
+    })
 }
 
 #[test]

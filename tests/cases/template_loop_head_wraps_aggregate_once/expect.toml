@@ -1,0 +1,9 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain_exactly_once = ["class=\"aggregate-loop\""]
+must_contain_in_order = ["class=\"aggregate-loop\"", "<li>first", "<li>second", "</ul>"]

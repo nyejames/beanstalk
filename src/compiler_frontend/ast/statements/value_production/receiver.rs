@@ -15,10 +15,9 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::ast::expressions::parse_expression::{
     create_expression, create_expression_until,
 };
-use crate::compiler_frontend::ast::statements::branching::{
-    parse_match_block, parse_single_predicate_match_pattern,
-};
+use crate::compiler_frontend::ast::statements::branching::parse_match_block;
 use crate::compiler_frontend::ast::statements::condition_validation::ensure_if_statement_condition;
+use crate::compiler_frontend::ast::statements::match_headers::parse_single_predicate_match_pattern;
 use crate::compiler_frontend::ast::statements::value_production::completeness::analyze_branch_flow;
 use crate::compiler_frontend::ast::statements::value_production::extract_single_produced_type;
 use crate::compiler_frontend::ast::statements::value_production::parse_values::{

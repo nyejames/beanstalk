@@ -198,7 +198,6 @@ pub(crate) fn token_kind_name(token_kind: &TokenKind, string_table: &StringTable
         TokenKind::Continue => "`continue`".to_owned(),
         TokenKind::ExclusiveRange => "`to`".to_owned(),
         TokenKind::Ampersand => "`&`".to_owned(),
-        TokenKind::Case => "`case`".to_owned(),
         TokenKind::FatArrow => "`=>`".to_owned(),
         TokenKind::Wildcard => "`_`".to_owned(),
         TokenKind::Copy => "`copy`".to_owned(),

@@ -290,7 +290,7 @@ fn declaration_from_header(header: &Header, string_table: &mut StringTable) -> O
             })
         }
         HeaderKind::TypeAlias { .. } => None,
-        HeaderKind::ConstTemplate => None,
+        HeaderKind::ConstTemplate { .. } => None,
     }
 }
 

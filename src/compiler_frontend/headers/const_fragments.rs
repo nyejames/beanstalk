@@ -7,8 +7,12 @@
 //! indices, so this logic must stay in the header stage.
 
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
+use crate::compiler_frontend::declaration_syntax::declaration_shell::{
+    InitializerReference, collect_initializer_references,
+};
 use crate::compiler_frontend::headers::types::{Header, HeaderBuildContext, HeaderKind};
 use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::token_scan::NestingDepth;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
 use crate::projects::settings::TOP_LEVEL_CONST_TEMPLATE_NAME;
 use std::collections::HashSet;
@@ -55,6 +59,7 @@ pub(super) fn create_top_level_const_template(
         kind: TokenKind::Eof,
         location: token_stream.current_location(),
     });
+    let condition_references = collect_template_if_condition_references(&body);
 
     let full_name = scope.append(const_template_name);
     let name_location = SourceLocation {
@@ -67,7 +72,10 @@ pub(super) fn create_top_level_const_template(
     template_tokens.canonical_os_path = token_stream.canonical_os_path.clone();
 
     Ok(Header {
-        kind: HeaderKind::ConstTemplate,
+        kind: HeaderKind::ConstTemplate {
+            condition_references,
+            source_order: next_const_fragment_source_order(context),
+        },
         file_role: context.file_role,
         dependencies,
         name_location,
@@ -75,4 +83,62 @@ pub(super) fn create_top_level_const_template(
         source_file: context.source_file.to_owned(),
         file_imports: context.file_import_entries.to_vec(),
     })
+}
+
+fn next_const_fragment_source_order(context: &mut HeaderBuildContext<'_>) -> usize {
+    let source_order = *context.file_constant_order;
+    *context.file_constant_order += 1;
+    source_order
+}
+
+fn collect_template_if_condition_references(tokens: &[Token]) -> Vec<InitializerReference> {
+    let mut references = Vec::new();
+    let mut index = 0;
+
+    while index < tokens.len() {
+        if matches!(tokens[index].kind, TokenKind::If) {
+            let condition_start = index + 1;
+            let condition_end = find_template_if_condition_end(tokens, condition_start);
+            references.extend(collect_initializer_references(
+                &tokens[condition_start..condition_end],
+            ));
+            index = condition_end;
+            continue;
+        }
+
+        index += 1;
+    }
+
+    references
+}
+
+fn find_template_if_condition_end(tokens: &[Token], start: usize) -> usize {
+    let mut nesting_depth = NestingDepth::default();
+    let mut index = start;
+
+    while index < tokens.len() {
+        let token = &tokens[index];
+
+        if nesting_depth.is_top_level() {
+            match token.kind {
+                // Template suffix bodies use StartTemplateBody. Colon is included for
+                // defensive parity with other header scanners and tests.
+                TokenKind::StartTemplateBody
+                | TokenKind::Colon
+                | TokenKind::TemplateClose
+                | TokenKind::Eof => return index,
+
+                // Option-present template `if` conditions only depend on the scrutinee
+                // before `is`; capture names are branch-local, not header deps.
+                TokenKind::Is => return index,
+
+                _ => {}
+            }
+        }
+
+        nesting_depth.step(&token.kind);
+        index += 1;
+    }
+
+    index
 }

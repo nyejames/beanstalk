@@ -1020,6 +1020,89 @@ fn break_targets_exit_block_in_collection_loop() {
 }
 
 #[test]
+fn direct_break_in_collection_loop_does_not_leave_unreachable_step_block() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let location = test_location(65);
+
+    let collection_loop = node(
+        NodeKind::CollectionLoop {
+            bindings: LoopBindings {
+                item: Some(loop_binding(
+                    "item",
+                    builtin_type_ids::INT,
+                    &mut string_table,
+                )),
+                index: None,
+            },
+            iterable: collection_literal(location.clone()),
+            body: vec![node(NodeKind::Break, location.clone())],
+        },
+        location,
+    );
+
+    let start_fn = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![collection_loop],
+        test_location(64),
+    );
+
+    let (module, _type_environment) =
+        lower_ast(build_ast(vec![start_fn], entry_path), &mut string_table)
+            .expect("direct break collection loop lowering should succeed");
+
+    assert_no_placeholder_terminators(&module);
+}
+
+#[test]
+fn direct_break_in_range_loop_does_not_leave_unreachable_step_block() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let location = test_location(66);
+
+    let range_loop = node(
+        NodeKind::RangeLoop {
+            bindings: LoopBindings {
+                item: Some(loop_binding(
+                    "value",
+                    builtin_type_ids::INT,
+                    &mut string_table,
+                )),
+                index: None,
+            },
+            range: range_loop_spec(
+                Expression::int(0, location.clone(), ValueMode::ImmutableOwned),
+                Expression::int(3, location.clone(), ValueMode::ImmutableOwned),
+                RangeEndKind::Exclusive,
+                None,
+            ),
+            body: vec![node(NodeKind::Break, location.clone())],
+        },
+        location,
+    );
+
+    let start_fn = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![range_loop],
+        test_location(65),
+    );
+
+    let (module, _type_environment) =
+        lower_ast(build_ast(vec![start_fn], entry_path), &mut string_table)
+            .expect("direct break range loop lowering should succeed");
+
+    assert_no_placeholder_terminators(&module);
+}
+
+#[test]
 fn continue_targets_step_block_in_collection_loop() {
     let mut string_table = StringTable::new();
     let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);

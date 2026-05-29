@@ -263,9 +263,6 @@ pub(crate) fn invalid_match_arm_message(reason: InvalidMatchArmReason) -> String
         InvalidMatchArmReason::InvalidArrow => {
             "Unexpected '->' in match arm. Match arms use '=>'.".to_string()
         }
-        InvalidMatchArmReason::RemovedCaseKeyword => {
-            "`case` is no longer used in match arms. Write `<pattern> => <body>` instead.".to_string()
-        }
         InvalidMatchArmReason::ArmMustStartNewLine => {
             "Match arms must start at the beginning of a logical line.".to_string()
         }
@@ -372,9 +369,6 @@ pub(crate) fn invalid_statement_position_message(reason: InvalidStatementPositio
         }
         InvalidStatementPositionReason::UnexpectedWildcard => {
             "Unexpected wildcard '_' in function body. Wildcards are not standalone statements.".to_string()
-        }
-        InvalidStatementPositionReason::UnexpectedCase => {
-            "Unexpected 'case' in function body. Match arms no longer use 'case'; write `<pattern> => <body>` instead.".to_string()
         }
         InvalidStatementPositionReason::ReservedGenericDeclaration => {
             "Generic declarations using `type` are reserved but not implemented yet.".to_string()

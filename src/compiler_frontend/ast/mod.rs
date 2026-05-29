@@ -85,8 +85,12 @@ pub(crate) mod statements {
     pub(crate) mod diagnostics;
     pub(crate) mod fallible_handling;
     pub(crate) mod functions;
+    pub(crate) mod if_headers;
+    pub(crate) mod loop_headers;
     pub(crate) mod loops;
     pub(crate) mod match_arm_boundaries;
+    pub(crate) mod match_exhaustiveness;
+    pub(crate) mod match_headers;
     pub(crate) mod match_patterns;
     pub(crate) mod multi_bind;
     pub(crate) mod scoped_blocks;

@@ -10,8 +10,6 @@
 //!   `End`, or `Eof`.
 //! - `else` is handled separately by the match parser and is never reported as a
 //!   normal-arm candidate by this helper.
-//! - `case` is not treated as a candidate; legacy `case` diagnostics are emitted by
-//!   the caller.
 //! - Delimiter depth is tracked so `=>` inside nested parentheses, collections, or
 //!   templates is not mistaken for an arm separator.
 
@@ -83,7 +81,7 @@ pub(crate) fn token_index_has_top_level_fat_arrow(
 ///
 /// Returns `Some(candidate)` when:
 /// - the current token is line-initial;
-/// - the token is not `Else` (handled separately) or `Case` (legacy diagnostic);
+/// - the token is not `Else` or punctuation that cannot start a normal arm;
 /// - the same logical line contains a top-level `=>`.
 pub(crate) fn current_token_starts_match_arm_header(
     token_stream: &FileTokens,
@@ -113,11 +111,6 @@ pub(crate) fn token_index_starts_match_arm_header(
         start_kind,
         TokenKind::Else | TokenKind::FatArrow | TokenKind::Arrow | TokenKind::Colon
     ) {
-        return None;
-    }
-
-    // `case` is not a valid candidate; the caller emits a legacy diagnostic.
-    if matches!(start_kind, TokenKind::Case) {
         return None;
     }
 

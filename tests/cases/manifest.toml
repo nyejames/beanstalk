@@ -1540,11 +1540,6 @@ path = "diagnostic_match_legacy_colon_syntax"
 tags = ["integration","diagnostics"]
 
 [[case]]
-id = "diagnostic_match_removed_case_keyword"
-path = "diagnostic_match_removed_case_keyword"
-tags = ["integration","diagnostics"]
-
-[[case]]
 id = "diagnostic_match_semicolon_between_arms"
 path = "diagnostic_match_semicolon_between_arms"
 tags = ["integration","diagnostics"]
@@ -2870,9 +2865,209 @@ path = "template_copying_behavior"
 tags = ["integration","templates"]
 
 [[case]]
+id = "template_control_flow_children_wrapper_skipped_when_no_output"
+path = "template_control_flow_children_wrapper_skipped_when_no_output"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_control_flow_children_wrapper_when_output"
+path = "template_control_flow_children_wrapper_when_output"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_control_flow_fresh_skips_parent_children_wrapper"
+path = "template_control_flow_fresh_skips_parent_children_wrapper"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_control_flow_markdown_branch_isolation"
+path = "template_control_flow_markdown_branch_isolation"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_control_flow_literal_body_else_rejected"
+path = "template_control_flow_literal_body_else_rejected"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "template_control_flow_missing_comma_before_if"
+path = "template_control_flow_missing_comma_before_if"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "template_control_flow_missing_comma_before_loop"
+path = "template_control_flow_missing_comma_before_loop"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "template_control_flow_runtime_laziness"
+path = "template_control_flow_runtime_laziness"
+tags = ["integration","templates","results"]
+
+[[case]]
+id = "template_control_flow_suffix_not_final"
+path = "template_control_flow_suffix_not_final"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "template_control_flow_top_level_runtime_fragment_order"
+path = "template_control_flow_top_level_runtime_fragment_order"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_conditional_loop_binding_rejected"
+path = "template_conditional_loop_binding_rejected"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "template_conditional_loop_head_wraps_aggregate_once"
+path = "template_conditional_loop_head_wraps_aggregate_once"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_conditional_loop_runtime_multiple_iterations"
+path = "template_conditional_loop_runtime_multiple_iterations"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_conditional_loop_runtime_slot_rejected"
+path = "template_conditional_loop_runtime_slot_rejected"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "template_conditional_loop_runtime_zero_iterations"
+path = "template_conditional_loop_runtime_zero_iterations"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_const_conditional_loop_false"
+path = "template_const_conditional_loop_false"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_const_conditional_loop_runtime_condition_rejected"
+path = "template_const_conditional_loop_runtime_condition_rejected"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "template_const_conditional_loop_true_rejected"
+path = "template_const_conditional_loop_true_rejected"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "template_const_if_inactive_runtime_branch_rejected"
+path = "template_const_if_inactive_runtime_branch_rejected"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "template_const_if_runtime_condition_rejected"
+path = "template_const_if_runtime_condition_rejected"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "template_const_loop_expansion_limit"
+path = "template_const_loop_expansion_limit"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "template_const_loop_custom_lower_limit_rejected"
+path = "template_const_loop_custom_lower_limit_rejected"
+tags = ["integration","templates","diagnostics","config"]
+
+[[case]]
+id = "template_const_loop_custom_higher_limit_accepts"
+path = "template_const_loop_custom_higher_limit_accepts"
+tags = ["integration","templates","config"]
+
+[[case]]
+id = "template_const_loop_limit_string_rejected"
+path = "template_const_loop_limit_string_rejected"
+tags = ["integration","templates","diagnostics","config"]
+
+[[case]]
+id = "template_const_loop_limit_float_rejected"
+path = "template_const_loop_limit_float_rejected"
+tags = ["integration","templates","diagnostics","config"]
+
+[[case]]
+id = "template_const_loop_limit_bool_rejected"
+path = "template_const_loop_limit_bool_rejected"
+tags = ["integration","templates","diagnostics","config"]
+
+[[case]]
+id = "template_const_loop_limit_zero_rejected"
+path = "template_const_loop_limit_zero_rejected"
+tags = ["integration","templates","diagnostics","config"]
+
+[[case]]
+id = "template_const_loop_limit_negative_rejected"
+path = "template_const_loop_limit_negative_rejected"
+tags = ["integration","templates","diagnostics","config"]
+
+[[case]]
+id = "template_const_loop_limit_above_hard_max_rejected"
+path = "template_const_loop_limit_above_hard_max_rejected"
+tags = ["integration","templates","diagnostics","config"]
+
+[[case]]
+id = "template_const_loop_limit_runtime_value_rejected"
+path = "template_const_loop_limit_runtime_value_rejected"
+tags = ["integration","templates","diagnostics","config"]
+
+[[case]]
+id = "template_const_loop_limit_runtime_loop_unaffected"
+path = "template_const_loop_limit_runtime_loop_unaffected"
+tags = ["integration","templates","config"]
+
+[[case]]
+id = "template_const_loop_runtime_source_rejected"
+path = "template_const_loop_runtime_source_rejected"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
 id = "template_docs_examples_runtime_coverage"
 path = "template_docs_examples_runtime_coverage"
 tags = ["integration","templates","docs"]
+
+[[case]]
+id = "template_else_duplicate"
+path = "template_else_duplicate"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "template_else_if_after_else"
+path = "template_else_if_after_else"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "template_else_if_option_present_capture"
+path = "template_else_if_option_present_capture"
+tags = ["integration","templates","options"]
+
+[[case]]
+id = "template_else_if_runtime_chain"
+path = "template_else_if_runtime_chain"
+tags = ["integration","templates","results"]
+
+[[case]]
+id = "template_else_inline_not_standalone"
+path = "template_else_inline_not_standalone"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "template_else_inside_loop_without_nested_if"
+path = "template_else_inside_loop_without_nested_if"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "template_else_malformed_with_body"
+path = "template_else_malformed_with_body"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "template_else_orphan"
+path = "template_else_orphan"
+tags = ["integration","templates","diagnostics"]
 
 [[case]]
 id = "template_escaped_insert_helper_standalone_failure"
@@ -2900,6 +3095,187 @@ path = "template_imported_style_wrapper_nested_helpers_runtime"
 tags = ["integration","templates","docs"]
 
 [[case]]
+id = "template_if_bool_compile_time_false_else"
+path = "template_if_bool_compile_time_false_else"
+tags = ["integration","templates"]
+
+[[case]]
+id = "const_template_else_if_branch_chain"
+path = "const_template_else_if_branch_chain"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_if_bool_compile_time_true"
+path = "template_if_bool_compile_time_true"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_if_bool_runtime"
+path = "template_if_bool_runtime"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_match_style_if_rejected"
+path = "template_match_style_if_rejected"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "template_match_style_else_if_rejected"
+path = "template_match_style_else_if_rejected"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "template_if_missing_condition"
+path = "template_if_missing_condition"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "template_if_nested_else_binding"
+path = "template_if_nested_else_binding"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_if_option_capture_not_visible_in_else"
+path = "template_if_option_capture_not_visible_in_else"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_if_option_capture_shadows_visible_name"
+path = "template_if_option_capture_shadows_visible_name"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "template_if_option_present_capture"
+path = "template_if_option_present_capture"
+tags = ["integration","templates","options"]
+
+[[case]]
+id = "template_if_selected_empty_branch_wraps_head"
+path = "template_if_selected_empty_branch_wraps_head"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_if_without_else_empty_output"
+path = "template_if_without_else_empty_output"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_loop_binding_shadows_visible_name"
+path = "template_loop_binding_shadows_visible_name"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "template_loop_break_before_output_runtime"
+path = "template_loop_break_before_output_runtime"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_loop_break_outside_rejected"
+path = "template_loop_break_outside_rejected"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "template_loop_collection_compile_time"
+path = "template_loop_collection_compile_time"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_loop_collection_runtime"
+path = "template_loop_collection_runtime"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_loop_const_break"
+path = "template_loop_const_break"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_loop_const_continue"
+path = "template_loop_const_continue"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_loop_continue_before_output_runtime"
+path = "template_loop_continue_before_output_runtime"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_loop_continue_outside_rejected"
+path = "template_loop_continue_outside_rejected"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "template_loop_empty_skips_wrapper"
+path = "template_loop_empty_skips_wrapper"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_loop_head_wraps_aggregate_once"
+path = "template_loop_head_wraps_aggregate_once"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_loop_literal_body_break_rejected"
+path = "template_loop_literal_body_break_rejected"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "template_loop_malformed_break_rejected"
+path = "template_loop_malformed_break_rejected"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "template_loop_malformed_continue_rejected"
+path = "template_loop_malformed_continue_rejected"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "template_loop_missing_header"
+path = "template_loop_missing_header"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "template_loop_nearest_nested_runtime"
+path = "template_loop_nearest_nested_runtime"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_loop_nested_if_break_runtime"
+path = "template_loop_nested_if_break_runtime"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_loop_nested_if_continue_runtime"
+path = "template_loop_nested_if_continue_runtime"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_loop_output_then_break_runtime"
+path = "template_loop_output_then_break_runtime"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_loop_output_then_continue_runtime"
+path = "template_loop_output_then_continue_runtime"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_loop_per_iteration_wrapper_inside_body"
+path = "template_loop_per_iteration_wrapper_inside_body"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_loop_range_compile_time"
+path = "template_loop_range_compile_time"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_loop_range_runtime"
+path = "template_loop_range_runtime"
+tags = ["integration","templates"]
+
+
+[[case]]
 id = "template_output_test"
 path = "template_output_test"
 tags = ["integration","templates"]
@@ -2922,6 +3298,31 @@ tags = ["integration","templates","diagnostics"]
 [[case]]
 id = "template_positional_slot_children_body"
 path = "template_positional_slot_children_body"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_runtime_control_flow_insert_rejected"
+path = "template_runtime_control_flow_insert_rejected"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "template_runtime_control_flow_slot_rejected"
+path = "template_runtime_control_flow_slot_rejected"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "template_runtime_branch_slot_application"
+path = "template_runtime_branch_slot_application"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_runtime_loop_slot_application"
+path = "template_runtime_loop_slot_application"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_runtime_slot_children_fresh_control_flow"
+path = "template_runtime_slot_children_fresh_control_flow"
 tags = ["integration","templates"]
 
 [[case]]
@@ -3334,6 +3735,11 @@ tags = ["integration", "diagnostics"]
 id = "identifier_keyword_shadow_ast_error"
 path = "identifier_keyword_shadow_ast_error"
 tags = ["integration", "diagnostics"]
+
+[[case]]
+id = "case_identifier_success"
+path = "case_identifier_success"
+tags = ["integration", "language", "reserved-names"]
 
 [[case]]
 id = "assert_keyword_shadow_header_error"
@@ -3799,6 +4205,21 @@ tags = ["integration", "constants", "dependency-resolution", "imports", "diagnos
 id = "const_template_uses_constants"
 path = "const_template_uses_constants"
 tags = ["integration", "constants", "dependency-resolution", "templates"]
+
+[[case]]
+id = "const_template_if_source_const_bool"
+path = "const_template_if_source_const_bool"
+tags = ["integration", "constants", "dependency-resolution", "templates"]
+
+[[case]]
+id = "const_template_if_imported_source_const_bool"
+path = "const_template_if_imported_source_const_bool"
+tags = ["integration", "constants", "dependency-resolution", "templates", "imports"]
+
+[[case]]
+id = "const_template_if_forward_source_const_rejected"
+path = "const_template_if_forward_source_const_rejected"
+tags = ["integration", "constants", "dependency-resolution", "templates", "diagnostics"]
 
 [[case]]
 id = "struct_placeholder_visible_before_resolution"

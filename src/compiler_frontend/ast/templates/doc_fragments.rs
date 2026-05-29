@@ -27,6 +27,7 @@ pub(in crate::compiler_frontend::ast::templates) fn collect_and_strip_comment_te
     project_path_resolver: &ProjectPathResolver,
     path_format_config: &PathStringFormatConfig,
     string_table: &mut StringTable,
+    template_const_loop_iteration_limit: usize,
 ) -> Result<Vec<AstDocFragment>, TemplateError> {
     let mut fragments = Vec::new();
 
@@ -45,6 +46,7 @@ pub(in crate::compiler_frontend::ast::templates) fn collect_and_strip_comment_te
                     project_path_resolver,
                     path_format_config,
                     string_table,
+                    template_const_loop_iteration_limit,
                 )?;
                 continue;
             }
@@ -93,6 +95,7 @@ fn collect_doc_fragments(
     project_path_resolver: &ProjectPathResolver,
     path_format_config: &PathStringFormatConfig,
     string_table: &mut StringTable,
+    template_const_loop_iteration_limit: usize,
 ) -> Result<(), TemplateError> {
     if matches!(
         template.kind,
@@ -103,6 +106,8 @@ fn collect_doc_fragments(
             project_path_resolver,
             path_format_config,
             source_file_scope: &template.location.scope,
+            template_const_loop_iteration_limit,
+            bindings: Vec::new(),
         };
 
         let rendered = template.fold_into_stringid(&mut fold_context)?;
@@ -122,6 +127,7 @@ fn collect_doc_fragments(
             project_path_resolver,
             path_format_config,
             string_table,
+            template_const_loop_iteration_limit,
         )?;
     }
 

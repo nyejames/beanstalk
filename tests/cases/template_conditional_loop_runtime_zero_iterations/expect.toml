@@ -1,0 +1,5 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["template_conditional_loop_runtime_zero_iterations before", "after"]
+rendered_output_not_contains = ["hidden", "zero-loop-shell"]

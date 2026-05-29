@@ -6,8 +6,8 @@ warnings = "forbid"
 path = "index.html"
 kind = "html"
 must_contain = [
-  "__bs_binding(\" real=\")",
-  "__bs_binding(\", int=\")",
+  "\" real=\"",
+  "\", int=\"",
   ", 2.5);",
   ", 2);",
 ]

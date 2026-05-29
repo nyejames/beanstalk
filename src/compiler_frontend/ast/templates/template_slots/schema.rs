@@ -14,7 +14,7 @@ use crate::compiler_frontend::ast::templates::template_slots::error::TemplateSlo
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::SourceLocation;
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, InvalidTemplateSlotReason};
-use crate::compiler_frontend::symbols::string_interning::StringId;
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap, StringTable};
 
 use rustc_hash::FxHashSet;
 use std::collections::BTreeSet;
@@ -28,10 +28,10 @@ use std::collections::BTreeSet;
 /// Collected recursively so nested template expressions that declare slots are
 /// still accounted for in the wrapper's schema.
 #[derive(Clone, Debug, Default)]
-pub(super) struct SlotSchema {
-    pub has_default_slot: bool,
-    pub named_slots: FxHashSet<StringId>,
-    pub positional_slots: BTreeSet<usize>,
+pub(crate) struct SlotSchema {
+    pub(super) has_default_slot: bool,
+    pub(super) named_slots: FxHashSet<StringId>,
+    pub(super) positional_slots: BTreeSet<usize>,
 }
 
 impl SlotSchema {
@@ -49,6 +49,65 @@ impl SlotSchema {
 
     pub fn ordered_positional_slots(&self) -> impl Iterator<Item = &usize> {
         self.positional_slots.iter()
+    }
+
+    pub(crate) fn ordered_named_slots(&self, string_table: &StringTable) -> Vec<StringId> {
+        let mut names = self.named_slots.iter().copied().collect::<Vec<_>>();
+
+        names.sort_by(|left, right| {
+            string_table
+                .resolve(*left)
+                .cmp(string_table.resolve(*right))
+        });
+
+        names
+    }
+
+    /// Returns the deterministic runtime allocation order for slot accumulators.
+    ///
+    /// WHAT: default first, positional slots in numeric order, then named slots
+    /// by resolved source spelling.
+    /// WHY: HIR lowering needs stable local allocation without revalidating the
+    /// slot schema that AST already accepted.
+    pub(crate) fn ordered_slot_keys(&self, string_table: &StringTable) -> Vec<SlotKey> {
+        let mut keys = Vec::new();
+
+        if self.has_default_slot {
+            keys.push(SlotKey::Default);
+        }
+
+        for index in self.ordered_positional_slots() {
+            keys.push(SlotKey::Positional(*index));
+        }
+
+        for name in self.ordered_named_slots(string_table) {
+            keys.push(SlotKey::Named(name));
+        }
+
+        keys
+    }
+
+    #[cfg(test)]
+    pub(crate) fn from_keys_for_test(keys: impl IntoIterator<Item = SlotKey>) -> Self {
+        let mut schema = Self::default();
+
+        for key in keys {
+            match key {
+                SlotKey::Default => schema.has_default_slot = true,
+                SlotKey::Named(name) => {
+                    schema.named_slots.insert(name);
+                }
+                SlotKey::Positional(index) => {
+                    schema.positional_slots.insert(index);
+                }
+            }
+        }
+
+        schema
+    }
+
+    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
+        self.named_slots = self.named_slots.iter().map(|id| remap.get(*id)).collect();
     }
 }
 

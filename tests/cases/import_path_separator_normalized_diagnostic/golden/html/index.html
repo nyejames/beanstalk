@@ -464,31 +464,19 @@ body {
 
     function bst_start_fn1() {
         let bst___hir_tmp_0_l0 = __bs_binding(undefined);
-        let bst___hir_tmp_1_l4 = __bs_binding(undefined);
-        let bst___hir_tmp_2_l5 = __bs_binding(undefined);
-        let bst___hir_tmp_3_l6 = __bs_binding(undefined);
+        let bst___hir_tmp_1_l1 = __bs_binding(undefined);
+        let bst___hir_tmp_2_l2 = __bs_binding(undefined);
+        let bst___hir_tmp_3_l3 = __bs_binding(undefined);
         
         __bs_assign_value(bst___hir_tmp_0_l0, []);
-        __bs_assign_value(bst___hir_tmp_1_l4, bst_widget_status_fn0());
-        __bs_assign_value(bst___hir_tmp_2_l5, bst___template_fn_1_fn3(bst___hir_tmp_1_l4));
-        __bs_assign_value(bst___hir_tmp_3_l6, bst___template_fn_0_fn2(__bs_binding("backslash separator ok "), bst___hir_tmp_2_l5));
-        __bs_read(bst___hir_tmp_0_l0).push(__bs_read(bst___hir_tmp_3_l6));
+        __bs_assign_value(bst___hir_tmp_1_l1, "");
+        __bs_assign_value(bst___hir_tmp_1_l1, (__bs_read(bst___hir_tmp_1_l1) + "backslash separator ok "));
+        __bs_assign_value(bst___hir_tmp_2_l2, "");
+        __bs_assign_value(bst___hir_tmp_3_l3, bst_widget_status_fn0());
+        __bs_assign_value(bst___hir_tmp_2_l2, (__bs_read(bst___hir_tmp_2_l2) + __bs_read(bst___hir_tmp_3_l3)));
+        __bs_assign_value(bst___hir_tmp_1_l1, (__bs_read(bst___hir_tmp_1_l1) + __bs_clone_value(__bs_read(bst___hir_tmp_2_l2))));
+        __bs_read(bst___hir_tmp_0_l0).push(__bs_clone_value(__bs_read(bst___hir_tmp_1_l1)));
         return __bs_read(bst___hir_tmp_0_l0);
-    }
-
-    function bst___template_fn_0_fn2(bst_chunk_0_l1, bst_chunk_1_l2) {
-        
-        bst_chunk_0_l1 = __bs_param_binding(bst_chunk_0_l1);
-        bst_chunk_1_l2 = __bs_param_binding(bst_chunk_1_l2);
-        
-        return (("" + __bs_read(bst_chunk_0_l1)) + __bs_read(bst_chunk_1_l2));
-    }
-
-    function bst___template_fn_1_fn3(bst_chunk_0_l3) {
-        
-        bst_chunk_0_l3 = __bs_param_binding(bst_chunk_0_l3);
-        
-        return ("" + __bs_read(bst_chunk_0_l3));
     }
 
     </script>

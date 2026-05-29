@@ -1,0 +1,11 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = [
+  "<h1>",
+  "Hello Ada",
+  "Body runtime body",
+  "<aside>",
+  "</aside>",
+]
+rendered_output_not_contains = ["Hidden title", "Hidden body", "Missing title"]

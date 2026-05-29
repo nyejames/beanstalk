@@ -36,7 +36,7 @@ struct MatchCaptureLoweringContext {
 
 impl<'a> HirBuilder<'a> {
     /// Register capture locals for one match arm so guards and bodies can reference them.
-    pub(super) fn register_match_arm_capture_locals(
+    pub(crate) fn register_match_arm_capture_locals(
         &mut self,
         arm: &MatchArm,
         scrutinee_ast: &Expression,
@@ -183,7 +183,7 @@ impl<'a> HirBuilder<'a> {
     }
 
     /// Emit `Assign` statements that materialize choice payload captures at arm entry.
-    pub(super) fn emit_match_arm_capture_assignments(
+    pub(crate) fn emit_match_arm_capture_assignments(
         &mut self,
         arm: &MatchArm,
         capture_locals: &[LocalId],
@@ -282,7 +282,7 @@ impl<'a> HirBuilder<'a> {
     }
 
     /// Lower an arm body while capture names resolve to that arm's local IDs.
-    pub(super) fn with_arm_capture_bindings<T>(
+    pub(crate) fn with_arm_capture_bindings<T>(
         &mut self,
         arm: &MatchArm,
         capture_locals: &[LocalId],
