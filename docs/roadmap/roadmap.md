@@ -11,6 +11,7 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 ---
 
 # Plans / TODOS
+- assert termination: `docs/roadmap/plans/assert-terminality-implementation-plan.md`
 - Traits
 - `else => _` (Wildcards in value positions for pattern matching or default arguments in function calls)
 - Replace JSON with beanstalk files (dogfooding for language as a way to store data / config stuff). These could be standardised as their own build system under `src/projects`.
