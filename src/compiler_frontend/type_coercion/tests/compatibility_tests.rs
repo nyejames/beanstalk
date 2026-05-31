@@ -137,6 +137,21 @@ fn identical_types_are_always_compatible() {
 }
 
 #[test]
+fn compatibility_cache_bypasses_exact_type_identity() {
+    let env = TypeEnvironment::new();
+    let mut cache = TypeCompatibilityCache::new();
+
+    assert!(cache.is_compatible(
+        env.builtins().int,
+        env.builtins().int,
+        TypeCompatibilityMode::Standard,
+        &env
+    ));
+
+    assert_eq!(cache.len(), 0);
+}
+
+#[test]
 fn collection_type_identity_is_element_type_only() {
     let mut env = TypeEnvironment::new();
     let int = env.builtins().int;

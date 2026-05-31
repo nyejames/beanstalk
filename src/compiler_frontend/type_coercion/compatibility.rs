@@ -56,6 +56,12 @@ impl TypeCompatibilityCache {
         mode: TypeCompatibilityMode,
         type_environment: &TypeEnvironment,
     ) -> bool {
+        // Exact canonical identity is the common compatibility case. Return before
+        // hashing so the cache stays focused on structural and boundary-specific checks.
+        if expected_id == actual_id {
+            return true;
+        }
+
         increment_frontend_counter(FrontendCounter::TypeCompatibilityCacheLookups);
 
         let key = TypeCompatibilityKey {
@@ -106,6 +112,10 @@ pub(crate) fn is_type_compatible(
     actual_id: TypeId,
     type_environment: &TypeEnvironment,
 ) -> bool {
+    if expected_id == actual_id {
+        return true;
+    }
+
     // Struct compatibility includes const-record and generic-instance rules.
     if is_struct_type(expected_id, type_environment) && is_struct_type(actual_id, type_environment)
     {
