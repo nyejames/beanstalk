@@ -11,7 +11,7 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 ---
 
 # Plans / TODOS
-- Benchmarks improvement plan: `docs/roadmap/plans/benchmarking-implementation-plan.md`
+- Template control flow refactor follow up: `docs/roadmap/plans/template_control_flow_refactor_implementation_plan.md`
 - Traits
 - Generic follow-ups after cross-module free-function support:
   - Decide explicit generic call syntax. Current rejected examples include `identity of Int(42)`, `identity[Int](42)`, and `identity<Int>(42)`.
@@ -49,6 +49,12 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 - Typed config follow-ups after the private const config refactor: structured typed config values with choices/const records, future `project = Project::Html(...)` syntax, typed backend config schemas, optional config-local helper constants, config lock/cache metadata, numeric config shapes when keys need them, and private inferred `=` const-record config projection.
 - `bean new` follow-ups: non-interactive `--default`, template selection, project type aliases, richer scaffold presets, and optional package/dev tooling setup.
 - In the current architecture, source libraries are compiled into each consuming module. A future package system may move to separate library compilation, where libraries are built first and project modules consume pre-compiled library artifacts.
+- Benchmarking/profiling deferred tooling: CI performance gates, public dashboards,
+  source-library HIR caching, ownership/drop/ABI specialization, JS minification/tree-shaking,
+  package-manager caching, broad Criterion benchmark suites, tracing/allocation profiler
+  integrations, and tracked-summary counter expansion remain outside the current benchmarking
+  implementation. These tools should be added only when they answer a specific optimization
+  question and should not become part of the default validation path.
 
 ## Wasm
 

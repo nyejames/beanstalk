@@ -53,6 +53,8 @@ fn parse_headers_in_file_inner(
     context: &mut HeaderParseContext<'_>,
     file_warnings: &mut Vec<CompilerDiagnostic>,
 ) -> Result<FileFrontendPrepareOutput, CompilerDiagnostic> {
+    let token_count = token_stream.length;
+
     // Tracks names introduced by real top-level declarations/imports only.
     let mut headers = Vec::with_capacity(token_stream.length / TOKEN_TO_HEADER_RATIO);
     let mut encountered_symbols: HashMap<StringId, SourceLocation> = HashMap::with_capacity(
@@ -356,6 +358,7 @@ fn parse_headers_in_file_inner(
         return Ok(FileFrontendPrepareOutput {
             source_file: token_stream.src_path.to_owned(),
             file_id: token_stream.file_id,
+            token_count,
             headers,
             top_level_const_fragments,
             const_template_count,
@@ -387,6 +390,7 @@ fn parse_headers_in_file_inner(
     Ok(FileFrontendPrepareOutput {
         source_file: token_stream.src_path.to_owned(),
         file_id: token_stream.file_id,
+        token_count,
         headers,
         top_level_const_fragments,
         const_template_count,

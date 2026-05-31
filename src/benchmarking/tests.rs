@@ -39,6 +39,12 @@ fn frontend_benchmark_runs_for_simple_file() {
         !report.stages.is_empty(),
         "stage timings should be collected when detailed_timers is enabled"
     );
+
+    #[cfg(feature = "detailed_timers")]
+    assert!(
+        !report.counters.is_empty(),
+        "counters should be collected when detailed_timers is enabled"
+    );
 }
 
 #[test]

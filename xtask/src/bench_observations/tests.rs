@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn parses_stage_timings_and_counters_from_detailed_stdout() {
+fn parses_stage_timings_from_detailed_stdout() {
     let stdout = concat!(
         "Tokenized in: \u{1b}[32m335.834µs\u{1b}[0m\n",
         "Headers Parsed in: \u{1b}[32m1.25ms\u{1b}[0m\n",
@@ -22,13 +22,10 @@ fn parses_stage_timings_and_counters_from_detailed_stdout() {
     assert_metric_value(&observations.stage_timings, "ast_build_environment_ms", 2.0);
     assert_metric_value(&observations.stage_timings, "ast_ms", 51.731083);
 
-    assert_metric_value(&observations.counters, "scope contexts created", 602.0);
-    assert_metric_value(
-        &observations.counters,
-        "postfix receiver nodes copied",
-        41.0,
+    assert!(
+        observations.counters.is_empty(),
+        "legacy human counter prose should not feed new benchmark records"
     );
-    assert_metric_value(&observations.counters, "StringTable/full clone count", 8.0);
 }
 
 #[test]
@@ -76,6 +73,57 @@ fn parses_stable_benchmark_timing_lines() {
     assert_metric_value(&observations.stage_timings, "file_prepare_ms", 12.5);
     assert_metric_value(&observations.stage_timings, "ast_ms", 51.731083);
     assert_metric_value(&observations.stage_timings, "hir_ms", 8.0);
+}
+
+#[test]
+fn parses_stable_counter_line() {
+    let observations = parse_stdout_observations("BST_BENCH counter string_table_full_clones=8\n");
+
+    assert_eq!(observations.counters.len(), 1);
+    assert_metric_value(&observations.counters, "string_table_full_clones", 8.0);
+}
+
+#[test]
+fn parses_multiple_stable_counter_lines() {
+    let stdout = concat!(
+        "BST_BENCH counter type_compatibility_cache_lookups=11\n",
+        "BST_BENCH counter type_compatibility_cache_hits=7\n",
+    );
+
+    let observations = parse_stdout_observations(stdout);
+
+    assert_eq!(observations.counters.len(), 2);
+    assert_metric_value(
+        &observations.counters,
+        "type_compatibility_cache_lookups",
+        11.0,
+    );
+    assert_metric_value(&observations.counters, "type_compatibility_cache_hits", 7.0);
+}
+
+#[test]
+fn ignores_malformed_stable_counter_lines() {
+    let stdout = concat!(
+        "BST_BENCH counter =10\n",
+        "BST_BENCH counter missing_value=\n",
+        "BST_BENCH counter bad_value=abc\n",
+        "BST_BENCH counter good_value=3\n",
+    );
+
+    let observations = parse_stdout_observations(stdout);
+
+    assert_eq!(observations.counters.len(), 1);
+    assert_metric_value(&observations.counters, "good_value", 3.0);
+}
+
+#[test]
+fn parses_ansi_stripped_stable_counter_line() {
+    let stdout = "BST_BENCH counter \u{1b}[32mmodule_remap_string_ids_calls\u{1b}[0m=4\n";
+
+    let observations = parse_stdout_observations(stdout);
+
+    assert_eq!(observations.counters.len(), 1);
+    assert_metric_value(&observations.counters, "module_remap_string_ids_calls", 4.0);
 }
 
 #[test]
@@ -139,16 +187,14 @@ fn sums_duplicate_metrics_within_one_command_output() {
     let stdout = concat!(
         "AST created in: 2ms\n",
         "AST created in: 3ms\n",
-        "AST/churn counters:\n",
-        "  scope contexts created = 4\n",
-        "AST/churn counters:\n",
-        "  scope contexts created = 6\n",
+        "BST_BENCH counter scope_contexts_created=4\n",
+        "BST_BENCH counter scope_contexts_created=6\n",
     );
 
     let observations = parse_stdout_observations(stdout);
 
     assert_metric_value(&observations.stage_timings, "ast_ms", 5.0);
-    assert_metric_value(&observations.counters, "scope contexts created", 10.0);
+    assert_metric_value(&observations.counters, "scope_contexts_created", 10.0);
 }
 
 fn assert_metric_value(metrics: &[BenchmarkMetric], name: &str, expected: f64) {

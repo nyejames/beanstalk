@@ -455,6 +455,70 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
 ]
 
 #[section, $markdown:
+    # Compiler development tooling
+
+    [styled_table:
+        [header: [: Tooling] [: Status] [: Coverage] [: Current role] [: Watch points] ]
+
+        [data:
+            [: Benchmark summaries]
+            [: Supported]
+            [: Targeted]
+            [: Terse tracked monthly benchmark summaries for rough compiler-development trend tracking.]
+            [: Do not add per-case tables or raw counter dumps. Detailed analysis belongs in local JSONL and local report commands.]
+        ]
+
+        [data:
+            [: Local benchmark history]
+            [: Supported]
+            [: Targeted]
+            [: Local-only JSONL stores per-case timings, stage timings, counters, suite kind, primary metric, system identity, and commit metadata.]
+            [: Must remain ignored/untracked. Schema changes should be deliberate and documented.]
+        ]
+
+        [data:
+            [: Benchmark work counters]
+            [: Supported]
+            [: Targeted]
+            [: Stable counter transport records frontend implementation-pressure counters and the first cheap work-volume counters for input size, dependency sorting, AST, HIR, and borrow validation.]
+            [: Counters are diagnostic evidence, not public results. Prefer cheap counters recorded during existing compiler work. Older local records may still contain legacy human labels.]
+        ]
+
+        [data:
+            [: Local benchmark drilldown report]
+            [: Supported]
+            [: Targeted]
+            [: Local-only [codesnippet:just bench-report] command reports slowest cases, stage movement, counter movement, normalized ratios, and next investigation candidates from ignored JSONL history.]
+            [: Must not write tracked summaries. Must not become a CI timing gate.]
+        ]
+
+        [data:
+            [: Profiling command wrappers]
+            [: Supported]
+            [: Targeted]
+            [: Optional local [codesnippet:just profile-build] helper builds a frame-pointer, line-table profiling binary after benchmark reports identify an active investigation area.]
+            [: Keep out of default validation. Avoid mandatory external tools.]
+        ]
+
+        [data:
+            [: CI performance gates / public dashboard]
+            [: Deferred]
+            [: None]
+            [: Not part of Alpha. Current benchmarks are rough local sanity checks.]
+            [: Do not fail CI on timing noise until benchmarks are stable enough and dedicated infrastructure exists.]
+        ]
+
+        [data:
+            [: Criterion microbenchmarks]
+            [: Deferred / Targeted]
+            [: None]
+            [: Only for isolated hot functions after local benchmark reports identify them.]
+            [: Do not replace end-to-end and frontend benchmark suites with microbenchmarks.]
+        ]
+    ]
+]
+
+#[section, $markdown:
     # Experimental surfaces
 
     These are useful and may have tests, but they are not part of the Alpha stability contract.
@@ -652,7 +716,7 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
             [: Source-library HIR caching]
             [: Deferred]
             [: No precompiled source-library cache.]
-            [: Source libraries are compiled from `.bst` source each build. HIR caching is deferred until the library system is stable.]
+            [: Source libraries are compiled from `.bst` source each build. Benchmark counters may quantify this cost, but HIR caching is deferred until the library system is stable.]
         ]
 
         [data:

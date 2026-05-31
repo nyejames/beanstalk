@@ -626,6 +626,7 @@ fn file_frontend_prepare_output_remaps_all_string_id_fields() {
     let mut output = FileFrontendPrepareOutput {
         source_file,
         file_id: None,
+        token_count: 12,
         headers: vec![header],
         top_level_const_fragments: vec![fragment],
         const_template_count: 5,

@@ -33,6 +33,7 @@ use crate::compiler_frontend::hir::module::HirModule;
 use crate::compiler_frontend::hir::regions::HirRegion;
 use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::hir::validation::validate_hir_module;
+use crate::compiler_frontend::instrumentation::{FrontendCounter, add_frontend_counter};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -337,6 +338,8 @@ impl<'a> HirBuilder<'a> {
                     .with_type_context_for_all_diagnostics(self.type_environment.clone()),
             );
         }
+
+        record_hir_counters(&self.module);
 
         Ok((self.module, self.type_environment))
     }
@@ -664,4 +667,16 @@ impl<'a> HirBuilder<'a> {
             .map(str::to_owned)
             .unwrap_or_else(|| symbol.to_string(self.string_table))
     }
+}
+
+fn record_hir_counters(module: &HirModule) {
+    add_frontend_counter(FrontendCounter::HirBlockCount, module.blocks.len());
+    add_frontend_counter(FrontendCounter::HirFunctionCount, module.functions.len());
+
+    let statement_count = module
+        .blocks
+        .iter()
+        .map(|block| block.statements.len())
+        .sum();
+    add_frontend_counter(FrontendCounter::HirStatementCount, statement_count);
 }

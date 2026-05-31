@@ -18,6 +18,7 @@ frontend benchmarks/environment-stress.bst
 # group: module
 frontend benchmarks/module-graph
 frontend benchmarks/import-fanout
+frontend benchmarks/external-js-imports
 
 # group: borrow
 frontend benchmarks/borrow-stress.bst

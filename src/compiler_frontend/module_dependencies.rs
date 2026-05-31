@@ -22,6 +22,7 @@ use crate::compiler_frontend::headers::module_symbols::{FacadeExportEntry, Modul
 use crate::compiler_frontend::headers::parse_file_headers::{
     Header, HeaderKind, Headers, TopLevelConstFragment,
 };
+use crate::compiler_frontend::instrumentation::{FrontendCounter, add_frontend_counter};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::header_log;
@@ -47,6 +48,7 @@ pub(crate) struct SortedHeaders {
 struct DependencyTracker {
     temp_mark: FxHashSet<InternedPath>,
     visited: FxHashSet<InternedPath>,
+    visit_count: usize,
 }
 
 impl DependencyTracker {
@@ -54,6 +56,7 @@ impl DependencyTracker {
         DependencyTracker {
             temp_mark: FxHashSet::with_capacity_and_hasher(capacity, Default::default()),
             visited: FxHashSet::with_capacity_and_hasher(capacity, Default::default()),
+            visit_count: 0,
         }
     }
 }
@@ -95,6 +98,11 @@ pub fn resolve_module_dependencies(
             }
         })
         .collect();
+    let dependency_header_count = top_level_headers.len();
+    let dependency_edge_count = top_level_headers
+        .iter()
+        .map(|header| header.dependencies.len())
+        .sum();
 
     let mut graph: FxHashMap<InternedPath, Header> =
         FxHashMap::with_capacity_and_hasher(top_level_headers.len(), Default::default());
@@ -148,6 +156,13 @@ pub fn resolve_module_dependencies(
     // WHY: declarations must be in sorted order so AST passes see dependencies before dependents.
     module_symbols.build_sorted_declarations(&sorted, string_table);
 
+    add_frontend_counter(
+        FrontendCounter::DependencyHeaderCount,
+        dependency_header_count,
+    );
+    add_frontend_counter(FrontendCounter::DependencyEdgeCount, dependency_edge_count);
+    add_frontend_counter(FrontendCounter::DependencyVisitCount, tracker.visit_count);
+
     Ok(SortedHeaders {
         headers: sorted,
         top_level_const_fragments,
@@ -168,6 +183,8 @@ fn visit_node(
     facade_exports: &FxHashMap<String, FxHashSet<FacadeExportEntry>>,
     string_table: &mut StringTable,
 ) -> Result<(), CompilerDiagnostic> {
+    tracker.visit_count += 1;
+
     let Some(resolved_path) = resolve_graph_path(node_path, graph, facade_exports, string_table)
     else {
         return Err(CompilerDiagnostic::missing_import_target(

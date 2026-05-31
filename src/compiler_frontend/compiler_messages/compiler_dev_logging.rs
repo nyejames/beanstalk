@@ -1,6 +1,20 @@
 #[cfg(feature = "detailed_timers")]
 use std::time::Duration;
 
+#[cfg(feature = "detailed_timers")]
+#[derive(Debug, Clone, Default)]
+pub(crate) struct BenchmarkObservationSnapshot {
+    pub(crate) timings: Vec<BenchmarkObservationMetric>,
+    pub(crate) counters: Vec<BenchmarkObservationMetric>,
+}
+
+#[cfg(feature = "detailed_timers")]
+#[derive(Debug, Clone)]
+pub(crate) struct BenchmarkObservationMetric {
+    pub(crate) name: String,
+    pub(crate) value: f64,
+}
+
 // TOKEN LOGGING MACROS
 #[macro_export]
 #[cfg(feature = "show_tokens")]
@@ -82,11 +96,33 @@ pub fn log_aggregated_duration(label: &str, duration: Duration) {
 /// logging change its prose without silently breaking performance attribution.
 #[cfg(feature = "detailed_timers")]
 pub fn log_benchmark_timing(metric_name: &str, duration: Duration) {
+    if metric_name.trim().is_empty() {
+        return;
+    }
+
     let millis = duration.as_secs_f64() * 1000.0;
     if detailed_timer_output_enabled() {
         saying::say!("BST_BENCH timing ", metric_name, "=", #millis, "ms");
     }
     benchmark_collector::record_timing(metric_name, millis);
+}
+
+/// Emit one stable, machine-readable benchmark counter line.
+///
+/// WHAT: prints and records `BST_BENCH counter <metric>=<value>` observations
+/// using the same collection scope as stage timings.
+/// WHY: counters need a stable machine path for local benchmark history while
+/// human counter prose remains optional display text.
+#[cfg(feature = "detailed_timers")]
+pub fn log_benchmark_counter(metric_name: &str, value: f64) {
+    if metric_name.trim().is_empty() || !value.is_finite() {
+        return;
+    }
+
+    if detailed_timer_output_enabled() {
+        saying::say!("BST_BENCH counter ", metric_name, "=", #value);
+    }
+    benchmark_collector::record_counter(metric_name, value);
 }
 
 #[cfg(feature = "detailed_timers")]
@@ -98,19 +134,21 @@ pub fn detailed_timer_output_enabled() -> bool {
 //  In-Memory Benchmark Collector
 // -------------------------
 
-/// Thread-safe in-memory collector for benchmark timings.
+/// Thread-safe in-memory collector for benchmark observations.
 ///
 /// WHAT: captures stable benchmark metric values during an active collection scope
-/// so that in-process benchmark APIs can read stage timings directly instead of
-/// parsing stdout.
+/// so that in-process benchmark APIs can read timings and counters directly
+/// instead of parsing stdout.
 /// WHY: subprocess-free frontend benchmarks need programmatic access to the same
-/// metrics that CLI benchmarks extract from `BST_BENCH timing` lines.
+/// metrics that CLI benchmarks extract from stable `BST_BENCH` lines.
 #[cfg(feature = "detailed_timers")]
 mod benchmark_collector {
+    use super::{BenchmarkObservationMetric, BenchmarkObservationSnapshot};
     use std::sync::Mutex;
 
     struct ActiveBenchmarkCollection {
-        timings: Vec<(String, f64)>,
+        timings: Vec<BenchmarkObservationMetric>,
+        counters: Vec<BenchmarkObservationMetric>,
         suppress_output: bool,
     }
 
@@ -121,6 +159,7 @@ mod benchmark_collector {
         if let Ok(mut guard) = ACTIVE_COLLECTOR.lock() {
             *guard = Some(ActiveBenchmarkCollection {
                 timings: Vec::new(),
+                counters: Vec::new(),
                 suppress_output,
             });
         }
@@ -131,7 +170,22 @@ mod benchmark_collector {
         if let Ok(mut guard) = ACTIVE_COLLECTOR.lock()
             && let Some(collection) = guard.as_mut()
         {
-            collection.timings.push((name.to_string(), millis));
+            collection.timings.push(BenchmarkObservationMetric {
+                name: name.to_string(),
+                value: millis,
+            });
+        }
+    }
+
+    /// Record one counter if a collection scope is currently active.
+    pub fn record_counter(name: &str, value: f64) {
+        if let Ok(mut guard) = ACTIVE_COLLECTOR.lock()
+            && let Some(collection) = guard.as_mut()
+        {
+            collection.counters.push(BenchmarkObservationMetric {
+                name: name.to_string(),
+                value,
+            });
         }
     }
 
@@ -146,17 +200,21 @@ mod benchmark_collector {
         }
     }
 
-    /// Stop the current collection scope and return all captured timings.
+    /// Stop the current collection scope and return all captured observations.
     ///
-    /// Returns an empty vector if no scope was active or if the lock was poisoned.
-    pub fn stop_and_collect() -> Vec<(String, f64)> {
+    /// Returns an empty snapshot if no scope was active or if the lock was poisoned.
+    pub fn stop_and_collect() -> BenchmarkObservationSnapshot {
         if let Ok(mut guard) = ACTIVE_COLLECTOR.lock() {
             guard
                 .take()
-                .map(|collection| collection.timings)
-                .unwrap_or_default()
+                .map_or_else(BenchmarkObservationSnapshot::default, |collection| {
+                    BenchmarkObservationSnapshot {
+                        timings: collection.timings,
+                        counters: collection.counters,
+                    }
+                })
         } else {
-            Vec::new()
+            BenchmarkObservationSnapshot::default()
         }
     }
 }
@@ -164,7 +222,7 @@ mod benchmark_collector {
 #[cfg(feature = "detailed_timers")]
 pub use benchmark_collector::{
     start_collection as start_benchmark_collection,
-    stop_and_collect as stop_and_collect_benchmark_timings,
+    stop_and_collect as stop_and_collect_benchmark_observations,
 };
 
 // Headers Logging

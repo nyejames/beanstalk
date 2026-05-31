@@ -53,5 +53,13 @@ codegen-units = 1
 panic = "abort"
 strip = true
 
+[profile.profiling]
+inherits = "release"
+debug = "line-tables-only"
+strip = false
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+
 [profile.dev.package."*"]
 opt-level = 3  # Optimize dependencies in dev

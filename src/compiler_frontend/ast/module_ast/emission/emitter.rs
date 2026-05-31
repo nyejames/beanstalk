@@ -71,6 +71,8 @@ pub(in crate::compiler_frontend::ast) struct AstEmission {
     /// Compile-time template fragments keyed by the source file that declared them.
     pub(in crate::compiler_frontend::ast) const_templates_by_path:
         FxHashMap<InternedPath, StringId>,
+    /// Concrete generic function instances emitted while lowering visible calls.
+    pub(in crate::compiler_frontend::ast) generic_instance_count: usize,
 }
 
 /// Shared input used by [`AstEmitter::build_base_scope_context`] to create a
@@ -333,6 +335,7 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
             ast: self.ast,
             warnings: self.warnings,
             const_templates_by_path: self.const_templates_by_path,
+            generic_instance_count: self.generic_function_instances_by_key.len(),
         })
     }
 

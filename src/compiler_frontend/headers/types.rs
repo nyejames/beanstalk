@@ -344,6 +344,11 @@ pub struct FileFrontendPrepareOutput {
     /// Preserved for later parallel phases that need stable file identity before aggregation.
     #[allow(dead_code)]
     pub file_id: Option<FileId>,
+    /// Number of tokens produced for this file before header parsing consumes the stream.
+    ///
+    /// WHY: benchmark instrumentation needs module-level token volume without retokenizing or
+    /// walking source text after the Stage 2 preparation boundary.
+    pub token_count: usize,
     pub headers: Vec<Header>,
     pub top_level_const_fragments: Vec<TopLevelConstFragment>,
     /// Number of const templates parsed in this file.

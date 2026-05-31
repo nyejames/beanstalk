@@ -42,6 +42,7 @@ use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidTemplateStructureReason,
 };
+use crate::compiler_frontend::instrumentation::{FrontendCounter, increment_frontend_counter};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::FileTokens;
 #[cfg(test)]
@@ -317,6 +318,16 @@ impl Template {
             )
         {
             template.kind = TemplateType::String;
+        }
+
+        increment_frontend_counter(FrontendCounter::TemplateCount);
+        match control_flow_validation {
+            TemplateControlFlowValidationMode::ConstRequired => {
+                increment_frontend_counter(FrontendCounter::ConstTemplateCount);
+            }
+            TemplateControlFlowValidationMode::RuntimeCapable => {
+                increment_frontend_counter(FrontendCounter::RuntimeTemplateCount);
+            }
         }
 
         Ok(template)

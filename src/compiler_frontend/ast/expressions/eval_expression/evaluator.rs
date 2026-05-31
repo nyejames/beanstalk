@@ -14,6 +14,7 @@ use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, TypeMismat
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::TypeId;
+use crate::compiler_frontend::instrumentation::{FrontendCounter, increment_frontend_counter};
 use crate::compiler_frontend::optimizers::constant_folding::{
     ConstantFoldResult, constant_fold, fold_compile_time_expression,
 };
@@ -91,6 +92,7 @@ pub fn evaluate_expression(
     // Runtime RPN needs an owned value mode for the final expression node.
     let value_mode = value_mode.as_owned();
     eval_log!("Attempting to Fold: ", Pretty output_queue);
+    increment_frontend_counter(FrontendCounter::ConstantFoldAttemptCount);
 
     match constant_fold(&output_queue, string_table)? {
         ConstantFoldResult::Unchanged => {
@@ -107,6 +109,7 @@ pub fn evaluate_expression(
         }
 
         ConstantFoldResult::Folded(stack) => {
+            increment_frontend_counter(FrontendCounter::ConstantFoldSuccessCount);
             eval_log!("Stack after folding: ", Pretty stack);
 
             // Fully folded to a single compile-time value.

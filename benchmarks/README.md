@@ -33,6 +33,8 @@ Compiler stage timings are attribution and debugging evidence. They help explain
 
 Stage observations are emitted as stable `BST_BENCH timing <metric>=<ms>ms` lines when the compiler is built with `detailed_timers`. Human timer prose is kept for developer readability, but benchmark parsing should prefer the stable metric lines.
 
+Counter observations are local diagnostic evidence, not public benchmark results. Stable counter metric names use snake_case and are emitted as `BST_BENCH counter <metric>=<value>` lines. Counters are stored in local JSONL and used by local report tooling; raw counter tables must not be added to tracked summaries.
+
 The current `file_prepare_ms` metric is the combined parallel file-preparation aggregate: per-file tokenization, header parsing, local string-table work, and deterministic merge/remap into the module table. Older local records may still contain separate legacy `tokenize_ms` or `headers_ms` observations.
 
 In-process frontend timings call production compiler paths directly and stop at the documented frontend/backend boundary after HIR and borrow validation. They are useful for compiler refactors, but they are still rough development signals rather than precise measurements.
@@ -93,9 +95,28 @@ Stage movement should explain a benchmark result, not replace it. Treat it as a 
 
 Detailed run data is local-only in `benchmarks/local-data/runs.jsonl`. Do not commit raw local history.
 
-Raw records include per-case means, medians, standard deviations, stage timings, counters, suite kind, primary metric name, system identity, and commit metadata when available.
+Raw records include per-case means, medians, standard deviations, stage timings, counters, suite kind, primary metric name, system identity, and commit metadata when available. Counters include work-volume counters and implementation-pressure counters.
 
 The tracked Markdown summaries under `benchmarks/summaries/` are the public record. They must stay concise.
+
+## Local Drilldown Reports
+
+`just bench-report` reads local JSONL only. It does not update tracked summaries or append local history.
+
+Use it for compact per-case, stage, counter, and ratio detail during active optimization work.
+
+## Local Profiling
+
+Use `just bench-report` to choose a case and stage before profiling.
+
+Build a profiling-friendly binary with `just profile-build`, then run an external profiler against `target/profiling/bean`. Do not commit profiler output.
+
+Example profiler commands, when those tools are installed:
+
+```bash
+samply record target/profiling/bean check benchmarks/template-stress.bst
+perf record --call-graph dwarf target/profiling/bean check benchmarks/template-stress.bst
+```
 
 ## Adding Cases
 
@@ -120,12 +141,16 @@ Keep the public group list short. Use existing groups unless a new group gives c
 - `environment-stress.bst`: AST environment building, type alias expansion, nominal structs and choices, receiver catalog construction, generic declarations and instantiations, and body validation/type resolution.
 - `module-graph/`: small multi-file project with imports, facade exports, cross-file constants, and templates.
 - `import-fanout/`: multi-file project with repeated imports, aliases, facade wrapper declarations, and cross-file constants for string-table interning and module-graph resolution.
+- `external-js-imports/`: HTML project with annotated JavaScript imports, runtime helper imports, opaque external types, namespace imports, and external receiver methods.
 - `borrow-stress.bst`: valid mutable/exclusive access and borrow-validation coverage.
 
 ## What Not To Do
 
 - Do not treat small timing changes as precise performance measurements.
 - Do not add per-case tables to tracked summaries.
+- Do not add raw counter dumps to tracked summaries.
+- Do not add expensive counters that require new full-pipeline traversals without a targeted investigation.
+- Do not treat counter movement as an optimization result unless timing moved meaningfully too.
 - Do not compare CLI and frontend suite results manually as if they were the same metric.
 - Do not commit `benchmarks/local-data/`, generated benchmark outputs, or old benchmark result folders.
 - Do not add failing diagnostic cases to benchmark suites.

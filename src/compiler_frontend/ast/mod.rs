@@ -131,7 +131,10 @@ use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::headers::import_environment::HeaderImportEnvironment;
 use crate::compiler_frontend::headers::module_symbols::ModuleSymbols;
-use crate::compiler_frontend::headers::parse_file_headers::{Header, TopLevelConstFragment};
+use crate::compiler_frontend::headers::parse_file_headers::{
+    Header, HeaderKind, TopLevelConstFragment,
+};
+use crate::compiler_frontend::instrumentation::{FrontendCounter, add_frontend_counter};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -223,6 +226,7 @@ impl Ast {
         reset_ast_counters();
 
         let header_count = headers.len();
+        let ast_header_counts = AstHeaderCounterSnapshot::from_headers(&headers);
         let (phase_context, string_table) = AstPhaseContext::from_build_context(context);
 
         let mut environment = AstModuleEnvironmentBuilder::new(&phase_context).build(
@@ -233,10 +237,13 @@ impl Ast {
             },
             string_table,
         )?;
+        let generic_template_count = environment.lookups.generic_declarations_by_path.len();
+        let receiver_method_count = environment.lookups.receiver_methods.by_function_path.len();
 
         let node_emission_start = Instant::now();
         let emitted = AstEmitter::new(&phase_context, &mut environment, header_count)
             .emit(headers, string_table)?;
+        let generic_instance_count = emitted.generic_instance_count;
         benchmark_timer_log!(
             node_emission_start,
             "ast_emit_nodes_ms",
@@ -257,9 +264,76 @@ impl Ast {
         );
         let _ = finalization_start;
 
+        ast_header_counts.record();
+        add_frontend_counter(
+            FrontendCounter::AstReceiverMethodCount,
+            receiver_method_count,
+        );
+        add_frontend_counter(
+            FrontendCounter::AstGenericTemplateCount,
+            generic_template_count,
+        );
+        add_frontend_counter(
+            FrontendCounter::AstGenericInstanceCount,
+            generic_instance_count,
+        );
+
         log_ast_counters();
 
         Ok(ast)
+    }
+}
+
+/// Cheap AST boundary counts derived from the sorted headers AST already consumes.
+///
+/// WHY: these counters explain AST work volume without walking emitted AST nodes or rebuilding
+/// declaration metadata owned by earlier stages.
+struct AstHeaderCounterSnapshot {
+    header_count: usize,
+    function_count: usize,
+    struct_count: usize,
+    choice_count: usize,
+    constant_count: usize,
+}
+
+impl AstHeaderCounterSnapshot {
+    fn from_headers(headers: &[Header]) -> Self {
+        let mut function_count = 0usize;
+        let mut struct_count = 0usize;
+        let mut choice_count = 0usize;
+        let mut constant_count = 0usize;
+
+        for header in headers {
+            match &header.kind {
+                HeaderKind::Function { .. } => function_count += 1,
+
+                HeaderKind::Struct { .. } => struct_count += 1,
+
+                HeaderKind::Choice { .. } => choice_count += 1,
+
+                HeaderKind::Constant { .. } => constant_count += 1,
+
+                HeaderKind::TypeAlias { .. }
+                | HeaderKind::ConstTemplate { .. }
+                | HeaderKind::StartFunction => {}
+            }
+        }
+
+        Self {
+            header_count: headers.len(),
+            function_count,
+            struct_count,
+            choice_count,
+            constant_count,
+        }
+    }
+
+    fn record(&self) {
+        add_frontend_counter(FrontendCounter::AstHeaderCount, self.header_count);
+        add_frontend_counter(FrontendCounter::AstFunctionCount, self.function_count);
+        add_frontend_counter(FrontendCounter::AstStructCount, self.struct_count);
+        add_frontend_counter(FrontendCounter::AstChoiceCount, self.choice_count);
+        add_frontend_counter(FrontendCounter::AstConstantCount, self.constant_count);
     }
 }
 

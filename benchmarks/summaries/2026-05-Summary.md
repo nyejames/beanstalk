@@ -1,11 +1,16 @@
 # May 2026 Summary
 
-## End-to-end CLI / macOS Apple Silicon (6D851D)
-Change since initial benchmark: case set changed: avg +22ms on 8/14 shared cases; 6 slower, 0 faster
-Initial: all ~37ms, core ~82ms, docs ~87ms, stress ~8ms
-Latest: all ~40ms, core ~123ms, docs ~136ms, stress ~19ms, module ~13ms, borrow ~12ms
-Case spread latest: ~46ms
+## Frontend phases / macOS Apple Silicon (6D851D)
+Change since initial benchmark: case set changed: avg +3ms on 7/8 shared cases; 2 slower, 0 faster
+Initial: all ~80ms, core ~54ms, docs ~334ms, stress ~57ms, module ~22ms, borrow ~16ms
+Latest: all ~74ms, core ~55ms, docs ~343ms, stress ~60ms, module ~18ms, borrow ~18ms
+Case spread latest: ~104ms
 
+## End-to-end CLI / macOS Apple Silicon (6D851D)
+Change since initial benchmark: case set changed: avg +14ms on 8/16 shared cases; 4 slower, 1 faster
+Initial: all ~37ms, core ~82ms, docs ~87ms, stress ~8ms
+Latest: all ~32ms, core ~78ms, docs ~149ms, stress ~21ms, module ~12ms, borrow ~12ms
+Case spread latest: ~37ms
 ---------------------
 
 # End-to-end CLI / macOS Apple Silicon (6D851D): May 11th - 10:09
@@ -70,4 +75,33 @@ Stage movement: ast emit +6ms, file prep -5ms, ast env -4ms
 **+2ms avg**; 0 faster, 2 slower; 14/14 cases
 Avg: all ~40ms, core ~123ms, docs ~136ms, stress ~19ms, module ~13ms, borrow ~12ms
 Stage movement: ast +59ms, ast env +34ms, file prep -32ms
+
+# Frontend phases / macOS Apple Silicon (6D851D): May 31st - 08:35
+**baseline**; 7 cases
+Avg: all ~80ms, core ~54ms, docs ~334ms, stress ~57ms, module ~22ms, borrow ~16ms
+
+# Frontend phases / macOS Apple Silicon (6D851D): May 31st - 08:58
+**+7ms avg**; 0 faster, 1 slower; 7/7 cases
+Avg: all ~88ms, core ~55ms, docs ~375ms, stress ~60ms, module ~23ms, borrow ~18ms
+Stage movement: ast +12ms, ast env -3ms, ast emit +2ms
+
+# End-to-end CLI / macOS Apple Silicon (6D851D): May 31st - 09:24
+**-5ms avg**; 2 faster, 0 slower; 14/14 cases
+Avg: all ~35ms, core ~76ms, docs ~153ms, stress ~21ms, module ~13ms, borrow ~12ms
+Stage movement: ast +73ms, ast emit +57ms, hir -48ms
+
+# Frontend phases / macOS Apple Silicon (6D851D): May 31st - 09:24
+no measurable change: avg -4ms; 7/7 cases
+Avg: all ~84ms, core ~54ms, docs ~340ms, stress ~59ms, module ~27ms, borrow ~20ms
+Stage movement: ast -5ms, ast emit -5ms, ast env -1ms
+
+# End-to-end CLI / macOS Apple Silicon (6D851D): May 31st - 09:56
+case set changed: avg 0ms on 14/16 shared cases; 0 slower, 0 faster
+Avg: all ~32ms, core ~78ms, docs ~149ms, stress ~21ms, module ~12ms, borrow ~12ms
+Stage movement: ast -34ms, ast emit -27ms, ast finalize -5ms
+
+# Frontend phases / macOS Apple Silicon (6D851D): May 31st - 09:56
+case set changed: avg -1ms on 7/8 shared cases; 0 slower, 0 faster
+Avg: all ~74ms, core ~55ms, docs ~343ms, stress ~60ms, module ~18ms, borrow ~18ms
+Stage movement: file prep -2ms, ast emit +1ms
 

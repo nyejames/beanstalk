@@ -15,6 +15,8 @@ pub enum BenchmarkMode {
     Bench,
     /// Run the full benchmark suite without writing benchmark history.
     BenchCheck,
+    /// Read local benchmark history and print a drilldown report.
+    BenchReport,
     /// Run the focused frontend benchmark suite and record.
     BenchFrontend,
     /// Run the focused frontend benchmark suite without writing history.
@@ -29,6 +31,7 @@ impl BenchmarkMode {
         match mode_str {
             "bench" => Some(BenchmarkMode::Bench),
             "bench-check" => Some(BenchmarkMode::BenchCheck),
+            "bench-report" => Some(BenchmarkMode::BenchReport),
             "bench-frontend" => Some(BenchmarkMode::BenchFrontend),
             "bench-frontend-check" => Some(BenchmarkMode::BenchFrontendCheck),
             _ => None,

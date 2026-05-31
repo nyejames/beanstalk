@@ -15,10 +15,12 @@ use crate::compiler_frontend::external_packages::{
     CallTarget, ExternalPackageId, ExternalPackageRegistry,
 };
 use crate::compiler_frontend::headers::parse_file_headers::{
-    FileFrontendPrepareError, FileFrontendPrepareOutput, HeaderParseOptions, Headers, parse_headers,
+    FileFrontendPrepareError, FileFrontendPrepareOutput, HeaderKind, HeaderParseOptions, Headers,
+    parse_headers,
 };
 use crate::compiler_frontend::hir::module::HirModule;
 use crate::compiler_frontend::hir::statements::HirStatementKind;
+use crate::compiler_frontend::instrumentation::{FrontendCounter, add_frontend_counter};
 use crate::compiler_frontend::module_dependencies::SortedHeaders;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
@@ -66,6 +68,8 @@ impl FrontendModuleBuildContext<'_> {
         entry_file_path: &Path,
         string_table: StringTable,
     ) -> Result<CompiledModuleResult, CompilerMessages> {
+        record_module_input_counters(module);
+
         let external_import_resolution_table = self.external_import_resolution_table;
 
         let mut compiler = CompilerFrontend::new(
@@ -130,6 +134,7 @@ impl FrontendModuleBuildContext<'_> {
                 timed_frontend_stage("borrow_ms", "Borrow checking completed in: ", || {
                     Self::check_borrows(&compiler, &hir_module, &warnings)
                 })?;
+            record_borrow_counters(&borrow_analysis);
 
             // Scan HIR for referenced builder-runtime package functions so we only emit
             // runtime assets for packages that are actually used by this module.
@@ -370,6 +375,11 @@ impl FrontendModuleBuildContext<'_> {
             return Err(messages);
         }
 
+        let prepared_file_count = prepared_outputs.len();
+        let token_count = prepared_outputs
+            .iter()
+            .map(|output| output.token_count)
+            .sum();
         let headers = parse_headers(
             prepared_outputs,
             &compiler.external_package_registry,
@@ -385,6 +395,10 @@ impl FrontendModuleBuildContext<'_> {
             messages.prepend_diagnostics_preserving_context(warnings.iter().cloned());
             messages
         })?;
+
+        add_frontend_counter(FrontendCounter::PreparedFileCount, prepared_file_count);
+        add_frontend_counter(FrontendCounter::TokenCount, token_count);
+        record_header_counters(&headers);
 
         Ok((headers, warnings))
     }
@@ -449,6 +463,84 @@ impl FrontendModuleBuildContext<'_> {
 // -------------------------
 //  Shared Helpers
 // -------------------------
+
+fn record_module_input_counters(module: &[InputFile]) {
+    add_frontend_counter(FrontendCounter::ModuleCount, 1);
+    add_frontend_counter(FrontendCounter::SourceFileCount, module.len());
+
+    let source_byte_count = module
+        .iter()
+        .map(|input_file| input_file.source_code.len())
+        .sum();
+    add_frontend_counter(FrontendCounter::SourceByteCount, source_byte_count);
+}
+
+fn record_header_counters(headers: &Headers) {
+    add_frontend_counter(FrontendCounter::HeaderCount, headers.headers.len());
+
+    let import_count = headers
+        .module_symbols
+        .file_imports_by_source
+        .values()
+        .map(Vec::len)
+        .sum();
+    add_frontend_counter(FrontendCounter::ImportCount, import_count);
+
+    let top_level_declaration_count = headers
+        .headers
+        .iter()
+        .filter(|header| {
+            matches!(
+                header.kind,
+                HeaderKind::Function { .. }
+                    | HeaderKind::Constant { .. }
+                    | HeaderKind::Struct { .. }
+                    | HeaderKind::Choice { .. }
+                    | HeaderKind::TypeAlias { .. }
+            )
+        })
+        .count();
+    add_frontend_counter(
+        FrontendCounter::TopLevelDeclarationCount,
+        top_level_declaration_count,
+    );
+}
+
+fn record_borrow_counters(report: &BorrowCheckReport) {
+    add_frontend_counter(
+        FrontendCounter::BorrowFunctionCount,
+        report.stats.functions_analyzed,
+    );
+    add_frontend_counter(
+        FrontendCounter::BorrowBlockCount,
+        report.stats.blocks_analyzed,
+    );
+    add_frontend_counter(
+        FrontendCounter::BorrowConflictCheckCount,
+        report.stats.conflicts_checked,
+    );
+
+    let state_snapshot_count = report.analysis.block_entry_states.len()
+        + report.analysis.block_exit_states.len()
+        + report.analysis.statement_entry_states.len();
+    add_frontend_counter(
+        FrontendCounter::BorrowStateSnapshotCount,
+        state_snapshot_count,
+    );
+
+    add_frontend_counter(
+        FrontendCounter::BorrowStatementFactCount,
+        report.analysis.statement_facts.len(),
+    );
+    add_frontend_counter(
+        FrontendCounter::BorrowTerminatorFactCount,
+        report.analysis.terminator_facts.len(),
+    );
+    add_frontend_counter(
+        FrontendCounter::BorrowValueFactCount,
+        report.analysis.value_facts.len(),
+    );
+}
 
 fn merge_stage_messages(
     messages: CompilerMessages,

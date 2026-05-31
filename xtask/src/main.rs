@@ -13,6 +13,7 @@
 //! Modes:
 //! - `bench`                - Run the full benchmark suite and update local/public summaries
 //! - `bench-check`          - Run the full benchmark suite without writing benchmark history
+//! - `bench-report`         - Print a local-only benchmark drilldown report
 //! - `bench-frontend-check` - Run the focused frontend benchmark suite without writing history
 //! - `bench-frontend`       - Run the focused frontend benchmark suite and record
 
@@ -20,6 +21,7 @@ mod bench;
 mod bench_history;
 mod bench_migration;
 mod bench_observations;
+mod bench_report;
 mod bench_summary;
 mod bench_system;
 mod bench_time;
@@ -31,6 +33,7 @@ mod mode;
 mod process_runner;
 
 use bench::{BenchMode, BenchOptions, run_benchmarks};
+use bench_report::run_benchmark_report;
 use frontend_bench::{FrontendBenchMode, FrontendBenchOptions, run_frontend_benchmarks};
 use mode::BenchmarkMode;
 use std::env;
@@ -49,6 +52,7 @@ fn main() {
         eprintln!(
             "  bench-check          Run the full benchmark suite without writing benchmark history"
         );
+        eprintln!("  bench-report         Print a local-only benchmark drilldown report");
         eprintln!(
             "  bench-frontend-check Run the focused frontend benchmark suite without writing history"
         );
@@ -61,7 +65,9 @@ fn main() {
     let Some(mode) = BenchmarkMode::parse(mode_str) else {
         eprintln!("Error: Unknown mode '{}'", mode_str);
         eprintln!();
-        eprintln!("Valid modes: bench, bench-check, bench-frontend-check, bench-frontend");
+        eprintln!(
+            "Valid modes: bench, bench-check, bench-report, bench-frontend-check, bench-frontend"
+        );
         process::exit(1);
     };
 
@@ -83,6 +89,9 @@ fn main() {
             };
 
             exit_with_result(run_benchmarks(options));
+        }
+        BenchmarkMode::BenchReport => {
+            exit_with_result(run_benchmark_report());
         }
         BenchmarkMode::BenchFrontendCheck => {
             let options = FrontendBenchOptions {

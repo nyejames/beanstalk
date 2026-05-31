@@ -81,8 +81,8 @@ impl std::error::Error for FrontendBenchmarkError {}
 /// WHY: this is the narrow dev-tooling entry point that keeps benchmark
 /// orchestration out of the compiler frontend while reusing production setup.
 ///
-/// Stage timings are only populated when the `detailed_timers` feature is
-/// enabled and a collection scope is active during compilation.
+/// Stage timings and counters are only populated when the `detailed_timers`
+/// feature is enabled and a collection scope is active during compilation.
 pub fn run_frontend_benchmark(
     options: FrontendBenchmarkOptions,
 ) -> Result<FrontendBenchmarkReport, FrontendBenchmarkError> {
@@ -112,6 +112,12 @@ pub fn run_frontend_benchmark(
     };
 
     let project_builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
+
+    #[cfg(feature = "detailed_timers")]
+    crate::compiler_frontend::compiler_messages::compiler_dev_logging::start_benchmark_collection(
+        true,
+    );
+
     let BuildBootstrap {
         mut config,
         style_directives,
@@ -120,6 +126,9 @@ pub fn run_frontend_benchmark(
     } = match bootstrap_project_build(&project_builder, valid_path) {
         Ok(bootstrap) => bootstrap,
         Err(messages) => {
+            #[cfg(feature = "detailed_timers")]
+            let _ = crate::compiler_frontend::compiler_messages::compiler_dev_logging::stop_and_collect_benchmark_observations();
+
             return Err(FrontendBenchmarkError {
                 message: format_compiler_messages(&messages),
             });
@@ -130,11 +139,6 @@ pub fn run_frontend_benchmark(
         FrontendBenchmarkBuildProfile::Release => vec![Flag::Release],
         FrontendBenchmarkBuildProfile::Dev => vec![],
     };
-
-    #[cfg(feature = "detailed_timers")]
-    crate::compiler_frontend::compiler_messages::compiler_dev_logging::start_benchmark_collection(
-        true,
-    );
 
     let messages = match compile_project_frontend(
         &mut config,
@@ -148,10 +152,14 @@ pub fn run_frontend_benchmark(
     };
 
     #[cfg(feature = "detailed_timers")]
-    let raw_timings = crate::compiler_frontend::compiler_messages::compiler_dev_logging::stop_and_collect_benchmark_timings();
+    let raw_observations =
+        crate::compiler_frontend::compiler_messages::compiler_dev_logging::stop_and_collect_benchmark_observations();
 
     #[cfg(not(feature = "detailed_timers"))]
-    let raw_timings: Vec<(String, f64)> = Vec::new();
+    let stages: Vec<FrontendBenchmarkStage> = Vec::new();
+
+    #[cfg(not(feature = "detailed_timers"))]
+    let counters: Vec<FrontendBenchmarkCounter> = Vec::new();
 
     let total_ms = start.elapsed().as_secs_f64() * 1000.0;
 
@@ -161,12 +169,25 @@ pub fn run_frontend_benchmark(
         });
     }
 
-    let stages = raw_timings
+    #[cfg(feature = "detailed_timers")]
+    let stages = raw_observations
+        .timings
         .into_iter()
-        .map(|(name, duration_ms)| FrontendBenchmarkStage { name, duration_ms })
+        .map(|metric| FrontendBenchmarkStage {
+            name: metric.name,
+            duration_ms: metric.value,
+        })
         .collect();
 
-    let counters = Vec::new();
+    #[cfg(feature = "detailed_timers")]
+    let counters = raw_observations
+        .counters
+        .into_iter()
+        .map(|metric| FrontendBenchmarkCounter {
+            name: metric.name,
+            value: metric.value,
+        })
+        .collect();
 
     Ok(FrontendBenchmarkReport {
         total_ms,

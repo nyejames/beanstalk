@@ -25,35 +25,24 @@ const STAGE_PREFIXES: [(&str, &str); 10] = [
 ];
 
 const STABLE_BENCH_PREFIX: &str = "BST_BENCH timing";
+const STABLE_COUNTER_PREFIX: &str = "BST_BENCH counter";
 
 pub(crate) fn parse_stdout_observations(stdout: &str) -> BenchmarkCaseObservations {
     let mut stable_timings = Vec::new();
     let mut legacy_timings = Vec::new();
     let mut counters = Vec::new();
-    let mut in_counter_section = false;
 
     for raw_line in stdout.lines() {
         let line = strip_ansi_codes(raw_line);
         let trimmed = line.trim();
 
-        if trimmed.ends_with("counters:") {
-            in_counter_section = true;
+        if let Some(stable) = parse_stable_benchmark_line(trimmed) {
+            stable_timings.push(stable);
             continue;
         }
 
-        if in_counter_section {
-            if let Some(counter) = parse_counter_line(trimmed) {
-                counters.push(counter);
-                continue;
-            }
-
-            if !trimmed.is_empty() {
-                in_counter_section = false;
-            }
-        }
-
-        if let Some(stable) = parse_stable_benchmark_line(trimmed) {
-            stable_timings.push(stable);
+        if let Some(counter) = parse_stable_counter_line(trimmed) {
+            counters.push(counter);
             continue;
         }
 
@@ -121,12 +110,23 @@ fn parse_stable_benchmark_line(line: &str) -> Option<BenchmarkMetric> {
     })
 }
 
-fn parse_counter_line(line: &str) -> Option<BenchmarkMetric> {
-    let (name, value_text) = line.split_once('=')?;
-    let value = parse_leading_number(value_text.trim())?;
+fn parse_stable_counter_line(line: &str) -> Option<BenchmarkMetric> {
+    let rest = line.strip_prefix(STABLE_COUNTER_PREFIX)?.trim();
+
+    // Expected shape: <name>=<number>
+    let (name, value_text) = rest.split_once('=')?;
+    let name = name.trim();
+    if name.is_empty() {
+        return None;
+    }
+
+    let value: f64 = value_text.trim().parse().ok()?;
+    if !value.is_finite() {
+        return None;
+    }
 
     Some(BenchmarkMetric {
-        name: name.trim().to_string(),
+        name: name.to_string(),
         value,
     })
 }

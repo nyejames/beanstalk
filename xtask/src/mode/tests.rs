@@ -14,6 +14,14 @@ fn parse_bench_check_mode() {
 }
 
 #[test]
+fn parse_bench_report_mode() {
+    assert_eq!(
+        BenchmarkMode::parse("bench-report"),
+        Some(BenchmarkMode::BenchReport)
+    );
+}
+
+#[test]
 fn parse_bench_frontend_mode() {
     assert_eq!(
         BenchmarkMode::parse("bench-frontend"),

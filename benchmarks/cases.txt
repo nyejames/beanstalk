@@ -25,6 +25,8 @@ check benchmarks/module-graph
 build benchmarks/module-graph
 check benchmarks/import-fanout
 build benchmarks/import-fanout
+check benchmarks/external-js-imports
+build benchmarks/external-js-imports
 
 # group: borrow
 check benchmarks/borrow-stress.bst
