@@ -615,6 +615,11 @@ path = "generic_function_expected_context_success"
 tags = ["integration","generics","functions"]
 
 [[case]]
+id = "generic_fn_nested_expected_parameter_intermediate_success"
+path = "generic_fn_nested_expected_parameter_intermediate_success"
+tags = ["integration","generics","functions"]
+
+[[case]]
 id = "generic_constructed_types_success"
 path = "generic_constructed_types_success"
 tags = ["integration","generics","functions","collections","options"]
@@ -632,6 +637,11 @@ tags = ["integration","generics","functions","options","diagnostics"]
 [[case]]
 id = "generic_function_ambiguous_inference_rejected"
 path = "generic_function_ambiguous_inference_rejected"
+tags = ["integration","generics","functions","diagnostics"]
+
+[[case]]
+id = "generic_fn_nested_expected_parameter_rejected"
+path = "generic_fn_nested_expected_parameter_rejected"
 tags = ["integration","generics","functions","diagnostics"]
 
 [[case]]
@@ -700,9 +710,29 @@ path = "generic_fn_value_use_return_rejected"
 tags = ["integration","generics","functions","imports","diagnostics"]
 
 [[case]]
+id = "generic_fn_value_use_facade_rejected"
+path = "generic_fn_value_use_facade_rejected"
+tags = ["integration","generics","functions","facades","diagnostics"]
+
+[[case]]
 id = "generic_fn_namespace_synthetic_instance_inaccessible_rejected"
 path = "generic_fn_namespace_synthetic_instance_inaccessible_rejected"
 tags = ["integration","generics","functions","imports","diagnostics"]
+
+[[case]]
+id = "generic_fn_synthetic_grouped_import_rejected"
+path = "generic_fn_synthetic_grouped_import_rejected"
+tags = ["integration","generics","functions","imports","diagnostics"]
+
+[[case]]
+id = "generic_fn_synthetic_direct_symbol_path_import_rejected"
+path = "generic_fn_synthetic_direct_symbol_path_import_rejected"
+tags = ["integration","generics","functions","imports","diagnostics"]
+
+[[case]]
+id = "generic_fn_synthetic_facade_export_rejected"
+path = "generic_fn_synthetic_facade_export_rejected"
+tags = ["integration","generics","functions","imports","facade","diagnostics"]
 
 [[case]]
 id = "generic_fn_cross_file_expected_result_collection_success"
@@ -792,6 +822,16 @@ tags = ["integration","generics","functions","diagnostics"]
 [[case]]
 id = "generic_function_body_arithmetic_rejected"
 path = "generic_function_body_arithmetic_rejected"
+tags = ["integration","generics","functions","diagnostics"]
+
+[[case]]
+id = "generic_constraint_syntax_deferred"
+path = "generic_constraint_syntax_deferred"
+tags = ["integration","generics","functions","diagnostics"]
+
+[[case]]
+id = "generic_where_constraint_syntax_rejected"
+path = "generic_where_constraint_syntax_rejected"
 tags = ["integration","generics","functions","diagnostics"]
 
 [[case]]
@@ -930,13 +970,13 @@ path = "generic_import_alias_concrete_alias_success"
 tags = ["integration","generics","imports","aliases"]
 
 [[case]]
-id = "generic_nonexported_import_rejected"
-path = "generic_nonexported_import_rejected"
-tags = ["integration","generics","imports","diagnostics"]
+id = "generic_same_module_imported_type_success"
+path = "generic_same_module_imported_type_success"
+tags = ["integration","generics","imports"]
 
 [[case]]
-id = "generic_alias_rejected"
-path = "generic_alias_rejected"
+id = "generic_parameterized_alias_rejected"
+path = "generic_parameterized_alias_rejected"
 tags = ["integration","generics","aliases","diagnostics"]
 
 [[case]]
@@ -945,9 +985,44 @@ path = "generic_receiver_rejected"
 tags = ["integration","generics","receiver-methods","diagnostics"]
 
 [[case]]
-id = "generic_explicit_call_syntax_still_rejected"
-path = "generic_explicit_call_syntax_still_rejected"
+id = "generic_receiver_method_declaration_rejected"
+path = "generic_receiver_method_declaration_rejected"
+tags = ["integration","generics","receiver-methods","diagnostics"]
+
+[[case]]
+id = "generic_external_opaque_type_application_rejected"
+path = "generic_external_opaque_type_application_rejected"
+tags = ["integration","generics","external-imports","diagnostics"]
+
+[[case]]
+id = "generic_explicit_call_square_syntax_rejected"
+path = "generic_explicit_call_square_syntax_rejected"
 tags = ["integration","generics","functions","diagnostics"]
+
+[[case]]
+id = "generic_explicit_call_of_syntax_rejected"
+path = "generic_explicit_call_of_syntax_rejected"
+tags = ["integration","generics","functions","diagnostics"]
+
+[[case]]
+id = "generic_explicit_call_of_spacing_rejected"
+path = "generic_explicit_call_of_spacing_rejected"
+tags = ["integration","generics","functions","diagnostics"]
+
+[[case]]
+id = "generic_explicit_call_angle_syntax_rejected"
+path = "generic_explicit_call_angle_syntax_rejected"
+tags = ["integration","generics","functions","diagnostics"]
+
+[[case]]
+id = "generic_explicit_call_argument_type_syntax_rejected"
+path = "generic_explicit_call_argument_type_syntax_rejected"
+tags = ["integration","generics","functions","diagnostics"]
+
+[[case]]
+id = "generic_explicit_call_inference_annotation_success"
+path = "generic_explicit_call_inference_annotation_success"
+tags = ["integration","generics","functions"]
 
 [[case]]
 id = "generic_mutual_recursive_rejected"
@@ -975,9 +1050,29 @@ path = "generic_nested_alias_workaround"
 tags = ["integration","generics","aliases"]
 
 [[case]]
+id = "generic_partial_type_application_rejected"
+path = "generic_partial_type_application_rejected"
+tags = ["integration","generics","aliases","diagnostics"]
+
+[[case]]
 id = "generic_nested_of_rejected"
 path = "generic_nested_of_rejected"
 tags = ["integration","generics","diagnostics"]
+
+[[case]]
+id = "generic_type_name_value_rejected"
+path = "generic_type_name_value_rejected"
+tags = ["integration","generics","diagnostics"]
+
+[[case]]
+id = "generic_type_application_value_rejected"
+path = "generic_type_application_value_rejected"
+tags = ["integration","generics","diagnostics"]
+
+[[case]]
+id = "generic_namespace_type_value_rejected"
+path = "generic_namespace_type_value_rejected"
+tags = ["integration","generics","imports","diagnostics"]
 
 [[case]]
 id = "choice_variant_default_value_deferred"
@@ -2043,6 +2138,16 @@ tags = ["integration","functions"]
 id = "js_import_cross_module_bypass_rejected"
 path = "js_import_cross_module_bypass_rejected"
 tags = ["integration","imports","diagnostics","js-backend"]
+
+[[case]]
+id = "js_import_generic_signature_rejected"
+path = "js_import_generic_signature_rejected"
+tags = ["integration","imports","external-imports","diagnostics","js-backend"]
+
+[[case]]
+id = "js_import_generic_opaque_type_rejected"
+path = "js_import_generic_opaque_type_rejected"
+tags = ["integration","imports","external-imports","diagnostics","js-backend"]
 
 [[case]]
 id = "js_mutable_param_reassignment"

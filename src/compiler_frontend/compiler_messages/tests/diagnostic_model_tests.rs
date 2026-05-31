@@ -1011,6 +1011,48 @@ fn generic_instantiation_rendering_resolves_type_name() {
 }
 
 #[test]
+fn generic_conflict_rendering_resolves_concrete_type_names() {
+    use crate::compiler_frontend::compiler_messages::{
+        CompilerDiagnostic, InvalidGenericInstantiationReason,
+    };
+    use crate::compiler_frontend::datatypes::ids::GenericParameterId;
+    use crate::compiler_frontend::symbols::string_interning::StringTable;
+    use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
+
+    let mut string_table = StringTable::new();
+    let function_name = string_table.intern("first");
+    let parameter_name = string_table.intern("T");
+    let location = SourceLocation::default();
+    let type_environment = TypeEnvironment::new();
+
+    let diagnostic = CompilerDiagnostic::invalid_generic_instantiation(
+        Some(function_name),
+        InvalidGenericInstantiationReason::ConflictingFunctionArgument {
+            parameter_id: GenericParameterId(0),
+            parameter_name,
+            existing_type_id: type_environment.builtins().int,
+            replacement_type_id: type_environment.builtins().string,
+            current_evidence_location: location.clone(),
+            previous_evidence_location: None,
+        },
+        location,
+    );
+
+    let render_context = DiagnosticRenderContext::new(&string_table)
+        .with_optional_type_environment(Some(&type_environment));
+    let guidance = terminal::format_payload_guidance(&diagnostic.payload, render_context);
+
+    assert!(
+        guidance
+            .iter()
+            .any(|line| line.contains("Generic parameter 'T'")
+                && line.contains("Int")
+                && line.contains("String")),
+        "expected rendered type names in guidance, got: {guidance:?}"
+    );
+}
+
+#[test]
 fn builtin_cast_shape_diagnostic_preserves_stable_code_and_rendering() {
     use crate::compiler_frontend::compiler_messages::InvalidBuiltinCallReason;
 

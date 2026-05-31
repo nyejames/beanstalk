@@ -36,6 +36,7 @@ pub(super) fn parse_identifier_or_call(
     type_interner: &mut AstTypeInterner<'_>,
     expression: &mut Vec<AstNode>,
     allow_boundary_catch: bool,
+    expected_result_evidence_allowed: bool,
     string_table: &mut StringTable,
 ) -> Result<(), ExpressionParseError> {
     // Fast path for reserved receiver keyword `this`.
@@ -185,6 +186,24 @@ pub(super) fn parse_identifier_or_call(
             .into());
         }
 
+        // Type declarations live in the type namespace. Constructor and variant syntax above are
+        // the only expression-position routes that may start from a nominal type name.
+        if context.is_nominal_type_declaration_path(&binding.id)
+            && matches!(binding.value.kind, ExpressionKind::NoValue)
+            && matches!(
+                binding.value.diagnostic_type,
+                DataType::Struct { .. } | DataType::Choices { .. }
+            )
+        {
+            return Err(CompilerDiagnostic::namespace_misuse(
+                identifier,
+                NameNamespace::Value,
+                NameNamespace::Type,
+                token_stream.current_location(),
+            )
+            .into());
+        }
+
         // Constant contexts reject non-constant local references.
         if context.kind.is_constant_context()
             && !binding.value.is_compile_time_constant()
@@ -213,6 +232,7 @@ pub(super) fn parse_identifier_or_call(
                     context,
                     expression,
                     allow_boundary_catch,
+                    expected_result_evidence_allowed,
                     type_interner,
                     string_table,
                 })?;
@@ -268,6 +288,7 @@ pub(super) fn parse_identifier_or_call(
                 type_interner,
                 expression,
                 allow_boundary_catch,
+                expected_result_evidence_allowed,
                 record_name: identifier,
                 record,
                 string_table,

@@ -13,8 +13,8 @@ use super::parse_expression_dispatch::push_expression_node;
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::generic_functions::{
-    GenericFunctionCallParseInput, GenericFunctionTemplate, parse_generic_function_call,
-    validate_generic_function_template_call,
+    GenericCallExpectedContext, GenericFunctionCallParseInput, GenericFunctionTemplate,
+    parse_generic_function_call, validate_generic_function_template_call,
 };
 use crate::compiler_frontend::ast::statements::fallible_handling::fallible_catch_allowed_in_context;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
@@ -42,6 +42,7 @@ pub(super) struct SourceCallableMemberInput<'a, 'env> {
     pub(super) context: &'a ScopeContext,
     pub(super) expression: &'a mut Vec<AstNode>,
     pub(super) allow_boundary_catch: bool,
+    pub(super) expected_result_evidence_allowed: bool,
     pub(super) type_interner: &'a mut AstTypeInterner<'env>,
     pub(super) string_table: &'a mut StringTable,
 }
@@ -67,6 +68,7 @@ pub(super) fn parse_source_callable_member(
         context,
         expression,
         allow_boundary_catch,
+        expected_result_evidence_allowed,
         type_interner,
         string_table,
     } = input;
@@ -80,31 +82,55 @@ pub(super) fn parse_source_callable_member(
     //  Generic source call
     // ------------------------
     if let Some(template) = generic_template {
-        // Generic functions must be called; using them as first-class values is
-        // deferred for Alpha. Require an immediate `(` to route into the call parser.
-        if token_stream.peek_next_token() != Some(&TokenKind::OpenParenthesis) {
-            return Err(CompilerDiagnostic::invalid_generic_instantiation(
-                Some(visible_name),
-                InvalidGenericInstantiationReason::GenericFunctionValueDeferred,
-                call_location,
-            )
-            .into());
+        match token_stream.peek_next_token() {
+            // Explicit call-site type arguments are not part of the Alpha surface.
+            // Reject the known foreign spellings before they can be interpreted as
+            // generic function values, comparisons, or templates.
+            Some(TokenKind::Of | TokenKind::LessThan | TokenKind::TemplateHead) => {
+                let explicit_syntax_location = token_stream
+                    .tokens
+                    .get(token_stream.index + 1)
+                    .map(|token| token.location.clone())
+                    .unwrap_or_else(|| call_location.clone());
+
+                return Err(explicit_generic_call_type_arguments_error(
+                    visible_name,
+                    explicit_syntax_location,
+                )
+                .into());
+            }
+
+            // Generic functions must be called; using them as first-class values is
+            // deferred for Alpha. Require an immediate `(` to route into the call parser.
+            Some(TokenKind::OpenParenthesis) => {}
+
+            _ => {
+                return Err(CompilerDiagnostic::invalid_generic_instantiation(
+                    Some(visible_name),
+                    InvalidGenericInstantiationReason::GenericFunctionValueDeferred,
+                    call_location,
+                )
+                .into());
+            }
         }
 
         // Move from the visible generic function name to the `(` consumed by the shared call parser.
         token_stream.advance();
 
-        let expected_result_type_ids = if expression_is_boundary_leading {
-            context.expected_result_type_ids.as_slice()
+        let expected_context = if expected_result_evidence_allowed
+            && expression_is_boundary_leading
+            && !context.expected_result_type_ids.is_empty()
+        {
+            GenericCallExpectedContext::ImmediateResult(context.expected_result_type_ids.as_slice())
         } else {
-            &[]
+            GenericCallExpectedContext::None
         };
 
         let generic_call_input = GenericFunctionCallParseInput {
             token_stream,
             template,
             context,
-            expected_result_type_ids,
+            expected_context,
             value_required: true,
             allow_boundary_catch: allow_call_boundary_catch,
             call_location,
@@ -160,6 +186,17 @@ pub(super) fn parse_source_callable_member(
     )?;
 
     Ok(())
+}
+
+fn explicit_generic_call_type_arguments_error(
+    function_name: StringId,
+    location: SourceLocation,
+) -> CompilerDiagnostic {
+    CompilerDiagnostic::invalid_generic_instantiation(
+        Some(function_name),
+        InvalidGenericInstantiationReason::ExplicitCallTypeArgumentsUnsupported,
+        location,
+    )
 }
 
 /// Convert a `FunctionCall` or `HandledFallibleFunctionCall` AST node into an

@@ -8,8 +8,8 @@
 #![allow(clippy::result_large_err)]
 
 use crate::compiler_frontend::compiler_messages::{
-    CompilerDiagnostic, InvalidFunctionSignatureReason, InvalidSignatureMemberReason,
-    TypeMismatchContext,
+    CompilerDiagnostic, DeferredFeatureReason, InvalidFunctionSignatureReason,
+    InvalidSignatureMemberReason, TypeMismatchContext,
 };
 use crate::compiler_frontend::datatypes::parsed::ParsedTypeRef;
 use crate::compiler_frontend::declaration_syntax::type_syntax::{
@@ -535,6 +535,12 @@ fn parse_return_list_syntax(
 
                     _ => {}
                 }
+            }
+            TokenKind::Symbol(symbol) if string_table.resolve(*symbol) == "where" => {
+                return Err(CompilerDiagnostic::deferred_feature_reason(
+                    DeferredFeatureReason::GenericWhereConstraints,
+                    token_stream.current_location(),
+                ));
             }
             TokenKind::Colon => {
                 token_stream.advance();

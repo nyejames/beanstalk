@@ -87,9 +87,7 @@ fn path_is_visible_type(
     if let Some(metadata) = generic_declarations_by_path.get(path) {
         return matches!(
             metadata.kind,
-            GenericDeclarationKind::Struct
-                | GenericDeclarationKind::Choice
-                | GenericDeclarationKind::TypeAlias
+            GenericDeclarationKind::Struct | GenericDeclarationKind::Choice
         );
     }
 

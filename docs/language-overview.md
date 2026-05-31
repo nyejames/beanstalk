@@ -1098,14 +1098,121 @@ if Result::Err("bad") is Result::Err("bad"):
 ### Payload immutability
 Payload fields are immutable after construction. Direct payload field access is deferred and produces a diagnostic suggesting pattern matching. Payload field mutation is rejected with an immutability diagnostic.
 
+## Generics
+Generics are declaration-site type abstractions. They let a top-level struct,
+choice, or free function describe one implementation over one or more type
+parameters while keeping calls and constructors ordinary.
+
+Generic parameters are introduced with `type` after the declaration name:
+
+```beanstalk
+identity type A |value A| -> A:
+    return value
+;
+
+Box type A = |
+    value A,
+|
+
+Maybe type A ::
+    Some | value A |,
+    None,
+;
+```
+
+Generic parameter names use type-name style and are scoped to the declaration.
+They are compile-time placeholders, not runtime values. A generic parameter
+cannot collide with another parameter in the same declaration or with visible
+concrete types, type aliases, external package types, builtins, or other names
+that are valid in type position.
+
+Generic function calls use normal call syntax only. Type arguments are inferred
+from immediate call arguments and, when the call appears at a closed receiving
+site, the immediate expected result type:
+
+```beanstalk
+value = identity(42)
+typed_value Int = identity(42)
+
+empty type A || -> {A}:
+    return {}
+;
+
+items {Int} = empty()
+```
+
+Inference does not use later mutation, later use, whole-program analysis, HIR,
+borrow validation, or expected parameter context from an outer function call
+into a nested generic call. Use ordinary annotations to make nested calls
+explicit:
+
+```beanstalk
+user User = parse_json(text)!
+save_user(user)
+```
+
+Unconstrained generic code can pass values through, return them, store them in
+generic structs and choices, forward them to other generic functions when the
+immediate call evidence solves the parameters, and use generic parameters in
+local annotations.
+
+Operations that require behavior from the unknown type are rejected until
+traits or another constraint model exists. This includes arithmetic,
+equality and comparison, field access, receiver calls, template interpolation
+that requires string-like behavior, and external or IO behavior that requires a
+concrete type.
+
+Concrete generic aliases are supported:
+
+```beanstalk
+StringBox as Box of String
+```
+
+Name intermediate concrete aliases instead of writing nested `of` applications:
+
+```beanstalk
+Pair type A, B = |
+    first A,
+    second B,
+|
+
+StringIntPair as Pair of String, Int
+value Box of StringIntPair = Box(Pair("count", 3))
+```
+
+The following surfaces are rejected or deferred in the current Alpha
+implementation:
+- explicit generic call-site syntax such as `identity of Int(42)`,
+  `identity<Int>(42)`, `identity[Int](42)`, or `identity(42 Int)`
+- inline generic sugar such as `|value type A|`
+- generic function values and higher-order polymorphism
+- type values, type-returning functions, type-level `#if`, and compile-time type inspection
+- generic receiver methods and receiver methods on concrete generic instances
+- generic external package functions and generic external package types
+- recursive generic types
+- nested `of` applications except through concrete alias workarounds
+- parameterized generic aliases and partial type application
+
+Future generic constraints wait for traits or interfaces. The intended
+direction is compact declaration-site syntax:
+
+```beanstalk
+max type A is Ordered |left A, right A| -> A:
+    return left
+;
+```
+
+`where` syntax and a types-as-values model are not part of that direction.
+
 ## Type aliases
 Type aliases give another name to an existing type at compile-time.
-They can target built-in types, structs, choices, options, collections, imported types, and external package types.
+They can target built-in types, structs, choices, options, collections, fully concrete generic instances, imported types, and external package types.
 
 ```beanstalk
 UserId as Int
 Names as {String}
 MaybeName as String?
+StringBox as Box of String
 ```
 
 Type aliases are **transparent**. They do not create a new nominal type.

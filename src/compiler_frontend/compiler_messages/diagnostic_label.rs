@@ -5,6 +5,7 @@
 //! tooling without carrying final prose in compiler stages.
 
 use crate::compiler_frontend::compiler_messages::source_location::SourceLocation;
+use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap};
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -61,12 +62,41 @@ pub enum DiagnosticLabelMessage {
     GenericInstantiationCallSite,
     /// Marks the generic function body location where the concrete instantiation failed.
     GenericInstantiationBodySite,
+    /// Marks the generic declaration that produced the instantiated body.
+    GenericInstantiationDeclarationSite,
+    /// Shows the concrete type substitutions selected for this generic body parse.
+    GenericInstantiationSubstitutions {
+        substitutions: Vec<GenericSubstitutionDiagnostic>,
+    },
+    /// Marks the earlier evidence that fixed a generic parameter before a later conflict.
+    GenericInferencePreviousEvidence,
 }
 
 impl DiagnosticLabelMessage {
     pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        if let DiagnosticLabelMessage::RenderedText(message) = self {
-            *message = remap.get(*message);
+        match self {
+            DiagnosticLabelMessage::RenderedText(message) => {
+                *message = remap.get(*message);
+            }
+            DiagnosticLabelMessage::GenericInstantiationSubstitutions { substitutions } => {
+                for substitution in substitutions {
+                    substitution.parameter_name = remap.get(substitution.parameter_name);
+                }
+            }
+            DiagnosticLabelMessage::PreviousDeclaration
+            | DiagnosticLabelMessage::ExistingBorrow
+            | DiagnosticLabelMessage::ExpectedTypeDeclaredHere
+            | DiagnosticLabelMessage::ValueMovedHere
+            | DiagnosticLabelMessage::GenericInstantiationCallSite
+            | DiagnosticLabelMessage::GenericInstantiationBodySite
+            | DiagnosticLabelMessage::GenericInstantiationDeclarationSite
+            | DiagnosticLabelMessage::GenericInferencePreviousEvidence => {}
         }
     }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct GenericSubstitutionDiagnostic {
+    pub(crate) parameter_name: StringId,
+    pub(crate) concrete_type_id: TypeId,
 }

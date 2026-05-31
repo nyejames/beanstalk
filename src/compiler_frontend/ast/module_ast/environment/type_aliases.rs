@@ -32,7 +32,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         string_table: &mut StringTable,
     ) -> Result<(), CompilerMessages> {
         for header in sorted_headers {
-            let HeaderKind::TypeAlias { target, .. } = &header.kind else {
+            let HeaderKind::TypeAlias { target } = &header.kind else {
                 continue;
             };
 

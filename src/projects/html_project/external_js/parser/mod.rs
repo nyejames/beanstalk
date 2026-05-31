@@ -287,6 +287,10 @@ impl<'a> ParseOrchestrator<'a> {
         function: &ParsedJsFunction,
         opaque_names: &[&str],
     ) {
+        if function.signature.has_unsupported_generic_parameters {
+            return;
+        }
+
         for parameter in &function.signature.parameters {
             self.validate_type_name(
                 &parameter.type_name,

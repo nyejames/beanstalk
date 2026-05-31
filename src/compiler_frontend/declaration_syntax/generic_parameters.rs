@@ -7,8 +7,9 @@
 #![allow(clippy::result_large_err)]
 
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorType};
-use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
-use crate::compiler_frontend::compiler_messages::InvalidGenericParameterReason;
+use crate::compiler_frontend::compiler_messages::{
+    CompilerDiagnostic, DeferredFeatureReason, InvalidGenericParameterReason,
+};
 use crate::compiler_frontend::datatypes::generic_parameters::{
     GenericParameter, GenericParameterList, GenericParameterScope, TypeParameterId,
 };
@@ -69,6 +70,13 @@ pub(crate) fn parse_generic_parameter_list_after_type_keyword(
 
                 token_stream.advance();
                 expecting_parameter = true;
+            }
+
+            TokenKind::Is if !expecting_parameter => {
+                return Err(CompilerDiagnostic::deferred_feature_reason(
+                    DeferredFeatureReason::GenericConstraints,
+                    token_stream.current_location(),
+                ));
             }
 
             TokenKind::TypeParameterBracket

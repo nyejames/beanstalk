@@ -7,7 +7,9 @@
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::ast::expressions::parse_expression::create_expression_without_boundary_catch;
+use crate::compiler_frontend::ast::expressions::parse_expression::{
+    ExpressionTrailingPolicy, create_expression_with_trailing_newline_policy,
+};
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::type_resolution::resolve_diagnostic_type_to_type_id;
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
@@ -317,13 +319,18 @@ fn parse_signature_default_expression(
     let mut expected_type = parse_expectation_for_type_id(type_id, type_interner.environment());
     let mut expression_stream = token_stream_with_eof(&member.default_tokens)?;
 
-    create_expression_without_boundary_catch(
+    create_expression_with_trailing_newline_policy(
         &mut expression_stream,
         &parameter_context,
         type_interner,
         &mut expected_type,
         &member.value_mode,
-        false,
+        ExpressionTrailingPolicy {
+            consume_closing_parenthesis: false,
+            skip_trailing_newlines: true,
+            allow_boundary_catch: false,
+            allow_expected_result_evidence: true,
+        },
         string_table,
     )
     .map_err(CompilerDiagnostic::from)

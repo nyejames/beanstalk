@@ -383,13 +383,22 @@ impl DiagnosticPayload {
                     }
                     InvalidGenericInstantiationReason::ConflictingFunctionArgument {
                         parameter_name,
+                        current_evidence_location,
+                        previous_evidence_location,
+                        ..
                     } => {
                         *parameter_name = remap.get(*parameter_name);
+                        current_evidence_location.remap_string_ids(remap);
+                        if let Some(previous_evidence_location) = previous_evidence_location {
+                            previous_evidence_location.remap_string_ids(remap);
+                        }
                     }
                     InvalidGenericInstantiationReason::WrongArgumentCount { .. }
                     | InvalidGenericInstantiationReason::TypeDoesNotAcceptArguments
+                    | InvalidGenericInstantiationReason::ExternalTypeArgumentsUnsupported
                     | InvalidGenericInstantiationReason::MissingTypeArguments
                     | InvalidGenericInstantiationReason::RecursiveFunctionInstantiation
+                    | InvalidGenericInstantiationReason::ExplicitCallTypeArgumentsUnsupported
                     | InvalidGenericInstantiationReason::GenericFunctionValueDeferred => {}
                 }
             }

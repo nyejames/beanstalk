@@ -750,7 +750,7 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
         [data:
             [: Generic type infrastructure]
             [: Supported]
-            [: Targeted frontend unit coverage for TypeId-native generic instance identity, generic binding consistency, TypeId binding/unification for generic parameters, collections, options, nominal generic instances, generic free-function templates, constructed-type substitution, type-identity compatibility keys, parameter scopes, generic parameter parsing, [codesnippet:of] type applications, arity checks, collection generic substrate, recursive HIR-boundary generic-parameter rejection, and diagnostics. Integration coverage includes duplicate, invalid, builtin-colliding, and visible-type-colliding generic parameter diagnostics; generic struct and choice constructor inference; concrete generic aliases; imported generic types and aliases; named argument inference; conflicting inference diagnostics; generic function declaration parsing; generic body validation; local generic function call inference and instantiation; same-module grouped-import and namespace generic function calls; grouped alias calls; cross-file and facade expected-result inference; cross-file and facade optional returns; cross-file and facade fallible error slots; generic function value diagnostics; authored facade wrapper generic calls through grouped, namespace, and grouped-alias imports; facade privacy regressions; direct [codesnippet:#mod.bst] import rejection; facade import-alias non-reexport rejection; constructed collection returns; ambiguous/conflicting function inference diagnostics; recursive generic function instantiation rejection with call-site context; receiver rejection; nested [codesnippet:of] rejection; non-exported import rejection; and collection capacity parsing.]
+            [: Targeted frontend unit coverage for TypeId-native generic instance identity, generic binding consistency, TypeId binding/unification for generic parameters, collections, options, nominal generic instances, generic free-function templates, constructed-type substitution, type-identity compatibility keys, parameter scopes, generic parameter parsing, [codesnippet:of] type applications, arity checks, collection generic substrate, recursive HIR-boundary generic-parameter rejection, and diagnostics. Integration coverage includes duplicate, invalid, builtin-colliding, and visible-type-colliding generic parameter diagnostics; generic struct and choice constructor inference; concrete generic aliases; same-module imported generic types and aliases; named argument inference; conflicting inference diagnostics; generic function declaration parsing; generic body validation; local generic function call inference and instantiation; same-module grouped-import and namespace generic function calls; grouped alias calls; cross-file and facade expected-result inference; cross-file and facade optional returns; cross-file and facade fallible error slots; generic function value diagnostics; authored facade wrapper generic calls through grouped, namespace, and grouped-alias imports; facade privacy regressions; direct [codesnippet:#mod.bst] import rejection; facade import-alias non-reexport rejection; constructed collection returns; ambiguous/conflicting function inference diagnostics; recursive generic function instantiation rejection with call-site context; receiver rejection; nested [codesnippet:of] rejection; and collection capacity parsing.]
             [: The current generic free-function import-hardening work is implemented through the AST generic free-function template and concrete instance model. Generic parameter metadata, [codesnippet:of] type applications, concrete generic aliases, collection generic substrate, constructor inference, choice matching, AST unresolved-generic validation, concrete HIR nominal identity, HIR validation rejection for unresolved generic parameters, AST-owned generic function templates, template-aware generic body validation, same-file calls, same-module grouped-import or namespace calls, authored facade-wrapper calls, constructed-type substitution coverage, imported generic optional/fallible returns, and generic diagnostic hardening are implemented. The generic substrate is split by owner across [codesnippet:generic_parameters], [codesnippet:generic_bindings], [codesnippet:generic_identity_bridge], and [codesnippet:ast/generic_functions]. Nested inline generic applications, recursive generic types, generic aliases with parameters, partial application, explicit generic call syntax, generic function values, generic receiver methods, trait bounds, direct facade re-export syntax, and generic external package functions remain deferred or rejected.]
         ]
 
@@ -778,36 +778,50 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
         [data:
             [: Generic functions]
             [: Partial]
-            [: [codesnippet:generic_function_declaration_parse_success], [codesnippet:generic_function_body_validation_success], [codesnippet:generic_function_local_annotations_success], [codesnippet:generic_function_local_unknown_annotation_rejected], [codesnippet:generic_parameter_name_outside_scope_rejected], [codesnippet:generic_function_body_arithmetic_rejected], [codesnippet:generic_function_body_io_rejected], [codesnippet:generic_function_body_template_rejected], [codesnippet:generic_function_body_field_access_rejected], [codesnippet:generic_function_identity_success], [codesnippet:generic_function_wrapper_success], [codesnippet:generic_function_expected_context_success], [codesnippet:generic_constructed_types_success], [codesnippet:generic_function_optional_return_success], [codesnippet:generic_optional_none_inference_rejected], [codesnippet:generic_function_ambiguous_inference_rejected], [codesnippet:generic_function_conflicting_inference_rejected], [codesnippet:generic_function_recursive_instantiation_rejected], [codesnippet:generic_fn_cross_file_grouped_success], [codesnippet:generic_fn_cross_file_grouped_alias_success], [codesnippet:generic_fn_cross_file_conflicting_inference_rejected], [codesnippet:generic_fn_cross_file_namespace_success], [codesnippet:generic_fn_cross_file_namespace_expected_result_success], [codesnippet:generic_fn_cross_file_expected_result_collection_success], [codesnippet:generic_fn_facade_expected_result_collection_success], [codesnippet:generic_fn_cross_file_optional_return_success], [codesnippet:generic_fn_facade_optional_return_success], [codesnippet:generic_fn_cross_file_fallible_error_slot_success], [codesnippet:generic_fn_facade_fallible_error_slot_success], [codesnippet:generic_fn_uninferable_parameter_rejected], [codesnippet:generic_fn_later_use_inference_rejected], [codesnippet:generic_fn_multiple_substitutions_same_module_success], [codesnippet:generic_fn_value_use_grouped_rejected], [codesnippet:generic_fn_value_use_namespace_rejected], [codesnippet:generic_fn_value_use_collection_rejected], [codesnippet:generic_fn_value_use_argument_rejected], [codesnippet:generic_fn_value_use_return_rejected], [codesnippet:generic_fn_namespace_synthetic_instance_inaccessible_rejected], [codesnippet:generic_fn_facade_grouped_success], [codesnippet:generic_fn_facade_namespace_success], [codesnippet:generic_fn_facade_grouped_alias_success], [codesnippet:generic_fn_facade_private_impl_import_rejected], [codesnippet:generic_fn_facade_direct_mod_import_rejected], [codesnippet:generic_fn_facade_import_alias_not_reexported_rejected], [codesnippet:generic_fn_instance_body_type_error_rejected], [codesnippet:generic_fallible_function_success], [codesnippet:generic_fallible_body_specialization_rejected], [codesnippet:generic_unused_parameter_rejected]]
-            [: Generic function headers parse into AST-owned templates with canonical signature [codesnippet:TypeId]s. Template-aware body validation rejects behavior-dependent operations on unconstrained generic parameters while allowing pass-through, generic-to-generic forwarding, generic wrapper construction, local annotations using generic parameters, constructed collection returns, contextual optional returns, and final generic error slots. Same-file, same-module grouped-import, same-module namespace, and authored facade-wrapper calls infer type arguments from immediate arguments and immediate expected success-result context, then emit concrete AST/HIR-bound function instances. Facade wrapper bodies resolve through the facade file's visibility, so private implementation generic helpers remain usable by the wrapper but hidden from outside importers. Generic optional returns and generic fallible error slots work across visible imports when immediate evidence solves the type parameters. Concrete instance body-emission diagnostics make the instantiating call site primary and keep the generic body failure span as secondary context. Generic fallible calls use the same postfix [codesnippet:!] and [codesnippet:catch] handling as ordinary fallible calls. [codesnippet:none] alone cannot infer a generic optional inner type. Generic functions must still be called and cannot be used as first-class values.]
+            [: [codesnippet:generic_function_declaration_parse_success], [codesnippet:generic_function_body_validation_success], [codesnippet:generic_function_local_annotations_success], [codesnippet:generic_function_local_unknown_annotation_rejected], [codesnippet:generic_parameter_name_outside_scope_rejected], [codesnippet:generic_function_body_arithmetic_rejected], [codesnippet:generic_function_body_io_rejected], [codesnippet:generic_function_body_template_rejected], [codesnippet:generic_function_body_field_access_rejected], [codesnippet:generic_function_identity_success], [codesnippet:generic_function_wrapper_success], [codesnippet:generic_function_expected_context_success], [codesnippet:generic_fn_nested_expected_parameter_intermediate_success], [codesnippet:generic_constructed_types_success], [codesnippet:generic_function_optional_return_success], [codesnippet:generic_optional_none_inference_rejected], [codesnippet:generic_function_ambiguous_inference_rejected], [codesnippet:generic_fn_nested_expected_parameter_rejected], [codesnippet:generic_function_conflicting_inference_rejected], [codesnippet:generic_function_recursive_instantiation_rejected], [codesnippet:generic_fn_cross_file_grouped_success], [codesnippet:generic_fn_cross_file_grouped_alias_success], [codesnippet:generic_fn_cross_file_conflicting_inference_rejected], [codesnippet:generic_fn_cross_file_namespace_success], [codesnippet:generic_fn_cross_file_namespace_expected_result_success], [codesnippet:generic_fn_cross_file_expected_result_collection_success], [codesnippet:generic_fn_facade_expected_result_collection_success], [codesnippet:generic_fn_cross_file_optional_return_success], [codesnippet:generic_fn_facade_optional_return_success], [codesnippet:generic_fn_cross_file_fallible_error_slot_success], [codesnippet:generic_fn_facade_fallible_error_slot_success], [codesnippet:generic_fn_uninferable_parameter_rejected], [codesnippet:generic_fn_later_use_inference_rejected], [codesnippet:generic_fn_multiple_substitutions_same_module_success], [codesnippet:generic_fn_value_use_grouped_rejected], [codesnippet:generic_fn_value_use_namespace_rejected], [codesnippet:generic_fn_value_use_collection_rejected], [codesnippet:generic_fn_value_use_argument_rejected], [codesnippet:generic_fn_value_use_return_rejected], [codesnippet:generic_fn_value_use_facade_rejected], [codesnippet:generic_fn_namespace_synthetic_instance_inaccessible_rejected], [codesnippet:generic_fn_synthetic_grouped_import_rejected], [codesnippet:generic_fn_synthetic_direct_symbol_path_import_rejected], [codesnippet:generic_fn_synthetic_facade_export_rejected], [codesnippet:generic_fn_facade_grouped_success], [codesnippet:generic_fn_facade_namespace_success], [codesnippet:generic_fn_facade_grouped_alias_success], [codesnippet:generic_fn_facade_private_impl_import_rejected], [codesnippet:generic_fn_facade_direct_mod_import_rejected], [codesnippet:generic_fn_facade_import_alias_not_reexported_rejected], [codesnippet:generic_fn_instance_body_type_error_rejected], [codesnippet:generic_fallible_function_success], [codesnippet:generic_fallible_body_specialization_rejected], [codesnippet:generic_unused_parameter_rejected]]
+            [: Generic function headers parse into AST-owned templates with canonical signature [codesnippet:TypeId]s. Template-aware body validation rejects behavior-dependent operations on unconstrained generic parameters while allowing pass-through, generic-to-generic forwarding, generic wrapper construction, local annotations using generic parameters, constructed collection returns, contextual optional returns, and final generic error slots. Same-file, same-module grouped-import, same-module namespace, and authored facade-wrapper calls infer type arguments from immediate arguments and immediate expected success-result context, then emit concrete AST/HIR-bound function instances. Synthetic generic instance paths stay internal and cannot be reached through namespace records, grouped imports, direct symbol-path imports, or facade import surfaces. Facade wrapper bodies resolve through the facade file's visibility, so private implementation generic helpers remain usable by the wrapper but hidden from outside importers. Generic optional returns and generic fallible error slots work across visible imports when immediate evidence solves the type parameters. Concrete instance body-emission diagnostics make the instantiating call site primary and keep the generic body failure span, declaration site, and concrete substitutions as diagnostic context. Conflicting inference diagnostics render both concrete [codesnippet:TypeId] names through the diagnostic type context, and cannot-infer diagnostics suggest ordinary receiving-site annotations. Generic fallible calls use the same postfix [codesnippet:!] and [codesnippet:catch] handling as ordinary fallible calls. [codesnippet:none] alone cannot infer a generic optional inner type. Inference does not flow from later use or from an outer expected parameter context into a nested generic call. Generic functions must still be called and cannot be used as first-class values.]
         ]
 
         [data:
-            [: Generic type aliases]
-            [: Partial]
-            [: [codesnippet:generic_concrete_alias_success], [codesnippet:generic_import_alias_concrete_alias_success], [codesnippet:generic_nested_alias_workaround], [codesnippet:generic_alias_rejected]]
-            [: Aliases to fully concrete generic instances are supported and transparent in annotations and declaration/constructor compatibility checks, including aliases to imported generic declarations. Generic aliases with parameters, partial type application, and type-constructor composition are rejected.]
+            [: Concrete generic aliases]
+            [: Supported]
+            [: [codesnippet:generic_concrete_alias_success], [codesnippet:generic_import_alias_concrete_alias_success], [codesnippet:generic_nested_alias_workaround]]
+            [: Aliases to fully concrete generic instances are supported and transparent in annotations and declaration/constructor compatibility checks, including aliases to imported generic declarations. Generic aliases with parameters are a separate deferred surface.]
         ]
 
         [data:
             [: Trait bounds on generics]
             [: Deferred]
-            [: None]
-            [: Required for operators, equality, methods, and behavior-dependent operations on unconstrained generic parameters.]
+            [: [codesnippet:generic_constraint_syntax_deferred], [codesnippet:generic_where_constraint_syntax_rejected]]
+            [: Required for operators, equality, methods, and behavior-dependent operations on unconstrained generic parameters. Declaration-site [codesnippet:type A is Trait] constraints now produce a structured deferred diagnostic until traits/interfaces exist; [codesnippet:where] syntax is rejected because it is not part of the planned Alpha direction.]
         ]
 
         [data:
             [: Explicit generic call-site application]
+            [: Rejected / Not Alpha]
+            [: [codesnippet:generic_explicit_call_of_syntax_rejected], [codesnippet:generic_explicit_call_of_spacing_rejected], [codesnippet:generic_explicit_call_angle_syntax_rejected], [codesnippet:generic_explicit_call_square_syntax_rejected], [codesnippet:generic_explicit_call_argument_type_syntax_rejected], [codesnippet:generic_explicit_call_inference_annotation_success]]
+            [: Explicit call-site type arguments such as [codesnippet, "identity of Int(42)"], [codesnippet, "identity<Int>(42)"], [codesnippet, "identity[Int](42)"], and [codesnippet, "identity(42 Int)"] are not Alpha syntax. Local generic function calls infer type arguments from immediate arguments and immediate expected result context only.]
+        ]
+
+        [data:
+            [: Generic function values]
+            [: Rejected / Deferred]
+            [: [codesnippet:generic_fn_value_use_grouped_rejected], [codesnippet:generic_fn_value_use_namespace_rejected], [codesnippet:generic_fn_value_use_collection_rejected], [codesnippet:generic_fn_value_use_argument_rejected], [codesnippet:generic_fn_value_use_return_rejected], [codesnippet:generic_fn_value_use_facade_rejected]]
+            [: Generic functions are callable declarations only. They cannot be assigned, passed as arguments, returned, collected, or used through namespace members or facade exports as first-class values.]
+        ]
+
+        [data:
+            [: Higher-order polymorphism]
             [: Deferred]
-            [: Diagnostics only.]
-            [: [codesnippet:identity of Int(42)] is rejected. Local generic function calls infer type arguments from immediate arguments and immediate expected context only.]
+            [: None]
+            [: Generic function values, polymorphic function parameters, and higher-order generic calls are outside the Alpha surface.]
         ]
 
         [data:
             [: Generic receiver methods]
-            [: Deferred]
-            [: [codesnippet:generic_receiver_rejected]]
-            [: Both generic receiver methods and receiver methods on concrete generic instantiated types are rejected with targeted diagnostics. Use free functions instead.]
+            [: Rejected / Deferred]
+            [: [codesnippet:generic_receiver_rejected], [codesnippet:generic_receiver_method_declaration_rejected]]
+            [: Declaration-site generic receiver methods and receiver methods on concrete generic instantiated types are not supported. Use free functions instead; broader method behavior waits for trait/constraint design.]
         ]
 
         [data:
@@ -819,16 +833,37 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
 
         [data:
             [: Nested generic type application]
-            [: Deferred]
+            [: Deferred / Rejected]
             [: [codesnippet:generic_nested_alias_workaround], [codesnippet:generic_nested_of_rejected]]
             [: More than one [codesnippet:of] application in a single annotation is rejected, except for collection element types. Name intermediate concrete aliases to compose complex types.]
         ]
 
         [data:
-            [: Generic aliases / partial type application]
-            [: Deferred]
-            [: Diagnostics only.]
-            [: Partial application and type-constructor composition are rejected. Alias a fully concrete generic instance instead.]
+            [: Parameterized generic aliases]
+            [: Deferred / Rejected]
+            [: [codesnippet:generic_parameterized_alias_rejected]]
+            [: Alias a fully concrete generic instance for now. Alias parameter substitution is not implemented, and parameterized alias declarations are rejected during header parsing.]
+        ]
+
+        [data:
+            [: Partial type application]
+            [: Rejected]
+            [: [codesnippet:generic_partial_type_application_rejected]]
+            [: Partially applied type constructors and placeholder-style type arguments are not supported. Alias a fully concrete generic instance instead.]
+        ]
+
+        [data:
+            [: Generic external package functions]
+            [: Deferred / Rejected]
+            [: [codesnippet:js_import_generic_signature_rejected], [codesnippet:js_import_generic_opaque_type_rejected], [codesnippet:generic_external_opaque_type_application_rejected]]
+            [: External package functions and external package types are concrete only for Alpha. JS provider signatures, opaque declarations, source type annotations, and backend package metadata must expose concrete surfaces.]
+        ]
+
+        [data:
+            [: Type values / type-level CTFE]
+            [: Not supported]
+            [: [codesnippet:generic_type_name_value_rejected], [codesnippet:generic_type_application_value_rejected], [codesnippet:generic_namespace_type_value_rejected]]
+            [: Types are not runtime or compile-time values. Type-returning functions, type-level [codesnippet:#if], type inspection, and generic call-site type expressions are outside the Alpha model.]
         ]
 
         [data:

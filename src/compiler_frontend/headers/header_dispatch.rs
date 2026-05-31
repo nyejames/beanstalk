@@ -7,7 +7,7 @@
 //! WHY: declaration-kind parsing is separate from per-file token walking and from dependency sorting.
 
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorType};
-use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
+use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, InvalidDeclarationReason};
 use crate::compiler_frontend::datatypes::generic_parameters::GenericParameterList;
 
 use crate::compiler_frontend::declaration_syntax::choice::parse_choice_shell as parse_choice_header_payload;
@@ -278,9 +278,10 @@ pub(super) fn create_header(
         // `as`: type alias declaration `Name as Type`
         TokenKind::As => {
             if !generic_parameters.is_empty() {
-                return Err(generic_type_alias_deferred_error(
-                    token_stream,
-                    context.string_table,
+                return Err(CompilerDiagnostic::invalid_declaration(
+                    InvalidDeclarationReason::ParameterizedGenericTypeAlias,
+                    Some(declaration_name),
+                    name_location.to_owned(),
                 ));
             }
 
@@ -312,10 +313,7 @@ pub(super) fn create_header(
                 );
             });
 
-            kind = HeaderKind::TypeAlias {
-                generic_parameters: GenericParameterList::default(),
-                target,
-            };
+            kind = HeaderKind::TypeAlias { target };
         }
 
         _ => {}
@@ -473,18 +471,6 @@ fn capture_function_body_tokens(
     }
 
     Ok(())
-}
-
-fn generic_type_alias_deferred_error(
-    token_stream: &FileTokens,
-    string_table: &mut StringTable,
-) -> CompilerDiagnostic {
-    // Mutation: deferred-feature diagnostics intern a descriptive feature name that does not
-    // appear in the source text, so the payload can be remapped and rendered later.
-    CompilerDiagnostic::deferred_feature(
-        string_table.intern("generic type aliases"),
-        token_stream.current_location(),
-    )
 }
 
 fn create_constant_header_payload(

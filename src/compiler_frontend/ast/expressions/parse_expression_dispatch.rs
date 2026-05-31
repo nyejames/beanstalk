@@ -7,7 +7,9 @@ use super::error::ExpressionParseError;
 use super::eval_expression::evaluate_expression;
 use super::expression::{Expression, ExpressionKind, Operator};
 use super::option_propagation::parse_option_propagation_suffix_for_expression;
-use super::parse_expression::create_expression_without_boundary_catch;
+use super::parse_expression::{
+    ExpressionTrailingPolicy, create_expression_with_trailing_newline_policy,
+};
 use super::parse_expression_identifiers::parse_identifier_or_call;
 use super::parse_expression_literals::{LiteralParseState, parse_literal_expression};
 use super::parse_expression_places::{
@@ -51,6 +53,7 @@ pub(super) struct ExpressionDispatchState<'a> {
     pub(super) value_mode: &'a ValueMode,
     pub(super) consume_closing_parenthesis: bool,
     pub(super) allow_boundary_catch: bool,
+    pub(super) allow_expected_result_evidence: bool,
     pub(super) expression: &'a mut Vec<AstNode>,
     pub(super) next_number_negative: &'a mut bool,
 }
@@ -282,13 +285,18 @@ pub(super) fn dispatch_expression_token(
 
         TokenKind::OpenParenthesis => {
             token_stream.advance();
-            let value = create_expression_without_boundary_catch(
+            let value = create_expression_with_trailing_newline_policy(
                 token_stream,
                 context,
                 type_interner,
                 state.expected_type,
                 state.value_mode,
-                true,
+                ExpressionTrailingPolicy {
+                    consume_closing_parenthesis: true,
+                    skip_trailing_newlines: true,
+                    allow_boundary_catch: false,
+                    allow_expected_result_evidence: state.allow_expected_result_evidence,
+                },
                 string_table,
             )?;
 
@@ -361,6 +369,7 @@ pub(super) fn dispatch_expression_token(
                 type_interner,
                 state.expression,
                 state.allow_boundary_catch,
+                state.allow_expected_result_evidence,
                 string_table,
             )?;
             Ok(ExpressionTokenStep::Continue)

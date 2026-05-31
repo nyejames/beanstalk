@@ -36,6 +36,7 @@ pub(super) struct NamespaceMemberAccessInput<'a, 'env> {
     pub(super) type_interner: &'a mut AstTypeInterner<'env>,
     pub(super) expression: &'a mut Vec<AstNode>,
     pub(super) allow_boundary_catch: bool,
+    pub(super) expected_result_evidence_allowed: bool,
     pub(super) record_name: StringId,
     pub(super) record: &'a NamespaceRecord,
     pub(super) string_table: &'a mut StringTable,
@@ -56,6 +57,7 @@ pub(super) fn parse_namespace_member_access(
         type_interner,
         expression,
         allow_boundary_catch,
+        expected_result_evidence_allowed,
         record_name,
         record,
         string_table,
@@ -117,6 +119,7 @@ pub(super) fn parse_namespace_member_access(
                         context,
                         expression,
                         allow_boundary_catch,
+                        expected_result_evidence_allowed,
                         type_interner,
                         string_table,
                     })?;

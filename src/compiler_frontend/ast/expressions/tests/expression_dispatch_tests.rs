@@ -63,6 +63,7 @@ fn hash_in_expression_position_rejected() {
         value_mode: &ValueMode::ImmutableOwned,
         consume_closing_parenthesis: false,
         allow_boundary_catch: true,
+        allow_expected_result_evidence: true,
         expression: &mut expression,
         next_number_negative: &mut next_number_negative,
     };
@@ -115,6 +116,7 @@ fn hash_before_template_head_allowed() {
         value_mode: &ValueMode::ImmutableOwned,
         consume_closing_parenthesis: false,
         allow_boundary_catch: true,
+        allow_expected_result_evidence: true,
         expression: &mut expression,
         next_number_negative: &mut next_number_negative,
     };

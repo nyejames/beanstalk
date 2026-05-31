@@ -19,9 +19,15 @@ use crate::compiler_frontend::hir::blocks::HirLocal;
 use crate::compiler_frontend::hir::expressions::{
     HirExpression, HirExpressionKind, HirVariantCarrier, HirVariantField, ValueKind,
 };
-use crate::compiler_frontend::hir::hir_builder::validate_module_for_tests;
+use crate::compiler_frontend::hir::hir_builder::{
+    HirTestChoiceDefinition, build_ast, build_ast_with_choices, lower_ast,
+    validate_module_for_tests,
+};
 use crate::compiler_frontend::hir::ids::{
     ChoiceId, FieldId, HirNodeId, HirValueId, LocalId, RegionId, StructId,
+};
+use crate::compiler_frontend::hir::module::{
+    HirChoice, HirChoiceField, HirChoiceVariant, HirModule,
 };
 use crate::compiler_frontend::hir::patterns::{HirMatchArm, HirPattern};
 use crate::compiler_frontend::hir::places::HirPlace;
@@ -32,6 +38,9 @@ use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::hir::tests::hir_expression_lowering_tests::location;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::tests::type_id_fixture_support::{
+    no_value_expr, reference_expr, success_return_slot,
+};
 use crate::compiler_frontend::value_mode::ValueMode;
 
 fn test_location(line: i32) -> SourceLocation {
@@ -70,12 +79,59 @@ fn function_node(
     node(NodeKind::Function(name, signature, body), location)
 }
 
-use crate::compiler_frontend::hir::hir_builder::{
-    HirTestChoiceDefinition, build_ast, build_ast_with_choices, lower_ast,
-};
-use crate::compiler_frontend::tests::type_id_fixture_support::{
-    no_value_expr, reference_expr, success_return_slot,
-};
+// Shared builders for the validation regressions below.
+fn generic_parameter_type_id(
+    string_table: &mut StringTable,
+    type_environment: &mut TypeEnvironment,
+) -> TypeId {
+    let parameter_name = string_table.intern("T");
+    type_environment.intern_generic_parameter(GenericParameterId(0), parameter_name)
+}
+
+fn minimal_lowered_hir_module() -> (StringTable, HirModule, TypeEnvironment) {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+
+    let start_fn = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![],
+            returns: vec![],
+        },
+        vec![node(NodeKind::Return(vec![]), test_location(1))],
+        test_location(1),
+    );
+
+    let ast = build_ast(vec![start_fn], entry_path);
+    let (module, type_environment) =
+        lower_ast(ast, &mut string_table).expect("lowering should succeed");
+
+    (string_table, module, type_environment)
+}
+
+fn start_entry_block_index(module: &HirModule) -> usize {
+    module.functions[module.start_function.0 as usize].entry.0 as usize
+}
+
+fn validation_error_for_injected_local_type(
+    build_type: impl FnOnce(&mut StringTable, &mut TypeEnvironment) -> TypeId,
+) -> CompilerError {
+    let (mut string_table, mut module, mut type_environment) = minimal_lowered_hir_module();
+    let local_type_id = build_type(&mut string_table, &mut type_environment);
+
+    let entry_block_index = start_entry_block_index(&module);
+    let entry_block = &mut module.blocks[entry_block_index];
+    entry_block.locals.push(HirLocal {
+        id: LocalId(9000),
+        ty: local_type_id,
+        mutable: false,
+        region: entry_block.region,
+        source_info: Some(test_location(20)),
+    });
+
+    validate_module_for_tests(&module, &string_table, &type_environment)
+        .expect_err("validator should reject unresolved generic parameter inside TypeId")
+}
 
 #[test]
 fn valid_module_passes_explicit_validation() {
@@ -270,49 +326,6 @@ fn validator_rejects_unresolved_generic_parameter_types() {
     assert!(error.msg.contains("Unresolved generic parameter"));
 }
 
-fn generic_parameter_type_id(
-    string_table: &mut StringTable,
-    type_environment: &mut TypeEnvironment,
-) -> TypeId {
-    let parameter_name = string_table.intern("T");
-    type_environment.intern_generic_parameter(GenericParameterId(0), parameter_name)
-}
-
-fn validation_error_for_injected_local_type(
-    build_type: impl FnOnce(&mut StringTable, &mut TypeEnvironment) -> TypeId,
-) -> CompilerError {
-    let mut string_table = StringTable::new();
-    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
-
-    let start_fn = function_node(
-        start_name,
-        FunctionSignature {
-            parameters: vec![],
-            returns: vec![],
-        },
-        vec![node(NodeKind::Return(vec![]), test_location(1))],
-        test_location(1),
-    );
-
-    let ast = build_ast(vec![start_fn], entry_path);
-    let (mut module, mut type_environment) =
-        lower_ast(ast, &mut string_table).expect("lowering should succeed");
-    let local_type_id = build_type(&mut string_table, &mut type_environment);
-
-    let entry_block =
-        &mut module.blocks[module.functions[module.start_function.0 as usize].entry.0 as usize];
-    entry_block.locals.push(HirLocal {
-        id: LocalId(9000),
-        ty: local_type_id,
-        mutable: false,
-        region: entry_block.region,
-        source_info: Some(test_location(20)),
-    });
-
-    validate_module_for_tests(&module, &string_table, &type_environment)
-        .expect_err("validator should reject unresolved generic parameter inside TypeId")
-}
-
 #[test]
 fn validator_rejects_collection_containing_generic_parameter() {
     let error = validation_error_for_injected_local_type(|string_table, type_environment| {
@@ -422,6 +435,113 @@ fn validator_rejects_struct_field_type_containing_generic_parameter() {
 
     let error = validate_module_for_tests(&module, &string_table, &type_environment)
         .expect_err("validator should reject unresolved generic parameter in HIR field types");
+    assert_eq!(error.error_type, ErrorType::HirTransformation);
+    assert!(error.msg.contains("Unresolved generic parameter"));
+}
+
+#[test]
+fn validator_rejects_function_return_type_containing_generic_parameter() {
+    let (mut string_table, mut module, mut type_environment) = minimal_lowered_hir_module();
+    let generic_type_id = generic_parameter_type_id(&mut string_table, &mut type_environment);
+
+    let start_index = module.start_function.0 as usize;
+    module.functions[start_index].return_type = generic_type_id;
+
+    let error = validate_module_for_tests(&module, &string_table, &type_environment)
+        .expect_err("validator should reject unresolved generic parameter in return types");
+    assert_eq!(error.error_type, ErrorType::HirTransformation);
+    assert!(error.msg.contains("Unresolved generic parameter"));
+}
+
+#[test]
+fn validator_rejects_function_parameter_type_containing_generic_parameter() {
+    let mut string_table = StringTable::new();
+    let (entry_path, start_name) = super::entry_path_and_start_name(&mut string_table);
+    let value_name = super::symbol("value", &mut string_table);
+
+    let start_fn = function_node(
+        start_name,
+        FunctionSignature {
+            parameters: vec![param(
+                value_name,
+                builtin_type_ids::INT,
+                false,
+                test_location(1),
+            )],
+            returns: vec![],
+        },
+        vec![node(NodeKind::Return(vec![]), test_location(2))],
+        test_location(1),
+    );
+
+    let ast = build_ast(vec![start_fn], entry_path);
+    let (mut module, mut type_environment) =
+        lower_ast(ast, &mut string_table).expect("lowering should succeed");
+    let generic_type_id = generic_parameter_type_id(&mut string_table, &mut type_environment);
+
+    let entry_block =
+        &mut module.blocks[module.functions[module.start_function.0 as usize].entry.0 as usize];
+    entry_block.locals[0].ty = generic_type_id;
+
+    let error = validate_module_for_tests(&module, &string_table, &type_environment)
+        .expect_err("validator should reject unresolved generic parameter in parameter locals");
+    assert_eq!(error.error_type, ErrorType::HirTransformation);
+    assert!(error.msg.contains("Unresolved generic parameter"));
+}
+
+#[test]
+fn validator_rejects_choice_payload_type_containing_generic_parameter() {
+    let (mut string_table, mut module, mut type_environment) = minimal_lowered_hir_module();
+    let generic_type_id = generic_parameter_type_id(&mut string_table, &mut type_environment);
+    let field_name = string_table.intern("value");
+
+    module.choices.push(HirChoice {
+        id: ChoiceId(9000),
+        frontend_type_id: type_environment.builtins().int,
+        variants: vec![HirChoiceVariant {
+            name: string_table.intern("Some"),
+            fields: vec![HirChoiceField {
+                name: field_name,
+                ty: generic_type_id,
+            }],
+        }],
+    });
+
+    let error = validate_module_for_tests(&module, &string_table, &type_environment)
+        .expect_err("validator should reject unresolved generic parameter in choice payloads");
+    assert_eq!(error.error_type, ErrorType::HirTransformation);
+    assert!(error.msg.contains("Unresolved generic parameter"));
+}
+
+#[test]
+fn validator_rejects_expression_type_containing_generic_parameter() {
+    let (mut string_table, mut module, mut type_environment) = minimal_lowered_hir_module();
+    let generic_type_id = generic_parameter_type_id(&mut string_table, &mut type_environment);
+
+    let entry_block_index = start_entry_block_index(&module);
+    let entry_block = &mut module.blocks[entry_block_index];
+    let value_id = HirValueId(9000);
+    let statement_id = HirNodeId(9000);
+    let location = test_location(20);
+    let expression = HirExpression {
+        id: value_id,
+        kind: HirExpressionKind::Int(1),
+        ty: generic_type_id,
+        value_kind: ValueKind::Const,
+        region: entry_block.region,
+    };
+    let statement = HirStatement {
+        id: statement_id,
+        kind: HirStatementKind::Expr(expression),
+        location: location.clone(),
+    };
+
+    module.side_table.map_statement(&location, &statement);
+    module.side_table.map_value(&location, value_id, &location);
+    entry_block.statements.push(statement);
+
+    let error = validate_module_for_tests(&module, &string_table, &type_environment)
+        .expect_err("validator should reject unresolved generic parameter in expression types");
     assert_eq!(error.error_type, ErrorType::HirTransformation);
     assert!(error.msg.contains("Unresolved generic parameter"));
 }

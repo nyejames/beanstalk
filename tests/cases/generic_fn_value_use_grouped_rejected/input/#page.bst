@@ -1,3 +1,3 @@
-import @./helpers {identity}
+import @./helpers {identity as id}
 
-f = identity
+f = id

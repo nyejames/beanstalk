@@ -10,6 +10,7 @@
 //! (`builders`, `local_declarations`, `diagnostic_sinks`).
 
 use super::*;
+use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::ast::generic_functions::GenericFunctionTemplate;
 
 impl ScopeContext {
@@ -228,6 +229,34 @@ impl ScopeContext {
             .as_ref()
             .is_some_and(|file_visibility| {
                 file_visibility.visible_type_alias_names.contains_key(&name)
+            })
+    }
+
+    /// Check whether a visible source binding points at a nominal type declaration.
+    ///
+    /// WHAT: uses canonical declaration paths instead of source spelling conventions.
+    /// WHY: values may violate naming conventions and receive warnings, but namespace diagnostics
+    /// must rely on the header/AST type metadata that identifies real type declarations.
+    pub(crate) fn is_nominal_type_declaration_path(&self, path: &InternedPath) -> bool {
+        if self.nominal_type_ids_by_path.contains_key(path)
+            || self
+                .lookups
+                .module_symbols
+                .nominal_type_paths
+                .contains(path)
+        {
+            return true;
+        }
+
+        self.lookups
+            .declaration_table
+            .get_by_path(path)
+            .is_some_and(|declaration| {
+                matches!(declaration.value.kind, ExpressionKind::NoValue)
+                    && matches!(
+                        declaration.value.diagnostic_type,
+                        DataType::Struct { .. } | DataType::Choices { .. }
+                    )
             })
     }
 }

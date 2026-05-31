@@ -696,6 +696,13 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         let generic_declarations =
             Rc::new(self.module_symbols.generic_declarations_by_path.clone());
 
+        // Constant parsing reads these side tables but does not mutate them. Clone the maps once
+        // for the constants pass so const-heavy modules do not rebuild identical Rc payloads for
+        // every header.
+        let resolved_struct_fields_by_path = Rc::new(self.resolved_struct_fields_by_path.clone());
+        let choice_variant_shells_by_path = Rc::new(self.choice_variant_shells_by_path.clone());
+        let nominal_type_ids_by_path = Rc::new(self.nominal_type_ids_by_path.clone());
+
         for header in sorted_headers {
             let HeaderKind::Constant { .. } = &header.kind else {
                 continue;
@@ -716,14 +723,10 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                     visible_type_aliases: &visibility.visible_type_alias_names,
                     resolved_type_aliases: Rc::clone(&resolved_type_aliases),
                     generic_declarations_by_path: Rc::clone(&generic_declarations),
-                    resolved_struct_fields_by_path: Rc::new(
-                        self.resolved_struct_fields_by_path.clone(),
-                    ),
-                    choice_variant_shells_by_path: Rc::new(
-                        self.choice_variant_shells_by_path.clone(),
-                    ),
+                    resolved_struct_fields_by_path: Rc::clone(&resolved_struct_fields_by_path),
+                    choice_variant_shells_by_path: Rc::clone(&choice_variant_shells_by_path),
                     type_environment: &mut self.type_environment,
-                    nominal_type_ids_by_path: Rc::new(self.nominal_type_ids_by_path.clone()),
+                    nominal_type_ids_by_path: Rc::clone(&nominal_type_ids_by_path),
                     external_package_registry: self.context.external_package_registry,
                     style_directives: self.context.style_directives,
                     project_path_resolver: self.context.project_path_resolver.clone(),

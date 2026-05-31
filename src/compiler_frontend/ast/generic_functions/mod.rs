@@ -13,11 +13,13 @@ mod templates;
 
 pub(crate) use body_rules::{GenericFunctionBodyValidationInput, validate_generic_function_body};
 pub(crate) use calls::{
-    GenericFunctionCallParseInput, concrete_argument_mapping, parse_generic_function_call,
-    substitute_function_signature, validate_generic_function_template_call,
+    GenericCallExpectedContext, GenericFunctionCallParseInput, concrete_argument_mapping,
+    parse_generic_function_call, substitute_function_signature,
+    validate_generic_function_template_call,
 };
 pub(crate) use diagnostics::{
-    recursive_generic_function_instantiation, with_generic_instantiation_context,
+    GenericInstantiationDiagnosticContext, recursive_generic_function_instantiation,
+    with_generic_instantiation_context,
 };
 pub(crate) use instances::{
     GenericFunctionInstance, GenericFunctionInstanceKey, GenericFunctionInstantiationRequest,

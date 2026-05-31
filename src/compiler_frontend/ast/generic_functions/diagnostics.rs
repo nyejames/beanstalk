@@ -7,10 +7,25 @@
 
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, DiagnosticLabel, DiagnosticLabelMessage, DiagnosticLabelStyle,
-    InvalidGenericInstantiationReason,
+    GenericSubstitutionDiagnostic, InvalidGenericInstantiationReason,
 };
+use crate::compiler_frontend::datatypes::generic_bindings::BindingConflict;
 use crate::compiler_frontend::symbols::string_interning::StringId;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
+
+/// Carries the source locations and substitution facts needed to rewrite a
+/// concrete-body diagnostic into a call-site-primary generic instantiation diagnostic.
+///
+/// WHAT: bundles the call-site span, generic declaration span, and substitution
+/// payload consumed by `with_generic_instantiation_context`.
+/// WHY: emitter code can build this once and avoid duplicating the diagnostic
+/// rewrite logic at each call site.
+#[derive(Clone, Debug)]
+pub(crate) struct GenericInstantiationDiagnosticContext {
+    pub(crate) call_location: SourceLocation,
+    pub(crate) declaration_location: SourceLocation,
+    pub(crate) substitutions: Vec<GenericSubstitutionDiagnostic>,
+}
 
 pub(crate) fn cannot_infer_generic_function_arguments(
     function_name: Option<StringId>,
@@ -26,14 +41,35 @@ pub(crate) fn cannot_infer_generic_function_arguments(
 
 pub(crate) fn conflicting_generic_function_argument(
     function_name: Option<StringId>,
+    conflict: BindingConflict,
     parameter_name: StringId,
-    location: SourceLocation,
+    current_evidence_location: SourceLocation,
+    previous_evidence_location: Option<SourceLocation>,
 ) -> CompilerDiagnostic {
-    CompilerDiagnostic::invalid_generic_instantiation(
+    let mut diagnostic = CompilerDiagnostic::invalid_generic_instantiation(
         function_name,
-        InvalidGenericInstantiationReason::ConflictingFunctionArgument { parameter_name },
-        location,
-    )
+        InvalidGenericInstantiationReason::ConflictingFunctionArgument {
+            parameter_id: conflict.parameter_id,
+            parameter_name,
+            existing_type_id: conflict.existing_type_id,
+            replacement_type_id: conflict.replacement_type_id,
+            current_evidence_location: current_evidence_location.clone(),
+            previous_evidence_location: previous_evidence_location.clone(),
+        },
+        current_evidence_location.clone(),
+    );
+
+    if let Some(previous_evidence_location) = previous_evidence_location {
+        diagnostic = diagnostic.with_labels(vec![
+            DiagnosticLabel::primary(current_evidence_location),
+            DiagnosticLabel::secondary(
+                previous_evidence_location,
+                Some(DiagnosticLabelMessage::GenericInferencePreviousEvidence),
+            ),
+        ]);
+    }
+
+    diagnostic
 }
 
 pub(crate) fn recursive_generic_function_instantiation(
@@ -56,14 +92,19 @@ pub(crate) fn recursive_generic_function_instantiation(
 /// and the generic body span should be secondary.
 pub(crate) fn with_generic_instantiation_context(
     mut diagnostic: CompilerDiagnostic,
-    call_location: SourceLocation,
+    context: GenericInstantiationDiagnosticContext,
 ) -> CompilerDiagnostic {
     let body_location = diagnostic.primary_location.clone();
+    let GenericInstantiationDiagnosticContext {
+        call_location,
+        declaration_location,
+        substitutions,
+    } = context;
 
     // The call site selected the concrete type arguments, so it becomes primary.
     diagnostic.primary_location = call_location.clone();
 
-    let mut new_labels = Vec::with_capacity(diagnostic.labels.len() + 2);
+    let mut new_labels = Vec::with_capacity(diagnostic.labels.len() + 4);
 
     // Primary call-site label.
     new_labels.push(DiagnosticLabel {
@@ -81,6 +122,25 @@ pub(crate) fn with_generic_instantiation_context(
         new_labels.push(DiagnosticLabel::secondary(
             body_location,
             Some(DiagnosticLabelMessage::GenericInstantiationBodySite),
+        ));
+    }
+
+    let declaration_label_already_present = diagnostic
+        .labels
+        .iter()
+        .any(|label| label.location == declaration_location);
+
+    if !declaration_label_already_present {
+        new_labels.push(DiagnosticLabel::secondary(
+            declaration_location.clone(),
+            Some(DiagnosticLabelMessage::GenericInstantiationDeclarationSite),
+        ));
+    }
+
+    if !substitutions.is_empty() {
+        new_labels.push(DiagnosticLabel::secondary(
+            declaration_location,
+            Some(DiagnosticLabelMessage::GenericInstantiationSubstitutions { substitutions }),
         ));
     }
 

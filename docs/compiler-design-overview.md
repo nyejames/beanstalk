@@ -300,7 +300,7 @@ Examples:
 - function shell: name, generic parameters, parsed signature, body tokens
 - struct shell: name, generic parameters, parsed field names/types/default token data where applicable
 - choice shell: name, generic parameters, variant names and payload field type shells
-- type alias shell: name, generic parameters, target type annotation
+- type alias shell: name, target type annotation. Parameterized generic aliases are rejected before shell creation.
 - start shell: entry-file executable token body, excluded from dependency sorting
 
 ### Header and AST ownership boundary
@@ -378,6 +378,21 @@ AST owns:
 
 AST should be described by this ownership and data-flow contract, not by a fixed internal pass count.
 The internal substeps inside each phase are implementation details and may change as the stage is simplified.
+
+### Generics contract
+
+Generics are resolved before HIR. Header parsing records declaration-site
+generic parameter metadata on declaration shells, but AST owns semantic
+registration, validation, inference, and concrete instance emission.
+
+- Header parsing records generic parameter lists and declaration metadata; it does not infer or substitute generic types
+- AST registers generic parameter lists in `TypeEnvironment` and resolves generic signatures to canonical `TypeId`s
+- AST stores generic free-function templates and validates generic bodies before concrete calls are emitted
+- AST infers generic function calls from immediate argument evidence and immediate expected result context only
+- AST emits concrete generic function instances before HIR generation
+- HIR must never carry unresolved generic executable types or unsolved generic function calls
+- Borrow validation receives concrete HIR and does not consume generic template state
+- Backends never solve generic type arguments or generic function instances
 
 ### Imports and visibility
 

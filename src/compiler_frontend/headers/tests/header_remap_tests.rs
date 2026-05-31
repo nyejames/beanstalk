@@ -354,32 +354,23 @@ fn header_kind_choice_remaps_generic_parameters_and_variants() {
 }
 
 #[test]
-fn header_kind_type_alias_remaps_generic_parameters_and_target() {
+fn header_kind_type_alias_remaps_target() {
     let mut local = StringTable::new();
     let mut global = StringTable::new();
 
-    let generic_parameters = make_generic_parameter_list("T", &mut local);
     let target = ParsedTypeRef::Named {
         name: local.intern("TargetType"),
         location: make_location("test.bst", &mut local),
     };
 
-    let mut kind = HeaderKind::TypeAlias {
-        generic_parameters,
-        target,
-    };
+    let mut kind = HeaderKind::TypeAlias { target };
 
     let remap = global.merge_from(&local);
     kind.remap_string_ids(&remap);
 
-    let HeaderKind::TypeAlias {
-        generic_parameters,
-        target,
-    } = kind
-    else {
+    let HeaderKind::TypeAlias { target } = kind else {
         panic!("expected TypeAlias kind");
     };
-    assert_eq!(global.resolve(generic_parameters.parameters[0].name), "T");
 
     let ParsedTypeRef::Named { name, location } = target else {
         panic!("expected Named target");

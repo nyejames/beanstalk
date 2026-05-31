@@ -14,8 +14,9 @@ use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::function_body_to_ast;
 use crate::compiler_frontend::ast::generic_functions::{
     GenericFunctionBodyValidationInput, GenericFunctionInstance, GenericFunctionInstanceKey,
-    GenericFunctionInstantiationRequest, concrete_argument_mapping,
-    recursive_generic_function_instantiation, substitute_function_signature,
+    GenericFunctionInstantiationRequest, GenericInstantiationDiagnosticContext,
+    concrete_argument_mapping, recursive_generic_function_instantiation,
+    substitute_function_signature,
     validate_generic_function_body as validate_generic_body_template,
     with_generic_instantiation_context,
 };
@@ -32,7 +33,7 @@ use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_messages::{
-    CompilerDiagnostic, InvalidTemplateStructureReason,
+    CompilerDiagnostic, GenericSubstitutionDiagnostic, InvalidTemplateStructureReason,
 };
 
 use crate::compiler_frontend::ast::type_resolution::resolve_diagnostic_type_to_type_id_checked;
@@ -323,7 +324,7 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
             );
             if detailed_timer_output_enabled() {
                 saying::say!(
-                    "AST/node emission/headers emitted: \n functions = ", Dark Green function_headers_emitted ,
+                    "AST/node emission/headers emitted: \n functions = ", Dark Green function_headers_emitted,
                     Reset "\n starts = ", Dark Green start_headers_emitted,
                     Reset "\n structs = ", Dark Green struct_headers_emitted,
                     Reset "\n const templates = ", Dark Green const_templates_emitted
@@ -403,6 +404,32 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
         })
     }
 
+    fn generic_substitution_diagnostics(
+        &self,
+        parameter_list_id: GenericParameterListId,
+        type_arguments: &[TypeId],
+    ) -> Vec<GenericSubstitutionDiagnostic> {
+        let Some(parameter_list) = self
+            .environment
+            .type_environment
+            .generic_parameters(parameter_list_id)
+        else {
+            return Vec::new();
+        };
+
+        parameter_list
+            .parameters
+            .iter()
+            .zip(type_arguments.iter())
+            .map(
+                |(parameter, concrete_type_id)| GenericSubstitutionDiagnostic {
+                    parameter_name: parameter.name,
+                    concrete_type_id: *concrete_type_id,
+                },
+            )
+            .collect()
+    }
+
     fn emit_generic_function_instance(
         &mut self,
         request: GenericFunctionInstantiationRequest,
@@ -461,6 +488,10 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
                 string_table,
             ));
         };
+        let substitution_diagnostics = self.generic_substitution_diagnostics(
+            template.generic_parameter_list_id,
+            request.key.type_arguments.as_ref(),
+        );
 
         let mut signature = substitute_function_signature(
             &template.signature,
@@ -527,8 +558,14 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
         ) {
             Ok(body) => body,
             Err(diagnostic) => {
-                let diagnostic =
-                    with_generic_instantiation_context(diagnostic, request.call_location.clone());
+                let diagnostic = with_generic_instantiation_context(
+                    diagnostic,
+                    GenericInstantiationDiagnosticContext {
+                        call_location: request.call_location.clone(),
+                        declaration_location: template.declaration_location.clone(),
+                        substitutions: substitution_diagnostics,
+                    },
+                );
                 return Err(self.diagnostic_messages(diagnostic, string_table));
             }
         };

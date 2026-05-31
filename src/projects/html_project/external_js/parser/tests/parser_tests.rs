@@ -67,6 +67,24 @@ fn assert_diagnostic_kinds(
     );
 }
 
+fn assert_diagnostic_message_contains(
+    library: &crate::projects::html_project::external_js::parser::parsed_js_library::ParsedJsLibrary,
+    expected: &str,
+) {
+    assert!(
+        library
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.message.contains(expected)),
+        "expected diagnostic message containing {expected:?}, got {:?}",
+        library
+            .diagnostics
+            .iter()
+            .map(|d| d.message.as_str())
+            .collect::<Vec<_>>()
+    );
+}
+
 fn assert_runtime_imports(
     library: &crate::projects::html_project::external_js::parser::parsed_js_library::ParsedJsLibrary,
     expected: &[(&str, &[&str])],
@@ -1088,6 +1106,34 @@ export function maybe(name) {
 "#;
     let library = parse(source);
     assert_diagnostic_kinds(&library, &[JsDiagnosticKind::UnsupportedTypeSyntax]);
+}
+
+#[test]
+fn generic_external_function_signature_rejected() {
+    let source = r#"
+/**
+ * @bst.sig identity type A |value A| -> A
+ */
+export function identity(value) {
+    return value;
+}
+"#;
+    let library = parse(source);
+    assert_diagnostic_kinds(&library, &[JsDiagnosticKind::GenericExternalFunction]);
+    assert_diagnostic_message_contains(&library, "External package functions cannot be generic");
+}
+
+#[test]
+fn generic_external_opaque_type_rejected() {
+    let source = r#"
+/**
+ * @bst.opaque Canvas of Int
+ */
+"#;
+    let library = parse(source);
+    assert_diagnostic_kinds(&library, &[JsDiagnosticKind::GenericExternalType]);
+    assert_diagnostic_message_contains(&library, "External package types cannot be generic");
+    assert_opaque_types(&library, &[]);
 }
 
 #[test]

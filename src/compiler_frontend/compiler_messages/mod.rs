@@ -32,7 +32,9 @@ pub(crate) use diagnostic_kind::{
     DiagnosticKind, ImportDiagnosticKind, InfrastructureDiagnosticKind, RuleDiagnosticKind,
     SyntaxDiagnosticKind, TypeDiagnosticKind,
 };
-pub(crate) use diagnostic_label::{DiagnosticLabel, DiagnosticLabelMessage, DiagnosticLabelStyle};
+pub(crate) use diagnostic_label::{
+    DiagnosticLabel, DiagnosticLabelMessage, DiagnosticLabelStyle, GenericSubstitutionDiagnostic,
+};
 pub(crate) use diagnostic_payload::{
     BorrowAccessKind, CommonSyntaxMistakeReason, CompileTimeEvaluationErrorReason,
     DeferredFeatureReason, DiagnosticPayload, DiagnosticPlace, GenericApplicationErrorReason,

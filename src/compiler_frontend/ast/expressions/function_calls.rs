@@ -24,8 +24,9 @@ use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::builtins::error_type::resolve_builtin_error_type_typed;
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
 use crate::compiler_frontend::compiler_messages::{
-    CompilerDiagnostic, InvalidCallShapeReason, InvalidResultHandlingReason,
-    InvalidResultOperandReason, TypeMismatchContext, UnsupportedOperatorCategory,
+    CompilerDiagnostic, InvalidCallShapeReason, InvalidGenericInstantiationReason,
+    InvalidResultHandlingReason, InvalidResultOperandReason, TypeMismatchContext,
+    UnsupportedOperatorCategory,
 };
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
@@ -34,7 +35,7 @@ use crate::compiler_frontend::external_packages::{
     ExternalFunctionDef, ExternalFunctionId, ExternalSignatureType,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::type_coercion::parse_context::ExpectedType;
 use crate::compiler_frontend::value_mode::ValueMode;
@@ -202,6 +203,46 @@ pub(crate) fn parse_call_arguments_typed(
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
 ) -> Result<Vec<CallArgument>, ExpressionParseError> {
+    parse_call_arguments_inner(
+        token_stream,
+        context,
+        type_interner,
+        string_table,
+        CallArgumentSyntaxContext::Ordinary,
+    )
+}
+
+pub(crate) fn parse_generic_call_arguments_typed(
+    token_stream: &mut FileTokens,
+    context: &ScopeContext,
+    type_interner: &mut AstTypeInterner<'_>,
+    string_table: &mut StringTable,
+    generic_function_name: Option<StringId>,
+) -> Result<Vec<CallArgument>, ExpressionParseError> {
+    parse_call_arguments_inner(
+        token_stream,
+        context,
+        type_interner,
+        string_table,
+        CallArgumentSyntaxContext::GenericFunction {
+            function_name: generic_function_name,
+        },
+    )
+}
+
+#[derive(Clone, Copy)]
+enum CallArgumentSyntaxContext {
+    Ordinary,
+    GenericFunction { function_name: Option<StringId> },
+}
+
+fn parse_call_arguments_inner(
+    token_stream: &mut FileTokens,
+    context: &ScopeContext,
+    type_interner: &mut AstTypeInterner<'_>,
+    string_table: &mut StringTable,
+    syntax_context: CallArgumentSyntaxContext,
+) -> Result<Vec<CallArgument>, ExpressionParseError> {
     ast_log!("Creating function call arguments");
 
     // ------------------------
@@ -237,6 +278,8 @@ pub(crate) fn parse_call_arguments_typed(
         }
 
         let argument_location = token_stream.current_location();
+
+        reject_simple_generic_argument_type_ascription(token_stream, syntax_context)?;
 
         // Detect named-target syntax (`name = expr`) or reject unsupported variants.
         let named_target = match token_stream.current_token_kind() {
@@ -303,13 +346,6 @@ pub(crate) fn parse_call_arguments_typed(
         if token_stream.current_token_kind() == &TokenKind::Comma
             || token_stream.current_token_kind() == &TokenKind::CloseParenthesis
         {
-            if named_target.is_some() {
-                return Err(CompilerDiagnostic::unexpected_token(
-                    token_stream.current_token_kind().to_owned(),
-                    token_stream.current_location(),
-                )
-                .into());
-            }
             return Err(CompilerDiagnostic::unexpected_token(
                 token_stream.current_token_kind().to_owned(),
                 token_stream.current_location(),
@@ -354,6 +390,68 @@ pub(crate) fn parse_call_arguments_typed(
     }
 
     Ok(args)
+}
+
+fn reject_simple_generic_argument_type_ascription(
+    token_stream: &FileTokens,
+    syntax_context: CallArgumentSyntaxContext,
+) -> Result<(), ExpressionParseError> {
+    let CallArgumentSyntaxContext::GenericFunction { function_name } = syntax_context else {
+        return Ok(());
+    };
+
+    if !starts_simple_value_with_attached_type(token_stream) {
+        return Ok(());
+    }
+
+    let Some(type_token) = token_stream.tokens.get(token_stream.index + 1) else {
+        return Ok(());
+    };
+
+    Err(CompilerDiagnostic::invalid_generic_instantiation(
+        function_name,
+        InvalidGenericInstantiationReason::ExplicitCallTypeArgumentsUnsupported,
+        type_token.location.clone(),
+    )
+    .into())
+}
+
+/// Recognize the narrow `identity(42 Int)`-style foreign syntax before the
+/// expression parser tries to parse the type keyword as another expression.
+///
+/// This deliberately stays small: broader type-looking symbol recovery would be
+/// speculative in the shared call parser and could change ordinary call errors.
+fn starts_simple_value_with_attached_type(token_stream: &FileTokens) -> bool {
+    let Some(value_token) = token_stream.tokens.get(token_stream.index) else {
+        return false;
+    };
+    let Some(type_token) = token_stream.tokens.get(token_stream.index + 1) else {
+        return false;
+    };
+    let Some(boundary_token) = token_stream.tokens.get(token_stream.index + 2) else {
+        return false;
+    };
+
+    matches!(
+        value_token.kind,
+        TokenKind::IntLiteral(_)
+            | TokenKind::FloatLiteral(_)
+            | TokenKind::StringSliceLiteral(_)
+            | TokenKind::BoolLiteral(_)
+            | TokenKind::CharLiteral(_)
+            | TokenKind::NoneLiteral
+    ) && matches!(
+        type_token.kind,
+        TokenKind::DatatypeInt
+            | TokenKind::DatatypeFloat
+            | TokenKind::DatatypeBool
+            | TokenKind::DatatypeString
+            | TokenKind::DatatypeChar
+            | TokenKind::DatatypeNone
+    ) && matches!(
+        boundary_token.kind,
+        TokenKind::Comma | TokenKind::CloseParenthesis | TokenKind::Newline
+    )
 }
 
 fn resolve_user_function_call_arguments(

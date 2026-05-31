@@ -161,6 +161,15 @@ impl<'a> CommentScanner<'a> {
         match directive {
             "@bst.opaque" => {
                 if let Some(type_name) = tokens.next() {
+                    if tokens.next() == Some("of") {
+                        self.diagnostics.push(JsParserDiagnostic {
+                            message: "External package types cannot be generic. Expose concrete opaque external types.".to_string(),
+                            span: block_span,
+                            kind: JsDiagnosticKind::GenericExternalType,
+                        });
+                        return;
+                    }
+
                     self.annotations.push(ExtractedAnnotation {
                         kind: AnnotationKind::Opaque {
                             type_name: type_name.to_string(),

@@ -1009,10 +1009,9 @@ fn resolve_generic_base_type(
                     Some(ExternalSymbolId::Type(_))
                 )
             {
-                return Err(Box::new(CompilerDiagnostic::namespace_misuse(
-                    *type_name,
-                    NameNamespace::Type,
-                    NameNamespace::Value,
+                return Err(Box::new(CompilerDiagnostic::invalid_generic_instantiation(
+                    Some(*type_name),
+                    InvalidGenericInstantiationReason::ExternalTypeArgumentsUnsupported,
                     location.to_owned(),
                 )));
             }
@@ -1042,7 +1041,7 @@ fn resolve_generic_base_type(
         GenericBaseType::External(_) => {
             Err(Box::new(CompilerDiagnostic::invalid_generic_instantiation(
                 None,
-                InvalidGenericInstantiationReason::TypeDoesNotAcceptArguments,
+                InvalidGenericInstantiationReason::ExternalTypeArgumentsUnsupported,
                 location.to_owned(),
             )))
         }

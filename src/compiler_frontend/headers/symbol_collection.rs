@@ -246,9 +246,7 @@ fn register_header_symbol(
             );
         }
 
-        HeaderKind::TypeAlias {
-            generic_parameters, ..
-        } => {
+        HeaderKind::TypeAlias { .. } => {
             register_declared_symbol(
                 module_symbols,
                 &header.tokens.src_path,
@@ -258,12 +256,6 @@ fn register_header_symbol(
             module_symbols
                 .type_alias_paths
                 .insert(header.tokens.src_path.to_owned());
-            register_generic_declaration_metadata(
-                module_symbols,
-                header,
-                generic_parameters,
-                GenericDeclarationKind::TypeAlias,
-            );
         }
 
         HeaderKind::ConstTemplate { .. } => {}

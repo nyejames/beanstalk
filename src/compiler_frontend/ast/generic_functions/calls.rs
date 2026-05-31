@@ -14,7 +14,7 @@ use crate::compiler_frontend::ast::expressions::call_validation::{
     resolve_call_arguments_shape_and_access,
 };
 use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
-use crate::compiler_frontend::ast::expressions::function_calls::parse_call_arguments_typed;
+use crate::compiler_frontend::ast::expressions::function_calls::parse_generic_call_arguments_typed;
 use crate::compiler_frontend::ast::generic_functions::diagnostics::{
     cannot_infer_generic_function_arguments, conflicting_generic_function_argument,
     recursive_generic_function_instantiation,
@@ -47,13 +47,26 @@ pub(crate) struct GenericFunctionCallParseInput<'a, 'b> {
     pub(crate) token_stream: &'a mut FileTokens,
     pub(crate) template: &'a GenericFunctionTemplate,
     pub(crate) context: &'a ScopeContext,
-    pub(crate) expected_result_type_ids: &'a [TypeId],
+    pub(crate) expected_context: GenericCallExpectedContext<'a>,
     pub(crate) value_required: bool,
     pub(crate) allow_boundary_catch: bool,
     pub(crate) call_location: SourceLocation,
     pub(crate) warnings: Option<&'a mut Vec<CompilerDiagnostic>>,
     pub(crate) type_interner: &'a mut AstTypeInterner<'b>,
     pub(crate) string_table: &'a mut StringTable,
+}
+
+/// Expected-result evidence available to generic free-function inference.
+///
+/// WHAT: distinguishes a direct receiving-site type from the absence of
+/// expected-result evidence.
+/// WHY: generic calls may infer from immediate declaration/return/then
+/// boundaries, but not from later use or from an outer function parameter when
+/// the generic call is nested inside another ordinary argument expression.
+#[derive(Clone, Copy)]
+pub(crate) enum GenericCallExpectedContext<'a> {
+    ImmediateResult(&'a [TypeId]),
+    None,
 }
 
 struct GenericFunctionCallFinishInput<'a, 'b> {
@@ -75,7 +88,7 @@ pub(crate) fn parse_generic_function_call(
         token_stream,
         template,
         context,
-        expected_result_type_ids,
+        expected_context,
         value_required,
         allow_boundary_catch,
         call_location,
@@ -84,12 +97,17 @@ pub(crate) fn parse_generic_function_call(
         string_table,
     } = input;
 
-    let raw_arguments =
-        parse_call_arguments_typed(token_stream, context, type_interner, string_table)?;
+    let raw_arguments = parse_generic_call_arguments_typed(
+        token_stream,
+        context,
+        type_interner,
+        string_table,
+        template.function_path.name(),
+    )?;
     let inference = infer_generic_function_call(GenericFunctionInferenceInput {
         template,
         raw_arguments: &raw_arguments,
-        expected_result_type_ids,
+        expected_context,
         call_location: call_location.clone(),
         type_environment: type_interner.environment_mut_for_derived_types(),
         string_table,
@@ -156,7 +174,7 @@ pub(crate) fn validate_generic_function_template_call(
         token_stream,
         template,
         context,
-        expected_result_type_ids,
+        expected_context,
         value_required,
         allow_boundary_catch,
         call_location,
@@ -165,12 +183,17 @@ pub(crate) fn validate_generic_function_template_call(
         string_table,
     } = input;
 
-    let raw_arguments =
-        parse_call_arguments_typed(token_stream, context, type_interner, string_table)?;
+    let raw_arguments = parse_generic_call_arguments_typed(
+        token_stream,
+        context,
+        type_interner,
+        string_table,
+        template.function_path.name(),
+    )?;
     let inference = infer_generic_function_call(GenericFunctionInferenceInput {
         template,
         raw_arguments: &raw_arguments,
-        expected_result_type_ids,
+        expected_context,
         call_location: call_location.clone(),
         type_environment: type_interner.environment_mut_for_derived_types(),
         string_table,
@@ -272,7 +295,7 @@ fn finish_generic_function_call(
 struct GenericFunctionInferenceInput<'a> {
     template: &'a GenericFunctionTemplate,
     raw_arguments: &'a [CallArgument],
-    expected_result_type_ids: &'a [TypeId],
+    expected_context: GenericCallExpectedContext<'a>,
     call_location: SourceLocation,
     type_environment: &'a mut TypeEnvironment,
     string_table: &'a mut StringTable,
@@ -284,13 +307,59 @@ struct GenericFunctionInference {
     signature: FunctionSignature,
 }
 
+struct GenericBindingEvidenceLocations {
+    locations_by_parameter: FxHashMap<GenericParameterId, SourceLocation>,
+}
+
+struct GenericBindingEvidenceContext<'a> {
+    template: &'a GenericFunctionTemplate,
+    bindings: &'a mut GenericTypeBindings,
+    evidence_locations: &'a mut GenericBindingEvidenceLocations,
+    type_environment: &'a TypeEnvironment,
+    string_table: &'a mut StringTable,
+}
+
+impl GenericBindingEvidenceLocations {
+    fn new() -> Self {
+        Self {
+            locations_by_parameter: FxHashMap::default(),
+        }
+    }
+
+    fn previous_location(&self, parameter_id: GenericParameterId) -> Option<SourceLocation> {
+        self.locations_by_parameter.get(&parameter_id).cloned()
+    }
+
+    fn record_first_bindings(
+        &mut self,
+        template: &GenericFunctionTemplate,
+        bindings: &GenericTypeBindings,
+        type_environment: &TypeEnvironment,
+        location: SourceLocation,
+    ) {
+        let Some(parameter_list) =
+            type_environment.generic_parameters(template.generic_parameter_list_id)
+        else {
+            return;
+        };
+
+        for parameter in &parameter_list.parameters {
+            if bindings.get(parameter.id).is_some() {
+                self.locations_by_parameter
+                    .entry(parameter.id)
+                    .or_insert_with(|| location.clone());
+            }
+        }
+    }
+}
+
 fn infer_generic_function_call(
     input: GenericFunctionInferenceInput<'_>,
 ) -> Result<GenericFunctionInference, ExpressionParseError> {
     let GenericFunctionInferenceInput {
         template,
         raw_arguments,
-        expected_result_type_ids,
+        expected_context,
         call_location,
         type_environment,
         string_table,
@@ -311,22 +380,26 @@ fn infer_generic_function_call(
     )?;
 
     let mut bindings = GenericTypeBindings::new();
+    let mut evidence_locations = GenericBindingEvidenceLocations::new();
     collect_call_argument_bindings(
         template,
         &routed_arguments,
         &expectations,
         &mut bindings,
+        &mut evidence_locations,
         type_environment,
         string_table,
     )?;
 
     if !bindings.is_complete_for(template.generic_parameter_list_id, type_environment)
-        && expected_result_type_ids.len() == template.signature.success_return_type_ids().len()
+        && let Some(expected_result_type_ids) = expected_context
+            .matching_success_results(template.signature.success_return_type_ids().len())
     {
         collect_expected_result_bindings(
             template,
             expected_result_type_ids,
             &mut bindings,
+            &mut evidence_locations,
             type_environment,
             string_table,
             call_location.clone(),
@@ -375,14 +448,39 @@ fn infer_generic_function_call(
     })
 }
 
+impl<'a> GenericCallExpectedContext<'a> {
+    fn matching_success_results(self, success_return_count: usize) -> Option<&'a [TypeId]> {
+        match self {
+            GenericCallExpectedContext::ImmediateResult(expected_result_type_ids)
+                if expected_result_type_ids.len() == success_return_count =>
+            {
+                Some(expected_result_type_ids)
+            }
+
+            GenericCallExpectedContext::ImmediateResult(_) | GenericCallExpectedContext::None => {
+                None
+            }
+        }
+    }
+}
+
 fn collect_call_argument_bindings(
     template: &GenericFunctionTemplate,
     routed_arguments: &[Option<CallArgument>],
     expectations: &[ParameterExpectation],
     bindings: &mut GenericTypeBindings,
+    evidence_locations: &mut GenericBindingEvidenceLocations,
     type_environment: &TypeEnvironment,
     string_table: &mut StringTable,
 ) -> Result<(), ExpressionParseError> {
+    let mut evidence_context = GenericBindingEvidenceContext {
+        template,
+        bindings,
+        evidence_locations,
+        type_environment,
+        string_table,
+    };
+
     for (slot, argument) in routed_arguments.iter().enumerate() {
         let Some(argument) = argument else {
             continue;
@@ -393,12 +491,9 @@ fn collect_call_argument_bindings(
         };
 
         collect_binding_evidence(
-            template,
+            &mut evidence_context,
             template_type_id,
             argument.value.type_id,
-            bindings,
-            type_environment,
-            string_table,
             argument.location.clone(),
         )?;
     }
@@ -410,10 +505,19 @@ fn collect_expected_result_bindings(
     template: &GenericFunctionTemplate,
     expected_result_type_ids: &[TypeId],
     bindings: &mut GenericTypeBindings,
+    evidence_locations: &mut GenericBindingEvidenceLocations,
     type_environment: &TypeEnvironment,
     string_table: &mut StringTable,
     location: SourceLocation,
 ) -> Result<(), ExpressionParseError> {
+    let mut evidence_context = GenericBindingEvidenceContext {
+        template,
+        bindings,
+        evidence_locations,
+        type_environment,
+        string_table,
+    };
+
     for (template_return_type, expected_type) in template
         .signature
         .success_return_type_ids()
@@ -421,12 +525,9 @@ fn collect_expected_result_bindings(
         .zip(expected_result_type_ids.iter())
     {
         collect_binding_evidence(
-            template,
+            &mut evidence_context,
             *template_return_type,
             *expected_type,
-            bindings,
-            type_environment,
-            string_table,
             location.clone(),
         )?;
     }
@@ -435,25 +536,33 @@ fn collect_expected_result_bindings(
 }
 
 fn collect_binding_evidence(
-    template: &GenericFunctionTemplate,
+    context: &mut GenericBindingEvidenceContext<'_>,
     template_type_id: TypeId,
     concrete_type_id: TypeId,
-    bindings: &mut GenericTypeBindings,
-    type_environment: &TypeEnvironment,
-    string_table: &mut StringTable,
     location: SourceLocation,
 ) -> Result<(), ExpressionParseError> {
-    match type_environment.try_collect_type_parameter_bindings_typeid(
-        template_type_id,
-        concrete_type_id,
-        bindings,
-    ) {
-        Ok(_) => Ok(()),
+    match context
+        .type_environment
+        .try_collect_type_parameter_bindings_typeid(
+            template_type_id,
+            concrete_type_id,
+            &mut *context.bindings,
+        ) {
+        Ok(_) => {
+            context.evidence_locations.record_first_bindings(
+                context.template,
+                &*context.bindings,
+                context.type_environment,
+                location,
+            );
+            Ok(())
+        }
         Err(conflict) => Err(binding_conflict_diagnostic(
-            template,
+            context.template,
             conflict,
-            type_environment,
-            string_table,
+            &*context.evidence_locations,
+            context.type_environment,
+            &mut *context.string_table,
             location,
         )
         .into()),
@@ -463,6 +572,7 @@ fn collect_binding_evidence(
 fn binding_conflict_diagnostic(
     template: &GenericFunctionTemplate,
     conflict: BindingConflict,
+    evidence_locations: &GenericBindingEvidenceLocations,
     type_environment: &TypeEnvironment,
     string_table: &mut StringTable,
     location: SourceLocation,
@@ -477,7 +587,13 @@ fn binding_conflict_diagnostic(
         })
         .unwrap_or_else(|| string_table.intern("<generic parameter>"));
 
-    conflicting_generic_function_argument(template.function_path.name(), parameter_name, location)
+    conflicting_generic_function_argument(
+        template.function_path.name(),
+        conflict,
+        parameter_name,
+        location,
+        evidence_locations.previous_location(conflict.parameter_id),
+    )
 }
 
 pub(crate) fn substitute_function_signature(

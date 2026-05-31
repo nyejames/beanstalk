@@ -1,4 +1,4 @@
-//! Light-weight parser for `@bst.sig` signature bodies.
+//! Lightweight parser for `@bst.sig` signature bodies.
 //!
 //! WHAT: parses Beanstalk parameter-list syntax such as `|this ~Canvas2d, x Float| -> Error!`
 //!       into structured `ParsedParameter` and `ParsedReturnType` values.
@@ -71,6 +71,9 @@ impl SignatureScanner {
     fn parse(&mut self) -> SignatureParseResult {
         self.skip_whitespace();
 
+        let has_unsupported_generic_parameters = self.consume_generic_parameter_preamble();
+        self.skip_whitespace();
+
         if !self.consume_char('|') {
             self.emit_diagnostic(
                 "Signature must start with parameter list `|...|`.",
@@ -97,6 +100,7 @@ impl SignatureScanner {
                 parameters,
                 returns,
                 has_error_return,
+                has_unsupported_generic_parameters,
             },
             diagnostics: std::mem::take(&mut self.diagnostics),
         }
@@ -108,9 +112,29 @@ impl SignatureScanner {
                 parameters: Vec::new(),
                 returns: Vec::new(),
                 has_error_return: false,
+                has_unsupported_generic_parameters: false,
             },
             diagnostics: self.diagnostics.clone(),
         }
+    }
+
+    fn consume_generic_parameter_preamble(&mut self) -> bool {
+        if !self.consume_keyword("type") {
+            return false;
+        }
+
+        self.emit_diagnostic(
+            "External package functions cannot be generic. Expose concrete external functions or wrap them with source Beanstalk generic functions.",
+            JsDiagnosticKind::GenericExternalFunction,
+        );
+
+        // Recover at the real ABI parameter list so arity and receiver parsing stay
+        // deterministic without treating generic parameter names as external types.
+        while !self.is_at_end() && !self.peek_char('|') {
+            self.advance();
+        }
+
+        true
     }
 
     // ------------------------
@@ -172,7 +196,8 @@ impl SignatureScanner {
     ) -> Option<ParsedParameter> {
         self.skip_whitespace();
 
-        // Detect `...` rest parameters
+        // Rest parameters are rejected before type parsing so recovery can stop
+        // at the next boundary instead of consuming the rest of the signature.
         if self.peek_str("...") {
             self.emit_diagnostic(
                 "Rest parameters are not supported in Beanstalk JS library signatures.",
@@ -182,7 +207,8 @@ impl SignatureScanner {
             return None;
         }
 
-        // Detect destructuring patterns by `{` or `[`
+        // Destructuring patterns are rejected for the same reason: the subset
+        // only accepts flat ABI slots.
         if self.peek_char('{') || self.peek_char('[') {
             self.emit_diagnostic(
                 "Destructuring parameters are not supported in Beanstalk JS library signatures.",
@@ -194,7 +220,7 @@ impl SignatureScanner {
 
         let name = self.parse_identifier()?;
 
-        // Detect optional parameter marker `name?`
+        // Optional parameters are rejected in the external signature subset.
         if self.consume_char('?') {
             self.emit_diagnostic(
                 "Optional parameters are not supported in Beanstalk JS library signatures.",
@@ -207,8 +233,8 @@ impl SignatureScanner {
         let is_receiver = name == "this";
         self.skip_whitespace();
 
-        // The JS signature subset uses the same `~T` marker for mutable/exclusive ABI slots.
-        // Receiver methods spell this as `this ~T`; regular parameters can also use `name ~T`.
+        // The `~T` marker preserves the mutable/exclusive ABI contract for both
+        // receivers (`this ~T`) and regular parameters (`name ~T`).
         let is_mutable = self.consume_char('~');
         self.skip_whitespace();
 
@@ -248,10 +274,10 @@ impl SignatureScanner {
     fn parse_type_annotation(&mut self) -> String {
         self.skip_whitespace();
 
-        // Type annotation starts with the type name token
         let mut type_name = String::new();
 
-        // Check for collection type `{T}`
+        // Preserve collection spellings verbatim so the caller can surface a
+        // targeted unsupported-type diagnostic while still recovering.
         if self.consume_char('{') {
             type_name.push('{');
             while !self.is_at_end() && !self.peek_char('}') {
@@ -268,7 +294,6 @@ impl SignatureScanner {
             return type_name;
         }
 
-        // Parse the base type identifier
         while let Some(ch) = self.current_char_opt() {
             if ch.is_alphanumeric() || ch == '_' {
                 type_name.push(ch);
@@ -278,7 +303,6 @@ impl SignatureScanner {
             }
         }
 
-        // Check for option suffix `?`
         if self.consume_char('?') {
             type_name.push('?');
             self.emit_diagnostic(
@@ -304,7 +328,8 @@ impl SignatureScanner {
                 break;
             }
 
-            // `Error!` return slot
+            // Preserve the `Error!` sentinel so success-return validation still
+            // runs on the remaining return slots.
             if self.peek_str("Error") {
                 let error_word = self.parse_identifier().unwrap_or_default();
                 if error_word == "Error" && self.consume_char('!') {
@@ -318,7 +343,7 @@ impl SignatureScanner {
                     }
                     break;
                 } else {
-                    // It's a regular type named Error (unlikely but handle it)
+                    // Fall back to treating `Error` as an ordinary success type name.
                     returns.push(ParsedReturnType {
                         type_name: error_word,
                     });
@@ -329,7 +354,8 @@ impl SignatureScanner {
                     break;
                 }
 
-                // Reject Void/unit spellings
+                // Normalize common unit spellings to the same unsupported-return
+                // diagnostic so callers see one consistent failure mode.
                 if type_name.eq_ignore_ascii_case("void")
                     || type_name.eq_ignore_ascii_case("none")
                     || type_name.eq_ignore_ascii_case("unit")
@@ -351,7 +377,7 @@ impl SignatureScanner {
             }
         }
 
-        // Multi-success return detection: more than one non-error success type
+        // More than one success return is not supported in this parser subset.
         if returns.len() > 1 {
             self.emit_diagnostic(
                 "Multi-success returns are not supported in Beanstalk JS library signatures yet.",
@@ -391,6 +417,26 @@ impl SignatureScanner {
         }
 
         Some(name)
+    }
+
+    fn consume_keyword(&mut self, expected: &str) -> bool {
+        self.skip_whitespace();
+
+        if !self.peek_str(expected) {
+            return false;
+        }
+
+        let after_keyword = self.pos + expected.chars().count();
+        if self
+            .text
+            .get(after_keyword)
+            .is_some_and(|ch| ch.is_alphanumeric() || *ch == '_')
+        {
+            return false;
+        }
+
+        self.pos = after_keyword;
+        true
     }
 
     fn consume_arrow(&mut self) -> bool {

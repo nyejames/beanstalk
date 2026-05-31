@@ -32,12 +32,18 @@ pub(crate) struct ExpressionTrailingPolicy {
     /// function arguments, collection items, and parenthesized subexpressions
     /// from silently becoming recovery boundaries.
     pub(crate) allow_boundary_catch: bool,
+    /// Generic expected-result inference is also boundary-sensitive, but it is
+    /// not identical to `catch`: parenthesized grouping should preserve evidence
+    /// from a receiving declaration/return, while function arguments must not
+    /// inherit an outer expected result type.
+    pub(crate) allow_expected_result_evidence: bool,
 }
 
 /// Policy for parsing expressions bounded by one or more stop tokens.
 struct BoundedExpressionPolicy<'a> {
     stop_tokens: &'a [TokenKind],
     allow_boundary_catch: bool,
+    allow_expected_result_evidence: bool,
 }
 
 // WHAT: parses a comma-separated expression list against already-known expected result types.
@@ -85,6 +91,7 @@ fn create_multiple_expressions_inner(
                 consume_closing_parenthesis,
                 skip_trailing_newlines: false,
                 allow_boundary_catch: !consume_closing_parenthesis,
+                allow_expected_result_evidence: !consume_closing_parenthesis,
             },
             string_table,
         )?;
@@ -153,6 +160,7 @@ pub fn create_expression(
             consume_closing_parenthesis,
             skip_trailing_newlines: true,
             allow_boundary_catch: !consume_closing_parenthesis,
+            allow_expected_result_evidence: !consume_closing_parenthesis,
         },
         string_table,
     )
@@ -180,6 +188,7 @@ pub(crate) fn create_expression_without_boundary_catch(
             consume_closing_parenthesis,
             skip_trailing_newlines: true,
             allow_boundary_catch: false,
+            allow_expected_result_evidence: false,
         },
         string_table,
     )
@@ -217,6 +226,7 @@ pub(crate) fn create_expression_with_trailing_newline_policy(
             value_mode,
             consume_closing_parenthesis: trailing_policy.consume_closing_parenthesis,
             allow_boundary_catch: trailing_policy.allow_boundary_catch,
+            allow_expected_result_evidence: trailing_policy.allow_expected_result_evidence,
             expression: &mut expression,
             next_number_negative: &mut next_number_negative,
         };
@@ -271,6 +281,7 @@ pub(crate) fn create_expression_until(
         BoundedExpressionPolicy {
             stop_tokens,
             allow_boundary_catch: true,
+            allow_expected_result_evidence: true,
         },
         string_table,
     )
@@ -297,6 +308,7 @@ pub(crate) fn create_expression_until_without_boundary_catch(
         BoundedExpressionPolicy {
             stop_tokens,
             allow_boundary_catch: false,
+            allow_expected_result_evidence: false,
         },
         string_table,
     )
@@ -320,6 +332,7 @@ fn create_expression_until_inner(
             consume_closing_parenthesis: false,
             skip_trailing_newlines: true,
             allow_boundary_catch,
+            allow_expected_result_evidence: policy.allow_expected_result_evidence,
         };
 
         return create_expression_with_trailing_newline_policy(
@@ -401,6 +414,7 @@ fn create_expression_until_inner(
             consume_closing_parenthesis: false,
             skip_trailing_newlines: true,
             allow_boundary_catch,
+            allow_expected_result_evidence: policy.allow_expected_result_evidence,
         },
         string_table,
     );

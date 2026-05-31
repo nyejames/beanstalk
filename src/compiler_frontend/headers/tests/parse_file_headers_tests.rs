@@ -11,8 +11,9 @@ use crate::compiler_frontend::compiler_messages::render::{
 };
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, DeferredFeatureDiagnosticKind, DeferredFeatureReason, DiagnosticBag,
-    DiagnosticKind, DiagnosticPayload, InvalidChoiceVariantReason, InvalidFunctionSignatureReason,
-    InvalidTypeAnnotationReason, ReservedNameOwner,
+    DiagnosticKind, DiagnosticPayload, InvalidChoiceVariantReason, InvalidDeclarationReason,
+    InvalidFunctionSignatureReason, InvalidTypeAnnotationReason, ReservedNameOwner,
+    RuleDiagnosticKind,
 };
 use crate::compiler_frontend::datatypes::parsed::ParsedTypeRef;
 use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariantPayloadSyntax;
@@ -401,9 +402,6 @@ fn non_generic_headers_keep_generic_parameter_lists_empty() {
                 generic_parameters, ..
             }
             | HeaderKind::Choice {
-                generic_parameters, ..
-            }
-            | HeaderKind::TypeAlias {
                 generic_parameters, ..
             } => {
                 assert!(
@@ -1174,7 +1172,7 @@ fn trait_declarations_using_must_are_reserved_during_header_parsing() {
 }
 
 #[test]
-fn generic_type_aliases_are_deferred_during_header_parsing() {
+fn generic_type_aliases_are_rejected_during_header_parsing() {
     let result = parse_single_file_headers_with_entry(
         "Response type T as ResultShape of T, Error\n",
         "src/#page.bst",
@@ -1183,14 +1181,20 @@ fn generic_type_aliases_are_deferred_during_header_parsing() {
 
     assert!(
         result.is_err(),
-        "generic type aliases should fail during phase 1"
+        "generic type aliases should fail during header parsing"
     );
     let errors = result.err().expect("expected parse errors");
 
-    assert!(diagnostics_contain_guidance(
-        &errors,
-        "Deferred feature: generic type aliases"
-    ));
+    assert!(errors.diagnostics.iter().any(|diagnostic| {
+        diagnostic.kind == DiagnosticKind::Rule(RuleDiagnosticKind::InvalidDeclaration)
+            && matches!(
+                diagnostic.payload,
+                DiagnosticPayload::InvalidDeclaration {
+                    reason: InvalidDeclarationReason::ParameterizedGenericTypeAlias,
+                    ..
+                }
+            )
+    }));
 }
 
 #[test]
@@ -1637,7 +1641,7 @@ fn per_file_fork_merge_remaps_non_identity_strings_across_multiple_files() {
     // that local ID past the first file's generated string in the module table.
     let sources = [
         (
-            "Foo #= \"a\"\nNameA type T as Int\n".to_owned(),
+            "Foo #= \"a\"\nChoiceA :: Variant = 1;\n".to_owned(),
             "src/#page.bst".to_owned(),
         ),
         (
@@ -1678,7 +1682,7 @@ fn per_file_fork_merge_remaps_non_identity_strings_across_multiple_files() {
     }
 
     assert!(
-        feature_names.contains(&"generic type aliases".to_owned()),
+        feature_names.contains(&"choice variant default values".to_owned()),
         "first file's generated feature name must resolve correctly"
     );
     assert!(

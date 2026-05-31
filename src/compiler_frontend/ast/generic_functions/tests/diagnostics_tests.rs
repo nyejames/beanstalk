@@ -4,12 +4,18 @@
 //! WHY: the helper is the single point of truth for call-site-primary generic instantiation
 //! diagnostics and should be tested in isolation.
 
-use crate::compiler_frontend::ast::generic_functions::diagnostics::with_generic_instantiation_context;
+use crate::compiler_frontend::ast::generic_functions::diagnostics::{
+    GenericInstantiationDiagnosticContext, conflicting_generic_function_argument,
+    with_generic_instantiation_context,
+};
 use crate::compiler_frontend::compiler_messages::source_location::{CharPosition, SourceLocation};
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, DiagnosticKind, DiagnosticLabel, DiagnosticLabelMessage,
-    DiagnosticLabelStyle, DiagnosticPayload, RuleDiagnosticKind, TypeMismatchContext,
+    DiagnosticLabelStyle, DiagnosticPayload, GenericSubstitutionDiagnostic, RuleDiagnosticKind,
+    TypeMismatchContext,
 };
+use crate::compiler_frontend::datatypes::generic_bindings::BindingConflict;
+use crate::compiler_frontend::datatypes::ids::GenericParameterId;
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -34,6 +40,17 @@ fn make_location(
     )
 }
 
+fn instantiation_context(
+    call_location: SourceLocation,
+    declaration_location: SourceLocation,
+) -> GenericInstantiationDiagnosticContext {
+    GenericInstantiationDiagnosticContext {
+        call_location,
+        declaration_location,
+        substitutions: Vec::new(),
+    }
+}
+
 #[test]
 fn with_generic_instantiation_context_changes_primary_location_to_call_site() {
     let mut string_table = StringTable::new();
@@ -47,7 +64,10 @@ fn with_generic_instantiation_context_changes_primary_location_to_call_site() {
         body_location.clone(),
     );
 
-    let transformed = with_generic_instantiation_context(diagnostic, call_location.clone());
+    let transformed = with_generic_instantiation_context(
+        diagnostic,
+        instantiation_context(call_location.clone(), body_location),
+    );
 
     assert_eq!(transformed.primary_location, call_location);
 }
@@ -62,10 +82,13 @@ fn with_generic_instantiation_context_first_label_is_primary_call_site() {
         builtin_type_ids::INT,
         builtin_type_ids::STRING,
         TypeMismatchContext::FunctionArgument,
-        body_location,
+        body_location.clone(),
     );
 
-    let transformed = with_generic_instantiation_context(diagnostic, call_location.clone());
+    let transformed = with_generic_instantiation_context(
+        diagnostic,
+        instantiation_context(call_location.clone(), body_location),
+    );
 
     let first_label = transformed
         .labels
@@ -92,7 +115,10 @@ fn with_generic_instantiation_context_adds_secondary_body_site_label() {
         body_location.clone(),
     );
 
-    let transformed = with_generic_instantiation_context(diagnostic, call_location);
+    let transformed = with_generic_instantiation_context(
+        diagnostic,
+        instantiation_context(call_location, body_location.clone()),
+    );
 
     let body_label = transformed
         .labels
@@ -127,7 +153,10 @@ fn with_generic_instantiation_context_preserves_existing_secondary_labels() {
         Some(DiagnosticLabelMessage::PreviousDeclaration),
     )]);
 
-    let transformed = with_generic_instantiation_context(diagnostic, call_location);
+    let transformed = with_generic_instantiation_context(
+        diagnostic,
+        instantiation_context(call_location, body_location),
+    );
 
     let extra_label = transformed
         .labels
@@ -162,7 +191,10 @@ fn with_generic_instantiation_context_avoids_duplicate_body_secondary_label() {
         Some(DiagnosticLabelMessage::PreviousDeclaration),
     )]);
 
-    let transformed = with_generic_instantiation_context(diagnostic, call_location);
+    let transformed = with_generic_instantiation_context(
+        diagnostic,
+        instantiation_context(call_location, body_location.clone()),
+    );
 
     let body_secondary_count = transformed
         .labels
@@ -199,7 +231,10 @@ fn with_generic_instantiation_context_drops_original_primary_label() {
         message: Some(DiagnosticLabelMessage::PreviousDeclaration),
     }]);
 
-    let transformed = with_generic_instantiation_context(diagnostic, call_location.clone());
+    let transformed = with_generic_instantiation_context(
+        diagnostic,
+        instantiation_context(call_location.clone(), body_location.clone()),
+    );
 
     // No primary label should remain at the old body location.
     assert!(
@@ -213,4 +248,123 @@ fn with_generic_instantiation_context_drops_original_primary_label() {
     let first_label = transformed.labels.first().unwrap();
     assert_eq!(first_label.location, call_location);
     assert_eq!(first_label.style, DiagnosticLabelStyle::Primary);
+}
+
+#[test]
+fn with_generic_instantiation_context_adds_declaration_site_label() {
+    let mut string_table = StringTable::new();
+    let body_location = make_location("body.bst", 10, 5, &mut string_table);
+    let call_location = make_location("call.bst", 20, 8, &mut string_table);
+    let declaration_location = make_location("declaration.bst", 2, 1, &mut string_table);
+
+    let diagnostic = CompilerDiagnostic::type_mismatch(
+        builtin_type_ids::INT,
+        builtin_type_ids::STRING,
+        TypeMismatchContext::FunctionArgument,
+        body_location,
+    );
+
+    let transformed = with_generic_instantiation_context(
+        diagnostic,
+        instantiation_context(call_location, declaration_location.clone()),
+    );
+
+    let declaration_label = transformed
+        .labels
+        .iter()
+        .find(|label| {
+            label.style == DiagnosticLabelStyle::Secondary
+                && label.location == declaration_location
+                && label.message
+                    == Some(DiagnosticLabelMessage::GenericInstantiationDeclarationSite)
+        })
+        .expect("expected a secondary declaration-site label");
+
+    assert_eq!(declaration_label.location, declaration_location);
+}
+
+#[test]
+fn with_generic_instantiation_context_adds_structured_substitution_label() {
+    let mut string_table = StringTable::new();
+    let body_location = make_location("body.bst", 10, 5, &mut string_table);
+    let call_location = make_location("call.bst", 20, 8, &mut string_table);
+    let declaration_location = make_location("declaration.bst", 2, 1, &mut string_table);
+    let parameter_name = string_table.intern("T");
+
+    let diagnostic = CompilerDiagnostic::type_mismatch(
+        builtin_type_ids::INT,
+        builtin_type_ids::STRING,
+        TypeMismatchContext::FunctionArgument,
+        body_location,
+    );
+
+    let transformed = with_generic_instantiation_context(
+        diagnostic,
+        GenericInstantiationDiagnosticContext {
+            call_location,
+            declaration_location: declaration_location.clone(),
+            substitutions: vec![GenericSubstitutionDiagnostic {
+                parameter_name,
+                concrete_type_id: builtin_type_ids::STRING,
+            }],
+        },
+    );
+
+    let substitution_label = transformed
+        .labels
+        .iter()
+        .find(|label| {
+            label.style == DiagnosticLabelStyle::Secondary
+                && label.location == declaration_location
+                && matches!(
+                    &label.message,
+                    Some(DiagnosticLabelMessage::GenericInstantiationSubstitutions {
+                        substitutions
+                    }) if substitutions
+                        == &vec![GenericSubstitutionDiagnostic {
+                            parameter_name,
+                            concrete_type_id: builtin_type_ids::STRING,
+                        }]
+                )
+        })
+        .expect("expected a structured substitution label");
+
+    assert_eq!(substitution_label.location, declaration_location);
+}
+
+#[test]
+fn conflicting_generic_function_argument_keeps_current_evidence_primary_label() {
+    let mut string_table = StringTable::new();
+    let current_location = make_location("call.bst", 12, 4, &mut string_table);
+    let previous_location = make_location("call.bst", 12, 1, &mut string_table);
+    let function_name = string_table.intern("same");
+    let parameter_name = string_table.intern("T");
+
+    let diagnostic = conflicting_generic_function_argument(
+        Some(function_name),
+        BindingConflict {
+            parameter_id: GenericParameterId(0),
+            existing_type_id: builtin_type_ids::INT,
+            replacement_type_id: builtin_type_ids::STRING,
+        },
+        parameter_name,
+        current_location.clone(),
+        Some(previous_location.clone()),
+    );
+
+    assert_eq!(diagnostic.primary_location, current_location);
+    assert!(
+        diagnostic.labels.iter().any(|label| {
+            label.style == DiagnosticLabelStyle::Primary && label.location == current_location
+        }),
+        "expected current evidence to remain represented by a primary label"
+    );
+    assert!(
+        diagnostic.labels.iter().any(|label| {
+            label.style == DiagnosticLabelStyle::Secondary
+                && label.location == previous_location
+                && label.message == Some(DiagnosticLabelMessage::GenericInferencePreviousEvidence)
+        }),
+        "expected previous evidence to be represented by a secondary label"
+    );
 }

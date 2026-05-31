@@ -476,9 +476,9 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             .get(symbol_path)
         {
             match metadata.kind {
-                GenericDeclarationKind::Struct
-                | GenericDeclarationKind::Choice
-                | GenericDeclarationKind::TypeAlias => return SymbolKind::Type,
+                GenericDeclarationKind::Struct | GenericDeclarationKind::Choice => {
+                    return SymbolKind::Type;
+                }
                 GenericDeclarationKind::Function => return SymbolKind::Value,
             }
         }

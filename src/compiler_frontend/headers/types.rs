@@ -98,7 +98,6 @@ pub enum HeaderKind {
         variants: Vec<ChoiceVariantSyntax>,
     },
     TypeAlias {
-        generic_parameters: GenericParameterList,
         target: ParsedTypeRef,
     },
 
@@ -239,11 +238,7 @@ impl HeaderKind {
                 }
             }
 
-            HeaderKind::TypeAlias {
-                generic_parameters,
-                target,
-            } => {
-                generic_parameters.remap_string_ids(remap);
+            HeaderKind::TypeAlias { target } => {
                 target.remap_string_ids(remap);
             }
 

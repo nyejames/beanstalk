@@ -13,7 +13,7 @@ page_head #= theme_head
 
     The supported surface is intentionally small:
 
-    - generic parameter declarations with [codesnippet:type] on top-level structs and choices
+    - declaration-site generic parameters with [codesnippet:type] on top-level structs, choices, and free functions
     - [codesnippet:of] type application in type positions
     - concrete generic aliases to fully applied generic types
     - constructor inference for concrete generic structs and choices
@@ -65,6 +65,30 @@ page_head #= theme_head
         ]
 
         [data:
+            [: Explicit generic call syntax]
+            [: Rejected / Not Alpha]
+            [: Generic calls use ordinary call syntax and inference only.]
+        ]
+
+        [data:
+            [: Generic function values]
+            [: Rejected / Deferred]
+            [: Generic functions are callable declarations only, not first-class values.]
+        ]
+
+        [data:
+            [: Generic receiver methods]
+            [: Rejected / Deferred]
+            [: Use free functions until traits or another constraint model exists.]
+        ]
+
+        [data:
+            [: Type values / type-level CTFE]
+            [: Not supported]
+            [: Types are compile-time annotation facts, not runtime or compile-time values.]
+        ]
+
+        [data:
             [: Trait bounds]
             [: Deferred]
             [: Operators, equality, field access, formatting, and receiver calls on unconstrained generic parameters wait for traits or another constraint model.]
@@ -91,7 +115,7 @@ page_head #= theme_head
     ]
 
     [codesnippet:of] is type-position-only. It is not current Alpha syntax for explicit
-    generic function calls or runtime generic values.
+    generic function calls, runtime generic values, type values, or type-level computation.
 ]
 
 #[section, $markdown:
@@ -189,7 +213,8 @@ page_head #= theme_head
 
     Generic free functions are callable when their type arguments can be inferred from the call
     itself or from an immediate expected result type. The same inference rules apply for same-file
-    calls, grouped imports, namespace imports, and authored facade wrappers.
+    calls, grouped imports, namespace imports, and authored facade wrappers. There is no explicit
+    generic call-site type argument syntax.
 
     [codeblock, $code("bst"):
         identity type T |value T| -> T:
@@ -232,11 +257,21 @@ page_head #= theme_head
     constraint model exists.
 
     Inference is deliberately immediate. Beanstalk does not infer a generic function's type
-    arguments from later uses of the resulting value:
+    arguments from later uses of the resulting value, whole-program analysis, HIR, borrow
+    validation, or expected parameter context from an outer function call into a nested generic
+    call:
 
     [codeblock, $code("bst"):
         -- rejected: T is ambiguous at the declaration site
         values = empty_values()
+    ]
+
+    Use an intermediate annotation when a nested generic call would otherwise need evidence from
+    its parent call:
+
+    [codeblock, $code("bst"):
+        user User = parse_json(text)!
+        save_user(user)
     ]
 
     Generic functions may also return optional or fallible values, including across imports:
@@ -334,9 +369,11 @@ page_head #= theme_head
 
     The following are not current Alpha generics:
 
-    - explicit generic call syntax such as [codesnippet:identity of Int(42)]
+    - explicit generic call syntax such as [codesnippet, "identity of Int(42)"], [codesnippet, "identity<Int>(42)"], [codesnippet, "identity[Int](42)"], or [codesnippet, "identity(42 Int)"]
+    - inline generic sugar such as [codesnippet, "|value type A|"]
     - generic function values and higher-order generic functions
-    - trait bounds and [codesnippet:where] clauses
+    - trait bounds and [codesnippet:where] clauses; the future direction is declaration-site [codesnippet:type A is Trait] constraints after traits exist
+    - type values, type-returning functions, type-level [codesnippet:#if], and compile-time type inspection
     - recursive generic structs or choices
     - generic receiver methods
     - receiver methods on instantiated generic types

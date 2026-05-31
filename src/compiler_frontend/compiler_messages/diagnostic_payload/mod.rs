@@ -5,7 +5,7 @@
 //! pre-rendered strings or generic argument maps.
 
 use crate::compiler_frontend::compiler_messages::source_location::SourceLocation;
-use crate::compiler_frontend::datatypes::ids::TypeId;
+use crate::compiler_frontend::datatypes::ids::{GenericParameterId, TypeId};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap};
 use crate::compiler_frontend::tokenizer::tokens::TokenKind;

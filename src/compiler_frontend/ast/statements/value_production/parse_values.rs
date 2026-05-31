@@ -179,6 +179,7 @@ fn parse_single_inferred_declaration_value(
             consume_closing_parenthesis: false,
             skip_trailing_newlines: false,
             allow_boundary_catch: true,
+            allow_expected_result_evidence: false,
         },
         string_table,
     )?;
@@ -221,6 +222,7 @@ pub(crate) fn parse_fixed_arity_inferred_values(
                 consume_closing_parenthesis: false,
                 skip_trailing_newlines: false,
                 allow_boundary_catch: true,
+                allow_expected_result_evidence: false,
             },
             string_table,
         )?;

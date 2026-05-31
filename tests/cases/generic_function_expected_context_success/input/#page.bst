@@ -3,5 +3,7 @@ empty_values type T || -> {T}:
 ;
 
 numbers {Int} = empty_values()
+wrapped_numbers {Int} = (empty_values())
 
 io(numbers.length())
+io(wrapped_numbers.length())

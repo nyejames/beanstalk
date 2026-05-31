@@ -629,6 +629,7 @@ pub enum InvalidDeclarationReason {
     ReservedBuiltinName,
     ConstantCannotBeMutable,
     ExternalTypeLiteralConstruction,
+    ParameterizedGenericTypeAlias,
     UnusedGenericParameter { parameter_name: StringId },
     RecursiveGenericType,
     RecursiveRuntimeStruct { cycle: String },
@@ -1024,6 +1025,8 @@ pub enum DeferredFeatureReason {
     ReservedTraitMustKeyword,
     ReservedTraitThisKeyword,
     TraitDeclaration,
+    GenericConstraints,
+    GenericWhereConstraints,
     CaptureTaggedPattern,
     NegatedMatchPattern,
     NamedPayloadPatternAssignment,
@@ -1178,12 +1181,28 @@ impl CommonSyntaxMistakeReason {
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum InvalidGenericInstantiationReason {
-    WrongArgumentCount { expected: usize, found: usize },
+    WrongArgumentCount {
+        expected: usize,
+        found: usize,
+    },
     TypeDoesNotAcceptArguments,
+    ExternalTypeArgumentsUnsupported,
     MissingTypeArguments,
-    CannotInferArguments { missing_parameters: Vec<StringId> },
-    CannotInferFunctionArguments { missing_parameters: Vec<StringId> },
-    ConflictingFunctionArgument { parameter_name: StringId },
+    CannotInferArguments {
+        missing_parameters: Vec<StringId>,
+    },
+    CannotInferFunctionArguments {
+        missing_parameters: Vec<StringId>,
+    },
+    ConflictingFunctionArgument {
+        parameter_id: GenericParameterId,
+        parameter_name: StringId,
+        existing_type_id: TypeId,
+        replacement_type_id: TypeId,
+        current_evidence_location: SourceLocation,
+        previous_evidence_location: Option<SourceLocation>,
+    },
     RecursiveFunctionInstantiation,
+    ExplicitCallTypeArgumentsUnsupported,
     GenericFunctionValueDeferred,
 }

@@ -1,0 +1,8 @@
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+diagnostic_codes = ["BST-DEFERRED-0001"]
+message_contains = [
+    "Generic constraints are deferred until traits/interfaces are implemented.",
+    "`where` syntax is not part of the planned generic constraint form.",
+]

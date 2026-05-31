@@ -11,7 +11,6 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 ---
 
 # Plans / TODOS
-- Final generics design and implementation. Design draft: ``
 - Traits
 - `else => _` (Wildcards in value positions for pattern matching or default arguments in function calls)
 - Replace JSON with beanstalk files (dogfooding for language as a way to store data / config stuff). These could be standardised as their own build system under `src/projects`.
@@ -23,6 +22,9 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 - Move to more specific explicit type declarations for numbers (I32, I64, F32, F64) - JS backend just makes all an F64 and accepts the precision loss, more for future Wasm backend
 
 # Notes
+- Final generics design and implementation is complete. The accepted implementation record is
+  `docs/roadmap/plans/generics-hardening-implementation-plan.md`.
+
 - The template control-flow runtime-slot refactor is complete. Template head suffix control flow
   is implemented for source-authored Bool `if`, option-present `if`, range `loop`, collection
   `loop`, standalone `[else]`, standalone `[else if ...]`, structural `[break]` / `[continue]`,

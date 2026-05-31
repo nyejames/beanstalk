@@ -4,7 +4,7 @@
 //! WHY: this is the primary human-facing render path for compiler errors and warnings.
 
 use crate::compiler_frontend::compiler_messages::render::{
-    DiagnosticRenderContext, display_column_number, display_line_number,
+    DiagnosticRenderContext, diagnostic_type_name, display_column_number, display_line_number,
     relative_display_path_from_root, render_payload, resolve_source_file_path,
 };
 use crate::compiler_frontend::compiler_messages::{
@@ -96,7 +96,7 @@ pub(crate) fn print_diagnostic_with_context(
         say!(Red "^".repeat(underline_length));
     }
 
-    for label_message in format_label_messages(diagnostic, string_table) {
+    for label_message in format_label_messages_with_context(diagnostic, context) {
         say!(Bright Blue "  ", label_message);
     }
 
@@ -113,6 +113,13 @@ pub(crate) fn format_label_messages(
     diagnostic: &CompilerDiagnostic,
     string_table: &StringTable,
 ) -> Vec<String> {
+    format_label_messages_with_context(diagnostic, DiagnosticRenderContext::new(string_table))
+}
+
+pub(crate) fn format_label_messages_with_context(
+    diagnostic: &CompilerDiagnostic,
+    context: DiagnosticRenderContext<'_>,
+) -> Vec<String> {
     let mut rendered_labels = Vec::new();
 
     for label in &diagnostic.labels {
@@ -123,7 +130,7 @@ pub(crate) fn format_label_messages(
                 DiagnosticLabelStyle::Primary => "note",
                 DiagnosticLabelStyle::Secondary => "info",
             };
-            let message_text = diagnostic_label_message_text(message, string_table);
+            let message_text = diagnostic_label_message_text(message, context);
 
             rendered_labels.push(format!(
                 "{style_name}: {label_line}:{label_col} - {message_text}"
@@ -151,8 +158,10 @@ pub(crate) fn format_payload_guidance(
 
 fn diagnostic_label_message_text(
     message: &DiagnosticLabelMessage,
-    string_table: &StringTable,
+    context: DiagnosticRenderContext<'_>,
 ) -> String {
+    let string_table = context.string_table;
+
     match message {
         DiagnosticLabelMessage::PreviousDeclaration => "previous declaration here".to_owned(),
         DiagnosticLabelMessage::ExistingBorrow => "existing borrow here".to_owned(),
@@ -166,6 +175,26 @@ fn diagnostic_label_message_text(
         }
         DiagnosticLabelMessage::GenericInstantiationBodySite => {
             "generic body operation failed here".to_owned()
+        }
+        DiagnosticLabelMessage::GenericInstantiationDeclarationSite => {
+            "generic function declared here".to_owned()
+        }
+        DiagnosticLabelMessage::GenericInstantiationSubstitutions { substitutions } => {
+            let substitution_text = substitutions
+                .iter()
+                .map(|substitution| {
+                    let parameter_name = string_table.resolve(substitution.parameter_name);
+                    let concrete_type =
+                        diagnostic_type_name(substitution.concrete_type_id, context);
+                    format!("{parameter_name} = {concrete_type}")
+                })
+                .collect::<Vec<_>>()
+                .join(", ");
+
+            format!("generic substitution: {substitution_text}")
+        }
+        DiagnosticLabelMessage::GenericInferencePreviousEvidence => {
+            "previous generic inference evidence here".to_owned()
         }
     }
 }

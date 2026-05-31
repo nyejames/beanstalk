@@ -35,6 +35,18 @@ pub(crate) fn render_payload(
         DiagnosticPayload::CompileTimeEvaluationError { reason, .. } => {
             vec![compile_time_evaluation_error_suggestion(*reason).to_owned()]
         }
+        DiagnosticPayload::InvalidGenericInstantiation {
+            reason:
+                crate::compiler_frontend::compiler_messages::InvalidGenericInstantiationReason::CannotInferFunctionArguments {
+                    ..
+                },
+            ..
+        } => {
+            vec![
+                "Add a type annotation to the receiving declaration, for example `value Int = ...`."
+                    .to_owned(),
+            ]
+        }
         _ => Vec::new(),
     };
 
@@ -346,7 +358,7 @@ fn render_payload_message(
         }
         DiagnosticPayload::InvalidReturnShape { reason } => invalid_return_shape_message(*reason),
         DiagnosticPayload::InvalidGenericInstantiation { type_name, reason } => {
-            invalid_generic_instantiation_message(*type_name, reason, string_table)
+            invalid_generic_instantiation_message(*type_name, reason, context)
         }
         DiagnosticPayload::InvalidRangeOperand {
             operand,

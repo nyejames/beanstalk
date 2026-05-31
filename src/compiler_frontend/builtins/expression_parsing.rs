@@ -69,6 +69,7 @@ pub(crate) fn parse_builtin_cast_expression(
             consume_closing_parenthesis: false,
             skip_trailing_newlines: false,
             allow_boundary_catch: false,
+            allow_expected_result_evidence: false,
         },
         string_table,
     )?;

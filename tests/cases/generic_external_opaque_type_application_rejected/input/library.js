@@ -1,0 +1,3 @@
+/**
+ * @bst.opaque Canvas
+ */

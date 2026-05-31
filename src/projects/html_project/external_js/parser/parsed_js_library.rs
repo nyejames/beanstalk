@@ -62,6 +62,8 @@ pub enum JsDiagnosticKind {
     DynamicImport,
     UnsupportedParameterPattern,
     UnsupportedTypeSyntax,
+    GenericExternalFunction,
+    GenericExternalType,
     VoidReturn,
     MultiSuccessReturn,
     UnknownExternalType,
@@ -113,6 +115,10 @@ pub struct ParsedSignature {
     pub parameters: Vec<ParsedParameter>,
     pub returns: Vec<ParsedReturnType>,
     pub has_error_return: bool,
+    /// Parser-local recovery flag for rejected generic-looking `@bst.sig`
+    /// preambles. This is not external package metadata; provider registration
+    /// stops before converting a library with parser diagnostics.
+    pub has_unsupported_generic_parameters: bool,
 }
 
 impl ParsedSignature {

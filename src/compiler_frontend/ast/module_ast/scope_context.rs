@@ -434,6 +434,14 @@ impl ScopeContext {
         } else {
             None
         };
+        // Conditions are not receiving sites. They validate against Bool through
+        // parse-context expectations, but they must not let a surrounding
+        // declaration or return type solve a nested generic call.
+        let expected_result_type_ids = if matches!(kind, ContextKind::Condition) {
+            Vec::new()
+        } else {
+            self.expected_result_type_ids.clone()
+        };
 
         ScopeContext {
             kind,
@@ -444,7 +452,7 @@ impl ScopeContext {
             unavailable_assignment_targets: self.unavailable_assignment_targets.clone(),
             pending_catch_assignment_targets: self.pending_catch_assignment_targets.clone(),
             visible_declaration_ids: self.visible_declaration_ids.clone(),
-            expected_result_type_ids: self.expected_result_type_ids.clone(),
+            expected_result_type_ids,
             expected_error_type: self.expected_error_type,
             current_function_return_type_ids: self.current_function_return_type_ids.clone(),
             // Branch-like child scopes inherit value production so ordinary nested

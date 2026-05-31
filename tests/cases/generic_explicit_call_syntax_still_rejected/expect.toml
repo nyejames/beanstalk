@@ -1,5 +1,0 @@
-[backends.html]
-mode = "failure"
-warnings = "forbid"
-diagnostic_codes = ["BST-RULE-0057"]
-message_contains = ["Generic function 'identity' must be called; generic function values are deferred"]

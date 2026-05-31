@@ -66,7 +66,6 @@ pub(crate) enum GenericDeclarationKind {
     Function,
     Struct,
     Choice,
-    TypeAlias,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

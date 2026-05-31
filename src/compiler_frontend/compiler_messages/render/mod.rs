@@ -509,6 +509,12 @@ fn deferred_feature_static_message(reason: &DeferredFeatureReason) -> &'static s
         DeferredFeatureReason::TraitDeclaration => {
             "Trait declarations using 'must' are reserved for traits and are deferred for Alpha."
         }
+        DeferredFeatureReason::GenericConstraints => {
+            "Generic constraints are deferred until traits/interfaces are implemented. The planned constraint form is `type A is Trait`, but traits are not implemented yet."
+        }
+        DeferredFeatureReason::GenericWhereConstraints => {
+            "Generic constraints are deferred until traits/interfaces are implemented. `where` syntax is not part of the planned generic constraint form."
+        }
         DeferredFeatureReason::CaptureTaggedPattern => {
             "Capture/tagged patterns using '|...|' are deferred for Alpha."
         }
@@ -522,7 +528,7 @@ fn deferred_feature_static_message(reason: &DeferredFeatureReason) -> &'static s
             "Nested payload patterns are deferred. Use flat capture bindings with declared field names only."
         }
         DeferredFeatureReason::GenericReceiverMethod => {
-            "Generic receiver methods are not supported yet. Use a generic free function instead."
+            "Receiver methods on generic types are not supported. Use a free function instead."
         }
         DeferredFeatureReason::PublicOptionTypeSyntax => {
             "Public `Option of T` type syntax is deferred for Alpha. Use the `T?` optional type suffix instead."
@@ -623,6 +629,9 @@ pub(crate) fn invalid_declaration_message(
         InvalidDeclarationReason::ExternalTypeLiteralConstruction => {
             "Cannot construct external type with a struct literal. External types are opaque and can only be obtained from external function calls.".to_string()
         }
+        InvalidDeclarationReason::ParameterizedGenericTypeAlias => {
+            "Generic type aliases with parameters are not supported. Alias a fully concrete generic instance instead.".to_string()
+        }
         InvalidDeclarationReason::UnusedGenericParameter { parameter_name } => {
             format!(
                 "Generic parameter '{}' is declared but never used in the public type shape for '{}'.",
@@ -665,10 +674,11 @@ pub(crate) fn invalid_declaration_message(
 pub(crate) fn invalid_generic_instantiation_message(
     type_name: Option<StringId>,
     reason: &crate::compiler_frontend::compiler_messages::InvalidGenericInstantiationReason,
-    string_table: &StringTable,
+    context: DiagnosticRenderContext<'_>,
 ) -> String {
     use crate::compiler_frontend::compiler_messages::InvalidGenericInstantiationReason;
 
+    let string_table = context.string_table;
     let type_name_str = type_name
         .map(|n| format!("'{}'", string_table.resolve(n)))
         .unwrap_or_else(|| "This type".to_string());
@@ -682,6 +692,11 @@ pub(crate) fn invalid_generic_instantiation_message(
         }
         InvalidGenericInstantiationReason::TypeDoesNotAcceptArguments => {
             format!("Type {type_name_str} does not accept generic arguments.")
+        }
+        InvalidGenericInstantiationReason::ExternalTypeArgumentsUnsupported => {
+            format!(
+                "External package type {type_name_str} cannot be generic. Expose a concrete external type instead."
+            )
         }
         InvalidGenericInstantiationReason::MissingTypeArguments => {
             format!("Generic type {type_name_str} requires type arguments.")
@@ -703,13 +718,20 @@ pub(crate) fn invalid_generic_instantiation_message(
                 .collect::<Vec<_>>()
                 .join(", ");
             format!(
-                "Cannot infer type argument(s) for generic function {type_name_str}: {missing}. Add an immediate type annotation or pass arguments that fix the type."
+                "Cannot infer type argument(s) for generic function {type_name_str}: {missing}. Add an immediate receiving-site type annotation or pass arguments that fix the type."
             )
         }
-        InvalidGenericInstantiationReason::ConflictingFunctionArgument { parameter_name } => {
+        InvalidGenericInstantiationReason::ConflictingFunctionArgument {
+            parameter_name,
+            existing_type_id,
+            replacement_type_id,
+            ..
+        } => {
             let parameter = string_table.resolve(*parameter_name);
+            let existing_type = diagnostic_type_name(*existing_type_id, context);
+            let replacement_type = diagnostic_type_name(*replacement_type_id, context);
             format!(
-                "Generic function {type_name_str} infers conflicting concrete types for type parameter '{parameter}'."
+                "Generic parameter '{parameter}' in generic function {type_name_str} was inferred as both {existing_type} and {replacement_type}."
             )
         }
         InvalidGenericInstantiationReason::RecursiveFunctionInstantiation => {
@@ -717,9 +739,12 @@ pub(crate) fn invalid_generic_instantiation_message(
                 "Generic function {type_name_str} recursively instantiates itself, which is deferred for Alpha."
             )
         }
+        InvalidGenericInstantiationReason::ExplicitCallTypeArgumentsUnsupported => {
+            "Explicit generic call-site type arguments are not supported. Add an ordinary type annotation to the receiving declaration or argument instead.".to_string()
+        }
         InvalidGenericInstantiationReason::GenericFunctionValueDeferred => {
             format!(
-                "Generic function {type_name_str} must be called; generic function values are deferred for Alpha."
+                "Generic functions cannot be used as values. Call {type_name_str} directly or write a concrete wrapper function."
             )
         }
     }
@@ -825,14 +850,11 @@ pub(crate) fn invalid_receiver_declaration_message(
                 .to_string()
         }
         InvalidReceiverDeclarationReason::GenericReceiverType {
-            function_name,
-            type_name,
+            function_name: _,
+            type_name: _,
         } => {
-            format!(
-                "Function '{}' uses generic receiver type '{}'. Receiver methods on generic types are not supported yet.",
-                string_table.resolve(function_name),
-                string_table.resolve(type_name)
-            )
+            "Receiver methods on generic types are not supported. Use a free function instead."
+                .to_string()
         }
         InvalidReceiverDeclarationReason::UnsupportedType {
             function_name,
