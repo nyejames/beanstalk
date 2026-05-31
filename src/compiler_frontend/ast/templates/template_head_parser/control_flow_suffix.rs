@@ -72,7 +72,7 @@ pub(crate) fn parse_if_suffix(
 
         ParsedIfHeader::MatchStyle { scrutinee } => {
             return Err(CompilerDiagnostic::invalid_template_structure(
-                InvalidTemplateStructureReason::TemplateMatchStyleControlFlowRemoved,
+                InvalidTemplateStructureReason::TemplateMatchStyleControlFlowUnsupported,
                 scrutinee.location,
             ));
         }

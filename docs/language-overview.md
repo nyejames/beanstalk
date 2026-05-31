@@ -625,11 +625,11 @@ control-flow suffix requires a comma.
 ]
 ```
 
-Template `if` supports `Bool` conditions, option-present capture, and
-standalone `[else if ...]` sentinels. `[else]` is optional, must be standalone,
-and belongs to the nearest active template `if`. Full pattern-match branch
-chains belong to ordinary statement/value `if value is:` blocks, not template
-heads.
+Template `if` supports `Bool` conditions and option-present capture.
+Standalone `[else if ...]` sentinels use the same simple selectors. `[else]`
+is optional, must be standalone, and belongs to the nearest active template
+`if`. Full pattern-match branch chains belong to ordinary statement/value
+`if value is:` blocks, not template heads.
 
 ```beanstalk
 maybe_name String? = none
@@ -702,6 +702,8 @@ Runtime slot applications are valid inside template control flow after normal
 slot routing. Escaped helper artifacts that still leave unresolved `[$slot]` or
 `$insert(...)` output inside runtime control-flow bodies are invalid template
 structure.
+Runtime slot applications appended inside template loops follow the same nearest
+template-loop `[break]` / `[continue]` rules as direct loop body content.
 
 ### If Statements / Pattern Matching
 If statements are non-exhaustive and don't have 'else if'.

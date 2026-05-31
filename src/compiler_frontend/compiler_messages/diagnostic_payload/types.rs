@@ -509,7 +509,7 @@ pub enum InvalidTemplateStructureReason {
     TemplateElseInLoopBody,
     TemplateElseIfInLoopBody,
     UnexpectedTokenAfterControlFlowSuffix,
-    TemplateMatchStyleControlFlowRemoved,
+    TemplateMatchStyleControlFlowUnsupported,
     TemplateIfConditionNotConst,
     TemplateIfBranchNotConst,
     TemplateOptionCaptureConstDeferred,
@@ -603,6 +603,7 @@ pub enum InvalidReceiverDeclarationReason {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum InvalidControlFlowStatementReason {
     ElseOutsideIfOrMatch,
+    ElseIfUnsupported,
     BreakOutsideLoop,
     ContinueOutsideLoop,
     TemplateInsideFunctionBody,

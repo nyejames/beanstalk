@@ -9,9 +9,9 @@ use crate::compiler_frontend::ast::templates::template_body_parser::{
 };
 use crate::compiler_frontend::ast::templates::template_body_sentinels::TemplateBodyControlContext;
 use crate::compiler_frontend::ast::templates::template_control_flow::{
-    TemplateBranchChain, TemplateBranchSelector, TemplateConditionalBranch, TemplateControlFlow,
-    TemplateControlFlowValidationMode, TemplateFallbackBranch, TemplateLoopAggregatePiece,
-    TemplateLoopAggregateRenderPlan, TemplateLoopHeader,
+    TemplateAggregatePiece, TemplateAggregateRenderPlan, TemplateBranchChain,
+    TemplateBranchSelector, TemplateConditionalBranch, TemplateControlFlow,
+    TemplateControlFlowValidationMode, TemplateFallbackBranch, TemplateLoopHeader,
     validate_const_required_template_control_flow,
 };
 use crate::compiler_frontend::ast::templates::template_head_parser::parse_template_head;
@@ -280,7 +280,7 @@ fn match_style_template_if_is_rejected() {
         matches!(
             diagnostic.payload,
             DiagnosticPayload::InvalidTemplateStructure {
-                reason: InvalidTemplateStructureReason::TemplateMatchStyleControlFlowRemoved
+                reason: InvalidTemplateStructureReason::TemplateMatchStyleControlFlowUnsupported
             }
         ),
         "unexpected payload: {:?}",
@@ -297,7 +297,7 @@ fn match_style_template_else_if_is_rejected() {
         matches!(
             diagnostic.payload,
             DiagnosticPayload::InvalidTemplateStructure {
-                reason: InvalidTemplateStructureReason::TemplateMatchStyleControlFlowRemoved
+                reason: InvalidTemplateStructureReason::TemplateMatchStyleControlFlowUnsupported
             }
         ),
         "unexpected payload: {:?}",
@@ -1366,7 +1366,7 @@ fn const_required_template_zero_iteration_loop_skips_shared_head_output() {
         Template::new_const_required(&mut token_stream, &context, vec![], &mut string_table)
             .expect("const-required zero loop should parse");
 
-    assert_loop_aggregate_plan_is_structural(&template);
+    assert_aggregate_plan_is_structural(&template);
 
     let folded = fold_template_in_context(&template, &context, &mut string_table);
 
@@ -1401,7 +1401,7 @@ fn const_required_template_loop_wraps_aggregate_once() {
         Template::new_const_required(&mut token_stream, &context, vec![], &mut string_table)
             .expect("const-required loop should parse");
 
-    assert_loop_aggregate_plan_is_structural(&template);
+    assert_aggregate_plan_is_structural(&template);
 
     let folded = fold_template_in_context(&template, &context, &mut string_table);
 
@@ -2063,7 +2063,7 @@ fn assert_invalid_template_structure(
     }
 }
 
-fn assert_loop_aggregate_plan_is_structural(template: &Template) {
+fn assert_aggregate_plan_is_structural(template: &Template) {
     let Some(TemplateControlFlow::Loop(template_loop)) = &template.control_flow else {
         panic!("expected template loop control flow");
     };
@@ -2073,42 +2073,40 @@ fn assert_loop_aggregate_plan_is_structural(template: &Template) {
         .expect("template loop should have an aggregate render plan");
 
     assert_eq!(
-        count_loop_aggregate_pieces(aggregate_plan),
+        count_aggregate_pieces(aggregate_plan),
         1,
-        "template loop aggregate plans should contain one explicit aggregate marker"
+        "template aggregate plans should contain one explicit aggregate marker"
     );
     assert!(
         !aggregate_plan_contains_no_value_expression(aggregate_plan),
-        "loop aggregate markers must not be represented as ExpressionKind::NoValue"
+        "aggregate markers must not be represented as ExpressionKind::NoValue"
     );
     assert!(
         !aggregate_plan_contains_render_slot(aggregate_plan),
-        "loop aggregate markers must be converted before final aggregate render plans"
+        "aggregate markers must be converted before final aggregate render plans"
     );
 }
 
-fn count_loop_aggregate_pieces(plan: &TemplateLoopAggregateRenderPlan) -> usize {
+fn count_aggregate_pieces(plan: &TemplateAggregateRenderPlan) -> usize {
     plan.pieces
         .iter()
-        .filter(|piece| matches!(piece, TemplateLoopAggregatePiece::Aggregate))
+        .filter(|piece| matches!(piece, TemplateAggregatePiece::Aggregate))
         .count()
 }
 
-fn aggregate_plan_contains_no_value_expression(plan: &TemplateLoopAggregateRenderPlan) -> bool {
+fn aggregate_plan_contains_no_value_expression(plan: &TemplateAggregateRenderPlan) -> bool {
     plan.pieces.iter().any(|piece| match piece {
-        TemplateLoopAggregatePiece::Aggregate => false,
-        TemplateLoopAggregatePiece::Render(render_piece) => {
+        TemplateAggregatePiece::Aggregate => false,
+        TemplateAggregatePiece::Render(render_piece) => {
             render_piece_contains_no_value_expression(render_piece)
         }
     })
 }
 
-fn aggregate_plan_contains_render_slot(plan: &TemplateLoopAggregateRenderPlan) -> bool {
+fn aggregate_plan_contains_render_slot(plan: &TemplateAggregateRenderPlan) -> bool {
     plan.pieces.iter().any(|piece| match piece {
-        TemplateLoopAggregatePiece::Aggregate => false,
-        TemplateLoopAggregatePiece::Render(render_piece) => {
-            render_piece_contains_slot(render_piece)
-        }
+        TemplateAggregatePiece::Aggregate => false,
+        TemplateAggregatePiece::Render(render_piece) => render_piece_contains_slot(render_piece),
     })
 }
 
@@ -2120,7 +2118,10 @@ fn render_piece_contains_slot(piece: &RenderPiece) -> bool {
 
         RenderPiece::ChildTemplate(child) => expression_contains_slot(&child.expression),
 
-        RenderPiece::Text(_) | RenderPiece::HeadContent(_) | RenderPiece::LoopControl(_) => false,
+        RenderPiece::Text(_)
+        | RenderPiece::HeadContent(_)
+        | RenderPiece::LoopControl(_)
+        | RenderPiece::RuntimeSlotSite(_) => false,
     }
 }
 
@@ -2135,7 +2136,8 @@ fn render_piece_contains_no_value_expression(piece: &RenderPiece) -> bool {
         RenderPiece::Text(_)
         | RenderPiece::HeadContent(_)
         | RenderPiece::LoopControl(_)
-        | RenderPiece::Slot(_) => false,
+        | RenderPiece::Slot(_)
+        | RenderPiece::RuntimeSlotSite(_) => false,
     }
 }
 

@@ -423,7 +423,7 @@ It:
 * composes slots, inserts, wrappers, and child templates
 * folds fully constant templates into string literals
 * preserves structured template `if` / `loop` bodies for runtime lazy lowering
-* prepares runtime slot application plans after AST-owned schema extraction and contribution routing
+* prepares runtime slot source/site plans after AST-owned schema extraction and contribution routing
 * validates const-required template control flow before HIR
 * rejects escaped slot/insert helper artifacts that are invalid after composition/routing
 * preserves runtime templates as runtime expressions
@@ -432,9 +432,10 @@ It:
 
 HIR only lowers finalized runtime templates that remain after AST folding. Runtime
 template control flow lowers inline as ordinary HIR branches, loops, accumulator
-appends, and runtime slot-application plans in the enclosing function, not as
-backend-specific template control-flow nodes. HIR consumes AST-prepared slot
-plans only; it does not parse directives or validate slot schemas.
+appends, and AST-prepared runtime slot source/site plans in the enclosing
+function, not as backend-specific template control-flow nodes. HIR consumes
+AST-prepared slot source/site plans only; it does not parse directives or
+validate slot schemas.
 Compile-time page fragments stay outside HIR.
 
 ## Stage 5: HIR Generation
@@ -451,7 +452,7 @@ HIR owns:
 * explicit locals and call targets
 * lowered runtime template expressions
 * inline runtime template control flow as ordinary CFG
-* runtime slot application plans as ordinary string accumulators and appends
+* runtime slot source/site plans lowered as ordinary string accumulators and appends
 * module constants as compile-time metadata
 * advisory private const-fact metadata projected from AST for future optimization consumers
 * stable external function IDs selected during AST resolution

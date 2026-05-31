@@ -19,16 +19,16 @@ use crate::compiler_frontend::ast::templates::template::{
     SlotKey, SlotPlaceholder, TemplateAtom, TemplateContent,
 };
 use crate::compiler_frontend::ast::templates::template_control_flow::{
-    TemplateBranchChain, TemplateBranchSelector, TemplateConditionalBranch, TemplateControlFlow,
-    TemplateFallbackBranch, TemplateLoopAggregatePiece, TemplateLoopAggregateRenderPlan,
+    TemplateAggregatePiece, TemplateAggregateRenderPlan, TemplateBranchChain,
+    TemplateBranchSelector, TemplateConditionalBranch, TemplateControlFlow, TemplateFallbackBranch,
     TemplateLoopControlFlow, TemplateLoopHeader,
 };
 use crate::compiler_frontend::ast::templates::template_render_plan::{
     RenderPiece, TemplateRenderPlan,
 };
 use crate::compiler_frontend::ast::templates::template_slots::{
-    RuntimeSlotApplicationPlan, RuntimeSlotContribution, RuntimeSlotContributionContent,
-    RuntimeSlotContributionPlan, SlotSchema,
+    RuntimeSlotApplicationPlan, RuntimeSlotContributionSource, RuntimeSlotContributionSourceId,
+    RuntimeSlotSiteId, RuntimeSlotSitePiece, RuntimeSlotSitePlan, RuntimeSlotSiteRenderPlan,
 };
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::builtins::CollectionBuiltinOp;
@@ -261,7 +261,7 @@ fn runtime_template_range_loop_expression(
     bindings: LoopBindings,
     range: RangeLoopSpec,
     body_content: TemplateContent,
-    aggregate_plan: TemplateLoopAggregateRenderPlan,
+    aggregate_plan: TemplateAggregateRenderPlan,
     location: SourceLocation,
 ) -> Expression {
     let body_render_plan = TemplateRenderPlan::from_content(&body_content);
@@ -291,7 +291,7 @@ fn runtime_template_collection_loop_expression(
     bindings: LoopBindings,
     iterable: Expression,
     body_content: TemplateContent,
-    aggregate_plan: TemplateLoopAggregateRenderPlan,
+    aggregate_plan: TemplateAggregateRenderPlan,
     location: SourceLocation,
 ) -> Expression {
     let body_render_plan = TemplateRenderPlan::from_content(&body_content);
@@ -320,7 +320,7 @@ fn runtime_template_collection_loop_expression(
 fn runtime_template_conditional_loop_expression(
     condition: Expression,
     body_content: TemplateContent,
-    aggregate_plan: TemplateLoopAggregateRenderPlan,
+    aggregate_plan: TemplateAggregateRenderPlan,
     location: SourceLocation,
 ) -> Expression {
     let body_render_plan = TemplateRenderPlan::from_content(&body_content);
@@ -346,17 +346,17 @@ fn runtime_template_conditional_loop_expression(
 }
 
 fn runtime_slot_application_template_expression(
-    wrapper_content: TemplateContent,
-    contribution_plan: RuntimeSlotContributionPlan,
+    wrapper_plan: TemplateRenderPlan,
+    contribution_sources: Vec<RuntimeSlotContributionSource>,
+    slot_sites: Vec<RuntimeSlotSitePlan>,
     location: SourceLocation,
 ) -> Expression {
-    let wrapper_plan = TemplateRenderPlan::from_content(&wrapper_content);
-
     let mut template = Template::empty();
     template.location = location.clone();
     template.runtime_slot_application = Some(RuntimeSlotApplicationPlan {
         wrapper_plan,
-        contribution_plan,
+        contribution_sources,
+        slot_sites,
         location,
     });
     template.resync_runtime_metadata();
@@ -364,21 +364,50 @@ fn runtime_slot_application_template_expression(
     Expression::template(template, ValueMode::ImmutableOwned)
 }
 
+fn runtime_slot_source(
+    id: usize,
+    target: SlotKey,
+    render_plan: TemplateRenderPlan,
+    location: SourceLocation,
+) -> RuntimeSlotContributionSource {
+    RuntimeSlotContributionSource {
+        id: RuntimeSlotContributionSourceId(id),
+        target,
+        render_plan,
+        renders_wrapper_unconditionally: true,
+        location,
+    }
+}
+
+fn runtime_slot_site(
+    id: usize,
+    key: SlotKey,
+    pieces: Vec<RuntimeSlotSitePiece>,
+    location: SourceLocation,
+) -> RuntimeSlotSitePlan {
+    RuntimeSlotSitePlan {
+        id: RuntimeSlotSiteId(id),
+        key,
+        render_plan: RuntimeSlotSiteRenderPlan { pieces },
+        location,
+    }
+}
+
 fn aggregate_plan_around_body(
     prefix: StringId,
     suffix: StringId,
     location: SourceLocation,
-) -> TemplateLoopAggregateRenderPlan {
-    TemplateLoopAggregateRenderPlan {
+) -> TemplateAggregateRenderPlan {
+    TemplateAggregateRenderPlan {
         pieces: vec![
-            TemplateLoopAggregatePiece::Render(Box::new(RenderPiece::Text(
+            TemplateAggregatePiece::Render(Box::new(RenderPiece::Text(
                 crate::compiler_frontend::ast::templates::template_render_plan::RenderTextPiece {
                     text: prefix,
                     location: location.clone(),
                 },
             ))),
-            TemplateLoopAggregatePiece::Aggregate,
-            TemplateLoopAggregatePiece::Render(Box::new(RenderPiece::Text(
+            TemplateAggregatePiece::Aggregate,
+            TemplateAggregatePiece::Render(Box::new(RenderPiece::Text(
                 crate::compiler_frontend::ast::templates::template_render_plan::RenderTextPiece {
                     text: suffix,
                     location,
@@ -1627,27 +1656,43 @@ fn runtime_slot_application_replays_repeated_slot_accumulator() {
     let location = location(12);
     let mut builder = setup_builder(&mut string_table);
 
-    let wrapper_content = TemplateContent {
-        atoms: vec![
-            TemplateAtom::Slot(SlotPlaceholder::new(SlotKey::Default)),
-            TemplateAtom::Slot(SlotPlaceholder::new(SlotKey::Default)),
-        ],
-    };
     let contribution_content = template_content_from_expressions(vec![Expression::string_slice(
         slot_text,
         location.clone(),
         ValueMode::ImmutableOwned,
     )]);
-    let contribution_plan = RuntimeSlotContributionPlan {
-        schema: SlotSchema::from_keys_for_test([SlotKey::Default]),
-        contributions: vec![RuntimeSlotContribution {
-            target: SlotKey::Default,
-            content: RuntimeSlotContributionContent::Static(contribution_content),
-            location: location.clone(),
-        }],
+    let source = runtime_slot_source(
+        0,
+        SlotKey::Default,
+        TemplateRenderPlan::from_content(&contribution_content),
+        location.clone(),
+    );
+    let wrapper_plan = TemplateRenderPlan {
+        pieces: vec![
+            RenderPiece::RuntimeSlotSite(RuntimeSlotSiteId(0)),
+            RenderPiece::RuntimeSlotSite(RuntimeSlotSiteId(1)),
+        ],
     };
-    let expr =
-        runtime_slot_application_template_expression(wrapper_content, contribution_plan, location);
+    let slot_sites = vec![
+        runtime_slot_site(
+            0,
+            SlotKey::Default,
+            vec![RuntimeSlotSitePiece::ContributionSource(source.id)],
+            location.clone(),
+        ),
+        runtime_slot_site(
+            1,
+            SlotKey::Default,
+            vec![RuntimeSlotSitePiece::ContributionSource(source.id)],
+            location.clone(),
+        ),
+    ];
+    let expr = runtime_slot_application_template_expression(
+        wrapper_plan,
+        vec![source],
+        slot_sites,
+        location,
+    );
 
     let lowered = builder
         .lower_expression(&expr)
@@ -1680,17 +1725,17 @@ fn runtime_slot_application_missing_slot_appends_empty_accumulator() {
     let location = location(12);
     let mut builder = setup_builder(&mut string_table);
 
-    let wrapper_content = TemplateContent {
-        atoms: vec![TemplateAtom::Slot(SlotPlaceholder::new(SlotKey::Named(
-            title_slot,
-        )))],
+    let wrapper_plan = TemplateRenderPlan {
+        pieces: vec![RenderPiece::RuntimeSlotSite(RuntimeSlotSiteId(0))],
     };
-    let contribution_plan = RuntimeSlotContributionPlan {
-        schema: SlotSchema::from_keys_for_test([SlotKey::Named(title_slot)]),
-        contributions: vec![],
-    };
+    let slot_sites = vec![runtime_slot_site(
+        0,
+        SlotKey::Named(title_slot),
+        vec![],
+        location.clone(),
+    )];
     let expr =
-        runtime_slot_application_template_expression(wrapper_content, contribution_plan, location);
+        runtime_slot_application_template_expression(wrapper_plan, vec![], slot_sites, location);
 
     let lowered = builder
         .lower_expression(&expr)
@@ -1709,9 +1754,10 @@ fn runtime_slot_application_missing_slot_appends_empty_accumulator() {
         .iter()
         .find(|block| block.id == BlockId(0))
         .expect("entry block should exist");
-    assert!(
-        count_block_appends_local_string(entry_block) >= 1,
-        "missing slots should still append their initialized empty accumulator"
+    assert_eq!(
+        count_block_appends_local_string(entry_block),
+        0,
+        "missing runtime slot sites should render as initialized empty output"
     );
 }
 
@@ -1722,7 +1768,7 @@ fn runtime_slot_application_preserves_slot_context_inside_nested_control_flow() 
     let location = location(12);
     let mut builder = setup_builder(&mut string_table);
 
-    let branch_expression = runtime_template_bool_if_expression(
+    let mut branch_expression = runtime_template_bool_if_expression(
         Expression::bool(true, location.clone(), ValueMode::ImmutableOwned),
         TemplateContent {
             atoms: vec![TemplateAtom::Slot(SlotPlaceholder::new(SlotKey::Default))],
@@ -1730,22 +1776,38 @@ fn runtime_slot_application_preserves_slot_context_inside_nested_control_flow() 
         None,
         location.clone(),
     );
+    if let ExpressionKind::Template(template) = &mut branch_expression.kind
+        && let Some(TemplateControlFlow::BranchChain(branch_chain)) = &mut template.control_flow
+    {
+        branch_chain.branches[0].render_plan = Some(TemplateRenderPlan {
+            pieces: vec![RenderPiece::RuntimeSlotSite(RuntimeSlotSiteId(0))],
+        });
+    }
     let wrapper_content = template_content_from_expressions(vec![branch_expression]);
     let contribution_content = template_content_from_expressions(vec![Expression::string_slice(
         slot_text,
         location.clone(),
         ValueMode::ImmutableOwned,
     )]);
-    let contribution_plan = RuntimeSlotContributionPlan {
-        schema: SlotSchema::from_keys_for_test([SlotKey::Default]),
-        contributions: vec![RuntimeSlotContribution {
-            target: SlotKey::Default,
-            content: RuntimeSlotContributionContent::Static(contribution_content),
-            location: location.clone(),
-        }],
-    };
-    let expr =
-        runtime_slot_application_template_expression(wrapper_content, contribution_plan, location);
+    let source = runtime_slot_source(
+        0,
+        SlotKey::Default,
+        TemplateRenderPlan::from_content(&contribution_content),
+        location.clone(),
+    );
+    let wrapper_plan = TemplateRenderPlan::from_content(&wrapper_content);
+    let slot_sites = vec![runtime_slot_site(
+        0,
+        SlotKey::Default,
+        vec![RuntimeSlotSitePiece::ContributionSource(source.id)],
+        location.clone(),
+    )];
+    let expr = runtime_slot_application_template_expression(
+        wrapper_plan,
+        vec![source],
+        slot_sites,
+        location,
+    );
 
     let lowered = builder
         .lower_expression(&expr)
@@ -2319,7 +2381,7 @@ fn runtime_template_control_flow_loop_range_lowers_inline_and_wraps_aggregate_wh
             .blocks
             .iter()
             .any(|block| block_assigns_string_literal(block, "<card>")),
-        "emitted loop aggregate should apply the owning head before the aggregate"
+        "emitted aggregate should apply the owning head before the aggregate"
     );
     assert!(
         builder
@@ -2327,11 +2389,11 @@ fn runtime_template_control_flow_loop_range_lowers_inline_and_wraps_aggregate_wh
             .blocks
             .iter()
             .any(|block| block_assigns_string_literal(block, "</card>")),
-        "emitted loop aggregate should apply the owning head after the aggregate"
+        "emitted aggregate should apply the owning head after the aggregate"
     );
     assert!(
         builder.module.blocks.iter().any(block_appends_local_string),
-        "emitted loop aggregate should append the loop-local aggregate string"
+        "emitted aggregate should append the loop-local aggregate string"
     );
 }
 
@@ -2457,7 +2519,7 @@ fn runtime_template_control_flow_conditional_loop_rechecks_condition_and_wraps_w
             .blocks
             .iter()
             .any(|block| block_assigns_string_literal(block, "<wrap>")),
-        "emitted conditional loop aggregate should apply the owning wrapper"
+        "emitted aggregate should apply the owning wrapper"
     );
 }
 

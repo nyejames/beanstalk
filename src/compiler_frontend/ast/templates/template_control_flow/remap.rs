@@ -7,8 +7,8 @@
 use crate::compiler_frontend::symbols::string_interning::StringIdRemap;
 
 use super::types::{
-    TemplateBranchChain, TemplateBranchSelector, TemplateControlFlow, TemplateLoopAggregatePiece,
-    TemplateLoopAggregateRenderPlan, TemplateLoopControlFlow, TemplateLoopHeader,
+    TemplateAggregatePiece, TemplateAggregateRenderPlan, TemplateBranchChain,
+    TemplateBranchSelector, TemplateControlFlow, TemplateLoopControlFlow, TemplateLoopHeader,
 };
 
 impl TemplateControlFlow {
@@ -73,7 +73,7 @@ impl TemplateLoopControlFlow {
     }
 }
 
-impl TemplateLoopAggregateRenderPlan {
+impl TemplateAggregateRenderPlan {
     pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         for piece in &mut self.pieces {
             piece.remap_string_ids(remap);
@@ -81,7 +81,7 @@ impl TemplateLoopAggregateRenderPlan {
     }
 }
 
-impl TemplateLoopAggregatePiece {
+impl TemplateAggregatePiece {
     fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         match self {
             Self::Render(piece) => piece.remap_string_ids(remap),

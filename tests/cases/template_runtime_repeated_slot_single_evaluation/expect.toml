@@ -1,0 +1,10 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = [
+  "<p class=\"first\">",
+  "<p class=\"second\">",
+  "count=1",
+  "final-count=1",
+]
+rendered_output_not_contains = ["count=2", "final-count=2"]

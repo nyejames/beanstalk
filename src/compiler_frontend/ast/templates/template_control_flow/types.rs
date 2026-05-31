@@ -68,7 +68,7 @@ pub(crate) struct TemplateLoopControlFlow {
     pub(crate) header: TemplateLoopHeader,
     pub(crate) body_content: TemplateContent,
     pub(crate) body_render_plan: Option<TemplateRenderPlan>,
-    pub(crate) aggregate_render_plan: Option<TemplateLoopAggregateRenderPlan>,
+    pub(crate) aggregate_render_plan: Option<TemplateAggregateRenderPlan>,
     pub(crate) location: SourceLocation,
 }
 
@@ -113,17 +113,19 @@ pub(crate) enum TemplateBodyEmission {
     Continue,
 }
 
-/// Prepared render plan for applying the owning loop template head to the
-/// runtime aggregate output exactly once.
+/// Prepared render plan for applying wrappers around maybe-empty aggregate output.
+///
+/// Loop heads use this around the per-loop aggregate, while conditional child
+/// wrappers use the same shape around a child control-flow accumulator.
 #[derive(Clone, Debug)]
-pub(crate) struct TemplateLoopAggregateRenderPlan {
-    pub(crate) pieces: Vec<TemplateLoopAggregatePiece>,
+pub(crate) struct TemplateAggregateRenderPlan {
+    pub(crate) pieces: Vec<TemplateAggregatePiece>,
 }
 
-/// A loop aggregate plan is mostly an ordinary render plan, with one explicit
+/// An aggregate plan is mostly an ordinary render plan, with one explicit
 /// placeholder for the runtime aggregate local.
 #[derive(Clone, Debug)]
-pub(crate) enum TemplateLoopAggregatePiece {
+pub(crate) enum TemplateAggregatePiece {
     Render(Box<RenderPiece>),
     Aggregate,
 }
@@ -141,10 +143,11 @@ pub(crate) enum TemplateBodyParseMode {
 
 /// Selects the post-parse validation rules for structured template control flow.
 ///
-/// Runtime-capable templates must not leave control-flow-local slot artifacts for
-/// HIR. Const-required templates use stricter foldability validation instead,
-/// which lets compile-time helper templates keep slot structure until a parent
-/// template composes it.
+/// Runtime-capable templates may carry AST-prepared runtime slot application
+/// plans, but unresolved helper artifacts that escape routing/composition are
+/// invalid before HIR. Const-required templates use stricter foldability
+/// validation instead, which lets compile-time helper templates keep slot
+/// structure until a parent template composes it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum TemplateControlFlowValidationMode {
     RuntimeCapable,

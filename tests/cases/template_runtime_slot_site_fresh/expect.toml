@@ -1,0 +1,8 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = [
+  "<ul>",
+  "fresh runtime",
+]
+rendered_output_not_contains = ["<li class=\"wrapped\">"]

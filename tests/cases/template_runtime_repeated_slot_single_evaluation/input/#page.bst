@@ -1,0 +1,27 @@
+repeater = [:
+    <section>
+        <p class="first">[$slot("item")]</p>
+        <p class="second">[$slot("item")]</p>
+        [$slot]
+    </section>
+]
+
+mark_once |values ~{Int}| -> String:
+    ~values.push(1)
+    count = values.length()
+    return [:count=[count]]
+;
+
+show = true
+values ~{Int} = {}
+
+rendered = [repeater:
+    [$insert("item"):
+        [if show:
+            [mark_once(~values)]
+        ]
+    ]
+]
+
+io(rendered)
+io([:final-count=[values.length()]])

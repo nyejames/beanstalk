@@ -1140,6 +1140,7 @@ fn fold_plan_to_emission(
                 // content still renders.
                 None
             }
+            RenderPiece::RuntimeSlotSite(_) => None,
         };
 
         let Some(expression) = maybe_expression else {

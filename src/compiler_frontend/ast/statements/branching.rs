@@ -81,6 +81,27 @@ fn peek_next_non_newline_token_index(token_stream: &FileTokens) -> Option<usize>
         .map(|(i, _)| i)
 }
 
+fn reject_same_line_else_if(token_stream: &FileTokens) -> Result<(), CompilerDiagnostic> {
+    let else_location = token_stream.current_location();
+    let Some(next_token) = token_stream.tokens.get(token_stream.index + 1) else {
+        return Ok(());
+    };
+
+    // Statement `else if` is deliberately not a branch-chain syntax. A nested
+    // `if` remains available as the first statement inside a separate `else` body.
+    let next_token_is_same_line_if = matches!(next_token.kind, TokenKind::If)
+        && next_token.location.start_pos.line_number == else_location.start_pos.line_number;
+
+    if next_token_is_same_line_if {
+        return Err(CompilerDiagnostic::invalid_control_flow_statement(
+            InvalidControlFlowStatementReason::ElseIfUnsupported,
+            else_location,
+        ));
+    }
+
+    Ok(())
+}
+
 /// Parse an `if` statement or an `if <subject> is:` match statement.
 ///
 /// WHAT: detects single-predicate option matches (`if option is |name|:`) before
@@ -150,6 +171,7 @@ pub fn create_branch(
     )?;
 
     let else_block = if token_stream.current_token_kind() == &TokenKind::Else {
+        reject_same_line_else_if(token_stream)?;
         token_stream.advance();
         let else_context = context.new_child_control_flow(ContextKind::Branch, string_table);
         Some(function_body_to_ast(
@@ -198,6 +220,7 @@ fn create_option_present_capture_branch(
     )?;
 
     let else_block = if token_stream.current_token_kind() == &TokenKind::Else {
+        reject_same_line_else_if(token_stream)?;
         token_stream.advance();
         let else_context = context.new_child_control_flow(ContextKind::Branch, string_table);
         Some(function_body_to_ast(

@@ -3115,14 +3115,19 @@ path = "template_if_bool_runtime"
 tags = ["integration","templates"]
 
 [[case]]
-id = "template_match_style_if_rejected"
-path = "template_match_style_if_rejected"
+id = "template_if_match_style_unsupported"
+path = "template_if_match_style_unsupported"
 tags = ["integration","templates","diagnostics"]
 
 [[case]]
-id = "template_match_style_else_if_rejected"
-path = "template_match_style_else_if_rejected"
+id = "template_else_if_match_style_unsupported"
+path = "template_else_if_match_style_unsupported"
 tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "template_case_identifier_success"
+path = "template_case_identifier_success"
+tags = ["integration","templates"]
 
 [[case]]
 id = "template_if_missing_condition"
@@ -3321,8 +3326,58 @@ path = "template_runtime_loop_slot_application"
 tags = ["integration","templates"]
 
 [[case]]
+id = "template_runtime_slot_break_inside_loop"
+path = "template_runtime_slot_break_inside_loop"
+tags = ["integration","templates"]
+
+[[case]]
 id = "template_runtime_slot_children_fresh_control_flow"
 path = "template_runtime_slot_children_fresh_control_flow"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_runtime_slot_continue_inside_loop"
+path = "template_runtime_slot_continue_inside_loop"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_runtime_slot_loop_control_outside_loop_rejected"
+path = "template_runtime_slot_loop_control_outside_loop_rejected"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "template_runtime_slot_output_then_continue_inside_loop"
+path = "template_runtime_slot_output_then_continue_inside_loop"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_runtime_repeated_slot_single_evaluation"
+path = "template_runtime_repeated_slot_single_evaluation"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_runtime_repeated_slot_different_wrappers"
+path = "template_runtime_repeated_slot_different_wrappers"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_runtime_slot_site_nested_wrapper"
+path = "template_runtime_slot_site_nested_wrapper"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_runtime_slot_site_fresh"
+path = "template_runtime_slot_site_fresh"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_runtime_slot_site_children_per_child"
+path = "template_runtime_slot_site_children_per_child"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_runtime_slot_mixed_static_runtime_order"
+path = "template_runtime_slot_mixed_static_runtime_order"
 tags = ["integration","templates"]
 
 [[case]]
@@ -3889,6 +3944,11 @@ tags = ["integration", "templates", "borrows"]
 [[case]]
 id = "if_condition_requires_bool"
 path = "if_condition_requires_bool"
+tags = ["integration", "control-flow", "diagnostics"]
+
+[[case]]
+id = "if_statement_else_if_unsupported"
+path = "if_statement_else_if_unsupported"
 tags = ["integration", "control-flow", "diagnostics"]
 
 [[case]]

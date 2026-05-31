@@ -6,7 +6,9 @@ use crate::compiler_frontend::ast::templates::template::{
 use crate::compiler_frontend::ast::templates::template_head_parser::directive_args::{
     parse_optional_slot_target_argument, parse_required_slot_name_argument,
 };
-use crate::compiler_frontend::ast::templates::template_render_plan::TemplateRenderPlan;
+use crate::compiler_frontend::ast::templates::template_render_plan::{
+    RenderPiece, RenderTextPiece, TemplateRenderPlan,
+};
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationTable};
 use crate::compiler_frontend::compiler_errors::SourceLocation;
@@ -530,6 +532,7 @@ fn route_slot_contributions_routes_loose_to_positional_then_default() {
 fn route_slot_contributions_detects_runtime_contribution_content() {
     let mut string_table = StringTable::new();
     let wrapper = template_from_source("[:[$slot]]", &mut string_table);
+    assert!(wrapper.has_unresolved_slots());
 
     let runtime_expression = Expression::runtime_with_type_id(
         Vec::new(),
@@ -538,7 +541,6 @@ fn route_slot_contributions_detects_runtime_contribution_content() {
         SourceLocation::default(),
         ValueMode::ImmutableOwned,
     );
-
     let fill_content = TemplateContent {
         atoms: vec![TemplateAtom::Content(TemplateSegment::new(
             runtime_expression,
@@ -564,7 +566,12 @@ fn route_slot_contributions_detects_runtime_contribution_content() {
 fn runtime_slot_application_plan_model_holds_wrapper_plan_and_contributions() {
     let mut string_table = StringTable::new();
     let wrapper = template_from_source("[:[$slot]]", &mut string_table);
-    let wrapper_plan = TemplateRenderPlan::from_content(&wrapper.content);
+    assert!(wrapper.has_unresolved_slots());
+    let site_id = super::runtime_plan::RuntimeSlotSiteId(0);
+    let source_id = super::runtime_plan::RuntimeSlotContributionSourceId(0);
+    let wrapper_plan = TemplateRenderPlan {
+        pieces: vec![RenderPiece::RuntimeSlotSite(site_id)],
+    };
 
     let contrib_template = template_from_source("[:hello]", &mut string_table);
     let contrib_content = TemplateContent {
@@ -574,23 +581,236 @@ fn runtime_slot_application_plan_model_holds_wrapper_plan_and_contributions() {
         ))],
     };
 
-    let contribution = super::runtime_plan::RuntimeSlotContribution {
+    let contribution = super::runtime_plan::RuntimeSlotContributionSource {
+        id: source_id,
         target: SlotKey::Default,
-        content: super::runtime_plan::RuntimeSlotContributionContent::Static(contrib_content),
+        render_plan: TemplateRenderPlan::from_content(&contrib_content),
+        renders_wrapper_unconditionally: true,
         location: SourceLocation::default(),
     };
 
     let plan = super::runtime_plan::RuntimeSlotApplicationPlan {
         wrapper_plan,
-        contribution_plan: super::runtime_plan::RuntimeSlotContributionPlan {
-            schema: super::schema::collect_slot_schema(&wrapper, &SourceLocation::default())
-                .unwrap(),
-            contributions: vec![contribution],
-        },
+        contribution_sources: vec![contribution],
+        slot_sites: vec![super::runtime_plan::RuntimeSlotSitePlan {
+            id: site_id,
+            key: SlotKey::Default,
+            render_plan: super::runtime_plan::RuntimeSlotSiteRenderPlan {
+                pieces: vec![
+                    super::runtime_plan::RuntimeSlotSitePiece::ContributionSource(source_id),
+                ],
+            },
+            location: SourceLocation::default(),
+        }],
         location: SourceLocation::default(),
     };
 
     assert!(!plan.wrapper_plan.pieces.is_empty());
-    assert_eq!(plan.contribution_plan.contributions.len(), 1);
-    assert!(plan.contribution_plan.schema.has_default_slot);
+    assert_eq!(plan.contribution_sources.len(), 1);
+    assert_eq!(plan.slot_sites.len(), 1);
+    assert!(!plan.contribution_sources[0].render_plan.pieces.is_empty());
+}
+
+#[test]
+fn runtime_slot_application_plan_builds_render_plan_for_runtime_contribution() {
+    let mut string_table = StringTable::new();
+    let wrapper = template_from_source("[:[$slot]]", &mut string_table);
+    let runtime_expression = Expression::runtime_with_type_id(
+        Vec::new(),
+        DataType::Int,
+        builtin_type_ids::INT,
+        SourceLocation::default(),
+        ValueMode::ImmutableOwned,
+    );
+
+    let fill_content = TemplateContent {
+        atoms: vec![TemplateAtom::Content(TemplateSegment::new(
+            runtime_expression,
+            TemplateSegmentOrigin::Body,
+        ))],
+    };
+
+    let outcome = super::runtime_plan::resolve_slot_application(
+        &wrapper,
+        fill_content,
+        &SourceLocation::default(),
+        &string_table,
+        SlotResolutionMode::AllowRuntimePlans,
+    )
+    .unwrap();
+
+    let SlotResolutionOutcome::Runtime(plan) = outcome else {
+        panic!("runtime contribution should force runtime slot planning");
+    };
+
+    let contribution = plan
+        .contribution_sources
+        .iter()
+        .find(|source| source.target == SlotKey::Default)
+        .expect("runtime default contribution should be planned");
+
+    assert!(!contribution.render_plan.pieces.is_empty());
+    assert!(!contribution.renders_wrapper_unconditionally);
+    assert_eq!(plan.slot_sites.len(), 1);
+}
+
+#[test]
+fn runtime_slot_application_plan_builds_one_site_per_repeated_placeholder() {
+    let mut string_table = StringTable::new();
+    let wrapper = template_from_source("[:[$slot(1)] and [$slot(1)]]", &mut string_table);
+    let runtime_expression = Expression::runtime_with_type_id(
+        Vec::new(),
+        DataType::Int,
+        builtin_type_ids::INT,
+        SourceLocation::default(),
+        ValueMode::ImmutableOwned,
+    );
+
+    let fill_content = TemplateContent {
+        atoms: vec![TemplateAtom::Content(TemplateSegment::new(
+            runtime_expression,
+            TemplateSegmentOrigin::Body,
+        ))],
+    };
+
+    let outcome = super::runtime_plan::resolve_slot_application(
+        &wrapper,
+        fill_content,
+        &SourceLocation::default(),
+        &string_table,
+        SlotResolutionMode::AllowRuntimePlans,
+    )
+    .unwrap();
+
+    let SlotResolutionOutcome::Runtime(plan) = outcome else {
+        panic!("runtime contribution should force runtime slot planning");
+    };
+
+    assert_eq!(plan.contribution_sources.len(), 1);
+    assert_eq!(plan.slot_sites.len(), 2);
+    assert!(matches!(
+        plan.wrapper_plan.pieces[0],
+        RenderPiece::RuntimeSlotSite(super::runtime_plan::RuntimeSlotSiteId(0))
+    ));
+    assert!(matches!(
+        plan.wrapper_plan.pieces[2],
+        RenderPiece::RuntimeSlotSite(super::runtime_plan::RuntimeSlotSiteId(1))
+    ));
+}
+
+#[test]
+fn runtime_slot_application_plan_builds_one_source_per_contribution_atom() {
+    let mut string_table = StringTable::new();
+    let wrapper = template_from_source("[:[$slot]]", &mut string_table);
+    let first_expression = Expression::runtime_with_type_id(
+        Vec::new(),
+        DataType::Int,
+        builtin_type_ids::INT,
+        SourceLocation::default(),
+        ValueMode::ImmutableOwned,
+    );
+    let second_expression = Expression::runtime_with_type_id(
+        Vec::new(),
+        DataType::Int,
+        builtin_type_ids::INT,
+        SourceLocation::default(),
+        ValueMode::ImmutableOwned,
+    );
+
+    let fill_content = TemplateContent {
+        atoms: vec![
+            TemplateAtom::Content(TemplateSegment::new(
+                first_expression,
+                TemplateSegmentOrigin::Body,
+            )),
+            TemplateAtom::Content(TemplateSegment::new(
+                second_expression,
+                TemplateSegmentOrigin::Body,
+            )),
+        ],
+    };
+
+    let outcome = super::runtime_plan::resolve_slot_application(
+        &wrapper,
+        fill_content,
+        &SourceLocation::default(),
+        &string_table,
+        SlotResolutionMode::AllowRuntimePlans,
+    )
+    .unwrap();
+
+    let SlotResolutionOutcome::Runtime(plan) = outcome else {
+        panic!("runtime contributions should force runtime slot planning");
+    };
+
+    assert_eq!(plan.contribution_sources.len(), 2);
+    assert_eq!(
+        plan.contribution_sources[0].id,
+        super::runtime_plan::RuntimeSlotContributionSourceId(0)
+    );
+    assert_eq!(
+        plan.contribution_sources[1].id,
+        super::runtime_plan::RuntimeSlotContributionSourceId(1)
+    );
+    assert_eq!(plan.slot_sites.len(), 1);
+}
+
+#[test]
+fn runtime_slot_contribution_render_plan_remaps_string_ids() {
+    let mut local_table = StringTable::new();
+    let contribution_text = local_table.intern("contribution");
+    let target_name = local_table.intern("title");
+    let source_id = super::runtime_plan::RuntimeSlotContributionSourceId(0);
+
+    let mut plan = super::runtime_plan::RuntimeSlotApplicationPlan {
+        wrapper_plan: TemplateRenderPlan::from_content(&TemplateContent::default()),
+        contribution_sources: vec![super::runtime_plan::RuntimeSlotContributionSource {
+            id: source_id,
+            target: SlotKey::Named(target_name),
+            render_plan: TemplateRenderPlan {
+                pieces: vec![RenderPiece::Text(RenderTextPiece {
+                    text: contribution_text,
+                    location: SourceLocation::default(),
+                })],
+            },
+            renders_wrapper_unconditionally: true,
+            location: SourceLocation::default(),
+        }],
+        slot_sites: vec![super::runtime_plan::RuntimeSlotSitePlan {
+            id: super::runtime_plan::RuntimeSlotSiteId(0),
+            key: SlotKey::Named(target_name),
+            render_plan: super::runtime_plan::RuntimeSlotSiteRenderPlan {
+                pieces: vec![super::runtime_plan::RuntimeSlotSitePiece::Render(Box::new(
+                    RenderPiece::Text(RenderTextPiece {
+                        text: contribution_text,
+                        location: SourceLocation::default(),
+                    }),
+                ))],
+            },
+            location: SourceLocation::default(),
+        }],
+        location: SourceLocation::default(),
+    };
+
+    let mut global_table = StringTable::new();
+    global_table.intern("preexisting");
+    let remap = global_table.merge_from(&local_table);
+
+    plan.remap_string_ids(&remap);
+
+    let RenderPiece::Text(text) = &plan.contribution_sources[0].render_plan.pieces[0] else {
+        panic!("expected contribution render plan to keep its text piece");
+    };
+
+    assert_eq!(global_table.resolve(text.text), "contribution");
+
+    let super::runtime_plan::RuntimeSlotSitePiece::Render(site_piece) =
+        &plan.slot_sites[0].render_plan.pieces[0]
+    else {
+        panic!("expected site render plan to keep render piece");
+    };
+    let RenderPiece::Text(text) = site_piece.as_ref() else {
+        panic!("expected site render plan to remap render text");
+    };
+    assert_eq!(global_table.resolve(text.text), "contribution");
 }

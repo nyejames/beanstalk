@@ -642,7 +642,7 @@ fn branch_selector_and_context_from_parsed_if_header(
 
         ParsedIfHeader::MatchStyle { scrutinee } => {
             Err(CompilerDiagnostic::invalid_template_structure(
-                InvalidTemplateStructureReason::TemplateMatchStyleControlFlowRemoved,
+                InvalidTemplateStructureReason::TemplateMatchStyleControlFlowUnsupported,
                 scrutinee.location,
             ))
         }

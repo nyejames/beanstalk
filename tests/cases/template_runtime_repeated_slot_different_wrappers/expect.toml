@@ -1,0 +1,10 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = [
+  "<div class=\"plain\">",
+  "<div class=\"wrapped\">",
+  "<strong>",
+  "value runtime",
+]
+rendered_output_not_contains = ["<strong><strong>"]

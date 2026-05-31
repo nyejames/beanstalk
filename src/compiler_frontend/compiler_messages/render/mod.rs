@@ -546,6 +546,9 @@ pub(crate) fn invalid_control_flow_statement_message(
         InvalidControlFlowStatementReason::ElseOutsideIfOrMatch => {
             "Unexpected use of 'else' keyword. It can only be used inside an if statement or match statement.".to_string()
         }
+        InvalidControlFlowStatementReason::ElseIfUnsupported => {
+            "Ordinary if statements do not support 'else if'. Use a standalone 'else' body with a nested if statement when another condition is needed.".to_string()
+        }
         InvalidControlFlowStatementReason::BreakOutsideLoop => {
             "Break statements can only be used inside loops.".to_string()
         }
@@ -1512,8 +1515,8 @@ pub(crate) fn invalid_template_structure_message(
         crate::compiler_frontend::compiler_messages::InvalidTemplateStructureReason::UnexpectedTokenAfterControlFlowSuffix => {
             "Unexpected token after template control-flow suffix.".to_string()
         }
-        crate::compiler_frontend::compiler_messages::InvalidTemplateStructureReason::TemplateMatchStyleControlFlowRemoved => {
-            "Match-style template control flow (`if value is:`) is not supported. Use a boolean condition or option-present capture in template `if` suffixes.".to_string()
+        crate::compiler_frontend::compiler_messages::InvalidTemplateStructureReason::TemplateMatchStyleControlFlowUnsupported => {
+            "Template `if` heads support Bool conditions and option-present capture only. Use ordinary statement/value `if value is:` blocks for pattern matching outside templates.".to_string()
         }
         crate::compiler_frontend::compiler_messages::InvalidTemplateStructureReason::TemplateIfConditionNotConst => {
             "Template `if` condition in a const-required template must fold to a Bool at compile time.".to_string()

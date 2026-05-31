@@ -14,7 +14,7 @@ use crate::compiler_frontend::ast::templates::template_slots::error::TemplateSlo
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::SourceLocation;
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, InvalidTemplateSlotReason};
-use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap, StringTable};
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 
 use rustc_hash::FxHashSet;
 use std::collections::BTreeSet;
@@ -85,29 +85,6 @@ impl SlotSchema {
         }
 
         keys
-    }
-
-    #[cfg(test)]
-    pub(crate) fn from_keys_for_test(keys: impl IntoIterator<Item = SlotKey>) -> Self {
-        let mut schema = Self::default();
-
-        for key in keys {
-            match key {
-                SlotKey::Default => schema.has_default_slot = true,
-                SlotKey::Named(name) => {
-                    schema.named_slots.insert(name);
-                }
-                SlotKey::Positional(index) => {
-                    schema.positional_slots.insert(index);
-                }
-            }
-        }
-
-        schema
-    }
-
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        self.named_slots = self.named_slots.iter().map(|id| remap.get(*id)).collect();
     }
 }
 

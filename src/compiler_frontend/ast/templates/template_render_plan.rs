@@ -11,6 +11,7 @@ use crate::compiler_frontend::ast::templates::template::{
 use crate::compiler_frontend::ast::templates::template_control_flow::{
     TemplateControlFlow, TemplateLoopControlSignal,
 };
+use crate::compiler_frontend::ast::templates::template_slots::RuntimeSlotSiteId;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
@@ -41,6 +42,11 @@ pub enum RenderPiece {
     LoopControl(TemplateLoopControlSignal),
     /// Unresolved slot placeholder that will be filled later.
     Slot(SlotPlaceholder),
+    /// Runtime slot placeholder occurrence resolved by AST planning.
+    ///
+    /// Each site points to placeholder-local wrapper behavior while contribution
+    /// sources stay evaluated once in the runtime slot application plan.
+    RuntimeSlotSite(RuntimeSlotSiteId),
 }
 
 #[derive(Debug, Clone)]
@@ -96,6 +102,8 @@ impl RenderPiece {
             RenderPiece::Slot(placeholder) => {
                 placeholder.remap_string_ids(remap);
             }
+
+            RenderPiece::RuntimeSlotSite(_) => {}
         }
     }
 }
@@ -357,6 +365,8 @@ impl TemplateRenderPlan {
                 RenderPiece::Slot(placeholder) => {
                     atoms.push(TemplateAtom::Slot(placeholder.clone()));
                 }
+
+                RenderPiece::RuntimeSlotSite(_) => {}
             }
         }
 
@@ -378,6 +388,7 @@ impl TemplateRenderPlan {
                 RenderPiece::DynamicExpression(p) => Some(p.expression.clone()),
                 RenderPiece::LoopControl(_) => None,
                 RenderPiece::Slot(_) => None,
+                RenderPiece::RuntimeSlotSite(_) => None,
             })
             .collect()
     }

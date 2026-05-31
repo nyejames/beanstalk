@@ -12,8 +12,9 @@ use crate::compiler_frontend::ast::statements::match_patterns::{
     MatchPattern, RelationalPatternOp,
 };
 use crate::compiler_frontend::compiler_messages::{
-    DiagnosticKind, DiagnosticPayload, InvalidMatchArmReason, InvalidMatchPatternReason,
-    NonExhaustiveMatchReason, RuleDiagnosticKind, SyntaxDiagnosticKind, TypeMismatchContext,
+    DiagnosticKind, DiagnosticPayload, InvalidControlFlowStatementReason, InvalidMatchArmReason,
+    InvalidMatchPatternReason, NonExhaustiveMatchReason, RuleDiagnosticKind, SyntaxDiagnosticKind,
+    TypeMismatchContext,
 };
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::tests::test_support::{
@@ -37,6 +38,24 @@ fn parses_if_else_statements() {
         else_block.as_ref().map(Vec::len),
         Some(1),
         "else block should contain one host call"
+    );
+}
+
+#[test]
+fn rejects_same_line_else_if_statement() {
+    let diagnostic = parse_single_file_ast_diagnostic(
+        "if true:\n    io(\"selected\")\nelse if false:\n    io(\"unsupported\")\n;\n",
+    );
+
+    assert!(
+        matches!(
+            diagnostic.payload,
+            DiagnosticPayload::InvalidControlFlowStatement {
+                reason: InvalidControlFlowStatementReason::ElseIfUnsupported,
+            }
+        ),
+        "{:?}",
+        diagnostic.payload
     );
 }
 

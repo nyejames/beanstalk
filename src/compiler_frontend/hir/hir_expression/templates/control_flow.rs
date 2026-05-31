@@ -22,8 +22,8 @@ use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::return_hir_transformation_error;
 
-use super::loop_aggregate::RuntimeTemplateLoopAggregateAppend;
-use super::render_append::RuntimeTemplateAppendContext;
+use super::aggregate::RuntimeTemplateAggregateAppend;
+use super::append_context::RuntimeTemplateAppendContext;
 
 struct RuntimeTemplateBranchChainAppend<'a, 'context> {
     branch_chain: &'a TemplateBranchChain,
@@ -90,11 +90,11 @@ impl<'a> HirBuilder<'a> {
         template: &Template,
         control_flow: &TemplateControlFlow,
         accumulator: LocalId,
-        emitted_any_iteration: Option<LocalId>,
+        emitted_output: Option<LocalId>,
         location: &SourceLocation,
     ) -> Result<TemplateBodyEmission, CompilerError> {
-        let append_context = RuntimeTemplateAppendContext::new(accumulator)
-            .with_emitted_any_iteration(emitted_any_iteration);
+        let append_context =
+            RuntimeTemplateAppendContext::new(accumulator).with_emitted_output(emitted_output);
 
         self.append_runtime_template_control_flow_with_context(
             template,
@@ -288,7 +288,7 @@ impl<'a> HirBuilder<'a> {
                     |builder| {
                         let iteration_context = append_context
                             .with_target_accumulator(aggregate)
-                            .with_emitted_any_iteration(Some(emitted_any_iteration));
+                            .with_emitted_output(Some(emitted_any_iteration));
 
                         builder.append_runtime_template_loop_body_iteration(
                             body_plan,
@@ -307,7 +307,7 @@ impl<'a> HirBuilder<'a> {
                     |builder| {
                         let iteration_context = append_context
                             .with_target_accumulator(aggregate)
-                            .with_emitted_any_iteration(Some(emitted_any_iteration));
+                            .with_emitted_output(Some(emitted_any_iteration));
 
                         builder.append_runtime_template_loop_body_iteration(
                             body_plan,
@@ -326,7 +326,7 @@ impl<'a> HirBuilder<'a> {
                     |builder| {
                         let iteration_context = append_context
                             .with_target_accumulator(aggregate)
-                            .with_emitted_any_iteration(Some(emitted_any_iteration));
+                            .with_emitted_output(Some(emitted_any_iteration));
 
                         builder.append_runtime_template_loop_body_iteration(
                             body_plan,
@@ -338,12 +338,12 @@ impl<'a> HirBuilder<'a> {
             }
         }
 
-        self.append_runtime_template_loop_aggregate_if_emitted(
+        self.append_runtime_template_aggregate_if_emitted(
             template,
             aggregate_plan,
-            RuntimeTemplateLoopAggregateAppend {
+            RuntimeTemplateAggregateAppend {
                 aggregate,
-                emitted_any_iteration,
+                emitted_output: emitted_any_iteration,
                 append_context,
             },
             fallback_location,

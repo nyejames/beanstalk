@@ -10,7 +10,7 @@ use crate::compiler_frontend::ast::templates::template::{
     Style, TemplateConstValueKind, TemplateContent, TemplateType,
 };
 use crate::compiler_frontend::ast::templates::template_control_flow::{
-    TemplateControlFlow, TemplateLoopAggregateRenderPlan,
+    TemplateAggregateRenderPlan, TemplateControlFlow,
 };
 use crate::compiler_frontend::ast::templates::template_render_plan::TemplateRenderPlan;
 use crate::compiler_frontend::ast::templates::template_slots::RuntimeSlotApplicationPlan;
@@ -68,14 +68,15 @@ pub struct Template {
     ///
     /// HIR lowers control-flow children into a temporary accumulator, then applies
     /// this plan only if the child structurally emitted output.
-    pub(crate) conditional_child_wrapper_plan: Option<TemplateLoopAggregateRenderPlan>,
+    pub(crate) conditional_child_wrapper_plan: Option<TemplateAggregateRenderPlan>,
 
     /// Runtime slot application plan for templates that should lower through HIR
     /// accumulators rather than being fully expanded at AST time.
     ///
     /// WHEN SET: The template represents a wrapper fill site whose contributions
     /// contain runtime content. The `content` field is typically empty; the
-    /// wrapper plan and routed contributions live here.
+    /// wrapper plan, once-evaluated contribution sources, and placeholder-local
+    /// slot sites live here.
     pub(crate) runtime_slot_application: Option<RuntimeSlotApplicationPlan>,
 
     pub id: String,

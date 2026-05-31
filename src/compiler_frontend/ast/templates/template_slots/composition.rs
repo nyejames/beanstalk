@@ -11,7 +11,7 @@
 //! WHY:
 //! - Keeps the structural rewrite logic separate from contribution bucketing
 //!   and schema discovery, so each submodule has one clear responsibility.
-//! - Runtime planning in `runtime_plan.rs` consumes the same routed data without
+//! - Runtime planning in `runtime_plan/` consumes the same routed data without
 //!   duplicating target validation or loose routing.
 
 use super::contributions::{
@@ -150,7 +150,7 @@ pub(super) fn route_slot_contributions(
 
 /// Recursively replaces slot placeholders in wrapper atoms with routed contributions.
 ///
-/// WHY: Kept as a separate reusable helper so `runtime_plan.rs` can call it for
+/// WHY: Kept as a separate reusable helper so `runtime_plan/` can call it for
 /// the `Composed` path without duplicating the recursive walk.
 pub(super) fn compose_wrapper_atoms_recursive(
     wrapper_atoms: &[TemplateAtom],

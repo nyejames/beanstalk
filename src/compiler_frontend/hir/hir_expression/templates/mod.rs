@@ -5,11 +5,12 @@
 //! the runtime surface that remains after those decisions are complete.
 //!
 //! Submodule map:
+//! - `append_context`: shared append target and runtime slot source/site context.
 //! - `linear`: ordinary render-plan appending for runtime templates without control flow.
 //! - `control_flow`: structured `if` / `loop` dispatch that mutates the enclosing CFG lazily.
 //! - `render_append`: render-plan chunk appending and string coercion shared by runtime paths.
 //! - `option_capture`: option-present template `if` capture lowering.
-//! - `loop_aggregate`: loop aggregate wrapping after at least one iteration emitted output.
+//! - `aggregate`: shared aggregate wrapping after a loop or child emitted output.
 //! - `slot_application`: AST-planned runtime slots lowered through slot accumulators.
 
 use crate::compiler_frontend::ast::templates::template::{TemplateConstValueKind, TemplateType};
@@ -21,9 +22,10 @@ use crate::return_hir_transformation_error;
 
 use super::LoweredExpression;
 
+mod aggregate;
+mod append_context;
 mod control_flow;
 mod linear;
-mod loop_aggregate;
 mod option_capture;
 mod render_append;
 mod slot_application;

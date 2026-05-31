@@ -349,7 +349,10 @@ fn representative_text_location_for_run(run: &[RenderPiece]) -> SourceLocation {
                 return dynamic_piece.expression.location.clone();
             }
 
-            RenderPiece::HeadContent(_) | RenderPiece::LoopControl(_) | RenderPiece::Slot(_) => {}
+            RenderPiece::HeadContent(_)
+            | RenderPiece::LoopControl(_)
+            | RenderPiece::Slot(_)
+            | RenderPiece::RuntimeSlotSite(_) => {}
         }
     }
 

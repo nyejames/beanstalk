@@ -1,10 +1,11 @@
-//! Runtime template loop aggregate lowering.
+//! Runtime template aggregate lowering.
 //!
-//! WHAT: appends a loop aggregate render plan only when at least one iteration emitted output.
-//! WHY: template loop heads/wrappers apply to the aggregate once, while zero-iteration loops
-//! preserve structural no-output semantics.
+//! WHAT: appends an aggregate render plan only when the source accumulator structurally emitted
+//! output.
+//! WHY: loop heads and conditional child wrappers both apply around aggregate output once, while
+//! skipped branches and zero-output loops preserve structural no-output semantics.
 
-use crate::compiler_frontend::ast::templates::template_control_flow::TemplateLoopAggregateRenderPlan;
+use crate::compiler_frontend::ast::templates::template_control_flow::TemplateAggregateRenderPlan;
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
@@ -15,20 +16,20 @@ use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
-use super::render_append::RuntimeTemplateAppendContext;
+use super::append_context::RuntimeTemplateAppendContext;
 
-pub(super) struct RuntimeTemplateLoopAggregateAppend<'context> {
+pub(super) struct RuntimeTemplateAggregateAppend<'context> {
     pub(super) aggregate: LocalId,
-    pub(super) emitted_any_iteration: LocalId,
+    pub(super) emitted_output: LocalId,
     pub(super) append_context: RuntimeTemplateAppendContext<'context>,
 }
 
 impl<'a> HirBuilder<'a> {
-    pub(super) fn append_runtime_template_loop_aggregate_if_emitted(
+    pub(super) fn append_runtime_template_aggregate_if_emitted(
         &mut self,
         template: &Template,
-        aggregate_plan: &TemplateLoopAggregateRenderPlan,
-        append: RuntimeTemplateLoopAggregateAppend,
+        aggregate_plan: &TemplateAggregateRenderPlan,
+        append: RuntimeTemplateAggregateAppend,
         fallback_location: &SourceLocation,
     ) -> Result<(), CompilerError> {
         let condition_block = self.current_block_id_or_error(fallback_location)?;
@@ -36,11 +37,11 @@ impl<'a> HirBuilder<'a> {
         let then_region = self.create_child_region(parent_region);
         let else_region = self.create_child_region(parent_region);
         let then_block =
-            self.create_block(then_region, fallback_location, "template-loop-emitted")?;
+            self.create_block(then_region, fallback_location, "template-aggregate-emitted")?;
         let else_block =
-            self.create_block(else_region, fallback_location, "template-loop-skipped")?;
+            self.create_block(else_region, fallback_location, "template-aggregate-skipped")?;
         let condition = self.make_local_load_expression(
-            append.emitted_any_iteration,
+            append.emitted_output,
             builtin_type_ids::BOOL,
             fallback_location,
             parent_region,
@@ -56,10 +57,10 @@ impl<'a> HirBuilder<'a> {
             fallback_location,
         )?;
         self.set_current_block(then_block, fallback_location)?;
-        if let Some(parent_flag) = append.append_context.emitted_any_iteration() {
-            self.mark_runtime_template_loop_iteration_emitted(parent_flag, fallback_location)?;
+        if let Some(parent_flag) = append.append_context.emitted_output() {
+            self.mark_runtime_template_output_emitted(parent_flag, fallback_location)?;
         }
-        self.append_template_loop_aggregate_plan_with_context(
+        self.append_template_aggregate_plan_with_context(
             template,
             aggregate_plan,
             append.aggregate,
@@ -79,18 +80,18 @@ impl<'a> HirBuilder<'a> {
         }
 
         let merge_block =
-            self.create_block(parent_region, fallback_location, "template-loop-merge")?;
+            self.create_block(parent_region, fallback_location, "template-aggregate-merge")?;
         self.emit_jump_to(
             then_tail_block,
             merge_block,
             fallback_location,
-            "template-loop.emitted.merge",
+            "template-aggregate.emitted.merge",
         )?;
         self.emit_jump_to(
             else_tail_block,
             merge_block,
             fallback_location,
-            "template-loop.skipped.merge",
+            "template-aggregate.skipped.merge",
         )?;
 
         self.set_current_block(merge_block, fallback_location)
@@ -121,9 +122,9 @@ impl<'a> HirBuilder<'a> {
         Ok(flag)
     }
 
-    pub(super) fn mark_runtime_template_loop_iteration_emitted(
+    pub(super) fn mark_runtime_template_output_emitted(
         &mut self,
-        emitted_any_iteration: LocalId,
+        emitted_output: LocalId,
         location: &SourceLocation,
     ) -> Result<(), CompilerError> {
         let region = self.current_region_or_error(location)?;
@@ -137,7 +138,7 @@ impl<'a> HirBuilder<'a> {
 
         self.emit_statement_kind(
             crate::compiler_frontend::hir::statements::HirStatementKind::Assign {
-                target: HirPlace::Local(emitted_any_iteration),
+                target: HirPlace::Local(emitted_output),
                 value: true_value,
             },
             location,

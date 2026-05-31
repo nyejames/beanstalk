@@ -11,44 +11,39 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 ---
 
 # Plans / TODOS
-- Template control flow refactor follow up: `docs/roadmap/plans/template_control_flow_refactor_implementation_plan.md`
+- Final generics design and implementation. Design draft: ``
 - Traits
-- Generic follow-ups after cross-module free-function support:
-  - Decide explicit generic call syntax. Current rejected examples include `identity of Int(42)`, `identity[Int](42)`, and `identity<Int>(42)`.
-  - Design generic function values and higher-order polymorphism.
-  - Design generic receiver methods and receiver methods on instantiated generic types.
-  - Add trait bounds / constraints before broadening behavior-dependent operations on generic parameters.
-  - Design direct facade re-export syntax, function alias exports, and automatic method/function re-export through facade aliases.
-  - Design generic external JS/package functions and backend glue.
-  - Add richer generic instantiation diagnostics with substitution/declaration context beyond the current call-site/body labels.
-  - Design generic aliases with parameters and partial type application.
 - `else => _` (Wildcards in value positions for pattern matching or default arguments in function calls)
 - Replace JSON with beanstalk files (dogfooding for language as a way to store data / config stuff). These could be standardised as their own build system under `src/projects`.
 - Closures
 - Wasm backend plan based on docs inside `docs/wasm-notes`
 - Hash Maps (core library)
 - Collection capacity type extension `{Int 64}`
-- Possibly change generics syntax from `type T` to more conventional syntax? `<T>`
 - Compile time arbitary precision aritmetic + Decimals Type support
 - Move to more specific explicit type declarations for numbers (I32, I64, F32, F64) - JS backend just makes all an F64 and accepts the precision loss, more for future Wasm backend
 
 # Notes
-- Template head suffix control flow is implemented for source-authored Bool `if`, option-present
-  `if`, range `loop`, collection `loop`, standalone `[else]`, standalone `[else if ...]`,
-  structural `[break]` / `[continue]`, const folding where supported, lazy runtime HIR
-  lowering, and runtime slot applications with branch/loop contributions plus `$children(...)`
-  / `$fresh` wrapper behavior. Remaining template follow-ups are deliberate future surfaces,
-  not part of the completed control-flow/runtime-slot implementation plan.
+- The template control-flow runtime-slot refactor is complete. Template head suffix control flow
+  is implemented for source-authored Bool `if`, option-present `if`, range `loop`, collection
+  `loop`, standalone `[else]`, standalone `[else if ...]`, structural `[break]` / `[continue]`,
+  const folding where supported, lazy runtime HIR lowering, and runtime slot applications with
+  branch/loop contributions plus `$children(...)` / `$fresh` wrapper behavior.
+
 - Assert/panic follow-ups after the always-checked `assert` implementation: debug-only assertions,
   lazy runtime assertion-message expressions, compile-time constant assertion messages,
   catchable/recoverable panic design, explicit stop helpers such as `todo` / `unreachable` /
   `fatal` / `abort` / `precondition`, Wasm trap message support, and richer runtime failure
   metadata or stack traces.
+
 - External non-scalar constant design: string slices, collections, and opaque-type external constants in const contexts are rejected for Alpha. Design compile-time representation and validation before enabling.
 - Private const/config follow-ups after the private const config refactor: consume HIR const metadata in borrow checking, temporary-local reduction, and lowering/constant propagation.
+
 - Typed config follow-ups after the private const config refactor: structured typed config values with choices/const records, future `project = Project::Html(...)` syntax, typed backend config schemas, optional config-local helper constants, config lock/cache metadata, numeric config shapes when keys need them, and private inferred `=` const-record config projection.
+
 - `bean new` follow-ups: non-interactive `--default`, template selection, project type aliases, richer scaffold presets, and optional package/dev tooling setup.
+
 - In the current architecture, source libraries are compiled into each consuming module. A future package system may move to separate library compilation, where libraries are built first and project modules consume pre-compiled library artifacts.
+
 - Benchmarking/profiling deferred tooling: CI performance gates, public dashboards,
   source-library HIR caching, ownership/drop/ABI specialization, JS minification/tree-shaking,
   package-manager caching, broad Criterion benchmark suites, tracing/allocation profiler

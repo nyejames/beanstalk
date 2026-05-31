@@ -215,7 +215,8 @@ page_head #= theme_head
     ]
 
     Boolean [codesnippet:if] conditions choose one branch lazily at runtime.
-    [codesnippet, "[else if ...]"] adds more branches in source order.
+    [codesnippet, "[else if ...]"] adds more branches in source order and uses
+    the same Bool and option-present selectors as the initial [codesnippet:if].
     [codesnippet, "[else]"] is optional, must be standalone, and binds to the nearest
     active template [codesnippet:if].
 
@@ -333,5 +334,8 @@ page_head #= theme_head
     normal slot routing. Escaped helper artifacts that still leave unresolved
     [codesnippet:[$slot]] or [codesnippet:$insert(...)] output inside runtime
     control-flow bodies are invalid template structure.
+    Runtime slot applications appended inside template loops follow the same
+    nearest-template-loop [codesnippet, "[break]"] / [codesnippet, "[continue]"]
+    rules as direct loop body content.
 
 ]

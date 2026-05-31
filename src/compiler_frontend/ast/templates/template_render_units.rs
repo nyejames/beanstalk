@@ -18,7 +18,7 @@ use crate::compiler_frontend::ast::templates::template_composition::{
     apply_inherited_child_templates_to_content, compose_template_head_chain, wrap_direct_child_atom,
 };
 use crate::compiler_frontend::ast::templates::template_control_flow::{
-    TemplateControlFlow, TemplateLoopAggregatePiece, TemplateLoopAggregateRenderPlan,
+    TemplateAggregatePiece, TemplateAggregateRenderPlan, TemplateControlFlow,
 };
 use crate::compiler_frontend::ast::templates::template_formatting::{
     BodyFormattingResult, apply_body_formatter,
@@ -35,9 +35,9 @@ use crate::compiler_frontend::compiler_messages::DiagnosticSeverity;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 // Source-authored positional slots are one-based. Index zero is therefore a
-// private marker for synthetic loop-aggregate composition and must be converted
+// private marker for synthetic aggregate composition and must be converted
 // before the aggregate render plan is returned.
-const LOOP_AGGREGATE_MARKER_SLOT_INDEX: usize = 0;
+const AGGREGATE_MARKER_SLOT_INDEX: usize = 0;
 
 /// Result of preparing parsed content through the shared composition /
 /// formatting / finalization pipeline.
@@ -196,9 +196,9 @@ pub(in crate::compiler_frontend::ast::templates) fn prepare_control_flow_render_
 fn prepare_loop_aggregate_render_plan(
     shared_head_prefix: &TemplateContent,
     string_table: &StringTable,
-) -> Result<TemplateLoopAggregateRenderPlan, TemplateError> {
+) -> Result<TemplateAggregateRenderPlan, TemplateError> {
     let mut content = shared_head_prefix.to_owned();
-    content.atoms.push(loop_aggregate_placeholder_atom());
+    content.atoms.push(aggregate_placeholder_atom());
 
     // The aggregate placeholder is structural and local to this synthetic
     // composition pass. It lets normal head-chain/slot composition place the
@@ -214,17 +214,17 @@ fn prepare_loop_aggregate_render_plan(
     let plan = TemplateRenderPlan::from_content(&composed);
     let mut pieces = Vec::new();
     for piece in plan.pieces {
-        pieces.extend(loop_aggregate_pieces_from_render_piece(piece));
+        pieces.extend(aggregate_pieces_from_render_piece(piece));
     }
 
-    Ok(TemplateLoopAggregateRenderPlan { pieces })
+    Ok(TemplateAggregateRenderPlan { pieces })
 }
 
 pub(in crate::compiler_frontend::ast::templates) fn prepare_conditional_child_wrapper_render_plan(
     child_wrappers: &[Template],
     string_table: &StringTable,
-) -> Result<TemplateLoopAggregateRenderPlan, TemplateSlotError> {
-    let aggregate_atom = loop_aggregate_placeholder_atom();
+) -> Result<TemplateAggregateRenderPlan, TemplateSlotError> {
+    let aggregate_atom = aggregate_placeholder_atom();
     let wrapped_atom = wrap_direct_child_atom(
         &aggregate_atom,
         child_wrappers,
@@ -237,93 +237,91 @@ pub(in crate::compiler_frontend::ast::templates) fn prepare_conditional_child_wr
     let mut pieces = Vec::new();
 
     for piece in plan.pieces {
-        pieces.extend(loop_aggregate_pieces_from_render_piece(piece));
+        pieces.extend(aggregate_pieces_from_render_piece(piece));
     }
 
-    Ok(TemplateLoopAggregateRenderPlan { pieces })
+    Ok(TemplateAggregateRenderPlan { pieces })
 }
 
-fn loop_aggregate_placeholder_atom() -> TemplateAtom {
+fn aggregate_placeholder_atom() -> TemplateAtom {
     TemplateAtom::Slot(SlotPlaceholder::with_wrappers(
-        SlotKey::Positional(LOOP_AGGREGATE_MARKER_SLOT_INDEX),
+        SlotKey::Positional(AGGREGATE_MARKER_SLOT_INDEX),
         Vec::new(),
         Vec::new(),
         true,
     ))
 }
 
-fn loop_aggregate_pieces_from_render_piece(piece: RenderPiece) -> Vec<TemplateLoopAggregatePiece> {
+fn aggregate_pieces_from_render_piece(piece: RenderPiece) -> Vec<TemplateAggregatePiece> {
     match piece {
-        RenderPiece::Slot(slot) if is_loop_aggregate_placeholder(&slot) => {
-            vec![TemplateLoopAggregatePiece::Aggregate]
+        RenderPiece::Slot(slot) if is_aggregate_placeholder(&slot) => {
+            vec![TemplateAggregatePiece::Aggregate]
         }
 
         RenderPiece::DynamicExpression(dynamic) => {
             if let ExpressionKind::Template(template) = &dynamic.expression.kind
-                && template_contains_loop_aggregate_placeholder(template)
+                && template_contains_aggregate_placeholder(template)
             {
-                return loop_aggregate_pieces_from_template(template);
+                return aggregate_pieces_from_template(template);
             }
 
-            vec![TemplateLoopAggregatePiece::Render(Box::new(
+            vec![TemplateAggregatePiece::Render(Box::new(
                 RenderPiece::DynamicExpression(dynamic),
             ))]
         }
 
         RenderPiece::ChildTemplate(child) => {
             if let ExpressionKind::Template(template) = &child.expression.kind
-                && template_contains_loop_aggregate_placeholder(template)
+                && template_contains_aggregate_placeholder(template)
             {
-                return loop_aggregate_pieces_from_template(template);
+                return aggregate_pieces_from_template(template);
             }
 
-            vec![TemplateLoopAggregatePiece::Render(Box::new(
+            vec![TemplateAggregatePiece::Render(Box::new(
                 RenderPiece::ChildTemplate(child),
             ))]
         }
 
-        RenderPiece::LoopControl(signal) => vec![TemplateLoopAggregatePiece::Render(Box::new(
+        RenderPiece::LoopControl(signal) => vec![TemplateAggregatePiece::Render(Box::new(
             RenderPiece::LoopControl(signal),
         ))],
 
-        _ => vec![TemplateLoopAggregatePiece::Render(Box::new(piece))],
+        _ => vec![TemplateAggregatePiece::Render(Box::new(piece))],
     }
 }
 
-fn is_loop_aggregate_placeholder(slot: &SlotPlaceholder) -> bool {
+fn is_aggregate_placeholder(slot: &SlotPlaceholder) -> bool {
     matches!(
         &slot.key,
-        SlotKey::Positional(index) if *index == LOOP_AGGREGATE_MARKER_SLOT_INDEX
+        SlotKey::Positional(index) if *index == AGGREGATE_MARKER_SLOT_INDEX
     )
 }
 
-fn loop_aggregate_pieces_from_template(template: &Template) -> Vec<TemplateLoopAggregatePiece> {
+fn aggregate_pieces_from_template(template: &Template) -> Vec<TemplateAggregatePiece> {
     let plan = TemplateRenderPlan::from_content(&template.content);
     let mut pieces = Vec::new();
 
     for piece in plan.pieces {
-        pieces.extend(loop_aggregate_pieces_from_render_piece(piece));
+        pieces.extend(aggregate_pieces_from_render_piece(piece));
     }
 
     pieces
 }
 
-fn template_contains_loop_aggregate_placeholder(template: &Template) -> bool {
+fn template_contains_aggregate_placeholder(template: &Template) -> bool {
     template
         .content
         .atoms
         .iter()
-        .any(atom_contains_loop_aggregate_placeholder)
+        .any(atom_contains_aggregate_placeholder)
 }
 
-fn atom_contains_loop_aggregate_placeholder(atom: &TemplateAtom) -> bool {
+fn atom_contains_aggregate_placeholder(atom: &TemplateAtom) -> bool {
     match atom {
-        TemplateAtom::Slot(slot) => is_loop_aggregate_placeholder(slot),
+        TemplateAtom::Slot(slot) => is_aggregate_placeholder(slot),
 
         TemplateAtom::Content(segment) => match &segment.expression.kind {
-            ExpressionKind::Template(template) => {
-                template_contains_loop_aggregate_placeholder(template)
-            }
+            ExpressionKind::Template(template) => template_contains_aggregate_placeholder(template),
             _ => false,
         },
     }

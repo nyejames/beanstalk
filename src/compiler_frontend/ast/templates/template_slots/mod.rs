@@ -19,8 +19,14 @@
 //!        │
 //!        ▼ contributions.rs   partition fill atoms into explicit/loose buckets
 //!        │
-//!        ▼ composition.rs     replace SlotPlaceholder atoms with expanded content
+//!        ▼ composition.rs     route compile-time and runtime applications
+//!        │
+//!        ▼ runtime_plan/      build source/site plans for HIR lowering
 //! ```
+//!
+//! Runtime plans reuse the same schema and contribution routing as compile-time
+//! composition. HIR receives only prepared source/site plans and owns lowering
+//! them into accumulators, not validating slot targets or parsing directives.
 
 // -------------------------
 //  Submodules
@@ -39,14 +45,15 @@ mod schema;
 
 pub(in crate::compiler_frontend::ast::templates) use composition::ensure_no_slot_insertions_remain;
 pub(in crate::compiler_frontend::ast::templates) use error::TemplateSlotError;
-pub(crate) use runtime_plan::{RuntimeSlotApplicationPlan, RuntimeSlotContributionContent};
+pub(crate) use runtime_plan::{
+    RuntimeSlotApplicationPlan, RuntimeSlotContributionSourceId, RuntimeSlotSiteId,
+    RuntimeSlotSitePiece, RuntimeSlotSitePlan,
+};
 #[cfg(test)]
-pub(crate) use runtime_plan::{RuntimeSlotContribution, RuntimeSlotContributionPlan};
+pub(crate) use runtime_plan::{RuntimeSlotContributionSource, RuntimeSlotSiteRenderPlan};
 pub(in crate::compiler_frontend::ast::templates) use runtime_plan::{
     SlotResolutionMode, SlotResolutionOutcome, resolve_slot_application,
 };
-#[cfg(test)]
-pub(crate) use schema::SlotSchema;
 
 #[cfg(test)]
 #[path = "../tests/slots_tests.rs"]
