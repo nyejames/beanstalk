@@ -475,6 +475,104 @@ fn provider_runtime_assets_deduped_for_repeated_imports() {
 }
 
 #[test]
+fn provider_runtime_metadata_ignores_unreachable_external_calls() {
+    let dir = temp_dir("provider_runtime_metadata_unreachable");
+    fs::create_dir_all(&dir).expect("should create temp dir");
+    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(
+        dir.join("#page.bst"),
+        "import @./other { run }\nvalue = 1\n",
+    )
+    .expect("should write entry");
+    fs::write(
+        dir.join("other.bst"),
+        "import @./drawing.js { get_number }\nrun || -> Int, Error!:\n    return get_number()!\n;\n",
+    )
+    .expect("should write helper source");
+    fs::write(
+        dir.join("drawing.js"),
+        "import { bstOk } from \"@beanstalk/runtime\";\n/**\n * @bst.sig get_number || -> Int, Error!\n */\nexport function getNumber() { return bstOk(7); }\n",
+    )
+    .expect("should write js");
+
+    let mut config = Config::new(dir.clone());
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let mut string_table = StringTable::new();
+    let mut libraries = library_set_with_html_js_provider();
+
+    let modules = compile_project_frontend(
+        &mut config,
+        &[],
+        &style_directives,
+        &mut libraries,
+        &mut string_table,
+    )
+    .expect("unreachable provider-backed call should compile");
+
+    let module = modules.into_iter().next().expect("expected one module");
+    assert!(
+        module_contains_external_module_export(&module, "getNumber"),
+        "HIR should keep the unreachable function body and provider package metadata"
+    );
+    assert!(
+        module.module_external_imports.is_empty(),
+        "module runtime metadata should ignore provider packages reached only by unreachable calls"
+    );
+
+    fs::remove_dir_all(&dir).expect("should remove temp dir");
+}
+
+#[test]
+fn builder_runtime_metadata_ignores_unreachable_source_library_wrappers() {
+    let dir = temp_dir("builder_runtime_metadata_unreachable");
+    fs::create_dir_all(&dir).expect("should create temp dir");
+    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(
+        dir.join("#page.bst"),
+        "import @html { CANVAS_ID }\npage_canvas_id #= CANVAS_ID\nvalue = 1\n",
+    )
+    .expect("should write page");
+
+    let mut config = Config::new(dir.clone());
+    let builder = crate::projects::html_project::html_project_builder::HtmlProjectBuilder::new();
+    let style_directives = StyleDirectiveRegistry::merged(&builder.frontend_style_directives())
+        .expect("HTML style directives should merge");
+    let mut libraries = builder.libraries();
+    let canvas_package_id = libraries
+        .external_packages
+        .resolve_package_id("@web/canvas")
+        .expect("@web/canvas should be registered for HTML projects");
+    let mut string_table = StringTable::new();
+
+    let modules = compile_project_frontend(
+        &mut config,
+        &[],
+        &style_directives,
+        &mut libraries,
+        &mut string_table,
+    )
+    .expect("unused @html canvas wrapper should compile");
+
+    let module = modules.into_iter().next().expect("expected one module");
+    assert!(
+        module
+            .external_package_registry
+            .get_package_by_id(canvas_package_id)
+            .is_some(),
+        "the external package registry should stay fully populated"
+    );
+    assert!(
+        module
+            .module_external_imports
+            .iter()
+            .all(|import| import.package_id != canvas_package_id),
+        "unreachable @html wrappers should not attach @web/canvas runtime metadata"
+    );
+
+    fs::remove_dir_all(&dir).expect("should remove temp dir");
+}
+
+#[test]
 fn provider_backed_import_with_js_lowering_passes_html_build() {
     let dir = temp_dir("provider_js_lowering_html");
     fs::create_dir_all(&dir).expect("should create temp dir");

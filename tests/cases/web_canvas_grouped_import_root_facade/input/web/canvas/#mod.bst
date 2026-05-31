@@ -1,0 +1,2 @@
+-- This project module facade intentionally overlaps the @web/canvas package path.
+-- Grouped virtual package symbols must resolve through external metadata before this facade.

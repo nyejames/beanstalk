@@ -11,6 +11,7 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 ---
 
 # Plans / TODOS
+- assert termination: `docs/roadmap/plans/assert-terminality-implementation-plan.md`
 - Traits
 - `else => _` (Wildcards in value positions for pattern matching or default arguments in function calls)
 - Replace JSON with beanstalk files (dogfooding for language as a way to store data / config stuff). These could be standardised as their own build system under `src/projects`.
@@ -36,6 +37,19 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
   catchable/recoverable panic design, explicit stop helpers such as `todo` / `unreachable` /
   `fatal` / `abort` / `precondition`, Wasm trap message support, and richer runtime failure
   metadata or stack traces.
+
+- The canvas helper import/runtime reachability refactor is complete. Grouped virtual external
+  package imports resolve before source/module facade enforcement without weakening real source
+  facade privacy. HTML JS runtime assets, generated glue, runtime modules, import maps, and
+  unsupported-backend validation are driven by HIR calls reachable from the entry `start` function.
+  Implementation record: `docs/roadmap/plans/canvas-helper-import-runtime-refactor-plan.md`.
+
+- Deliberately deferred library-system follow-ups after the canvas reachability refactor: direct
+  facade re-export syntax, wildcard imports, automatic re-export of receiver methods through
+  facade type aliases, source-library HIR caching, user-authored external binding files, broader
+  JS-backed external package APIs, and Wasm implementations for JS-backed packages such as
+  `@web/canvas`. Current reachability is artifact-planning correctness, not general JS
+  tree-shaking/minification.
 
 - External non-scalar constant design: string slices, collections, and opaque-type external constants in const contexts are rejected for Alpha. Design compile-time representation and validation before enabling.
 - Private const/config follow-ups after the private const config refactor: consume HIR const metadata in borrow checking, temporary-local reduction, and lowering/constant propagation.

@@ -1,21 +1,29 @@
 //! Pre-lowering validation that a HIR module only references external functions supported by the
 //! target backend.
 //!
-//! WHAT: scans every HIR block for `CallTarget::ExternalFunction` and checks whether the
-//! referenced function has backend-specific lowering metadata.
+//! WHAT: validates external calls reachable from the module entry point and checks whether the
+//! referenced functions have backend-specific lowering metadata.
 //! WHY: backends should fail early with a structured user-facing diagnostic rather than
 //! panicking or emitting a vague lowering error deep in backend code.
 
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
+use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::external_packages::{ExternalFunctionId, ExternalPackageRegistry};
 use crate::compiler_frontend::hir::module::HirModule;
-use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
+use crate::compiler_frontend::hir::reachability::{
+    ReachableExternalCall, collect_reachability_from_start,
+};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 /// Backend target for external-package support validation.
 pub enum BackendTarget {
     Js,
     Wasm,
+}
+
+pub enum ExternalPackageValidationError {
+    Diagnostic(Box<CompilerDiagnostic>),
+    Infrastructure(Box<CompilerError>),
 }
 
 impl BackendTarget {
@@ -27,37 +35,35 @@ impl BackendTarget {
     }
 }
 
-/// Validates that every external function call in `hir` has lowering metadata for `target`.
+/// Validates that every reachable external function call in `hir` has lowering metadata for
+/// `target`.
 ///
-/// WHAT: iterates all HIR blocks and statements, finds `Call` statements targeting external
-/// functions, and checks the registry for backend-specific lowering support.
+/// WHAT: consumes backend-neutral HIR reachability, then checks each reachable external call
+/// against backend-specific lowering support.
 /// WHY: moving this check before backend lowering lets us report a clear `Rule` error at the
-/// call site instead of a backend-internal `LirTransformation` or `WasmGeneration` error.
+/// reachable call site instead of a backend-internal `LirTransformation` or `WasmGeneration`
+/// error. Unused source-library wrappers stay type-checked HIR, but they are not executable page
+/// code and must not fail backend support validation.
 pub fn validate_hir_external_package_support(
     hir: &HirModule,
     registry: &ExternalPackageRegistry,
     target: BackendTarget,
     string_table: &mut StringTable,
-) -> Result<(), CompilerDiagnostic> {
-    for block in &hir.blocks {
-        for statement in &block.statements {
-            if let HirStatementKind::Call {
-                target:
-                    crate::compiler_frontend::external_packages::CallTarget::ExternalFunction(id),
-                ..
-            } = &statement.kind
-                && !has_backend_lowering(registry, *id, &target)
-            {
-                return Err(unsupported_external_function_diagnostic(
-                    registry,
-                    *id,
-                    &target,
-                    statement,
-                    string_table,
-                ));
-            }
+) -> Result<(), ExternalPackageValidationError> {
+    let reachability = collect_reachability_from_start(hir)
+        .map_err(|error| ExternalPackageValidationError::Infrastructure(Box::new(error)))?;
+
+    for call in &reachability.reachable_external_calls {
+        if !has_backend_lowering(registry, call.function_id, &target) {
+            let diagnostic =
+                unsupported_external_function_diagnostic(registry, call, &target, string_table);
+
+            return Err(ExternalPackageValidationError::Diagnostic(Box::new(
+                diagnostic,
+            )));
         }
     }
+
     Ok(())
 }
 
@@ -93,22 +99,21 @@ fn has_backend_lowering(
 
 fn unsupported_external_function_diagnostic(
     registry: &ExternalPackageRegistry,
-    id: ExternalFunctionId,
+    call: &ReachableExternalCall,
     target: &BackendTarget,
-    statement: &HirStatement,
     string_table: &mut StringTable,
 ) -> CompilerDiagnostic {
     let function_name = registry
-        .get_function_by_id(id)
+        .get_function_by_id(call.function_id)
         .map(|def| def.name.clone())
-        .unwrap_or_else(|| id.name().to_owned());
+        .unwrap_or_else(|| call.function_id.name().to_owned());
 
-    let package_path = registry.resolve_function_package(id);
+    let package_path = registry.resolve_function_package(call.function_id);
 
     CompilerDiagnostic::unsupported_external_function(
         string_table.intern(&function_name),
         package_path.map(|path| string_table.intern(path)),
         string_table.intern(target.as_str()),
-        statement.location.clone(),
+        call.location.clone(),
     )
 }

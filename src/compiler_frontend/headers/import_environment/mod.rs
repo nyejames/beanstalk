@@ -26,8 +26,9 @@ pub(crate) use facade_resolution::{
 };
 
 pub(crate) use target_resolution::{
-    ExportRequirement, ImportTargetResolutionInput, NamespaceTargetResolutionInput,
-    ResolvedImportTarget, ResolvedNamespaceTarget, has_explicit_bst_extension,
+    ExportRequirement, ExternalPackageSymbolLookup, ExternalPackageSymbolResolutionInput,
+    ImportTargetResolutionInput, NamespaceTargetResolutionInput, ResolvedImportTarget,
+    ResolvedNamespaceTarget, has_explicit_bst_extension, resolve_external_package_symbol,
     resolve_import_target, resolve_namespace_target,
 };
 pub(crate) use visible_names::{
@@ -361,6 +362,14 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             return Ok(resolved);
         }
 
+        if let Some(resolved) = self.resolve_and_register_external_package_grouped_import(
+            file_visibility,
+            registry,
+            import,
+        )? {
+            return Ok(resolved);
+        }
+
         // Try facade resolution first.
         let facade_input = FacadeResolutionInput {
             importer_file: source_file,
@@ -459,6 +468,46 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             ResolvedImportTarget::External { symbol_id } => {
                 self.register_external_import(file_visibility, registry, import, symbol_id)
             }
+        }
+    }
+
+    /// Resolve grouped virtual-package imports before source facade enforcement.
+    ///
+    /// WHAT: `import @web/canvas { get_canvas }` is parsed as a grouped import whose
+    /// individual entry path is `web/canvas/get_canvas`. That path may also look like a
+    /// module-root facade import if the project has a `web/canvas/#mod.bst` shape. Checking
+    /// external metadata here keeps virtual packages out of source facade privacy rules while
+    /// leaving all source imports on the normal facade-first path.
+    // The typed diagnostic payload is still large enough to trigger clippy::result_large_err here.
+    #[allow(clippy::result_large_err)]
+    fn resolve_and_register_external_package_grouped_import(
+        &mut self,
+        file_visibility: &mut FileVisibility,
+        registry: &mut VisibleNameRegistry,
+        import: &FileImport,
+    ) -> Result<Option<()>, CompilerDiagnostic> {
+        if !import.from_grouped {
+            return Ok(None);
+        }
+
+        match resolve_external_package_symbol(ExternalPackageSymbolResolutionInput {
+            import_path: &import.header_path,
+            external_package_registry: self.external_package_registry,
+            string_table: self.string_table,
+        }) {
+            ExternalPackageSymbolLookup::Found { symbol_id } => {
+                self.register_external_import(file_visibility, registry, import, symbol_id)?;
+                Ok(Some(()))
+            }
+            ExternalPackageSymbolLookup::PackageFoundSymbolMissing {
+                package_path,
+                symbol_name,
+            } => Err(diagnostics::missing_package_symbol(
+                symbol_name,
+                package_path,
+                import.location.clone(),
+            )),
+            ExternalPackageSymbolLookup::NoMatch => Ok(None),
         }
     }
 

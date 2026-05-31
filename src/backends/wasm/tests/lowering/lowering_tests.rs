@@ -6,7 +6,9 @@ use crate::backends::wasm::lir::linkage::{WasmExportKind, WasmFunctionLinkage};
 use crate::backends::wasm::lir::types::{
     WasmAbiType, WasmImportId, WasmLirFunctionId, WasmLirLocalId,
 };
-use crate::backends::wasm::request::{WasmBackendRequest, WasmDebugFlags, WasmExportPolicy};
+use crate::backends::wasm::request::{
+    WasmBackendRequest, WasmDebugFlags, WasmExportPolicy, WasmFunctionEmissionPolicy,
+};
 use crate::backends::wasm::tests::lowering::test_support::{
     bool_expression, borrow_facts_with_drop_site, build_module, build_type_environment,
     default_borrow_facts, expression, int_expression, load_local, local, statement,
@@ -824,6 +826,7 @@ fn synthesizes_export_wrappers_with_stable_names() {
             ..Default::default()
         },
         external_package_registry: Default::default(),
+        function_emission_policy: Default::default(),
     };
 
     let result = lower_hir_to_wasm_lir(
@@ -1045,6 +1048,92 @@ fn rejects_unsupported_host_call_with_diagnostic() {
         .first_infrastructure_error_for_tests()
         .expect("Wasm lowering failure should be wrapped for rendering");
     assert!(message.contains("<synthetic>"));
+}
+
+#[test]
+fn export_reachable_policy_ignores_unreachable_host_calls() {
+    let mut string_table = StringTable::new();
+    let (type_environment, types) = build_type_environment();
+    let start_path = InternedPath::from_single_str("main", &mut string_table);
+    let unused_path = InternedPath::from_single_str("unused", &mut string_table);
+
+    let start_block = HirBlock {
+        id: BlockId(0),
+        region: RegionId(0),
+        locals: vec![],
+        statements: vec![],
+        terminator: HirTerminator::Return(unit_expression(900, types.unit, RegionId(0))),
+    };
+
+    let unsupported_id =
+        crate::compiler_frontend::external_packages::ExternalFunctionId::Synthetic(9999);
+    let unused_block = HirBlock {
+        id: BlockId(10),
+        region: RegionId(0),
+        locals: vec![],
+        statements: vec![statement(
+            1,
+            HirStatementKind::Call {
+                target: CallTarget::ExternalFunction(unsupported_id),
+                args: vec![],
+                result: None,
+            },
+            1,
+        )],
+        terminator: HirTerminator::Return(unit_expression(901, types.unit, RegionId(0))),
+    };
+
+    let start_function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.unit,
+        return_aliases: vec![],
+    };
+    let unused_function = HirFunction {
+        id: FunctionId(1),
+        entry: BlockId(10),
+        params: vec![],
+        return_type: types.unit,
+        return_aliases: vec![],
+    };
+    let module = build_module(
+        &mut string_table,
+        vec![
+            (start_function, start_path, HirFunctionOrigin::EntryStart),
+            (unused_function, unused_path, HirFunctionOrigin::Normal),
+        ],
+        vec![start_block, unused_block],
+        FunctionId(0),
+    );
+
+    let mut export_names = FxHashMap::default();
+    export_names.insert(FunctionId(0), "main".to_owned());
+    let request = WasmBackendRequest {
+        export_policy: WasmExportPolicy {
+            exported_functions: vec![FunctionId(0)],
+            export_names,
+            helper_exports: Default::default(),
+        },
+        function_emission_policy: WasmFunctionEmissionPolicy::ReachableFromExports,
+        ..Default::default()
+    };
+
+    let result = lower_hir_to_wasm_lir(
+        &module,
+        &default_borrow_facts(),
+        &request,
+        &string_table,
+        &type_environment,
+    )
+    .expect("unreachable unsupported host call should not be lowered");
+
+    assert_eq!(result.lir_module.imports.len(), 0);
+    assert_eq!(
+        result.lir_module.functions.len(),
+        2,
+        "only the exported start function and its wrapper should be lowered"
+    );
 }
 
 #[test]

@@ -4,6 +4,7 @@
 //! concern. WHY: the JS backend tests build HIR directly, so duplicated constructors make behavior
 //! harder to audit than a single stage-local support surface.
 
+pub(super) use crate::backends::js::JsFunctionEmissionPolicy;
 pub(super) use crate::backends::js::test_symbol_helpers::{
     expected_dev_field_name, expected_dev_function_name, expected_dev_local_name,
 };
@@ -234,6 +235,7 @@ pub(super) fn lower_minimal_module(function_name: &str) -> String {
             pretty: true,
             emit_locations: false,
             auto_invoke_start: false,
+            function_emission_policy: JsFunctionEmissionPolicy::AllFunctions,
             external_package_registry: ExternalPackageRegistry::new(),
             external_module_export_glue_enabled: false,
         },
@@ -248,6 +250,7 @@ pub(super) fn default_config() -> JsLoweringConfig {
         pretty: true,
         emit_locations: false,
         auto_invoke_start: false,
+        function_emission_policy: JsFunctionEmissionPolicy::AllFunctions,
         external_package_registry: ExternalPackageRegistry::new(),
         external_module_export_glue_enabled: false,
     }

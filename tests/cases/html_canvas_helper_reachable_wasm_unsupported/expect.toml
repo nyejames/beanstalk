@@ -1,0 +1,9 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+
+[backends.html_wasm]
+mode = "failure"
+warnings = "forbid"
+diagnostic_codes = ["BST-RULE-0058"]
+message_contains = ["html/#mod.bst", "41", "33", "get_canvas"]

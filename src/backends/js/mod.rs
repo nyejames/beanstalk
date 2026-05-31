@@ -24,6 +24,19 @@ use crate::compiler_frontend::external_packages::{ExternalFunctionId, ExternalPa
 use crate::compiler_frontend::hir::ids::FunctionId;
 use std::collections::{HashMap, HashSet};
 
+/// Selects which HIR functions should be lowered into one JS bundle.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum JsFunctionEmissionPolicy {
+    /// Emit every HIR function. This is the direct JS backend contract and test default.
+    AllFunctions,
+
+    /// Emit only functions syntactically reachable from the module entry `start` function.
+    ///
+    /// WHY: HTML page bundles execute from one entry point, and unreachable source-library
+    /// wrappers must not request runtime glue or assets.
+    ReachableFromStart,
+}
+
 /// Configuration for JS lowering.
 #[derive(Debug, Clone)]
 pub struct JsLoweringConfig {
@@ -35,6 +48,9 @@ pub struct JsLoweringConfig {
 
     /// Automatically invoke the module start function.
     pub auto_invoke_start: bool,
+
+    /// Controls whether the bundle contains every HIR function or only entry-reachable code.
+    pub function_emission_policy: JsFunctionEmissionPolicy,
 
     /// External package registry for resolving backend lowering metadata.
     pub external_package_registry: ExternalPackageRegistry,
@@ -52,6 +68,7 @@ impl JsLoweringConfig {
             pretty: !release_build,
             emit_locations: false,
             auto_invoke_start: false,
+            function_emission_policy: JsFunctionEmissionPolicy::AllFunctions,
             external_package_registry: ExternalPackageRegistry::new(),
             external_module_export_glue_enabled: false,
         }
@@ -75,7 +92,7 @@ pub struct JsModule {
     /// Complete JS source code.
     pub source: String,
     pub function_name_by_id: HashMap<FunctionId, String>,
-    /// Set of external function IDs referenced during lowering.
+    /// Set of external function IDs referenced while lowering emitted JS functions.
     /// WHY: the HTML builder uses this to decide which generated glue wrappers to emit.
     pub referenced_external_functions: HashSet<ExternalFunctionId>,
 }

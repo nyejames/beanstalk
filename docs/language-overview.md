@@ -789,6 +789,8 @@ Library categories:
 
 Core libraries require explicit imports unless they are part of the prelude. Unsupported builder packages are rejected with an unsupported-by-builder diagnostic. Source libraries are normal modules behind `#mod.bst` facades.
 
+The HTML builder's `@html` source library exposes authored HTML helpers, including `canvas`, `CANVAS_ID`, and `get_canvas_context`. Those are real facade declarations backed by local `@web/canvas` imports inside `libraries/html/#mod.bst`; the raw `@web/canvas` symbols themselves are not re-exported through `@html`. Import raw drawing APIs directly from `@web/canvas` when needed.
+
 ### External platform package imports
 
 Project builders may provide virtual packages such as `@core/io`, `@core/math`, or `@web/canvas`. These are typed external packages, not Beanstalk source files. They expose external functions and opaque external types.

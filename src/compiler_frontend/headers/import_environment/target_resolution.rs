@@ -49,6 +49,54 @@ pub(crate) struct ImportTargetResolutionInput<'a> {
     pub(crate) string_table: &'a mut StringTable,
 }
 
+/// Result of resolving an import path against virtual external-package metadata.
+///
+/// WHY: grouped external package imports need this lookup before source facade enforcement,
+/// while ordinary source imports must continue through the facade path first.
+pub(crate) enum ExternalPackageSymbolLookup {
+    Found {
+        symbol_id: ExternalSymbolId,
+    },
+    PackageFoundSymbolMissing {
+        package_path: StringId,
+        symbol_name: StringId,
+    },
+    NoMatch,
+}
+
+/// Input bundle for external-package-only symbol lookup.
+///
+/// This deliberately does not include source files or source symbols, so callers cannot use it
+/// to bypass source-library or module-root facade checks.
+pub(crate) struct ExternalPackageSymbolResolutionInput<'a> {
+    pub(crate) import_path: &'a InternedPath,
+    pub(crate) external_package_registry: &'a ExternalPackageRegistry,
+    pub(crate) string_table: &'a mut StringTable,
+}
+
+/// Resolve `@package/path/symbol` against virtual external package metadata only.
+pub(crate) fn resolve_external_package_symbol(
+    input: ExternalPackageSymbolResolutionInput<'_>,
+) -> ExternalPackageSymbolLookup {
+    match resolve_virtual_package_import(
+        input.import_path,
+        input.external_package_registry,
+        input.string_table,
+    ) {
+        VirtualPackageMatch::Found { symbol_id, .. } => {
+            ExternalPackageSymbolLookup::Found { symbol_id }
+        }
+        VirtualPackageMatch::PackageFoundSymbolMissing {
+            package_path,
+            symbol_name,
+        } => ExternalPackageSymbolLookup::PackageFoundSymbolMissing {
+            package_path,
+            symbol_name,
+        },
+        VirtualPackageMatch::NoMatch => ExternalPackageSymbolLookup::NoMatch,
+    }
+}
+
 /// Resolve an `@path/to/symbol` to its concrete target.
 ///
 /// WHAT: performs source-symbol resolution (exact match and suffix match with optional `.bst`
@@ -110,59 +158,25 @@ pub(crate) fn resolve_import_target(
             }
 
             // Try to resolve as a virtual package import.
-            match resolve_virtual_package_import(
-                input.import_path,
-                input.external_package_registry,
-                input.string_table,
-            ) {
-                VirtualPackageMatch::Found(package_path, symbol_name) => {
-                    let package_path_str = input.string_table.resolve(package_path);
-                    let symbol_name_str = input.string_table.resolve(symbol_name);
-                    let external_symbol_id = if let Some((func_id, _)) = input
-                        .external_package_registry
-                        .resolve_package_function(package_path_str, symbol_name_str)
-                    {
-                        Some(ExternalSymbolId::Function(func_id))
-                    } else if let Some((type_id, _)) = input
-                        .external_package_registry
-                        .resolve_package_type(package_path_str, symbol_name_str)
-                    {
-                        Some(ExternalSymbolId::Type(type_id))
-                    } else if let Some((const_id, _)) = input
-                        .external_package_registry
-                        .resolve_package_constant(package_path_str, symbol_name_str)
-                    {
-                        Some(ExternalSymbolId::Constant(const_id))
-                    } else {
-                        None
-                    };
-
-                    if let Some(id) = external_symbol_id {
-                        return Ok(ResolvedImportTarget::External { symbol_id: id });
-                    }
-
-                    let symbol_name = input
-                        .import_path
-                        .name()
-                        .unwrap_or_else(|| input.string_table.intern("<unknown>"));
+            match resolve_external_package_symbol(ExternalPackageSymbolResolutionInput {
+                import_path: input.import_path,
+                external_package_registry: input.external_package_registry,
+                string_table: input.string_table,
+            }) {
+                ExternalPackageSymbolLookup::Found { symbol_id } => {
+                    return Ok(ResolvedImportTarget::External { symbol_id });
+                }
+                ExternalPackageSymbolLookup::PackageFoundSymbolMissing {
+                    package_path,
+                    symbol_name,
+                } => {
                     return Err(diagnostics::missing_package_symbol(
                         symbol_name,
                         package_path,
                         input.location.clone(),
                     ));
                 }
-                VirtualPackageMatch::PackageFoundSymbolMissing(package_path) => {
-                    let symbol_name = input
-                        .import_path
-                        .name()
-                        .unwrap_or_else(|| input.string_table.intern("<unknown>"));
-                    return Err(diagnostics::missing_package_symbol(
-                        symbol_name,
-                        package_path,
-                        input.location.clone(),
-                    ));
-                }
-                VirtualPackageMatch::NoMatch => {}
+                ExternalPackageSymbolLookup::NoMatch => {}
             }
 
             // If the path matches a module file but not a symbol, report a bare-file import error.
@@ -248,11 +262,13 @@ fn resolve_import_target_path(
 
 /// Result of attempting to resolve an import path as a virtual package symbol.
 enum VirtualPackageMatch {
-    Found(
-        crate::compiler_frontend::symbols::string_interning::StringId,
-        crate::compiler_frontend::symbols::string_interning::StringId,
-    ),
-    PackageFoundSymbolMissing(crate::compiler_frontend::symbols::string_interning::StringId),
+    Found {
+        symbol_id: ExternalSymbolId,
+    },
+    PackageFoundSymbolMissing {
+        package_path: StringId,
+        symbol_name: StringId,
+    },
     NoMatch,
 }
 
@@ -294,29 +310,31 @@ fn resolve_virtual_package_import(
         // The remaining components are the symbol path within the package.
         // For now, we only support a single symbol name after the package path.
         let symbol_components = &components[package_len..];
+        let symbol_name = symbol_components
+            .last()
+            .copied()
+            .unwrap_or_else(|| string_table.intern("<unknown>"));
+
         if symbol_components.len() != 1 {
             // Multi-component symbol paths within packages are not supported yet.
-            return VirtualPackageMatch::PackageFoundSymbolMissing(package_path);
+            return VirtualPackageMatch::PackageFoundSymbolMissing {
+                package_path,
+                symbol_name,
+            };
         }
 
-        let symbol_name = symbol_components[0];
         let symbol_name_str = string_table.resolve(symbol_name);
-        if registry
-            .resolve_package_symbol(&package_path_str, symbol_name_str)
-            .is_some()
-            || registry
-                .resolve_package_type(&package_path_str, symbol_name_str)
-                .is_some()
-            || registry
-                .resolve_package_constant(&package_path_str, symbol_name_str)
-                .is_some()
+        if let Some(symbol_id) = registry.resolve_package_symbol(&package_path_str, symbol_name_str)
         {
-            return VirtualPackageMatch::Found(package_path, symbol_name);
+            return VirtualPackageMatch::Found { symbol_id };
         }
 
         // Package exists but symbol doesn't — stop searching shorter prefixes
         // so we report the missing symbol accurately.
-        return VirtualPackageMatch::PackageFoundSymbolMissing(package_path);
+        return VirtualPackageMatch::PackageFoundSymbolMissing {
+            package_path,
+            symbol_name,
+        };
     }
 
     VirtualPackageMatch::NoMatch

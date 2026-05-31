@@ -20,6 +20,7 @@ mod hir_result_lowering_tests;
 mod hir_scoped_block_lowering_tests;
 mod hir_validation_tests;
 mod loop_lowering_tests;
+mod reachability_tests;
 
 pub(super) fn symbol(name: &str, string_table: &mut StringTable) -> InternedPath {
     InternedPath::from_single_str(name, string_table)

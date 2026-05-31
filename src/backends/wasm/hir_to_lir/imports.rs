@@ -7,14 +7,23 @@ use crate::backends::wasm::lir::types::{WasmAbiType, WasmImportId, WasmLirSignat
 use crate::backends::wasm::runtime::imports::WasmHostFunction;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::external_packages::{CallTarget, ExternalFunctionId};
+use crate::compiler_frontend::hir::ids::BlockId;
 use crate::compiler_frontend::hir::statements::HirStatementKind;
+use rustc_hash::FxHashSet;
 
 pub(crate) fn register_required_host_imports(
     context: &mut WasmLirLoweringContext<'_>,
+    reachable_blocks: Option<&FxHashSet<BlockId>>,
 ) -> Result<(), CompilerError> {
     // WHAT: scan HIR for host calls and pre-register required imports.
     // WHY: deterministic import-id assignment for the whole module.
     for block in &context.hir_module.blocks {
+        if let Some(reachable_blocks) = reachable_blocks
+            && !reachable_blocks.contains(&block.id)
+        {
+            continue;
+        }
+
         for statement in &block.statements {
             if let HirStatementKind::Call {
                 target: CallTarget::ExternalFunction(id),

@@ -11,3 +11,4 @@ must_contain = ["_beanstalk/js/glue/module-", "_beanstalk/js/runtime/beanstalk-r
 mode = "failure"
 warnings = "forbid"
 diagnostic_codes = ["BST-RULE-0058"]
+message_contains = ["#page.bst", "4", "36", "get_canvas"]

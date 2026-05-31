@@ -5520,14 +5520,64 @@ path = "web_canvas_grouped_type_auto_method"
 tags = ["integration", "external-imports", "web-canvas", "positive", "js-backend", "receiver-methods"]
 
 [[case]]
+id = "web_canvas_grouped_import_root_facade"
+path = "web_canvas_grouped_import_root_facade"
+tags = ["integration", "external-imports", "web-canvas", "positive", "js-backend", "facade"]
+
+[[case]]
 id = "web_canvas_missing_import_rejected"
 path = "web_canvas_missing_import_rejected"
+tags = ["integration", "external-imports", "web-canvas", "diagnostics"]
+
+[[case]]
+id = "web_canvas_grouped_missing_symbol_root_facade"
+path = "web_canvas_grouped_missing_symbol_root_facade"
+tags = ["integration", "external-imports", "web-canvas", "diagnostics", "facade"]
+
+[[case]]
+id = "web_canvas_direct_symbol_path_rejected"
+path = "web_canvas_direct_symbol_path_rejected"
 tags = ["integration", "external-imports", "web-canvas", "diagnostics"]
 
 [[case]]
 id = "web_canvas_wasm_unsupported"
 path = "web_canvas_wasm_unsupported"
 tags = ["integration", "external-imports", "web-canvas", "diagnostics", "html-wasm"]
+
+[[case]]
+id = "html_wasm_unused_html_canvas_constant"
+path = "html_wasm_unused_html_canvas_constant"
+tags = ["integration", "external-imports", "web-canvas", "html-wasm", "reachability"]
+
+[[case]]
+id = "html_wasm_unreachable_generic_runtime_value"
+path = "html_wasm_unreachable_generic_runtime_value"
+tags = ["integration", "html-wasm", "generics", "reachability"]
+
+[[case]]
+id = "html_wasm_reachable_generic_runtime_value_unsupported"
+path = "html_wasm_reachable_generic_runtime_value_unsupported"
+tags = ["integration", "html-wasm", "generics", "diagnostics", "reachability"]
+
+[[case]]
+id = "html_canvas_helper_unused_no_runtime_assets"
+path = "html_canvas_helper_unused_no_runtime_assets"
+tags = ["integration", "source-libraries", "external-imports", "web-canvas", "html", "html-wasm", "reachability"]
+
+[[case]]
+id = "html_canvas_helper_reachable_runtime_assets"
+path = "html_canvas_helper_reachable_runtime_assets"
+tags = ["integration", "source-libraries", "external-imports", "web-canvas", "html", "reachability"]
+
+[[case]]
+id = "html_canvas_helper_reachable_wasm_unsupported"
+path = "html_canvas_helper_reachable_wasm_unsupported"
+tags = ["integration", "source-libraries", "external-imports", "web-canvas", "html-wasm", "diagnostics", "reachability"]
+
+[[case]]
+id = "html_canvas_raw_get_canvas_not_reexported"
+path = "html_canvas_raw_get_canvas_not_reexported"
+tags = ["integration", "source-libraries", "external-imports", "web-canvas", "diagnostics", "facade"]
 
 [[case]]
 id = "receiver_method_source_visibility_rejected"

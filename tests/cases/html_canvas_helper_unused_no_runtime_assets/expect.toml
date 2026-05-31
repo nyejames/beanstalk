@@ -1,0 +1,27 @@
+entry = "."
+
+[backends.html]
+mode = "success"
+warnings = "forbid"
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = ["bst_builtin_canvas", "<canvas"]
+must_not_contain = [
+    "_beanstalk/js/canvas-",
+    "_beanstalk/js/glue/module-",
+    "_beanstalk/js/runtime/beanstalk-runtime",
+    "<script type=\"importmap\">",
+]
+
+[backends.html_wasm]
+mode = "success"
+warnings = "forbid"
+
+[[backends.html_wasm.artifact_assertions]]
+path = "page.wasm"
+kind = "wasm"
+validate_wasm = true
+must_export = ["memory", "bst_str_ptr", "bst_str_len", "bst_release", "bst_start"]
+

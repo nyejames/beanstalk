@@ -4,7 +4,7 @@
 //! WHY: this keeps orchestration concerns local to the builder and avoids leaking HTML policy
 //! into backend lowering/emission modules.
 
-use crate::backends::js::{JsLoweringConfig, lower_hir_to_js};
+use crate::backends::js::{JsFunctionEmissionPolicy, JsLoweringConfig, lower_hir_to_js};
 use crate::backends::wasm::backend::lower_hir_to_wasm_module;
 use crate::backends::wasm::request::WasmBackendRequest;
 use crate::build_system::build::{FileKind, OutputFile};
@@ -13,8 +13,10 @@ use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::datatypes::definitions::TypeDefinition;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind};
+use crate::compiler_frontend::hir::ids::{BlockId, FunctionId};
 use crate::compiler_frontend::hir::module::HirModule;
-use crate::compiler_frontend::hir::statements::HirStatementKind;
+use crate::compiler_frontend::hir::reachability::{HirReachabilityInput, collect_hir_reachability};
+use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
 use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::projects::html_project::compile_input::HtmlModuleCompileInput;
@@ -28,6 +30,7 @@ use crate::projects::html_project::wasm::export_plan::{
 };
 use crate::projects::html_project::wasm::js_bootstrap::generate_wasm_bootstrap_js;
 use crate::projects::html_project::wasm::request::build_wasm_backend_request;
+use rustc_hash::FxHashSet;
 use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 
@@ -104,12 +107,16 @@ pub(crate) fn compile_html_module_wasm(
 ) -> Result<CompiledHtmlWasmModule, CompilerMessages> {
     // Derive per-route artifact paths from the already-derived logical HTML path.
     // WHY: the builder has already computed the canonical route via derive_logical_html_path.
-    //      This planner only colocates JS/Wasm artifacts beside the HTML output — no re-derivation.
+    //      This planner only places JS/Wasm artifacts beside that HTML output, so it never
+    //      re-derives the route here.
     let output_plan = plan_wasm_output_from_logical_html_path(logical_html_output_path)
         .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
 
     let mut js_lowering_config = JsLoweringConfig::standard_html(input.release_build);
     js_lowering_config.external_package_registry = input.external_package_registry.clone();
+    // Only functions reachable from entry `start` should keep companion JS glue or runtime
+    // assets alive.
+    js_lowering_config.function_emission_policy = JsFunctionEmissionPolicy::ReachableFromStart;
     let js_module = lower_hir_to_js(
         input.hir_module,
         input.borrow_analysis,
@@ -126,7 +133,11 @@ pub(crate) fn compile_html_module_wasm(
         .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
     build_plan.wasm_request.external_package_registry = input.external_package_registry.clone();
 
-    validate_html_wasm_generic_support(input, string_table)?;
+    validate_html_wasm_generic_support(
+        input,
+        &build_plan.wasm_request.export_policy.exported_functions,
+        string_table,
+    )?;
 
     let wasm_result = lower_hir_to_wasm_module(
         input.hir_module,
@@ -185,11 +196,22 @@ pub(crate) fn compile_html_module_wasm(
 
 fn validate_html_wasm_generic_support(
     input: &HtmlModuleCompileInput<'_>,
+    root_functions: &[FunctionId],
     string_table: &mut StringTable,
 ) -> Result<(), CompilerMessages> {
-    let Some(location) =
-        first_generic_runtime_module_location(input.hir_module, input.type_environment)
-    else {
+    // Reachability is rooted at the exported entry functions so dead helper bodies do not
+    // surface backend diagnostics for code the HTML page never executes.
+    let reachability = collect_hir_reachability(HirReachabilityInput {
+        hir: input.hir_module,
+        root_functions: root_functions.to_vec(),
+    })
+    .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
+
+    let Some(location) = first_generic_runtime_module_location(
+        input.hir_module,
+        input.type_environment,
+        &reachability.reachable_blocks,
+    ) else {
         return Ok(());
     };
 
@@ -204,11 +226,17 @@ fn validate_html_wasm_generic_support(
     )
 }
 
+// Only reachable blocks are scanned here; dead blocks stay invisible to this backend check.
 fn first_generic_runtime_module_location(
     module: &HirModule,
     type_environment: &TypeEnvironment,
+    reachable_blocks: &FxHashSet<BlockId>,
 ) -> Option<SourceLocation> {
     for block in &module.blocks {
+        if !reachable_blocks.contains(&block.id) {
+            continue;
+        }
+
         for statement in &block.statements {
             if let Some(location) =
                 first_generic_runtime_statement_location(statement, module, type_environment)
@@ -228,7 +256,7 @@ fn first_generic_runtime_module_location(
 }
 
 fn first_generic_runtime_statement_location(
-    statement: &crate::compiler_frontend::hir::statements::HirStatement,
+    statement: &HirStatement,
     module: &HirModule,
     type_environment: &TypeEnvironment,
 ) -> Option<SourceLocation> {
