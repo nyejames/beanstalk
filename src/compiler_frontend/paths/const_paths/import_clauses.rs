@@ -157,9 +157,8 @@ pub fn parse_import_clause_tokens(
     start_index: usize,
 ) -> Result<(Vec<InternedPath>, usize), CompilerDiagnostic> {
     // WHAT: path-only import clause parsing for callers that do not need alias data.
-    // WHY: avoids threading StringTable through legacy call sites like path tests.
-    // Note: this intentionally loses alias information. Callers that need aliases
-    // should use parse_import_clause_items directly.
+    // WHY: module reachability only needs canonical target paths; header import preparation is
+    // the owner for alias visibility and uses `parse_import_clause_items` directly.
     let mut index = start_index;
     while tokens
         .get(index)

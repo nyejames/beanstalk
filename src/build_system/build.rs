@@ -61,6 +61,8 @@ pub struct ResolvedConstFragment {
 /// WHY: backends emit runtime assets and generated glue based on this metadata without needing
 ///      the full per-source-file resolution table.
 #[derive(Debug, Clone)]
+// Kept ahead of the backend handoff: external provider/runtime metadata is recorded by the
+// frontend today, while the current HTML path only reads the subset it can lower.
 #[allow(dead_code)]
 pub(crate) struct ModuleExternalImport {
     pub(crate) package_id: ExternalPackageId,

@@ -18,7 +18,6 @@ use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidFieldAccessReason, NamespaceTypeValueMisuseKind,
 };
-use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::external_packages::ExternalSymbolId;
 use crate::compiler_frontend::headers::import_environment::{
     NamespaceRecord, NamespaceValueMember,
@@ -106,7 +105,7 @@ pub(super) fn parse_namespace_member_access(
                 // Namespace fields are not first-class function values. A function member must
                 // continue through the normal call parser so missing `(...)` reports at the call
                 // boundary instead of lowering a `NoValue` declaration reference.
-                if let DataType::Function(_, signature) = &declaration.value.diagnostic_type {
+                if let Some(signature) = context.source_callable_signature(declaration) {
                     let generic_template = context.lookup_generic_function_template(symbol_path);
 
                     parse_source_callable_member(SourceCallableMemberInput {

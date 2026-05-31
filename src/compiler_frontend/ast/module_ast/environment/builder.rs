@@ -10,7 +10,8 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::ast::generic_functions::GenericFunctionTemplate;
 use crate::compiler_frontend::ast::module_ast::build_context::AstPhaseContext;
 use crate::compiler_frontend::ast::module_ast::environment::{
-    AstEnvironmentInput, AstModuleEnvironment, AstModuleLookups, TopLevelDeclarationTable,
+    AstEnvironmentInput, AstModuleEnvironment, AstModuleLookups, DeclarationSemanticTable,
+    TopLevelDeclarationTable,
 };
 use crate::compiler_frontend::ast::module_ast::scope_context::ReceiverMethodCatalog;
 use crate::compiler_frontend::ast::type_resolution::ResolvedFunctionSignature;
@@ -204,6 +205,13 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         receiver_methods: Rc<ReceiverMethodCatalog>,
         generic_declarations_by_path: FxHashMap<InternedPath, GenericDeclarationMetadata>,
     ) -> AstModuleEnvironment {
+        let declaration_semantics = DeclarationSemanticTable::from_environment(
+            self.declaration_table.as_ref(),
+            &self.resolved_function_signatures_by_path,
+            &self.nominal_type_ids_by_path,
+            &self.type_environment,
+        );
+
         AstModuleEnvironment {
             lookups: Rc::new(AstModuleLookups {
                 module_symbols: self.module_symbols,
@@ -223,6 +231,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 ),
                 resolved_type_aliases_by_path: Rc::new(self.resolved_type_aliases_by_path),
                 choice_variant_shells_by_path: Rc::new(self.choice_variant_shells_by_path),
+                declaration_semantics: Rc::new(declaration_semantics),
 
                 receiver_methods,
                 generic_declarations_by_path: Rc::new(generic_declarations_by_path),

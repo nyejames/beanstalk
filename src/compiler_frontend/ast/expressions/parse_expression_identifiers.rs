@@ -24,7 +24,6 @@ use crate::compiler_frontend::compiler_messages::{
     CompileTimeEvaluationErrorReason, CompilerDiagnostic, InvalidAssignmentTargetReason,
     InvalidTemplateSlotReason, InvalidThisUsageReason, NameNamespace,
 };
-use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::external_packages::ExternalConstantValue;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
@@ -104,27 +103,18 @@ pub(super) fn parse_identifier_or_call(
         // This keeps `x #= MyStruct(...)` on the constructor path so const
         // record coercion can validate field values instead of rejecting the
         // struct symbol itself as a non-constant reference.
-        if let DataType::Struct {
-            nominal_path,
-            type_id,
-            ..
-        } = &binding.value.diagnostic_type
-            && token_stream.peek_next_token() == Some(&TokenKind::OpenParenthesis)
+        if token_stream.peek_next_token() == Some(&TokenKind::OpenParenthesis)
+            && let Some(struct_constructor) =
+                context.source_struct_constructor(binding, type_interner.environment())
         {
-            let fields = context
-                .resolved_struct_fields_by_path
-                .as_ref()
-                .and_then(|map| map.get(nominal_path))
-                .map(|f| f.as_slice())
-                .unwrap_or(&[]);
             let struct_instance = parse_struct_constructor_expression(
                 token_stream,
                 StructConstructorParseInput {
-                    struct_path: nominal_path,
+                    struct_path: &struct_constructor.struct_path,
                     struct_name: identifier,
-                    fields,
-                    struct_value_mode: &binding.value.value_mode,
-                    type_id: *type_id,
+                    fields: struct_constructor.fields,
+                    struct_value_mode: struct_constructor.struct_value_mode,
+                    type_id: struct_constructor.type_id,
                 },
                 context,
                 type_interner,
@@ -150,7 +140,7 @@ pub(super) fn parse_identifier_or_call(
 
         // Choice constructors are routed through their own parser.
         if token_stream.peek_next_token() == Some(&TokenKind::DoubleColon) {
-            if matches!(&binding.value.diagnostic_type, DataType::Choices { .. }) {
+            if context.is_source_choice_declaration(binding, type_interner.environment()) {
                 let choice_value = parse_choice_construct(
                     token_stream,
                     binding,
@@ -190,10 +180,6 @@ pub(super) fn parse_identifier_or_call(
         // the only expression-position routes that may start from a nominal type name.
         if context.is_nominal_type_declaration_path(&binding.id)
             && matches!(binding.value.kind, ExpressionKind::NoValue)
-            && matches!(
-                binding.value.diagnostic_type,
-                DataType::Struct { .. } | DataType::Choices { .. }
-            )
         {
             return Err(CompilerDiagnostic::namespace_misuse(
                 identifier,
@@ -217,8 +203,8 @@ pub(super) fn parse_identifier_or_call(
             .into());
         }
 
-        match &binding.value.diagnostic_type {
-            DataType::Function(_, signature) => {
+        match context.source_callable_signature(binding) {
+            Some(signature) => {
                 let generic_template = context.lookup_generic_function_template(&binding.id);
                 let call_location = token_stream.current_location();
 
@@ -240,23 +226,7 @@ pub(super) fn parse_identifier_or_call(
                 return Ok(());
             }
 
-            DataType::Struct { .. } => {
-                // Fall through to normal reference behaviour for non-constructor uses.
-                let reference_node =
-                    create_reference(token_stream, binding, context, type_interner, string_table)?;
-                push_expression_node(
-                    token_stream,
-                    context,
-                    type_interner,
-                    string_table,
-                    expression,
-                    allow_boundary_catch,
-                    reference_node,
-                )?;
-                return Ok(());
-            }
-
-            _ => {
+            None => {
                 let reference_node =
                     create_reference(token_stream, binding, context, type_interner, string_table)?;
                 push_expression_node(

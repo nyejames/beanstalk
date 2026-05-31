@@ -8,7 +8,9 @@
 use crate::compiler_frontend::FrontendBuildProfile;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration};
 use crate::compiler_frontend::ast::generic_functions::GenericFunctionTemplate;
-use crate::compiler_frontend::ast::module_ast::environment::TopLevelDeclarationTable;
+use crate::compiler_frontend::ast::module_ast::environment::{
+    DeclarationSemanticTable, TopLevelDeclarationTable,
+};
 use crate::compiler_frontend::ast::module_ast::scope_context::ReceiverMethodCatalog;
 use crate::compiler_frontend::ast::type_resolution::ResolvedFunctionSignature;
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
@@ -58,6 +60,11 @@ pub(crate) struct AstModuleLookups {
         Rc<FxHashMap<InternedPath, GenericFunctionTemplate>>,
     pub(crate) resolved_type_aliases_by_path: Rc<FxHashMap<InternedPath, DataType>>,
     pub(crate) choice_variant_shells_by_path: Rc<FxHashMap<InternedPath, Vec<ChoiceVariant>>>,
+
+    // Semantic declaration classification.
+    // WHY: expression dispatch must distinguish functions, nominal types, constants, and values
+    // without branching on diagnostic-only `DataType` spelling.
+    pub(crate) declaration_semantics: Rc<DeclarationSemanticTable>,
 
     // Generic declaration metadata.
     pub(crate) generic_declarations_by_path:

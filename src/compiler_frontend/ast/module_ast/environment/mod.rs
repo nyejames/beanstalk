@@ -7,6 +7,7 @@
 
 pub(in crate::compiler_frontend::ast) mod builder;
 pub(in crate::compiler_frontend::ast) mod constant_resolution;
+mod declaration_semantics;
 pub(in crate::compiler_frontend::ast) mod declaration_table;
 mod function_signatures;
 mod input;
@@ -19,6 +20,7 @@ mod type_resolution;
 // --------------------------
 
 pub(in crate::compiler_frontend::ast) use builder::AstModuleEnvironmentBuilder;
+pub(crate) use declaration_semantics::{DeclarationSemanticKind, DeclarationSemanticTable};
 pub(crate) use declaration_table::TopLevelDeclarationTable;
 pub(in crate::compiler_frontend::ast) use input::AstEnvironmentInput;
 pub(in crate::compiler_frontend::ast) use lookups::{AstModuleEnvironment, AstModuleLookups};

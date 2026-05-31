@@ -2940,6 +2940,11 @@ path = "scope_semantics"
 tags = ["integration","language"]
 
 [[case]]
+id = "semantic_declaration_dispatch_imports"
+path = "semantic_declaration_dispatch_imports"
+tags = ["integration","imports","generics","structs","choices"]
+
+[[case]]
 id = "simple_if_test"
 path = "simple_if_test"
 tags = ["integration","control-flow"]

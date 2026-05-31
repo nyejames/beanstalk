@@ -11,7 +11,6 @@ use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorType};
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, DeferredFeatureReason, InvalidMatchPatternReason,
 };
-use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::declaration_syntax::choice::{ChoiceVariant, ChoiceVariantPayload};
 use crate::compiler_frontend::deferred_feature_diagnostics::deferred_feature_reason_diagnostic;
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -392,12 +391,7 @@ fn qualifier_resolves_to_choice(
 ) -> bool {
     match_context
         .get_reference(&qualifier)
-        .is_some_and(|declaration| {
-            matches!(
-                &declaration.value.diagnostic_type,
-                DataType::Choices { nominal_path, .. } if nominal_path == choice_nominal_path
-            )
-        })
+        .is_some_and(|declaration| &declaration.id == choice_nominal_path)
 }
 
 /// Look up a variant name in the declared choice variant list and return its positional tag.

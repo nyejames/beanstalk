@@ -13,13 +13,15 @@
 //! - template control flow.
 
 pub(crate) mod completeness;
+pub(crate) mod multi_bind;
 pub(crate) mod parse_values;
 pub(crate) mod receiver;
 pub(crate) mod types;
 
 pub(crate) use completeness::{analyze_branch_flow, extract_single_produced_type};
+pub(crate) use multi_bind::try_parse_multi_bind_value_block;
 pub(crate) use parse_values::{ProducedValuesParseInput, parse_produced_values_typed};
-pub(crate) use receiver::{try_parse_multi_bind_value_block, try_parse_value_block_at_receiver};
+pub(crate) use receiver::try_parse_value_block_at_receiver;
 pub(crate) use types::{
     ActiveValueProductionTarget, BranchFlow, ProducedValues, ValueReceiverKind,
 };

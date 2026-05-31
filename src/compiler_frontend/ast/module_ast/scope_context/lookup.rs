@@ -12,6 +12,20 @@
 use super::*;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::ast::generic_functions::GenericFunctionTemplate;
+use crate::compiler_frontend::value_mode::ValueMode;
+
+/// Resolved struct constructor metadata for identifier-led expression dispatch.
+///
+/// WHAT: carries canonical nominal identity plus the original AST field declarations used for
+/// constructor defaults.
+/// WHY: constructor routing should be driven by semantic TypeId/type-environment facts, while
+/// default expressions still live on AST declarations.
+pub(crate) struct SourceStructConstructor<'a> {
+    pub(crate) struct_path: InternedPath,
+    pub(crate) fields: &'a [Declaration],
+    pub(crate) struct_value_mode: &'a ValueMode,
+    pub(crate) type_id: TypeId,
+}
 
 impl ScopeContext {
     // --------------------------
@@ -65,6 +79,93 @@ impl ScopeContext {
             .lookups
             .generic_function_templates_by_path
             .get(function_path)
+    }
+
+    /// Return the semantic role of a declaration without inspecting display-only type spelling.
+    pub(crate) fn semantic_kind_for_declaration(
+        &self,
+        declaration: &Declaration,
+        type_environment: &TypeEnvironment,
+    ) -> DeclarationSemanticKind {
+        if let Some(kind) = self
+            .lookups
+            .declaration_semantics
+            .kind_for_path(&declaration.id)
+        {
+            return kind;
+        }
+
+        match &declaration.value.kind {
+            ExpressionKind::Function(..) => DeclarationSemanticKind::Function,
+            ExpressionKind::NoValue => match type_environment.get(declaration.value.type_id) {
+                Some(TypeDefinition::Struct(..)) => DeclarationSemanticKind::Struct,
+                Some(TypeDefinition::Choice(..)) => DeclarationSemanticKind::Choice,
+                _ => DeclarationSemanticKind::Value,
+            },
+            _ if declaration.value.is_compile_time_constant() => DeclarationSemanticKind::Constant,
+            _ => DeclarationSemanticKind::Value,
+        }
+    }
+
+    /// Resolve callable metadata for a source declaration.
+    ///
+    /// Top-level functions are classified from the environment's resolved signature table.
+    /// Body-local functions carry their signature directly in `ExpressionKind::Function`.
+    pub(crate) fn source_callable_signature<'a>(
+        &'a self,
+        declaration: &'a Declaration,
+    ) -> Option<&'a FunctionSignature> {
+        if let Some(resolved_signature) = self
+            .lookups
+            .resolved_function_signatures_by_path
+            .get(&declaration.id)
+        {
+            return Some(&resolved_signature.signature);
+        }
+
+        match &declaration.value.kind {
+            ExpressionKind::Function(signature, _) => Some(signature),
+            _ => None,
+        }
+    }
+
+    /// Resolve constructor metadata for a source struct declaration.
+    pub(crate) fn source_struct_constructor<'a>(
+        &'a self,
+        declaration: &'a Declaration,
+        type_environment: &TypeEnvironment,
+    ) -> Option<SourceStructConstructor<'a>> {
+        if self.semantic_kind_for_declaration(declaration, type_environment)
+            != DeclarationSemanticKind::Struct
+        {
+            return None;
+        }
+
+        let type_id = declaration.value.type_id;
+        let struct_path = type_environment.nominal_path(type_id)?.to_owned();
+        let fields = self
+            .resolved_struct_fields_by_path
+            .as_ref()
+            .and_then(|map| map.get(&struct_path))
+            .map(Vec::as_slice)
+            .unwrap_or(&[]);
+
+        Some(SourceStructConstructor {
+            struct_path,
+            fields,
+            struct_value_mode: &declaration.value.value_mode,
+            type_id,
+        })
+    }
+
+    /// Return whether a source declaration is a choice type.
+    pub(crate) fn is_source_choice_declaration(
+        &self,
+        declaration: &Declaration,
+        type_environment: &TypeEnvironment,
+    ) -> bool {
+        self.semantic_kind_for_declaration(declaration, type_environment)
+            == DeclarationSemanticKind::Choice
     }
 
     pub(crate) fn lookup_receiver_method(
@@ -249,14 +350,13 @@ impl ScopeContext {
         }
 
         self.lookups
-            .declaration_table
-            .get_by_path(path)
-            .is_some_and(|declaration| {
-                matches!(declaration.value.kind, ExpressionKind::NoValue)
-                    && matches!(
-                        declaration.value.diagnostic_type,
-                        DataType::Struct { .. } | DataType::Choices { .. }
-                    )
+            .declaration_semantics
+            .kind_for_path(path)
+            .is_some_and(|kind| {
+                matches!(
+                    kind,
+                    DeclarationSemanticKind::Struct | DeclarationSemanticKind::Choice
+                )
             })
     }
 }

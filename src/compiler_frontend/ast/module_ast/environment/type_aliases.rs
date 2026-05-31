@@ -46,10 +46,10 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 let mut type_resolution_context =
                     self.type_resolution_context_for(&visibility, None);
 
-                // Type aliases still store diagnostic `DataType` spellings because generic
-                // alias expansion has a few Alpha bridge paths that are not expressible as
-                // standalone `TypeId`s yet. Keep the conversion local to alias metadata so
-                // executable declaration annotations can use `ResolvedTypeAnnotation`.
+                // Type aliases store resolved diagnostic spellings because aliases are
+                // source-facing metadata that must preserve the written nominal/generic shape.
+                // Executable declarations still consume canonical `TypeId`s through
+                // `ResolvedTypeAnnotation`.
                 let data_type_target = parsed_ref_to_data_type(target);
 
                 resolve_type(

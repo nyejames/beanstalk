@@ -39,7 +39,7 @@ use crate::compiler_frontend::ast::instrumentation::{
     AstCounter, add_ast_counter, increment_ast_counter,
 };
 use crate::compiler_frontend::ast::module_ast::environment::{
-    AstModuleLookups, TopLevelDeclarationTable,
+    AstModuleLookups, DeclarationSemanticKind, DeclarationSemanticTable, TopLevelDeclarationTable,
 };
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::templates::template_folding::TemplateFoldContext;
@@ -356,6 +356,7 @@ impl ScopeContext {
             generic_function_templates_by_path: Rc::new(FxHashMap::default()),
             resolved_type_aliases_by_path: Rc::new(FxHashMap::default()),
             choice_variant_shells_by_path: Rc::new(FxHashMap::default()),
+            declaration_semantics: Rc::new(DeclarationSemanticTable::empty()),
             receiver_methods: Rc::new(ReceiverMethodCatalog::default()),
             generic_declarations_by_path: Rc::new(FxHashMap::default()),
             nominal_type_ids_by_path: Rc::new(FxHashMap::default()),

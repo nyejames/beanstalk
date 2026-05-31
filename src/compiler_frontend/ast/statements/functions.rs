@@ -271,11 +271,9 @@ pub(crate) fn signature_member_to_declaration(
 ) -> Result<Declaration, CompilerDiagnostic> {
     let data_type = parsed_ref_to_data_type(&member.type_annotation);
 
-    // Transitional bridge: function-signature parsing still builds declaration shells for
-    // body-local syntax before every parsed type has gone through AST semantic resolution.
-    // Callers that need checked conversion resolve the diagnostic type first and use
-    // `resolve_diagnostic_type_to_type_id_checked`; constructor validation now uses semantic
-    // field views instead of relying on this declaration-shaped fallback.
+    // Signature parsing builds declaration shells before named type references are resolved by
+    // the AST environment. This hint is used only to seed parse-era placeholders; checked
+    // TypeId conversion happens after semantic type resolution.
     let type_id = resolve_diagnostic_type_to_type_id(
         &data_type,
         type_interner.environment_mut_for_derived_types(),

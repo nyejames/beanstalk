@@ -58,7 +58,7 @@ use crate::compiler_frontend::type_coercion::parse_context::{
 
 /// Create an AST reference node for an existing declaration.
 ///
-/// Dispatches to function-call parsing when the declaration's diagnostic type is a function,
+/// Dispatches to function-call parsing when the declaration is semantically callable,
 /// otherwise falls through to field access.
 pub fn create_reference(
     token_stream: &mut FileTokens,
@@ -70,13 +70,8 @@ pub fn create_reference(
     // Move past the name
     token_stream.advance();
 
-    // Note: `diagnostic_type` is used here as a parse-level shape check. The
-    // `DataType::Function` variant tells us that a bare reference to this
-    // declaration should be treated as a call parse, not a field access.
-    // Semantic type identity is `type_id`; this branch is syntax-directed.
-    match declaration.value.diagnostic_type {
-        // Function Call
-        DataType::Function(_, ref signature) => parse_function_call(FunctionCallParseInput {
+    if let Some(signature) = context.source_callable_signature(declaration) {
+        return parse_function_call(FunctionCallParseInput {
             token_stream,
             id: &declaration.id,
             context,
@@ -86,16 +81,16 @@ pub fn create_reference(
             warnings: None,
             type_interner,
             string_table,
-        }),
-
-        _ => parse_field_access(
-            token_stream,
-            declaration,
-            context,
-            type_interner,
-            string_table,
-        ),
+        });
     }
+
+    parse_field_access(
+        token_stream,
+        declaration,
+        context,
+        type_interner,
+        string_table,
+    )
 }
 
 /// Parse a new body-local declaration from the token stream.

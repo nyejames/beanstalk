@@ -16,7 +16,6 @@ use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidCopyTargetReason, InvalidReceiverCallReason, NameNamespace,
 };
-use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::reserved_trait_syntax::{
     reserved_trait_keyword_error, reserved_trait_keyword_or_dispatch_mismatch,
 };
@@ -148,34 +147,35 @@ pub(super) fn parse_copy_place_expression(
                 .into());
             };
 
-            match &place_declaration.value.diagnostic_type {
-                DataType::Function(_, _) => Err(CompilerDiagnostic::invalid_copy_target(
+            if context
+                .source_callable_signature(place_declaration)
+                .is_some()
+            {
+                Err(CompilerDiagnostic::invalid_copy_target(
                     InvalidCopyTargetReason::FunctionValue,
                     token_stream.current_location(),
                 )
-                .into()),
+                .into())
+            } else {
+                let place = create_reference(
+                    token_stream,
+                    place_declaration,
+                    context,
+                    type_interner,
+                    string_table,
+                )?;
 
-                _ => {
-                    let place = create_reference(
-                        token_stream,
-                        place_declaration,
-                        context,
-                        type_interner,
-                        string_table,
-                    )?;
-
-                    // create_reference may produce a non-place node in edge cases (e.g. certain
-                    // builtin aliases), so verify the AST shape before accepting it.
-                    if !ast_node_is_place(&place) {
-                        return Err(CompilerDiagnostic::invalid_copy_target(
-                            InvalidCopyTargetReason::NonPlace,
-                            token_stream.current_location(),
-                        )
-                        .into());
-                    }
-
-                    Ok(place)
+                // create_reference may produce a non-place node in edge cases (e.g. certain
+                // builtin aliases), so verify the AST shape before accepting it.
+                if !ast_node_is_place(&place) {
+                    return Err(CompilerDiagnostic::invalid_copy_target(
+                        InvalidCopyTargetReason::NonPlace,
+                        token_stream.current_location(),
+                    )
+                    .into());
                 }
+
+                Ok(place)
             }
         }
 
