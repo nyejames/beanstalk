@@ -395,7 +395,7 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Structured diagnostics</td>
      <td style="padding: 0.2em 0.5em;  "> Supported</td>
-     <td style="padding: 0.2em 0.5em;  "> Import, import path resolution, compile-time path literal validation, name-resolution, semantic-rule, type, borrow, deferred-feature, unsupported external-package backend validation, Stage 0 config parsing/value validation, Stage 0 project-structure validation, HTML project config validation, and AST expression/template diagnostics use typed CompilerDiagnostic payloads with stable codes. Infrastructure failures use a dedicated stable infrastructure code, and warnings share the same ordered diagnostic stream.</td>
+     <td style="padding: 0.2em 0.5em;  "> Import, import path resolution, compile-time path literal validation, name-resolution, semantic-rule, type, borrow, deferred-feature, unsupported external-package/backend-feature validation, Stage 0 config parsing/value validation, Stage 0 project-structure validation, HTML project config validation, and AST expression/template diagnostics use typed CompilerDiagnostic payloads with stable codes. Infrastructure failures use a dedicated stable infrastructure code, and warnings share the same ordered diagnostic stream.</td>
      <td style="padding: 0.2em 0.5em;  "> Frontend</td>
      <td style="padding: 0.2em 0.5em;  "> Do not add legacy user-diagnostic macros, rendered-string payloads, or user-facing CompilerError routes. AST and borrow source failures use <span style="
         color: #c444aff9;
@@ -406,19 +406,19 @@ body {
     ">CompilerError</span> / <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">ErrorType::HirTransformation</span> for invariant failures only. Result-returning diagnostic boundary enums box large <span style="
+    ">ErrorType::HirTransformation</span> for invariant failures only. Local fallible compiler-stage helpers and diagnostic boundary enums may box large <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">CompilerDiagnostic</span> / <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">CompilerError</span> payloads and unbox them only at <span style="
+    ">CompilerError</span> payloads to keep Result boundaries small, but they unbox only at <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">DiagnosticBag</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">CompilerMessages</span>, or render boundaries so Clippy stays clean without weakening the typed diagnostic model. Executable AST and HIR call/result typing is <span style="
+    ">CompilerMessages</span>, or render boundaries so this remains an internal transport detail rather than a user-facing diagnostic-shape change. Executable AST and HIR call/result typing is <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">TypeId</span>-first, with <span style="
@@ -497,9 +497,126 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Templates and style directives</td>
      <td style="padding: 0.2em 0.5em;  "> Supported</td>
-     <td style="padding: 0.2em 0.5em;  "> Broad template parsing, slot, directive, const-fragment, and runtime-fragment coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad template parsing, slot, directive, const-fragment, and runtime-fragment coverage, with targeted unit coverage for template head suffix control-flow parsing and diagnostics, const Bool <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">if</span> folding including dependency-sorted source const references, runtime Bool <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">if</span> HIR lowering including expression-level <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">!</span> propagation, const option-present <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">if</span> folding for already-decidable option values and source const scrutinees, runtime option-present <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">if</span> HIR lowering, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">[else]</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">[else if ...]</span>, grammar-boundary diagnostics for unsupported match-style template heads, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">case</span> as an ordinary identifier, const conditional loops, const range loops, const collection loops, runtime conditional / range / collection loop HIR lowering, and runtime slot applications with branch, loop, loop-control in append contexts, repeated slot single-evaluation/source-site behavior, nested slot sites, mixed static/runtime ordering, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">$children(...)</span>, and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">$fresh</span> coverage.</td>
      <td style="padding: 0.2em 0.5em;  "> HTML / JS</td>
-     <td style="padding: 0.2em 0.5em;  "> This is one of the main Alpha surfaces. Keep fragment ordering and slot composition heavily tested.</td>
+     <td style="padding: 0.2em 0.5em;  "> This is one of the main Alpha surfaces. Template head suffix control flow is supported for source-authored Bool <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">if</span> and option-present <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">if</span> branching, conditional <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">loop</span>, range <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">loop</span>, collection <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">loop</span>, standalone <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">[else]</span>, standalone <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">[else if ...]</span> branch chains, and structural <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">[break]</span> / <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">[continue]</span> loop-control sentinels in runtime-capable contexts. Template heads do not support full pattern-match branch chains; use ordinary statement/value <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">if value is:</span> blocks outside templates for that shape. <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">case</span> is not a keyword or template sentinel and remains valid as an ordinary identifier. Const-required Bool <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">if</span>, already-decidable option-present <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">if</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">[else if ...]</span> branch chains, conditional <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">loop</span> with a compile-time false condition, range <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">loop</span>, collection <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">loop</span>, and structural loop-control sentinels inside const range/collection loop bodies fold during AST construction. Const-required template <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">if</span> conditions, option scrutinees and conditional-loop conditions can reference dependency-sorted source constants, with same-file forward references still rejected by the header dependency pass. Runtime slot applications support default, named, positional, loose contribution routing, repeated slots, missing slots as empty, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">$insert(...)</span>, runtime branch/loop contributions, loop-control propagation inside template loop append contexts, source evaluation once with slot-site replay, site-local <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">$children(...)</span> / <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">$fresh</span> wrapper behavior, and mixed static/runtime contribution ordering. Supported paths preserve structural no-output semantics, lazy runtime branch/loop lowering, nearest-template-loop <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">[break]</span> / <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">[continue]</span> targeting, output-before-loop-control preservation, expression-level <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">!</span> propagation, runtime slot/insert leakage diagnostics for invalid helper artifacts, literal-body <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">[else]</span> / <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">[else if ...]</span> / loop-control rejection, malformed/orphan/inline sentinel diagnostics, and the <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">template_const_loop_iteration_limit</span> const expansion guard with a default of <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">10_000</span> iterations and a hard maximum of <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">1_000_000</span>.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -718,7 +835,7 @@ body {
     ">none =></span> presence checks, literal and relational present-value patterns, and present capture <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">|value| =></span> with exhaustiveness. Block-form option unwrap value blocks, arbitrary nested value blocks, value-producing loops, template control flow, user tuple values, option inner choice patterns, and polished diagnostics remain deferred. <span style="
+    ">|value| =></span> with exhaustiveness. Block-form option unwrap value blocks, arbitrary nested value blocks, value-producing loops, user tuple values, option inner choice patterns, and polished diagnostics remain deferred. <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">none is none</span> remains invalid. Public <span style="
@@ -1196,10 +1313,19 @@ body {
     ">"html"</span>, boolean settings require folded <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">Bool</span> values, and <span style="
+    ">Bool</span> values, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">library_folders</span> accepts one string or a collection of strings. Preferred source-library scan syntax is <span style="
+    ">library_folders</span> accepts one string or a collection of strings, and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">template_const_loop_iteration_limit</span> requires a positive folded <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Int</span> no greater than <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">1_000_000</span>. Preferred source-library scan syntax is <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">library_folders = {"lib", "packages"}</span>; explicit compile-time syntax such as <span style="
@@ -1273,7 +1399,10 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> If statements and conditions</td>
      <td style="padding: 0.2em 0.5em;  "> Supported</td>
-     <td style="padding: 0.2em 0.5em;  "> Broad condition validation, nested condition, Bool requirement, and JS lowering coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad condition validation, nested condition, Bool requirement, same-line <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">else if</span> rejection, and JS lowering coverage.</td>
      <td style="padding: 0.2em 0.5em;  "> JS / HTML</td>
      <td style="padding: 0.2em 0.5em;  "> No major Alpha gap if current control-flow coverage remains green.</td>
         </tr>
@@ -1443,6 +1572,77 @@ body {
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">0</span> through the general struct-default path. Hidden location/trace metadata remains backend-internal.</td>
+        </tr>
+        
+    </table></section>
+    <section class="container"><h1>Compiler development tooling</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+        
+    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Tooling</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Status</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Coverage</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Current role</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Watch points</th> 
+    </tr>
+
+            
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Benchmark summaries</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Targeted</td>
+     <td style="padding: 0.2em 0.5em;  "> Terse tracked monthly benchmark summaries for rough compiler-development trend tracking.</td>
+     <td style="padding: 0.2em 0.5em;  "> Do not add per-case tables or raw counter dumps. Detailed analysis belongs in local JSONL and local report commands.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Local benchmark history</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Targeted</td>
+     <td style="padding: 0.2em 0.5em;  "> Local-only JSONL stores per-case timings, stage timings, counters, suite kind, primary metric, system identity, and commit metadata.</td>
+     <td style="padding: 0.2em 0.5em;  "> Must remain ignored/untracked. Schema changes should be deliberate and documented.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Benchmark work counters</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Targeted</td>
+     <td style="padding: 0.2em 0.5em;  "> Stable counter transport records frontend implementation-pressure counters and the first cheap work-volume counters for input size, dependency sorting, AST, HIR, and borrow validation.</td>
+     <td style="padding: 0.2em 0.5em;  "> Counters are diagnostic evidence, not public results. Prefer cheap counters recorded during existing compiler work. Older local records may still contain legacy human labels.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Local benchmark drilldown report</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Targeted</td>
+     <td style="padding: 0.2em 0.5em;  "> Local-only <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">just bench-report</span> command reports slowest cases, stage movement, counter movement, normalized ratios, and next investigation candidates from ignored JSONL history.</td>
+     <td style="padding: 0.2em 0.5em;  "> Must not write tracked summaries. Must not become a CI timing gate.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Profiling command wrappers</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Targeted</td>
+     <td style="padding: 0.2em 0.5em;  "> Optional local <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">just profile-build</span> helper builds a frame-pointer, line-table profiling binary after benchmark reports identify an active investigation area.</td>
+     <td style="padding: 0.2em 0.5em;  "> Keep out of default validation. Avoid mandatory external tools.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> CI performance gates / public dashboard</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> None</td>
+     <td style="padding: 0.2em 0.5em;  "> Not part of Alpha. Current benchmarks are rough local sanity checks.</td>
+     <td style="padding: 0.2em 0.5em;  "> Do not fail CI on timing noise until benchmarks are stable enough and dedicated infrastructure exists.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Criterion microbenchmarks</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred / Targeted</td>
+     <td style="padding: 0.2em 0.5em;  "> None</td>
+     <td style="padding: 0.2em 0.5em;  "> Only for isolated hot functions after local benchmark reports identify them.</td>
+     <td style="padding: 0.2em 0.5em;  "> Do not replace end-to-end and frontend benchmark suites with microbenchmarks.</td>
         </tr>
         
     </table></section>
@@ -1972,7 +2172,7 @@ body {
              <td style="padding: 0.2em 0.5em;  "> Source-library HIR caching</td>
      <td style="padding: 0.2em 0.5em;  "> Deferred</td>
      <td style="padding: 0.2em 0.5em;  "> No precompiled source-library cache.</td>
-     <td style="padding: 0.2em 0.5em;  "> Source libraries are compiled from `.bst` source each build. HIR caching is deferred until the library system is stable.</td>
+     <td style="padding: 0.2em 0.5em;  "> Source libraries are compiled from `.bst` source each build. Benchmark counters may quantify this cost, but HIR caching is deferred until the library system is stable.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -2123,7 +2323,7 @@ body {
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">generic_recursive_type_deferred</span></td>
-     <td style="padding: 0.2em 0.5em;  "> Generic struct headers parse and resolve. Concrete constructor inference, field type substitution, named constructor arguments, imports and import aliases, collection element types, and concrete HIR lowering are supported. Recursive generic structs and generic receiver methods remain rejected.</td>
+     <td style="padding: 0.2em 0.5em;  "> Generic struct headers parse and resolve. Concrete constructor inference, field type substitution, named constructor arguments, imports and import aliases, collection element types, and concrete HIR lowering are supported. Recursive generic structs and generic receiver methods remain rejected. HTML-Wasm generic runtime values fail with structured unsupported-backend diagnostics before Wasm lowering.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">

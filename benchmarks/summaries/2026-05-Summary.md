@@ -1,16 +1,16 @@
 # May 2026 Summary
 
+## End-to-end CLI / macOS Apple Silicon (6D851D)
+Change since initial benchmark: case set changed: avg +8ms on 8/16 shared cases; 5 slower, 2 faster
+Initial: all ~37ms, core ~82ms, docs ~87ms, stress ~8ms
+Latest: all ~29ms, core ~63ms, docs ~142ms, stress ~19ms, module ~11ms, borrow ~12ms
+Case spread latest: ~34ms
+
 ## Frontend phases / macOS Apple Silicon (6D851D)
 Change since initial benchmark: case set changed: avg +3ms on 7/8 shared cases; 2 slower, 0 faster
 Initial: all ~80ms, core ~54ms, docs ~334ms, stress ~57ms, module ~22ms, borrow ~16ms
 Latest: all ~74ms, core ~55ms, docs ~343ms, stress ~60ms, module ~18ms, borrow ~18ms
 Case spread latest: ~104ms
-
-## End-to-end CLI / macOS Apple Silicon (6D851D)
-Change since initial benchmark: case set changed: avg +14ms on 8/16 shared cases; 4 slower, 1 faster
-Initial: all ~37ms, core ~82ms, docs ~87ms, stress ~8ms
-Latest: all ~32ms, core ~78ms, docs ~149ms, stress ~21ms, module ~12ms, borrow ~12ms
-Case spread latest: ~37ms
 ---------------------
 
 # End-to-end CLI / macOS Apple Silicon (6D851D): May 11th - 10:09
@@ -104,4 +104,9 @@ Stage movement: ast -34ms, ast emit -27ms, ast finalize -5ms
 case set changed: avg -1ms on 7/8 shared cases; 0 slower, 0 faster
 Avg: all ~74ms, core ~55ms, docs ~343ms, stress ~60ms, module ~18ms, borrow ~18ms
 Stage movement: file prep -2ms, ast emit +1ms
+
+# End-to-end CLI / macOS Apple Silicon (6D851D): May 31st - 13:38
+**-3ms avg**; 2 faster, 0 slower; 16/16 cases
+Avg: all ~29ms, core ~63ms, docs ~142ms, stress ~19ms, module ~11ms, borrow ~12ms
+Stage movement: ast -70ms, ast emit -54ms, ast env -13ms
 

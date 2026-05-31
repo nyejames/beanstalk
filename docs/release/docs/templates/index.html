@@ -516,7 +516,39 @@ body {
     ">$slot</span>.</p><p>If a template has named or positional slots but no default slot, any loose body content that cannot be assigned to a positional slot is an error.  If a slot receives no content, it expands to an empty string. Repeated slots, such as two occurrences of <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    "></span>, will replay the same content in both places.</p><p>Because <span style="
+    "></span>, will replay the same content in both places.</p><p>Slot applications may contain runtime-producing content. Runtime-capable templates support default, named, positional, and loose contributions from template <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">if</span> branches and template <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">loop</span> bodies. Valid runtime slot applications are routed during AST preparation, then lowered through ordinary runtime string accumulators. Missing slots still render as empty strings, and repeated slots replay the same accumulated contribution.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    card <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-operator'>&lt;</span>h<span class='bst-code-number'>1</span><span class='bst-code-operator'>&gt;</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>slot<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;title&quot;</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-operator'>&lt;</span><span class='bst-code-operator'>/</span>h<span class='bst-code-number'>1</span><span class='bst-code-operator'>&gt;</span>
+        <span class='bst-code-operator'>&lt;</span>section<span class='bst-code-operator'>&gt;</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>slot<span class='bst-code-parenthesis'>]</span><span class='bst-code-operator'>&lt;</span><span class='bst-code-operator'>/</span>section<span class='bst-code-operator'>&gt;</span>
+    <span class='bst-code-parenthesis'>]</span>
+
+    <span class='bst-code-parenthesis'>[</span>card<span class='bst-code-operator'>:</span>
+        <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>insert<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;title&quot;</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>:</span>
+            <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>if</span> maybe_title is <span class='bst-code-operator'>|</span>title<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+                <span class='bst-code-parenthesis'>[</span>title<span class='bst-code-parenthesis'>]</span>
+            <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>else</span><span class='bst-code-parenthesis'>]</span>
+                <span class='bst-code-struct'>Untitled</span>
+            <span class='bst-code-parenthesis'>]</span>
+        <span class='bst-code-parenthesis'>]</span>
+
+        <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>loop</span> items <span class='bst-code-operator'>|</span>item<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+            <span class='bst-code-parenthesis'>[</span>item<span class='bst-code-parenthesis'>]</span>
+        <span class='bst-code-parenthesis'>]</span>
+    <span class='bst-code-parenthesis'>]</span>
+    </code></pre><p>Because <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">$children(..)</span> only applies to direct child templates, nested helpers can scope row and cell wrappers independently.</p><p>A child template is treated as an opaque contribution after it has been selected as a direct child. The parent <span style="
@@ -572,7 +604,13 @@ body {
     "><td></span>. The nested <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">codesnippet</span> helper inside a cell remains inline content inside that cell; it does not become another table cell.</p><h2>Template control flow examples</h2><pre style="
+    ">codesnippet</span> helper inside a cell remains inline content inside that cell; it does not become another table cell.</p><h2>Template head suffix control flow</h2><p>Template control flow is written as the final suffix in the template head, immediately before the body colon. If the head already contains a value, helper, or directive, put a comma before <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">if</span> or <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">loop</span>.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -580,16 +618,196 @@ body {
         white-space: pre;
         overflow-x: auto;
     "><code class='codeblock'>
-    <span class='bst-code-parenthesis'>[</span>head_of_element<span class='bst-code-operator'>:</span> content of element that renders <span class='bst-code-keyword'>as</span> text <span class='bst-code-parenthesis'>(</span>markdown <span class='bst-code-operator'>/</span> metadata <span class='bst-code-operator'>/</span> alt tag <span class='bst-code-operator'>/</span> code ..etc<span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>]</span>
-
-    <span class='bst-code-parenthesis'>[</span> <span class='bst-code-keyword'>loop</span> text_array <span class='bst-code-operator'>|</span>text<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-parenthesis'>[</span>text<span class='bst-code-parenthesis'>]</span>
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>if</span> show<span class='bst-code-operator'>:</span>
+        <span class='bst-code-struct'>Visible</span>
     <span class='bst-code-parenthesis'>]</span>
 
-    <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>if</span> not text.isBlank<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-parenthesis'>[</span> text<span class='bst-code-operator'>:</span> plus some extra text <span class='bst-code-keyword'>in</span> the same element <span class='bst-code-keyword'>as</span> the variable text <span class='bst-code-parenthesis'>]</span>
+    <span class='bst-code-parenthesis'>[</span>card, <span class='bst-code-keyword'>if</span> show<span class='bst-code-operator'>:</span>
+        <span class='bst-code-struct'>Visible</span> inside card
     <span class='bst-code-parenthesis'>]</span>
-    </code></pre></section>
+    </code></pre><p>Boolean <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">if</span> conditions choose one branch lazily at runtime.</p><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">[else if ...]</span> adds more branches in source order and uses</p><p>the same Bool and option-present selectors as the initial <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">if</span>.</p><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">[else]</span> is optional, must be standalone, and binds to the nearest</p><p>active template <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">if</span>.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    show_summary <span class='bst-code-operator'>=</span> false
+    show_details <span class='bst-code-operator'>=</span> true
+
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>if</span> show_summary<span class='bst-code-operator'>:</span>
+        <span class='bst-code-struct'>Summary</span>
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>else</span> <span class='bst-code-keyword'>if</span> show_details<span class='bst-code-parenthesis'>]</span>
+        <span class='bst-code-struct'>Details</span>
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>else</span><span class='bst-code-parenthesis'>]</span>
+        <span class='bst-code-struct'>Empty</span>
+    <span class='bst-code-parenthesis'>]</span>
+    </code></pre><p>Option-present captures use the normal <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">is |name|</span> form. The captured value is visible only inside the selected branch.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    maybe_name <span class='bst-code-type'>String</span><span class='bst-code-operator'>?</span> <span class='bst-code-operator'>=</span> none
+    maybe_backup <span class='bst-code-type'>String</span><span class='bst-code-operator'>?</span> <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Ada&quot;</span>
+
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>if</span> maybe_name is <span class='bst-code-operator'>|</span>name<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-struct'>Hello</span> <span class='bst-code-parenthesis'>[</span>name<span class='bst-code-parenthesis'>]</span>
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>else</span> <span class='bst-code-keyword'>if</span> maybe_backup is <span class='bst-code-operator'>|</span>backup<span class='bst-code-operator'>|</span><span class='bst-code-parenthesis'>]</span>
+        <span class='bst-code-struct'>Hello</span> <span class='bst-code-parenthesis'>[</span>backup<span class='bst-code-parenthesis'>]</span>
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>else</span><span class='bst-code-parenthesis'>]</span>
+        <span class='bst-code-struct'>Hello</span> guest
+    <span class='bst-code-parenthesis'>]</span>
+    </code></pre><p>Full pattern-match branch chains belong to ordinary statement/value</p><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">if value is:</span> blocks, not template heads.</p><p>Template loops support conditional loops, collection loops, and numeric range loops using the same header syntax as statement loops. Conditional template loops do not take bindings. Collection and range loops can use a second binding for the zero-based index. Loops concatenate iterations directly; there is no implicit separator. Standalone <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">[break]</span> and</p><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">[continue]</span> sentinels are valid inside template loop bodies,</p><p>including nested template <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">if</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">[else if ...]</span>, and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">[else]</span> bodies. They target the nearest active template loop and are structural control signals, not rendered output.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>loop</span> has_next<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-parenthesis'>[</span>next_item<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>]</span>
+    <span class='bst-code-parenthesis'>]</span>
+
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>loop</span> items <span class='bst-code-operator'>|</span>item<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-parenthesis'>[</span>item<span class='bst-code-parenthesis'>]</span>
+    <span class='bst-code-parenthesis'>]</span>
+
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>loop</span> items <span class='bst-code-operator'>|</span>item, index<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-parenthesis'>[</span>index<span class='bst-code-parenthesis'>]</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>item<span class='bst-code-parenthesis'>]</span>
+    <span class='bst-code-parenthesis'>]</span>
+
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>loop</span> <span class='bst-code-number'>0</span> <span class='bst-code-keyword'>to</span> <span class='bst-code-number'>10</span> <span class='bst-code-operator'>|</span>i<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-parenthesis'>[</span>i<span class='bst-code-parenthesis'>]</span>
+    <span class='bst-code-parenthesis'>]</span>
+
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>loop</span> items <span class='bst-code-operator'>|</span>item<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>if</span> item.skip<span class='bst-code-operator'>:</span>
+            <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>continue</span><span class='bst-code-parenthesis'>]</span>
+        <span class='bst-code-parenthesis'>]</span>
+        <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>if</span> item.done<span class='bst-code-operator'>:</span>
+            <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>break</span><span class='bst-code-parenthesis'>]</span>
+        <span class='bst-code-parenthesis'>]</span>
+        <span class='bst-code-parenthesis'>[</span>item<span class='bst-code-parenthesis'>]</span>
+    <span class='bst-code-parenthesis'>]</span>
+    </code></pre><p>Head values and wrappers apply to the selected or generated output. For a loop, the owning head wraps the whole aggregate once. Put per-iteration wrappers inside the loop body.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-parenthesis'>[</span>list, <span class='bst-code-keyword'>loop</span> items <span class='bst-code-operator'>|</span>item<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-parenthesis'>[</span>row<span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>item<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span>
+    <span class='bst-code-parenthesis'>]</span>
+    </code></pre><p>A false <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">if</span> with no <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">[else]</span> produces structural no-output. A false conditional loop and zero-iteration collection or range loop also produce no-output. In those cases, shared head wrappers and parent</p><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">$children(..)</span> wrappers are skipped. A selected branch with an</p><p>empty body is still selected, so its head wrappers may render an empty wrapper. A loop iteration that reaches <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">[break]</span> or</p><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">[continue]</span> before any output also does not count as emitted.</p><p>Output before a loop-control sentinel is preserved.</p><p>Top-level <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#[if ...:]</span> and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#[loop ...:]</span> fragments must fully fold at compile time. Const-required template <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">if</span> forms validate every branch body, even when one path is inactive. Const-required conditional template loops fold to no-output when their condition is compile-time <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">false</span>. Compile-time <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">true</span> and unknown/runtime conditional-loop conditions are rejected because the compiler does not perform template loop termination analysis. Const range and collection template loops can fold structural <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">[break]</span> and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">[continue]</span>, and use the</p><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">template_const_loop_iteration_limit</span> project config guard. The</p><p>default is <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">10_000</span> iterations per const template loop, and the configured value must be a positive folded <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Int</span> no greater than</p><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">1_000_000</span>.</p><p>Runtime template control flow stays lazy. Only the selected <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">if</span> branch is evaluated. Range and collection loop sources are evaluated once before iteration; conditional loop conditions are evaluated before every iteration. Expression-level <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">!</span> inside selected branch or loop content propagates from the enclosing function.</p><p>Runtime slot applications are valid inside template control flow after normal slot routing. Escaped helper artifacts that still leave unresolved <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    "></span> or <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">$insert(...)</span> output inside runtime control-flow bodies are invalid template structure. Runtime slot applications appended inside template loops follow the same nearest-template-loop <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">[break]</span> / <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">[continue]</span> rules as direct loop body content.</p></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

@@ -404,7 +404,16 @@ body {
     ">"html"</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">library_folders</span> accepts one string or a collection of strings, and boolean HTML settings such as <span style="
+    ">library_folders</span> accepts one string or a collection of strings, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">template_const_loop_iteration_limit</span> requires a positive folded <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Int</span> no greater than <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">1_000_000</span>, and boolean HTML settings such as <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">redirect_index_html</span> require real <span style="
@@ -483,6 +492,17 @@ body {
         font-family: var(--bst-font-family-monospace);
     ">library_folders</span></td>
      <td style="padding: 0.2em 0.5em;  "> Configures source-library scan roots. Each direct child directory of a scan root becomes an import prefix. `/lib` is the default when omitted.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">template_const_loop_iteration_limit</span></td>
+     <td style="padding: 0.2em 0.5em;  "> Sets the per-loop compile-time template expansion guard. The default is <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">10_000</span>.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
