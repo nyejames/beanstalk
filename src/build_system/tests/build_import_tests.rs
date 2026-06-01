@@ -377,7 +377,7 @@ fn build_html_project_web_canvas_emits_builtin_js_asset_and_glue() {
     fs::write(root.join("#config.bst"), "project = \"html\"\n").expect("should write config");
     fs::write(
         root.join("#page.bst"),
-        "import @web/canvas\nrun |id String| -> String, Error!:\n    canvas_ref = canvas.get_canvas(id)!\n    ctx ~= canvas.context_2d(canvas_ref)!\n    ~ctx.fill_rect(0.0, 0.0, 10.0, 10.0)\n    return \"ok\"\n;\nresult = run(\"game\") catch:\n    then \"error\"\n;\nio(result)\n",
+        "import @web/canvas\nrun |id String| -> String, Error!:\n    canvas_ref = canvas.get_canvas(id)!\n    ctx ~= canvas.context_2d(canvas_ref)!\n    ~ctx.set_line_width(2.0)\n    gradient ~= ctx.create_linear_gradient(0.0, 0.0, 10.0, 0.0)!\n    ~gradient.add_color_stop(0.0, \"red\")!\n    ~ctx.set_fill_gradient(gradient)\n    ~ctx.fill_rect(0.0, 0.0, 10.0, 10.0)\n    return \"ok\"\n;\nresult = run(\"game\") catch:\n    then \"error\"\n;\nio(result)\n",
     )
     .expect("should write page");
 
@@ -406,6 +406,9 @@ fn build_html_project_web_canvas_emits_builtin_js_asset_and_glue() {
         .expect("@web/canvas should emit its built-in JS asset");
     assert!(canvas_asset.contains("export function getCanvas"));
     assert!(canvas_asset.contains("@bst.opaque Canvas2d"));
+    assert!(canvas_asset.contains("@bst.opaque CanvasGradient"));
+    assert!(canvas_asset.contains("export function createLinearGradient"));
+    assert!(canvas_asset.contains("export function imageDataSetPixel"));
 
     let glue = result
         .project
@@ -424,6 +427,9 @@ fn build_html_project_web_canvas_emits_builtin_js_asset_and_glue() {
         .expect("@web/canvas calls should emit generated glue");
     assert!(glue.contains("getCanvas as __bs_external_fn"));
     assert!(glue.contains("fillRect as __bs_external_fn"));
+    assert!(glue.contains("createLinearGradient as __bs_external_fn"));
+    assert!(glue.contains("addColorStop as __bs_external_fn"));
+    assert!(glue.contains("setFillGradient as __bs_external_fn"));
     assert!(
         glue.contains("from \"../canvas-"),
         "glue imports should be relative to the glue module"

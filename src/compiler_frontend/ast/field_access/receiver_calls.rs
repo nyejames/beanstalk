@@ -18,9 +18,13 @@ use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
 use crate::compiler_frontend::ast::expressions::function_calls::parse_call_arguments_typed;
 use crate::compiler_frontend::ast::instrumentation::{AstCounter, increment_ast_counter};
 use crate::compiler_frontend::ast::receiver_methods::ReceiverMethodEntry;
+use crate::compiler_frontend::ast::statements::fallible_handling::token_stream_starts_fallible_handling_suffix;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::builtins::error_type::resolve_builtin_error_type_typed;
-use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, InvalidReceiverCallReason};
+use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::compiler_messages::{
+    CompilerDiagnostic, InvalidReceiverCallReason, InvalidResultHandlingReason,
+};
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::external_packages::ExternalAccessKind;
@@ -35,6 +39,22 @@ fn lookup_receiver_method<'a>(
 ) -> Option<&'a ReceiverMethodEntry> {
     let receiver_key = type_environment.receiver_key_for_type_id(receiver_type_id)?;
     context.lookup_receiver_method(&receiver_key, member_name)
+}
+
+fn fallible_receiver_result_type_ids(
+    success_return_type_ids: Vec<TypeId>,
+    error_return_type_id: TypeId,
+    type_interner: &mut AstTypeInterner<'_>,
+) -> Vec<TypeId> {
+    let success_type_id = match success_return_type_ids.as_slice() {
+        [] => type_interner.builtins().none,
+        [single] => *single,
+        multiple => type_interner
+            .environment_mut_for_derived_types()
+            .intern_tuple(multiple.to_vec()),
+    };
+
+    vec![type_interner.intern_fallible_carrier(success_type_id, error_return_type_id)]
 }
 
 pub(super) fn parse_receiver_method_call_typed(
@@ -110,7 +130,35 @@ pub(super) fn parse_receiver_method_call_typed(
             type_check_context.type_environment,
             type_check_context.compatibility_cache,
         )?;
-        let result_type_ids = method_entry.signature.success_return_type_ids();
+        let result_type_ids =
+            if let Some(error_return_type_id) = method_entry.signature.error_return_type_id() {
+                if !token_stream_starts_fallible_handling_suffix(token_stream) {
+                    return Err(CompilerDiagnostic::invalid_result_handling(
+                        InvalidResultHandlingReason::UnhandledErrorReturn,
+                        token_stream.current_location(),
+                    )
+                    .into());
+                }
+
+                fallible_receiver_result_type_ids(
+                    method_entry.signature.success_return_type_ids(),
+                    error_return_type_id,
+                    type_interner,
+                )
+            } else {
+                if matches!(
+                    token_stream.current_token_kind(),
+                    TokenKind::Bang | TokenKind::Catch
+                ) {
+                    return Err(CompilerDiagnostic::invalid_result_handling(
+                        InvalidResultHandlingReason::NotResultExpression,
+                        token_stream.current_location(),
+                    )
+                    .into());
+                }
+
+                method_entry.signature.success_return_type_ids()
+            };
 
         increment_ast_counter(AstCounter::PostfixReceiverNodesCopied);
 
@@ -193,10 +241,51 @@ pub(super) fn parse_receiver_method_call_typed(
 
         let builtin_error_type =
             resolve_builtin_error_type_typed(scope_context, &member_location, string_table)?;
-        let result_type_ids = external_def.success_return_type_ids(
+        let success_return_type_ids = external_def.success_return_type_ids(
             type_interner.environment_mut_for_derived_types(),
             builtin_error_type.type_id,
         );
+        let error_return_type_id = external_def.error_return_type_id(
+            type_interner.environment_mut_for_derived_types(),
+            builtin_error_type.type_id,
+        );
+
+        let result_type_ids = if external_def.is_fallible() {
+            let Some(error_return_type_id) = error_return_type_id else {
+                return Err(CompilerError::compiler_error(format!(
+                    "Fallible external receiver method '{}' has no frontend-visible concrete error slot.",
+                    external_def.name
+                ))
+                .into());
+            };
+
+            if !token_stream_starts_fallible_handling_suffix(token_stream) {
+                return Err(CompilerDiagnostic::invalid_result_handling(
+                    InvalidResultHandlingReason::UnhandledErrorReturn,
+                    token_stream.current_location(),
+                )
+                .into());
+            }
+
+            fallible_receiver_result_type_ids(
+                success_return_type_ids,
+                error_return_type_id,
+                type_interner,
+            )
+        } else {
+            if matches!(
+                token_stream.current_token_kind(),
+                TokenKind::Bang | TokenKind::Catch
+            ) {
+                return Err(CompilerDiagnostic::invalid_result_handling(
+                    InvalidResultHandlingReason::NotResultExpression,
+                    token_stream.current_location(),
+                )
+                .into());
+            }
+
+            success_return_type_ids
+        };
 
         return Ok(Some(AstNode {
             kind: NodeKind::HostFunctionCall {

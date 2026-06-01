@@ -563,6 +563,13 @@ fn parses_mutable_receiver_methods_with_explicit_receiver_tilde() {
 }
 
 #[test]
+fn parses_result_propagation_for_receiver_method_call() {
+    parse_single_file_ast(
+        "Point = |\n    x Int = 1,\n|\n\nread |this Point| -> Int, Error!:\n    return this.x\n;\n\nforward |point Point| -> Int, Error!:\n    return point.read()!\n;\n",
+    );
+}
+
+#[test]
 fn rejects_mutable_receiver_methods_without_explicit_receiver_tilde() {
     assert_invalid_receiver_call(
         "Point = |\n    x Int = 0,\n|\n\nreset |this ~Point|:\n    this.x = 0\n;\n\npoint ~= Point()\npoint.reset()\n",

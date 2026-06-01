@@ -18,6 +18,7 @@ use crate::compiler_frontend::ast::expressions::parse_expression::create_express
 use crate::compiler_frontend::ast::statements::fallible_handling::{
     FallibleCallSite, FallibleHostCallSite, HandledFallibleCall, HandledFallibleHostCall,
     parse_fallible_handling_suffix_for_call, parse_fallible_handling_suffix_for_host_call,
+    token_stream_starts_fallible_handling_suffix,
 };
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
@@ -71,15 +72,6 @@ pub fn parse_function_call(
     input: FunctionCallParseInput<'_, '_>,
 ) -> Result<AstNode, ExpressionParseError> {
     parse_function_call_typed(input)
-}
-
-/// Returns `true` when the current token starts a fallible-handling suffix (`!`, `catch`,
-/// or a symbol followed by `!`).
-fn token_stream_starts_fallible_handling(token_stream: &FileTokens) -> bool {
-    token_stream.current_token_kind() == &TokenKind::Bang
-        || token_stream.current_token_kind() == &TokenKind::Catch
-        || (matches!(token_stream.current_token_kind(), TokenKind::Symbol(_))
-            && token_stream.peek_next_token() == Some(&TokenKind::Bang))
 }
 
 fn parse_function_call_typed(
@@ -143,7 +135,7 @@ fn parse_function_call_typed(
     //  Apply fallible handling
     // ------------------------
     if let Some(error_return_type_id) = signature.error_return_type_id() {
-        if token_stream_starts_fallible_handling(token_stream) {
+        if token_stream_starts_fallible_handling_suffix(token_stream) {
             return parse_fallible_handling_suffix_for_call(
                 token_stream,
                 context,
@@ -591,7 +583,7 @@ fn parse_external_function_call_typed(
             call_location: location.clone(),
         };
 
-        if token_stream_starts_fallible_handling(token_stream) {
+        if token_stream_starts_fallible_handling_suffix(token_stream) {
             return parse_fallible_handling_suffix_for_host_call(
                 token_stream,
                 context,

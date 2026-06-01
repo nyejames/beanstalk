@@ -1246,3 +1246,62 @@ export function fillRect(ctx, x, y, width, height) {
     assert_free_functions(&library, &["get_canvas"]);
     assert_receiver_methods(&library, &["fill_rect"]);
 }
+
+#[test]
+fn builtin_web_canvas_library_parses_expanded_surface() {
+    let source = include_str!("../../../external_libraries/web/canvas/canvas.js");
+    let library = parse(source);
+
+    assert_no_diagnostics(&library);
+    assert_opaque_types(
+        &library,
+        &[
+            "Canvas",
+            "Canvas2d",
+            "CanvasGradient",
+            "CanvasPattern",
+            "CanvasImage",
+            "CanvasImageData",
+            "CanvasTextMetrics",
+        ],
+    );
+    assert_runtime_imports(&library, &[("@beanstalk/runtime", &["bstErr", "bstOk"])]);
+
+    let free_function_names: Vec<&str> = library
+        .free_functions
+        .iter()
+        .map(|function| function.beanstalk_name.as_str())
+        .collect();
+    for expected in [
+        "get_canvas",
+        "get_image",
+        "context_2d",
+        "to_data_url_quality",
+        "image_data_get_red",
+        "text_width",
+    ] {
+        assert!(
+            free_function_names.contains(&expected),
+            "expected expanded canvas free function {expected}"
+        );
+    }
+
+    let receiver_method_names: Vec<&str> = library
+        .receiver_methods
+        .iter()
+        .map(|function| function.beanstalk_name.as_str())
+        .collect();
+    for expected in [
+        "set_canvas_size",
+        "set_fill_style",
+        "create_linear_gradient",
+        "add_color_stop",
+        "draw_image_scaled",
+        "image_data_set_pixel",
+    ] {
+        assert!(
+            receiver_method_names.contains(&expected),
+            "expected expanded canvas receiver method {expected}"
+        );
+    }
+}

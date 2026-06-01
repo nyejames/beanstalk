@@ -11,6 +11,7 @@ use super::receiver_access::{
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
 use crate::compiler_frontend::ast::instrumentation::{AstCounter, increment_ast_counter};
+use crate::compiler_frontend::ast::statements::fallible_handling::token_stream_starts_fallible_handling_suffix;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::builtins::CollectionBuiltinOp;
 use crate::compiler_frontend::builtins::error_type::{
@@ -66,13 +67,6 @@ fn is_fallible_collection_builtin(builtin: CollectionBuiltinOp) -> bool {
         builtin,
         CollectionBuiltinOp::Get | CollectionBuiltinOp::Set | CollectionBuiltinOp::Remove
     )
-}
-
-fn token_starts_fallible_handling_suffix(token_stream: &FileTokens) -> bool {
-    token_stream.current_token_kind() == &TokenKind::Bang
-        || token_stream.current_token_kind() == &TokenKind::Catch
-        || (matches!(token_stream.current_token_kind(), TokenKind::Symbol(_))
-            && token_stream.peek_next_token() == Some(&TokenKind::Bang))
 }
 
 // --------------------------
@@ -234,7 +228,7 @@ pub(super) fn parse_collection_builtin_member_typed(
     // Collection `get`, `set`, and `remove` produce fallible carriers, so the parser rejects raw
     // values before HIR can mistake them for ordinary runtime data.
     if is_fallible_collection_builtin(builtin)
-        && !token_starts_fallible_handling_suffix(token_stream)
+        && !token_stream_starts_fallible_handling_suffix(token_stream)
     {
         return Err(CompilerDiagnostic::invalid_builtin_call(
             InvalidBuiltinCallReason::MustHandleFallibleResult,

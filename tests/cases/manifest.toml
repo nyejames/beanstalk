@@ -5530,6 +5530,11 @@ path = "web_canvas_grouped_type_auto_method"
 tags = ["integration", "external-imports", "web-canvas", "positive", "js-backend", "receiver-methods"]
 
 [[case]]
+id = "web_canvas_expanded_2d_surface"
+path = "web_canvas_expanded_2d_surface"
+tags = ["integration", "external-imports", "web-canvas", "positive", "js-backend", "receiver-methods"]
+
+[[case]]
 id = "web_canvas_grouped_import_root_facade"
 path = "web_canvas_grouped_import_root_facade"
 tags = ["integration", "external-imports", "web-canvas", "positive", "js-backend", "facade"]
