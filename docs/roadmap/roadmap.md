@@ -11,8 +11,7 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 ---
 
 # Plans / TODOS
-- assert termination: `docs/roadmap/plans/assert-terminality-implementation-plan.md`
-- Traits
+- Traits (plan todo)
 - `else => _` (Wildcards in value positions for pattern matching or default arguments in function calls)
 - Replace JSON with beanstalk files (dogfooding for language as a way to store data / config stuff). These could be standardised as their own build system under `src/projects`.
 - Closures
@@ -23,27 +22,6 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 - Move to more specific explicit type declarations for numbers (I32, I64, F32, F64) - JS backend just makes all an F64 and accepts the precision loss, more for future Wasm backend
 
 # Notes
-- Final generics design and implementation is complete. The accepted implementation record is
-  `docs/roadmap/plans/generics-hardening-implementation-plan.md`.
-
-- The template control-flow runtime-slot refactor is complete. Template head suffix control flow
-  is implemented for source-authored Bool `if`, option-present `if`, range `loop`, collection
-  `loop`, standalone `[else]`, standalone `[else if ...]`, structural `[break]` / `[continue]`,
-  const folding where supported, lazy runtime HIR lowering, and runtime slot applications with
-  branch/loop contributions plus `$children(...)` / `$fresh` wrapper behavior.
-
-- Assert/panic follow-ups after the always-checked `assert` implementation: debug-only assertions,
-  lazy runtime assertion-message expressions, compile-time constant assertion messages,
-  catchable/recoverable panic design, explicit stop helpers such as `todo` / `unreachable` /
-  `fatal` / `abort` / `precondition`, Wasm trap message support, and richer runtime failure
-  metadata or stack traces.
-
-- The canvas helper import/runtime reachability refactor is complete. Grouped virtual external
-  package imports resolve before source/module facade enforcement without weakening real source
-  facade privacy. HTML JS runtime assets, generated glue, runtime modules, import maps, and
-  unsupported-backend validation are driven by HIR calls reachable from the entry `start` function.
-  Implementation record: `docs/roadmap/plans/canvas-helper-import-runtime-refactor-plan.md`.
-
 - Deliberately deferred library-system follow-ups after the canvas reachability refactor: direct
   facade re-export syntax, wildcard imports, automatic re-export of receiver methods through
   facade type aliases, source-library HIR caching, user-authored external binding files, broader
@@ -52,6 +30,7 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
   tree-shaking/minification.
 
 - External non-scalar constant design: string slices, collections, and opaque-type external constants in const contexts are rejected for Alpha. Design compile-time representation and validation before enabling.
+
 - Private const/config follow-ups after the private const config refactor: consume HIR const metadata in borrow checking, temporary-local reduction, and lowering/constant propagation.
 
 - Typed config follow-ups after the private const config refactor: structured typed config values with choices/const records, future `project = Project::Html(...)` syntax, typed backend config schemas, optional config-local helper constants, config lock/cache metadata, numeric config shapes when keys need them, and private inferred `=` const-record config projection.

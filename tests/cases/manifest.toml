@@ -2800,6 +2800,16 @@ path = "value_catch_missing_producing_path"
 tags = ["integration","results","value-blocks","diagnostics"]
 
 [[case]]
+id = "value_catch_assert_false_terminal"
+path = "value_catch_assert_false_terminal"
+tags = ["integration","results","value-blocks","assert","control-flow"]
+
+[[case]]
+id = "value_catch_dynamic_assert_fallthrough_rejected"
+path = "value_catch_dynamic_assert_fallthrough_rejected"
+tags = ["integration","results","value-blocks","assert","control-flow","diagnostics"]
+
+[[case]]
 id = "result_multi_bind_propagate"
 path = "result_multi_bind_propagate"
 tags = ["integration","results"]

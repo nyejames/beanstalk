@@ -7,6 +7,7 @@
 //! and future value blocks one shared branch-flow vocabulary.
 
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
+use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::statements::value_production::types::BranchFlow;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 
@@ -25,6 +26,15 @@ pub fn analyze_branch_flow(body: &[AstNode]) -> BranchFlow {
     }
 
     BranchFlow::FallsThrough
+}
+
+/// Detects whether an assert condition is statically known to be `false`.
+///
+/// WHAT: checks only source-level/lowered literal `false`.
+/// WHY: branch completeness deliberately recognizes only literal false assertions
+///      and must stay aligned with HIR's direct assertion-failure lowering.
+fn assert_condition_is_statically_false(condition: &Expression) -> bool {
+    matches!(&condition.kind, ExpressionKind::Bool(false))
 }
 
 /// Determines the control-flow effect of a single statement.
@@ -67,6 +77,10 @@ fn statement_flow(statement: &AstNode) -> BranchFlow {
                 }
                 None => all_arms_flow,
             }
+        }
+
+        NodeKind::Assert { condition, .. } if assert_condition_is_statically_false(condition) => {
+            BranchFlow::Terminates
         }
 
         _ => BranchFlow::FallsThrough,

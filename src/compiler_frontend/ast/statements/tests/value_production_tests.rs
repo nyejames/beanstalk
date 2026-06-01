@@ -48,6 +48,16 @@ fn rvalue(line: i32) -> AstNode {
     )
 }
 
+fn assert_statement(condition: Expression, line: i32) -> AstNode {
+    node(
+        NodeKind::Assert {
+            condition,
+            message: None,
+        },
+        test_location(line),
+    )
+}
+
 #[test]
 fn branch_flow_reports_direct_value_production() {
     let flow = analyze_branch_flow(&[rvalue(1), then_value(2), rvalue(3)]);
@@ -135,5 +145,69 @@ fn branch_flow_combines_match_arms_and_default() {
         analyze_branch_flow(&[mixed_match]),
         BranchFlow::FallsThrough,
         "mixed produce/terminate paths are not a single value-producing flow"
+    );
+}
+
+#[test]
+fn branch_flow_reports_assert_false_as_terminal() {
+    let flow = analyze_branch_flow(&[
+        rvalue(1),
+        assert_statement(
+            Expression::bool(false, test_location(2), ValueMode::ImmutableOwned),
+            2,
+        ),
+        then_value(3),
+    ]);
+
+    assert_eq!(flow, BranchFlow::Terminates);
+}
+
+#[test]
+fn branch_flow_does_not_treat_passing_assert_as_terminal() {
+    let flow = analyze_branch_flow(&[assert_statement(
+        Expression::bool(true, test_location(1), ValueMode::ImmutableOwned),
+        1,
+    )]);
+
+    assert_eq!(flow, BranchFlow::FallsThrough);
+}
+
+#[test]
+fn branch_flow_combines_assert_false_branches_as_terminal() {
+    let terminating_if = node(
+        NodeKind::If(
+            Expression::bool(true, test_location(1), ValueMode::ImmutableOwned),
+            vec![assert_statement(
+                Expression::bool(false, test_location(2), ValueMode::ImmutableOwned),
+                2,
+            )],
+            Some(vec![assert_statement(
+                Expression::bool(false, test_location(3), ValueMode::ImmutableOwned),
+                3,
+            )]),
+        ),
+        test_location(1),
+    );
+
+    let partial_if = node(
+        NodeKind::If(
+            Expression::bool(true, test_location(4), ValueMode::ImmutableOwned),
+            vec![assert_statement(
+                Expression::bool(false, test_location(5), ValueMode::ImmutableOwned),
+                5,
+            )],
+            None,
+        ),
+        test_location(4),
+    );
+
+    assert_eq!(
+        analyze_branch_flow(&[terminating_if]),
+        BranchFlow::Terminates
+    );
+    assert_eq!(
+        analyze_branch_flow(&[partial_if]),
+        BranchFlow::FallsThrough,
+        "if with only one assert-false branch still has a fallthrough path"
     );
 }

@@ -463,7 +463,10 @@ body {
     ">assert(condition, "message")</span> are always checked. Failed assertions are unrecoverable and cannot be caught. <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">assert(false, "message")</span> is the only current explicit source-level panic path. Expected failures should use <span style="
+    ">assert(false, "message")</span> is the only current explicit source-level panic path and is statically terminal for value-required functions and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">catch</span> handlers. Expected failures should use <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">Error!</span> and <span style="
@@ -1560,7 +1563,13 @@ body {
     ">then</span> values through shared value-block result locals; nested ordinary branch paths may produce for the same catch block. Success-producing catch handlers without <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">then</span> must terminate explicitly; fallthrough is rejected before HIR. Collection <span style="
+    ">then</span> must terminate explicitly; literal <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">assert(false)</span> / <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">assert(false, "message")</span> handlers satisfy that rule, while dynamic assertions still fall through for static completeness. Fallthrough is rejected before HIR. Collection <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">get</span>, <span style="

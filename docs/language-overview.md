@@ -251,7 +251,7 @@ Rules:
 - Failure is unrecoverable, does not return `Error!`, and cannot be caught with `catch`.
 - `assert` cannot be assigned, passed, imported, aliased, or used in expression position.
 - Expected failures should use typed error propagation with `Error!` and `catch`.
-- `assert(false)` and `assert(false, "message")` are statically terminal and may end a non-`Void` function.
+- `assert(false)` and `assert(false, "message")` are statically terminal and may end a non-`Void` function or value-required `catch` handler.
 - Dynamic `assert(condition)` is not statically terminal.
 - Assertion messages are currently string literals only.
 

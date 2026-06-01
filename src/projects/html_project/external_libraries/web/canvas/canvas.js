@@ -49,7 +49,7 @@ export function fillRect(ctx, x, y, width, height) {
  * @bst.sig set_fill_style |this ~Canvas2d, color String|
  */
 export function setFillStyle(ctx, color) {
-    ctx.fillStyle = color;
+    ctx.setFillStyle(color);
 }
 
 /**

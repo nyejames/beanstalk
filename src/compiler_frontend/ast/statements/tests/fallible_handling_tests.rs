@@ -181,6 +181,72 @@ fn parses_catch_handler_without_fallback_when_handler_guarantees_return() {
     assert!(matches!(handler_body[0].kind, NodeKind::Return(_)));
 }
 
+#[test]
+fn parses_catch_handler_without_fallback_when_handler_ends_with_assert_false() {
+    let (ast, string_table) = parse_single_file_ast(
+        "can_error |value String| -> String, Error!:\n    return! Error(\"boom\")\n;\n\nrecover |value String| -> String:\n    output = can_error(value) catch |err|:\n        io(err.message)\n        assert(false, \"unreachable error path\")\n    ;\n    return output\n;\n",
+    );
+
+    let body = function_body_by_name(&ast, &string_table, "recover");
+    let NodeKind::VariableDeclaration(output_decl) = &body[0].kind else {
+        panic!("expected declaration statement in recover()")
+    };
+
+    let ExpressionKind::ValueBlock { block } = &output_decl.value.kind else {
+        panic!("expected catch value block in recover declaration")
+    };
+    let ValueBlock::Catch(value_catch) = block.as_ref() else {
+        panic!("expected catch value block")
+    };
+    let ExpressionKind::HandledFallibleFunctionCall { handling, .. } =
+        &value_catch.handled_value.kind
+    else {
+        panic!("expected handled call expression in catch value block")
+    };
+    let FallibleHandling::Handler {
+        body: handler_body, ..
+    } = handling
+    else {
+        panic!("expected catch handler handling")
+    };
+
+    assert_eq!(handler_body.len(), 2);
+    assert!(matches!(handler_body[1].kind, NodeKind::Assert { .. }));
+}
+
+#[test]
+fn parses_catch_handler_without_fallback_when_handler_ends_with_assert_false_no_binding() {
+    let (ast, string_table) = parse_single_file_ast(
+        "can_error |value String| -> String, Error!:\n    return! Error(\"boom\")\n;\n\nrecover |value String| -> String:\n    output = can_error(value) catch:\n        assert(false, \"unreachable error path\")\n    ;\n    return output\n;\n",
+    );
+
+    let body = function_body_by_name(&ast, &string_table, "recover");
+    let NodeKind::VariableDeclaration(output_decl) = &body[0].kind else {
+        panic!("expected declaration statement in recover()")
+    };
+
+    let ExpressionKind::ValueBlock { block } = &output_decl.value.kind else {
+        panic!("expected catch value block in recover declaration")
+    };
+    let ValueBlock::Catch(value_catch) = block.as_ref() else {
+        panic!("expected catch value block")
+    };
+    let ExpressionKind::HandledFallibleFunctionCall { handling, .. } =
+        &value_catch.handled_value.kind
+    else {
+        panic!("expected handled call expression in catch value block")
+    };
+    let FallibleHandling::Handler {
+        body: handler_body, ..
+    } = handling
+    else {
+        panic!("expected catch handler handling")
+    };
+
+    assert_eq!(handler_body.len(), 1);
+    assert!(matches!(handler_body[0].kind, NodeKind::Assert { .. }));
+}
+
 // --------------------------
 //  Catch handler fallthrough rejection
 // --------------------------
@@ -197,6 +263,14 @@ fn rejects_catch_handler_without_fallback_when_handler_can_fall_through() {
 fn rejects_catch_handler_if_without_else_even_when_then_branch_returns() {
     assert_invalid_fallible_handling(
         "can_error |value String| -> String, Error!:\n    return! Error(\"boom\")\n;\n\nrecover |value String, route Bool| -> String:\n    return can_error(value) catch:\n        if route:\n            return \"fallback\"\n        ;\n    ;\n;\n",
+        InvalidResultHandlingReason::CatchHandlerCanFallThrough,
+    );
+}
+
+#[test]
+fn rejects_catch_handler_without_fallback_when_handler_ends_with_dynamic_assert() {
+    assert_invalid_fallible_handling(
+        "can_error |value String| -> String, Error!:\n    return! Error(\"boom\")\n;\n\nrecover |value String, should_stop Bool| -> String:\n    return can_error(value) catch |err|:\n        io(err.message)\n        assert(should_stop, \"dynamic assertion can pass\")\n    ;\n;\n",
         InvalidResultHandlingReason::CatchHandlerCanFallThrough,
     );
 }
