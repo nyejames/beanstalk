@@ -1,5 +1,6 @@
 -- Basic HTML components and utility formatters for HTML project builds.
 -- Provided by the HTML project builder as a builder source library.
+import @web/canvas {get_canvas, context_2d, Canvas2d}
 
 -- Basic tags
 p #String = [$html:<p style="[$slot("style")]">[$slot]</p>]
@@ -30,3 +31,13 @@ left #String = [$insert("style"):text-align: left;]
 smaller #String = [$insert("style"):font-size: smaller;]
 medium #String = [$insert("style"):font-size: medium;]
 larger #String = [$insert("style"):font-size: larger;]
+
+-- Basic Canvas component
+CANVAS_ID #= "bst_builtin_canvas"
+canvas #String = [$html:<canvas id="[CANVAS_ID]" width="[$slot(2)]" height="[$slot(3)]" style="[$slot("style")]"></canvas>]
+
+-- Get the basic canvas element and 2D context for drawing (opaque JS interop)
+get_canvas_context || -> Canvas2d, Error!:
+    canvas_element = get_canvas(CANVAS_ID)!
+    return context_2d(canvas_element)!
+;

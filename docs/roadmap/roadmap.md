@@ -11,6 +11,7 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 ---
 
 # Plans / TODOS
+- fixes: `docs/roadmap/plans/canvas-helper-import-runtime-refactor-plan.md`
 - assert termination: `docs/roadmap/plans/assert-terminality-implementation-plan.md`
 - Traits
 - `else => _` (Wildcards in value positions for pattern matching or default arguments in function calls)
