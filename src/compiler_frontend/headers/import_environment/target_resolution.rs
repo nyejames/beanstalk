@@ -283,61 +283,44 @@ fn resolve_virtual_package_import(
     registry: &ExternalPackageRegistry,
     string_table: &mut StringTable,
 ) -> VirtualPackageMatch {
-    let components = requested_path.as_components();
-    if components.is_empty() {
+    let Some(package_match) =
+        registry.longest_package_prefix_for_import(requested_path, string_table)
+    else {
         return VirtualPackageMatch::NoMatch;
-    }
+    };
 
-    // Build candidate package paths by joining progressively more components.
-    // For @core/io/io we try "@core/io/io", "@core/io", "@core".
-    for package_len in (1..=components.len()).rev() {
-        let package_components = &components[..package_len];
-        let package_path_str = format!(
-            "@{}",
-            package_components
-                .iter()
-                .map(|&id| string_table.resolve(id))
-                .collect::<Vec<_>>()
-                .join("/")
-        );
+    let package_path = string_table.intern(&package_match.package_path);
 
-        if !registry.has_package(&package_path_str) {
-            continue;
-        }
+    // The remaining components are the symbol path within the package.
+    // For now, we only support a single symbol name after the package path.
+    let symbol_components =
+        &requested_path.as_components()[package_match.matched_component_count..];
+    let symbol_name = symbol_components
+        .last()
+        .copied()
+        .unwrap_or_else(|| string_table.intern("<unknown>"));
 
-        let package_path = string_table.intern(&package_path_str);
-
-        // The remaining components are the symbol path within the package.
-        // For now, we only support a single symbol name after the package path.
-        let symbol_components = &components[package_len..];
-        let symbol_name = symbol_components
-            .last()
-            .copied()
-            .unwrap_or_else(|| string_table.intern("<unknown>"));
-
-        if symbol_components.len() != 1 {
-            // Multi-component symbol paths within packages are not supported yet.
-            return VirtualPackageMatch::PackageFoundSymbolMissing {
-                package_path,
-                symbol_name,
-            };
-        }
-
-        let symbol_name_str = string_table.resolve(symbol_name);
-        if let Some(symbol_id) = registry.resolve_package_symbol(&package_path_str, symbol_name_str)
-        {
-            return VirtualPackageMatch::Found { symbol_id };
-        }
-
-        // Package exists but symbol doesn't — stop searching shorter prefixes
-        // so we report the missing symbol accurately.
+    if symbol_components.len() != 1 {
+        // Multi-component symbol paths within packages are not supported yet.
         return VirtualPackageMatch::PackageFoundSymbolMissing {
             package_path,
             symbol_name,
         };
     }
 
-    VirtualPackageMatch::NoMatch
+    let symbol_name_str = string_table.resolve(symbol_name);
+    if let Some(symbol_id) =
+        registry.resolve_package_symbol(&package_match.package_path, symbol_name_str)
+    {
+        return VirtualPackageMatch::Found { symbol_id };
+    }
+
+    // Package exists but symbol doesn't — stop searching shorter prefixes
+    // so we report the missing symbol accurately.
+    VirtualPackageMatch::PackageFoundSymbolMissing {
+        package_path,
+        symbol_name,
+    }
 }
 
 fn exact_path_matches_candidate(
@@ -439,23 +422,13 @@ pub(crate) fn resolve_namespace_target(
     }
 
     // 2. Try to match as an external package (exact path only).
-    let components = input.import_path.as_components();
-    if !components.is_empty() {
-        let package_path_str = format!(
-            "@{}",
-            components
-                .iter()
-                .map(|&id| input.string_table.resolve(id))
-                .collect::<Vec<_>>()
-                .join("/")
-        );
-        if input
-            .external_package_registry
-            .has_package(&package_path_str)
-        {
-            let package_path = input.string_table.intern(&package_path_str);
-            return Some(ResolvedNamespaceTarget::ExternalPackage { package_path });
-        }
+    if let Some(package_match) = input
+        .external_package_registry
+        .longest_package_prefix_for_import(input.import_path, input.string_table)
+        && package_match.matched_component_count == input.import_path.len()
+    {
+        let package_path = input.string_table.intern(&package_match.package_path);
+        return Some(ResolvedNamespaceTarget::ExternalPackage { package_path });
     }
 
     None

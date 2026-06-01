@@ -15,6 +15,8 @@ use super::ids::{
     ExternalConstantId, ExternalFunctionId, ExternalPackageId, ExternalSymbolId, ExternalTypeId,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::return_compiler_error;
 use std::collections::HashMap;
 
@@ -28,6 +30,18 @@ use std::collections::HashMap;
 struct ExternalPackageSymbolKey {
     package_id: ExternalPackageId,
     symbol_name: String,
+}
+
+/// Match between an import path and the longest registered external package prefix.
+///
+/// WHAT: records the package that matched plus how many import-path components belong to it.
+/// WHY: grouped imports, namespace imports, and Stage 0 discovery all need the same
+///      package-prefix rule before they decide how to handle any remaining symbol components.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ExternalPackagePathMatch {
+    pub(crate) package_path: String,
+    pub(crate) package_id: ExternalPackageId,
+    pub(crate) matched_component_count: usize,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -468,6 +482,39 @@ impl ExternalPackageRegistry {
         self.package_id_by_path.contains_key(path)
     }
 
+    /// Finds the longest registered external package prefix for an import path.
+    ///
+    /// WHAT: for an import such as `@core/math/sin`, checks `@core/math/sin`,
+    ///      then `@core/math`, then `@core` and returns the first registered package.
+    /// WHY: virtual packages share the same `@` syntax as source imports. Keeping the
+    ///      longest-prefix rule here prevents Stage 0, namespace imports, and grouped
+    ///      imports from reimplementing subtly different package matching.
+    pub(crate) fn longest_package_prefix_for_import(
+        &self,
+        import_path: &InternedPath,
+        string_table: &StringTable,
+    ) -> Option<ExternalPackagePathMatch> {
+        let components = import_path.as_components();
+        if components.is_empty() {
+            return None;
+        }
+
+        for package_len in (1..=components.len()).rev() {
+            let package_path =
+                external_package_path_from_components(&components[..package_len], string_table);
+
+            if let Some(package_id) = self.package_id_by_path.get(&package_path).copied() {
+                return Some(ExternalPackagePathMatch {
+                    package_path,
+                    package_id,
+                    matched_component_count: package_len,
+                });
+            }
+        }
+
+        None
+    }
+
     /// Returns the package path that owns the given external function ID.
     ///
     /// WHAT: reverse lookup from stable function ID to its declaring package path.
@@ -496,27 +543,11 @@ impl ExternalPackageRegistry {
     ///      can handle them with proper error messages.
     pub fn is_virtual_package_import(
         &self,
-        import_path: &crate::compiler_frontend::interned_path::InternedPath,
-        string_table: &crate::compiler_frontend::symbols::string_interning::StringTable,
+        import_path: &InternedPath,
+        string_table: &StringTable,
     ) -> bool {
-        let components = import_path.as_components();
-        if components.is_empty() {
-            return false;
-        }
-        for package_len in (1..=components.len()).rev() {
-            let package_path = format!(
-                "@{}",
-                components[..package_len]
-                    .iter()
-                    .map(|&id| string_table.resolve(id))
-                    .collect::<Vec<_>>()
-                    .join("/")
-            );
-            if self.has_package(&package_path) {
-                return true;
-            }
-        }
-        false
+        self.longest_package_prefix_for_import(import_path, string_table)
+            .is_some()
     }
 
     /// Returns a known optional package path when an import targets a package this builder
@@ -581,6 +612,22 @@ impl ExternalPackageRegistry {
             .get(name)
             .is_some_and(|symbol_id| matches!(symbol_id, ExternalSymbolId::Type(_)))
     }
+}
+
+fn external_package_path_from_components(
+    components: &[StringId],
+    string_table: &StringTable,
+) -> String {
+    let mut package_path = String::from("@");
+
+    for (index, component) in components.iter().enumerate() {
+        if index > 0 {
+            package_path.push('/');
+        }
+        package_path.push_str(string_table.resolve(*component));
+    }
+
+    package_path
 }
 
 #[cfg(test)]

@@ -196,6 +196,12 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                         },
                         SourceLocation::default(),
                     )?;
+                    Self::add_visible_receiver_method(
+                        &mut file_visibility,
+                        name,
+                        path,
+                        SourceLocation::default(),
+                    );
                     continue;
                 }
 
@@ -220,22 +226,6 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                     file_visibility
                         .visible_source_names
                         .insert(name, path.clone());
-                }
-            }
-        }
-
-        // 1b. Register same-file receiver methods.
-        if let Some(declared_paths) = self.module_symbols.declared_paths_by_file.get(source_file) {
-            for path in declared_paths {
-                if self.module_symbols.receiver_method_paths.contains(path)
-                    && let Some(name) = path.name()
-                {
-                    Self::add_visible_receiver_method(
-                        &mut file_visibility,
-                        name,
-                        path,
-                        SourceLocation::default(),
-                    );
                 }
             }
         }

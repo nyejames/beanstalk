@@ -37,7 +37,7 @@ CANVAS_ID #= "bst_builtin_canvas"
 canvas #String = [$html:<canvas id="[CANVAS_ID]" width="[$slot(2)]" height="[$slot(3)]" style="[$slot("style")]"></canvas>]
 
 -- Get the basic canvas element and 2D context for drawing (opaque JS interop)
-get_2d_canvas_context || -> Canvas2d, Error!:
+get_canvas_context || -> Canvas2d, Error!:
     canvas_element = get_canvas(CANVAS_ID)!
     return context_2d(canvas_element)!
 ;
