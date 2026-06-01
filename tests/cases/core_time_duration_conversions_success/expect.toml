@@ -1,0 +1,21 @@
+entry = "."
+
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = [
+    "duration_conversions sec=1.5 millis=1500 neg=true abs_sec=0.25 clamped_sec=0.5",
+]
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = [
+    "(1.5 * 1000.0)",
+    "Math.abs(",
+    "Math.min(Math.max(",
+]
+must_not_contain = [
+    "function __bs_time_duration_from_seconds(",
+    "function __bs_time_duration_from_milliseconds(",
+]

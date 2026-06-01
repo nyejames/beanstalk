@@ -1,4 +1,4 @@
-import @core/time {now_millis}
+import @core/time {duration_from_seconds}
 
-bad = now_millis(1)
+bad = duration_from_seconds()
 io(bad)

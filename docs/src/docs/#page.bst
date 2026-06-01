@@ -39,6 +39,7 @@ page_head #= theme_head
     ## Project Structure
     - @./project-structure (The shape of Beanstalk projects)
     - @./libraries (Libraries and modules)
+    - @./libraries/core (Core libraries)
 
     ### Future Design Drafts
     - @./errors (Error Handling)

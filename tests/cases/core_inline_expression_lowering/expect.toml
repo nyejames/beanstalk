@@ -12,7 +12,8 @@ must_contain = [
     "Math.cos(",
     "Math.pow(2, 3)",
     "Math.min(Math.max(5, 0), 10)",
-    "Date.now()",
+    "(1.5 * 1000.0)",
+    "1000.0",
     "Math.random()",
 ]
 must_not_contain = [
@@ -20,6 +21,7 @@ must_not_contain = [
     "function __bs_math_cos(",
     "function __bs_math_pow(",
     "function __bs_math_clamp(",
-    "function __bs_time_now_millis(",
+    "function __bs_time_duration_from_seconds(",
+    "function __bs_time_timestamp_from_unix_milliseconds(",
     "function __bs_random_float(",
 ]

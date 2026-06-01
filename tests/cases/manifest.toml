@@ -5157,12 +5157,77 @@ tags = ["integration", "language", "external-packages", "core-libraries", "diagn
 [[case]]
 id = "core_time_functions"
 path = "core_time_functions"
-tags = ["integration", "language", "external-packages", "core-libraries", "js", "wasm", "diagnostics"]
+tags = ["integration", "language", "external-packages", "core-libraries", "time", "js", "wasm", "diagnostics"]
 
 [[case]]
 id = "core_time_arity_error"
 path = "core_time_arity_error"
-tags = ["integration", "language", "external-packages", "core-libraries", "diagnostics"]
+tags = ["integration", "language", "external-packages", "core-libraries", "time", "diagnostics"]
+
+[[case]]
+id = "core_time_duration_conversions_success"
+path = "core_time_duration_conversions_success"
+tags = ["integration", "language", "external-packages", "core-libraries", "time", "js"]
+
+[[case]]
+id = "core_time_mark_delta_success"
+path = "core_time_mark_delta_success"
+tags = ["integration", "language", "external-packages", "core-libraries", "time", "js"]
+
+[[case]]
+id = "core_time_timestamp_conversions_success"
+path = "core_time_timestamp_conversions_success"
+tags = ["integration", "language", "external-packages", "core-libraries", "time", "js"]
+
+[[case]]
+id = "core_time_timestamp_parse_success"
+path = "core_time_timestamp_parse_success"
+tags = ["integration", "language", "external-packages", "core-libraries", "time", "js", "results"]
+
+[[case]]
+id = "core_time_timestamp_parse_invalid_catch_success"
+path = "core_time_timestamp_parse_invalid_catch_success"
+tags = ["integration", "language", "external-packages", "core-libraries", "time", "js", "results"]
+
+[[case]]
+id = "core_time_namespace_import_success"
+path = "core_time_namespace_import_success"
+tags = ["integration", "language", "external-packages", "core-libraries", "time", "imports", "namespace-imports"]
+
+[[case]]
+id = "core_time_grouped_alias_success"
+path = "core_time_grouped_alias_success"
+tags = ["integration", "language", "external-packages", "core-libraries", "time", "imports", "aliases"]
+
+[[case]]
+id = "core_time_receiver_visibility_success"
+path = "core_time_receiver_visibility_success"
+tags = ["integration", "language", "external-packages", "core-libraries", "time", "receiver-methods", "imports"]
+
+[[case]]
+id = "core_time_old_api_rejected"
+path = "core_time_old_api_rejected"
+tags = ["integration", "language", "external-packages", "core-libraries", "time", "diagnostics", "imports"]
+
+[[case]]
+id = "core_time_wrong_argument_type_rejected"
+path = "core_time_wrong_argument_type_rejected"
+tags = ["integration", "language", "external-packages", "core-libraries", "time", "diagnostics", "type-checking"]
+
+[[case]]
+id = "core_time_opaque_field_access_rejected"
+path = "core_time_opaque_field_access_rejected"
+tags = ["integration", "language", "external-packages", "core-libraries", "time", "diagnostics", "opaque-types"]
+
+[[case]]
+id = "core_time_receiver_method_without_visible_type_rejected"
+path = "core_time_receiver_method_without_visible_type_rejected"
+tags = ["integration", "language", "external-packages", "core-libraries", "time", "diagnostics", "receiver-methods", "imports"]
+
+[[case]]
+id = "core_time_unused_wasm_wrapper_success"
+path = "core_time_unused_wasm_wrapper_success"
+tags = ["integration", "language", "external-packages", "core-libraries", "time", "wasm", "reachability", "js"]
 
 [[case]]
 id = "import_core_package_skips_filesystem_resolution"

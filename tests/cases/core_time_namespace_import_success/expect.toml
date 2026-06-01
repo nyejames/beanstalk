@@ -1,0 +1,19 @@
+entry = "."
+
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = [
+    "namespace sec=1 millis=2000",
+]
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = [
+    "(1 * 1000.0)",
+    "(2 * 1000.0)",
+]
+must_not_contain = [
+    "function __bs_time_duration_from_seconds(",
+]

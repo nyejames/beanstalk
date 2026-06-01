@@ -1,0 +1,20 @@
+entry = "."
+
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = [
+    "mark_delta delta_ok=true elapsed_ok=true",
+]
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = [
+    "globalThis.performance.now()",
+]
+must_not_contain = [
+    "function __bs_time_mark_now(",
+    "function __bs_time_elapsed_since(",
+    "function __bs_time_duration_between(",
+]

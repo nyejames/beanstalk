@@ -3,18 +3,26 @@ entry = "."
 [backends.html]
 mode = "success"
 warnings = "forbid"
-rendered_output_contains = ["core_time millis=", " seconds="]
+rendered_output_contains = [
+    "duration sec=1.5 millis=1500 neg=true abs_sec=0.25 clamped_sec=1",
+    "delta_ok=true elapsed_ok=true",
+    "timestamp ts_millis=0 ts_sec=1 iso=1970-01-01T00:00:00.000Z",
+]
 
 [[backends.html.artifact_assertions]]
 path = "index.html"
 kind = "html"
 must_contain = [
+    "globalThis.performance.now()",
     "Date.now()",
-    "function __bs_time_now_seconds(",
-    "__bs_time_now_seconds()",
+    "(1.5 * 1000.0)",
+    "Math.abs(",
+    "Math.min(Math.max(",
+    "toISOString()",
 ]
 must_not_contain = [
     "function __bs_time_now_millis(",
+    "function __bs_time_now_seconds(",
 ]
 
 [backends.html_wasm]

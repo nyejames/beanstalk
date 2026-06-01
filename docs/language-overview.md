@@ -815,7 +815,13 @@ Initial optional core packages:
 - `@core/math`: `PI`, `TAU`, `E`, and `Float` math helpers.
 - `@core/text`: `length`, `is_empty`, `contains`, `starts_with`, `ends_with`.
 - `@core/random`: `random_float`, `random_int`; `random_int(min, max)` is inclusive at both ends and swaps bounds when `min > max`; seeded random is deferred.
-- `@core/time`: `now_millis`, `now_seconds`; richer date/time APIs are deferred.
+- `@core/time`: opaque `Duration`, `TimeMark`, and `Timestamp` types; monotonic `mark_now`, `elapsed_since`, and `duration_between`; duration construction/conversion helpers; Unix timestamp construction/conversion helpers; and fallible ISO timestamp parsing/formatting.
+
+Time package split:
+- Use `TimeMark` for elapsed time and frame deltas.
+- Use `Timestamp` for real-world UTC instants.
+- Use `Duration` for elapsed amounts.
+- `timestamp_from_iso_string` is fallible and must be handled with postfix `!` or `catch`.
 
 The HTML builder supports annotated single-file `.js` imports through `@bst.opaque` and `@bst.sig`. JavaScript export names are runtime implementation details; Beanstalk names come from annotations. Supported JS export forms are `export function name(...) { ... }` and block-bodied arrow exports. Runtime imports from builder-registered modules must be named static imports. Unsupported JS features include arbitrary dependency graphs, default exports, re-exports, CommonJS, classes, JS constants, property accessors, callbacks, async functions, collections/options in JS signatures, generic external types, and multi-success JS returns.
 
@@ -827,7 +833,7 @@ Deferred library-system features:
 - user-authored external binding files
 - wildcard imports and direct facade re-export syntax
 - automatic docs/API extraction from `#mod.bst`
-- seeded random, full date/time/timezone APIs, and Wasm implementations for non-math core packages
+- seeded random, full date/time/time-zone/calendar APIs, Temporal-backed calendar implementation, locale-aware formatting/parsing, local time-zone lookup, async timers/sleep/intervals, browser animation scheduling packages, and non-JS lowerings for JS-backed core packages
 
 ### Binding Modes, Top-Level Declarations, and Constants
 

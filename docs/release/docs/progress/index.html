@@ -1318,21 +1318,81 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Core time package</td>
      <td style="padding: 0.2em 0.5em;  "> Partial</td>
-     <td style="padding: 0.2em 0.5em;  "> Targeted import, JS helper, runtime smoke, arity-error, and Wasm-unsupported coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> Targeted import, grouped alias, namespace, receiver-method visibility, runtime smoke, fallible parse/catch, arity/type diagnostics, old-name rejection, opaque-field rejection, reachable Wasm-unsupported, and unused-wrapper reachability coverage.</td>
      <td style="padding: 0.2em 0.5em;  "> JS / HTML</td>
      <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">@core/time</span> exposes <span style="
+    ">@core/time</span> exposes opaque <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">now_millis()</span> and <span style="
+    ">Duration</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">now_seconds()</span>. Full date/time/timezone objects, formatting, durations, and monotonic clocks are deferred. Wasm support is deferred; HTML-Wasm builds fail with a structured <span style="
+    ">TimeMark</span>, and <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">Rule</span> diagnostic before backend lowering.</td>
+    ">Timestamp</span> types plus the first JS-backed time helper slice. <ul><li>Monotonic elapsed-time helpers: <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">mark_now()</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">elapsed_since(start)</span>, and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">duration_between(start, end)</span>.</li><li>Wall-clock timestamp helpers: <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">timestamp_now()</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">timestamp_from_unix_seconds(seconds)</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">timestamp_from_unix_milliseconds(milliseconds)</span>, and fallible <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">timestamp_from_iso_string(text)</span>.</li><li>Duration helpers: <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">duration_from_seconds(seconds)</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">duration_from_milliseconds(milliseconds)</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">duration.as_seconds()</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">duration.as_milliseconds()</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">duration.is_negative()</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">duration.abs()</span>, and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">duration.clamp(min, max)</span>.</li><li>Timestamp receiver helpers: <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">timestamp.unix_seconds()</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">timestamp.unix_milliseconds()</span>, and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">timestamp.to_iso_string()</span>.</li><li>Use <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">TimeMark</span>, not <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Timestamp</span>, for frame deltas and profiling. <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Timestamp</span> is UTC wall-clock time and can move with system clock changes.</li><li>Current JS representation is opaque to Beanstalk code but numeric internally: durations and marks are milliseconds, timestamps are Unix epoch milliseconds.</li><li>Full calendar date/time/time-zone APIs, local time-zone lookup, locale-aware formatting/parsing, timers/sleep/intervals, browser animation scheduling, and Wasm/native lowerings remain deferred. Reachable HTML-Wasm usage fails with a structured unsupported-backend diagnostic before backend lowering.</li></ul></td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">

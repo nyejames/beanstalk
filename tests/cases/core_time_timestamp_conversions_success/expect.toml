@@ -1,0 +1,20 @@
+entry = "."
+
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = [
+    "timestamp_conversions iso0=1970-01-01T00:00:00.000Z iso1=1970-01-01T00:00:01.000Z millis0=0 sec1=1 millis2=1000",
+]
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = [
+    "toISOString()",
+]
+must_not_contain = [
+    "function __bs_time_timestamp_from_unix_seconds(",
+    "function __bs_time_timestamp_from_unix_milliseconds(",
+    "function __bs_time_to_iso_string(",
+]

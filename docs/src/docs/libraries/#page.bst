@@ -53,6 +53,22 @@ page_head #= theme_head
 ]
 
 #[section, $markdown:
+    # Core library pages
+
+    Core libraries are builder-provided packages for common language-adjacent work.
+    Most core packages require explicit imports, while the prelude keeps only the smallest always-available surface bare.
+
+    - @./core (Core library overview)
+    - @./core/prelude (Prelude)
+    - @./core/io (IO)
+    - @./core/collections (Collections)
+    - @./core/math (Math)
+    - @./core/text (Text)
+    - @./core/random (Random)
+    - @./core/time (Time)
+]
+
+#[section, $markdown:
     # Import forms
 
     Imports target a declaration surface, not a raw folder dump.
@@ -219,10 +235,10 @@ page_head #= theme_head
 
     The HTML builder currently opts into optional core packages such as:
 
-    - [codesnippet:@core/math]
-    - [codesnippet:@core/text]
-    - [codesnippet:@core/random]
-    - [codesnippet:@core/time]
+    - @./core/math (Math)
+    - @./core/text (Text)
+    - @./core/random (Random)
+    - @./core/time (Time)
 
     Other builders may expose a different core surface.
 ]

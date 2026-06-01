@@ -387,6 +387,7 @@ body {
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">@web/canvas</span>. This page calls it the canvas library, but examples use the current full import path.</p></section>
+    <section class="container"><h1>Core library pages</h1><p>Core libraries are builder-provided packages for common language-adjacent work. Most core packages require explicit imports, while the prelude keeps only the smallest always-available surface bare.</p><ul><li><a href="./core">Core library overview</a></li><li><a href="./core/prelude">Prelude</a></li><li><a href="./core/io">IO</a></li><li><a href="./core/collections">Collections</a></li><li><a href="./core/math">Math</a></li><li><a href="./core/text">Text</a></li><li><a href="./core/random">Random</a></li><li><a href="./core/time">Time</a></li></ul></section>
     <section class="container"><h1>Import forms</h1><p>Imports target a declaration surface, not a raw folder dump.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
@@ -641,19 +642,7 @@ body {
     ">E</span>.</p><p>In the JavaScript backend, these math functions currently lower to JavaScript <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">Math</span> expressions rather than emitted helper files. Other external packages may lower through generated glue or runtime assets instead.</p><p>The HTML builder currently opts into optional core packages such as:</p><ul><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@core/math</span></li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@core/text</span></li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@core/random</span></li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@core/time</span></li></ul><p>Other builders may expose a different core surface.</p></section>
+    ">Math</span> expressions rather than emitted helper files. Other external packages may lower through generated glue or runtime assets instead.</p><p>The HTML builder currently opts into optional core packages such as:</p><ul><li><a href="./core/math">Math</a></li><li><a href="./core/text">Text</a></li><li><a href="./core/random">Random</a></li><li><a href="./core/time">Time</a></li></ul><p>Other builders may expose a different core surface.</p></section>
     <section class="container"><h1>JavaScript libraries</h1><p>The HTML builder can import annotated JavaScript files. A JavaScript file becomes a Beanstalk import target when the JS external import provider can parse its <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);

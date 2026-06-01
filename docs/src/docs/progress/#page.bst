@@ -335,9 +335,17 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
         [data:
             [: Core time package]
             [: Partial]
-            [: Targeted import, JS helper, runtime smoke, arity-error, and Wasm-unsupported coverage.]
+            [: Targeted import, grouped alias, namespace, receiver-method visibility, runtime smoke, fallible parse/catch, arity/type diagnostics, old-name rejection, opaque-field rejection, reachable Wasm-unsupported, and unused-wrapper reachability coverage.]
             [: JS / HTML]
-            [: [codesnippet:@core/time] exposes [codesnippet:now_millis()] and [codesnippet:now_seconds()]. Full date/time/timezone objects, formatting, durations, and monotonic clocks are deferred. Wasm support is deferred; HTML-Wasm builds fail with a structured [codesnippet:Rule] diagnostic before backend lowering.]
+            [: [codesnippet:@core/time] exposes opaque [codesnippet:Duration], [codesnippet:TimeMark], and [codesnippet:Timestamp] types plus the first JS-backed time helper slice. [$markdown:
+                - Monotonic elapsed-time helpers: [codesnippet:mark_now()], [codesnippet:elapsed_since(start)], and [codesnippet:duration_between(start, end)].
+                - Wall-clock timestamp helpers: [codesnippet:timestamp_now()], [codesnippet:timestamp_from_unix_seconds(seconds)], [codesnippet:timestamp_from_unix_milliseconds(milliseconds)], and fallible [codesnippet:timestamp_from_iso_string(text)].
+                - Duration helpers: [codesnippet:duration_from_seconds(seconds)], [codesnippet:duration_from_milliseconds(milliseconds)], [codesnippet:duration.as_seconds()], [codesnippet:duration.as_milliseconds()], [codesnippet:duration.is_negative()], [codesnippet:duration.abs()], and [codesnippet:duration.clamp(min, max)].
+                - Timestamp receiver helpers: [codesnippet:timestamp.unix_seconds()], [codesnippet:timestamp.unix_milliseconds()], and [codesnippet:timestamp.to_iso_string()].
+                - Use [codesnippet:TimeMark], not [codesnippet:Timestamp], for frame deltas and profiling. [codesnippet:Timestamp] is UTC wall-clock time and can move with system clock changes.
+                - Current JS representation is opaque to Beanstalk code but numeric internally: durations and marks are milliseconds, timestamps are Unix epoch milliseconds.
+                - Full calendar date/time/time-zone APIs, local time-zone lookup, locale-aware formatting/parsing, timers/sleep/intervals, browser animation scheduling, and Wasm/native lowerings remain deferred. Reachable HTML-Wasm usage fails with a structured unsupported-backend diagnostic before backend lowering.
+            ]]
         ]
 
         [data:

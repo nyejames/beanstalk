@@ -11,7 +11,6 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 ---
 
 # Plans / TODOS
-- Core `time` library v1 implementation: `docs/roadmap/plans/core-time-library-implementation-plan.md`
 - Traits (plan todo)
 - `else => _` (Wildcards in value positions for pattern matching or default arguments in function calls)
 - Replace JSON with beanstalk files (dogfooding for language as a way to store data / config stuff). These could be standardised as their own build system under `src/projects`.
@@ -23,6 +22,14 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 - Move to more specific explicit type declarations for numbers (I32, I64, F32, F64) - JS backend just makes all an F64 and accepts the precision loss, more for future Wasm backend
 
 # Notes
+- Time library follow-ups after the first `@core/time` JS slice: civil/calendar types
+  (`Date`, `TimeOfDay`, `DateTime`, `TimeZone`, `ZonedDateTime`, `Period`),
+  Temporal-backed JS calendar behavior once runtime/polyfill policy is clear,
+  locale-aware formatting/parsing, local time-zone lookup, async timers/sleep/intervals
+  after async/task design exists, browser animation-frame integration in a web-specific
+  package rather than `@core/time`, Wasm/native lowerings, and higher-precision or
+  nanosecond timestamp representation if wider numeric ABI work lands.
+
 - Deliberately deferred library-system follow-ups after the canvas reachability refactor: direct
   facade re-export syntax, wildcard imports, automatic re-export of receiver methods through
   facade type aliases, source-library HIR caching, user-authored external binding files, broader

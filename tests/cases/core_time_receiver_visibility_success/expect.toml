@@ -1,0 +1,8 @@
+entry = "."
+
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = [
+    "receiver sec=2.5 millis=2500 neg=false abs_sec=2.5 clamped_sec=2.5",
+]
