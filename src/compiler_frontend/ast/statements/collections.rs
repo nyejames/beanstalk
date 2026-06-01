@@ -9,13 +9,11 @@ use crate::compiler_frontend::ast::expressions::parse_expression::create_express
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, TypeMismatchContext};
 use crate::compiler_frontend::datatypes::diagnostic_type_spelling;
-use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
-use crate::compiler_frontend::type_coercion::compatibility::is_declaration_compatible;
-use crate::compiler_frontend::type_coercion::contextual::coerce_expression_to_declared_type;
+use crate::compiler_frontend::type_coercion::contextual::coerce_expression_to_explicit_type_boundary;
 use crate::compiler_frontend::type_coercion::parse_context::{
     ExpectedType, parse_expectation_for_type_id,
 };
@@ -51,7 +49,6 @@ fn parse_collection_literal(
     let mut items: Vec<Expression> = Vec::new();
     let mut inferred_inner_type_id: Option<TypeId> = element_type_id;
     let mut inner_type_spelling = None;
-    let has_explicit_type = inferred_inner_type_id.is_some();
     let collection_location = token_stream.current_location();
     let mut consumed_close_curly = false;
 
@@ -122,22 +119,13 @@ fn parse_collection_literal(
                 let item_type_id = parsed_item.type_id;
                 let expected_item_type_id = inferred_inner_type_id.get_or_insert(item_type_id);
 
-                {
-                    let type_environment = type_interner.environment();
-                    validate_collection_item_type(
-                        *expected_item_type_id,
-                        &parsed_item,
-                        has_explicit_type,
-                        string_table,
-                        type_environment,
-                    )?;
-                }
-
-                let coerced_item = coerce_expression_to_declared_type(
+                let coerced_item = coerce_expression_to_explicit_type_boundary(
                     parsed_item,
                     *expected_item_type_id,
                     type_interner.environment(),
-                );
+                    context,
+                    TypeMismatchContext::CollectionElement,
+                )?;
 
                 // Capture the diagnostic type spelling from the first item
                 // so the collection expression can report its element type.
@@ -177,27 +165,6 @@ fn parse_collection_literal(
         type_interner.environment_mut_for_derived_types(),
         token_stream.current_location(),
         value_mode.to_owned(),
-    ))
-}
-
-/// Validate that a collection item's type is compatible with the expected
-/// element type, producing a `CollectionElement` type-mismatch diagnostic on failure.
-fn validate_collection_item_type(
-    expected_type_id: TypeId,
-    item_expression: &Expression,
-    _has_explicit_type: bool,
-    _string_table: &StringTable,
-    type_environment: &TypeEnvironment,
-) -> Result<(), CompilerDiagnostic> {
-    if is_declaration_compatible(expected_type_id, item_expression.type_id, type_environment) {
-        return Ok(());
-    }
-
-    Err(CompilerDiagnostic::type_mismatch(
-        expected_type_id,
-        item_expression.type_id,
-        TypeMismatchContext::CollectionElement,
-        item_expression.location.clone(),
     ))
 }
 

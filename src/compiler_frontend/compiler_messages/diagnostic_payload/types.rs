@@ -423,12 +423,14 @@ pub enum TypeAnnotationContext {
     SignatureParameter,
     SignatureReturn,
     TypeAliasTarget,
+    TraitRequirement,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum InvalidTypeAnnotationReason {
     NoneNotAllowed,
     ReservedTraitKeyword,
+    TraitThisMustBeDirect,
     AsNotValidHere,
     UnexpectedColon,
     InvalidTokenAfterName { token: TokenKind },
@@ -446,7 +448,7 @@ pub enum InvalidCollectionTypeReason {
 #[derive(Clone, Debug, PartialEq)]
 pub enum InvalidGenericParameterReason {
     EmptyParameterList,
-    BoundsNotSupported,
+    BoundsMustUseIs,
     ListMustStayWithHeader,
     InvalidToken { found: TokenKind },
 }
@@ -530,6 +532,9 @@ pub enum InvalidSignatureMemberReason {
     CompileTimeParameterDeferred,
     ThisNotAllowed,
     TrailingComma,
+    TraitReceiverMustBeThis,
+    TraitMutableThisOnlyFirstParameter,
+    TraitRequirementDefaultValue,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -548,6 +553,7 @@ pub enum InvalidFunctionSignatureReason {
     MissingParameterNameInAlias,
     DuplicateParameterInAlias,
     AliasCannotBeError,
+    AliasReturnNotAllowedInTraitRequirement,
     MultipleErrorReturnSlots,
     ErrorSlotNotLast,
 }
@@ -580,6 +586,13 @@ pub enum InvalidThisUsageReason {
     DeclarationBinding,
     DuplicateThis { function_name: StringId },
     NotFirstParameter { function_name: StringId },
+    OutsideTraitDeclaration,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum InvalidTraitKeywordUsageReason {
+    MustOutsideTraitSyntax,
+    ThisOutsideTraitSyntax,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -588,6 +601,9 @@ pub enum InvalidReceiverDeclarationReason {
     WrongSourceFile,
     FieldNameConflict,
     DuplicateMethod,
+    ReceiverTypeNotVisible,
+    ExtensionOverridesCanonicalMethod,
+    NonExportableExtensionMethodImport,
     ImportedReceiverTypeNotVisible,
     ImportedMethodCollision,
     GenericReceiverType {
@@ -638,6 +654,135 @@ pub enum InvalidDeclarationReason {
     DuplicateGenericParameter { parameter_name: StringId },
     GenericParameterNameCollision { parameter_name: StringId },
     ReservedGenericParameterName { parameter_name: StringId },
+    GenericTraitsDeferred,
+    InvalidTraitName,
+    TraitConformanceMissingTrait,
+    TraitConformanceSemicolon,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum InvalidTraitConformanceReason {
+    ModuleFacade,
+    AliasTarget,
+    NonCanonicalTarget,
+    DuplicateCanonicalEvidence,
+    DuplicateFileLocalExtensionEvidence,
+    FileLocalExtensionOverridesCanonicalEvidence,
+    BuiltinEvidenceOverride,
+    MissingMethod {
+        requirement_name: StringId,
+    },
+    ReceiverMutabilityMismatch {
+        requirement_name: StringId,
+    },
+    ParameterCountMismatch {
+        requirement_name: StringId,
+        expected: usize,
+        found: usize,
+    },
+    ParameterModeMismatch {
+        requirement_name: StringId,
+        parameter_index: usize,
+    },
+    ParameterTypeMismatch {
+        requirement_name: StringId,
+        parameter_index: usize,
+        expected_type: TypeId,
+        found_type: TypeId,
+    },
+    ReturnCountMismatch {
+        requirement_name: StringId,
+        expected: usize,
+        found: usize,
+    },
+    ReturnTypeMismatch {
+        requirement_name: StringId,
+        return_index: usize,
+        expected_type: TypeId,
+        found_type: TypeId,
+    },
+    ReturnChannelMismatch {
+        requirement_name: StringId,
+        return_index: usize,
+    },
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum InvalidDynamicTraitTypeReason {
+    BoundOnly {
+        reason: BoundOnlyTraitDiagnosticReason,
+        requirement_name: Option<StringId>,
+    },
+    Constant,
+    Applied,
+    StaticBoundSubstitution {
+        dynamic_type_id: TypeId,
+    },
+    MissingEvidence {
+        concrete_type_id: TypeId,
+    },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum BoundOnlyTraitDiagnosticReason {
+    ThisParameter,
+    ThisReturn,
+}
+
+impl InvalidDynamicTraitTypeReason {
+    pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
+        match self {
+            Self::BoundOnly {
+                requirement_name, ..
+            } => {
+                if let Some(requirement_name) = requirement_name {
+                    *requirement_name = remap.get(*requirement_name);
+                }
+            }
+
+            Self::Constant
+            | Self::Applied
+            | Self::StaticBoundSubstitution { .. }
+            | Self::MissingEvidence { .. } => {}
+        }
+    }
+}
+
+impl InvalidTraitConformanceReason {
+    pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
+        match self {
+            Self::MissingMethod { requirement_name }
+            | Self::ReceiverMutabilityMismatch { requirement_name }
+            | Self::ParameterCountMismatch {
+                requirement_name, ..
+            }
+            | Self::ParameterModeMismatch {
+                requirement_name, ..
+            }
+            | Self::ParameterTypeMismatch {
+                requirement_name, ..
+            }
+            | Self::ReturnCountMismatch {
+                requirement_name, ..
+            }
+            | Self::ReturnTypeMismatch {
+                requirement_name, ..
+            }
+            | Self::ReturnChannelMismatch {
+                requirement_name, ..
+            } => {
+                *requirement_name = remap.get(*requirement_name);
+            }
+
+            Self::ModuleFacade
+            | Self::AliasTarget
+            | Self::NonCanonicalTarget
+            | Self::DuplicateCanonicalEvidence
+            | Self::DuplicateFileLocalExtensionEvidence
+            | Self::FileLocalExtensionOverridesCanonicalEvidence
+            | Self::BuiltinEvidenceOverride => {}
+        }
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -694,6 +839,9 @@ pub enum InvalidReceiverCallReason {
     MissingMutableAccessMarker,
     UnneededMutableAccessMarker,
     MutableMarkerOnNonReceiverCall,
+    AmbiguousGenericBoundMethod,
+    AmbiguousTraitEvidenceMethod,
+    FileLocalGenericBoundEvidenceUnsupported,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -1022,10 +1170,6 @@ pub enum InvalidReturnShapeReason {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum DeferredFeatureReason {
     NamedFeature { feature: StringId },
-    ReservedTraitMustKeyword,
-    ReservedTraitThisKeyword,
-    TraitDeclaration,
-    GenericConstraints,
     GenericWhereConstraints,
     CaptureTaggedPattern,
     NegatedMatchPattern,
@@ -1201,6 +1345,20 @@ pub enum InvalidGenericInstantiationReason {
         replacement_type_id: TypeId,
         current_evidence_location: SourceLocation,
         previous_evidence_location: Option<SourceLocation>,
+    },
+    MissingTraitEvidence {
+        parameter_name: StringId,
+        trait_name: StringId,
+        concrete_type_id: TypeId,
+    },
+    MissingNominalTraitEvidence {
+        parameter_name: StringId,
+        trait_name: StringId,
+        concrete_type_id: TypeId,
+    },
+    FileLocalNominalTraitEvidenceUnsupported {
+        trait_name: StringId,
+        concrete_type_id: TypeId,
     },
     RecursiveFunctionInstantiation,
     ExplicitCallTypeArgumentsUnsupported,

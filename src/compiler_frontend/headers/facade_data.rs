@@ -19,8 +19,9 @@ use rustc_hash::FxHashSet;
 /// Whether a header kind represents a real authored declaration that should be exported by a
 /// module facade.
 ///
-/// WHAT: functions, structs, choices, type aliases, and compile-time constants are authored
-/// declarations. Const templates and the implicit start function are not.
+/// WHAT: functions, structs, choices, type aliases, traits, and compile-time constants are
+/// authored declarations. Const templates, conformance declarations, and the implicit start
+/// function are not.
 /// WHY: `#mod.bst` has no private authored declaration surface; every valid authored declaration
 /// is automatically exported. Imported names and runtime bindings are not headers of these kinds.
 fn is_authored_facade_declaration(kind: &HeaderKind) -> bool {
@@ -30,6 +31,7 @@ fn is_authored_facade_declaration(kind: &HeaderKind) -> bool {
             | HeaderKind::Struct { .. }
             | HeaderKind::Choice { .. }
             | HeaderKind::TypeAlias { .. }
+            | HeaderKind::Trait { .. }
             | HeaderKind::Constant { .. }
     )
 }

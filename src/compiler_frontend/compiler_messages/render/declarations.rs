@@ -29,6 +29,15 @@ pub(crate) fn invalid_signature_member_message(reason: InvalidSignatureMemberRea
         InvalidSignatureMemberReason::TrailingComma => {
             "Trailing comma is not allowed in this parameter list.".to_string()
         }
+        InvalidSignatureMemberReason::TraitReceiverMustBeThis => {
+            "Trait receiver parameters must use 'This' or '~This'.".to_string()
+        }
+        InvalidSignatureMemberReason::TraitMutableThisOnlyFirstParameter => {
+            "'~This' is only valid as the first parameter of a trait requirement.".to_string()
+        }
+        InvalidSignatureMemberReason::TraitRequirementDefaultValue => {
+            "Trait requirements cannot declare default parameter values.".to_string()
+        }
     }
 }
 
@@ -84,6 +93,10 @@ pub(crate) fn invalid_function_signature_message(
         }
         InvalidFunctionSignatureReason::AliasCannotBeError => {
             "Alias return declarations cannot be marked as an error slot in v1.".to_string()
+        }
+        InvalidFunctionSignatureReason::AliasReturnNotAllowedInTraitRequirement => {
+            "Trait requirements cannot use return aliases. Write an explicit return type instead."
+                .to_string()
         }
         InvalidFunctionSignatureReason::MultipleErrorReturnSlots => {
             "Function signatures can only declare one distinguished error return slot.".to_string()
@@ -149,6 +162,21 @@ pub(crate) fn invalid_declaration_message(
         InvalidDeclarationReason::ReservedGenericParameterName { parameter_name } => {
             let parameter_name_str = string_table.resolve(parameter_name);
             format!("Generic parameter '{parameter_name_str}' collides with a builtin type name.")
+        }
+        InvalidDeclarationReason::GenericTraitsDeferred => {
+            "Generic traits are deferred. Trait declarations cannot have generic parameters."
+                .to_string()
+        }
+        InvalidDeclarationReason::InvalidTraitName => {
+            format!("{name_text} is not a valid trait name. Trait names must use all-caps identifiers such as 'DISPLAYABLE'.")
+        }
+        InvalidDeclarationReason::TraitConformanceMissingTrait => {
+            "Trait conformance declarations must name at least one trait after 'must'."
+                .to_string()
+        }
+        InvalidDeclarationReason::TraitConformanceSemicolon => {
+            "Trait conformance declarations are newline-terminated and must not end with ';'."
+                .to_string()
         }
     }
 }
@@ -216,6 +244,40 @@ pub(crate) fn invalid_generic_instantiation_message(
                 "Generic parameter '{parameter}' in generic function {type_name_str} was inferred as both {existing_type} and {replacement_type}."
             )
         }
+        InvalidGenericInstantiationReason::MissingTraitEvidence {
+            parameter_name,
+            trait_name,
+            concrete_type_id,
+        } => {
+            let parameter = string_table.resolve(*parameter_name);
+            let trait_name = string_table.resolve(*trait_name);
+            let concrete_type = diagnostic_type_name(*concrete_type_id, context);
+            format!(
+                "Generic function {type_name_str} requires '{parameter}' to satisfy trait '{trait_name}', but {concrete_type} has no visible trait evidence for that bound."
+            )
+        }
+        InvalidGenericInstantiationReason::MissingNominalTraitEvidence {
+            parameter_name,
+            trait_name,
+            concrete_type_id,
+        } => {
+            let parameter = string_table.resolve(*parameter_name);
+            let trait_name = string_table.resolve(*trait_name);
+            let concrete_type = diagnostic_type_name(*concrete_type_id, context);
+            format!(
+                "Generic type {type_name_str} requires '{parameter}' to satisfy trait '{trait_name}', but {concrete_type} has no visible trait evidence for that bound."
+            )
+        }
+        InvalidGenericInstantiationReason::FileLocalNominalTraitEvidenceUnsupported {
+            trait_name,
+            concrete_type_id,
+        } => {
+            let trait_name = string_table.resolve(*trait_name);
+            let concrete_type = diagnostic_type_name(*concrete_type_id, context);
+            format!(
+                "Generic type {type_name_str} cannot use file-local evidence for trait '{trait_name}' on {concrete_type}. Generic nominal instances require reusable canonical or compiler-owned evidence."
+            )
+        }
         InvalidGenericInstantiationReason::RecursiveFunctionInstantiation => {
             format!(
                 "Generic function {type_name_str} recursively instantiates itself, which is deferred for Alpha."
@@ -240,10 +302,10 @@ pub(crate) fn invalid_receiver_declaration_message(
 
     match reason {
         InvalidReceiverDeclarationReason::UnknownStructTarget => {
-            "Receiver method targets an unknown struct.".to_string()
+            "Receiver method targets an unknown receiver type.".to_string()
         }
         InvalidReceiverDeclarationReason::WrongSourceFile => {
-            "Receiver method must be declared in the same file as the struct definition."
+            "Receiver method must be declared in the same file as the receiver type definition."
                 .to_string()
         }
         InvalidReceiverDeclarationReason::FieldNameConflict => {
@@ -251,6 +313,17 @@ pub(crate) fn invalid_receiver_declaration_message(
         }
         InvalidReceiverDeclarationReason::DuplicateMethod => {
             "Duplicate receiver method for this receiver and name.".to_string()
+        }
+        InvalidReceiverDeclarationReason::ReceiverTypeNotVisible => {
+            "Receiver method extension targets a type that is not visible in this file."
+                .to_string()
+        }
+        InvalidReceiverDeclarationReason::ExtensionOverridesCanonicalMethod => {
+            "File-local extension receiver methods cannot override a visible canonical receiver method for the same receiver type and method name.".to_string()
+        }
+        InvalidReceiverDeclarationReason::NonExportableExtensionMethodImport => {
+            "File-local extension receiver methods are not importable from another file."
+                .to_string()
         }
         InvalidReceiverDeclarationReason::ImportedReceiverTypeNotVisible => {
             "Imported receiver method is visible without its receiver type. Import the receiver type from the same surface or import the whole namespace.".to_string()
@@ -271,7 +344,7 @@ pub(crate) fn invalid_receiver_declaration_message(
             type_name,
         } => {
             format!(
-                "Function '{}' uses unsupported receiver type '{}'. Receiver methods must target a user-defined struct or built-in scalar type.",
+                "Function '{}' uses unsupported receiver type '{}'. Receiver methods must target a user-defined struct, choice, external opaque type, or built-in scalar type.",
                 string_table.resolve(function_name),
                 string_table.resolve(type_name)
             )

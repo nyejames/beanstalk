@@ -262,6 +262,21 @@ pub(crate) fn invalid_receiver_call_message(
             "Mutable receiver marker '~' is only valid for receiver calls like '~value.method(...)' or '~values.push(...)'."
                 .to_string()
         }
+        InvalidReceiverCallReason::AmbiguousGenericBoundMethod => {
+            format!(
+                "{method_text} is provided by more than one generic bound for {receiver_text}. Add a more specific bound or rename one of the trait requirements."
+            )
+        }
+        InvalidReceiverCallReason::AmbiguousTraitEvidenceMethod => {
+            format!(
+                "{method_text} is provided by more than one visible trait evidence surface for {receiver_text}. Import a narrower trait surface or call an ordinary receiver method with an unambiguous name."
+            )
+        }
+        InvalidReceiverCallReason::FileLocalGenericBoundEvidenceUnsupported => {
+            format!(
+                "{method_text} would dispatch through file-local trait evidence for {receiver_text}, which generic-bound receiver calls do not support yet."
+            )
+        }
     }
 }
 

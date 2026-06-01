@@ -167,6 +167,22 @@ impl<'a> HirValidator<'a> {
                 }
             }
 
+            HirStatementKind::CallDynamicTraitMethod {
+                receiver,
+                args,
+                result,
+                ..
+            } => {
+                self.validate_expression(receiver, anchor)?;
+                for arg in args {
+                    self.validate_expression(&arg.value, anchor)?;
+                }
+
+                if let Some(local_id) = result {
+                    self.require_local_id(*local_id, anchor)?;
+                }
+            }
+
             HirStatementKind::Expr(expression) => {
                 self.validate_expression(expression, anchor)?;
             }

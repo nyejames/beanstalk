@@ -9,15 +9,15 @@
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration};
 use crate::compiler_frontend::ast::expressions::call_argument::CallArgument;
 use crate::compiler_frontend::ast::expressions::call_validation::{
-    CallDiagnosticContext, ExpectedParameterType, ParameterExpectation,
-    expectations_from_user_parameters, resolve_call_argument_slots_typed, resolve_call_arguments,
-    resolve_call_arguments_shape_and_access,
+    CallArgumentResolutionContext, CallDiagnosticContext, ExpectedParameterType,
+    ParameterExpectation, expectations_from_user_parameters, resolve_call_argument_slots_typed,
+    resolve_call_arguments, resolve_call_arguments_shape_and_access,
 };
 use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
 use crate::compiler_frontend::ast::expressions::function_calls::parse_generic_call_arguments_typed;
 use crate::compiler_frontend::ast::generic_functions::diagnostics::{
     cannot_infer_generic_function_arguments, conflicting_generic_function_argument,
-    recursive_generic_function_instantiation,
+    missing_generic_function_trait_evidence, recursive_generic_function_instantiation,
 };
 use crate::compiler_frontend::ast::generic_functions::{
     GenericFunctionInstanceKey, GenericFunctionInstantiationRequest, GenericFunctionTemplate,
@@ -31,7 +31,7 @@ use crate::compiler_frontend::ast::statements::functions::{
 };
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_messages::{
-    CompilerDiagnostic, InvalidResultHandlingReason,
+    CompilerDiagnostic, InvalidReceiverCallReason, InvalidResultHandlingReason,
 };
 use crate::compiler_frontend::datatypes::diagnostic_type_spelling;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
@@ -112,6 +112,13 @@ pub(crate) fn parse_generic_function_call(
         type_environment: type_interner.environment_mut_for_derived_types(),
         string_table,
     })?;
+    validate_generic_function_bound_evidence(
+        template,
+        inference.key.type_arguments.as_ref(),
+        context,
+        type_interner.environment(),
+        call_location.clone(),
+    )?;
 
     if context.is_generic_function_instantiation_active(&inference.key) {
         return Err(recursive_generic_function_instantiation(
@@ -133,9 +140,12 @@ pub(crate) fn parse_generic_function_call(
         &raw_arguments,
         &expectations,
         call_location.clone(),
-        string_table,
-        type_check_context.type_environment,
-        type_check_context.compatibility_cache,
+        CallArgumentResolutionContext {
+            string_table,
+            type_environment: type_check_context.type_environment,
+            compatibility_cache: type_check_context.compatibility_cache,
+            scope_context: Some(context),
+        },
     )
     .map_err(ExpressionParseError::from)?;
 
@@ -198,6 +208,13 @@ pub(crate) fn validate_generic_function_template_call(
         type_environment: type_interner.environment_mut_for_derived_types(),
         string_table,
     })?;
+    validate_generic_function_bound_evidence(
+        template,
+        inference.key.type_arguments.as_ref(),
+        context,
+        type_interner.environment(),
+        call_location.clone(),
+    )?;
 
     let callee_name = template
         .function_path
@@ -212,6 +229,7 @@ pub(crate) fn validate_generic_function_template_call(
         call_location.clone(),
         string_table,
         type_interner.environment(),
+        Some(context),
     )
     .map_err(ExpressionParseError::from)?;
 
@@ -292,19 +310,19 @@ fn finish_generic_function_call(
     .into())
 }
 
-struct GenericFunctionInferenceInput<'a> {
-    template: &'a GenericFunctionTemplate,
-    raw_arguments: &'a [CallArgument],
-    expected_context: GenericCallExpectedContext<'a>,
-    call_location: SourceLocation,
-    type_environment: &'a mut TypeEnvironment,
-    string_table: &'a mut StringTable,
+pub(crate) struct GenericFunctionInferenceInput<'a> {
+    pub(crate) template: &'a GenericFunctionTemplate,
+    pub(crate) raw_arguments: &'a [CallArgument],
+    pub(crate) expected_context: GenericCallExpectedContext<'a>,
+    pub(crate) call_location: SourceLocation,
+    pub(crate) type_environment: &'a mut TypeEnvironment,
+    pub(crate) string_table: &'a mut StringTable,
 }
 
-struct GenericFunctionInference {
-    key: GenericFunctionInstanceKey,
-    instance_path: InternedPath,
-    signature: FunctionSignature,
+pub(crate) struct GenericFunctionInference {
+    pub(crate) key: GenericFunctionInstanceKey,
+    pub(crate) instance_path: InternedPath,
+    pub(crate) signature: FunctionSignature,
 }
 
 struct GenericBindingEvidenceLocations {
@@ -353,7 +371,7 @@ impl GenericBindingEvidenceLocations {
     }
 }
 
-fn infer_generic_function_call(
+pub(crate) fn infer_generic_function_call(
     input: GenericFunctionInferenceInput<'_>,
 ) -> Result<GenericFunctionInference, ExpressionParseError> {
     let GenericFunctionInferenceInput {
@@ -446,6 +464,72 @@ fn infer_generic_function_call(
         instance_path,
         signature,
     })
+}
+
+fn validate_generic_function_bound_evidence(
+    template: &GenericFunctionTemplate,
+    type_arguments: &[TypeId],
+    context: &ScopeContext,
+    type_environment: &TypeEnvironment,
+    call_location: SourceLocation,
+) -> Result<(), ExpressionParseError> {
+    let Some(parameter_list) =
+        type_environment.generic_parameters(template.generic_parameter_list_id)
+    else {
+        return Ok(());
+    };
+
+    let source_file_scope =
+        context.required_source_file_scope("generic function bound evidence")?;
+    let trait_environment = context.trait_environment();
+    let evidence_environment = context.trait_evidence_environment();
+
+    for (parameter, concrete_type_id) in parameter_list.parameters.iter().zip(type_arguments) {
+        for trait_id in &parameter.trait_bounds {
+            let trait_is_visible = context.trait_id_is_visible(*trait_id);
+            let has_reusable_evidence = trait_is_visible
+                && (evidence_environment
+                    .builtin_for(*concrete_type_id, *trait_id)
+                    .is_some()
+                    || evidence_environment
+                        .canonical_for(*concrete_type_id, *trait_id)
+                        .is_some());
+
+            if has_reusable_evidence {
+                continue;
+            }
+
+            let trait_name = trait_environment
+                .get(*trait_id)
+                .map(|definition| definition.name)
+                .unwrap_or(template.function_path.name().unwrap_or(parameter.name));
+
+            if trait_is_visible
+                && evidence_environment
+                    .file_local_for(source_file_scope, *concrete_type_id, *trait_id)
+                    .is_some()
+            {
+                return Err(CompilerDiagnostic::invalid_receiver_call(
+                    InvalidReceiverCallReason::FileLocalGenericBoundEvidenceUnsupported,
+                    Some(trait_name),
+                    template.function_path.name(),
+                    call_location,
+                )
+                .into());
+            }
+
+            return Err(missing_generic_function_trait_evidence(
+                template.function_path.name(),
+                parameter.name,
+                trait_name,
+                *concrete_type_id,
+                call_location,
+            )
+            .into());
+        }
+    }
+
+    Ok(())
 }
 
 impl<'a> GenericCallExpectedContext<'a> {

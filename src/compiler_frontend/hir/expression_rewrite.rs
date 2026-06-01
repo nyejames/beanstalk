@@ -119,6 +119,16 @@ pub(crate) fn rewrite_expression_bottom_up(
             variant_index: *variant_index,
             field_index: *field_index,
         },
+
+        HirExpressionKind::ConstructDynamicTraitValue {
+            value,
+            trait_id,
+            evidence_id,
+        } => HirExpressionKind::ConstructDynamicTraitValue {
+            value: Box::new(rewrite_expression_bottom_up(value, rewrite)),
+            trait_id: *trait_id,
+            evidence_id: *evidence_id,
+        },
     };
 
     let rewritten = HirExpression {

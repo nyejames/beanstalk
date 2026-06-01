@@ -1,0 +1,3 @@
+PrivateType = |
+    value String,
+|

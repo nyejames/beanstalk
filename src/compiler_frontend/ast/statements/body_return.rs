@@ -20,8 +20,7 @@ use crate::compiler_frontend::compiler_messages::{
 };
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
-use crate::compiler_frontend::type_coercion::compatibility::is_declaration_compatible;
-use crate::compiler_frontend::type_coercion::contextual::coerce_expression_to_declared_type;
+use crate::compiler_frontend::type_coercion::contextual::coerce_expression_to_explicit_type_boundary;
 use crate::compiler_frontend::type_coercion::parse_context::ExpectedType;
 use crate::compiler_frontend::value_mode::ValueMode;
 
@@ -87,26 +86,13 @@ pub(crate) fn parse_return_statement(
             string_table,
         )?;
 
-        let actual_type_id = returned_error.type_id;
-
-        if !is_declaration_compatible(
-            expected_error_type_id,
-            actual_type_id,
-            type_interner.environment(),
-        ) {
-            return Err(CompilerDiagnostic::type_mismatch(
-                expected_error_type_id,
-                actual_type_id,
-                TypeMismatchContext::ReturnValue,
-                returned_error.location.clone(),
-            ));
-        }
-
-        let returned_error = coerce_expression_to_declared_type(
+        let returned_error = coerce_expression_to_explicit_type_boundary(
             returned_error,
             expected_error_type_id,
             type_interner.environment(),
-        );
+            context,
+            TypeMismatchContext::ReturnValue,
+        )?;
 
         ast.push(AstNode {
             kind: NodeKind::ReturnError(returned_error),
@@ -151,28 +137,14 @@ pub(crate) fn parse_return_statement(
         // parser already validated and coerced each slot.
         let return_expr = if context.expected_result_type_ids.len() == 1 {
             let expected_type_id = context.expected_result_type_ids[0];
-            let actual_type_id = value_block_expr.type_id;
 
-            if actual_type_id == expected_type_id {
-                value_block_expr
-            } else if is_declaration_compatible(
+            coerce_expression_to_explicit_type_boundary(
+                value_block_expr,
                 expected_type_id,
-                actual_type_id,
                 type_interner.environment(),
-            ) {
-                coerce_expression_to_declared_type(
-                    value_block_expr,
-                    expected_type_id,
-                    type_interner.environment(),
-                )
-            } else {
-                return Err(CompilerDiagnostic::type_mismatch(
-                    expected_type_id,
-                    actual_type_id,
-                    TypeMismatchContext::ReturnValue,
-                    token_stream.current_location(),
-                ));
-            }
+                context,
+                TypeMismatchContext::ReturnValue,
+            )?
         } else {
             value_block_expr
         };
@@ -233,32 +205,13 @@ pub(crate) fn parse_return_statement(
             .into_iter()
             .zip(context.expected_result_type_ids.iter())
         {
-            let actual_type_id = returned_value.type_id;
-
-            if actual_type_id == *expected_type_id {
-                coerced_values.push(returned_value);
-                continue;
-            }
-
-            if is_declaration_compatible(
+            coerced_values.push(coerce_expression_to_explicit_type_boundary(
+                returned_value,
                 *expected_type_id,
-                actual_type_id,
                 type_interner.environment(),
-            ) {
-                coerced_values.push(coerce_expression_to_declared_type(
-                    returned_value,
-                    *expected_type_id,
-                    type_interner.environment(),
-                ));
-                continue;
-            }
-
-            return Err(CompilerDiagnostic::type_mismatch(
-                *expected_type_id,
-                actual_type_id,
+                context,
                 TypeMismatchContext::ReturnValue,
-                returned_value.location.clone(),
-            ));
+            )?);
         }
 
         coerced_values

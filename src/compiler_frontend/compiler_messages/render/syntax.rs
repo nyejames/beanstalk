@@ -66,6 +66,9 @@ pub(crate) fn invalid_type_annotation_message(
         InvalidTypeAnnotationReason::ReservedTraitKeyword => {
             "Reserved trait keywords are not valid in type annotations.".to_string()
         }
+        InvalidTypeAnnotationReason::TraitThisMustBeDirect => {
+            "`This` must be used directly in trait requirements. Composed forms such as `This?`, `{This}`, and `This of T` are deferred.".to_string()
+        }
         InvalidTypeAnnotationReason::AsNotValidHere => {
             "`as` is not valid here. It is only supported in type aliases, import clauses, and choice payload patterns.".to_string()
         }
@@ -413,6 +416,10 @@ pub(crate) fn invalid_this_usage_message(
                 "Function '{}' uses 'this' as a receiver parameter, but it is not the first parameter.",
                 string_table.resolve(function_name)
             )
+        }
+        InvalidThisUsageReason::OutsideTraitDeclaration => {
+            "'This' is only valid inside trait declarations. Use a concrete type name here."
+                .to_string()
         }
     }
 }

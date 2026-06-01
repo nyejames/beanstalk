@@ -313,6 +313,37 @@ impl<'a> HirDisplayContext<'a> {
 
                 out
             }
+            HirStatementKind::CallDynamicTraitMethod {
+                receiver,
+                trait_id,
+                requirement_id,
+                args,
+                result,
+                ..
+            } => {
+                let mut out = String::new();
+
+                if let Some(local) = result {
+                    let _ = write!(out, "{} = ", self.local_label(*local));
+                }
+
+                let args_rendered = args
+                    .iter()
+                    .map(|arg| self.render_expression(&arg.value))
+                    .collect::<Vec<_>>()
+                    .join(", ");
+
+                let _ = write!(
+                    out,
+                    "dynamic_call {:?}.{:?}({}; {})",
+                    trait_id,
+                    requirement_id,
+                    self.render_expression(receiver),
+                    args_rendered
+                );
+
+                out
+            }
             HirStatementKind::Expr(expr) => self.render_expression(expr),
             HirStatementKind::Drop(local) => format!("drop {}", self.local_label(*local)),
             HirStatementKind::PushRuntimeFragment { vec_local, value } => {
@@ -578,6 +609,18 @@ impl<'a> HirDisplayContext<'a> {
                     self.render_expression(source)
                 )
             }
+            HirExpressionKind::ConstructDynamicTraitValue {
+                value,
+                trait_id,
+                evidence_id,
+            } => {
+                format!(
+                    "construct_dynamic_trait({:?}, evidence={:?}, value={})",
+                    trait_id,
+                    evidence_id,
+                    self.render_expression(value)
+                )
+            }
         }
     }
 
@@ -840,6 +883,9 @@ impl<'a> HirDisplayContext<'a> {
                 } else {
                     format!("{name}<{args}>")
                 }
+            }
+            TypeDefinition::DynamicTrait(definition) => {
+                self.string_table.resolve(definition.name).to_owned()
             }
         }
     }

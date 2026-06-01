@@ -275,6 +275,13 @@ impl<'a> BorrowChecker<'a> {
                                 saw_any_write = true;
                                 saw_fresh_write = true;
                             }
+                            HirStatementKind::CallDynamicTraitMethod {
+                                result: Some(result_local),
+                                ..
+                            } if *result_local == local_to_scan => {
+                                saw_any_write = true;
+                                saw_unknown_write = true;
+                            }
                             _ => {}
                         }
                     }
@@ -805,6 +812,12 @@ fn collect_statement_loaded_locals(statement: &HirStatement, visitor: &mut impl 
                 collect_expression_loaded_locals(arg, visitor);
             }
         }
+        HirStatementKind::CallDynamicTraitMethod { receiver, args, .. } => {
+            collect_expression_loaded_locals(receiver, visitor);
+            for arg in args {
+                collect_expression_loaded_locals(&arg.value, visitor);
+            }
+        }
         HirStatementKind::Expr(expression) => {
             collect_expression_loaded_locals(expression, visitor);
         }
@@ -823,7 +836,12 @@ fn collect_statement_written_locals(statement: &HirStatement, visitor: &mut impl
             result: Some(local),
             ..
         } => visitor(*local),
+        HirStatementKind::CallDynamicTraitMethod {
+            result: Some(local),
+            ..
+        } => visitor(*local),
         HirStatementKind::Call { result: None, .. }
+        | HirStatementKind::CallDynamicTraitMethod { result: None, .. }
         | HirStatementKind::Expr(_)
         | HirStatementKind::Drop(_)
         | HirStatementKind::PushRuntimeFragment { .. } => {}
@@ -944,6 +962,9 @@ fn collect_expression_loaded_locals(expression: &HirExpression, visitor: &mut im
 
         HirExpressionKind::VariantPayloadGet { source, .. } => {
             collect_expression_loaded_locals(source, visitor);
+        }
+        HirExpressionKind::ConstructDynamicTraitValue { value, .. } => {
+            collect_expression_loaded_locals(value, visitor);
         }
     }
 }

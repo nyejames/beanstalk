@@ -6,8 +6,8 @@
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::expressions::call_argument::CallArgument;
 use crate::compiler_frontend::ast::expressions::call_validation::{
-    CallDiagnosticContext, ExpectedAccessMode, ExpectedParameterType, ParameterExpectation,
-    resolve_call_arguments_typed,
+    CallArgumentResolutionContext, CallDiagnosticContext, ExpectedAccessMode,
+    ExpectedParameterType, ParameterExpectation, resolve_call_arguments,
 };
 use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
 use crate::compiler_frontend::ast::expressions::function_calls::parse_call_arguments_typed;
@@ -77,13 +77,16 @@ pub(super) fn parse_builtin_method_args_typed(
 
     let type_check_context = type_interner.type_check_context();
 
-    Ok(resolve_call_arguments_typed(
+    Ok(resolve_call_arguments(
         CallDiagnosticContext::builtin_member(member_name),
         &parsed_arguments,
         &expectations,
         member_location.to_owned(),
-        string_table,
-        type_check_context.type_environment,
-        type_check_context.compatibility_cache,
+        CallArgumentResolutionContext {
+            string_table,
+            type_environment: type_check_context.type_environment,
+            compatibility_cache: type_check_context.compatibility_cache,
+            scope_context: Some(context),
+        },
     )?)
 }

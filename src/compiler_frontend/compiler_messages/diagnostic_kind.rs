@@ -238,6 +238,14 @@ pub enum RuleDiagnosticKind {
     ConstRecordUsedAsValue,
     NestedTraversal,
     NamespaceTypeValueMisuse,
+    UnknownTrait,
+    DuplicateTraitRequirement,
+    TraitPrivateSurfaceLeak,
+    UnsupportedTraitFeature,
+    InvalidTraitConformance,
+    GenericBoundPrivateSurfaceLeak,
+    InvalidDynamicTraitType,
+    InvalidTraitKeywordUsage,
 }
 
 #[cfg(test)]
@@ -303,6 +311,14 @@ impl RuleDiagnosticKind {
             Self::ConstRecordUsedAsValue,
             Self::NestedTraversal,
             Self::NamespaceTypeValueMisuse,
+            Self::UnknownTrait,
+            Self::DuplicateTraitRequirement,
+            Self::TraitPrivateSurfaceLeak,
+            Self::UnsupportedTraitFeature,
+            Self::InvalidTraitConformance,
+            Self::GenericBoundPrivateSurfaceLeak,
+            Self::InvalidDynamicTraitType,
+            Self::InvalidTraitKeywordUsage,
         ]
         .into_iter()
     }

@@ -69,6 +69,13 @@ pub enum ParsedTypeRef {
     },
 
     // -----------------
+    //  Trait-local Types
+    // -----------------
+    This {
+        location: SourceLocation,
+    },
+
+    // -----------------
     //  Constructed Types
     // -----------------
     Collection {
@@ -134,7 +141,8 @@ impl ParsedTypeRef {
             | ParsedTypeRef::BuiltinDecimal { location }
             | ParsedTypeRef::BuiltinString { location }
             | ParsedTypeRef::BuiltinChar { location }
-            | ParsedTypeRef::BuiltinNone { location } => {
+            | ParsedTypeRef::BuiltinNone { location }
+            | ParsedTypeRef::This { location } => {
                 location.remap_string_ids(remap);
             }
 

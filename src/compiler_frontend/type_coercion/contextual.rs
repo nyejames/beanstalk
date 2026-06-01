@@ -8,12 +8,61 @@
 //! when assigned to `T?`. This module bridges that gap by inserting explicit
 //! AST coercion nodes after natural expression typing has completed.
 
+use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, TypeMismatchContext};
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 
-use crate::compiler_frontend::type_coercion::compatibility::is_numeric_coercible_by_id;
+use crate::compiler_frontend::type_coercion::compatibility::{
+    is_declaration_compatible, is_numeric_coercible_by_id,
+};
+use crate::compiler_frontend::type_coercion::dynamic_trait::{
+    construct_dynamic_trait_value, select_dynamic_trait_coercion_for_expression,
+};
 use crate::compiler_frontend::value_mode::ValueMode;
+
+/// Validates and applies the contextual coercion policy for an explicit typed boundary.
+///
+/// WHAT: accepts exact matches, ordinary contextual coercions such as `Int -> Float` and `T -> T?`,
+/// and dynamic trait wrappers when visible evidence proves the concrete type conforms.
+/// WHY: declarations, returns, produced values, and explicit collection elements should share one
+/// frontend-owned policy rather than duplicating the same compatibility checks.
+pub(crate) fn coerce_expression_to_explicit_type_boundary(
+    expression: Expression,
+    expected_type_id: TypeId,
+    type_environment: &TypeEnvironment,
+    scope_context: &ScopeContext,
+    mismatch_context: TypeMismatchContext,
+) -> Result<Expression, CompilerDiagnostic> {
+    if expression.type_id == expected_type_id {
+        return Ok(expression);
+    }
+
+    if is_declaration_compatible(expected_type_id, expression.type_id, type_environment) {
+        return Ok(coerce_expression_to_declared_type(
+            expression,
+            expected_type_id,
+            type_environment,
+        ));
+    }
+
+    if let Some(coercion) = select_dynamic_trait_coercion_for_expression(
+        &expression,
+        expected_type_id,
+        type_environment,
+        scope_context,
+    )? {
+        return Ok(construct_dynamic_trait_value(expression, coercion));
+    }
+
+    Err(CompilerDiagnostic::type_mismatch(
+        expected_type_id,
+        expression.type_id,
+        mismatch_context,
+        expression.location.clone(),
+    ))
+}
 
 /// Applies contextual coercion to `expr` if the target type requires it.
 ///

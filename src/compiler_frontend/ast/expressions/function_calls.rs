@@ -10,8 +10,8 @@ use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, CallArgument};
 use crate::compiler_frontend::ast::expressions::call_validation::{
-    CallDiagnosticContext, expectations_from_host_function, expectations_from_user_parameters,
-    resolve_call_arguments,
+    CallArgumentResolutionContext, CallDiagnosticContext, expectations_from_host_function,
+    expectations_from_user_parameters, resolve_call_arguments,
 };
 use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression_without_boundary_catch;
@@ -122,6 +122,7 @@ fn parse_function_call_typed(
         token_stream.current_location(),
         string_table,
         type_interner,
+        Some(context),
     )?;
 
     let call = HandledFallibleCall {
@@ -453,6 +454,7 @@ fn resolve_user_function_call_arguments(
     location: SourceLocation,
     string_table: &mut StringTable,
     type_interner: &mut AstTypeInterner<'_>,
+    scope_context: Option<&ScopeContext>,
 ) -> Result<Vec<CallArgument>, ExpressionParseError> {
     let callee_name = function_name
         .name_str(string_table)
@@ -466,9 +468,12 @@ fn resolve_user_function_call_arguments(
         raw_args,
         &expectations,
         location,
-        string_table,
-        type_check_context.type_environment,
-        type_check_context.compatibility_cache,
+        CallArgumentResolutionContext {
+            string_table,
+            type_environment: type_check_context.type_environment,
+            compatibility_cache: type_check_context.compatibility_cache,
+            scope_context,
+        },
     )
     .map_err(ExpressionParseError::from)
 }
@@ -527,9 +532,12 @@ fn parse_external_function_call_typed(
         &raw_args,
         &expectations,
         location.clone(),
-        string_table,
-        type_check_context.type_environment,
-        type_check_context.compatibility_cache,
+        CallArgumentResolutionContext {
+            string_table,
+            type_environment: type_check_context.type_environment,
+            compatibility_cache: type_check_context.compatibility_cache,
+            scope_context: Some(context),
+        },
     )
     .map_err(ExpressionParseError::from)?;
     validate_host_specific_call_rules(

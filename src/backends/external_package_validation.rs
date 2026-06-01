@@ -16,6 +16,7 @@ use crate::compiler_frontend::hir::reachability::{
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 /// Backend target for external-package support validation.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BackendTarget {
     Js,
     Wasm,
@@ -27,7 +28,7 @@ pub enum ExternalPackageValidationError {
 }
 
 impl BackendTarget {
-    fn as_str(&self) -> &'static str {
+    pub(crate) fn as_str(&self) -> &'static str {
         match self {
             BackendTarget::Js => "JavaScript",
             BackendTarget::Wasm => "Wasm",

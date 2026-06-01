@@ -825,9 +825,269 @@ path = "generic_function_body_arithmetic_rejected"
 tags = ["integration","generics","functions","diagnostics"]
 
 [[case]]
-id = "generic_constraint_syntax_deferred"
-path = "generic_constraint_syntax_deferred"
-tags = ["integration","generics","functions","diagnostics"]
+id = "trait_bound_function_success"
+path = "trait_bound_function_success"
+tags = ["integration","generics","traits","functions"]
+
+[[case]]
+id = "trait_bound_multiple_and_success"
+path = "trait_bound_multiple_and_success"
+tags = ["integration","generics","traits","functions"]
+
+[[case]]
+id = "trait_bound_multiple_params_success"
+path = "trait_bound_multiple_params_success"
+tags = ["integration","generics","traits","functions"]
+
+[[case]]
+id = "generic_bound_receiver_call_success"
+path = "generic_bound_receiver_call_success"
+tags = ["integration","generics","traits","functions","receivers"]
+
+[[case]]
+id = "trait_bound_generic_struct_success"
+path = "trait_bound_generic_struct_success"
+tags = ["integration","generics","traits","structs"]
+
+[[case]]
+id = "trait_bound_generic_choice_success"
+path = "trait_bound_generic_choice_success"
+tags = ["integration","generics","traits","choices"]
+
+[[case]]
+id = "trait_bound_generic_struct_annotation_missing_evidence_rejected"
+path = "trait_bound_generic_struct_annotation_missing_evidence_rejected"
+tags = ["integration","generics","traits","structs","diagnostics"]
+
+[[case]]
+id = "trait_bound_generic_struct_constructor_missing_evidence_rejected"
+path = "trait_bound_generic_struct_constructor_missing_evidence_rejected"
+tags = ["integration","generics","traits","structs","constructors","diagnostics"]
+
+[[case]]
+id = "trait_bound_generic_alias_missing_evidence_rejected"
+path = "trait_bound_generic_alias_missing_evidence_rejected"
+tags = ["integration","generics","traits","aliases","diagnostics"]
+
+[[case]]
+id = "trait_bound_generic_matching_method_without_conformance_rejected"
+path = "trait_bound_generic_matching_method_without_conformance_rejected"
+tags = ["integration","generics","traits","structs","diagnostics"]
+
+[[case]]
+id = "trait_bound_generic_file_local_evidence_rejected"
+path = "trait_bound_generic_file_local_evidence_rejected"
+tags = ["integration","generics","traits","structs","diagnostics"]
+
+[[case]]
+id = "dynamic_trait_annotation_success"
+path = "dynamic_trait_annotation_success"
+tags = ["integration","traits","dynamic"]
+
+[[case]]
+id = "dynamic_trait_bound_only_rejected"
+path = "dynamic_trait_bound_only_rejected"
+tags = ["integration","traits","dynamic","diagnostics"]
+
+[[case]]
+id = "dynamic_trait_bound_only_static_bound_success"
+path = "dynamic_trait_bound_only_static_bound_success"
+tags = ["integration","generics","traits","dynamic"]
+
+[[case]]
+id = "dynamic_trait_composition_rejected"
+path = "dynamic_trait_composition_rejected"
+tags = ["integration","traits","dynamic","diagnostics"]
+
+[[case]]
+id = "dynamic_trait_struct_field_success"
+path = "dynamic_trait_struct_field_success"
+tags = ["integration","traits","dynamic"]
+
+[[case]]
+id = "dynamic_trait_choice_payload_success"
+path = "dynamic_trait_choice_payload_success"
+tags = ["integration","traits","dynamic"]
+
+[[case]]
+id = "dynamic_trait_const_rejected"
+path = "dynamic_trait_const_rejected"
+tags = ["integration","traits","dynamic","diagnostics"]
+
+[[case]]
+id = "dynamic_trait_struct_field_bound_only_rejected"
+path = "dynamic_trait_struct_field_bound_only_rejected"
+tags = ["integration","traits","dynamic","diagnostics"]
+
+[[case]]
+id = "dynamic_trait_coercion_boundaries_success"
+path = "dynamic_trait_coercion_boundaries_success"
+tags = ["integration","traits","dynamic","coercion"]
+
+[[case]]
+id = "dynamic_trait_missing_evidence_rejected"
+path = "dynamic_trait_missing_evidence_rejected"
+tags = ["integration","traits","dynamic","coercion","diagnostics"]
+
+[[case]]
+id = "dynamic_trait_unannotated_inference_rejected"
+path = "dynamic_trait_unannotated_inference_rejected"
+tags = ["integration","traits","dynamic","collections","diagnostics"]
+
+[[case]]
+id = "dynamic_trait_method_call_success"
+path = "dynamic_trait_method_call_success"
+tags = ["integration","traits","dynamic"]
+
+[[case]]
+id = "dynamic_trait_js_runtime_argument"
+path = "dynamic_trait_js_runtime_argument"
+tags = ["integration","traits","dynamic","js"]
+
+[[case]]
+id = "dynamic_trait_js_runtime_return"
+path = "dynamic_trait_js_runtime_return"
+tags = ["integration","traits","dynamic","js"]
+
+[[case]]
+id = "dynamic_trait_js_runtime_collection"
+path = "dynamic_trait_js_runtime_collection"
+tags = ["integration","traits","dynamic","collections","js"]
+
+[[case]]
+id = "dynamic_trait_js_file_local_extension_runtime"
+path = "dynamic_trait_js_file_local_extension_runtime"
+tags = ["integration","traits","dynamic","js"]
+
+[[case]]
+id = "dynamic_trait_js_private_concrete_return"
+path = "dynamic_trait_js_private_concrete_return"
+tags = ["integration","traits","dynamic","imports","js"]
+
+[[case]]
+id = "dynamic_trait_js_unreachable_helper_not_emitted"
+path = "dynamic_trait_js_unreachable_helper_not_emitted"
+tags = ["integration","traits","dynamic","js"]
+
+[[case]]
+id = "dynamic_trait_wasm_reachable_rejected"
+path = "dynamic_trait_wasm_reachable_rejected"
+tags = ["integration","traits","dynamic","html-wasm","diagnostics","reachability"]
+
+[[case]]
+id = "dynamic_trait_wasm_unreachable_ignored"
+path = "dynamic_trait_wasm_unreachable_ignored"
+tags = ["integration","traits","dynamic","html-wasm","reachability"]
+
+[[case]]
+id = "dynamic_trait_concrete_method_rejected"
+path = "dynamic_trait_concrete_method_rejected"
+tags = ["integration","traits","dynamic","diagnostics"]
+
+[[case]]
+id = "dynamic_trait_mutable_method_requires_mutable_receiver"
+path = "dynamic_trait_mutable_method_requires_mutable_receiver"
+tags = ["integration","traits","dynamic","diagnostics"]
+
+[[case]]
+id = "trait_bound_dynamic_value_rejected"
+path = "trait_bound_dynamic_value_rejected"
+tags = ["integration","generics","traits","dynamic","diagnostics"]
+
+[[case]]
+id = "trait_bound_cross_file_grouped_success"
+path = "trait_bound_cross_file_grouped_success"
+tags = ["integration","generics","traits","functions","imports","receivers"]
+
+[[case]]
+id = "trait_bound_cross_file_namespace_success"
+path = "trait_bound_cross_file_namespace_success"
+tags = ["integration","generics","traits","functions","imports","receivers"]
+
+[[case]]
+id = "trait_bound_cross_file_grouped_alias_success"
+path = "trait_bound_cross_file_grouped_alias_success"
+tags = ["integration","generics","traits","functions","imports","receivers"]
+
+[[case]]
+id = "trait_bound_facade_grouped_wrapper_success"
+path = "trait_bound_facade_grouped_wrapper_success"
+tags = ["integration","generics","traits","functions","imports","facade","receivers"]
+
+[[case]]
+id = "generic_bound_receiver_multiple_params_success"
+path = "generic_bound_receiver_multiple_params_success"
+tags = ["integration","generics","traits","functions","receivers"]
+
+[[case]]
+id = "generic_bound_receiver_same_concrete_params_success"
+path = "generic_bound_receiver_same_concrete_params_success"
+tags = ["integration","generics","traits","functions","receivers"]
+
+[[case]]
+id = "trait_bound_missing_evidence_rejected"
+path = "trait_bound_missing_evidence_rejected"
+tags = ["integration","generics","traits","functions","diagnostics"]
+
+[[case]]
+id = "generic_bound_receiver_ambiguous_rejected"
+path = "generic_bound_receiver_ambiguous_rejected"
+tags = ["integration","generics","traits","functions","receivers","diagnostics"]
+
+[[case]]
+id = "generic_bound_file_local_evidence_rejected"
+path = "generic_bound_file_local_evidence_rejected"
+tags = ["integration","generics","traits","functions","receivers","diagnostics"]
+
+[[case]]
+id = "public_generic_bound_private_trait_rejected"
+path = "public_generic_bound_private_trait_rejected"
+tags = ["integration","generics","traits","functions","imports","facade","diagnostics"]
+
+[[case]]
+id = "public_generic_bound_public_trait_success"
+path = "public_generic_bound_public_trait_success"
+tags = ["integration","generics","traits","functions","imports","facade"]
+
+[[case]]
+id = "trait_evidence_method_visible_without_concrete_method_export_success"
+path = "trait_evidence_method_visible_without_concrete_method_export_success"
+tags = ["integration","traits","receivers","imports","facade"]
+
+[[case]]
+id = "trait_evidence_file_local_builtin_fallback_success"
+path = "trait_evidence_file_local_builtin_fallback_success"
+tags = ["integration","traits","receivers","scalars"]
+
+[[case]]
+id = "trait_evidence_ambiguous_concrete_receiver_rejected"
+path = "trait_evidence_ambiguous_concrete_receiver_rejected"
+tags = ["integration","traits","receivers","imports","facade","diagnostics"]
+
+[[case]]
+id = "trait_evidence_ordinary_method_priority_success"
+path = "trait_evidence_ordinary_method_priority_success"
+tags = ["integration","traits","receivers"]
+
+[[case]]
+id = "trait_evidence_no_explicit_conformance_rejected"
+path = "trait_evidence_no_explicit_conformance_rejected"
+tags = ["integration","traits","receivers","imports","facade","diagnostics"]
+
+[[case]]
+id = "trait_bound_imported_private_trait_rejected"
+path = "trait_bound_imported_private_trait_rejected"
+tags = ["integration","generics","traits","functions","imports","diagnostics"]
+
+[[case]]
+id = "trait_bound_must_syntax_rejected"
+path = "trait_bound_must_syntax_rejected"
+tags = ["integration","generics","traits","functions","diagnostics"]
+
+[[case]]
+id = "trait_bound_invalid_trait_name_rejected"
+path = "trait_bound_invalid_trait_name_rejected"
+tags = ["integration","generics","traits","functions","diagnostics"]
 
 [[case]]
 id = "generic_where_constraint_syntax_rejected"
@@ -985,9 +1245,19 @@ path = "generic_receiver_rejected"
 tags = ["integration","generics","receiver-methods","diagnostics"]
 
 [[case]]
-id = "generic_receiver_method_declaration_rejected"
-path = "generic_receiver_method_declaration_rejected"
+id = "generic_receiver_method_success"
+path = "generic_receiver_method_success"
+tags = ["integration","generics","receiver-methods"]
+
+[[case]]
+id = "generic_receiver_method_parameter_mismatch_rejected"
+path = "generic_receiver_method_parameter_mismatch_rejected"
 tags = ["integration","generics","receiver-methods","diagnostics"]
+
+[[case]]
+id = "generic_choice_receiver_method_success"
+path = "generic_choice_receiver_method_success"
+tags = ["integration","generics","choices","receiver-methods"]
 
 [[case]]
 id = "generic_external_opaque_type_application_rejected"
@@ -2680,9 +2950,19 @@ path = "receiver_method_basic_call"
 tags = ["integration","receivers"]
 
 [[case]]
-id = "receiver_method_cross_file_rejected"
-path = "receiver_method_cross_file_rejected"
-tags = ["integration","receivers","diagnostics"]
+id = "receiver_extension_imported_source_success"
+path = "receiver_extension_imported_source_success"
+tags = ["integration","receivers","receiver-methods","imports"]
+
+[[case]]
+id = "receiver_extension_not_importable_rejected"
+path = "receiver_extension_not_importable_rejected"
+tags = ["integration","receivers","receiver-methods","imports","diagnostics"]
+
+[[case]]
+id = "receiver_extension_canonical_override_rejected"
+path = "receiver_extension_canonical_override_rejected"
+tags = ["integration","receivers","receiver-methods","imports","diagnostics"]
 
 [[case]]
 id = "receiver_method_field_name_conflict_rejected"
@@ -3596,13 +3876,48 @@ path = "top_level_const_template_single_item"
 tags = ["integration","templates"]
 
 [[case]]
-id = "trait_declaration_reserved"
-path = "trait_declaration_reserved"
-tags = ["integration","diagnostics"]
+id = "trait_declaration_parse_success"
+path = "trait_declaration_parse_success"
+tags = ["integration","traits"]
 
 [[case]]
-id = "trait_this_reserved"
-path = "trait_this_reserved"
+id = "trait_displayable_scaffold_conformance_reference"
+path = "trait_displayable_scaffold_conformance_reference"
+tags = ["integration","traits"]
+
+[[case]]
+id = "trait_imported_reference_resolves"
+path = "trait_imported_reference_resolves"
+tags = ["integration","traits"]
+
+[[case]]
+id = "trait_unknown_reference_rejected"
+path = "trait_unknown_reference_rejected"
+tags = ["integration","traits", "diagnostics"]
+
+[[case]]
+id = "trait_private_reference_without_import_rejected"
+path = "trait_private_reference_without_import_rejected"
+tags = ["integration","traits", "diagnostics"]
+
+[[case]]
+id = "trait_duplicate_requirement_rejected"
+path = "trait_duplicate_requirement_rejected"
+tags = ["integration","traits", "diagnostics"]
+
+[[case]]
+id = "trait_duplicate_declaration_rejected"
+path = "trait_duplicate_declaration_rejected"
+tags = ["integration","traits", "diagnostics"]
+
+[[case]]
+id = "trait_export_private_surface_rejected"
+path = "trait_export_private_surface_rejected"
+tags = ["integration","traits", "diagnostics"]
+
+[[case]]
+id = "trait_this_outside_trait_rejected"
+path = "trait_this_outside_trait_rejected"
 tags = ["integration","diagnostics"]
 
 [[case]]
@@ -3616,14 +3931,94 @@ path = "reserved_trait_keyword_in_postfix_member"
 tags = ["integration","diagnostics"]
 
 [[case]]
-id = "trait_reserved_syntax_invalid_semicolons"
-path = "trait_reserved_syntax_invalid_semicolons"
+id = "trait_conformance_semicolon_rejected"
+path = "trait_conformance_semicolon_rejected"
 tags = ["integration","diagnostics"]
 
 [[case]]
-id = "trait_reserved_syntax_invalid_trailing_comma"
-path = "trait_reserved_syntax_invalid_trailing_comma"
+id = "trait_conformance_trailing_comma_rejected"
+path = "trait_conformance_trailing_comma_rejected"
 tags = ["integration","diagnostics"]
+
+[[case]]
+id = "trait_conformance_struct_success"
+path = "trait_conformance_struct_success"
+tags = ["integration","traits"]
+
+[[case]]
+id = "trait_conformance_choice_success"
+path = "trait_conformance_choice_success"
+tags = ["integration","traits"]
+
+[[case]]
+id = "trait_conformance_imported_trait_success"
+path = "trait_conformance_imported_trait_success"
+tags = ["integration","traits"]
+
+[[case]]
+id = "trait_conformance_missing_method_rejected"
+path = "trait_conformance_missing_method_rejected"
+tags = ["integration","traits", "diagnostics"]
+
+[[case]]
+id = "trait_conformance_parameter_type_mismatch_rejected"
+path = "trait_conformance_parameter_type_mismatch_rejected"
+tags = ["integration","traits", "diagnostics"]
+
+[[case]]
+id = "trait_conformance_return_type_mismatch_rejected"
+path = "trait_conformance_return_type_mismatch_rejected"
+tags = ["integration","traits", "diagnostics"]
+
+[[case]]
+id = "trait_conformance_alias_target_rejected"
+path = "trait_conformance_alias_target_rejected"
+tags = ["integration","traits", "diagnostics"]
+
+[[case]]
+id = "trait_conformance_specialized_generic_rejected"
+path = "trait_conformance_specialized_generic_rejected"
+tags = ["integration","traits", "diagnostics"]
+
+[[case]]
+id = "trait_conformance_duplicate_canonical_rejected"
+path = "trait_conformance_duplicate_canonical_rejected"
+tags = ["integration","traits", "diagnostics"]
+
+[[case]]
+id = "trait_conformance_mod_file_rejected"
+path = "trait_conformance_mod_file_rejected"
+tags = ["integration","traits", "diagnostics"]
+
+[[case]]
+id = "trait_conformance_order_independent_success"
+path = "trait_conformance_order_independent_success"
+tags = ["integration","traits"]
+
+[[case]]
+id = "trait_conformance_builtin_extension_success"
+path = "trait_conformance_builtin_extension_success"
+tags = ["integration","traits"]
+
+[[case]]
+id = "trait_conformance_imported_source_extension_success"
+path = "trait_conformance_imported_source_extension_success"
+tags = ["integration","traits"]
+
+[[case]]
+id = "trait_conformance_external_opaque_extension_success"
+path = "trait_conformance_external_opaque_extension_success"
+tags = ["integration","traits"]
+
+[[case]]
+id = "trait_conformance_duplicate_file_local_extension_rejected"
+path = "trait_conformance_duplicate_file_local_extension_rejected"
+tags = ["integration","traits", "diagnostics"]
+
+[[case]]
+id = "trait_conformance_extension_overrides_canonical_rejected"
+path = "trait_conformance_extension_overrides_canonical_rejected"
+tags = ["integration","traits", "diagnostics"]
 
 [[case]]
 id = "function_trailing_comma_returns"
@@ -3855,6 +4250,16 @@ tags = ["integration", "receiver-methods", "imports", "aliases"]
 id = "receiver_type_import_auto_imports_methods"
 path = "receiver_type_import_auto_imports_methods"
 tags = ["integration", "receiver-methods", "imports"]
+
+[[case]]
+id = "choice_receiver_method_basic_call"
+path = "choice_receiver_method_basic_call"
+tags = ["integration", "receiver-methods", "choices"]
+
+[[case]]
+id = "choice_receiver_type_import_auto_imports_methods"
+path = "choice_receiver_type_import_auto_imports_methods"
+tags = ["integration", "receiver-methods", "choices", "imports"]
 
 [[case]]
 id = "receiver_facade_type_alias_no_private_method"
@@ -5203,6 +5608,16 @@ tags = ["integration", "language", "external-packages", "core-libraries", "time"
 id = "core_time_receiver_visibility_success"
 path = "core_time_receiver_visibility_success"
 tags = ["integration", "language", "external-packages", "core-libraries", "time", "receiver-methods", "imports"]
+
+[[case]]
+id = "receiver_extension_external_opaque_success"
+path = "receiver_extension_external_opaque_success"
+tags = ["integration", "language", "external-packages", "core-libraries", "time", "receiver-methods", "imports"]
+
+[[case]]
+id = "receiver_extension_external_override_rejected"
+path = "receiver_extension_external_override_rejected"
+tags = ["integration", "language", "external-packages", "core-libraries", "time", "receiver-methods", "imports", "diagnostics"]
 
 [[case]]
 id = "core_time_old_api_rejected"

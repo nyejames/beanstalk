@@ -10,6 +10,7 @@ use super::scope_context::{ContextKind, ScopeContext};
 use super::*;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler_frontend::ast::receiver_methods::ReceiverMethodKind;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::type_resolution::validate_no_recursive_runtime_structs;
 use crate::compiler_frontend::compiler_messages::{DiagnosticPayload, InvalidDeclarationReason};
@@ -37,7 +38,9 @@ fn empty_receiver_entry(
     ReceiverMethodEntry {
         function_path,
         receiver,
+        visibility_source_file: source_file.to_owned(),
         source_file,
+        kind: ReceiverMethodKind::Canonical,
         exported,
         receiver_mutable: false,
         signature: FunctionSignature {
@@ -72,12 +75,12 @@ fn lookup_receiver_method_requires_exact_source_file_match_when_not_exported() {
     let mut catalog = ReceiverMethodCatalog::default();
     catalog.by_receiver_and_name.insert(
         key,
-        empty_receiver_entry(
+        vec![empty_receiver_entry(
             interned_path(&["module", "reset"], &mut string_table),
             interned_path(&["src", "#page.bst"], &mut string_table),
             receiver.to_owned(),
             false,
-        ),
+        )],
     );
 
     let different_shape_context = context_for_source_file(

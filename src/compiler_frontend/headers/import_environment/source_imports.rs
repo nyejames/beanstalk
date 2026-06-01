@@ -1,7 +1,7 @@
 //! Source import registration and source receiver auto-imports.
 //!
 //! WHAT: registers imports that resolve to source file declarations (same-module, cross-module,
-//! source library) and auto-imports receiver methods when a struct type is imported.
+//! source library) and auto-imports receiver methods when a nominal receiver type is imported.
 //! WHY: source imports follow facade and export rules that differ from external package imports,
 //! so they deserve their own focused registration path.
 //! MUST NOT: register external package symbols or build namespace records.
@@ -17,18 +17,18 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 impl<'a> ImportEnvironmentBuilder<'a> {
-    /// Auto-import receiver methods for a struct type from the file where it is declared.
+    /// Auto-import receiver methods for a nominal type from the file where it is declared.
     ///
-    /// WHAT: when a struct type is imported, all receiver methods declared in the same file
-    ///       whose receiver matches that struct become visible through the receiver catalog.
+    /// WHAT: when a struct or choice type is imported, all receiver methods declared in the same
+    ///       file whose receiver matches that type become visible through the receiver catalog.
     /// WHY: receiver methods travel with their receiver type on the same import surface.
     fn auto_import_receiver_methods_for_type(
         &self,
         file_visibility: &mut FileVisibility,
-        struct_path: &InternedPath,
+        nominal_type_path: &InternedPath,
         target_file: &InternedPath,
     ) {
-        let Some(struct_name) = struct_path.name() else {
+        let Some(receiver_type_name) = nominal_type_path.name() else {
             return;
         };
 
@@ -37,7 +37,9 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         //      declared_paths_by_file uses header.source_file (logical/relative).
         //      Comparing against canonical_source_by_symbol_path avoids the mismatch.
         for path in &self.module_symbols.receiver_method_paths {
-            if self.module_symbols.receiver_method_receiver_names.get(path) != Some(&struct_name) {
+            if self.module_symbols.receiver_method_receiver_names.get(path)
+                != Some(&receiver_type_name)
+            {
                 continue;
             }
 
@@ -147,6 +149,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             .insert(symbol_path.clone());
 
         let is_type_alias = self.module_symbols.type_alias_paths.contains(symbol_path);
+        let is_trait = self.module_symbols.trait_paths.contains(symbol_path);
         let is_receiver_method = self
             .module_symbols
             .receiver_method_paths
@@ -190,6 +193,10 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             VisibleNameBinding::TypeAlias {
                 canonical_path: symbol_path.clone(),
             }
+        } else if is_trait {
+            VisibleNameBinding::Trait {
+                canonical_path: symbol_path.clone(),
+            }
         } else {
             VisibleNameBinding::SourceImport {
                 canonical_path: symbol_path.clone(),
@@ -202,14 +209,18 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             file_visibility
                 .visible_type_alias_names
                 .insert(local_name, symbol_path.clone());
+        } else if is_trait {
+            file_visibility
+                .visible_trait_names
+                .insert(local_name, symbol_path.clone());
         } else {
             file_visibility
                 .visible_source_names
                 .insert(local_name, symbol_path.clone());
         }
 
-        // Importing a struct type auto-imports visible receiver methods for that
-        // type from the same declaration surface.
+        // Importing a nominal receiver type auto-imports visible receiver methods
+        // for that type from the same declaration surface.
         if self.module_symbols.nominal_type_paths.contains(symbol_path)
             && let Some(target_file) = self
                 .module_symbols

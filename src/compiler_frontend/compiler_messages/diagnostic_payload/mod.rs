@@ -493,6 +493,46 @@ pub enum DiagnosticPayload {
         found: NamespaceTypeValueMisuseKind,
     },
 
+    UnknownTrait {
+        name: StringId,
+    },
+
+    DuplicateTraitRequirement {
+        trait_name: StringId,
+        requirement_name: StringId,
+        first_location: SourceLocation,
+    },
+
+    TraitPrivateSurfaceLeak {
+        trait_name: StringId,
+        surface_type: TypeId,
+    },
+
+    GenericBoundPrivateSurfaceLeak {
+        function_name: StringId,
+        trait_name: StringId,
+    },
+
+    UnsupportedTraitFeature {
+        trait_name: StringId,
+        feature: StringId,
+    },
+
+    InvalidTraitKeywordUsage {
+        reason: InvalidTraitKeywordUsageReason,
+    },
+
+    InvalidTraitConformance {
+        target_name: StringId,
+        trait_name: Option<StringId>,
+        reason: InvalidTraitConformanceReason,
+    },
+
+    InvalidDynamicTraitType {
+        trait_name: StringId,
+        reason: InvalidDynamicTraitTypeReason,
+    },
+
     InvalidExpression,
 
     MissingOperatorOperand {

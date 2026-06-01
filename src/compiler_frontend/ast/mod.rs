@@ -37,6 +37,7 @@
 // (expressions, statements, templates, field access, etc.).
 pub(crate) mod ast_nodes;
 pub(crate) mod const_values;
+pub(crate) mod generic_bounds;
 pub(crate) mod generic_functions;
 pub(crate) mod instrumentation;
 mod module_ast;
@@ -108,6 +109,7 @@ pub(crate) mod templates;
 pub use module_ast::build_context::AstBuildContext;
 pub(crate) use module_ast::environment::TopLevelDeclarationTable;
 pub use module_ast::scope_context::{ContextKind, ScopeContext};
+pub(crate) use receiver_methods::{ReceiverMethodCatalog, ReceiverMethodEntry, ReceiverMethodKind};
 pub use templates::top_level_templates::AstDocFragment;
 pub use templates::top_level_templates::AstDocFragmentKind;
 
@@ -139,6 +141,8 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::FileTokens;
+use crate::compiler_frontend::traits::environment::TraitEnvironment;
+use crate::compiler_frontend::traits::evidence::TraitEvidenceEnvironment;
 use std::time::Instant;
 
 /// Resolved choice definition carried from AST to HIR for pre-registration.
@@ -182,6 +186,19 @@ pub struct Ast {
     /// WHAT: carries the canonical TypeEnvironment from AST construction to HIR lowering.
     /// WHY: HIR needs to query substituted fields/variants for generic struct/choice instances.
     pub type_environment: TypeEnvironment,
+
+    /// Resolved trait declarations available at the backend boundary.
+    ///
+    /// WHAT: carries stable trait and requirement IDs selected by AST/HIR dynamic operations.
+    /// WHY: dynamic runtime lowering must use frontend-selected metadata instead of re-solving
+    /// traits or scanning source declarations in the backend.
+    pub(crate) trait_environment: TraitEnvironment,
+
+    /// Validated conformance evidence selected by dynamic coercion and static trait paths.
+    ///
+    /// WHAT: maps evidence IDs to concrete receiver-method implementations.
+    /// WHY: JS method-table construction needs the exact evidence chosen by the frontend.
+    pub(crate) trait_evidence_environment: TraitEvidenceEnvironment,
 
     /// Compile-time const facts for all declarations that resolve to constant values.
     ///
@@ -294,6 +311,8 @@ struct AstHeaderCounterSnapshot {
     struct_count: usize,
     choice_count: usize,
     constant_count: usize,
+    trait_declaration_count: usize,
+    trait_conformance_count: usize,
 }
 
 impl AstHeaderCounterSnapshot {
@@ -302,6 +321,8 @@ impl AstHeaderCounterSnapshot {
         let mut struct_count = 0usize;
         let mut choice_count = 0usize;
         let mut constant_count = 0usize;
+        let mut trait_declaration_count = 0usize;
+        let mut trait_conformance_count = 0usize;
 
         for header in headers {
             match &header.kind {
@@ -312,6 +333,10 @@ impl AstHeaderCounterSnapshot {
                 HeaderKind::Choice { .. } => choice_count += 1,
 
                 HeaderKind::Constant { .. } => constant_count += 1,
+
+                HeaderKind::Trait { .. } => trait_declaration_count += 1,
+
+                HeaderKind::TraitConformance { .. } => trait_conformance_count += 1,
 
                 HeaderKind::TypeAlias { .. }
                 | HeaderKind::ConstTemplate { .. }
@@ -325,6 +350,8 @@ impl AstHeaderCounterSnapshot {
             struct_count,
             choice_count,
             constant_count,
+            trait_declaration_count,
+            trait_conformance_count,
         }
     }
 
@@ -334,6 +361,14 @@ impl AstHeaderCounterSnapshot {
         add_frontend_counter(FrontendCounter::AstStructCount, self.struct_count);
         add_frontend_counter(FrontendCounter::AstChoiceCount, self.choice_count);
         add_frontend_counter(FrontendCounter::AstConstantCount, self.constant_count);
+        add_frontend_counter(
+            FrontendCounter::AstTraitDeclarationCount,
+            self.trait_declaration_count,
+        );
+        add_frontend_counter(
+            FrontendCounter::AstTraitConformanceCount,
+            self.trait_conformance_count,
+        );
     }
 }
 

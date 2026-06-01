@@ -43,6 +43,12 @@ impl<'hir> JsEmitter<'hir> {
                 variant_index,
                 fields,
             } => self.lower_variant_construct(carrier, *variant_index, fields),
+            HirExpressionKind::ConstructDynamicTraitValue {
+                value, evidence_id, ..
+            } => {
+                let lowered_value = self.lower_expr(value)?;
+                Ok(self.lower_dynamic_trait_construction(lowered_value, *evidence_id))
+            }
 
             HirExpressionKind::Float(value) => {
                 if value.is_nan() {

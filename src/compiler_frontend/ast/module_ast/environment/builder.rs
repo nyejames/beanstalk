@@ -26,7 +26,9 @@ use crate::compiler_frontend::datatypes::definitions::{FieldDefinition, StructTy
 use crate::compiler_frontend::datatypes::environment::{
     RegisteredGenericParameterList, TypeEnvironment,
 };
-use crate::compiler_frontend::datatypes::generic_parameters::GenericParameterScope;
+use crate::compiler_frontend::datatypes::generic_parameters::{
+    GenericParameterList, GenericParameterScope, TypeParameterId,
+};
 use crate::compiler_frontend::datatypes::ids::{NominalTypeId, TypeId};
 use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant;
 use crate::compiler_frontend::headers::import_environment::{
@@ -39,6 +41,13 @@ use crate::compiler_frontend::headers::parse_file_headers::Header;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::traits::definitions::TraitVisibility;
+use crate::compiler_frontend::traits::environment::TraitEnvironment;
+use crate::compiler_frontend::traits::evidence::{
+    TraitEvidenceEnvironment, ValidateTraitEvidenceInput, validate_trait_evidence,
+};
+use crate::compiler_frontend::traits::ids::TraitId;
+use crate::compiler_frontend::traits::syntax::TraitReferenceSyntax;
 use crate::compiler_frontend::value_mode::ValueMode;
 use crate::{benchmark_timer_log, timer_log};
 use rustc_hash::FxHashMap;
@@ -63,6 +72,7 @@ pub(crate) struct AstModuleEnvironmentBuilder<'context, 'services> {
     pub(crate) builtin_struct_ast_nodes: Vec<AstNode>,
     pub(crate) resolved_struct_fields_by_path: FxHashMap<InternedPath, Vec<Declaration>>,
     pub(crate) struct_source_by_path: FxHashMap<InternedPath, InternedPath>,
+    pub(crate) choice_source_by_path: FxHashMap<InternedPath, InternedPath>,
     pub(crate) choice_variant_shells_by_path: FxHashMap<InternedPath, Vec<ChoiceVariant>>,
     pub(crate) resolved_function_signatures_by_path:
         FxHashMap<InternedPath, ResolvedFunctionSignature>,
@@ -92,6 +102,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             builtin_struct_ast_nodes: Vec::new(),
             resolved_struct_fields_by_path: FxHashMap::default(),
             struct_source_by_path: FxHashMap::default(),
+            choice_source_by_path: FxHashMap::default(),
             choice_variant_shells_by_path: FxHashMap::default(),
             resolved_function_signatures_by_path: FxHashMap::default(),
             generic_function_templates_by_path: FxHashMap::default(),
@@ -146,22 +157,71 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         );
         let _ = type_alias_resolution_start;
 
-        // -----------------------
-        //  Resolve nominal types
-        // -----------------------
-        let type_resolution_start = Instant::now();
-        self.resolve_types(sorted_headers, string_table)?;
+        // --------------------------------------------
+        //  Register nominal struct and choice shells
+        // --------------------------------------------
+        // WHAT: register identities early so trait requirement signatures and dynamic
+        // trait annotations can reference nominal types before fields are resolved.
+        let shell_registration_start = Instant::now();
+        self.register_nominal_shells(sorted_headers, string_table)?;
         timer_log!(
-            type_resolution_start,
-            "AST/environment/nominal types completed in: "
+            shell_registration_start,
+            "AST/environment/nominal shells registered in: "
         );
-        let _ = type_resolution_start;
+        let _ = shell_registration_start;
+
+        // --------------------------
+        //  Resolve trait metadata
+        // --------------------------
+        // Trait definitions are needed before function signatures so declaration-site
+        // generic bounds can be resolved into canonical TraitIds. They are also needed
+        // before struct fields, choice payloads, and constants so dynamic trait annotations
+        // resolve correctly on those surfaces.
+        // Evidence validation stays after receiver catalog construction because it needs
+        // resolved receiver methods.
+        let trait_resolution_start = Instant::now();
+        let trait_environment = self.resolve_trait_definitions(sorted_headers, string_table)?;
+        timer_log!(
+            trait_resolution_start,
+            "AST/environment/trait definitions resolved in: "
+        );
+        let _ = trait_resolution_start;
+
+        // -------------------------------------------
+        //  Resolve nominal members and constants
+        // -------------------------------------------
+        // WHAT: resolves constructor shells, constants, struct fields, and choice
+        // payload types with trait-aware type resolution.
+        // WHY: dynamic trait annotations on fields, payloads, and constant
+        // declarations need the trait environment available during resolution.
+        let member_resolution_start = Instant::now();
+        self.resolve_nominal_members_and_constants(
+            sorted_headers,
+            &trait_environment,
+            string_table,
+        )?;
+        timer_log!(
+            member_resolution_start,
+            "AST/environment/nominal members and constants resolved in: "
+        );
+        let _ = member_resolution_start;
+
+        // --------------------------------------
+        //  Resolve nominal generic bound traits
+        // --------------------------------------
+        let nominal_bound_resolution_start = Instant::now();
+        self.resolve_nominal_generic_bounds(sorted_headers, &trait_environment, string_table)?;
+        timer_log!(
+            nominal_bound_resolution_start,
+            "AST/environment/nominal generic bounds resolved in: "
+        );
+        let _ = nominal_bound_resolution_start;
 
         // -----------------------------
         //  Resolve function signatures
         // -----------------------------
         let function_signatures_start = Instant::now();
-        self.resolve_function_signatures(sorted_headers, string_table)?;
+        self.resolve_function_signatures(sorted_headers, &trait_environment, string_table)?;
         timer_log!(
             function_signatures_start,
             "AST/environment/function signatures resolved in: "
@@ -180,6 +240,44 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         );
         let _ = receiver_catalog_start;
 
+        // ---------------------------
+        //  Validate trait evidence
+        // ---------------------------
+        let trait_evidence_start = Instant::now();
+        let trait_evidence_environment = validate_trait_evidence(ValidateTraitEvidenceInput {
+            sorted_headers,
+            trait_environment: &trait_environment,
+            receiver_methods: receiver_methods.as_ref(),
+            type_environment: &self.type_environment,
+            import_environment: &self.import_environment,
+            nominal_type_ids_by_path: &self.nominal_type_ids_by_path,
+            struct_source_by_path: &self.struct_source_by_path,
+            choice_source_by_path: &self.choice_source_by_path,
+            string_table,
+        })
+        .map_err(|diagnostic| self.diagnostic_messages(diagnostic, string_table))?;
+        timer_log!(
+            trait_evidence_start,
+            "AST/environment/trait evidence resolved in: "
+        );
+        let _ = trait_evidence_start;
+
+        // -----------------------------------------
+        //  Validate bounded nominal instantiations
+        // -----------------------------------------
+        let nominal_bound_surface_start = Instant::now();
+        self.validate_nominal_generic_bound_surfaces(
+            sorted_headers,
+            &trait_environment,
+            &trait_evidence_environment,
+            string_table,
+        )?;
+        timer_log!(
+            nominal_bound_surface_start,
+            "AST/environment/nominal generic bound surfaces validated in: "
+        );
+        let _ = nominal_bound_surface_start;
+
         benchmark_timer_log!(
             environment_start,
             "ast_build_environment_ms",
@@ -191,7 +289,12 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         let generic_declarations_by_path =
             std::mem::take(&mut self.module_symbols.generic_declarations_by_path);
 
-        Ok(self.finish_environment(receiver_methods, generic_declarations_by_path))
+        Ok(self.finish_environment(
+            receiver_methods,
+            trait_environment,
+            trait_evidence_environment,
+            generic_declarations_by_path,
+        ))
     }
 
     /// Assemble the completed immutable environment package consumed by body emission.
@@ -203,6 +306,8 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
     fn finish_environment(
         self,
         receiver_methods: Rc<ReceiverMethodCatalog>,
+        trait_environment: TraitEnvironment,
+        trait_evidence_environment: TraitEvidenceEnvironment,
         generic_declarations_by_path: FxHashMap<InternedPath, GenericDeclarationMetadata>,
     ) -> AstModuleEnvironment {
         let declaration_semantics = DeclarationSemanticTable::from_environment(
@@ -234,6 +339,8 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 declaration_semantics: Rc::new(declaration_semantics),
 
                 receiver_methods,
+                trait_environment: Rc::new(trait_environment),
+                trait_evidence_environment: Rc::new(trait_evidence_environment),
                 generic_declarations_by_path: Rc::new(generic_declarations_by_path),
                 nominal_type_ids_by_path: Rc::new(self.nominal_type_ids_by_path),
 
@@ -340,6 +447,15 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         visibility: &'a FileVisibility,
         generic_parameters: Option<&'a GenericParameterScope>,
     ) -> TypeResolutionContext<'a> {
+        self.type_resolution_context_for_with_traits(visibility, generic_parameters, None)
+    }
+
+    pub(crate) fn type_resolution_context_for_with_traits<'a>(
+        &'a mut self,
+        visibility: &'a FileVisibility,
+        generic_parameters: Option<&'a GenericParameterScope>,
+        trait_environment: Option<&'a TraitEnvironment>,
+    ) -> TypeResolutionContext<'a> {
         let mut context = TypeResolutionContext::from_inputs(TypeResolutionContextInputs {
             declaration_table: &self.declaration_table,
             visible_declaration_ids: Some(&visibility.visible_declaration_paths),
@@ -351,11 +467,96 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             resolved_struct_fields_by_path: Some(&self.resolved_struct_fields_by_path),
             type_environment: &mut self.type_environment,
             visible_namespace_records: Some(&visibility.visible_namespace_records),
+            trait_environment,
+            trait_evidence_environment: None,
+            visible_trait_names: trait_environment.map(|_| &visibility.visible_trait_names),
+            source_file_scope: None,
         });
         if let Some(gp) = generic_parameters {
             context = context.with_generic_parameters(Some(gp));
         }
         context
+    }
+
+    pub(in crate::compiler_frontend::ast) fn resolve_generic_parameter_bounds(
+        &self,
+        generic_parameters: &GenericParameterList,
+        visibility: &FileVisibility,
+        trait_environment: &TraitEnvironment,
+        string_table: &mut StringTable,
+    ) -> Result<FxHashMap<TypeParameterId, Vec<TraitId>>, CompilerMessages> {
+        let mut resolved_bounds_by_local = FxHashMap::default();
+
+        for parameter in &generic_parameters.parameters {
+            if parameter.trait_bounds.is_empty() {
+                continue;
+            }
+
+            let mut resolved_bounds = Vec::with_capacity(parameter.trait_bounds.len());
+            for trait_bound in &parameter.trait_bounds {
+                let trait_ref = TraitReferenceSyntax {
+                    name: trait_bound.trait_name,
+                    location: trait_bound.location.clone(),
+                };
+                let trait_id = self.resolve_visible_trait_reference(
+                    &trait_ref,
+                    visibility,
+                    trait_environment,
+                    string_table,
+                )?;
+                resolved_bounds.push(trait_id);
+            }
+
+            resolved_bounds_by_local.insert(parameter.id, resolved_bounds);
+        }
+
+        Ok(resolved_bounds_by_local)
+    }
+
+    pub(in crate::compiler_frontend::ast) fn validate_public_generic_bounds(
+        &self,
+        owner_name: crate::compiler_frontend::symbols::string_interning::StringId,
+        generic_parameters: &GenericParameterList,
+        resolved_bounds_by_local: &FxHashMap<TypeParameterId, Vec<TraitId>>,
+        trait_environment: &TraitEnvironment,
+        string_table: &mut StringTable,
+    ) -> Result<(), CompilerMessages> {
+        for parameter in &generic_parameters.parameters {
+            let Some(resolved_bounds) = resolved_bounds_by_local.get(&parameter.id) else {
+                continue;
+            };
+
+            for (trait_bound, trait_id) in parameter.trait_bounds.iter().zip(resolved_bounds) {
+                let Some(trait_definition) = trait_environment.get(*trait_id) else {
+                    return Err(self.error_messages(
+                        CompilerError::compiler_error(
+                            "Generic bound resolved to missing trait definition.",
+                        ),
+                        string_table,
+                    ));
+                };
+
+                // Public generic signatures are consumed through the facade alone, so every
+                // bound trait on that public surface must be available from the same facade.
+                if matches!(
+                    trait_definition.visibility,
+                    TraitVisibility::Core | TraitVisibility::Source { exported: true }
+                ) {
+                    continue;
+                }
+
+                return Err(self.diagnostic_messages(
+                    CompilerDiagnostic::generic_bound_private_surface_leak(
+                        owner_name,
+                        trait_definition.name,
+                        trait_bound.location.clone(),
+                    ),
+                    string_table,
+                ));
+            }
+        }
+
+        Ok(())
     }
 
     /// Convert resolved AST member declarations into canonical type-environment fields.

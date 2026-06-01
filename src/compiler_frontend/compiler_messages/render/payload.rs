@@ -6,7 +6,9 @@
 
 use super::*;
 use crate::compiler_frontend::compiler_messages::{
-    DiagnosticPayload, NamingConvention, ReservedNameOwner,
+    BoundOnlyTraitDiagnosticReason, DiagnosticPayload, InvalidDynamicTraitTypeReason,
+    InvalidTraitConformanceReason, InvalidTraitKeywordUsageReason, NamingConvention,
+    ReservedNameOwner,
 };
 
 pub(crate) struct RenderedPayload {
@@ -272,6 +274,53 @@ fn render_payload_message(
             expected,
             found,
         } => namespace_type_value_misuse_message(*name, *expected, *found, string_table),
+        DiagnosticPayload::UnknownTrait { name } => {
+            format!("Unknown trait '{}'.", string_table.resolve(*name))
+        }
+        DiagnosticPayload::DuplicateTraitRequirement {
+            trait_name,
+            requirement_name,
+            ..
+        } => format!(
+            "Trait '{}' declares duplicate requirement '{}'. Trait requirements cannot be overloaded in v1.",
+            string_table.resolve(*trait_name),
+            string_table.resolve(*requirement_name)
+        ),
+        DiagnosticPayload::TraitPrivateSurfaceLeak {
+            trait_name,
+            surface_type,
+        } => format!(
+            "Exported trait '{}' exposes private type {} in its requirement surface.",
+            string_table.resolve(*trait_name),
+            diagnostic_type_name(*surface_type, context)
+        ),
+        DiagnosticPayload::GenericBoundPrivateSurfaceLeak {
+            function_name,
+            trait_name,
+        } => format!(
+            "Public generic function '{}' exposes private trait bound '{}'. Export the trait through the same facade surface or keep the function private.",
+            string_table.resolve(*function_name),
+            string_table.resolve(*trait_name)
+        ),
+        DiagnosticPayload::UnsupportedTraitFeature {
+            trait_name,
+            feature,
+        } => format!(
+            "Trait '{}' uses unsupported feature '{}'.",
+            string_table.resolve(*trait_name),
+            string_table.resolve(*feature)
+        ),
+        DiagnosticPayload::InvalidTraitKeywordUsage { reason } => {
+            invalid_trait_keyword_usage_message(*reason).to_owned()
+        }
+        DiagnosticPayload::InvalidTraitConformance {
+            target_name,
+            trait_name,
+            reason,
+        } => invalid_trait_conformance_message(*target_name, *trait_name, reason, context),
+        DiagnosticPayload::InvalidDynamicTraitType { trait_name, reason } => {
+            invalid_dynamic_trait_type_message(*trait_name, reason, context)
+        }
         DiagnosticPayload::ShadowedName { name, .. } => {
             format!("Shadowed name '{}'", string_table.resolve(*name))
         }
@@ -401,6 +450,187 @@ fn render_payload_message(
             invalid_statement_position_message(*reason)
         }
         DiagnosticPayload::None => String::new(),
+    }
+}
+
+fn invalid_trait_conformance_message(
+    target_name: StringId,
+    trait_name: Option<StringId>,
+    reason: &InvalidTraitConformanceReason,
+    context: DiagnosticRenderContext<'_>,
+) -> String {
+    let string_table = context.string_table;
+    let target = string_table.resolve(target_name);
+    let trait_text = trait_name
+        .map(|name| format!(" to '{}'", string_table.resolve(name)))
+        .unwrap_or_default();
+
+    match reason {
+        InvalidTraitConformanceReason::ModuleFacade => {
+            "Trait conformance declarations are not allowed in #mod.bst facade files.".to_owned()
+        }
+        InvalidTraitConformanceReason::AliasTarget => {
+            format!(
+                "Type alias '{target}' cannot declare trait conformance. Use the underlying nominal type."
+            )
+        }
+        InvalidTraitConformanceReason::NonCanonicalTarget => {
+            format!(
+                "'{target}' cannot produce trait evidence{trait_text}. Trait conformance targets must be a visible nominal type, builtin scalar, or external opaque type."
+            )
+        }
+        InvalidTraitConformanceReason::DuplicateCanonicalEvidence => {
+            format!("Duplicate canonical trait evidence for '{target}'{trait_text}.")
+        }
+        InvalidTraitConformanceReason::DuplicateFileLocalExtensionEvidence => {
+            format!(
+                "Duplicate file-local extension trait evidence for '{target}'{trait_text} in this file."
+            )
+        }
+        InvalidTraitConformanceReason::FileLocalExtensionOverridesCanonicalEvidence => {
+            format!(
+                "File-local extension trait evidence for '{target}'{trait_text} cannot override visible canonical evidence."
+            )
+        }
+        InvalidTraitConformanceReason::BuiltinEvidenceOverride => {
+            format!(
+                "User-authored trait evidence for '{target}'{trait_text} cannot override compiler-owned builtin evidence."
+            )
+        }
+        InvalidTraitConformanceReason::MissingMethod { requirement_name } => {
+            format!(
+                "'{target}' cannot conform{trait_text} because same-file receiver method '{}' is missing.",
+                string_table.resolve(*requirement_name)
+            )
+        }
+        InvalidTraitConformanceReason::ReceiverMutabilityMismatch { requirement_name } => {
+            format!(
+                "'{target}' cannot conform{trait_text} because receiver mutability for '{}' does not match the trait requirement.",
+                string_table.resolve(*requirement_name)
+            )
+        }
+        InvalidTraitConformanceReason::ParameterCountMismatch {
+            requirement_name,
+            expected,
+            found,
+        } => {
+            format!(
+                "'{target}' cannot conform{trait_text} because '{}' expects {expected} non-receiver parameter(s) but the method has {found}.",
+                string_table.resolve(*requirement_name)
+            )
+        }
+        InvalidTraitConformanceReason::ParameterModeMismatch {
+            requirement_name,
+            parameter_index,
+        } => {
+            format!(
+                "'{target}' cannot conform{trait_text} because parameter {parameter_index} of '{}' has a different value mode.",
+                string_table.resolve(*requirement_name)
+            )
+        }
+        InvalidTraitConformanceReason::ParameterTypeMismatch {
+            requirement_name,
+            parameter_index,
+            expected_type,
+            found_type,
+        } => {
+            format!(
+                "'{target}' cannot conform{trait_text} because parameter {parameter_index} of '{}' has type {}, expected {}.",
+                string_table.resolve(*requirement_name),
+                diagnostic_type_name(*found_type, context),
+                diagnostic_type_name(*expected_type, context)
+            )
+        }
+        InvalidTraitConformanceReason::ReturnCountMismatch {
+            requirement_name,
+            expected,
+            found,
+        } => {
+            format!(
+                "'{target}' cannot conform{trait_text} because '{}' expects {expected} return slot(s) but the method has {found}.",
+                string_table.resolve(*requirement_name)
+            )
+        }
+        InvalidTraitConformanceReason::ReturnTypeMismatch {
+            requirement_name,
+            return_index,
+            expected_type,
+            found_type,
+        } => {
+            format!(
+                "'{target}' cannot conform{trait_text} because return {return_index} of '{}' has type {}, expected {}.",
+                string_table.resolve(*requirement_name),
+                diagnostic_type_name(*found_type, context),
+                diagnostic_type_name(*expected_type, context)
+            )
+        }
+        InvalidTraitConformanceReason::ReturnChannelMismatch {
+            requirement_name,
+            return_index,
+        } => {
+            format!(
+                "'{target}' cannot conform{trait_text} because return {return_index} of '{}' uses a different return channel.",
+                string_table.resolve(*requirement_name)
+            )
+        }
+    }
+}
+
+fn invalid_trait_keyword_usage_message(reason: InvalidTraitKeywordUsageReason) -> &'static str {
+    match reason {
+        InvalidTraitKeywordUsageReason::MustOutsideTraitSyntax => {
+            "Keyword 'must' is trait-only syntax and cannot be used here."
+        }
+        InvalidTraitKeywordUsageReason::ThisOutsideTraitSyntax => {
+            "Keyword 'This' is trait-local syntax and cannot be used here."
+        }
+    }
+}
+
+fn invalid_dynamic_trait_type_message(
+    trait_name: StringId,
+    reason: &InvalidDynamicTraitTypeReason,
+    context: DiagnosticRenderContext<'_>,
+) -> String {
+    let trait_text = context.string_table.resolve(trait_name);
+
+    match reason {
+        InvalidDynamicTraitTypeReason::BoundOnly {
+            reason,
+            requirement_name,
+        } => {
+            let requirement_text = requirement_name
+                .map(|name| format!(" requirement '{}'", context.string_table.resolve(name)))
+                .unwrap_or_else(|| " requirement".to_owned());
+            let reason_text = match reason {
+                BoundOnlyTraitDiagnosticReason::ThisParameter => {
+                    "`This` appears as a non-receiver parameter"
+                }
+                BoundOnlyTraitDiagnosticReason::ThisReturn => "`This` appears as a return type",
+            };
+
+            format!(
+                "Trait '{trait_text}' is bound-only because{requirement_text} is not dynamic-safe: {reason_text}. Use `type T is {trait_text}` when static dispatch is intended."
+            )
+        }
+
+        InvalidDynamicTraitTypeReason::Constant => format!(
+            "Dynamic trait value type '{trait_text}' cannot be used in a compile-time constant. Dynamic trait values are runtime-only."
+        ),
+
+        InvalidDynamicTraitTypeReason::Applied => format!(
+            "Dynamic trait type '{trait_text}' cannot be applied or composed in a type annotation."
+        ),
+
+        InvalidDynamicTraitTypeReason::StaticBoundSubstitution { dynamic_type_id } => format!(
+            "Dynamic trait value type {} cannot satisfy a static generic bound. Use a concrete type with visible trait evidence instead.",
+            diagnostic_type_name(*dynamic_type_id, context)
+        ),
+
+        InvalidDynamicTraitTypeReason::MissingEvidence { concrete_type_id } => format!(
+            "No visible trait evidence allows {} to be used as dynamic trait value '{trait_text}'. Ensure the concrete type has an explicit conformance declaration and that both the type and trait are visible.",
+            diagnostic_type_name(*concrete_type_id, context)
+        ),
     }
 }
 

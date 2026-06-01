@@ -68,6 +68,8 @@ use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::traits::environment::TraitEnvironment;
+use crate::compiler_frontend::traits::evidence::TraitEvidenceEnvironment;
 use crate::projects::settings::DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS;
 use crate::return_compiler_error;
 
@@ -170,6 +172,10 @@ pub struct ScopeShared {
 
     // Receiver method catalog for dispatch.
     pub(crate) receiver_methods: Rc<ReceiverMethodCatalog>,
+
+    // Constant-header contexts are built before the final module lookup package exists, but
+    // dynamic trait annotations still need resolved trait metadata there.
+    pub(crate) trait_environment_override: Option<Rc<TraitEnvironment>>,
 }
 
 /// Shared parser/lowering context for one active AST scope.
@@ -358,6 +364,8 @@ impl ScopeContext {
             choice_variant_shells_by_path: Rc::new(FxHashMap::default()),
             declaration_semantics: Rc::new(DeclarationSemanticTable::empty()),
             receiver_methods: Rc::new(ReceiverMethodCatalog::default()),
+            trait_environment: Rc::new(TraitEnvironment::new()),
+            trait_evidence_environment: Rc::new(TraitEvidenceEnvironment::new()),
             generic_declarations_by_path: Rc::new(FxHashMap::default()),
             nominal_type_ids_by_path: Rc::new(FxHashMap::default()),
             external_package_registry,
@@ -387,6 +395,7 @@ impl ScopeContext {
             template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
             receiver_methods: Rc::clone(&lookups.receiver_methods),
             nominal_type_ids_by_path: Rc::clone(&lookups.nominal_type_ids_by_path),
+            trait_environment_override: None,
         });
 
         ScopeContext {

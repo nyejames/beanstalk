@@ -19,5 +19,6 @@
 
 pub(crate) mod compatibility;
 pub(crate) mod contextual;
+pub(crate) mod dynamic_trait;
 pub(crate) mod parse_context;
 pub(crate) mod string;

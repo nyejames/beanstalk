@@ -84,6 +84,8 @@ pub(crate) fn parsed_ref_to_data_type(parsed: &ParsedTypeRef) -> DataType {
         ParsedTypeRef::Result { ok, err, .. } => {
             DataType::fallible_carrier(parsed_ref_to_data_type(ok), parsed_ref_to_data_type(err))
         }
+
+        ParsedTypeRef::This { .. } => DataType::Inferred,
     }
 }
 

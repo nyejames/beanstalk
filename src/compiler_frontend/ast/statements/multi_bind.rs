@@ -642,6 +642,13 @@ fn resolve_target_explicit_type(
                     .file_visibility
                     .as_ref()
                     .map(|fv| &fv.visible_namespace_records),
+                trait_environment: Some(context.trait_environment()),
+                trait_evidence_environment: Some(context.trait_evidence_environment()),
+                visible_trait_names: context
+                    .file_visibility
+                    .as_ref()
+                    .map(|fv| &fv.visible_trait_names),
+                source_file_scope: context.source_file_scope.as_ref(),
             })
             .with_active_generic_type_context(context.active_generic_type_context());
 

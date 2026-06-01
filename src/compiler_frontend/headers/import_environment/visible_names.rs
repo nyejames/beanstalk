@@ -40,6 +40,9 @@ pub(crate) enum VisibleNameBinding {
     TypeAlias {
         canonical_path: InternedPath,
     },
+    Trait {
+        canonical_path: InternedPath,
+    },
     ExternalImport {
         symbol_id: ExternalSymbolId,
     },
@@ -130,6 +133,9 @@ fn is_same_target(a: &VisibleNameBinding, b: &VisibleNameBinding) -> bool {
             }
             | VisibleNameBinding::TypeAlias {
                 canonical_path: a_path,
+            }
+            | VisibleNameBinding::Trait {
+                canonical_path: a_path,
             },
             VisibleNameBinding::SameFileDeclaration {
                 declaration_path: b_path,
@@ -138,6 +144,9 @@ fn is_same_target(a: &VisibleNameBinding, b: &VisibleNameBinding) -> bool {
                 canonical_path: b_path,
             }
             | VisibleNameBinding::TypeAlias {
+                canonical_path: b_path,
+            }
+            | VisibleNameBinding::Trait {
                 canonical_path: b_path,
             },
         ) => a_path == b_path,

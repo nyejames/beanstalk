@@ -72,6 +72,24 @@ pub(crate) fn conflicting_generic_function_argument(
     diagnostic
 }
 
+pub(crate) fn missing_generic_function_trait_evidence(
+    function_name: Option<StringId>,
+    parameter_name: StringId,
+    trait_name: StringId,
+    concrete_type_id: crate::compiler_frontend::datatypes::ids::TypeId,
+    location: SourceLocation,
+) -> CompilerDiagnostic {
+    CompilerDiagnostic::invalid_generic_instantiation(
+        function_name,
+        InvalidGenericInstantiationReason::MissingTraitEvidence {
+            parameter_name,
+            trait_name,
+            concrete_type_id,
+        },
+        location,
+    )
+}
+
 pub(crate) fn recursive_generic_function_instantiation(
     function_name: Option<StringId>,
     location: SourceLocation,

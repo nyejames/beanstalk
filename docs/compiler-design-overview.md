@@ -35,6 +35,7 @@ They assemble one or more compiled modules into runnable artifacts such as HTML,
 - `src/compiler_frontend/datatypes/` owns `TypeEnvironment` (canonical semantic type identity) and `DataType` (parse-only / diagnostic-only type syntax). Semantic identity is `TypeId` equality in the relevant `TypeEnvironment`; `DataType` must not be used for semantic decisions in executable AST or HIR.
 - `src/compiler_frontend/type_coercion/` owns contextual compatibility and promotion rules layered on top of type identity
 - `src/compiler_frontend/value_mode.rs` tracks frontend access classification for bindings, expressions, call arguments, and receiver use. It keeps mutability/reference state separate from `DataType`; runtime ownership is a later borrow/lowering concern
+- `src/compiler_frontend/traits/` owns parsed trait shells, resolved trait definitions, explicit conformance evidence, evidence visibility, dynamic-safety classification, and trait diagnostics. Trait metadata is compile-time frontend state, not a backend-side source rediscovery path
 - `src/compiler_frontend/source_libraries/` resolves builder/project source library roots into normal module inputs
 - `src/compiler_frontend/external_packages/` stores backend-provided virtual package metadata and stable external symbol IDs
 - `src/compiler_frontend/builtins/` owns compiler-defined language symbols and operations that are neither user source declarations nor backend-provided external packages
@@ -374,6 +375,7 @@ AST owns:
 - receiver-method cataloging
 - generic declaration/type validation at the frontend level
 - generic free-function template storage, body validation, immediate local call inference, and concrete instance emission before HIR
+- trait declaration resolution, trait visibility, conformance evidence validation, static generic-bound evidence checks, evidence-backed receiver fallback, dynamic-safety checks, and dynamic trait coercion insertion
 - constant folding and const-only validation
 - template composition, compile-time folding, control-flow validation, helper elimination, and runtime render-plan preparation
 
@@ -394,6 +396,20 @@ registration, validation, inference, and concrete instance emission.
 - HIR must never carry unresolved generic executable types or unsolved generic function calls
 - Borrow validation receives concrete HIR and does not consume generic template state
 - Backends never solve generic type arguments or generic function instances
+
+### Traits contract
+
+Trait declarations and conformances are resolved before HIR. Header parsing records trait and
+conformance shells; AST owns semantic trait identity, requirement type resolution, conformance
+evidence validation, evidence visibility, dynamic-safety classification, and generic-bound
+evidence checks.
+
+- Traits are compile-time metadata in `TraitEnvironment`, not `DataType` values
+- Dynamic trait value annotations become semantic `TypeId`s in `TypeEnvironment`
+- Explicit conformance evidence lives in `TraitEvidenceEnvironment` with stable evidence IDs and requirement-to-method mappings
+- Static generic bounds use visible reusable evidence during generic function calls and concrete generic nominal instantiation
+- Dynamic coercion decisions are inserted by AST at explicit typed boundaries, then lowered as explicit HIR operations
+- Backends must consume selected trait/evidence IDs from HIR and must not resolve trait declarations or scan source headers for method shapes
 
 ### Imports and visibility
 
@@ -472,7 +488,9 @@ HIR owns:
 * module constants as compile-time metadata
 * advisory private const-fact metadata projected from AST for future optimization consumers
 * stable external function IDs selected during AST resolution
-* backend-neutral syntactic reachability over functions, blocks, and external call IDs from explicit roots
+* resolved trait declarations and conformance evidence projected across the backend boundary
+* explicit dynamic trait construction and dynamic trait method-dispatch operations
+* backend-neutral syntactic reachability over functions, blocks, external call IDs, and dynamic trait runtime operations from explicit roots
 * enough structure for borrow validation and later backend lowering
 
 HIR does not:
@@ -483,8 +501,23 @@ HIR does not:
 * carry compile-time top-level page fragments
 * use private const facts to change semantics in this plan
 * solve generic functions or carry unresolved generic parameter executable types
+* decide trait conformance, generic-bound evidence, or dynamic coercion
 * decide final runtime ownership
 * model exact lifetimes
+
+### Dynamic trait operations
+
+Dynamic trait value construction lowers to explicit HIR wrapper-construction expressions carrying
+the target trait ID and selected evidence ID. Dynamic trait method calls lower to explicit HIR
+statements carrying the erased trait ID, requirement ID, receiver expression, argument expressions,
+and access effects.
+
+HIR reachability records reachable dynamic trait runtime operations alongside reachable functions
+and external calls. JS lowering uses those facts to emit only reachable dynamic method tables and
+the concrete method functions they reference. HTML-Wasm uses the same reachable facts to reject
+reachable dynamic construction or dispatch with structured unsupported-backend diagnostics before
+Wasm lowering. Unreachable dynamic-only helper functions remain valid typed HIR and do not block
+backend builds.
 
 ### External calls
 
@@ -539,7 +572,7 @@ Backends consume compiled modules containing:
 Backends own target-specific output generation.
 They must preserve Beanstalk semantics even when backend representations differ.
 For the HTML JS path, backend lowering owns emitted JS assets, registered runtime modules, generated external-call glue, import-map HTML, and the final mapping from stable external function IDs to runtime wrapper names. Runtime module emission and import-map entries are driven by module external-import metadata recorded from accepted JS runtime imports, not by function fallibility.
-HTML JS page bundles emit the function set reachable from entry `start`; this keeps unused source-library wrappers from requesting glue or runtime assets. HTML-Wasm uses the same entry/export reachability for companion JS, Wasm function lowering, and backend feature validation, while reachable unsupported JS-backed external calls still fail with structured diagnostics.
+HTML JS page bundles emit the function set reachable from entry `start`; this keeps unused source-library wrappers from requesting glue or runtime assets. Reachable dynamic trait wrapper evidence can add concrete trait method implementations to that emitted JS function set without re-solving trait semantics in the backend. HTML-Wasm uses the same entry/export reachability for companion JS, Wasm function lowering, and backend feature validation, while reachable unsupported JS-backed external calls and reachable dynamic trait runtime operations fail with structured diagnostics before lowering.
 
 Ownership-aware backends may use borrow facts and memory-model metadata for optimization.
 GC-only backends can lower through the semantic baseline without deterministic drop behavior.

@@ -12,6 +12,7 @@ pub(in crate::compiler_frontend::ast) mod declaration_table;
 mod function_signatures;
 mod input;
 mod lookups;
+mod traits;
 mod type_aliases;
 mod type_resolution;
 

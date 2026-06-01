@@ -24,7 +24,7 @@ use crate::compiler_frontend::external_packages::test_support::register_test_ext
 use crate::compiler_frontend::headers::parse_file_headers::{
     HeaderParseOptions, parse_headers, prepare_file_from_tokens,
 };
-use crate::compiler_frontend::hir::hir_builder::HirBuilder;
+use crate::compiler_frontend::hir::hir_builder::lower_module;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::module_dependencies::resolve_module_dependencies;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
@@ -344,14 +344,8 @@ pub(crate) fn lower_hir(
     ast: Ast,
     string_table: &mut StringTable,
 ) -> crate::compiler_frontend::hir::module::HirModule {
-    let type_environment = ast.type_environment.clone();
-    let (module, _) = HirBuilder::new(
-        string_table,
-        PathStringFormatConfig::default(),
-        type_environment,
-    )
-    .build_hir_module(ast)
-    .expect("HIR lowering should succeed");
+    let (module, _) = lower_module(ast, string_table, PathStringFormatConfig::default())
+        .expect("HIR lowering should succeed");
     module
 }
 

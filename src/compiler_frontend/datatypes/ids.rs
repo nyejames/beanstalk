@@ -5,6 +5,7 @@
 //!      Deterministic lookup comes from stable keys, not from numeric IDs.
 
 use crate::compiler_frontend::external_packages::ExternalTypeId;
+use crate::compiler_frontend::traits::ids::TraitId;
 
 // -----------------------------------------------------------
 //  Compact Type Identifiers
@@ -73,6 +74,7 @@ pub enum TypeKey {
     GenericParameter(GenericParameterId),
     Function(FunctionTypeKey),
     External(ExternalTypeId),
+    DynamicTrait(TraitId),
 }
 
 /// Keys for builtin scalar types.

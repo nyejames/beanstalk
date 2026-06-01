@@ -438,7 +438,7 @@ pub enum TokenKind {
 
     // Reserved receiver / trait syntax
     // `this` is reserved for explicit method receiver parameters.
-    // `This` is reserved for future trait syntax.
+    // `This` is the trait-local receiver placeholder and remains reserved elsewhere.
     This,
     Must,
     TraitThis,

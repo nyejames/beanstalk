@@ -19,4 +19,5 @@ pub enum TypeKind {
     External,
     GenericParameter,
     GenericInstance,
+    DynamicTrait,
 }

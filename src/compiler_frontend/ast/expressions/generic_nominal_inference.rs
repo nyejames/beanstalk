@@ -11,6 +11,9 @@ use crate::compiler_frontend::ast::expressions::call_validation::{
     resolve_call_argument_slots_typed,
 };
 use crate::compiler_frontend::ast::expressions::constructor_views::ConstructorField;
+use crate::compiler_frontend::ast::generic_bounds::{
+    GenericBoundEvidenceContext, validate_nominal_generic_bound_evidence,
+};
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidGenericInstantiationReason,
@@ -135,6 +138,24 @@ pub(crate) fn infer_generic_nominal_constructor(
 
         (instance_type_id, instance_key)
     };
+
+    if let Some(instance_type_id) = instance_type_id {
+        let evidence_context = GenericBoundEvidenceContext {
+            type_environment: type_interner.environment(),
+            trait_environment: Some(context.trait_environment()),
+            trait_evidence_environment: Some(context.trait_evidence_environment()),
+            visible_trait_names: context
+                .file_visibility
+                .as_ref()
+                .map(|visibility| &visibility.visible_trait_names),
+            source_file_scope: context.source_file_scope.as_ref(),
+        };
+        validate_nominal_generic_bound_evidence(
+            instance_type_id,
+            input.location.clone(),
+            &evidence_context,
+        )?;
+    }
 
     Ok(GenericNominalInference {
         instance_type_id,

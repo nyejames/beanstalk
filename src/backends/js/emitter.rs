@@ -12,9 +12,12 @@ use crate::compiler_frontend::hir::blocks::HirBlock;
 use crate::compiler_frontend::hir::functions::HirFunction;
 use crate::compiler_frontend::hir::ids::{BlockId, FieldId, FunctionId, LocalId};
 use crate::compiler_frontend::hir::module::HirModule;
-use crate::compiler_frontend::hir::reachability::collect_reachability_from_start;
+use crate::compiler_frontend::hir::reachability::{
+    HirReachabilityInput, collect_hir_reachability, collect_reachability_from_start,
+};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use std::collections::{HashMap, HashSet};
+use crate::compiler_frontend::traits::ids::TraitEvidenceId;
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 /// Lower one validated HIR module into JavaScript source.
 pub fn lower_hir_to_js(
@@ -49,6 +52,12 @@ pub(crate) struct JsEmitter<'hir> {
         HashSet<crate::compiler_frontend::external_packages::ExternalFunctionId>,
     /// Whether choice equality was lowered, requiring the runtime helper.
     pub(crate) used_choice_equality: bool,
+    /// Evidence tables referenced by emitted dynamic trait wrapper construction.
+    pub(crate) used_dynamic_trait_tables: BTreeSet<TraitEvidenceId>,
+    /// Whether emitted code constructs dynamic trait wrappers.
+    pub(crate) used_dynamic_trait_constructor: bool,
+    /// Whether emitted code dispatches through a dynamic trait wrapper.
+    pub(crate) used_dynamic_trait_dispatch: bool,
 }
 
 impl<'hir> JsEmitter<'hir> {
@@ -82,6 +91,9 @@ impl<'hir> JsEmitter<'hir> {
             temp_counter: 0,
             referenced_external_functions: HashSet::new(),
             used_choice_equality: false,
+            used_dynamic_trait_tables: BTreeSet::new(),
+            used_dynamic_trait_constructor: false,
+            used_dynamic_trait_dispatch: false,
         }
     }
 
@@ -104,6 +116,8 @@ impl<'hir> JsEmitter<'hir> {
         if self.used_choice_equality {
             self.emit_runtime_choice_helpers();
         }
+
+        self.emit_dynamic_trait_runtime()?;
 
         if self.config.auto_invoke_start {
             let Some(start_name) = self
@@ -135,7 +149,7 @@ impl<'hir> JsEmitter<'hir> {
         let reachable_functions = match self.config.function_emission_policy {
             JsFunctionEmissionPolicy::AllFunctions => None,
             JsFunctionEmissionPolicy::ReachableFromStart => {
-                Some(collect_reachability_from_start(self.hir)?.reachable_functions)
+                Some(self.collect_js_reachable_functions()?)
             }
         };
 
@@ -154,5 +168,41 @@ impl<'hir> JsEmitter<'hir> {
         functions.sort_by_key(|function| function.id.0);
 
         Ok(functions)
+    }
+
+    fn collect_js_reachable_functions(
+        &self,
+    ) -> Result<rustc_hash::FxHashSet<FunctionId>, CompilerError> {
+        let mut reachability = collect_reachability_from_start(self.hir)?;
+
+        loop {
+            let dynamic_method_roots = self.dynamic_trait_method_roots_for_operations(
+                &reachability.reachable_dynamic_trait_operations,
+            )?;
+            let mut roots = reachability
+                .reachable_functions
+                .iter()
+                .copied()
+                .collect::<Vec<_>>();
+            let original_function_count = roots.len();
+
+            for function_id in dynamic_method_roots {
+                if !reachability.reachable_functions.contains(&function_id) {
+                    roots.push(function_id);
+                }
+            }
+
+            if roots.len() == original_function_count {
+                return Ok(reachability.reachable_functions);
+            }
+
+            roots.sort_by_key(|function_id| function_id.0);
+            roots.dedup_by_key(|function_id| function_id.0);
+
+            reachability = collect_hir_reachability(HirReachabilityInput {
+                hir: self.hir,
+                root_functions: roots,
+            })?;
+        }
     }
 }

@@ -7,6 +7,9 @@
 use super::builder::AstModuleEnvironmentBuilder;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler_frontend::ast::generic_bounds::{
+    GenericBoundEvidenceContext, validate_nominal_generic_bound_evidence,
+};
 use crate::compiler_frontend::ast::module_ast::environment::constant_resolution::{
     ConstantHeaderParseContext, parse_constant_header_declaration,
 };
@@ -16,9 +19,10 @@ use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::type_resolution::{
     GenericParameterScopeBuildInput, StructFieldResolutionError, build_generic_parameter_scope,
     collect_type_parameter_ids_from_choice_variants, collect_type_parameter_ids_from_declarations,
-    resolve_choice_variant_payload_types, resolve_struct_constructor_shell_types,
-    resolve_struct_field_types, validate_generic_parameters_used,
-    validate_no_recursive_generic_type, validate_no_recursive_runtime_structs,
+    resolve_choice_variant_payload_types, resolve_diagnostic_type_to_type_id_checked,
+    resolve_struct_constructor_shell_types, resolve_struct_field_types,
+    validate_generic_parameters_used, validate_no_recursive_generic_type,
+    validate_no_recursive_runtime_structs,
 };
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_messages::{
@@ -36,13 +40,15 @@ use crate::compiler_frontend::declaration_syntax::choice::{
 use crate::compiler_frontend::declaration_syntax::signature_members::SignatureMemberSyntax;
 
 use crate::compiler_frontend::headers::import_environment::FileVisibility;
-use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
+use crate::compiler_frontend::headers::parse_file_headers::{FileRole, Header, HeaderKind};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::traits::environment::TraitEnvironment;
+use crate::compiler_frontend::traits::evidence::TraitEvidenceEnvironment;
 use crate::compiler_frontend::type_coercion::compatibility::TypeCompatibilityCache;
 use crate::compiler_frontend::value_mode::ValueMode;
 use crate::timer_log;
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::rc::Rc;
 use std::time::Instant;
 
@@ -50,6 +56,13 @@ use std::time::Instant;
 enum MemberShellSemanticContext {
     StructField,
     ChoicePayloadField,
+}
+
+struct NominalBoundSurfaceValidationContext<'a> {
+    visibility: &'a FileVisibility,
+    source_file_scope: &'a InternedPath,
+    trait_environment: &'a TraitEnvironment,
+    trait_evidence_environment: &'a TraitEvidenceEnvironment,
 }
 
 fn member_shell_diagnostic_for_context(
@@ -79,25 +92,19 @@ fn is_non_constant_struct_default_diagnostic(diagnostic: &CompilerDiagnostic) ->
 }
 
 impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
-    /// Resolves constants and nominal declaration types in header dependency order.
-    /// WHY: headers are already dependency-sorted; constants are parsed in that order.
-    /// Struct defaults require constant-context parsing and import gates.
-    pub(in crate::compiler_frontend::ast) fn resolve_types(
+    /// Register struct and choice identities early so later phases (trait definitions,
+    /// constant parsing, field resolution) can reference nominal types by canonical `TypeId`.
+    ///
+    /// WHAT: registers every struct and choice in `TypeEnvironment` with empty members,
+    /// then stores unresolved field/variant shells in AST-owned side tables.
+    /// WHY: split from member resolution so trait metadata can be built while nominal
+    /// identities are already available, without forcing trait definitions to wait for
+    /// fully resolved fields.
+    pub(in crate::compiler_frontend::ast) fn register_nominal_shells(
         &mut self,
         sorted_headers: &[Header],
         string_table: &mut StringTable,
     ) -> Result<(), CompilerMessages> {
-        // --------------------------------------------
-        //  Register struct and choice shells early
-        // --------------------------------------------
-        // WHAT: before constants are resolved, register every struct and choice in
-        // TypeEnvironment with nominal identity and generic metadata only, then keep
-        // constructor member shells in AST-owned side tables.
-        // WHY: constant expressions may contain struct constructors (e.g.
-        // `wrapper #= Wrapper(theme)`) or choice constructors (e.g.
-        // `status #= Status::Ready`). Constructor parsing needs member metadata before
-        // final canonical TypeEnvironment members are available, but TypeEnvironment
-        // should not carry unresolved placeholder field or variant types.
         let struct_shell_registration_start = Instant::now();
         for header in sorted_headers {
             match &header.kind {
@@ -115,20 +122,16 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                     let generic_param_list_id = if generic_parameters.is_empty() {
                         None
                     } else {
-                        let registered = self
-                            .type_environment
-                            .register_generic_parameter_list(generic_parameters);
+                        let registered = self.type_environment.register_generic_parameter_list(
+                            generic_parameters,
+                            &FxHashMap::default(),
+                        );
                         let list_id = registered.list_id;
                         self.generic_parameter_lists_by_path
                             .insert(header.tokens.src_path.clone(), registered);
                         Some(list_id)
                     };
 
-                    // Register the struct with an empty field list during early identity
-                    // registration. Canonical field types are resolved later in this function.
-                    // Constructor parsing during constant resolution uses AST-owned shell
-                    // metadata from `resolved_struct_fields_by_path` instead of placeholder
-                    // entries in `TypeEnvironment`.
                     let struct_def = StructTypeDefinition {
                         id: NominalTypeId(0),
                         path: header.tokens.src_path.clone(),
@@ -141,7 +144,6 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                     self.nominal_type_ids_by_path
                         .insert(header.tokens.src_path.clone(), struct_type_id);
 
-                    // Make parsed field shells available for pre-constant semantic resolution.
                     self.resolved_struct_fields_by_path
                         .insert(header.tokens.src_path.to_owned(), unresolved_fields);
 
@@ -167,20 +169,16 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                     let generic_param_list_id = if generic_parameters.is_empty() {
                         None
                     } else {
-                        let registered = self
-                            .type_environment
-                            .register_generic_parameter_list(generic_parameters);
+                        let registered = self.type_environment.register_generic_parameter_list(
+                            generic_parameters,
+                            &FxHashMap::default(),
+                        );
                         let list_id = registered.list_id;
                         self.generic_parameter_lists_by_path
                             .insert(header.tokens.src_path.clone(), registered);
                         Some(list_id)
                     };
 
-                    // Store unresolved choice variant shells in AST environment state so
-                    // constant constructor parsing can access constructor metadata before
-                    // canonical payload types are resolved. Register the choice with empty
-                    // variants in `TypeEnvironment`; final variants are written later in this
-                    // function.
                     let unresolved_variants =
                         self.unresolved_choice_variants_for_header(header, variants, string_table)?;
                     self.choice_variant_shells_by_path
@@ -222,11 +220,30 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         );
         let _ = struct_shell_registration_start;
 
+        Ok(())
+    }
+
+    /// Resolves constants and nominal member types in header dependency order.
+    ///
+    /// WHY: headers are already dependency-sorted; constants are parsed in that order.
+    /// Struct defaults require constant-context parsing and import gates.
+    /// Trait metadata is available so dynamic trait annotations on fields, payloads,
+    /// and constant declarations are resolved or rejected with `BST-RULE-0075`.
+    pub(in crate::compiler_frontend::ast) fn resolve_nominal_members_and_constants(
+        &mut self,
+        sorted_headers: &[Header],
+        trait_environment: &TraitEnvironment,
+        string_table: &mut StringTable,
+    ) -> Result<(), CompilerMessages> {
         // -------------------------------------------------
         //  Resolve constructor shell types for constants
         // -------------------------------------------------
         let constructor_shell_resolution_start = Instant::now();
-        self.resolve_constructor_shells_for_constants(sorted_headers, string_table)?;
+        self.resolve_constructor_shells_for_constants(
+            sorted_headers,
+            trait_environment,
+            string_table,
+        )?;
         timer_log!(
             constructor_shell_resolution_start,
             "AST/environment/nominal types/constructor shells resolved in: "
@@ -237,7 +254,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         //  Resolve constants
         // -------------------
         let constant_resolution_start = Instant::now();
-        self.resolve_constant_headers(sorted_headers, string_table)?;
+        self.resolve_constant_headers(sorted_headers, trait_environment, string_table)?;
         timer_log!(
             constant_resolution_start,
             "AST/environment/constants resolved in: "
@@ -291,8 +308,11 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                         string_table,
                     )
                 })?;
-            let mut type_resolution_context =
-                self.type_resolution_context_for(&visibility, generic_parameter_scope.as_ref());
+            let mut type_resolution_context = self.type_resolution_context_for_with_traits(
+                &visibility,
+                generic_parameter_scope.as_ref(),
+                Some(trait_environment),
+            );
 
             let resolved_fields = resolve_struct_field_types(
                 &header.tokens.src_path,
@@ -377,6 +397,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 continue;
             };
 
+            let source_file_scope = header.canonical_source_file(string_table);
             let visibility = self
                 .import_environment
                 .visibility_for(&header.source_file)
@@ -410,8 +431,11 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                         string_table,
                     )
                 })?;
-            let mut type_resolution_context =
-                self.type_resolution_context_for(&visibility, generic_parameter_scope.as_ref());
+            let mut type_resolution_context = self.type_resolution_context_for_with_traits(
+                &visibility,
+                generic_parameter_scope.as_ref(),
+                Some(trait_environment),
+            );
 
             let resolved_variants = resolve_choice_variant_payload_types(
                 &unresolved_variants,
@@ -496,6 +520,10 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 header.tokens.src_path.to_owned(),
                 resolved_variants.to_owned(),
             );
+            self.choice_source_by_path.insert(
+                header.tokens.src_path.to_owned(),
+                source_file_scope.to_owned(),
+            );
 
             // Replace the placeholder declaration with the resolved choice type.
             self.replace_declaration(Declaration {
@@ -537,6 +565,238 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         Ok(())
     }
 
+    /// Resolve declaration-site trait bounds for nominal generic structs and choices.
+    ///
+    /// WHAT: patches the already-registered canonical generic parameter lists with resolved
+    /// `TraitId`s once trait definitions exist.
+    /// WHY: nominal identity must be registered before trait signatures resolve, but concrete
+    /// generic instantiation later needs the bounds stored on the canonical TypeEnvironment list.
+    pub(in crate::compiler_frontend::ast) fn resolve_nominal_generic_bounds(
+        &mut self,
+        sorted_headers: &[Header],
+        trait_environment: &TraitEnvironment,
+        string_table: &mut StringTable,
+    ) -> Result<(), CompilerMessages> {
+        for header in sorted_headers {
+            let generic_parameters = match &header.kind {
+                HeaderKind::Struct {
+                    generic_parameters, ..
+                }
+                | HeaderKind::Choice {
+                    generic_parameters, ..
+                } => generic_parameters,
+
+                _ => continue,
+            };
+
+            if generic_parameters.is_empty() {
+                continue;
+            }
+
+            let visibility = self
+                .import_environment
+                .visibility_for(&header.source_file)
+                .map_err(|error| self.error_messages(error, string_table))?
+                .clone();
+            let resolved_bounds_by_local = self.resolve_generic_parameter_bounds(
+                generic_parameters,
+                &visibility,
+                trait_environment,
+                string_table,
+            )?;
+
+            if header.file_role == FileRole::ModuleFacade {
+                let owner_name = header.tokens.src_path.name().ok_or_else(|| {
+                    self.error_messages(
+                        CompilerError::compiler_error(
+                            "Public nominal generic header had no source-path name.",
+                        ),
+                        string_table,
+                    )
+                })?;
+                self.validate_public_generic_bounds(
+                    owner_name,
+                    generic_parameters,
+                    &resolved_bounds_by_local,
+                    trait_environment,
+                    string_table,
+                )?;
+            }
+
+            if let Some(registered) = self
+                .generic_parameter_lists_by_path
+                .get(&header.tokens.src_path)
+            {
+                self.type_environment.update_generic_parameter_bounds(
+                    registered.list_id,
+                    &resolved_bounds_by_local,
+                    &registered.canonical_by_local,
+                );
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Validate concrete bounded generic instances on declaration surfaces.
+    ///
+    /// WHAT: checks aliases, nominal member types, and function signatures after trait evidence
+    /// has been validated.
+    /// WHY: those surfaces are resolved before receiver methods and conformance evidence exist,
+    /// but each concrete `Box of T` still needs visible reusable evidence at its declaration site.
+    pub(in crate::compiler_frontend::ast) fn validate_nominal_generic_bound_surfaces(
+        &mut self,
+        sorted_headers: &[Header],
+        trait_environment: &TraitEnvironment,
+        trait_evidence_environment: &TraitEvidenceEnvironment,
+        string_table: &mut StringTable,
+    ) -> Result<(), CompilerMessages> {
+        for header in sorted_headers {
+            let visibility = self
+                .import_environment
+                .visibility_for(&header.source_file)
+                .map_err(|error| self.error_messages(error, string_table))?
+                .clone();
+            let source_file_scope = header.canonical_source_file(string_table);
+            let validation_context = NominalBoundSurfaceValidationContext {
+                visibility: &visibility,
+                source_file_scope: &source_file_scope,
+                trait_environment,
+                trait_evidence_environment,
+            };
+
+            match &header.kind {
+                HeaderKind::TypeAlias { .. } => {
+                    let Some(resolved_target) = self
+                        .resolved_type_aliases_by_path
+                        .get(&header.tokens.src_path)
+                        .cloned()
+                    else {
+                        continue;
+                    };
+                    let type_id = resolve_diagnostic_type_to_type_id_checked(
+                        &resolved_target,
+                        &mut self.type_environment,
+                        &header.name_location,
+                    )
+                    .map_err(|diagnostic| self.diagnostic_messages(*diagnostic, string_table))?;
+
+                    self.validate_nominal_generic_bound_type_id(
+                        type_id,
+                        header.name_location.clone(),
+                        &validation_context,
+                        string_table,
+                    )?;
+                }
+
+                HeaderKind::Constant { .. } => {
+                    let Some(declaration) =
+                        self.declaration_table.get_by_path(&header.tokens.src_path)
+                    else {
+                        continue;
+                    };
+                    self.validate_nominal_generic_bound_type_id(
+                        declaration.value.type_id,
+                        declaration.value.location.clone(),
+                        &validation_context,
+                        string_table,
+                    )?;
+                }
+
+                HeaderKind::Struct { .. } => {
+                    let Some(fields) = self
+                        .resolved_struct_fields_by_path
+                        .get(&header.tokens.src_path)
+                    else {
+                        continue;
+                    };
+                    for field in fields.clone() {
+                        self.validate_nominal_generic_bound_type_id(
+                            field.value.type_id,
+                            field.value.location,
+                            &validation_context,
+                            string_table,
+                        )?;
+                    }
+                }
+
+                HeaderKind::Choice { .. } => {
+                    let Some(variants) = self
+                        .choice_variant_shells_by_path
+                        .get(&header.tokens.src_path)
+                    else {
+                        continue;
+                    };
+                    for variant in variants.clone() {
+                        if let ChoiceVariantPayload::Record { fields } = variant.payload {
+                            for field in fields {
+                                self.validate_nominal_generic_bound_type_id(
+                                    field.value.type_id,
+                                    field.value.location,
+                                    &validation_context,
+                                    string_table,
+                                )?;
+                            }
+                        }
+                    }
+                }
+
+                HeaderKind::Function { .. } => {
+                    let Some(resolved_signature) = self
+                        .resolved_function_signatures_by_path
+                        .get(&header.tokens.src_path)
+                        .cloned()
+                    else {
+                        continue;
+                    };
+
+                    for parameter in resolved_signature.signature.parameters {
+                        self.validate_nominal_generic_bound_type_id(
+                            parameter.value.type_id,
+                            parameter.value.location,
+                            &validation_context,
+                            string_table,
+                        )?;
+                    }
+
+                    for return_slot in resolved_signature.signature.returns {
+                        if let Some(type_id) = return_slot.type_id {
+                            self.validate_nominal_generic_bound_type_id(
+                                type_id,
+                                header.name_location.clone(),
+                                &validation_context,
+                                string_table,
+                            )?;
+                        }
+                    }
+                }
+
+                _ => {}
+            }
+        }
+
+        Ok(())
+    }
+
+    fn validate_nominal_generic_bound_type_id(
+        &self,
+        type_id: crate::compiler_frontend::datatypes::ids::TypeId,
+        location: crate::compiler_frontend::tokenizer::tokens::SourceLocation,
+        validation_context: &NominalBoundSurfaceValidationContext<'_>,
+        string_table: &mut StringTable,
+    ) -> Result<(), CompilerMessages> {
+        let evidence_context = GenericBoundEvidenceContext::from_file_visibility(
+            &self.type_environment,
+            validation_context.trait_environment,
+            validation_context.trait_evidence_environment,
+            validation_context.visibility,
+            validation_context.source_file_scope,
+        );
+
+        validate_nominal_generic_bound_evidence(type_id, location, &evidence_context)
+            .map_err(|diagnostic| self.diagnostic_messages(diagnostic, string_table))
+    }
+
     /// Resolve struct field and choice variant types needed for constant constructor parsing.
     ///
     /// WHAT: runs a lightweight type-resolution pass over struct fields and choice variant
@@ -546,6 +806,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
     fn resolve_constructor_shells_for_constants(
         &mut self,
         sorted_headers: &[Header],
+        trait_environment: &TraitEnvironment,
         string_table: &mut StringTable,
     ) -> Result<(), CompilerMessages> {
         for header in sorted_headers {
@@ -593,10 +854,12 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                         })?;
 
                     let resolved_fields = {
-                        let mut type_resolution_context = self.type_resolution_context_for(
-                            &visibility,
-                            generic_parameter_scope.as_ref(),
-                        );
+                        let mut type_resolution_context = self
+                            .type_resolution_context_for_with_traits(
+                                &visibility,
+                                generic_parameter_scope.as_ref(),
+                                Some(trait_environment),
+                            );
                         resolve_struct_constructor_shell_types(
                             &header.tokens.src_path,
                             &unresolved_fields,
@@ -661,10 +924,12 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                         })?;
 
                     let resolved_variants = {
-                        let mut type_resolution_context = self.type_resolution_context_for(
-                            &visibility,
-                            generic_parameter_scope.as_ref(),
-                        );
+                        let mut type_resolution_context = self
+                            .type_resolution_context_for_with_traits(
+                                &visibility,
+                                generic_parameter_scope.as_ref(),
+                                Some(trait_environment),
+                            );
                         resolve_choice_variant_payload_types(
                             &unresolved_variants,
                             &mut type_resolution_context,
@@ -688,6 +953,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
     fn resolve_constant_headers(
         &mut self,
         sorted_headers: &[Header],
+        trait_environment: &TraitEnvironment,
         string_table: &mut StringTable,
     ) -> Result<(), CompilerMessages> {
         let constants_resolution_start = Instant::now();
@@ -702,6 +968,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         let resolved_struct_fields_by_path = Rc::new(self.resolved_struct_fields_by_path.clone());
         let choice_variant_shells_by_path = Rc::new(self.choice_variant_shells_by_path.clone());
         let nominal_type_ids_by_path = Rc::new(self.nominal_type_ids_by_path.clone());
+        let trait_environment = Rc::new(trait_environment.clone());
 
         for header in sorted_headers {
             let HeaderKind::Constant { .. } = &header.kind else {
@@ -738,6 +1005,8 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                     warnings: &mut self.warnings,
                     rendered_path_usages: self.rendered_path_usages.clone(),
                     string_table,
+                    trait_environment: Some(Rc::clone(&trait_environment)),
+                    visible_trait_names: &visibility.visible_trait_names,
                 },
             )
             .map_err(|diagnostic| self.diagnostic_messages(*diagnostic, string_table))?;

@@ -10,7 +10,8 @@
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::call_validation::{
-    CallDiagnosticContext, expectations_from_constructor_fields, resolve_call_arguments,
+    CallArgumentResolutionContext, CallDiagnosticContext, expectations_from_constructor_fields,
+    resolve_call_arguments,
 };
 use crate::compiler_frontend::ast::expressions::constructor_views::ConstructorField;
 use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
@@ -28,7 +29,6 @@ use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
-use crate::compiler_frontend::type_coercion::contextual::coerce_expression_to_declared_type;
 use crate::compiler_frontend::value_mode::ValueMode;
 
 /// Input bundle for `parse_struct_constructor_expression`.
@@ -149,27 +149,22 @@ pub(super) fn parse_struct_constructor_expression(
         &raw_args,
         &expectations,
         constructor_location.clone(),
-        string_table,
-        type_check_context.type_environment,
-        type_check_context.compatibility_cache,
+        CallArgumentResolutionContext {
+            string_table,
+            type_environment: type_check_context.type_environment,
+            compatibility_cache: type_check_context.compatibility_cache,
+            scope_context: Some(context),
+        },
     )?;
 
     // ------------------------
-    //  Build fields with coercion and const checks
+    //  Build fields with const checks
     // ------------------------
     let enforce_const_record = context.kind.allows_const_record_coercion();
     let mut struct_fields = Vec::with_capacity(fields.len());
 
     for (field, arg) in resolved_fields.iter().zip(resolved_args.iter()) {
-        let field_type_id = field.type_id;
-
-        // Apply contextual numeric coercion (Int → Float) post-resolution, consistent with
-        // declaration sites. resolve_call_arguments has already validated type compatibility.
-        let mut value = coerce_expression_to_declared_type(
-            arg.value.clone(),
-            field_type_id,
-            type_interner.environment(),
-        );
+        let mut value = arg.value.clone();
 
         if enforce_const_record {
             // Header-stage struct shells may carry placeholder references until AST environment

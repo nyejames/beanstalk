@@ -38,6 +38,7 @@ use crate::compiler_frontend::compiler_messages::{
 
 use crate::compiler_frontend::ast::type_resolution::resolve_diagnostic_type_to_type_id_checked;
 use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::datatypes::definitions::TypeDefinition;
 use crate::compiler_frontend::datatypes::generic_parameters::{
     ActiveGenericTypeContext, GenericParameterScope,
 };
@@ -299,6 +300,11 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
                 HeaderKind::TypeAlias { .. } => {
                     // Type aliases are compile-time-only metadata; they do not emit runtime nodes.
                 }
+
+                HeaderKind::Trait { .. } | HeaderKind::TraitConformance { .. } => {
+                    // Trait metadata is compile-time-only. AST environment construction has
+                    // already resolved trait identities and evidence before body emission.
+                }
             }
         }
 
@@ -383,6 +389,7 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
         &self,
         parameter_list_id: GenericParameterListId,
         substitutions: Option<FxHashMap<GenericParameterId, TypeId>>,
+        source_parameter_by_rebased_path: FxHashMap<InternedPath, GenericParameterId>,
         string_table: &StringTable,
     ) -> Result<ActiveGenericTypeContext, CompilerMessages> {
         let Some(parameter_list) = self
@@ -401,7 +408,34 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
         Ok(ActiveGenericTypeContext {
             parameter_scope: GenericParameterScope::from_canonical_parameter_list(parameter_list),
             substitutions,
+            source_parameter_by_rebased_path,
         })
+    }
+
+    fn source_parameter_origins_for_signature(
+        &self,
+        source_signature: &FunctionSignature,
+        emitted_signature: &FunctionSignature,
+    ) -> FxHashMap<InternedPath, GenericParameterId> {
+        let mut origins = FxHashMap::default();
+
+        for (source_parameter, emitted_parameter) in source_signature
+            .parameters
+            .iter()
+            .zip(emitted_signature.parameters.iter())
+        {
+            let Some(TypeDefinition::GenericParameter(parameter)) = self
+                .environment
+                .type_environment
+                .get(source_parameter.value.type_id)
+            else {
+                continue;
+            };
+
+            origins.insert(emitted_parameter.id.clone(), parameter.id);
+        }
+
+        origins
     }
 
     fn generic_substitution_diagnostics(
@@ -502,6 +536,7 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
         let generic_type_context = self.build_active_generic_type_context(
             template.generic_parameter_list_id,
             Some(mapping),
+            self.source_parameter_origins_for_signature(&template.signature, &signature),
             string_table,
         )?;
 
@@ -653,6 +688,7 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
         let generic_type_context = self.build_active_generic_type_context(
             template.generic_parameter_list_id,
             None,
+            FxHashMap::default(),
             string_table,
         )?;
         context = context.with_active_generic_type_context(generic_type_context);

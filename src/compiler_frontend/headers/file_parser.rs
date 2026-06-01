@@ -15,6 +15,7 @@ use crate::compiler_frontend::headers::header_dispatch::create_header;
 use crate::compiler_frontend::headers::start_capture::push_runtime_template_tokens_to_start_function;
 use crate::compiler_frontend::headers::top_level_classifier::{
     HeaderFileItem, classify_current_item, starts_duplicate_top_level_header_declaration,
+    starts_specialized_generic_conformance_declaration, starts_trait_declaration_after_must,
 };
 use crate::compiler_frontend::headers::types::{
     FileFrontendPrepareError, FileFrontendPrepareOutput, FileRole, HeaderBuildContext, HeaderKind,
@@ -24,7 +25,7 @@ use crate::compiler_frontend::reserved_trait_syntax::{
     reserved_trait_keyword, reserved_trait_keyword_error,
 };
 use crate::compiler_frontend::symbols::string_interning::StringId;
-use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token};
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
 
 // Top-level declarations are module-visible; non-declaration statements are collected into the
 // implicit start-function header for that file.
@@ -54,6 +55,18 @@ fn parse_headers_in_file_inner(
 
         match classify_current_item(token_stream, &current_token) {
             HeaderFileItem::Symbol(name_id) => {
+                handle_symbol_item(
+                    token_stream,
+                    state,
+                    context,
+                    current_token,
+                    name_id,
+                    current_location,
+                )?;
+            }
+
+            HeaderFileItem::BuiltinTypeConformanceTarget(type_name) => {
+                let name_id = context.string_table.intern(type_name);
                 handle_symbol_item(
                     token_stream,
                     state,
@@ -127,7 +140,16 @@ fn handle_symbol_item(
     }
 
     if let Some(first_location) = state.encountered_symbols.get(&name_id) {
-        if starts_duplicate_top_level_header_declaration(token_stream) {
+        let is_conformance_declaration = (token_stream.current_token_kind() == &TokenKind::Must
+            && !starts_trait_declaration_after_must(token_stream))
+            || starts_specialized_generic_conformance_declaration(token_stream);
+
+        // Conformance declarations reuse the target type name (`Type must TRAIT`).
+        // They do not conflict with the type declaration itself.
+        // AST evidence validation catches duplicate semantic conformance facts later.
+        if !is_conformance_declaration
+            && starts_duplicate_top_level_header_declaration(token_stream)
+        {
             return Err(CompilerDiagnostic::duplicate_declaration(
                 name_id,
                 first_location.clone(),
@@ -135,10 +157,14 @@ fn handle_symbol_item(
             ));
         }
 
-        state.push_start_body_token(current_token);
-        // Body-level symbol/import resolution belongs to AST passes. Header parsing only validates
-        // duplicate top-level declaration starts at this stage.
-        return Ok(());
+        if !is_conformance_declaration {
+            state.push_start_body_token(current_token);
+            // Body-level symbol/import resolution belongs to AST passes. Header parsing only validates
+            // duplicate top-level declaration starts at this stage.
+            return Ok(());
+        }
+
+        // Fall through for conformance declarations so they are parsed as real headers.
     }
 
     if state.start_body_symbols.contains(&name_id)
@@ -171,6 +197,12 @@ fn handle_symbol_item(
             state.push_start_body_token(current_token);
             state.register_start_body_symbol(name_id);
         }
+        HeaderKind::TraitConformance { .. } => {
+            // Conformance declarations reuse the target type name and must not shadow
+            // the type's entry in encountered_symbols for duplicate detection.
+            state.register_header(header);
+        }
+
         _ => {
             let name_location = header.name_location.clone();
             state.register_header(header);

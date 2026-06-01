@@ -281,6 +281,7 @@ impl DiagnosticPayload {
             }
 
             DiagnosticPayload::InvalidThisUsage { .. }
+            | DiagnosticPayload::InvalidTraitKeywordUsage { .. }
             | DiagnosticPayload::InvalidReceiverDeclaration { .. }
             | DiagnosticPayload::InvalidCopyTarget { .. } => {}
 
@@ -393,6 +394,25 @@ impl DiagnosticPayload {
                             previous_evidence_location.remap_string_ids(remap);
                         }
                     }
+                    InvalidGenericInstantiationReason::MissingTraitEvidence {
+                        parameter_name,
+                        trait_name,
+                        ..
+                    }
+                    | InvalidGenericInstantiationReason::MissingNominalTraitEvidence {
+                        parameter_name,
+                        trait_name,
+                        ..
+                    } => {
+                        *parameter_name = remap.get(*parameter_name);
+                        *trait_name = remap.get(*trait_name);
+                    }
+                    InvalidGenericInstantiationReason::FileLocalNominalTraitEvidenceUnsupported {
+                        trait_name,
+                        ..
+                    } => {
+                        *trait_name = remap.get(*trait_name);
+                    }
                     InvalidGenericInstantiationReason::WrongArgumentCount { .. }
                     | InvalidGenericInstantiationReason::TypeDoesNotAcceptArguments
                     | InvalidGenericInstantiationReason::ExternalTypeArgumentsUnsupported
@@ -502,6 +522,57 @@ impl DiagnosticPayload {
             }
             DiagnosticPayload::NamespaceTypeValueMisuse { name, .. } => {
                 *name = remap.get(*name);
+            }
+
+            DiagnosticPayload::UnknownTrait { name } => {
+                *name = remap.get(*name);
+            }
+
+            DiagnosticPayload::DuplicateTraitRequirement {
+                trait_name,
+                requirement_name,
+                first_location,
+            } => {
+                *trait_name = remap.get(*trait_name);
+                *requirement_name = remap.get(*requirement_name);
+                first_location.remap_string_ids(remap);
+            }
+
+            DiagnosticPayload::TraitPrivateSurfaceLeak { trait_name, .. } => {
+                *trait_name = remap.get(*trait_name);
+            }
+
+            DiagnosticPayload::GenericBoundPrivateSurfaceLeak {
+                function_name,
+                trait_name,
+            } => {
+                *function_name = remap.get(*function_name);
+                *trait_name = remap.get(*trait_name);
+            }
+
+            DiagnosticPayload::UnsupportedTraitFeature {
+                trait_name,
+                feature,
+            } => {
+                *trait_name = remap.get(*trait_name);
+                *feature = remap.get(*feature);
+            }
+
+            DiagnosticPayload::InvalidTraitConformance {
+                target_name,
+                trait_name,
+                reason,
+            } => {
+                *target_name = remap.get(*target_name);
+                if let Some(trait_name) = trait_name {
+                    *trait_name = remap.get(*trait_name);
+                }
+                reason.remap_string_ids(remap);
+            }
+
+            DiagnosticPayload::InvalidDynamicTraitType { trait_name, reason } => {
+                *trait_name = remap.get(*trait_name);
+                reason.remap_string_ids(remap);
             }
 
             DiagnosticPayload::InvalidExpression

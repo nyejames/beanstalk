@@ -19,6 +19,7 @@ page_head #= theme_head
     - constructor inference for concrete generic structs and choices
     - collections as compiler-owned generic constructed types using [codesnippet:{T}]
     - generic free-function calls across same-file use, visible same-module imports, and authored facades
+    - declaration-site trait bounds with [codesnippet:type T is TRAIT]
 
     Generic function headers are parsed and tracked by the frontend, and their bodies are
     validated against unconstrained generic parameters before any concrete call is accepted.
@@ -78,8 +79,8 @@ page_head #= theme_head
 
         [data:
             [: Generic receiver methods]
-            [: Rejected / Deferred]
-            [: Use free functions until traits or another constraint model exists.]
+            [: Partial]
+            [: Declaration-site generic receiver methods are supported when the method generic parameters align exactly with the receiver constructor arguments. Receiver methods on fully instantiated generic types remain rejected.]
         ]
 
         [data:
@@ -90,8 +91,8 @@ page_head #= theme_head
 
         [data:
             [: Trait bounds]
-            [: Deferred]
-            [: Operators, equality, field access, formatting, and receiver calls on unconstrained generic parameters wait for traits or another constraint model.]
+            [: Partial]
+            [: Declaration-site [codesnippet:type T is TRAIT] bounds are supported for generic functions, structs, and choices. [codesnippet:where] clauses and file-local evidence-backed generic bound dispatch remain deferred.]
         ]
     ]
 ]
@@ -253,8 +254,10 @@ page_head #= theme_head
     same generic parameter type, forwarding it to another generic function, or storing it in
     a generic wrapper. Local annotations inside the generic body may use the active generic
     parameters, including [codesnippet:T], [codesnippet:{T}], and [codesnippet:Box of T].
-    Behavior-dependent operations on [codesnippet:T] are rejected until trait bounds or another
-    constraint model exists.
+    Behavior-dependent operations on unconstrained [codesnippet:T] are rejected. A declaration-site
+    trait bound can allow receiver calls supplied by a unique visible trait requirement. Arithmetic,
+    equality, field access, template interpolation, and external/IO behavior still require concrete
+    support or a future dedicated trait integration.
 
     Inference is deliberately immediate. Beanstalk does not infer a generic function's type
     arguments from later uses of the resulting value, whole-program analysis, HIR, borrow
@@ -365,6 +368,54 @@ page_head #= theme_head
 ]
 
 #[section, $markdown:
+    # Trait bounds
+
+    Generic bounds use [codesnippet:is], not [codesnippet:must].
+
+    [codeblock, $code("bst"):
+        render type Item is DISPLAY_TEXT |item Item| -> String:
+            return item.display()
+        ;
+    ]
+
+    Multiple bounds on one parameter use [codesnippet:and]. Commas still separate generic parameters:
+
+    [codeblock, $code("bst"):
+        combine type A is DISPLAY_TEXT, B is DISPLAY_TEXT |left A, right B| -> String:
+            return left.display() + right.display()
+        ;
+
+        render_named type Item is DISPLAY_TEXT and NAMED |item Item| -> String:
+            return item.display()
+        ;
+    ]
+
+    Concrete generic function calls and concrete generic struct/choice instantiations require
+    explicit visible reusable evidence for each concrete type argument.
+
+    [codeblock, $code("bst"):
+        Label = |
+            text String,
+        |
+
+        display |this Label| -> String:
+            return this.text
+        ;
+
+        Label must DISPLAY_TEXT
+
+        value = render(Label("ok"))
+    ]
+
+    A trait name in a normal type annotation means a dynamic trait value.
+    A trait name in a generic bound constrains a concrete generic parameter.
+    These are different features.
+
+    Dynamic trait values do not satisfy static generic bounds.
+    [codesnippet:where] clauses remain rejected; write bounds directly on the generic parameter list.
+]
+
+#[section, $markdown:
     # Deferred features
 
     The following are not current Alpha generics:
@@ -372,10 +423,9 @@ page_head #= theme_head
     - explicit generic call syntax such as [codesnippet, "identity of Int(42)"], [codesnippet, "identity<Int>(42)"], [codesnippet, "identity[Int](42)"], or [codesnippet, "identity(42 Int)"]
     - inline generic sugar such as [codesnippet, "|value type A|"]
     - generic function values and higher-order generic functions
-    - trait bounds and [codesnippet:where] clauses; the future direction is declaration-site [codesnippet:type A is Trait] constraints after traits exist
+    - [codesnippet:where] clauses and file-local evidence-backed generic bound dispatch
     - type values, type-returning functions, type-level [codesnippet:#if], and compile-time type inspection
     - recursive generic structs or choices
-    - generic receiver methods
     - receiver methods on instantiated generic types
     - direct facade re-export syntax and function alias exports through [codesnippet:#mod.bst]
     - generic JS or external package functions

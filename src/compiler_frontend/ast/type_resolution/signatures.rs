@@ -9,6 +9,10 @@ use crate::compiler_frontend::ast::type_resolution::{
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidReceiverDeclarationReason, InvalidThisUsageReason,
 };
+use crate::compiler_frontend::datatypes::definitions::TypeDefinition;
+use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
+use crate::compiler_frontend::datatypes::ids::{GenericParameterListId, TypeId};
+use crate::compiler_frontend::datatypes::{ReceiverKey, diagnostic_type_spelling};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
@@ -22,6 +26,7 @@ use super::{ResolvedFunctionSignature, resolve_named_signature_type};
 pub(crate) fn resolve_function_signature(
     function_path: &InternedPath,
     signature: &FunctionSignature,
+    generic_parameter_list_id: Option<GenericParameterListId>,
     type_resolution_context: &mut TypeResolutionContext<'_>,
     string_table: &mut StringTable,
 ) -> TypeResolutionResult<ResolvedFunctionSignature> {
@@ -82,49 +87,14 @@ pub(crate) fn resolve_function_signature(
                 )));
             }
 
-            let Some(receiver_key) = resolved_parameter
-                .value
-                .diagnostic_type
-                .receiver_key_from_type()
-            else {
-                if resolved_parameter
-                    .value
-                    .diagnostic_type
-                    .is_resolved_generic_nominal_instance()
-                    || resolved_parameter
-                        .value
-                        .diagnostic_type
-                        .is_unresolved_generic_application()
-                {
-                    let type_name = string_table.intern(
-                        &resolved_parameter
-                            .value
-                            .diagnostic_type
-                            .display_with_table(string_table),
-                    );
-                    return Err(Box::new(CompilerDiagnostic::invalid_receiver_declaration(
-                        InvalidReceiverDeclarationReason::GenericReceiverType {
-                            function_name: function_name_id,
-                            type_name,
-                        },
-                        parameter.value.location.clone(),
-                    )));
-                }
-
-                let type_name = string_table.intern(
-                    &resolved_parameter
-                        .value
-                        .diagnostic_type
-                        .display_with_table(string_table),
-                );
-                return Err(Box::new(CompilerDiagnostic::invalid_receiver_declaration(
-                    InvalidReceiverDeclarationReason::UnsupportedType {
-                        function_name: function_name_id,
-                        type_name,
-                    },
-                    parameter.value.location.clone(),
-                )));
-            };
+            let receiver_key = receiver_key_for_resolved_parameter(
+                function_name_id,
+                resolved_parameter.value.type_id,
+                generic_parameter_list_id,
+                type_resolution_context.type_environment,
+                &parameter.value.location,
+                string_table,
+            )?;
 
             receiver = Some(receiver_key);
         }
@@ -183,4 +153,144 @@ pub(crate) fn resolve_function_signature(
             returns: resolved_returns,
         },
     })
+}
+
+fn receiver_key_for_resolved_parameter(
+    function_name_id: crate::compiler_frontend::symbols::string_interning::StringId,
+    receiver_type_id: TypeId,
+    generic_parameter_list_id: Option<GenericParameterListId>,
+    type_environment: &TypeEnvironment,
+    location: &crate::compiler_frontend::tokenizer::tokens::SourceLocation,
+    string_table: &mut StringTable,
+) -> TypeResolutionResult<ReceiverKey> {
+    if let Some(TypeDefinition::GenericInstance(instance)) = type_environment.get(receiver_type_id)
+    {
+        if generic_receiver_arguments_align(
+            instance.arguments.as_ref(),
+            generic_parameter_list_id,
+            type_environment,
+        ) {
+            return receiver_key_for_generic_instance_base(receiver_type_id, type_environment)
+                .ok_or_else(|| {
+                    unsupported_receiver_type_diagnostic(
+                        function_name_id,
+                        receiver_type_id,
+                        type_environment,
+                        location,
+                        string_table,
+                    )
+                });
+        }
+
+        return Err(generic_receiver_type_diagnostic(
+            function_name_id,
+            receiver_type_id,
+            type_environment,
+            location,
+            string_table,
+        ));
+    }
+
+    type_environment
+        .receiver_key_for_type_id(receiver_type_id)
+        .ok_or_else(|| {
+            unsupported_receiver_type_diagnostic(
+                function_name_id,
+                receiver_type_id,
+                type_environment,
+                location,
+                string_table,
+            )
+        })
+}
+
+fn generic_receiver_arguments_align(
+    receiver_arguments: &[TypeId],
+    generic_parameter_list_id: Option<GenericParameterListId>,
+    type_environment: &TypeEnvironment,
+) -> bool {
+    let Some(generic_parameter_list_id) = generic_parameter_list_id else {
+        return false;
+    };
+
+    let Some(method_parameters) = type_environment.generic_parameters(generic_parameter_list_id)
+    else {
+        return false;
+    };
+
+    if method_parameters.parameters.len() != receiver_arguments.len() {
+        return false;
+    }
+
+    for (receiver_argument, method_parameter) in receiver_arguments
+        .iter()
+        .zip(method_parameters.parameters.iter())
+    {
+        let Some(TypeDefinition::GenericParameter(receiver_parameter)) =
+            type_environment.get(*receiver_argument)
+        else {
+            return false;
+        };
+
+        if receiver_parameter.id != method_parameter.id {
+            return false;
+        }
+    }
+
+    true
+}
+
+fn receiver_key_for_generic_instance_base(
+    receiver_type_id: TypeId,
+    type_environment: &TypeEnvironment,
+) -> Option<ReceiverKey> {
+    let TypeDefinition::GenericInstance(instance) = type_environment.get(receiver_type_id)? else {
+        return None;
+    };
+
+    let base_type_id = type_environment.type_id_for_nominal_id(instance.base)?;
+    type_environment.receiver_key_for_type_id(base_type_id)
+}
+
+fn generic_receiver_type_diagnostic(
+    function_name_id: crate::compiler_frontend::symbols::string_interning::StringId,
+    receiver_type_id: TypeId,
+    type_environment: &TypeEnvironment,
+    location: &crate::compiler_frontend::tokenizer::tokens::SourceLocation,
+    string_table: &mut StringTable,
+) -> Box<CompilerDiagnostic> {
+    let type_name = receiver_type_name(receiver_type_id, type_environment, string_table);
+    Box::new(CompilerDiagnostic::invalid_receiver_declaration(
+        InvalidReceiverDeclarationReason::GenericReceiverType {
+            function_name: function_name_id,
+            type_name,
+        },
+        location.clone(),
+    ))
+}
+
+fn unsupported_receiver_type_diagnostic(
+    function_name_id: crate::compiler_frontend::symbols::string_interning::StringId,
+    receiver_type_id: TypeId,
+    type_environment: &TypeEnvironment,
+    location: &crate::compiler_frontend::tokenizer::tokens::SourceLocation,
+    string_table: &mut StringTable,
+) -> Box<CompilerDiagnostic> {
+    let type_name = receiver_type_name(receiver_type_id, type_environment, string_table);
+    Box::new(CompilerDiagnostic::invalid_receiver_declaration(
+        InvalidReceiverDeclarationReason::UnsupportedType {
+            function_name: function_name_id,
+            type_name,
+        },
+        location.clone(),
+    ))
+}
+
+fn receiver_type_name(
+    receiver_type_id: TypeId,
+    type_environment: &TypeEnvironment,
+    string_table: &mut StringTable,
+) -> crate::compiler_frontend::symbols::string_interning::StringId {
+    let spelling = diagnostic_type_spelling(receiver_type_id, type_environment);
+    string_table.intern(&spelling.display_with_table(string_table))
 }

@@ -507,6 +507,44 @@ fn rule_descriptor(kind: RuleDiagnosticKind) -> DiagnosticDescriptor {
             "Namespace type/value misuse",
             DiagnosticSeverity::Error,
         ),
+        RuleDiagnosticKind::UnknownTrait => {
+            DiagnosticDescriptor::new("BST-RULE-0069", "Unknown trait", DiagnosticSeverity::Error)
+        }
+        RuleDiagnosticKind::DuplicateTraitRequirement => DiagnosticDescriptor::new(
+            "BST-RULE-0070",
+            "Duplicate trait requirement",
+            DiagnosticSeverity::Error,
+        ),
+        RuleDiagnosticKind::TraitPrivateSurfaceLeak => DiagnosticDescriptor::new(
+            "BST-RULE-0071",
+            "Private type exposed by trait",
+            DiagnosticSeverity::Error,
+        ),
+        RuleDiagnosticKind::UnsupportedTraitFeature => DiagnosticDescriptor::new(
+            "BST-RULE-0072",
+            "Unsupported trait feature",
+            DiagnosticSeverity::Error,
+        ),
+        RuleDiagnosticKind::InvalidTraitConformance => DiagnosticDescriptor::new(
+            "BST-RULE-0073",
+            "Invalid trait conformance",
+            DiagnosticSeverity::Error,
+        ),
+        RuleDiagnosticKind::GenericBoundPrivateSurfaceLeak => DiagnosticDescriptor::new(
+            "BST-RULE-0074",
+            "Private trait exposed by generic bound",
+            DiagnosticSeverity::Error,
+        ),
+        RuleDiagnosticKind::InvalidDynamicTraitType => DiagnosticDescriptor::new(
+            "BST-RULE-0075",
+            "Invalid dynamic trait type",
+            DiagnosticSeverity::Error,
+        ),
+        RuleDiagnosticKind::InvalidTraitKeywordUsage => DiagnosticDescriptor::new(
+            "BST-RULE-0076",
+            "Invalid trait keyword usage",
+            DiagnosticSeverity::Error,
+        ),
     }
 }
 

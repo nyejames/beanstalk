@@ -11,11 +11,12 @@ use crate::compiler_frontend::compiler_messages::{
     DiagnosticSeverity, GenericApplicationErrorReason, ImportClauseKind, ImportDiagnosticKind,
     ImportFacadeType, IncompatibleChoiceComparisonReason, InvalidChoiceVariantReason,
     InvalidCollectionTypeReason, InvalidCompileTimePathReason, InvalidConfigReason,
-    InvalidFunctionSignatureReason, InvalidGenericParameterReason, InvalidImportClauseReason,
-    InvalidImportPathReason, InvalidLoopHeaderReason, InvalidMatchArmReason,
-    InvalidMutableAccessReason, InvalidPageMetadataReason, InvalidResultOperandReason,
-    InvalidSignatureMemberReason, InvalidStandaloneStatementReason, InvalidStatementPositionReason,
-    InvalidTemplateDirectiveReason, InvalidTemplateStructureReason, InvalidTypeAnnotationReason,
+    InvalidDynamicTraitTypeReason, InvalidFunctionSignatureReason, InvalidGenericParameterReason,
+    InvalidImportClauseReason, InvalidImportPathReason, InvalidLoopHeaderReason,
+    InvalidMatchArmReason, InvalidMutableAccessReason, InvalidPageMetadataReason,
+    InvalidResultOperandReason, InvalidSignatureMemberReason, InvalidStandaloneStatementReason,
+    InvalidStatementPositionReason, InvalidTemplateDirectiveReason, InvalidTemplateStructureReason,
+    InvalidTraitConformanceReason, InvalidTraitKeywordUsageReason, InvalidTypeAnnotationReason,
     NameNamespace, NamespaceTypeValueMisuseKind, NamingConvention, NumberLiteralErrorReason,
     OperatorOperandPosition, PathKind, RangeOperandKind, RuleDiagnosticKind, SyntaxDiagnosticKind,
     TypeAnnotationContext, TypeDiagnosticKind, TypeMismatchContext, UnsupportedOperatorCategory,
@@ -1092,6 +1093,124 @@ impl CompilerDiagnostic {
                 name,
                 namespace: NameNamespace::Type,
             },
+        )
+    }
+
+    pub(crate) fn unknown_trait_name(name: StringId, location: SourceLocation) -> Self {
+        Self::new(
+            DiagnosticKind::Rule(RuleDiagnosticKind::UnknownTrait),
+            location,
+            DiagnosticPayload::UnknownTrait { name },
+        )
+    }
+
+    pub(crate) fn duplicate_trait_requirement(
+        trait_name: StringId,
+        requirement_name: StringId,
+        first_location: SourceLocation,
+        duplicate_location: SourceLocation,
+    ) -> Self {
+        let payload_first_location = first_location.clone();
+        Self::new(
+            DiagnosticKind::Rule(RuleDiagnosticKind::DuplicateTraitRequirement),
+            duplicate_location.clone(),
+            DiagnosticPayload::DuplicateTraitRequirement {
+                trait_name,
+                requirement_name,
+                first_location: payload_first_location,
+            },
+        )
+        .with_labels(vec![
+            DiagnosticLabel::primary(duplicate_location),
+            DiagnosticLabel::secondary(
+                first_location,
+                Some(DiagnosticLabelMessage::PreviousDeclaration),
+            ),
+        ])
+    }
+
+    pub(crate) fn trait_private_surface_leak(
+        trait_name: StringId,
+        surface_type: TypeId,
+        location: SourceLocation,
+    ) -> Self {
+        Self::new(
+            DiagnosticKind::Rule(RuleDiagnosticKind::TraitPrivateSurfaceLeak),
+            location,
+            DiagnosticPayload::TraitPrivateSurfaceLeak {
+                trait_name,
+                surface_type,
+            },
+        )
+    }
+
+    pub(crate) fn generic_bound_private_surface_leak(
+        function_name: StringId,
+        trait_name: StringId,
+        location: SourceLocation,
+    ) -> Self {
+        Self::new(
+            DiagnosticKind::Rule(RuleDiagnosticKind::GenericBoundPrivateSurfaceLeak),
+            location,
+            DiagnosticPayload::GenericBoundPrivateSurfaceLeak {
+                function_name,
+                trait_name,
+            },
+        )
+    }
+
+    pub(crate) fn unsupported_trait_feature(
+        trait_name: StringId,
+        feature: StringId,
+        location: SourceLocation,
+    ) -> Self {
+        Self::new(
+            DiagnosticKind::Rule(RuleDiagnosticKind::UnsupportedTraitFeature),
+            location,
+            DiagnosticPayload::UnsupportedTraitFeature {
+                trait_name,
+                feature,
+            },
+        )
+    }
+
+    pub(crate) fn invalid_trait_keyword_usage(
+        reason: InvalidTraitKeywordUsageReason,
+        location: SourceLocation,
+    ) -> Self {
+        Self::new(
+            DiagnosticKind::Rule(RuleDiagnosticKind::InvalidTraitKeywordUsage),
+            location,
+            DiagnosticPayload::InvalidTraitKeywordUsage { reason },
+        )
+    }
+
+    pub(crate) fn invalid_trait_conformance(
+        target_name: StringId,
+        trait_name: Option<StringId>,
+        reason: InvalidTraitConformanceReason,
+        location: SourceLocation,
+    ) -> Self {
+        Self::new(
+            DiagnosticKind::Rule(RuleDiagnosticKind::InvalidTraitConformance),
+            location,
+            DiagnosticPayload::InvalidTraitConformance {
+                target_name,
+                trait_name,
+                reason,
+            },
+        )
+    }
+
+    pub(crate) fn invalid_dynamic_trait_type(
+        trait_name: StringId,
+        reason: InvalidDynamicTraitTypeReason,
+        location: SourceLocation,
+    ) -> Self {
+        Self::new(
+            DiagnosticKind::Rule(RuleDiagnosticKind::InvalidDynamicTraitType),
+            location,
+            DiagnosticPayload::InvalidDynamicTraitType { trait_name, reason },
         )
     }
 

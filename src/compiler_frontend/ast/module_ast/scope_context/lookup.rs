@@ -191,17 +191,16 @@ impl ScopeContext {
 
         // Test contexts that don't set file_visibility fall back to the old
         // source-file + exported check.
-        let entry = self
+        let entries = self
             .receiver_methods
             .by_receiver_and_name
             .get(&(receiver.to_owned(), method_name))?;
 
         let current_source_file = self.source_file_scope.as_ref()?;
-        if &entry.source_file == current_source_file || entry.exported {
-            Some(entry)
-        } else {
-            None
-        }
+        entries
+            .iter()
+            .find(|entry| &entry.source_file == current_source_file)
+            .or_else(|| entries.iter().find(|entry| entry.exported))
     }
 
     pub(crate) fn lookup_visible_receiver_method_by_name(

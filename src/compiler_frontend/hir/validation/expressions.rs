@@ -424,6 +424,10 @@ impl<'a> HirValidator<'a> {
             | HirExpressionKind::BuiltinCast { value: result, .. } => {
                 self.validate_expression(result, anchor)?;
             }
+
+            HirExpressionKind::ConstructDynamicTraitValue { value, .. } => {
+                self.validate_expression(value, anchor)?;
+            }
         }
 
         Ok(())

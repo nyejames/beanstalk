@@ -30,6 +30,7 @@ fn single_generic_parameter_list(
             id: TypeParameterId(0),
             name,
             location: SourceLocation::default(),
+            trait_bounds: Vec::new(),
         }],
     }
 }
@@ -456,7 +457,8 @@ fn generic_member_definition_queries_return_substituted_borrowed_views() {
 
     let box_parameter_name = table.intern("T");
     let box_parameters = single_generic_parameter_list(box_parameter_name);
-    let registered_box_parameters = env.register_generic_parameter_list(&box_parameters);
+    let registered_box_parameters =
+        env.register_generic_parameter_list(&box_parameters, &Default::default());
     let box_parameter_list = registered_box_parameters.list_id;
     let box_parameter_id = registered_box_parameters.canonical_by_local[&TypeParameterId(0)];
     let box_parameter_type_id = env
@@ -492,7 +494,8 @@ fn generic_member_definition_queries_return_substituted_borrowed_views() {
 
     let state_parameter_name = table.intern("U");
     let state_parameters = single_generic_parameter_list(state_parameter_name);
-    let registered_state_parameters = env.register_generic_parameter_list(&state_parameters);
+    let registered_state_parameters =
+        env.register_generic_parameter_list(&state_parameters, &Default::default());
     let state_parameter_list = registered_state_parameters.list_id;
     let state_parameter_id = registered_state_parameters.canonical_by_local[&TypeParameterId(0)];
     let state_parameter_type_id = env
@@ -576,14 +579,23 @@ fn receiver_key_queries_use_type_id_semantics() {
         "const records still need the receiver key so member lookup can report the const-call diagnostic"
     );
 
+    let external_type = ExternalTypeId(42);
+    let external_type_id = env.intern_external(external_type);
+    assert_eq!(
+        env.receiver_key_for_type_id(external_type_id),
+        Some(ReceiverKey::External(external_type)),
+        "external opaque types can host file-local extension receiver methods"
+    );
+
     let box_parameter_name = table.intern("T");
     let box_parameters = single_generic_parameter_list(box_parameter_name);
-    let registered_box_parameters = env.register_generic_parameter_list(&box_parameters);
+    let registered_box_parameters =
+        env.register_generic_parameter_list(&box_parameters, &Default::default());
     let box_parameter_list = registered_box_parameters.list_id;
     let box_path = InternedPath::from_single_str("Box", &mut table);
     let (box_nominal_id, _) = env.register_nominal_struct(StructTypeDefinition {
         id: NominalTypeId(0),
-        path: box_path,
+        path: box_path.clone(),
         fields: Box::new([]),
         generic_parameters: Some(box_parameter_list),
         const_record: false,
@@ -591,8 +603,8 @@ fn receiver_key_queries_use_type_id_semantics() {
     let box_of_int = env.intern_generic_instance(box_nominal_id, Box::new([env.builtins().int]));
     assert_eq!(
         env.receiver_key_for_type_id(box_of_int),
-        None,
-        "receiver methods on concrete generic instances remain deferred"
+        Some(ReceiverKey::Struct(box_path)),
+        "generic instances use their constructor key for receiver-method lookup"
     );
 }
 
@@ -605,7 +617,7 @@ fn updating_choice_variants_preserves_generic_parameter_list() {
 
     let parsed_parameters = single_generic_parameter_list(parameter_name);
     let parameter_list = env
-        .register_generic_parameter_list(&parsed_parameters)
+        .register_generic_parameter_list(&parsed_parameters, &Default::default())
         .list_id;
 
     let (_, choice_type_id) = env.register_nominal_choice(ChoiceTypeDefinition {
@@ -640,7 +652,8 @@ fn updating_choice_variants_refreshes_generic_instance_variant_cache() {
     let parameter_name = table.intern("T");
 
     let parsed_parameters = single_generic_parameter_list(parameter_name);
-    let registered_parameters = env.register_generic_parameter_list(&parsed_parameters);
+    let registered_parameters =
+        env.register_generic_parameter_list(&parsed_parameters, &Default::default());
     let parameter_list = registered_parameters.list_id;
     let parameter_id = registered_parameters.canonical_by_local[&TypeParameterId(0)];
     let parameter_type_id = env
@@ -715,7 +728,8 @@ fn updating_struct_fields_refreshes_cached_substituted_generic_instance_views() 
     let parameter_name = table.intern("T");
 
     let parsed_parameters = single_generic_parameter_list(parameter_name);
-    let registered_parameters = env.register_generic_parameter_list(&parsed_parameters);
+    let registered_parameters =
+        env.register_generic_parameter_list(&parsed_parameters, &Default::default());
     let parameter_list = registered_parameters.list_id;
     let parameter_id = registered_parameters.canonical_by_local[&TypeParameterId(0)];
     let parameter_type_id = env
@@ -778,7 +792,8 @@ fn remap_string_ids_updates_definitions_indexes_and_generic_instance_caches() {
     let box_path = InternedPath::from_single_str("Box", &mut local_table);
     let box_parameter_name = local_table.intern("T");
     let box_parsed_parameters = single_generic_parameter_list(box_parameter_name);
-    let box_registered_parameters = env.register_generic_parameter_list(&box_parsed_parameters);
+    let box_registered_parameters =
+        env.register_generic_parameter_list(&box_parsed_parameters, &Default::default());
     let box_parameter_list = box_registered_parameters.list_id;
     let box_parameter_id = box_registered_parameters.canonical_by_local[&TypeParameterId(0)];
     let box_parameter_type_id = env
@@ -802,7 +817,8 @@ fn remap_string_ids_updates_definitions_indexes_and_generic_instance_caches() {
     let state_path = InternedPath::from_single_str("State", &mut local_table);
     let state_parameter_name = local_table.intern("U");
     let state_parsed_parameters = single_generic_parameter_list(state_parameter_name);
-    let state_registered_parameters = env.register_generic_parameter_list(&state_parsed_parameters);
+    let state_registered_parameters =
+        env.register_generic_parameter_list(&state_parsed_parameters, &Default::default());
     let state_parameter_list = state_registered_parameters.list_id;
     let state_parameter_id = state_registered_parameters.canonical_by_local[&TypeParameterId(0)];
     let state_parameter_type_id = env

@@ -20,6 +20,8 @@ use crate::compiler_frontend::hir::regions::HirRegion;
 use crate::compiler_frontend::hir::structs::HirStruct;
 use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap};
+use crate::compiler_frontend::traits::environment::TraitEnvironment;
+use crate::compiler_frontend::traits::evidence::TraitEvidenceEnvironment;
 use rustc_hash::FxHashMap;
 
 // -------------------------
@@ -93,6 +95,18 @@ pub struct HirModule {
     ///      without changing HIR semantics today.
     pub const_facts: HirConstFacts,
 
+    /// Resolved trait definitions projected across the HIR/backend boundary.
+    ///
+    /// WHAT: carries stable trait and requirement IDs already chosen by frontend lowering.
+    /// WHY: backends lower explicit dynamic trait operations without re-solving trait metadata.
+    pub(crate) trait_environment: TraitEnvironment,
+
+    /// Validated conformance evidence projected across the HIR/backend boundary.
+    ///
+    /// WHAT: maps frontend-selected evidence IDs to implementation receiver methods.
+    /// WHY: JS dynamic method tables need this selected dispatch data, not source headers.
+    pub(crate) trait_evidence_environment: TraitEvidenceEnvironment,
+
     /// Warnings Collected along the way
     pub warnings: Vec<CompilerDiagnostic>,
 }
@@ -113,12 +127,16 @@ impl HirModule {
             regions: vec![],
             warnings: vec![],
             const_facts: HirConstFacts::default(),
+            trait_environment: TraitEnvironment::new(),
+            trait_evidence_environment: TraitEvidenceEnvironment::new(),
         }
     }
 
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         self.side_table.remap_string_ids(remap);
         self.const_facts.remap_string_ids(remap);
+        self.trait_environment.remap_string_ids(remap);
+        self.trait_evidence_environment.remap_string_ids(remap);
 
         for fragment in &mut self.doc_fragments {
             fragment.location.remap_string_ids(remap);

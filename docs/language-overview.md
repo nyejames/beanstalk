@@ -26,7 +26,7 @@ Design principles:
 | Blocks | `:` opens a scope; `;` closes it. Semicolons do not terminate statements. |
 | Collections/templates | `{}` are collections. `[]` are string templates only. |
 | Comments | `--` starts a single-line comment. |
-| Operators | Logical/equality forms use words such as `is` and `not`; `==` and logical-not `!` are not operators. |
+| Operators | Logical/equality forms use words such as `is` and `not`; symbolic equality and logical-not forms are not operators. |
 | Mutability | `~` marks mutable bindings/access. In declarations it appears before the type: `name ~Type = value`. |
 | References | Shared immutable access is the default for stack and heap values. |
 | Constants | `#` marks compile-time constants: `name #= value`. |
@@ -34,6 +34,7 @@ Design principles:
 | Parameters/fields | Function parameters and struct/choice fields use `|...|`. Defaults use `=`. |
 | Results/options | Error returns use `Error!`; options use `T?`. |
 | Generics | Declaration-site generics use `type`: `Box type A = | value A |`. Concrete instances use `of`: `Box of String`. |
+| Traits | Trait declarations and conformances use `must`; generic bounds use `is`; dynamic trait value annotations use the trait name directly. |
 | Renaming | `as` is used for type aliases, namespace import aliases, and grouped import aliases. |
 | Shadowing | No visible name may be redeclared while still in scope. |
 
@@ -530,7 +531,7 @@ Receiver method rules:
 - A receiver method is a top-level function whose first parameter is named `this`.
 - `this` is reserved and may appear only as the first receiver parameter and inside that method body.
 - There may be exactly one `this` parameter.
-- Supported receiver types are user-defined structs and built-in scalars: `Int`, `Float`, `Bool`, `String`.
+- Supported receiver types are user-defined structs, choices, aligned declaration-site generic nominal receivers, built-in scalars (`Int`, `Float`, `Bool`, `String`), imported source nominal types for file-local extensions, and exact external opaque types exposed by backend package metadata.
 - Collection built-ins are compiler-owned operations, not `this` methods.
 - `this T` is immutable; `this ~T` is mutable.
 - Mutable receiver calls require explicit mutable/exclusive receiver syntax: `~value.method(...)`.
@@ -552,6 +553,60 @@ Receiver method visibility:
 import @web/canvas { Canvas2d, fill_rect }
 import @web/canvas { fill_rect } -- invalid unless Canvas2d is visible
 ```
+
+## Traits
+
+Traits are explicit nominal method contracts.
+
+```beanstalk
+DISPLAY_TEXT must:
+    display |This| -> String
+;
+
+Label = |
+    text String,
+|
+
+display |this Label| -> String:
+    return this.text
+;
+
+Label must DISPLAY_TEXT
+```
+
+Rules:
+- Trait names use all-caps identifiers.
+- `TRAIT must:` declares a top-level trait contract.
+- Trait requirements are method signatures only; marker traits with no requirements are valid.
+- Requirement receivers use `This` or `~This`, not lowercase `this`.
+- `This` is trait-local syntax and is rejected outside trait declarations.
+- `Type must TRAIT` declares explicit conformance. It is bodyless and newline-terminated; do not add a semicolon.
+- A matching method without `Type must TRAIT` is not conformance.
+- Conformance validates exact receiver mutability, non-receiver parameter modes/types, return types, and return channels. Parameter names do not matter.
+- Canonical conformance evidence for same-file structs, choices, and generic type constructors is reusable wherever both the type and trait are visible.
+- File-local extension evidence for builtins, imported types, and external opaque types is usable only in the declaring file and cannot override visible canonical evidence.
+
+A trait name in a normal type annotation means a dynamic trait value.
+A trait name in a generic bound constrains a concrete generic parameter.
+These are different features.
+
+```beanstalk
+render_dynamic |value DISPLAY_TEXT| -> String:
+    return value.display()
+;
+
+render_static type Item is DISPLAY_TEXT |value Item| -> String:
+    return value.display()
+;
+```
+
+Dynamic trait values are opaque owning wrappers. Concrete values coerce to dynamic trait values only at explicit typed boundaries: annotated declarations, function arguments, returns, struct fields, choice payloads, and explicitly typed collection elements. Unannotated locals and collection literals do not infer trait values.
+
+All traits can be generic bounds. Only dynamic-safe traits can be value types. A trait is not dynamic-safe if a requirement returns `This`, takes `This` outside the receiver, or otherwise requires recovering the erased concrete identity.
+
+Dynamic trait runtime lowering is supported by the JavaScript backend. HTML-Wasm rejects reachable dynamic trait construction and dispatch with structured unsupported-backend diagnostics; unreachable dynamic-only helper functions are ignored by that reachability validation. Static trait declarations, conformances, and generic bounds remain frontend semantics and are backend-independent.
+
+Deferred trait surfaces include default methods, associated types/constants, inheritance, generic traits, generic trait methods, specialized generic instance conformance, dynamic trait aliases, file-local evidence-backed generic bound dispatch, automatic primitive conformances, `DISPLAYABLE` output coercion, and operator-to-trait integration.
 
 ## Choices
 
@@ -631,7 +686,21 @@ Inference does not use later mutation, later use, whole-program analysis, HIR, b
 
 Unconstrained generic code can pass values through, return them, store them in generic structs/choices, forward them to other generic functions when immediate call evidence solves the parameters, and use generic parameters in local annotations.
 
-Operations that require behavior from the unknown type are rejected until traits or another constraint model exists. This includes arithmetic, equality/comparison, field access, receiver calls, template interpolation requiring string-like behavior, and external/IO behavior requiring a concrete type.
+Declaration-site trait bounds use `is`:
+
+```beanstalk
+render type Item is DISPLAY_TEXT |item Item| -> String:
+    return item.display()
+;
+
+render_pair type A is DISPLAY_TEXT, B is DISPLAY_TEXT |left A, right B| -> String:
+    return left.display() + right.display()
+;
+```
+
+Use `and` for multiple bounds on one parameter. Commas still separate generic parameters. `where` syntax remains rejected. Concrete generic calls and generic struct/choice instantiations require visible reusable evidence for each concrete type argument. Dynamic trait values do not satisfy static generic bounds.
+
+Operations that require behavior from an unconstrained generic type are rejected. Trait bounds currently enable unique bound-provided receiver calls. Arithmetic, equality/comparison, field access, template interpolation requiring string-like behavior, and external/IO behavior still require concrete type support or a future dedicated trait integration.
 
 Concrete generic aliases are supported:
 
@@ -656,21 +725,12 @@ Rejected or deferred in the current Alpha surface:
 - inline generic sugar such as `|value type A|`
 - generic function values and higher-order polymorphism
 - type values, type-returning functions, type-level `#if`, and compile-time type inspection
-- generic receiver methods and receiver methods on concrete generic instances
+- receiver methods on concrete generic instances
+- `where` clauses and file-local evidence-backed generic bound dispatch
 - generic external package functions and generic external package types
 - recursive generic types
 - nested `of` applications except through concrete alias workarounds
 - parameterized generic aliases and partial type application
-
-Future generic constraints wait for traits or interfaces. The intended direction is compact declaration-site syntax:
-
-```beanstalk
-max type A is Ordered |left A, right A| -> A:
-    return left
-;
-```
-
-`where` syntax and a types-as-values model are not part of that direction.
 
 ## Type Aliases
 

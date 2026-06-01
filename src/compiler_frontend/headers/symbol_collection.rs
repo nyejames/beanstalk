@@ -129,7 +129,7 @@ fn is_receiver_method_candidate(
 ///
 /// WHAT: records `Counter` from `tick |this Counter|` before semantic type resolution.
 /// WHY: header import preparation can then auto-import only methods attached to an imported
-///      struct from the same surface instead of every receiver method in that file.
+///      nominal type from the same surface instead of every receiver method in that file.
 fn receiver_method_receiver_name(
     signature: &FunctionSignatureSyntax,
     string_table: &mut StringTable,
@@ -259,6 +259,23 @@ fn register_header_symbol(
         }
 
         HeaderKind::ConstTemplate { .. } => {}
+
+        HeaderKind::Trait { .. } => {
+            register_declared_symbol(
+                module_symbols,
+                &header.tokens.src_path,
+                &header.source_file,
+                Some(true),
+            );
+            module_symbols
+                .trait_paths
+                .insert(header.tokens.src_path.clone());
+        }
+
+        HeaderKind::TraitConformance { .. } => {
+            // Conformance declarations are compile-time metadata. They do not introduce a new
+            // importable symbol; AST validates and indexes evidence later.
+        }
     }
 }
 

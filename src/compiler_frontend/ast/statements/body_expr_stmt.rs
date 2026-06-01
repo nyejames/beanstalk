@@ -39,6 +39,7 @@ fn is_expression_statement(expression: &Expression) -> bool {
             matches!(
                 node.kind,
                 NodeKind::MethodCall { .. }
+                    | NodeKind::DynamicTraitMethodCall { .. }
                     | NodeKind::CollectionBuiltinCall { .. }
                     | NodeKind::FunctionCall { .. }
                     | NodeKind::HostFunctionCall { .. }

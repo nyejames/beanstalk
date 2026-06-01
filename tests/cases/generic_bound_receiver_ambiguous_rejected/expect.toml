@@ -1,0 +1,8 @@
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+diagnostic_codes = ["BST-RULE-0047"]
+message_contains = [
+    "display",
+    "more than one generic bound",
+]

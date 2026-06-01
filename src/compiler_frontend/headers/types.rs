@@ -23,6 +23,7 @@ use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::symbols::identity::FileId;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation};
+use crate::compiler_frontend::traits::syntax::{TraitConformanceSyntax, TraitDeclarationSyntax};
 use std::collections::HashSet;
 use std::fmt::Display;
 
@@ -113,6 +114,25 @@ pub enum HeaderKind {
     /// non-trivial top-level executable code are rejected as a rule error.
     /// Start functions are build-system-only; they are not importable or callable from modules.
     StartFunction,
+
+    /// Trait declaration: `TRAIT must: requirements ;`
+    ///
+    /// WHAT: parse-only shell for a trait declaration discovered at the header stage.
+    /// WHY: trait declarations are top-level declarations that participate in normal
+    ///      module symbol collection; semantic resolution happens during AST environment
+    ///      construction.
+    Trait {
+        declaration: TraitDeclarationSyntax,
+    },
+
+    /// Trait conformance declaration: `Type must TRAIT, TRAIT`
+    ///
+    /// WHAT: parse-only shell for an explicit conformance declaration.
+    /// WHY: conformance declarations are bodyless top-level declarations discovered at
+    ///      the header stage; evidence validation happens during AST environment construction.
+    TraitConformance {
+        conformance: TraitConformanceSyntax,
+    },
 }
 
 #[derive(Clone, Debug)]
@@ -252,6 +272,14 @@ impl HeaderKind {
             }
 
             HeaderKind::StartFunction => {}
+
+            HeaderKind::Trait { declaration } => {
+                declaration.remap_string_ids(remap);
+            }
+
+            HeaderKind::TraitConformance { conformance } => {
+                conformance.remap_string_ids(remap);
+            }
         }
     }
 }

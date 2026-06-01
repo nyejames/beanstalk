@@ -11,11 +11,14 @@
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorType, SourceLocation};
 use crate::compiler_frontend::external_packages::{CallTarget, ExternalFunctionId};
 use crate::compiler_frontend::hir::blocks::HirBlock;
+use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind};
 use crate::compiler_frontend::hir::functions::HirFunction;
+use crate::compiler_frontend::hir::hir_side_table::HirLocation;
 use crate::compiler_frontend::hir::ids::{BlockId, FunctionId, HirNodeId};
 use crate::compiler_frontend::hir::module::HirModule;
-use crate::compiler_frontend::hir::statements::HirStatementKind;
+use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
 use crate::compiler_frontend::hir::terminators::HirTerminator;
+use crate::compiler_frontend::traits::ids::{TraitEvidenceId, TraitId, TraitRequirementId};
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::VecDeque;
 
@@ -29,6 +32,7 @@ pub(crate) struct HirReachability {
     pub(crate) reachable_blocks: FxHashSet<BlockId>,
     pub(crate) reachable_external_functions: FxHashSet<ExternalFunctionId>,
     pub(crate) reachable_external_calls: Vec<ReachableExternalCall>,
+    pub(crate) reachable_dynamic_trait_operations: Vec<ReachableDynamicTraitOperation>,
 }
 
 /// A reachable external call at the HIR statement that invokes it.
@@ -42,12 +46,35 @@ pub(crate) struct ReachableExternalCall {
     pub(crate) location: SourceLocation,
 }
 
+/// A dynamic trait runtime operation reachable from the selected HIR roots.
+///
+/// WHY: JS lowering and unsupported-backend validation both need to know which dynamic trait
+/// wrappers or dispatches can execute, but neither should rediscover that by scanning source.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ReachableDynamicTraitOperation {
+    pub(crate) kind: ReachableDynamicTraitOperationKind,
+    pub(crate) location: SourceLocation,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum ReachableDynamicTraitOperationKind {
+    Construct {
+        trait_id: TraitId,
+        evidence_id: TraitEvidenceId,
+    },
+    Dispatch {
+        trait_id: TraitId,
+        requirement_id: TraitRequirementId,
+    },
+}
+
 pub(crate) struct HirReachabilityInput<'a> {
     pub(crate) hir: &'a HirModule,
     pub(crate) root_functions: Vec<FunctionId>,
 }
 
 struct HirReachabilityContext<'a> {
+    hir: &'a HirModule,
     function_by_id: FxHashMap<FunctionId, &'a HirFunction>,
     block_by_id: FxHashMap<BlockId, &'a HirBlock>,
     function_worklist: VecDeque<FunctionId>,
@@ -82,6 +109,7 @@ impl<'a> HirReachabilityContext<'a> {
         let block_by_id = build_block_map(hir)?;
 
         Ok(Self {
+            hir,
             function_by_id,
             block_by_id,
             function_worklist: VecDeque::new(),
@@ -131,6 +159,7 @@ impl<'a> HirReachabilityContext<'a> {
         };
 
         self.visit_block_statements(block);
+        self.collect_dynamic_trait_operations_from_terminator(block);
         self.enqueue_terminator_successors(&block.terminator)
     }
 
@@ -139,6 +168,8 @@ impl<'a> HirReachabilityContext<'a> {
         // carry call targets. Keep the reachability boundary here unless HIR gains a call
         // expression variant in a later design.
         for statement in &block.statements {
+            self.collect_dynamic_trait_operations_from_statement(statement);
+
             let HirStatementKind::Call { target, .. } = &statement.kind else {
                 continue;
             };
@@ -158,6 +189,192 @@ impl<'a> HirReachabilityContext<'a> {
                         });
                 }
             }
+        }
+    }
+
+    fn collect_dynamic_trait_operations_from_statement(&mut self, statement: &HirStatement) {
+        match &statement.kind {
+            HirStatementKind::Assign { value, .. } | HirStatementKind::Expr(value) => {
+                self.collect_dynamic_trait_operations_from_expression(value, &statement.location);
+            }
+
+            HirStatementKind::Call { args, .. } => {
+                for arg in args {
+                    self.collect_dynamic_trait_operations_from_expression(arg, &statement.location);
+                }
+            }
+
+            HirStatementKind::CallDynamicTraitMethod {
+                receiver,
+                trait_id,
+                requirement_id,
+                args,
+                ..
+            } => {
+                self.reachability.reachable_dynamic_trait_operations.push(
+                    ReachableDynamicTraitOperation {
+                        kind: ReachableDynamicTraitOperationKind::Dispatch {
+                            trait_id: *trait_id,
+                            requirement_id: *requirement_id,
+                        },
+                        location: statement.location.clone(),
+                    },
+                );
+
+                self.collect_dynamic_trait_operations_from_expression(
+                    receiver,
+                    &statement.location,
+                );
+                for arg in args {
+                    self.collect_dynamic_trait_operations_from_expression(
+                        &arg.value,
+                        &statement.location,
+                    );
+                }
+            }
+
+            HirStatementKind::PushRuntimeFragment { value, .. } => {
+                self.collect_dynamic_trait_operations_from_expression(value, &statement.location);
+            }
+
+            HirStatementKind::Drop(_) => {}
+        }
+    }
+
+    fn collect_dynamic_trait_operations_from_terminator(&mut self, block: &HirBlock) {
+        let fallback_location = self
+            .hir
+            .side_table
+            .hir_source_location_for_hir(HirLocation::Terminator(block.id))
+            .cloned()
+            .unwrap_or_default();
+
+        match &block.terminator {
+            HirTerminator::If { condition, .. } => {
+                self.collect_dynamic_trait_operations_from_expression(
+                    condition,
+                    &fallback_location,
+                );
+            }
+
+            HirTerminator::FallibleBranch { result, .. } => {
+                self.collect_dynamic_trait_operations_from_expression(result, &fallback_location);
+            }
+
+            HirTerminator::Match { scrutinee, .. } => {
+                self.collect_dynamic_trait_operations_from_expression(
+                    scrutinee,
+                    &fallback_location,
+                );
+            }
+
+            HirTerminator::Return(value)
+            | HirTerminator::ReturnSuccess(value)
+            | HirTerminator::ReturnError(value) => {
+                self.collect_dynamic_trait_operations_from_expression(value, &fallback_location);
+            }
+
+            HirTerminator::Jump { .. }
+            | HirTerminator::Break { .. }
+            | HirTerminator::Continue { .. }
+            | HirTerminator::RuntimeFailure { .. }
+            | HirTerminator::AssertFailure { .. }
+            | HirTerminator::Uninitialized => {}
+        }
+    }
+
+    fn collect_dynamic_trait_operations_from_expression(
+        &mut self,
+        expression: &HirExpression,
+        fallback_location: &SourceLocation,
+    ) {
+        let expression_location = self
+            .hir
+            .side_table
+            .value_source_location(expression.id)
+            .unwrap_or(fallback_location)
+            .clone();
+
+        match &expression.kind {
+            HirExpressionKind::ConstructDynamicTraitValue {
+                value,
+                trait_id,
+                evidence_id,
+            } => {
+                self.reachability.reachable_dynamic_trait_operations.push(
+                    ReachableDynamicTraitOperation {
+                        kind: ReachableDynamicTraitOperationKind::Construct {
+                            trait_id: *trait_id,
+                            evidence_id: *evidence_id,
+                        },
+                        location: expression_location.clone(),
+                    },
+                );
+                self.collect_dynamic_trait_operations_from_expression(value, &expression_location);
+            }
+
+            HirExpressionKind::BinOp { left, right, .. } => {
+                self.collect_dynamic_trait_operations_from_expression(left, &expression_location);
+                self.collect_dynamic_trait_operations_from_expression(right, &expression_location);
+            }
+
+            HirExpressionKind::UnaryOp { operand, .. }
+            | HirExpressionKind::FallibleUnwrapSuccess { result: operand }
+            | HirExpressionKind::FallibleUnwrapError { result: operand }
+            | HirExpressionKind::BuiltinCast { value: operand, .. }
+            | HirExpressionKind::VariantPayloadGet {
+                source: operand, ..
+            } => {
+                self.collect_dynamic_trait_operations_from_expression(
+                    operand,
+                    &expression_location,
+                );
+            }
+
+            HirExpressionKind::StructConstruct { fields, .. } => {
+                for (_, value) in fields {
+                    self.collect_dynamic_trait_operations_from_expression(
+                        value,
+                        &expression_location,
+                    );
+                }
+            }
+
+            HirExpressionKind::Collection(elements)
+            | HirExpressionKind::TupleConstruct { elements } => {
+                for element in elements {
+                    self.collect_dynamic_trait_operations_from_expression(
+                        element,
+                        &expression_location,
+                    );
+                }
+            }
+
+            HirExpressionKind::Range { start, end } => {
+                self.collect_dynamic_trait_operations_from_expression(start, &expression_location);
+                self.collect_dynamic_trait_operations_from_expression(end, &expression_location);
+            }
+
+            HirExpressionKind::TupleGet { tuple, .. } => {
+                self.collect_dynamic_trait_operations_from_expression(tuple, &expression_location);
+            }
+
+            HirExpressionKind::VariantConstruct { fields, .. } => {
+                for field in fields {
+                    self.collect_dynamic_trait_operations_from_expression(
+                        &field.value,
+                        &expression_location,
+                    );
+                }
+            }
+
+            HirExpressionKind::Int(_)
+            | HirExpressionKind::Float(_)
+            | HirExpressionKind::Bool(_)
+            | HirExpressionKind::Char(_)
+            | HirExpressionKind::StringLiteral(_)
+            | HirExpressionKind::Load(_)
+            | HirExpressionKind::Copy(_) => {}
         }
     }
 

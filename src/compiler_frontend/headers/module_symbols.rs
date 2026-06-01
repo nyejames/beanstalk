@@ -109,6 +109,7 @@ pub(crate) struct ModuleSymbols {
     pub(crate) declared_names_by_file: FxHashMap<InternedPath, FxHashSet<StringId>>,
     pub(crate) type_alias_paths: FxHashSet<InternedPath>,
     pub(crate) nominal_type_paths: FxHashSet<InternedPath>,
+    pub(crate) trait_paths: FxHashSet<InternedPath>,
     pub(crate) generic_declarations_by_path: FxHashMap<InternedPath, GenericDeclarationMetadata>,
 
     // Builtin data merged during header parsing.
@@ -169,6 +170,7 @@ impl ModuleSymbols {
             receiver_method_receiver_names: FxHashMap::default(),
             type_alias_paths: FxHashSet::default(),
             nominal_type_paths: FxHashSet::default(),
+            trait_paths: FxHashSet::default(),
             generic_declarations_by_path: FxHashMap::default(),
             facade_exports: FxHashMap::default(),
             source_library_facade_files: FxHashMap::default(),
@@ -290,6 +292,7 @@ fn declaration_from_header(header: &Header, string_table: &mut StringTable) -> O
         }
         HeaderKind::TypeAlias { .. } => None,
         HeaderKind::ConstTemplate { .. } => None,
+        HeaderKind::Trait { .. } | HeaderKind::TraitConformance { .. } => None,
     }
 }
 

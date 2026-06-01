@@ -11,7 +11,9 @@ use crate::compiler_frontend::hir::statements::HirStatement;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::return_hir_transformation_error;
 
-use super::super::{ExternalFallibleCallLoweringInput, LoweredExpression};
+use super::super::{
+    DynamicTraitMethodCallLoweringInput, ExternalFallibleCallLoweringInput, LoweredExpression,
+};
 use super::RuntimeRpnTree;
 
 impl<'a> HirBuilder<'a> {
@@ -293,6 +295,26 @@ impl<'a> HirBuilder<'a> {
                 args,
                 result_type_ids,
                 location,
+            ),
+            NodeKind::DynamicTraitMethodCall {
+                receiver,
+                trait_id,
+                requirement_id,
+                receiver_requires_mutable,
+                args,
+                result_type_ids,
+                location,
+                ..
+            } => self.lower_dynamic_trait_method_call_expression(
+                DynamicTraitMethodCallLoweringInput {
+                    receiver,
+                    trait_id: *trait_id,
+                    requirement_id: *requirement_id,
+                    receiver_requires_mutable: *receiver_requires_mutable,
+                    args,
+                    result_type_ids,
+                    location,
+                },
             ),
             NodeKind::CollectionBuiltinCall {
                 receiver,

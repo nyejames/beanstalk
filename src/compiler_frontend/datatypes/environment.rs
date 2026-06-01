@@ -15,6 +15,7 @@ use crate::compiler_frontend::instrumentation::{
 };
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap};
+use crate::compiler_frontend::traits::ids::TraitId;
 
 use rustc_hash::{FxHashMap, FxHashSet};
 
@@ -68,6 +69,7 @@ pub struct TypeEnvironment {
     function_ids: FxHashMap<FunctionTypeKey, TypeId>,
     external_ids: FxHashMap<ExternalTypeId, TypeId>,
     generic_instance_ids: FxHashMap<GenericInstanceKey, TypeId>,
+    dynamic_trait_ids: FxHashMap<TraitId, TypeId>,
 
     // Nominal definition storage.
     // `NominalTypeId.0` indexes into `nominal_registry`.
@@ -125,10 +127,11 @@ pub struct GenericParameterList {
 }
 
 /// A single generic parameter descriptor.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub struct GenericParameter {
     pub id: GenericParameterId,
     pub name: StringId,
+    pub(crate) trait_bounds: Vec<TraitId>,
 }
 
 /// Result of registering a parsed generic parameter list.
@@ -221,6 +224,7 @@ impl TypeEnvironment {
             function_ids: FxHashMap::default(),
             external_ids: FxHashMap::default(),
             generic_instance_ids: FxHashMap::default(),
+            dynamic_trait_ids: FxHashMap::default(),
             nominal_registry: Vec::new(),
             struct_definitions: Vec::new(),
             choice_definitions: Vec::new(),
@@ -324,10 +328,34 @@ impl TypeEnvironment {
         self.generic_parameter_lists.get(id.0 as usize)
     }
 
+    /// Returns the trait bounds recorded on a canonical generic parameter.
+    ///
+    /// WHAT: looks up the parameter by semantic ID across the environment-owned generic lists.
+    /// WHY: executable body parsing can see only a receiver `TypeId` or concrete substitution;
+    ///      bound-method dispatch still needs the declaration-site bounds without rebuilding
+    ///      generic metadata in AST lookup code.
+    pub(crate) fn trait_bounds_for_generic_parameter(
+        &self,
+        parameter_id: GenericParameterId,
+    ) -> Option<&[TraitId]> {
+        for list in &self.generic_parameter_lists {
+            if let Some(parameter) = list
+                .parameters
+                .iter()
+                .find(|parameter| parameter.id == parameter_id)
+            {
+                return Some(parameter.trait_bounds.as_slice());
+            }
+        }
+
+        None
+    }
+
     /// Registers a parsed generic parameter list and returns its canonical semantic IDs.
-    pub fn register_generic_parameter_list(
+    pub(crate) fn register_generic_parameter_list(
         &mut self,
         parsed_parameters: &ParsedGenericParameterList,
+        resolved_bounds_by_local: &FxHashMap<TypeParameterId, Vec<TraitId>>,
     ) -> RegisteredGenericParameterList {
         let id = GenericParameterListId(self.next_generic_parameter_list_id);
         self.next_generic_parameter_list_id += 1;
@@ -344,6 +372,10 @@ impl TypeEnvironment {
             parameters.push(GenericParameter {
                 id: canonical_id,
                 name: parameter.name,
+                trait_bounds: resolved_bounds_by_local
+                    .get(&parameter.id)
+                    .cloned()
+                    .unwrap_or_default(),
             });
         }
 
@@ -354,6 +386,50 @@ impl TypeEnvironment {
             list_id: id,
             canonical_by_local,
         }
+    }
+
+    /// Updates canonical bounds after trait definitions become available.
+    ///
+    /// WHAT: nominal structs/choices are registered before trait declarations are resolved so
+    /// trait requirement signatures can refer to those nominal types. Their generic lists are
+    /// patched once the trait environment has stable `TraitId`s.
+    /// WHY: field/variant type resolution needs canonical generic parameter IDs early, while
+    /// later instantiation checks need the declaration-site bounds on the same canonical list.
+    pub(crate) fn update_generic_parameter_bounds(
+        &mut self,
+        list_id: GenericParameterListId,
+        resolved_bounds_by_local: &FxHashMap<TypeParameterId, Vec<TraitId>>,
+        canonical_by_local: &FxHashMap<TypeParameterId, GenericParameterId>,
+    ) {
+        let Some(list) = self.generic_parameter_lists.get_mut(list_id.0 as usize) else {
+            return;
+        };
+
+        for (local_id, canonical_id) in canonical_by_local {
+            let Some(parameter) = list
+                .parameters
+                .iter_mut()
+                .find(|parameter| parameter.id == *canonical_id)
+            else {
+                continue;
+            };
+
+            parameter.trait_bounds = resolved_bounds_by_local
+                .get(local_id)
+                .cloned()
+                .unwrap_or_default();
+        }
+    }
+
+    /// Registers one compiler-owned placeholder type parameter outside a parsed generic list.
+    ///
+    /// WHAT: creates a canonical `TypeId` for internal type variables such as trait `This`.
+    /// WHY: trait requirement signatures need semantic `TypeId`s before any concrete implementor
+    /// exists. Keeping the placeholder inside `TypeEnvironment` preserves the normal TypeId-first
+    /// contract without representing trait declarations themselves as datatypes.
+    pub(crate) fn register_synthetic_generic_parameter(&mut self, name: StringId) -> TypeId {
+        let canonical_id = self.allocate_generic_parameter_id();
+        self.intern_generic_parameter(canonical_id, name)
     }
 
     /// Returns the generic parameter list ID associated with a type, if any.
@@ -491,7 +567,8 @@ impl TypeEnvironment {
             | TypeDefinition::Struct(..)
             | TypeDefinition::Choice(..)
             | TypeDefinition::External(..)
-            | TypeDefinition::GenericParameter(..) => None,
+            | TypeDefinition::GenericParameter(..)
+            | TypeDefinition::DynamicTrait(..) => None,
         }
     }
 
@@ -738,6 +815,25 @@ impl TypeEnvironment {
         id
     }
 
+    /// Interns a dynamic trait value type.
+    ///
+    /// WHAT: creates the canonical `TypeId` for a normal type annotation whose name resolves to a
+    /// dynamic-safe trait.
+    /// WHY: trait declarations and evidence remain in `TraitEnvironment`; only the erased runtime
+    /// value identity belongs in `TypeEnvironment`.
+    pub(crate) fn intern_dynamic_trait(&mut self, trait_id: TraitId, name: StringId) -> TypeId {
+        if let Some(&existing) = self.dynamic_trait_ids.get(&trait_id) {
+            return existing;
+        }
+
+        let id = self.insert_definition(TypeDefinition::DynamicTrait(
+            super::definitions::DynamicTraitTypeDefinition { trait_id, name },
+        ));
+
+        self.dynamic_trait_ids.insert(trait_id, id);
+        id
+    }
+
     /// Interns a generic nominal instance (e.g. `Box of Int`).
     pub fn intern_generic_instance(
         &mut self,
@@ -901,6 +997,7 @@ impl TypeEnvironment {
             TypeDefinition::External(..) => TypeKind::External,
             TypeDefinition::GenericParameter(..) => TypeKind::GenericParameter,
             TypeDefinition::GenericInstance(..) => TypeKind::GenericInstance,
+            TypeDefinition::DynamicTrait(..) => TypeKind::DynamicTrait,
         })
     }
 
@@ -1078,6 +1175,7 @@ impl TypeEnvironment {
             | Some(TypeDefinition::Function(..))
             | Some(TypeDefinition::External(..))
             | Some(TypeDefinition::GenericParameter(..))
+            | Some(TypeDefinition::DynamicTrait(..))
             | None => false,
         }
     }
@@ -1279,9 +1377,9 @@ impl TypeEnvironment {
     /// WHAT: derives receiver keys from `TypeId` and the environment-owned type
     /// definition instead of parse-only `DataType` payloads.
     /// WHY: AST member lookup should use canonical semantic type identity on the
-    /// hot path. Generic receiver methods remain intentionally deferred, so
-    /// generic nominal instances only produce a receiver key when their base is a
-    /// non-generic struct.
+    /// hot path. Generic nominal instances resolve to their base constructor key
+    /// so the receiver catalog can store one declaration-site method for every
+    /// concrete instance of that constructor.
     pub fn receiver_key_for_type_id(&self, id: TypeId) -> Option<ReceiverKey> {
         match self.get(id)? {
             TypeDefinition::Builtin(builtin) => match builtin.key {
@@ -1305,24 +1403,31 @@ impl TypeEnvironment {
                 Some(ReceiverKey::Struct(definition.path.clone()))
             }
 
-            TypeDefinition::GenericInstance(instance) => {
-                let base_type_id = self.type_id_for_nominal_id(instance.base)?;
-                let TypeDefinition::Struct(base_definition) = self.get(base_type_id)? else {
-                    return None;
-                };
-
-                if base_definition.generic_parameters.is_some() {
-                    return None;
-                }
-
-                Some(ReceiverKey::Struct(base_definition.path.clone()))
+            TypeDefinition::Choice(definition) => {
+                Some(ReceiverKey::Choice(definition.path.clone()))
             }
 
-            TypeDefinition::Choice(..)
-            | TypeDefinition::Constructed(..)
+            TypeDefinition::GenericInstance(instance) => {
+                let base_type_id = self.type_id_for_nominal_id(instance.base)?;
+                match self.get(base_type_id)? {
+                    TypeDefinition::Struct(base_definition) => {
+                        Some(ReceiverKey::Struct(base_definition.path.clone()))
+                    }
+
+                    TypeDefinition::Choice(base_definition) => {
+                        Some(ReceiverKey::Choice(base_definition.path.clone()))
+                    }
+
+                    _ => None,
+                }
+            }
+
+            TypeDefinition::External(definition) => Some(ReceiverKey::External(definition.type_id)),
+
+            TypeDefinition::Constructed(..)
             | TypeDefinition::Function(..)
-            | TypeDefinition::External(..)
-            | TypeDefinition::GenericParameter(..) => None,
+            | TypeDefinition::GenericParameter(..)
+            | TypeDefinition::DynamicTrait(..) => None,
         }
     }
 
@@ -1396,7 +1501,9 @@ impl TypeEnvironment {
                 }))
             }
             TypeDefinition::External(ext) => Some(TypeIdentityKey::External(ext.type_id)),
-            TypeDefinition::Function(_) | TypeDefinition::GenericParameter(_) => None,
+            TypeDefinition::Function(_)
+            | TypeDefinition::GenericParameter(_)
+            | TypeDefinition::DynamicTrait(_) => None,
         }
     }
 
@@ -1533,6 +1640,9 @@ impl TypeEnvironment {
             TypeDefinition::GenericParameter(definition) => {
                 definition.name = remap.get(definition.name);
             }
+            TypeDefinition::DynamicTrait(definition) => {
+                definition.name = remap.get(definition.name);
+            }
             TypeDefinition::Builtin(..)
             | TypeDefinition::Constructed(..)
             | TypeDefinition::External(..)
@@ -1574,6 +1684,12 @@ impl TypeEnvironment {
     /// Returns the canonical `TypeId` for a builtin key, if seeded.
     pub fn type_id_for_builtin(&self, key: BuiltinTypeKey) -> Option<TypeId> {
         self.builtin_ids.get(&key).copied()
+    }
+
+    /// Returns the canonical `TypeId` for an opaque external type, if it has already
+    /// been interned by normal signature or type resolution.
+    pub fn type_id_for_external(&self, external_type_id: ExternalTypeId) -> Option<TypeId> {
+        self.external_ids.get(&external_type_id).copied()
     }
 
     /// Returns the canonical `TypeId` for a constructed type key, if registered.

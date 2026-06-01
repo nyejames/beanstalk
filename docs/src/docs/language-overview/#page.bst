@@ -33,8 +33,8 @@ page_head #= theme_head
     - Square brackets are NOT used for arrays, curly braces are used instead
     Square brackets are only used for string templates. Items in collections are accessed via methods.
 
-    - Equality and other logical operators use keywords like "is" and "not" 
-    (you can't use [codesnippet:==] or [codesnippet:!] for example).
+    - Equality and other logical operators use keywords like "is" and "not"; symbolic equality
+    and logical-not forms are not part of Beanstalk syntax.
 
     - tilde symbol [codesnippet: ~] to indicate mutability (mutability must be explicit). 
     This comes before the type if there is an explicit type declaration.

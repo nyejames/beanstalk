@@ -28,6 +28,8 @@ use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
+use crate::compiler_frontend::traits::environment::TraitEnvironment;
+use crate::compiler_frontend::traits::evidence::TraitEvidenceEnvironment;
 use rustc_hash::FxHashMap;
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -76,6 +78,18 @@ pub(crate) struct AstModuleLookups {
 
     // Receiver method catalog built from visible declarations and imports.
     pub(crate) receiver_methods: Rc<ReceiverMethodCatalog>,
+
+    // Resolved trait metadata.
+    // WHY: evidence validation, bounds, dynamic coercion, and dispatch need stable trait IDs and
+    // requirement TypeIds without querying raw headers.
+    #[allow(dead_code)]
+    pub(crate) trait_environment: Rc<TraitEnvironment>,
+
+    // Validated canonical conformance evidence.
+    // WHY: trait-bound and dispatch paths need indexed evidence instead of scanning conformance
+    // headers or receiver methods repeatedly.
+    #[allow(dead_code)]
+    pub(crate) trait_evidence_environment: Rc<TraitEvidenceEnvironment>,
 
     // Environment-wide immutable services copied from AstPhaseContext so ScopeShared can
     // reference everything through one Rc<AstModuleEnvironment>.

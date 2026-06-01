@@ -5,7 +5,7 @@
 //! WHY: these two syntactic forms previously duplicated structural validation
 //! (newline rejection, `else then` rejection, same-line checks, and coercion).
 
-use super::result_type::{coerce_branch_expression_to_result, infer_inline_result_type};
+use super::result_type::{infer_inline_result_type, receiver_type_mismatch_context};
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::expressions::parse_expression::{
@@ -24,6 +24,7 @@ use crate::compiler_frontend::compiler_messages::{
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
+use crate::compiler_frontend::type_coercion::contextual::coerce_expression_to_explicit_type_boundary;
 use crate::compiler_frontend::type_coercion::parse_context::ExpectedType;
 use crate::compiler_frontend::value_mode::ValueMode;
 
@@ -176,17 +177,34 @@ pub(super) fn parse_inline_then_else(
         ));
     }
 
-    let result_type_id = infer_inline_result_type(
-        then_expr.type_id,
-        else_expr.type_id,
-        expected_type_id,
-        type_interner,
-        &then_expr.location,
-        receiver_kind,
-    )?;
+    let result_type_id = if let Some(expected_type_id) = expected_type_id {
+        expected_type_id
+    } else {
+        infer_inline_result_type(
+            then_expr.type_id,
+            else_expr.type_id,
+            None,
+            type_interner,
+            &then_expr.location,
+            receiver_kind,
+        )?
+    };
 
-    let then_expr = coerce_branch_expression_to_result(then_expr, result_type_id, type_interner);
-    let else_expr = coerce_branch_expression_to_result(else_expr, result_type_id, type_interner);
+    let mismatch_context = receiver_type_mismatch_context(receiver_kind);
+    let then_expr = coerce_expression_to_explicit_type_boundary(
+        then_expr,
+        result_type_id,
+        type_interner.environment(),
+        then_context,
+        mismatch_context,
+    )?;
+    let else_expr = coerce_expression_to_explicit_type_boundary(
+        else_expr,
+        result_type_id,
+        type_interner.environment(),
+        else_context,
+        mismatch_context,
+    )?;
 
     Ok(InlineThenElseOutput {
         then_values: vec![then_expr],

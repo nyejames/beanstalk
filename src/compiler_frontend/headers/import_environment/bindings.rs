@@ -79,6 +79,13 @@ pub(crate) struct FileVisibility {
     /// Type aliases: local visible name → canonical type alias path.
     pub(crate) visible_type_alias_names: FxHashMap<StringId, InternedPath>,
 
+    /// Trait declarations: local visible name → canonical trait path.
+    ///
+    /// WHY: traits are compile-time contracts, not value declarations or datatypes. Keeping them
+    /// in their own map lets conformances resolve imported trait names without making `TRAIT`
+    /// usable as a normal type annotation before dynamic trait values are implemented.
+    pub(crate) visible_trait_names: FxHashMap<StringId, InternedPath>,
+
     /// External package functions/types/constants visible from this file.
     /// Populated by explicit virtual-package imports and prelude symbols.
     pub(crate) visible_external_symbols: FxHashMap<StringId, ExternalSymbolId>,

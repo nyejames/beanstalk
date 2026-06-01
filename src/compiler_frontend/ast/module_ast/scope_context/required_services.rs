@@ -6,6 +6,8 @@
 //! infrastructure failure. These are not user-facing diagnostics.
 
 use super::*;
+use crate::compiler_frontend::traits::definitions::TraitVisibility;
+use crate::compiler_frontend::traits::ids::TraitId;
 
 impl ScopeContext {
     // --------------------------
@@ -38,6 +40,39 @@ impl ScopeContext {
             );
         };
         Ok(source_scope)
+    }
+
+    pub(crate) fn trait_environment(&self) -> &TraitEnvironment {
+        if let Some(trait_environment) = &self.shared.trait_environment_override {
+            return trait_environment.as_ref();
+        }
+
+        self.shared.lookups.trait_environment.as_ref()
+    }
+
+    pub(crate) fn trait_evidence_environment(&self) -> &TraitEvidenceEnvironment {
+        self.shared.lookups.trait_evidence_environment.as_ref()
+    }
+
+    pub(crate) fn trait_id_is_visible(&self, trait_id: TraitId) -> bool {
+        let Some(trait_definition) = self.trait_environment().get(trait_id) else {
+            return false;
+        };
+
+        if matches!(trait_definition.visibility, TraitVisibility::Core) {
+            return true;
+        }
+
+        let Some(file_visibility) = &self.shared.file_visibility else {
+            // Synthetic test contexts may omit file visibility. Keep those contexts permissive;
+            // production scopes are built from header visibility and take the branch below.
+            return true;
+        };
+
+        file_visibility
+            .visible_trait_names
+            .values()
+            .any(|path| path == &trait_definition.canonical_path)
     }
 
     /// Build a [`TemplateFoldContext`] from the current scope's shared services.

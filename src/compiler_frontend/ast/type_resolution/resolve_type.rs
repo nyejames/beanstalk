@@ -19,11 +19,15 @@
 
 use crate::compiler_frontend::ast::TopLevelDeclarationTable;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
+use crate::compiler_frontend::ast::generic_bounds::{
+    GenericBoundEvidenceContext, validate_nominal_generic_bound_evidence,
+};
 use crate::compiler_frontend::ast::statements::functions::FunctionReturn;
 use crate::compiler_frontend::ast::type_resolution::TypeResolutionResult;
 use crate::compiler_frontend::compiler_messages::{
-    CompilerDiagnostic, DeferredFeatureReason, InvalidGenericInstantiationReason,
-    InvalidTypeAnnotationReason, NameNamespace, NamespaceTypeValueMisuseKind,
+    BoundOnlyTraitDiagnosticReason, CompilerDiagnostic, DeferredFeatureReason,
+    InvalidDynamicTraitTypeReason, InvalidGenericInstantiationReason, InvalidTypeAnnotationReason,
+    NameNamespace, NamespaceTypeValueMisuseKind,
 };
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::generic_identity_bridge::{
@@ -50,6 +54,9 @@ use crate::compiler_frontend::headers::module_symbols::{
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{SourceLocation, TokenKind};
+use crate::compiler_frontend::traits::definitions::{BoundOnlyTraitReason, TraitDynamicSafety};
+use crate::compiler_frontend::traits::environment::TraitEnvironment;
+use crate::compiler_frontend::traits::evidence::TraitEvidenceEnvironment;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::rc::Rc;
 
@@ -73,6 +80,10 @@ pub(crate) struct TypeResolutionContext<'a> {
     pub type_environment: &'a mut TypeEnvironment,
     /// Visible namespace records for resolving namespace-qualified type names.
     pub visible_namespace_records: Option<&'a FxHashMap<StringId, NamespaceRecord>>,
+    pub trait_environment: Option<&'a TraitEnvironment>,
+    pub trait_evidence_environment: Option<&'a TraitEvidenceEnvironment>,
+    pub visible_trait_names: Option<&'a FxHashMap<StringId, InternedPath>>,
+    pub source_file_scope: Option<&'a InternedPath>,
 }
 
 pub(crate) struct TypeResolutionContextInputs<'a> {
@@ -88,6 +99,10 @@ pub(crate) struct TypeResolutionContextInputs<'a> {
     pub type_environment: &'a mut TypeEnvironment,
     /// Visible namespace records for resolving namespace-qualified type names.
     pub visible_namespace_records: Option<&'a FxHashMap<StringId, NamespaceRecord>>,
+    pub trait_environment: Option<&'a TraitEnvironment>,
+    pub trait_evidence_environment: Option<&'a TraitEvidenceEnvironment>,
+    pub visible_trait_names: Option<&'a FxHashMap<StringId, InternedPath>>,
+    pub source_file_scope: Option<&'a InternedPath>,
 }
 
 impl<'a> TypeResolutionContext<'a> {
@@ -109,6 +124,10 @@ impl<'a> TypeResolutionContext<'a> {
             resolved_struct_fields_by_path: None,
             type_environment,
             visible_namespace_records: None,
+            trait_environment: None,
+            trait_evidence_environment: None,
+            visible_trait_names: None,
+            source_file_scope: None,
         }
     }
 
@@ -126,6 +145,10 @@ impl<'a> TypeResolutionContext<'a> {
             resolved_struct_fields_by_path: inputs.resolved_struct_fields_by_path,
             type_environment: inputs.type_environment,
             visible_namespace_records: inputs.visible_namespace_records,
+            trait_environment: inputs.trait_environment,
+            trait_evidence_environment: inputs.trait_evidence_environment,
+            visible_trait_names: inputs.visible_trait_names,
+            source_file_scope: inputs.source_file_scope,
         }
     }
 
@@ -340,6 +363,7 @@ pub(crate) fn resolve_diagnostic_type_to_type_id(
         }
         DataType::Returns(values) => returns_diagnostic_type_to_type_id(values, type_environment),
         DataType::External { type_id } => type_environment.intern_external(*type_id),
+        DataType::DynamicTrait { type_id, .. } => *type_id,
         DataType::Path(_) => type_environment.builtins().string,
         DataType::Parameters(_) => type_environment.builtins().none,
         DataType::Inferred | DataType::NamedType(_) | DataType::NamespacedType { .. } => {
@@ -508,6 +532,7 @@ pub(crate) fn resolve_diagnostic_type_to_type_id_opt(
             returns_diagnostic_type_to_type_id_opt(values, type_environment)
         }
         DataType::External { type_id } => Some(type_environment.intern_external(*type_id)),
+        DataType::DynamicTrait { type_id, .. } => Some(*type_id),
         DataType::Path(_) => Some(type_environment.builtins().string),
         DataType::Parameters(_)
         | DataType::Inferred
@@ -763,6 +788,7 @@ fn instantiate_generic_nominal(
                     type_environment.builtins().none
                 }
             };
+            validate_nominal_bound_evidence_for_instantiation(type_id, location, context)?;
 
             DataType::Struct {
                 nominal_path: base_path.to_owned(),
@@ -785,6 +811,7 @@ fn instantiate_generic_nominal(
                     type_environment.builtins().none
                 }
             };
+            validate_nominal_bound_evidence_for_instantiation(type_id, location, context)?;
 
             DataType::Choices {
                 nominal_path: base_path.to_owned(),
@@ -799,6 +826,23 @@ fn instantiate_generic_nominal(
     };
 
     Ok(Some(instantiated))
+}
+
+fn validate_nominal_bound_evidence_for_instantiation(
+    type_id: TypeId,
+    location: &SourceLocation,
+    context: &TypeResolutionContext<'_>,
+) -> TypeResolutionResult<()> {
+    let evidence_context = GenericBoundEvidenceContext {
+        type_environment: context.type_environment,
+        trait_environment: context.trait_environment,
+        trait_evidence_environment: context.trait_evidence_environment,
+        visible_trait_names: context.visible_trait_names,
+        source_file_scope: context.source_file_scope,
+    };
+
+    validate_nominal_generic_bound_evidence(type_id, location.clone(), &evidence_context)
+        .map_err(Box::new)
 }
 
 fn resolve_named_type_from_context(
@@ -869,7 +913,14 @@ fn resolve_named_type_from_context(
         return Ok(DataType::External { type_id: *type_id });
     }
 
-    // 5) Builtin type names that may still appear as named placeholders.
+    // 5) Visible trait names in normal type positions are dynamic trait value types.
+    if let Some(dynamic_trait_type) =
+        resolve_dynamic_trait_type(type_name, location, context, string_table)?
+    {
+        return Ok(dynamic_trait_type);
+    }
+
+    // 6) Builtin type names that may still appear as named placeholders.
     if let Some(builtin_type) = builtin_named_type(type_name, string_table) {
         return Ok(builtin_type);
     }
@@ -878,6 +929,102 @@ fn resolve_named_type_from_context(
         type_name,
         location.to_owned(),
     )))
+}
+
+fn resolve_dynamic_trait_type(
+    type_name: StringId,
+    location: &SourceLocation,
+    context: &mut TypeResolutionContext<'_>,
+    string_table: &StringTable,
+) -> TypeResolutionResult<Option<DataType>> {
+    let Some(trait_environment) = context.trait_environment else {
+        return Ok(None);
+    };
+
+    let Some(trait_id) = visible_dynamic_trait_id(type_name, context, string_table) else {
+        return Ok(None);
+    };
+    let Some(trait_definition) = trait_environment.get(trait_id) else {
+        return Ok(None);
+    };
+
+    match &trait_definition.dynamic_safety {
+        TraitDynamicSafety::DynamicSafe => {
+            let type_id = context
+                .type_environment
+                .intern_dynamic_trait(trait_id, trait_definition.name);
+            Ok(Some(DataType::DynamicTrait {
+                trait_id,
+                type_id,
+                name: trait_definition.name,
+            }))
+        }
+
+        TraitDynamicSafety::BoundOnly {
+            reason,
+            offending_requirement,
+        } => {
+            let requirement_name = trait_definition
+                .requirements
+                .iter()
+                .find(|requirement| requirement.id == *offending_requirement)
+                .map(|requirement| requirement.name);
+            Err(Box::new(CompilerDiagnostic::invalid_dynamic_trait_type(
+                trait_definition.name,
+                InvalidDynamicTraitTypeReason::BoundOnly {
+                    reason: bound_only_reason_for_diagnostic(*reason),
+                    requirement_name,
+                },
+                location.clone(),
+            )))
+        }
+    }
+}
+
+fn visible_dynamic_trait_id(
+    type_name: StringId,
+    context: &TypeResolutionContext<'_>,
+    string_table: &StringTable,
+) -> Option<crate::compiler_frontend::traits::ids::TraitId> {
+    let trait_environment = context.trait_environment?;
+
+    let trait_id = context
+        .visible_trait_names
+        .and_then(|visible_traits| visible_traits.get(&type_name))
+        .and_then(|path| trait_environment.id_for_path(path));
+
+    if trait_id.is_some() {
+        return trait_id;
+    }
+
+    if string_table.resolve(type_name)
+        == crate::compiler_frontend::traits::environment::DISPLAYABLE_TRAIT_NAME
+    {
+        return trait_environment.displayable_trait_id();
+    }
+
+    None
+}
+
+fn visible_dynamic_trait_name(
+    type_name: StringId,
+    context: &TypeResolutionContext<'_>,
+    string_table: &StringTable,
+) -> Option<StringId> {
+    let trait_id = visible_dynamic_trait_id(type_name, context, string_table)?;
+    context
+        .trait_environment?
+        .get(trait_id)
+        .map(|definition| definition.name)
+}
+
+fn bound_only_reason_for_diagnostic(
+    reason: BoundOnlyTraitReason,
+) -> BoundOnlyTraitDiagnosticReason {
+    match reason {
+        BoundOnlyTraitReason::ThisParameter => BoundOnlyTraitDiagnosticReason::ThisParameter,
+        BoundOnlyTraitReason::ThisReturn => BoundOnlyTraitDiagnosticReason::ThisReturn,
+    }
 }
 
 fn resolve_namespaced_type_from_context(
@@ -991,6 +1138,15 @@ fn resolve_generic_base_type(
                     context,
                     string_table,
                 );
+            }
+
+            if let Some(trait_name) = visible_dynamic_trait_name(*type_name, context, string_table)
+            {
+                return Err(Box::new(CompilerDiagnostic::invalid_dynamic_trait_type(
+                    trait_name,
+                    InvalidDynamicTraitTypeReason::Applied,
+                    location.clone(),
+                )));
             }
 
             if let Some(visible_aliases) = context.visible_type_aliases

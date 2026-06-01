@@ -7,8 +7,8 @@ use super::{
     InvalidAssignmentTargetReason, InvalidChoiceVariantReason, InvalidCollectionTypeReason,
     InvalidConfigReason, InvalidFunctionSignatureReason, InvalidGenericParameterReason,
     InvalidImportClauseReason, InvalidResultOperandReason, InvalidSignatureMemberReason,
-    InvalidTemplateDirectiveReason, InvalidTypeAnnotationReason, NameNamespace,
-    NumberLiteralErrorReason, PathKind, RuleDiagnosticKind, SyntaxDiagnosticKind,
+    InvalidTemplateDirectiveReason, InvalidTraitKeywordUsageReason, InvalidTypeAnnotationReason,
+    NameNamespace, NumberLiteralErrorReason, PathKind, RuleDiagnosticKind, SyntaxDiagnosticKind,
     TypeAnnotationContext, TypeDiagnosticKind, TypeMismatchContext, UnsupportedOperatorCategory,
 };
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
@@ -771,11 +771,19 @@ fn syntax_renderers_keep_typed_prose_without_error_conversion() {
         ),
         (
             CompilerDiagnostic::invalid_generic_parameter(
-                InvalidGenericParameterReason::BoundsNotSupported,
+                InvalidGenericParameterReason::BoundsMustUseIs,
                 location(source_path.clone()),
             ),
-            "Generic parameter bounds are not supported yet.",
-            "BoundsNotSupported",
+            "Generic parameter bounds use `is`.",
+            "BoundsMustUseIs",
+        ),
+        (
+            CompilerDiagnostic::invalid_trait_keyword_usage(
+                InvalidTraitKeywordUsageReason::MustOutsideTraitSyntax,
+                location(source_path.clone()),
+            ),
+            "Keyword 'must' is trait-only syntax",
+            "MustOutsideTraitSyntax",
         ),
         (
             CompilerDiagnostic::invalid_template_directive(

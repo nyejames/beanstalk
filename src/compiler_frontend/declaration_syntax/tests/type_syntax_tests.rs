@@ -75,6 +75,7 @@ fn single_parameter_metadata(
                 id: TypeParameterId(0),
                 name: parameter_name,
                 location: SourceLocation::default(),
+                trait_bounds: Vec::new(),
             }],
         },
         declaration_location: SourceLocation::default(),
@@ -517,6 +518,10 @@ fn alias_expanded_nested_optional_type_is_rejected() {
         resolved_struct_fields_by_path: None,
         type_environment: &mut type_environment,
         visible_namespace_records: None,
+        trait_environment: None,
+        trait_evidence_environment: None,
+        visible_trait_names: None,
+        source_file_scope: None,
     };
 
     let error = resolve_type(
@@ -617,6 +622,10 @@ fn resolves_generic_instance_base_to_canonical_nominal_path() {
         resolved_struct_fields_by_path: None,
         type_environment: &mut type_environment,
         visible_namespace_records: None,
+        trait_environment: None,
+        trait_evidence_environment: None,
+        visible_trait_names: None,
+        source_file_scope: None,
     };
 
     let location = SourceLocation::default();
@@ -674,6 +683,10 @@ fn generic_instance_resolution_rejects_wrong_arity() {
         resolved_struct_fields_by_path: None,
         type_environment: &mut type_environment,
         visible_namespace_records: None,
+        trait_environment: None,
+        trait_evidence_environment: None,
+        visible_trait_names: None,
+        source_file_scope: None,
     };
 
     let location = SourceLocation::default();
@@ -737,6 +750,10 @@ fn bare_generic_type_name_requires_type_arguments() {
         resolved_struct_fields_by_path: None,
         type_environment: &mut type_environment,
         visible_namespace_records: None,
+        trait_environment: None,
+        trait_evidence_environment: None,
+        visible_trait_names: None,
+        source_file_scope: None,
     };
 
     let location = SourceLocation::default();

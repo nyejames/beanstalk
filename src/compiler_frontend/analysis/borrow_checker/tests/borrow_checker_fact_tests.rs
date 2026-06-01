@@ -399,6 +399,12 @@ fn collect_statement_values(kind: HirStatementKind, out: &mut FxHashSet<HirValue
                 collect_expression_values(&arg, out);
             }
         }
+        HirStatementKind::CallDynamicTraitMethod { receiver, args, .. } => {
+            collect_expression_values(&receiver, out);
+            for arg in args {
+                collect_expression_values(&arg.value, out);
+            }
+        }
         HirStatementKind::Expr(expr) => collect_expression_values(&expr, out),
         HirStatementKind::Drop(_) => {}
         HirStatementKind::PushRuntimeFragment { value, .. } => {
@@ -492,6 +498,9 @@ fn collect_expression_values(expression: &HirExpression, out: &mut FxHashSet<Hir
 
         HirExpressionKind::VariantPayloadGet { source, .. } => {
             collect_expression_values(source, out);
+        }
+        HirExpressionKind::ConstructDynamicTraitValue { value, .. } => {
+            collect_expression_values(value, out);
         }
     }
 }

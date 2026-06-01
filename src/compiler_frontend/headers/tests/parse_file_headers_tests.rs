@@ -12,8 +12,8 @@ use crate::compiler_frontend::compiler_messages::render::{
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, DeferredFeatureDiagnosticKind, DeferredFeatureReason, DiagnosticBag,
     DiagnosticKind, DiagnosticPayload, InvalidChoiceVariantReason, InvalidDeclarationReason,
-    InvalidFunctionSignatureReason, InvalidTypeAnnotationReason, ReservedNameOwner,
-    RuleDiagnosticKind,
+    InvalidFunctionSignatureReason, InvalidSignatureMemberReason, InvalidThisUsageReason,
+    InvalidTypeAnnotationReason, ReservedNameOwner, RuleDiagnosticKind, SyntaxDiagnosticKind,
 };
 use crate::compiler_frontend::datatypes::parsed::ParsedTypeRef;
 use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariantPayloadSyntax;
@@ -28,6 +28,7 @@ use crate::compiler_frontend::tokenizer::lexer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::{
     FileTokens, SourceLocation, Token, TokenKind, TokenizeMode,
 };
+use crate::compiler_frontend::traits::syntax::TraitThisUsage;
 use crate::libraries::external_import_providers::resolution_table::ExternalImportResolutionTable;
 use std::path::{Path, PathBuf};
 
@@ -231,6 +232,16 @@ fn diagnostics_contain_guidance(error: &HeaderTestDiagnostics, expected_fragment
             .iter()
             .any(|line| line.contains(expected_fragment))
     })
+}
+
+fn expect_header_error(
+    result: Result<Headers, HeaderTestDiagnostics>,
+    message: &str,
+) -> HeaderTestDiagnostics {
+    match result {
+        Ok(_) => panic!("{message}"),
+        Err(errors) => errors,
+    }
 }
 
 fn first_function_signature(headers: &Headers) -> &FunctionSignatureSyntax {
@@ -891,6 +902,341 @@ fn function_signature_preserves_unknown_symbolic_return_for_ast_resolution() {
 }
 
 #[test]
+fn trait_declaration_headers_parse_requirement_shells() {
+    let (headers, string_table) = parse_single_file_headers_with_table(
+        "DISPLAYABLE must:\n\
+             display |This| -> String\n\
+             reset |~This|\n\
+             copy_value |This, other This| -> This\n\
+         ;\n",
+    );
+
+    let trait_header = headers
+        .headers
+        .iter()
+        .find(|header| matches!(header.kind, HeaderKind::Trait { .. }))
+        .expect("expected trait header");
+
+    let HeaderKind::Trait { declaration } = &trait_header.kind else {
+        panic!("expected trait header kind");
+    };
+
+    assert_eq!(string_table.resolve(declaration.name), "DISPLAYABLE");
+    assert_eq!(declaration.requirements.len(), 3);
+    assert_eq!(
+        declaration.requirements[0].this_usage,
+        TraitThisUsage::Immutable
+    );
+    assert_eq!(
+        declaration.requirements[1].this_usage,
+        TraitThisUsage::Mutable
+    );
+
+    let copy_requirement = &declaration.requirements[2];
+    assert!(matches!(
+        copy_requirement.signature.parameters[1].type_annotation,
+        ParsedTypeRef::This { .. }
+    ));
+    assert!(matches!(
+        copy_requirement.signature.returns[0].value,
+        FunctionReturnSyntax::Value {
+            type_annotation: ParsedTypeRef::This { .. },
+            ..
+        }
+    ));
+}
+
+#[test]
+fn empty_marker_trait_declaration_is_a_valid_header() {
+    let headers = parse_single_file_headers("MARKER must:\n;\n");
+
+    let trait_header = headers
+        .headers
+        .iter()
+        .find(|header| matches!(header.kind, HeaderKind::Trait { .. }))
+        .expect("expected trait header");
+
+    let HeaderKind::Trait { declaration } = &trait_header.kind else {
+        panic!("expected trait header kind");
+    };
+
+    assert!(
+        declaration.requirements.is_empty(),
+        "marker traits should parse with no requirement shells"
+    );
+}
+
+#[test]
+fn trait_conformance_headers_parse_single_and_continued_trait_lists() {
+    let (headers, string_table) =
+        parse_single_file_headers_with_table("Card must DISPLAYABLE,\n    SERIALIZABLE\n");
+
+    let conformance_header = headers
+        .headers
+        .iter()
+        .find(|header| matches!(header.kind, HeaderKind::TraitConformance { .. }))
+        .expect("expected trait conformance header");
+
+    let HeaderKind::TraitConformance { conformance } = &conformance_header.kind else {
+        panic!("expected trait conformance header kind");
+    };
+
+    let trait_names = conformance
+        .traits
+        .iter()
+        .map(|trait_ref| string_table.resolve(trait_ref.name).to_owned())
+        .collect::<Vec<_>>();
+
+    assert_eq!(string_table.resolve(conformance.target.name), "Card");
+    assert_eq!(trait_names, vec!["DISPLAYABLE", "SERIALIZABLE"]);
+}
+
+#[test]
+fn builtin_type_conformance_headers_parse_as_trait_conformances() {
+    let (headers, string_table) = parse_single_file_headers_with_table("Int must DISPLAYABLE\n");
+
+    let conformance_header = headers
+        .headers
+        .iter()
+        .find(|header| matches!(header.kind, HeaderKind::TraitConformance { .. }))
+        .expect("expected builtin trait conformance header");
+
+    let HeaderKind::TraitConformance { conformance } = &conformance_header.kind else {
+        panic!("expected trait conformance header kind");
+    };
+
+    assert_eq!(string_table.resolve(conformance.target.name), "Int");
+    assert_eq!(
+        string_table.resolve(conformance.traits[0].name),
+        "DISPLAYABLE"
+    );
+}
+
+#[test]
+fn trait_requirement_rejects_lowercase_this_receiver() {
+    let result = parse_single_file_headers_with_entry(
+        "BAD must:\n    wrong |this|\n;\n",
+        "src/#page.bst",
+        "src/#page.bst",
+    );
+    let errors = expect_header_error(result, "lowercase this should be rejected");
+
+    assert!(errors.diagnostics.iter().any(|diagnostic| matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidSignatureMember {
+            reason: InvalidSignatureMemberReason::ThisNotAllowed
+        }
+    )));
+}
+
+#[test]
+fn trait_requirement_rejects_missing_this_receiver() {
+    let result = parse_single_file_headers_with_entry(
+        "BAD must:\n    wrong |value Int|\n;\n",
+        "src/#page.bst",
+        "src/#page.bst",
+    );
+    let errors = expect_header_error(result, "trait requirements should start with This");
+
+    assert!(errors.diagnostics.iter().any(|diagnostic| matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidSignatureMember {
+            reason: InvalidSignatureMemberReason::TraitReceiverMustBeThis
+        }
+    )));
+}
+
+#[test]
+fn trait_requirement_rejects_mutable_this_after_receiver() {
+    let result = parse_single_file_headers_with_entry(
+        "BAD must:\n    wrong |This, ~This|\n;\n",
+        "src/#page.bst",
+        "src/#page.bst",
+    );
+    let errors = expect_header_error(result, "mutable This is receiver-only");
+
+    assert!(errors.diagnostics.iter().any(|diagnostic| matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidSignatureMember {
+            reason: InvalidSignatureMemberReason::TraitMutableThisOnlyFirstParameter
+        }
+    )));
+}
+
+#[test]
+fn trait_requirement_rejects_composed_this_type_forms() {
+    let result = parse_single_file_headers_with_entry(
+        "BAD must:\n    wrong |This, values {This}|\n;\n",
+        "src/#page.bst",
+        "src/#page.bst",
+    );
+    let errors = expect_header_error(result, "composed This forms are deferred");
+
+    assert!(errors.diagnostics.iter().any(|diagnostic| matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidTypeAnnotation {
+            reason: InvalidTypeAnnotationReason::TraitThisMustBeDirect,
+            ..
+        }
+    )));
+}
+
+#[test]
+fn trait_requirement_rejects_method_bodies_and_reversed_mutability() {
+    let method_body_result = parse_single_file_headers_with_entry(
+        "BAD must:\n    wrong |This|:\n        return \"bad\"\n    ;\n;\n",
+        "src/#page.bst",
+        "src/#page.bst",
+    );
+    let method_body_errors = expect_header_error(
+        method_body_result,
+        "trait requirements cannot have method bodies",
+    );
+
+    assert!(
+        method_body_errors
+            .diagnostics
+            .iter()
+            .any(|diagnostic| diagnostic.kind
+                == DiagnosticKind::Syntax(SyntaxDiagnosticKind::UnexpectedTokenInDeclaration))
+    );
+
+    let reversed_mutability_result = parse_single_file_headers_with_entry(
+        "BAD must:\n    wrong |This ~|\n;\n",
+        "src/#page.bst",
+        "src/#page.bst",
+    );
+    let reversed_mutability_errors = expect_header_error(
+        reversed_mutability_result,
+        "trait receiver mutability must be written as ~This",
+    );
+
+    assert!(
+        reversed_mutability_errors
+            .diagnostics
+            .iter()
+            .any(|diagnostic| matches!(
+                diagnostic.payload,
+                DiagnosticPayload::ExpectedToken { .. }
+            ))
+    );
+}
+
+#[test]
+fn trait_conformance_rejects_missing_trait_name() {
+    let result =
+        parse_single_file_headers_with_entry("Card must\n", "src/#page.bst", "src/#page.bst");
+    let errors = expect_header_error(result, "conformance declarations require a trait name");
+
+    assert!(errors.diagnostics.iter().any(|diagnostic| matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidDeclaration {
+            reason: InvalidDeclarationReason::TraitConformanceMissingTrait,
+            ..
+        }
+    )));
+}
+
+#[test]
+fn trait_conformance_rejects_semicolon_terminator() {
+    let result = parse_single_file_headers_with_entry(
+        "Card must DISPLAYABLE;\n",
+        "src/#page.bst",
+        "src/#page.bst",
+    );
+    let errors = expect_header_error(
+        result,
+        "conformance declarations should be newline terminated",
+    );
+
+    assert!(errors.diagnostics.iter().any(|diagnostic| matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidDeclaration {
+            reason: InvalidDeclarationReason::TraitConformanceSemicolon,
+            ..
+        }
+    )));
+}
+
+#[test]
+fn trait_conformance_rejects_trailing_comma() {
+    let result = parse_single_file_headers_with_entry(
+        "Card must DISPLAYABLE,\n",
+        "src/#page.bst",
+        "src/#page.bst",
+    );
+    let errors = expect_header_error(result, "trailing conformance commas should be rejected");
+
+    assert!(errors.diagnostics.iter().any(|diagnostic| matches!(
+        diagnostic.payload,
+        DiagnosticPayload::UnexpectedTrailingComma
+    )));
+}
+
+#[test]
+fn trait_declaration_and_reference_names_must_be_all_caps() {
+    let declaration_result = parse_single_file_headers_with_entry(
+        "Displayable must:\n;\n",
+        "src/#page.bst",
+        "src/#page.bst",
+    );
+    let declaration_errors = expect_header_error(
+        declaration_result,
+        "trait declarations should require all-caps names",
+    );
+
+    assert!(
+        declaration_errors
+            .diagnostics
+            .iter()
+            .any(|diagnostic| matches!(
+                diagnostic.payload,
+                DiagnosticPayload::InvalidDeclaration {
+                    reason: InvalidDeclarationReason::InvalidTraitName,
+                    ..
+                }
+            ))
+    );
+
+    let conformance_result = parse_single_file_headers_with_entry(
+        "Card must Displayable\n",
+        "src/#page.bst",
+        "src/#page.bst",
+    );
+    let conformance_errors = expect_header_error(
+        conformance_result,
+        "trait references should require all-caps names",
+    );
+
+    assert!(
+        conformance_errors
+            .diagnostics
+            .iter()
+            .any(|diagnostic| matches!(
+                diagnostic.payload,
+                DiagnosticPayload::InvalidDeclaration {
+                    reason: InvalidDeclarationReason::InvalidTraitName,
+                    ..
+                }
+            ))
+    );
+}
+
+#[test]
+fn trait_this_outside_trait_declaration_is_targeted() {
+    let result =
+        parse_single_file_headers_with_entry("value This = 1\n", "src/#page.bst", "src/#page.bst");
+    let errors = expect_header_error(result, "This outside trait declarations should be rejected");
+
+    assert!(errors.diagnostics.iter().any(|diagnostic| matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidThisUsage {
+            reason: InvalidThisUsageReason::OutsideTraitDeclaration
+        }
+    )));
+}
+
+#[test]
 fn function_signature_reports_missing_arrow_before_return_type() {
     let result = parse_single_file_headers_with_entry(
         "f|x Int| Int:\n;\n",
@@ -1178,29 +1524,16 @@ fn header_parsing_rejects_keyword_shadow_constant_name() {
 }
 
 #[test]
-fn trait_declarations_using_must_are_reserved_during_header_parsing() {
-    let result = parse_single_file_headers_with_entry(
-        "Drawable must:\n    draw |This, surface Surface| -> String\n;\n",
-        "src/#page.bst",
-        "src/#page.bst",
-    );
+fn trait_declarations_using_must_parse_as_trait_headers() {
+    let headers = parse_single_file_headers("DISPLAYABLE must:\n    display |This| -> String\n;\n");
 
     assert!(
-        result.is_err(),
-        "trait declarations using 'must' should fail during header parsing"
+        headers
+            .headers
+            .iter()
+            .any(|header| matches!(header.kind, HeaderKind::Trait { .. })),
+        "trait declarations using 'must:' should produce trait headers"
     );
-    let errors = result.err().expect("expected parse errors");
-
-    assert!(errors.diagnostics.iter().any(|diagnostic| {
-        diagnostic.kind
-            == DiagnosticKind::DeferredFeature(DeferredFeatureDiagnosticKind::DeferredFeature)
-            && matches!(
-                diagnostic.payload,
-                DiagnosticPayload::DeferredFeature {
-                    reason: DeferredFeatureReason::TraitDeclaration
-                }
-            )
-    }));
 }
 
 #[test]

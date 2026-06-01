@@ -4,10 +4,10 @@
 //! WHY: parser changes should not silently degrade recovery paths or produce vague errors.
 
 use crate::compiler_frontend::compiler_messages::{
-    DeferredFeatureReason, DiagnosticKind, DiagnosticPayload, InvalidControlFlowStatementReason,
+    DiagnosticKind, DiagnosticPayload, InvalidControlFlowStatementReason,
     InvalidFunctionSignatureReason, InvalidMatchPatternReason, InvalidMultiBindReason,
-    InvalidStatementPositionReason, InvalidTypeAnnotationReason, RuleDiagnosticKind,
-    SyntaxDiagnosticKind, TypeAnnotationContext,
+    InvalidStatementPositionReason, InvalidThisUsageReason, InvalidTraitKeywordUsageReason,
+    InvalidTypeAnnotationReason, RuleDiagnosticKind, SyntaxDiagnosticKind, TypeAnnotationContext,
 };
 use crate::compiler_frontend::tests::test_support::parse_single_file_ast_diagnostic;
 
@@ -199,8 +199,8 @@ fn reports_reserved_must_keyword_in_function_body() {
 
     assert_eq!(
         diagnostic.payload,
-        DiagnosticPayload::DeferredFeature {
-            reason: DeferredFeatureReason::ReservedTraitMustKeyword
+        DiagnosticPayload::InvalidTraitKeywordUsage {
+            reason: InvalidTraitKeywordUsageReason::MustOutsideTraitSyntax
         }
     );
     assert!(diagnostic.primary_location.start_pos.char_column > 0);
@@ -212,20 +212,20 @@ fn reports_reserved_this_keyword_in_function_body_statement_position() {
 
     assert_eq!(
         diagnostic.payload,
-        DiagnosticPayload::DeferredFeature {
-            reason: DeferredFeatureReason::ReservedTraitThisKeyword
+        DiagnosticPayload::InvalidTraitKeywordUsage {
+            reason: InvalidTraitKeywordUsageReason::ThisOutsideTraitSyntax
         }
     );
 }
 
 #[test]
-fn reports_reserved_this_keyword_in_declaration_type_position() {
+fn reports_trait_this_keyword_outside_trait_declaration_type_position() {
     let diagnostic = parse_single_file_ast_diagnostic("value This = 1\n");
 
     assert_eq!(
         diagnostic.payload,
-        DiagnosticPayload::DeferredFeature {
-            reason: DeferredFeatureReason::ReservedTraitThisKeyword
+        DiagnosticPayload::InvalidThisUsage {
+            reason: InvalidThisUsageReason::OutsideTraitDeclaration
         }
     );
 }
@@ -236,8 +236,8 @@ fn reports_reserved_must_keyword_in_expression_position() {
 
     assert_eq!(
         diagnostic.payload,
-        DiagnosticPayload::DeferredFeature {
-            reason: DeferredFeatureReason::ReservedTraitMustKeyword
+        DiagnosticPayload::InvalidTraitKeywordUsage {
+            reason: InvalidTraitKeywordUsageReason::MustOutsideTraitSyntax
         }
     );
 }
@@ -248,8 +248,8 @@ fn reports_reserved_this_keyword_in_expression_position() {
 
     assert_eq!(
         diagnostic.payload,
-        DiagnosticPayload::DeferredFeature {
-            reason: DeferredFeatureReason::ReservedTraitThisKeyword
+        DiagnosticPayload::InvalidTraitKeywordUsage {
+            reason: InvalidTraitKeywordUsageReason::ThisOutsideTraitSyntax
         }
     );
 }
@@ -260,8 +260,8 @@ fn reports_reserved_must_keyword_in_copy_place_position() {
 
     assert_eq!(
         diagnostic.payload,
-        DiagnosticPayload::DeferredFeature {
-            reason: DeferredFeatureReason::ReservedTraitMustKeyword
+        DiagnosticPayload::InvalidTraitKeywordUsage {
+            reason: InvalidTraitKeywordUsageReason::MustOutsideTraitSyntax
         }
     );
 }
@@ -272,8 +272,8 @@ fn reports_reserved_must_keyword_in_signature_member_position() {
 
     assert_eq!(
         diagnostic.payload,
-        DiagnosticPayload::DeferredFeature {
-            reason: DeferredFeatureReason::ReservedTraitMustKeyword
+        DiagnosticPayload::InvalidTraitKeywordUsage {
+            reason: InvalidTraitKeywordUsageReason::MustOutsideTraitSyntax
         }
     );
 }
@@ -286,8 +286,8 @@ fn reports_reserved_must_keyword_in_postfix_member_position() {
 
     assert_eq!(
         diagnostic.payload,
-        DiagnosticPayload::DeferredFeature {
-            reason: DeferredFeatureReason::ReservedTraitMustKeyword
+        DiagnosticPayload::InvalidTraitKeywordUsage {
+            reason: InvalidTraitKeywordUsageReason::MustOutsideTraitSyntax
         }
     );
 }

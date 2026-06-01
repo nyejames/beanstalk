@@ -159,6 +159,14 @@ fn parse_type_atom(
         )),
 
         TokenKind::Must | TokenKind::TraitThis => {
+            if matches!(context, TypeAnnotationContext::TraitRequirement)
+                && token_stream.current_token_kind() == &TokenKind::TraitThis
+            {
+                let location = token_stream.current_location();
+                token_stream.advance();
+                return Ok(ParsedTypeAnnotation::new(ParsedTypeRef::This { location }));
+            }
+
             let _keyword = reserved_trait_keyword_or_dispatch_mismatch(
                 token_stream.current_token_kind(),
                 token_stream.current_location(),
@@ -273,6 +281,9 @@ fn parse_collection_type(
     } else {
         parse_required_type_with_generic_application(token_stream, context, true)?
     };
+    if parsed_type_contains_trait_this(&inner.parsed_type) {
+        return Err(trait_this_composition_error(context, location));
+    }
 
     // Check for optional capacity after the element type.
     let capacity = if let TokenKind::IntLiteral(value) = token_stream.current_token_kind() {
@@ -331,6 +342,12 @@ fn parse_generic_arguments(
     }
 
     match parsed_type.parsed_type {
+        ParsedTypeRef::This { .. } => {
+            return Err(trait_this_composition_error(
+                context,
+                token_stream.current_location(),
+            ));
+        }
         ParsedTypeRef::Named { .. } => {}
         _ => {
             return Err(CompilerDiagnostic::invalid_generic_application(
@@ -444,6 +461,13 @@ fn parse_optional_type_suffix(
         return Ok(parsed_type);
     }
 
+    if matches!(parsed_type.parsed_type, ParsedTypeRef::This { .. }) {
+        return Err(trait_this_composition_error(
+            context,
+            token_stream.current_location(),
+        ));
+    }
+
     if matches!(parsed_type.parsed_type, ParsedTypeRef::Optional { .. }) {
         return Err(CompilerDiagnostic::invalid_type_annotation(
             context,
@@ -470,6 +494,41 @@ fn parse_optional_type_suffix(
     })
 }
 
+fn parsed_type_contains_trait_this(parsed_type: &ParsedTypeRef) -> bool {
+    match parsed_type {
+        ParsedTypeRef::This { .. } => true,
+
+        ParsedTypeRef::Applied {
+            base, arguments, ..
+        } => {
+            parsed_type_contains_trait_this(base)
+                || arguments.iter().any(parsed_type_contains_trait_this)
+        }
+
+        ParsedTypeRef::Collection { element, .. }
+        | ParsedTypeRef::Optional { inner: element, .. } => {
+            parsed_type_contains_trait_this(element)
+        }
+
+        ParsedTypeRef::Result { ok, err, .. } => {
+            parsed_type_contains_trait_this(ok) || parsed_type_contains_trait_this(err)
+        }
+
+        _ => false,
+    }
+}
+
+fn trait_this_composition_error(
+    context: TypeAnnotationContext,
+    location: SourceLocation,
+) -> CompilerDiagnostic {
+    CompilerDiagnostic::invalid_type_annotation(
+        context,
+        InvalidTypeAnnotationReason::TraitThisMustBeDirect,
+        location,
+    )
+}
+
 fn type_keyword_deferred_error(
     token_stream: &FileTokens,
     context: TypeAnnotationContext,
@@ -489,5 +548,6 @@ fn compilation_stage(context: TypeAnnotationContext) -> &'static str {
         TypeAnnotationContext::SignatureParameter => "Parameter Type Parsing",
         TypeAnnotationContext::SignatureReturn => "Function Signature Parsing",
         TypeAnnotationContext::TypeAliasTarget => "Type Alias Parsing",
+        TypeAnnotationContext::TraitRequirement => "Trait Requirement Parsing",
     }
 }

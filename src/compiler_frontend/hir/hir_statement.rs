@@ -24,7 +24,9 @@ use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::external_packages::CallTarget;
 use crate::compiler_frontend::hir::expressions::{HirExpressionKind, ValueKind};
 use crate::compiler_frontend::hir::hir_builder::{HirBuilder, HirLoweringError};
-use crate::compiler_frontend::hir::hir_expression::ExternalFallibleCallLoweringInput;
+use crate::compiler_frontend::hir::hir_expression::{
+    DynamicTraitMethodCallLoweringInput, ExternalFallibleCallLoweringInput,
+};
 use crate::compiler_frontend::hir::ids::{BlockId, FunctionId};
 use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
@@ -257,6 +259,33 @@ impl<'a> HirBuilder<'a> {
                 args,
                 location,
             ),
+
+            NodeKind::DynamicTraitMethodCall {
+                receiver,
+                trait_id,
+                requirement_id,
+                receiver_requires_mutable,
+                args,
+                result_type_ids,
+                location,
+                ..
+            } => {
+                let lowered = self.lower_dynamic_trait_method_call_expression(
+                    DynamicTraitMethodCallLoweringInput {
+                        receiver,
+                        trait_id: *trait_id,
+                        requirement_id: *requirement_id,
+                        receiver_requires_mutable: *receiver_requires_mutable,
+                        args,
+                        result_type_ids,
+                        location,
+                    },
+                )?;
+                for statement in lowered.prelude {
+                    self.emit_statement_to_current_block(statement, location)?;
+                }
+                Ok(())
+            }
 
             NodeKind::Rvalue(expr) => self.lower_expression_statement(expr, &node.location),
 

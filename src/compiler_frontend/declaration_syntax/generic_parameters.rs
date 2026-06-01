@@ -8,13 +8,15 @@
 
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorType};
 use crate::compiler_frontend::compiler_messages::{
-    CompilerDiagnostic, DeferredFeatureReason, InvalidGenericParameterReason,
+    CompilerDiagnostic, InvalidDeclarationReason, InvalidGenericParameterReason,
 };
 use crate::compiler_frontend::datatypes::generic_parameters::{
-    GenericParameter, GenericParameterList, GenericParameterScope, TypeParameterId,
+    GenericParameter, GenericParameterList, GenericParameterScope, GenericTraitBound,
+    TypeParameterId,
 };
+use crate::compiler_frontend::symbols::identifier_policy::is_uppercase_constant_name;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
-use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
 use rustc_hash::FxHashSet;
 
 /// Parse a generic parameter list after the current `type` keyword.
@@ -48,6 +50,7 @@ pub(crate) fn parse_generic_parameter_list_after_type_keyword(
                     id: TypeParameterId(parameters.len() as u32),
                     name,
                     location: token_stream.current_location(),
+                    trait_bounds: Vec::new(),
                 });
                 token_stream.advance();
                 expecting_parameter = false;
@@ -73,10 +76,12 @@ pub(crate) fn parse_generic_parameter_list_after_type_keyword(
             }
 
             TokenKind::Is if !expecting_parameter => {
-                return Err(CompilerDiagnostic::deferred_feature_reason(
-                    DeferredFeatureReason::GenericConstraints,
-                    token_stream.current_location(),
-                ));
+                token_stream.advance();
+                parse_trait_bounds_for_current_parameter(
+                    token_stream,
+                    &mut parameters,
+                    string_table,
+                )?;
             }
 
             TokenKind::TypeParameterBracket
@@ -108,9 +113,16 @@ pub(crate) fn parse_generic_parameter_list_after_type_keyword(
                 return Ok(parameter_list);
             }
 
-            TokenKind::Must | TokenKind::Colon => {
+            TokenKind::Must => {
                 return Err(CompilerDiagnostic::invalid_generic_parameter(
-                    InvalidGenericParameterReason::BoundsNotSupported,
+                    InvalidGenericParameterReason::BoundsMustUseIs,
+                    token_stream.current_location(),
+                ));
+            }
+
+            TokenKind::Colon => {
+                return Err(CompilerDiagnostic::invalid_generic_parameter(
+                    InvalidGenericParameterReason::BoundsMustUseIs,
                     token_stream.current_location(),
                 ));
             }
@@ -137,4 +149,90 @@ pub(crate) fn parse_generic_parameter_list_after_type_keyword(
             }
         }
     }
+}
+
+fn parse_trait_bounds_for_current_parameter(
+    token_stream: &mut FileTokens,
+    parameters: &mut [GenericParameter],
+    string_table: &StringTable,
+) -> Result<(), CompilerDiagnostic> {
+    let Some(parameter) = parameters.last_mut() else {
+        return Err(CompilerDiagnostic::unexpected_token(
+            token_stream.current_token_kind().to_owned(),
+            token_stream.current_location(),
+        ));
+    };
+
+    let mut expecting_trait_name = true;
+
+    loop {
+        match token_stream.current_token_kind().to_owned() {
+            TokenKind::Symbol(trait_name) if expecting_trait_name => {
+                ensure_trait_bound_name_is_all_caps(
+                    trait_name,
+                    token_stream.current_location(),
+                    string_table,
+                )?;
+
+                parameter.trait_bounds.push(GenericTraitBound {
+                    trait_name,
+                    location: token_stream.current_location(),
+                });
+                token_stream.advance();
+                expecting_trait_name = false;
+            }
+
+            TokenKind::And if !expecting_trait_name => {
+                token_stream.advance();
+                expecting_trait_name = true;
+            }
+
+            TokenKind::Comma
+            | TokenKind::TypeParameterBracket
+            | TokenKind::Assign
+            | TokenKind::DoubleColon
+            | TokenKind::As
+                if !expecting_trait_name =>
+            {
+                return Ok(());
+            }
+
+            TokenKind::Must => {
+                return Err(CompilerDiagnostic::invalid_generic_parameter(
+                    InvalidGenericParameterReason::BoundsMustUseIs,
+                    token_stream.current_location(),
+                ));
+            }
+
+            TokenKind::Eof | TokenKind::End => {
+                return Err(CompilerDiagnostic::unexpected_end_of_file(
+                    None,
+                    token_stream.current_location(),
+                ));
+            }
+
+            other => {
+                return Err(CompilerDiagnostic::invalid_generic_parameter(
+                    InvalidGenericParameterReason::InvalidToken { found: other },
+                    token_stream.current_location(),
+                ));
+            }
+        }
+    }
+}
+
+fn ensure_trait_bound_name_is_all_caps(
+    trait_name: StringId,
+    location: SourceLocation,
+    string_table: &StringTable,
+) -> Result<(), CompilerDiagnostic> {
+    if is_uppercase_constant_name(string_table.resolve(trait_name)) {
+        return Ok(());
+    }
+
+    Err(CompilerDiagnostic::invalid_declaration(
+        InvalidDeclarationReason::InvalidTraitName,
+        Some(trait_name),
+        location,
+    ))
 }

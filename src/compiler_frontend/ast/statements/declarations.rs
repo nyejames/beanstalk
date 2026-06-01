@@ -34,8 +34,9 @@ use crate::compiler_frontend::ast::{
 use crate::compiler_frontend::builtins::error_type::is_reserved_builtin_symbol;
 use crate::compiler_frontend::compiler_messages::{
     CompileTimeEvaluationErrorReason, CompilerDiagnostic, InvalidDeclarationReason,
-    InvalidResultHandlingReason, TypeMismatchContext,
+    InvalidDynamicTraitTypeReason, InvalidResultHandlingReason, TypeMismatchContext,
 };
+use crate::compiler_frontend::datatypes::definitions::TypeDefinition;
 use crate::compiler_frontend::datatypes::{DataType, ReceiverKey};
 use crate::compiler_frontend::declaration_syntax::declaration_shell::{
     DeclarationSyntax, parse_declaration_syntax,
@@ -50,8 +51,7 @@ use crate::compiler_frontend::symbols::identifier_policy::{
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::syntax_errors::signature_position::check_signature_common_mistake;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, Token, TokenKind};
-use crate::compiler_frontend::type_coercion::compatibility::is_declaration_compatible;
-use crate::compiler_frontend::type_coercion::contextual::coerce_expression_to_declared_type;
+use crate::compiler_frontend::type_coercion::contextual::coerce_expression_to_explicit_type_boundary;
 use crate::compiler_frontend::type_coercion::parse_context::{
     ExpectedType, parse_expectation_for_type_id,
 };
@@ -283,6 +283,13 @@ pub fn resolve_declaration_syntax(
                     .file_visibility
                     .as_ref()
                     .map(|fv| &fv.visible_namespace_records),
+                trait_environment: Some(context.trait_environment()),
+                trait_evidence_environment: Some(context.trait_evidence_environment()),
+                visible_trait_names: context
+                    .file_visibility
+                    .as_ref()
+                    .map(|fv| &fv.visible_trait_names),
+                source_file_scope: context.source_file_scope.as_ref(),
             })
             .with_active_generic_type_context(context.active_generic_type_context());
         resolve_parsed_type_annotation(
@@ -293,6 +300,18 @@ pub fn resolve_declaration_syntax(
         )
         .map_err(|diagnostic| *diagnostic)?
     };
+
+    if context.kind.is_constant_context()
+        && let Some(type_id) = resolved_annotation.type_id
+        && let Some(TypeDefinition::DynamicTrait(definition)) =
+            type_interner.environment().get(type_id)
+    {
+        return Err(CompilerDiagnostic::invalid_dynamic_trait_type(
+            definition.name,
+            InvalidDynamicTraitTypeReason::Constant,
+            declaration_location,
+        ));
+    }
 
     let mut initializer_tokens = declaration_syntax.initializer_tokens;
     initializer_tokens.push(Token::new(
@@ -403,34 +422,16 @@ pub fn resolve_declaration_syntax(
                 )?
             };
 
-            // Reject incompatible types (e.g. Bool → Float, Float → Int).
-            // is_declaration_compatible accepts exact matches and Int → Float;
-            // it does not reuse ReturnSlot semantics.
-            // `DataType::Inferred` is a parse-only marker; the semantic compatibility
-            // check uses canonical `TypeId`s in the `TypeEnvironment`.
-            if let Some(declared_type_id) = declared_type_id
-                && !is_declaration_compatible(
-                    declared_type_id,
-                    expression.type_id,
-                    type_interner.environment(),
-                )
-            {
-                return Err(CompilerDiagnostic::type_mismatch(
-                    declared_type_id,
-                    expression.type_id,
-                    TypeMismatchContext::Declaration,
-                    expression.location.clone(),
-                ));
-            }
-
-            // Apply contextual numeric coercion (e.g. Int → Float) when the
-            // declared type requires it.
             if let Some(declared_type_id) = declared_type_id {
-                coerce_expression_to_declared_type(
+                // This is an explicit typed boundary: apply ordinary contextual
+                // coercions and dynamic trait wrapping in one shared path.
+                coerce_expression_to_explicit_type_boundary(
                     expression,
                     declared_type_id,
                     type_interner.environment(),
-                )
+                    context,
+                    TypeMismatchContext::Declaration,
+                )?
             } else {
                 expression
             }

@@ -101,6 +101,22 @@ impl ScopeContext {
         self
     }
 
+    /// Register visible trait names for type-resolution in constant headers.
+    ///
+    /// WHAT: maps source-level trait names to canonical trait paths so that
+    /// dynamic trait annotations can be resolved in `#` constant declarations.
+    /// WHY: constant-header parsing runs before body emission and builds its
+    /// scope context manually; trait visibility must be injected explicitly.
+    pub fn with_visible_trait_names(
+        mut self,
+        trait_names: FxHashMap<StringId, InternedPath>,
+    ) -> ScopeContext {
+        self.update_file_visibility(|file_visibility| {
+            file_visibility.visible_trait_names = trait_names;
+        });
+        self
+    }
+
     /// Apply a header-built `FileVisibility` to this scope context.
     ///
     /// WHAT: copies all visibility maps from the prepared header environment.
@@ -294,6 +310,21 @@ impl ScopeContext {
         shared.choice_variant_shells_by_path =
             Some(Rc::clone(&lookups.choice_variant_shells_by_path));
         shared.lookups = lookups;
+        self
+    }
+
+    /// Inject a resolved trait environment into this scope context.
+    ///
+    /// WHAT: replaces the synthetic empty `TraitEnvironment` created by `ScopeContext::new`
+    /// with the real module trait metadata so type resolution in constant headers can
+    /// resolve and reject dynamic trait annotations.
+    /// WHY: constant-header parsing runs while the AST environment is still being built;
+    /// it needs trait awareness without waiting for the full `AstModuleLookups` package.
+    pub(crate) fn with_trait_environment(
+        mut self,
+        trait_environment: Rc<TraitEnvironment>,
+    ) -> ScopeContext {
+        Rc::make_mut(&mut self.shared).trait_environment_override = Some(trait_environment);
         self
     }
 }

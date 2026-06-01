@@ -32,6 +32,8 @@ pub(crate) enum FrontendCounter {
     AstStructCount,
     AstChoiceCount,
     AstConstantCount,
+    AstTraitDeclarationCount,
+    AstTraitConformanceCount,
     AstReceiverMethodCount,
     AstGenericTemplateCount,
     AstGenericInstanceCount,
@@ -108,6 +110,8 @@ mod detailed {
     static AST_STRUCT_COUNT: AtomicUsize = AtomicUsize::new(0);
     static AST_CHOICE_COUNT: AtomicUsize = AtomicUsize::new(0);
     static AST_CONSTANT_COUNT: AtomicUsize = AtomicUsize::new(0);
+    static AST_TRAIT_DECLARATION_COUNT: AtomicUsize = AtomicUsize::new(0);
+    static AST_TRAIT_CONFORMANCE_COUNT: AtomicUsize = AtomicUsize::new(0);
     static AST_RECEIVER_METHOD_COUNT: AtomicUsize = AtomicUsize::new(0);
     static AST_GENERIC_TEMPLATE_COUNT: AtomicUsize = AtomicUsize::new(0);
     static AST_GENERIC_INSTANCE_COUNT: AtomicUsize = AtomicUsize::new(0);
@@ -158,7 +162,7 @@ mod detailed {
         }
     }
 
-    fn all_counters() -> [FrontendCounter; 48] {
+    fn all_counters() -> [FrontendCounter; 50] {
         [
             FrontendCounter::ModuleCount,
             FrontendCounter::SourceFileCount,
@@ -176,6 +180,8 @@ mod detailed {
             FrontendCounter::AstStructCount,
             FrontendCounter::AstChoiceCount,
             FrontendCounter::AstConstantCount,
+            FrontendCounter::AstTraitDeclarationCount,
+            FrontendCounter::AstTraitConformanceCount,
             FrontendCounter::AstReceiverMethodCount,
             FrontendCounter::AstGenericTemplateCount,
             FrontendCounter::AstGenericInstanceCount,
@@ -244,6 +250,10 @@ mod detailed {
             FrontendCounter::AstChoiceCount => &AST_CHOICE_COUNT,
 
             FrontendCounter::AstConstantCount => &AST_CONSTANT_COUNT,
+
+            FrontendCounter::AstTraitDeclarationCount => &AST_TRAIT_DECLARATION_COUNT,
+
+            FrontendCounter::AstTraitConformanceCount => &AST_TRAIT_CONFORMANCE_COUNT,
 
             FrontendCounter::AstReceiverMethodCount => &AST_RECEIVER_METHOD_COUNT,
 
@@ -358,6 +368,10 @@ mod detailed {
             FrontendCounter::AstChoiceCount => "AST/choice count",
 
             FrontendCounter::AstConstantCount => "AST/constant count",
+
+            FrontendCounter::AstTraitDeclarationCount => "AST/trait declaration count",
+
+            FrontendCounter::AstTraitConformanceCount => "AST/trait conformance count",
 
             FrontendCounter::AstReceiverMethodCount => "AST/receiver method count",
 
@@ -476,6 +490,10 @@ mod detailed {
             FrontendCounter::AstChoiceCount => "ast_choice_count",
 
             FrontendCounter::AstConstantCount => "ast_constant_count",
+
+            FrontendCounter::AstTraitDeclarationCount => "ast_trait_declaration_count",
+
+            FrontendCounter::AstTraitConformanceCount => "ast_trait_conformance_count",
 
             FrontendCounter::AstReceiverMethodCount => "ast_receiver_method_count",
 

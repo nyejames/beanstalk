@@ -22,6 +22,7 @@ pub(crate) mod instrumentation;
 pub(crate) mod keywords;
 
 pub(crate) mod reserved_trait_syntax;
+pub(crate) mod traits;
 
 pub(crate) mod compiler_messages;
 

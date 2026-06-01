@@ -57,11 +57,12 @@ fn register_single_parameter_list(
             id: TypeParameterId(0),
             name: string_table.intern(name),
             location: location(),
+            trait_bounds: Vec::new(),
         }],
     };
 
     type_environment
-        .register_generic_parameter_list(&parameter_list)
+        .register_generic_parameter_list(&parameter_list, &Default::default())
         .list_id
 }
 
@@ -90,6 +91,7 @@ fn generic_scope_rejects_duplicate_parameter_names() {
         id: TypeParameterId(0),
         name,
         location: location(),
+        trait_bounds: Vec::new(),
     };
     let list = GenericParameterList {
         parameters: vec![parameter.clone(), parameter],
@@ -117,6 +119,7 @@ fn generic_scope_rejects_collisions_with_forbidden_names() {
             id: TypeParameterId(0),
             name,
             location: location(),
+            trait_bounds: Vec::new(),
         }],
     };
     let mut forbidden = FxHashSet::default();
@@ -143,6 +146,7 @@ fn generic_scope_rejects_non_type_style_parameter_names() {
             id: TypeParameterId(0),
             name: string_table.intern("item_type"),
             location: location(),
+            trait_bounds: Vec::new(),
         }],
     };
 
@@ -171,16 +175,19 @@ fn generic_scope_accepts_pascal_case_and_single_uppercase_names() {
                 id: TypeParameterId(0),
                 name: item_name,
                 location: location(),
+                trait_bounds: Vec::new(),
             },
             GenericParameter {
                 id: TypeParameterId(1),
                 name: t_name,
                 location: location(),
+                trait_bounds: Vec::new(),
             },
             GenericParameter {
                 id: TypeParameterId(2),
                 name: error_kind_name,
                 location: location(),
+                trait_bounds: Vec::new(),
             },
         ],
     };
@@ -283,16 +290,18 @@ fn type_bindings_collect_arguments_in_parameter_order() {
                 id: TypeParameterId(0),
                 name: string_table.intern("First"),
                 location: location(),
+                trait_bounds: Vec::new(),
             },
             GenericParameter {
                 id: TypeParameterId(1),
                 name: string_table.intern("Second"),
                 location: location(),
+                trait_bounds: Vec::new(),
             },
         ],
     };
     let registered_parameters =
-        type_environment.register_generic_parameter_list(&parsed_parameters);
+        type_environment.register_generic_parameter_list(&parsed_parameters, &Default::default());
     let first = registered_parameters.canonical_by_local[&TypeParameterId(0)];
     let second = registered_parameters.canonical_by_local[&TypeParameterId(1)];
     let list = registered_parameters.list_id;
@@ -324,6 +333,7 @@ fn type_environment_allocates_distinct_canonical_ids_for_local_parameter_ids() {
             id: TypeParameterId(0),
             name: first_name,
             location: location(),
+            trait_bounds: Vec::new(),
         }],
     };
     let second_list = GenericParameterList {
@@ -331,11 +341,14 @@ fn type_environment_allocates_distinct_canonical_ids_for_local_parameter_ids() {
             id: TypeParameterId(0),
             name: second_name,
             location: location(),
+            trait_bounds: Vec::new(),
         }],
     };
 
-    let first_registered = type_environment.register_generic_parameter_list(&first_list);
-    let second_registered = type_environment.register_generic_parameter_list(&second_list);
+    let first_registered =
+        type_environment.register_generic_parameter_list(&first_list, &Default::default());
+    let second_registered =
+        type_environment.register_generic_parameter_list(&second_list, &Default::default());
     let first_canonical = first_registered.canonical_by_local[&TypeParameterId(0)];
     let second_canonical = second_registered.canonical_by_local[&TypeParameterId(0)];
 

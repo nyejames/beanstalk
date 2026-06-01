@@ -19,6 +19,7 @@ use crate::compiler_frontend::external_packages::ExternalFunctionId;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::compile_time_paths::CompileTimePaths;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap};
+use crate::compiler_frontend::type_coercion::dynamic_trait::DynamicTraitCoercion;
 
 #[derive(Clone, Debug)]
 pub enum ExpressionKind {
@@ -160,6 +161,17 @@ pub enum ExpressionKind {
         to_type: TypeId,
     },
 
+    /// Wraps a concrete value into a dynamic trait value at an explicit typed boundary.
+    ///
+    /// WHAT: carries the frontend-selected evidence that proves the concrete type
+    ///       satisfies the target trait, so HIR and backends do not rediscover it.
+    /// WHY: dynamic trait coercion is frontend-owned; the wrapper node makes the
+    ///      conversion explicit and carries the facts needed for later lowering.
+    ConstructDynamicTraitValue {
+        value: Box<Expression>,
+        coercion: DynamicTraitCoercion,
+    },
+
     /// Explicit choice variant construction: `Choice::Variant` or `Choice::Variant(...)`.
     ///
     /// WHY: choice values must not masquerade as raw integer literals in AST.
@@ -283,7 +295,8 @@ impl ExpressionKind {
             ExpressionKind::BuiltinCast { value, .. }
             | ExpressionKind::FallibleCarrierConstruct { value, .. }
             | ExpressionKind::OptionPropagation { value }
-            | ExpressionKind::Coerced { value, .. } => {
+            | ExpressionKind::Coerced { value, .. }
+            | ExpressionKind::ConstructDynamicTraitValue { value, .. } => {
                 value.remap_string_ids(remap);
             }
 

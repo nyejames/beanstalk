@@ -206,8 +206,13 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                 }
 
                 let is_type_alias = self.module_symbols.type_alias_paths.contains(path);
+                let is_trait = self.module_symbols.trait_paths.contains(path);
                 let binding = if is_type_alias {
                     VisibleNameBinding::TypeAlias {
+                        canonical_path: path.clone(),
+                    }
+                } else if is_trait {
+                    VisibleNameBinding::Trait {
                         canonical_path: path.clone(),
                     }
                 } else {
@@ -221,6 +226,10 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                 if is_type_alias {
                     file_visibility
                         .visible_type_alias_names
+                        .insert(name, path.clone());
+                } else if is_trait {
+                    file_visibility
+                        .visible_trait_names
                         .insert(name, path.clone());
                 } else {
                     file_visibility

@@ -7,6 +7,7 @@
 use crate::compiler_frontend::builtins::error_type::is_reserved_builtin_symbol;
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, InvalidDeclarationReason};
 use crate::compiler_frontend::datatypes::ids::{GenericParameterId, TypeId};
+use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::identifier_policy::is_camel_case_type_name;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
@@ -24,6 +25,18 @@ pub struct GenericParameter {
     pub id: TypeParameterId,
     pub name: StringId,
     pub location: SourceLocation,
+    pub trait_bounds: Vec<GenericTraitBound>,
+}
+
+/// Parsed declaration-site trait bound on one generic parameter.
+///
+/// WHAT: records `type T is TRAIT` before AST resolves `TRAIT` to a stable `TraitId`.
+/// WHY: bounds belong to generic parameter metadata from the start; later stages should not
+///      recover them from raw tokens or a parallel declaration table.
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct GenericTraitBound {
+    pub trait_name: StringId,
+    pub location: SourceLocation,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -39,6 +52,9 @@ impl GenericParameter {
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         self.name = remap.get(self.name);
         self.location.remap_string_ids(remap);
+        for trait_bound in &mut self.trait_bounds {
+            trait_bound.remap_string_ids(remap);
+        }
     }
 }
 
@@ -68,6 +84,13 @@ impl GenericParameterList {
     }
 }
 
+impl GenericTraitBound {
+    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
+        self.trait_name = remap.get(self.trait_name);
+        self.location.remap_string_ids(remap);
+    }
+}
+
 // -----------------------------------------------------------
 //  Scope Validation
 // -----------------------------------------------------------
@@ -88,6 +111,7 @@ pub(crate) struct GenericParameterScope {
 pub(crate) struct ActiveGenericTypeContext {
     pub(crate) parameter_scope: GenericParameterScope,
     pub(crate) substitutions: Option<FxHashMap<GenericParameterId, TypeId>>,
+    pub(crate) source_parameter_by_rebased_path: FxHashMap<InternedPath, GenericParameterId>,
 }
 
 /// A generic parameter visible while resolving one declaration.

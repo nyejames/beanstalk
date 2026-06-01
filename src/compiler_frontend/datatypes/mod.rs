@@ -40,6 +40,7 @@ use crate::compiler_frontend::external_packages::ExternalTypeId;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::compile_time_paths::CompileTimePathKind;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap, StringTable};
+use crate::compiler_frontend::traits::ids::TraitId;
 
 use display::format_fallible_signature_parts;
 use generic_identity_bridge::display_generic_instantiation_key;
@@ -87,22 +88,24 @@ pub enum BuiltinScalarReceiver {
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum ReceiverKey {
     Struct(InternedPath),
+    Choice(InternedPath),
+    External(ExternalTypeId),
     BuiltinScalar(BuiltinScalarReceiver),
 }
 
 impl ReceiverKey {
-    /// Remap interned path components for struct receivers into the merged string table.
+    /// Remap interned path components for nominal receivers into the merged string table.
     ///
     /// Builtin scalar receivers carry no string IDs and are left unchanged.
     // Called by per-file frontend output remapping before module-wide dependency sorting.
     #[allow(dead_code)]
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         match self {
-            ReceiverKey::Struct(path) => {
+            ReceiverKey::Struct(path) | ReceiverKey::Choice(path) => {
                 path.remap_string_ids(remap);
             }
 
-            ReceiverKey::BuiltinScalar(_) => {}
+            ReceiverKey::External(_) | ReceiverKey::BuiltinScalar(_) => {}
         }
     }
 }
@@ -178,6 +181,15 @@ pub enum DataType {
     /// Cannot be constructed with struct literals or field-accessed.
     External {
         type_id: ExternalTypeId,
+    },
+    /// Display spelling for an erased dynamic trait value type.
+    ///
+    /// Semantic identity lives in `TypeEnvironment::DynamicTrait`; this variant keeps AST
+    /// diagnostics from treating a resolved trait annotation as an unresolved name.
+    DynamicTrait {
+        trait_id: TraitId,
+        type_id: TypeId,
+        name: StringId,
     },
     /// Parse/diagnostic spelling for built-in options.
     ///
@@ -266,6 +278,11 @@ impl DataType {
                 generic_instance_key: None,
                 ..
             } if !const_record => Some(ReceiverKey::Struct(nominal_path.to_owned())),
+            DataType::Choices {
+                nominal_path,
+                generic_instance_key: None,
+                ..
+            } => Some(ReceiverKey::Choice(nominal_path.to_owned())),
             DataType::Int => Some(ReceiverKey::BuiltinScalar(BuiltinScalarReceiver::Int)),
             DataType::Float => Some(ReceiverKey::BuiltinScalar(BuiltinScalarReceiver::Float)),
             DataType::Bool => Some(ReceiverKey::BuiltinScalar(BuiltinScalarReceiver::Bool)),
@@ -273,6 +290,8 @@ impl DataType {
                 Some(ReceiverKey::BuiltinScalar(BuiltinScalarReceiver::String))
             }
             DataType::Char => Some(ReceiverKey::BuiltinScalar(BuiltinScalarReceiver::Char)),
+            DataType::External { type_id } => Some(ReceiverKey::External(*type_id)),
+            DataType::DynamicTrait { .. } => None,
             _ => None,
         }
     }
@@ -542,6 +561,10 @@ impl DataType {
 
             DataType::External { .. } => {}
 
+            DataType::DynamicTrait { name, .. } => {
+                *name = remap.get(*name);
+            }
+
             DataType::Option(inner) => {
                 inner.remap_string_ids(remap);
             }
@@ -622,6 +645,7 @@ impl DataType {
                 // External types are opaque; display uses the stable ID.
                 format!("External({})", type_id.0)
             }
+            DataType::DynamicTrait { name, .. } => string_table.resolve(*name).to_owned(),
             DataType::Returns(returns) => {
                 let returns_string = returns
                     .iter()
@@ -857,6 +881,18 @@ impl PartialEq for DataType {
             (DataType::External { type_id: id_a }, DataType::External { type_id: id_b }) => {
                 id_a == id_b
             }
+            (
+                DataType::DynamicTrait {
+                    trait_id: trait_a,
+                    type_id: type_a,
+                    ..
+                },
+                DataType::DynamicTrait {
+                    trait_id: trait_b,
+                    type_id: type_b,
+                    ..
+                },
+            ) => trait_a == trait_b && type_a == type_b,
             _ => false,
         }
     }
@@ -999,6 +1035,11 @@ fn type_id_to_data_type(type_id: ids::TypeId, type_environment: &TypeEnvironment
                 DataType::None
             }
         }
+        Some(TypeDefinition::DynamicTrait(def)) => DataType::DynamicTrait {
+            trait_id: def.trait_id,
+            type_id,
+            name: def.name,
+        },
         None => DataType::None,
     }
 }

@@ -6,7 +6,6 @@
 //! `DataType` must not be used for semantic decisions once type IDs exist.
 
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
-use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::match_patterns::MatchArm;
 use crate::compiler_frontend::ast::statements::value_production::completeness::extract_single_produced_type;
 use crate::compiler_frontend::ast::statements::value_production::types::ValueReceiverKind;
@@ -17,7 +16,6 @@ use crate::compiler_frontend::compiler_messages::{
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::type_coercion::compatibility::is_declaration_compatible;
-use crate::compiler_frontend::type_coercion::contextual::coerce_expression_to_declared_type;
 
 /// Maps a receiver kind to the diagnostic context used when branch types mismatch.
 pub(super) fn receiver_type_mismatch_context(kind: ValueReceiverKind) -> TypeMismatchContext {
@@ -26,19 +24,6 @@ pub(super) fn receiver_type_mismatch_context(kind: ValueReceiverKind) -> TypeMis
         ValueReceiverKind::Declaration => TypeMismatchContext::Declaration,
         _ => TypeMismatchContext::Assignment,
     }
-}
-
-/// Coerce a single branch expression to the unified result type when compatible.
-pub(super) fn coerce_branch_expression_to_result(
-    expression: Expression,
-    target_type_id: TypeId,
-    type_interner: &mut AstTypeInterner<'_>,
-) -> Expression {
-    if expression.type_id == target_type_id {
-        return expression;
-    }
-
-    coerce_expression_to_declared_type(expression, target_type_id, type_interner.environment())
 }
 
 /// Unifies the types of two inline branch expressions.

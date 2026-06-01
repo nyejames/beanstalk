@@ -37,6 +37,7 @@ pub enum SignatureMemberContext {
     FunctionParameter,
     StructField,
     ChoicePayloadField,
+    TraitRequirement,
 }
 
 /// One parsed parameter/field shell before AST type resolution.
@@ -297,6 +298,55 @@ pub fn parse_signature_members_syntax(
                 ));
             }
 
+            TokenKind::TraitThis if member_context == SignatureMemberContext::TraitRequirement => {
+                if !expecting_member {
+                    return Err(CompilerDiagnostic::expected_token(
+                        TokenKind::Comma,
+                        Some(token_stream.current_token_kind().to_owned()),
+                        token_stream.current_location(),
+                    ));
+                }
+
+                let this_id = string_table.intern("This");
+                let member = parse_trait_this_member_syntax(
+                    token_stream,
+                    owner_path.append(this_id),
+                    ValueMode::ImmutableOwned,
+                )?;
+
+                members.push(member);
+                expecting_member = false;
+            }
+
+            TokenKind::Mutable if member_context == SignatureMemberContext::TraitRequirement => {
+                if !expecting_member {
+                    return Err(CompilerDiagnostic::expected_token(
+                        TokenKind::Comma,
+                        Some(token_stream.current_token_kind().to_owned()),
+                        token_stream.current_location(),
+                    ));
+                }
+
+                token_stream.advance();
+
+                if token_stream.current_token_kind() != &TokenKind::TraitThis {
+                    return Err(CompilerDiagnostic::invalid_signature_member(
+                        InvalidSignatureMemberReason::TraitReceiverMustBeThis,
+                        token_stream.current_location(),
+                    ));
+                }
+
+                let this_id = string_table.intern("This");
+                let member = parse_trait_this_member_syntax(
+                    token_stream,
+                    owner_path.append(this_id),
+                    ValueMode::MutableOwned,
+                )?;
+
+                members.push(member);
+                expecting_member = false;
+            }
+
             TokenKind::Comma => {
                 token_stream.advance();
                 if token_stream.current_token_kind() == &TokenKind::TypeParameterBracket {
@@ -407,11 +457,19 @@ fn parse_signature_member_syntax(
         token_stream.advance();
     }
 
-    let type_annotation =
-        parse_type_annotation(token_stream, TypeAnnotationContext::SignatureParameter)?;
+    let type_annotation = parse_type_annotation(
+        token_stream,
+        type_annotation_context_for_member(member_context),
+    )?;
     let default_tokens = match token_stream.current_token_kind() {
         TokenKind::Assign => {
             token_stream.advance();
+            if member_context == SignatureMemberContext::TraitRequirement {
+                return Err(CompilerDiagnostic::invalid_signature_member(
+                    InvalidSignatureMemberReason::TraitRequirementDefaultValue,
+                    token_stream.current_location(),
+                ));
+            }
             if member_context == SignatureMemberContext::ChoicePayloadField {
                 return Err(CompilerDiagnostic::invalid_signature_member(
                     InvalidSignatureMemberReason::ChoicePayloadDefaultValue,
@@ -441,6 +499,48 @@ fn parse_signature_member_syntax(
             ));
         }
     };
+
+    Ok(SignatureMemberSyntax {
+        id: full_name,
+        value_mode,
+        type_annotation,
+        default_tokens,
+        location: member_location,
+    })
+}
+
+fn type_annotation_context_for_member(
+    member_context: SignatureMemberContext,
+) -> TypeAnnotationContext {
+    match member_context {
+        SignatureMemberContext::TraitRequirement => TypeAnnotationContext::TraitRequirement,
+        SignatureMemberContext::FunctionParameter
+        | SignatureMemberContext::StructField
+        | SignatureMemberContext::ChoicePayloadField => TypeAnnotationContext::SignatureParameter,
+    }
+}
+
+/// Parse a `This` receiver parameter in a trait requirement.
+///
+/// ENTRY INVARIANT: the stream is positioned on `This` (TraitThis).
+/// EXIT INVARIANT: the stream is positioned on the token after `This`.
+fn parse_trait_this_member_syntax(
+    token_stream: &mut FileTokens,
+    full_name: InternedPath,
+    value_mode: ValueMode,
+) -> Result<SignatureMemberSyntax, CompilerDiagnostic> {
+    let member_location = token_stream.current_location();
+
+    token_stream.advance(); // past This
+
+    // Trait receiver parameters have no explicit type annotation;
+    // the type is implicitly the implementing concrete type.
+    let type_annotation = ParsedTypeRef::This {
+        location: member_location.clone(),
+    };
+
+    // Default values are not allowed in trait requirements.
+    let default_tokens = Vec::new();
 
     Ok(SignatureMemberSyntax {
         id: full_name,
@@ -491,6 +591,92 @@ fn collect_member_default_tokens(
     Ok(tokens)
 }
 
+/// Parse a return list for a trait requirement, stopping at newline or block end.
+///
+/// ENTRY INVARIANT: the stream is positioned on the `->` arrow.
+/// EXIT INVARIANT: the stream is positioned on the first token after the last return type.
+fn parse_trait_requirement_return_list(
+    token_stream: &mut FileTokens,
+    parameters: &[SignatureMemberSyntax],
+    string_table: &mut StringTable,
+) -> Result<Vec<ReturnSlotSyntax>, CompilerDiagnostic> {
+    let mut return_slots = Vec::new();
+
+    token_stream.advance(); // past ->
+
+    loop {
+        return_slots.push(parse_single_return_item_syntax(
+            token_stream,
+            parameters,
+            string_table,
+            TypeAnnotationContext::TraitRequirement,
+        )?);
+
+        match token_stream.current_token_kind() {
+            TokenKind::Comma => {
+                let comma_location = token_stream.current_location();
+                token_stream.advance();
+
+                match token_stream.current_token_kind() {
+                    TokenKind::Newline | TokenKind::End | TokenKind::Eof => {
+                        return Err(CompilerDiagnostic::unexpected_trailing_comma(
+                            comma_location,
+                        ));
+                    }
+
+                    _ => {}
+                }
+            }
+
+            TokenKind::Newline | TokenKind::End | TokenKind::Eof => {
+                return Ok(return_slots);
+            }
+
+            unexpected_token => {
+                return Err(CompilerDiagnostic::invalid_function_signature(
+                    InvalidFunctionSignatureReason::MissingCommaOrColon {
+                        found: unexpected_token.clone(),
+                    },
+                    token_stream.current_location(),
+                ));
+            }
+        }
+    }
+}
+
+/// Parse a trait requirement signature from `| params | [-> returns]`.
+///
+/// ENTRY INVARIANT: the stream is positioned on the opening `|`.
+/// EXIT INVARIANT: the stream is positioned on the first token after the signature.
+pub fn parse_trait_requirement_signature_syntax(
+    token_stream: &mut FileTokens,
+    warnings: &mut Vec<CompilerDiagnostic>,
+    string_table: &mut StringTable,
+    method_path: &InternedPath,
+) -> Result<FunctionSignatureSyntax, CompilerDiagnostic> {
+    token_stream.advance(); // past |
+
+    let parameters = parse_signature_members_syntax(
+        token_stream,
+        string_table,
+        warnings,
+        SignatureMemberContext::TraitRequirement,
+        method_path,
+    )?;
+    token_stream.advance(); // past |
+
+    let returns = if token_stream.current_token_kind() == &TokenKind::Arrow {
+        parse_trait_requirement_return_list(token_stream, &parameters, string_table)?
+    } else {
+        Vec::new()
+    };
+
+    Ok(FunctionSignatureSyntax {
+        parameters,
+        returns,
+    })
+}
+
 fn parse_return_list_syntax(
     token_stream: &mut FileTokens,
     parameters: &[SignatureMemberSyntax],
@@ -511,6 +697,7 @@ fn parse_return_list_syntax(
             token_stream,
             parameters,
             string_table,
+            TypeAnnotationContext::SignatureReturn,
         )?);
 
         match token_stream.current_token_kind() {
@@ -581,9 +768,21 @@ fn parse_single_return_item_syntax(
     token_stream: &mut FileTokens,
     parameters: &[SignatureMemberSyntax],
     string_table: &mut StringTable,
+    type_context: TypeAnnotationContext,
 ) -> Result<ReturnSlotSyntax, CompilerDiagnostic> {
     let location = token_stream.current_location();
     if let Some(symbol) = parameter_alias_symbol(token_stream.current_token_kind(), string_table) {
+        if type_context == TypeAnnotationContext::TraitRequirement
+            && parameters
+                .iter()
+                .any(|parameter| parameter.id.name() == Some(symbol))
+        {
+            return Err(CompilerDiagnostic::invalid_function_signature(
+                InvalidFunctionSignatureReason::AliasReturnNotAllowedInTraitRequirement,
+                location,
+            ));
+        }
+
         if parameters
             .iter()
             .any(|parameter| parameter.id.name() == Some(symbol))
@@ -604,16 +803,16 @@ fn parse_single_return_item_syntax(
         }
     }
 
-    parse_value_return_type_syntax(token_stream, string_table)
+    parse_value_return_type_syntax(token_stream, string_table, type_context)
 }
 
 fn parse_value_return_type_syntax(
     token_stream: &mut FileTokens,
     string_table: &StringTable,
+    type_context: TypeAnnotationContext,
 ) -> Result<ReturnSlotSyntax, CompilerDiagnostic> {
     let location = token_stream.current_location();
-    let type_annotation =
-        parse_type_annotation(token_stream, TypeAnnotationContext::SignatureReturn)?;
+    let type_annotation = parse_type_annotation(token_stream, type_context)?;
 
     if parsed_type_ref_is_void(&type_annotation, string_table) {
         return Err(CompilerDiagnostic::invalid_function_signature(

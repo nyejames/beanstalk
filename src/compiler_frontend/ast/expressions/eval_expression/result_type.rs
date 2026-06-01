@@ -74,6 +74,9 @@ pub(super) fn resolve_expression_result_type(
             | NodeKind::MethodCall {
                 result_type_ids, ..
             }
+            | NodeKind::DynamicTraitMethodCall {
+                result_type_ids, ..
+            }
             | NodeKind::CollectionBuiltinCall {
                 result_type_ids, ..
             }

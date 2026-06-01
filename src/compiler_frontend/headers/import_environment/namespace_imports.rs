@@ -353,6 +353,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                 .module_symbols
                 .receiver_method_paths
                 .contains(&symbol_path)
+                || self.module_symbols.trait_paths.contains(&symbol_path)
             {
                 continue;
             }

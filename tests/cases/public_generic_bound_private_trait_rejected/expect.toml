@@ -1,0 +1,7 @@
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+diagnostic_codes = ["BST-RULE-0074"]
+message_contains = [
+    "Public generic function 'identity' exposes private trait bound 'PRIVATE_DISPLAY'",
+]

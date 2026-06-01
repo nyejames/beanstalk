@@ -15,6 +15,7 @@ mod compiler_frontend;
 mod libraries;
 
 mod backends {
+    pub(crate) mod backend_feature_validation;
     pub(crate) mod error_types;
     pub(crate) mod external_package_validation;
     pub(crate) mod js;

@@ -1,0 +1,8 @@
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+diagnostic_codes = ["BST-RULE-0075"]
+message_contains = [
+    "No visible trait evidence allows Label",
+    "dynamic trait value 'DISPLAY_TEXT'",
+]

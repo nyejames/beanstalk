@@ -24,8 +24,7 @@ use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
-use crate::compiler_frontend::type_coercion::compatibility::is_declaration_compatible;
-use crate::compiler_frontend::type_coercion::contextual::coerce_expression_to_declared_type;
+use crate::compiler_frontend::type_coercion::contextual::coerce_expression_to_explicit_type_boundary;
 use crate::compiler_frontend::type_coercion::parse_context::ExpectedType;
 use crate::compiler_frontend::value_mode::ValueMode;
 
@@ -154,6 +153,8 @@ pub fn parse_produced_values_typed<'a, 'b>(
         produced_values,
         &target.result_type_ids,
         type_interner.environment(),
+        context,
+        target.receiver_kind,
     )
 }
 
@@ -260,40 +261,38 @@ fn validate_and_coerce_produced_values(
     produced_values: Vec<Expression>,
     expected_type_ids: &[TypeId],
     type_environment: &TypeEnvironment,
+    context: &ScopeContext,
+    receiver_kind: ValueReceiverKind,
 ) -> Result<Vec<Expression>, ExpressionParseError> {
     let mut checked_values = Vec::with_capacity(produced_values.len());
+    let mismatch_context = mismatch_context_for_receiver(receiver_kind);
 
     // Validate each produced value against the corresponding expected type,
     // coercing when compatible or reporting a mismatch when not.
     for (produced_value, expected_type_id) in
         produced_values.into_iter().zip(expected_type_ids.iter())
     {
-        let actual_type_id = produced_value.type_id;
-
-        if actual_type_id == *expected_type_id {
-            checked_values.push(produced_value);
-            continue;
-        }
-
-        if is_declaration_compatible(*expected_type_id, actual_type_id, type_environment) {
-            checked_values.push(coerce_expression_to_declared_type(
-                produced_value,
-                *expected_type_id,
-                type_environment,
-            ));
-            continue;
-        }
-
-        return Err(CompilerDiagnostic::type_mismatch(
+        checked_values.push(coerce_expression_to_explicit_type_boundary(
+            produced_value,
             *expected_type_id,
-            actual_type_id,
-            TypeMismatchContext::General,
-            produced_value.location,
-        )
-        .into());
+            type_environment,
+            context,
+            mismatch_context,
+        )?);
     }
 
     Ok(checked_values)
+}
+
+fn mismatch_context_for_receiver(receiver_kind: ValueReceiverKind) -> TypeMismatchContext {
+    match receiver_kind {
+        ValueReceiverKind::Declaration => TypeMismatchContext::Declaration,
+        ValueReceiverKind::Return => TypeMismatchContext::ReturnValue,
+        ValueReceiverKind::Assignment
+        | ValueReceiverKind::MultiBind
+        | ValueReceiverKind::NestedThen
+        | ValueReceiverKind::CatchHandler => TypeMismatchContext::General,
+    }
 }
 
 // WHAT: identifies tokens that can begin a new expression.

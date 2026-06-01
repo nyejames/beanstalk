@@ -12,7 +12,8 @@ use crate::compiler_frontend::ast::module_ast::scope_context::{
     ContextKind, ReceiverMethodCatalog, ScopeContext,
 };
 use crate::compiler_frontend::ast::receiver_methods::{
-    ReceiverMethodCatalogError, build_receiver_method_catalog,
+    BuildReceiverMethodCatalogInput, ReceiverMethodCatalogError, ReceiverMethodKind,
+    build_receiver_method_catalog, receiver_type_is_visible_in_file,
 };
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::statements::functions::function_signature_from_syntax_with_unresolved_types;
@@ -24,19 +25,21 @@ use crate::compiler_frontend::ast::type_resolution::{
 };
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_messages::{
-    CompilerDiagnostic, DeferredFeatureReason, InvalidReceiverDeclarationReason,
+    CompilerDiagnostic, InvalidReceiverDeclarationReason,
 };
-use crate::compiler_frontend::datatypes::generic_parameters::GenericParameterList;
-use crate::compiler_frontend::datatypes::ids::GenericParameterListId;
+use crate::compiler_frontend::datatypes::definitions::TypeDefinition;
+use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
+use crate::compiler_frontend::datatypes::generic_parameters::{
+    GenericParameterList, TypeParameterId,
+};
+use crate::compiler_frontend::datatypes::ids::{
+    GenericParameterId, GenericParameterListId, TypeId,
+};
 use crate::compiler_frontend::datatypes::{DataType, ReceiverKey};
-use crate::compiler_frontend::declaration_syntax::signature_members::FunctionSignatureSyntax;
-use crate::compiler_frontend::headers::import_environment::{
-    FileVisibility, NamespaceTypeMember, ReceiverMethodVisibility,
-};
-use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::headers::import_environment::ReceiverMethodVisibility;
+use crate::compiler_frontend::headers::parse_file_headers::{FileRole, Header, HeaderKind};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
+use crate::compiler_frontend::traits::environment::TraitEnvironment;
 use crate::compiler_frontend::type_coercion::compatibility::TypeCompatibilityCache;
 
 #[cfg(feature = "detailed_timers")]
@@ -53,6 +56,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
     pub(in crate::compiler_frontend::ast) fn resolve_function_signatures(
         &mut self,
         sorted_headers: &[Header],
+        trait_environment: &TraitEnvironment,
         string_table: &mut StringTable,
     ) -> Result<(), CompilerMessages> {
         #[cfg(feature = "detailed_timers")]
@@ -73,23 +77,39 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 .map_err(|error| self.error_messages(error, string_table))?
                 .clone();
 
-            if let Some(diagnostic) = generic_receiver_method_deferred_diagnostic(
+            let resolved_bounds_by_local = self.resolve_generic_parameter_bounds(
                 generic_parameters,
-                signature,
-                &header.name_location,
+                &visibility,
+                trait_environment,
                 string_table,
-            ) {
-                return Err(self.diagnostic_messages(diagnostic, string_table));
+            )?;
+            if header.file_role == FileRole::ModuleFacade {
+                let function_name = header.tokens.src_path.name().ok_or_else(|| {
+                    self.error_messages(
+                        CompilerError::compiler_error(
+                            "Public generic function header had no source-path name.",
+                        ),
+                        string_table,
+                    )
+                })?;
+                self.validate_public_generic_bounds(
+                    function_name,
+                    generic_parameters,
+                    &resolved_bounds_by_local,
+                    trait_environment,
+                    string_table,
+                )?;
             }
 
-            let registered_generic_parameters = if generic_parameters.is_empty() {
-                None
-            } else {
-                Some(
-                    self.type_environment
-                        .register_generic_parameter_list(generic_parameters),
-                )
-            };
+            let registered_generic_parameters =
+                if generic_parameters.is_empty() {
+                    None
+                } else {
+                    Some(self.type_environment.register_generic_parameter_list(
+                        generic_parameters,
+                        &resolved_bounds_by_local,
+                    ))
+                };
 
             let generic_parameter_scope =
                 build_generic_parameter_scope(GenericParameterScopeBuildInput {
@@ -159,11 +179,17 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             //  Resolve and validate signature
             // -------------------------------
 
-            let mut type_resolution_context =
-                self.type_resolution_context_for(&visibility, generic_parameter_scope.as_ref());
+            let mut type_resolution_context = self.type_resolution_context_for_with_traits(
+                &visibility,
+                generic_parameter_scope.as_ref(),
+                Some(trait_environment),
+            );
             let resolved_signature = resolve_function_signature(
                 &header.tokens.src_path,
                 &unresolved_signature,
+                registered_generic_parameters
+                    .as_ref()
+                    .map(|parameters| parameters.list_id),
                 &mut type_resolution_context,
                 string_table,
             )
@@ -177,6 +203,14 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             for return_slot in &resolved_signature.signature.returns {
                 collect_type_parameter_ids_from_type(
                     return_slot.data_type(),
+                    &mut used_generic_parameters,
+                );
+            }
+            if let Some(registered_generic_parameters) = registered_generic_parameters.as_ref() {
+                collect_type_parameter_ids_from_signature_type_ids(
+                    &resolved_signature.signature,
+                    &self.type_environment,
+                    &registered_generic_parameters.canonical_by_local,
                     &mut used_generic_parameters,
                 );
             }
@@ -270,14 +304,18 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         sorted_headers: &[Header],
         string_table: &mut StringTable,
     ) -> Result<Rc<ReceiverMethodCatalog>, CompilerMessages> {
-        let catalog = build_receiver_method_catalog(
+        let catalog = build_receiver_method_catalog(BuildReceiverMethodCatalogInput {
             sorted_headers,
-            &self.resolved_function_signatures_by_path,
-            &self.resolved_struct_fields_by_path,
-            &self.struct_source_by_path,
-            &self.module_symbols.canonical_source_by_symbol_path,
+            resolved_function_signatures_by_path: &self.resolved_function_signatures_by_path,
+            struct_fields_by_path: &self.resolved_struct_fields_by_path,
+            struct_source_by_path: &self.struct_source_by_path,
+            choice_source_by_path: &self.choice_source_by_path,
+            source_file_by_symbol_path: &self.module_symbols.canonical_source_by_symbol_path,
+            file_visibility_by_source: &self.import_environment.file_visibility_by_source,
+            resolved_type_aliases_by_path: &self.resolved_type_aliases_by_path,
+            external_package_registry: self.context.external_package_registry,
             string_table,
-        )
+        })
         .map_err(|error| match error {
             ReceiverMethodCatalogError::Diagnostic(diagnostic) => {
                 self.diagnostic_messages(diagnostic, string_table)
@@ -291,7 +329,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         if detailed_timer_output_enabled() {
             saying::say!(
                 "\n AST/receiver catalog/methods indexed: ",
-                catalog.by_receiver_and_name.len()
+                catalog.by_function_path.len()
             );
         }
 
@@ -310,7 +348,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         receiver_methods: &ReceiverMethodCatalog,
         string_table: &mut StringTable,
     ) -> Result<(), CompilerMessages> {
-        for file_visibility in self.import_environment.file_visibility_by_source.values() {
+        for (source_file, file_visibility) in &self.import_environment.file_visibility_by_source {
             for visible_methods in file_visibility.visible_receiver_methods.values() {
                 let mut methods_by_receiver: FxHashMap<ReceiverKey, &ReceiverMethodVisibility> =
                     FxHashMap::default();
@@ -323,7 +361,23 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                         continue;
                     };
 
-                    if !self.receiver_type_is_visible(file_visibility, &method_entry.receiver) {
+                    if method_entry.kind == ReceiverMethodKind::FileLocalExtension
+                        && &method_entry.visibility_source_file != source_file
+                    {
+                        return Err(self.diagnostic_messages(
+                            CompilerDiagnostic::invalid_receiver_declaration(
+                                InvalidReceiverDeclarationReason::NonExportableExtensionMethodImport,
+                                visible_method.location.clone(),
+                            ),
+                            string_table,
+                        ));
+                    }
+
+                    if !receiver_type_is_visible_in_file(
+                        &method_entry.receiver,
+                        file_visibility,
+                        &self.resolved_type_aliases_by_path,
+                    ) {
                         return Err(self.diagnostic_messages(
                             CompilerDiagnostic::invalid_receiver_declaration(
                                 InvalidReceiverDeclarationReason::ImportedReceiverTypeNotVisible,
@@ -353,78 +407,6 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
 
         Ok(())
     }
-
-    /// Checks whether a receiver type is visible in the given file visibility context.
-    ///
-    /// A receiver is considered visible when:
-    /// - the receiver is a scalar (not a struct), or
-    /// - the struct's declaration path is directly visible, or
-    /// - the struct is reachable through a visible type alias or namespace record.
-    fn receiver_type_is_visible(
-        &self,
-        file_visibility: &FileVisibility,
-        receiver: &ReceiverKey,
-    ) -> bool {
-        let ReceiverKey::Struct(receiver_path) = receiver else {
-            return true;
-        };
-
-        if file_visibility
-            .visible_declaration_paths
-            .contains(receiver_path)
-        {
-            return true;
-        }
-
-        file_visibility
-            .visible_type_alias_names
-            .values()
-            .any(|alias_path| self.type_path_matches_receiver(alias_path, receiver_path))
-            || file_visibility
-                .visible_namespace_records
-                .values()
-                .any(|record| {
-                    record.type_members.values().any(|member| {
-                        self.namespace_type_member_matches_receiver(member, receiver_path)
-                    })
-                })
-    }
-
-    /// Checks whether a namespace type member resolves to the given receiver struct path.
-    fn namespace_type_member_matches_receiver(
-        &self,
-        member: &NamespaceTypeMember,
-        receiver_path: &InternedPath,
-    ) -> bool {
-        match member {
-            NamespaceTypeMember::SourceDeclaration(type_path) => {
-                self.type_path_matches_receiver(type_path, receiver_path)
-            }
-            NamespaceTypeMember::ExternalSymbol(_) => false,
-        }
-    }
-
-    /// Checks whether a type path resolves to the given receiver struct path.
-    ///
-    /// This includes direct path equality and resolution through non-const struct type aliases.
-    fn type_path_matches_receiver(
-        &self,
-        type_path: &InternedPath,
-        receiver_path: &InternedPath,
-    ) -> bool {
-        if type_path == receiver_path {
-            return true;
-        }
-
-        matches!(
-            self.resolved_type_aliases_by_path.get(type_path),
-            Some(DataType::Struct {
-                nominal_path,
-                const_record: false,
-                ..
-            }) if nominal_path == receiver_path
-        )
-    }
 }
 
 /// Constructs a generic function template from a resolved header and signature.
@@ -452,28 +434,117 @@ fn build_generic_function_template(
     }
 }
 
-/// Produces the deferred-feature diagnostic for generic receiver methods.
-///
-/// WHY: generic receiver methods are not yet supported. Detecting them early prevents
-/// later stages from building invalid generic parameter scopes for receiver-shaped signatures.
-fn generic_receiver_method_deferred_diagnostic(
-    generic_parameters: &GenericParameterList,
-    signature: &FunctionSignatureSyntax,
-    location: &SourceLocation,
-    string_table: &StringTable,
-) -> Option<CompilerDiagnostic> {
-    if generic_parameters.is_empty() {
-        return None;
+fn collect_type_parameter_ids_from_signature_type_ids(
+    signature: &FunctionSignature,
+    type_environment: &TypeEnvironment,
+    canonical_by_local: &FxHashMap<TypeParameterId, GenericParameterId>,
+    used_parameters: &mut rustc_hash::FxHashSet<TypeParameterId>,
+) {
+    for parameter in &signature.parameters {
+        collect_type_parameter_ids_from_type_id(
+            parameter.value.type_id,
+            type_environment,
+            canonical_by_local,
+            used_parameters,
+        );
     }
 
-    let first_parameter = signature.parameters.first()?;
-
-    if first_parameter.id.name_str(string_table) == Some("this") {
-        return Some(CompilerDiagnostic::deferred_feature_reason(
-            DeferredFeatureReason::GenericReceiverMethod,
-            location.to_owned(),
-        ));
+    for return_slot in &signature.returns {
+        if let Some(return_type_id) = return_slot.type_id {
+            collect_type_parameter_ids_from_type_id(
+                return_type_id,
+                type_environment,
+                canonical_by_local,
+                used_parameters,
+            );
+        }
     }
+}
 
-    None
+fn collect_type_parameter_ids_from_type_id(
+    type_id: TypeId,
+    type_environment: &TypeEnvironment,
+    canonical_by_local: &FxHashMap<TypeParameterId, GenericParameterId>,
+    used_parameters: &mut rustc_hash::FxHashSet<TypeParameterId>,
+) {
+    match type_environment.get(type_id) {
+        Some(TypeDefinition::GenericParameter(parameter)) => {
+            if let Some(local_id) =
+                local_id_for_canonical_parameter(parameter.id, canonical_by_local)
+            {
+                used_parameters.insert(local_id);
+            }
+        }
+
+        Some(TypeDefinition::Constructed(constructed)) => {
+            for argument in constructed.arguments.iter() {
+                collect_type_parameter_ids_from_type_id(
+                    *argument,
+                    type_environment,
+                    canonical_by_local,
+                    used_parameters,
+                );
+            }
+        }
+
+        Some(TypeDefinition::Function(function)) => {
+            for parameter in function.parameters.iter() {
+                collect_type_parameter_ids_from_type_id(
+                    parameter.type_id,
+                    type_environment,
+                    canonical_by_local,
+                    used_parameters,
+                );
+            }
+
+            for return_type_id in function.returns.iter() {
+                collect_type_parameter_ids_from_type_id(
+                    *return_type_id,
+                    type_environment,
+                    canonical_by_local,
+                    used_parameters,
+                );
+            }
+
+            if let Some(error_return) = function.error_return {
+                collect_type_parameter_ids_from_type_id(
+                    error_return,
+                    type_environment,
+                    canonical_by_local,
+                    used_parameters,
+                );
+            }
+        }
+
+        Some(TypeDefinition::GenericInstance(instance)) => {
+            for argument in instance.arguments.iter() {
+                collect_type_parameter_ids_from_type_id(
+                    *argument,
+                    type_environment,
+                    canonical_by_local,
+                    used_parameters,
+                );
+            }
+        }
+
+        Some(
+            TypeDefinition::Builtin(..)
+            | TypeDefinition::Struct(..)
+            | TypeDefinition::Choice(..)
+            | TypeDefinition::External(..)
+            | TypeDefinition::DynamicTrait(..),
+        )
+        | None => {}
+    }
+}
+
+fn local_id_for_canonical_parameter(
+    canonical_id: GenericParameterId,
+    canonical_by_local: &FxHashMap<TypeParameterId, GenericParameterId>,
+) -> Option<TypeParameterId> {
+    canonical_by_local
+        .iter()
+        .find_map(|(local_id, mapped_canonical_id)| {
+            (*mapped_canonical_id == canonical_id).then_some(*local_id)
+        })
 }

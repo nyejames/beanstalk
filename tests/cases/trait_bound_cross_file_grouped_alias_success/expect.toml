@@ -1,0 +1,4 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["trait_bound_cross_file_grouped_alias_success alias"]

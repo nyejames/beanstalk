@@ -80,7 +80,7 @@ pub(crate) fn invalid_generic_parameter_message(
 ) -> String {
     match reason {
         InvalidGenericParameterReason::EmptyParameterList
-        | InvalidGenericParameterReason::BoundsNotSupported
+        | InvalidGenericParameterReason::BoundsMustUseIs
         | InvalidGenericParameterReason::ListMustStayWithHeader => {
             invalid_generic_parameter_static_message(reason).to_owned()
         }
@@ -100,8 +100,8 @@ fn invalid_generic_parameter_static_message(
         InvalidGenericParameterReason::EmptyParameterList => {
             "Expected at least one generic parameter after `type`."
         }
-        InvalidGenericParameterReason::BoundsNotSupported => {
-            "Generic parameter bounds are not supported yet."
+        InvalidGenericParameterReason::BoundsMustUseIs => {
+            "Generic parameter bounds use `is`. Write `type T is TRAIT`."
         }
         InvalidGenericParameterReason::ListMustStayWithHeader => {
             "Generic parameter lists must stay with the declaration header."
@@ -420,20 +420,8 @@ pub(crate) fn deferred_feature_message(
 fn deferred_feature_static_message(reason: &DeferredFeatureReason) -> &'static str {
     match reason {
         DeferredFeatureReason::NamedFeature { .. } => "Deferred feature.",
-        DeferredFeatureReason::ReservedTraitMustKeyword => {
-            "Keyword 'must' is reserved for traits and is deferred for Alpha."
-        }
-        DeferredFeatureReason::ReservedTraitThisKeyword => {
-            "Keyword 'This' is reserved for traits and is deferred for Alpha."
-        }
-        DeferredFeatureReason::TraitDeclaration => {
-            "Trait declarations using 'must' are reserved for traits and are deferred for Alpha."
-        }
-        DeferredFeatureReason::GenericConstraints => {
-            "Generic constraints are deferred until traits/interfaces are implemented. The planned constraint form is `type A is Trait`, but traits are not implemented yet."
-        }
         DeferredFeatureReason::GenericWhereConstraints => {
-            "Generic constraints are deferred until traits/interfaces are implemented. `where` syntax is not part of the planned generic constraint form."
+            "`where` syntax is not part of Beanstalk generic constraints. Use declaration-site bounds such as `type A is TRAIT`."
         }
         DeferredFeatureReason::CaptureTaggedPattern => {
             "Capture/tagged patterns using '|...|' are deferred for Alpha."

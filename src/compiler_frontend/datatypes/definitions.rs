@@ -8,6 +8,7 @@ use crate::compiler_frontend::external_packages::ExternalTypeId;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringId;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
+use crate::compiler_frontend::traits::ids::TraitId;
 
 use super::ids::{
     BuiltinTypeKey, FunctionTypeId, GenericInstanceKey, GenericParameterId, GenericParameterListId,
@@ -29,6 +30,7 @@ pub enum TypeDefinition {
     External(ExternalTypeDefinition),
     GenericParameter(GenericParameterDefinition),
     GenericInstance(GenericInstanceDefinition),
+    DynamicTrait(DynamicTraitTypeDefinition),
 }
 
 /// Builtin scalar type definition.
@@ -122,4 +124,15 @@ pub struct GenericInstanceDefinition {
     pub base: NominalTypeId,
     pub arguments: Box<[TypeId]>,
     pub source_key: GenericInstanceKey,
+}
+
+/// Dynamic trait value type identity.
+///
+/// WHAT: records the type-level identity for values whose concrete implementor is erased.
+/// WHY: trait declarations and evidence stay in `TraitEnvironment`; `TypeEnvironment` owns only
+/// the runtime value type identity needed by annotations and diagnostics.
+#[derive(Debug, Clone, Copy)]
+pub struct DynamicTraitTypeDefinition {
+    pub(crate) trait_id: TraitId,
+    pub(crate) name: StringId,
 }

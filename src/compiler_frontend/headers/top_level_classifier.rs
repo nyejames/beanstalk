@@ -10,6 +10,7 @@ use crate::compiler_frontend::tokenizer::tokens::{FileTokens, Token, TokenKind};
 
 pub(super) enum HeaderFileItem {
     Symbol(StringId),
+    BuiltinTypeConformanceTarget(&'static str),
     Import,
     Hash { at_statement_boundary: bool },
     RuntimeTemplate,
@@ -29,6 +30,22 @@ pub(super) fn classify_current_item(
 
         TokenKind::Symbol(_) => HeaderFileItem::StartBodyToken,
 
+        TokenKind::DatatypeInt
+        | TokenKind::DatatypeFloat
+        | TokenKind::DatatypeBool
+        | TokenKind::DatatypeString
+        | TokenKind::DatatypeChar
+            if current_item_started_at_statement_boundary(token_stream) =>
+        {
+            if let Some(type_name) = builtin_conformance_target_name(&current_token.kind)
+                && token_stream.current_token_kind() == &TokenKind::Must
+            {
+                return HeaderFileItem::BuiltinTypeConformanceTarget(type_name);
+            }
+
+            HeaderFileItem::StartBodyToken
+        }
+
         TokenKind::Import => HeaderFileItem::Import,
 
         TokenKind::Hash => HeaderFileItem::Hash {
@@ -42,6 +59,17 @@ pub(super) fn classify_current_item(
         TokenKind::Eof => HeaderFileItem::Eof,
 
         _ => HeaderFileItem::StartBodyToken,
+    }
+}
+
+fn builtin_conformance_target_name(token_kind: &TokenKind) -> Option<&'static str> {
+    match token_kind {
+        TokenKind::DatatypeInt => Some("Int"),
+        TokenKind::DatatypeFloat => Some("Float"),
+        TokenKind::DatatypeBool => Some("Bool"),
+        TokenKind::DatatypeString => Some("String"),
+        TokenKind::DatatypeChar => Some("Char"),
+        _ => None,
     }
 }
 
@@ -91,6 +119,39 @@ pub(super) fn starts_duplicate_top_level_header_declaration(token_stream: &FileT
         TokenKind::As => true,
         // `name #= ...` or `name #Type = ...` starts a compile-time constant declaration.
         TokenKind::Hash => true,
+        // `name must:` starts a trait declaration; `name must TRAIT` starts a conformance declaration.
+        TokenKind::Must => true,
+        // `Name of T must TRAIT` is a conformance declaration whose target is rejected later
+        // as deferred specialized generic evidence.
+        TokenKind::Of => starts_specialized_generic_conformance_declaration(token_stream),
         _ => false,
     }
+}
+
+/// Detect whether the current `must` token starts a trait declaration rather than conformance.
+///
+/// WHY: repeated `Type must TRAIT` conformance declarations reuse the target type name and do not
+/// shadow it, but repeated `TRAIT must:` declarations are ordinary duplicate headers.
+pub(super) fn starts_trait_declaration_after_must(token_stream: &FileTokens) -> bool {
+    token_stream.current_token_kind() == &TokenKind::Must
+        && matches!(token_stream.peek_next_token(), Some(TokenKind::Colon))
+}
+
+pub(super) fn starts_specialized_generic_conformance_declaration(
+    token_stream: &FileTokens,
+) -> bool {
+    if token_stream.current_token_kind() != &TokenKind::Of {
+        return false;
+    }
+
+    let mut index = token_stream.index;
+    while let Some(token) = token_stream.tokens.get(index) {
+        match token.kind {
+            TokenKind::Must => return true,
+            TokenKind::Newline | TokenKind::End | TokenKind::Eof => return false,
+            _ => index += 1,
+        }
+    }
+
+    false
 }

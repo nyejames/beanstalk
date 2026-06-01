@@ -73,6 +73,7 @@ fn make_generic_parameter_list(name: &str, string_table: &mut StringTable) -> Ge
             id: TypeParameterId(0),
             name: string_table.intern(name),
             location: make_location("test.bst", string_table),
+            trait_bounds: Vec::new(),
         }],
     }
 }
