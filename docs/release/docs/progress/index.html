@@ -643,7 +643,25 @@ body {
      <td style="padding: 0.2em 0.5em;  "> Partial</td>
      <td style="padding: 0.2em 0.5em;  "> Broad literal, choice-match, and payload-capture coverage, including exhaustiveness and diagnostics.</td>
      <td style="padding: 0.2em 0.5em;  "> JS / HTML</td>
-     <td style="padding: 0.2em 0.5em;  "> Literal patterns, choice variant patterns, payload extraction, relational patterns including strings, guards, else arms, and general capture patterns are supported. Wildcard patterns using '_' are permanently rejected; use else => instead. Obvious unreachable arms warn. Full relational overlap analysis and nested choice payload patterns remain deferred.</td>
+     <td style="padding: 0.2em 0.5em;  "> Literal patterns, choice variant patterns, payload extraction, relational patterns including strings, guards, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">else =></span> arms, empty <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">else =></span> no-op fallback arms, and general capture patterns are supported. Wildcard patterns using <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">_</span> and no-op bodies such as <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">else => _</span> are permanently rejected; use <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">else =></span> for fallback and an empty <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">else =></span> to do nothing. Obvious unreachable arms warn. Full relational overlap analysis and nested choice payload patterns remain deferred.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">

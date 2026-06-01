@@ -1,9 +1,9 @@
 //! Stage 3 dependency ordering for parsed Beanstalk headers.
 //!
-//! WHAT: topologically sorts top-level declaration headers by their header-provided dependency edges,
-//! then appends `StartFunction` headers in source order. Finalizes the header-owned
-//! `ModuleSymbols` package: declarations are built from the sorted headers and appended with
-//! builtin declarations.
+//! WHAT: builds a small dependency graph over top-level declaration headers, topologically sorts
+//! those headers by their header-provided dependency edges, then appends `StartFunction` headers in
+//! source order. Finalizes the header-owned `ModuleSymbols` package: declarations are built from
+//! the sorted headers and appended with builtin declarations.
 //!
 //! ## Stage contract
 //!
@@ -48,6 +48,7 @@ pub(crate) struct SortedHeaders {
 struct DependencyTracker {
     temp_mark: FxHashSet<InternedPath>,
     visited: FxHashSet<InternedPath>,
+    stack: Vec<InternedPath>,
     visit_count: usize,
 }
 
@@ -56,9 +57,248 @@ impl DependencyTracker {
         DependencyTracker {
             temp_mark: FxHashSet::with_capacity_and_hasher(capacity, Default::default()),
             visited: FxHashSet::with_capacity_and_hasher(capacity, Default::default()),
+            stack: Vec::with_capacity(capacity),
             visit_count: 0,
         }
     }
+
+    fn enter(&mut self, path: InternedPath) {
+        self.temp_mark.insert(path.to_owned());
+        self.stack.push(path);
+    }
+
+    fn is_in_current_stack(&self, path: &InternedPath) -> bool {
+        self.temp_mark.contains(path)
+    }
+
+    fn abandon(&mut self, path: &InternedPath) {
+        self.temp_mark.remove(path);
+
+        if self.stack.last() == Some(path) {
+            self.stack.pop();
+        } else {
+            self.stack.retain(|stack_path| stack_path != path);
+        }
+    }
+
+    fn finish(&mut self, path: &InternedPath) {
+        self.abandon(path);
+        self.visited.insert(path.to_owned());
+    }
+}
+
+/// Header dependency graph plus the path-resolution rules that make graph edges sortable.
+///
+/// WHAT: owns the graph keys, source-order indexes, and resolved edge construction used by DFS.
+/// WHY: dependency sorting needs one place where exact header membership, source-library facade
+/// fallback, same-file hint deferral, and stable edge ordering are applied consistently.
+struct DependencyGraph<'a> {
+    headers_by_path: FxHashMap<InternedPath, Header>,
+    source_order_by_path: FxHashMap<InternedPath, usize>,
+    ordered_paths: Vec<InternedPath>,
+    facade_exports: &'a FxHashMap<String, FxHashSet<FacadeExportEntry>>,
+}
+
+impl<'a> DependencyGraph<'a> {
+    fn from_headers(
+        headers: Vec<Header>,
+        facade_exports: &'a FxHashMap<String, FxHashSet<FacadeExportEntry>>,
+        _string_table: &StringTable,
+    ) -> Self {
+        let mut headers_by_path: FxHashMap<InternedPath, Header> =
+            FxHashMap::with_capacity_and_hasher(headers.len(), Default::default());
+        let mut source_order_by_path: FxHashMap<InternedPath, usize> =
+            FxHashMap::with_capacity_and_hasher(headers.len(), Default::default());
+        let mut ordered_paths: Vec<InternedPath> = Vec::with_capacity(headers.len());
+
+        for header in headers {
+            header_log!(header);
+
+            let path = header.tokens.src_path.to_owned();
+            source_order_by_path.insert(path.to_owned(), ordered_paths.len());
+            ordered_paths.push(path.to_owned());
+            headers_by_path.insert(path, header);
+        }
+
+        Self {
+            headers_by_path,
+            source_order_by_path,
+            ordered_paths,
+            facade_exports,
+        }
+    }
+
+    fn len(&self) -> usize {
+        self.headers_by_path.len()
+    }
+
+    fn ordered_paths(&self) -> &[InternedPath] {
+        &self.ordered_paths
+    }
+
+    fn header_for_path(&self, path: &InternedPath) -> Option<&Header> {
+        self.headers_by_path.get(path)
+    }
+
+    fn resolve_requested_path(
+        &self,
+        requested_path: &InternedPath,
+        string_table: &StringTable,
+    ) -> Option<ResolvedGraphPath> {
+        if self.headers_by_path.contains_key(requested_path) {
+            return Some(ResolvedGraphPath::Header(requested_path.to_owned()));
+        }
+
+        // Source-library facade imports can use a public prefix path that differs from the
+        // concrete `#mod.bst` header path. Accept those public edges without treating them as
+        // graph nodes.
+        if self.is_source_library_facade_export_path(requested_path, string_table) {
+            return Some(ResolvedGraphPath::SourceLibraryFacadeExport(
+                requested_path.to_owned(),
+            ));
+        }
+
+        None
+    }
+
+    fn source_order_for_requested_path(
+        &self,
+        requested_path: &InternedPath,
+        string_table: &StringTable,
+    ) -> Option<usize> {
+        let resolved_path = match self.resolve_requested_path(requested_path, string_table)? {
+            ResolvedGraphPath::Header(path) => path,
+            ResolvedGraphPath::SourceLibraryFacadeExport(_) => return None,
+        };
+
+        self.source_order_by_path.get(&resolved_path).copied()
+    }
+
+    fn sorted_dependency_edges_for_header(
+        &self,
+        header: &Header,
+        string_table: &StringTable,
+    ) -> Vec<ResolvedDependencyEdge> {
+        let mut edges = header
+            .dependencies
+            .iter()
+            .map(|requested_path| {
+                self.resolve_dependency_edge(header, requested_path, string_table)
+            })
+            .collect::<Vec<_>>();
+
+        edges.sort_by(|left, right| {
+            let left_order = self.source_order_for_edge(left);
+            let right_order = self.source_order_for_edge(right);
+
+            left_order.cmp(&right_order).then_with(|| {
+                left.requested_path
+                    .to_portable_string(string_table)
+                    .cmp(&right.requested_path.to_portable_string(string_table))
+            })
+        });
+
+        edges
+    }
+
+    fn resolve_dependency_edge(
+        &self,
+        header: &Header,
+        requested_path: &InternedPath,
+        string_table: &StringTable,
+    ) -> ResolvedDependencyEdge {
+        let location = header.name_location.to_owned();
+        let source_order = self.source_order_for_requested_path(requested_path, string_table);
+
+        match self.resolve_requested_path(requested_path, string_table) {
+            Some(ResolvedGraphPath::Header(resolved_path)) => ResolvedDependencyEdge {
+                requested_path: requested_path.to_owned(),
+                resolved_path: Some(resolved_path),
+                location,
+                source_order,
+                kind: DependencyEdgeKind::GraphHeader,
+            },
+            Some(ResolvedGraphPath::SourceLibraryFacadeExport(resolved_path)) => {
+                ResolvedDependencyEdge {
+                    requested_path: requested_path.to_owned(),
+                    resolved_path: Some(resolved_path),
+                    location,
+                    source_order,
+                    kind: DependencyEdgeKind::SourceLibraryFacadeExport,
+                }
+            }
+            None if self.is_same_file_symbol_hint(requested_path, &header.source_file) => {
+                ResolvedDependencyEdge {
+                    requested_path: requested_path.to_owned(),
+                    resolved_path: None,
+                    location,
+                    source_order,
+                    kind: DependencyEdgeKind::SameFileSymbolHint,
+                }
+            }
+            None => ResolvedDependencyEdge {
+                requested_path: requested_path.to_owned(),
+                resolved_path: None,
+                location,
+                source_order,
+                kind: DependencyEdgeKind::Missing,
+            },
+        }
+    }
+
+    fn source_order_for_edge(&self, edge: &ResolvedDependencyEdge) -> usize {
+        edge.source_order.unwrap_or(usize::MAX)
+    }
+
+    fn is_source_library_facade_export_path(
+        &self,
+        path: &InternedPath,
+        string_table: &StringTable,
+    ) -> bool {
+        let components = path.as_components();
+        if components.is_empty() {
+            return false;
+        }
+
+        let first_component = string_table.resolve(components[0]);
+        let Some(export_name) = path.name() else {
+            return false;
+        };
+
+        if let Some(entries) = self.facade_exports.get(first_component) {
+            for entry in entries {
+                if entry.export_name == export_name {
+                    return true;
+                }
+            }
+        }
+
+        false
+    }
+
+    fn is_same_file_symbol_hint(&self, path: &InternedPath, source_file: &InternedPath) -> bool {
+        path.parent().as_ref() == Some(source_file)
+    }
+}
+
+struct ResolvedDependencyEdge {
+    requested_path: InternedPath,
+    resolved_path: Option<InternedPath>,
+    location: SourceLocation,
+    source_order: Option<usize>,
+    kind: DependencyEdgeKind,
+}
+
+enum DependencyEdgeKind {
+    GraphHeader,
+    SourceLibraryFacadeExport,
+    SameFileSymbolHint,
+    Missing,
+}
+
+enum ResolvedGraphPath {
+    Header(InternedPath),
+    SourceLibraryFacadeExport(InternedPath),
 }
 
 /// Topologically sort headers and finalize the header-owned module symbol package.
@@ -104,48 +344,44 @@ pub fn resolve_module_dependencies(
         .map(|header| header.dependencies.len())
         .sum();
 
-    let mut graph: FxHashMap<InternedPath, Header> =
-        FxHashMap::with_capacity_and_hasher(top_level_headers.len(), Default::default());
-    let mut diagnostic_bag = DiagnosticBag::new();
-    let mut ordered_paths: Vec<InternedPath> = Vec::with_capacity(top_level_headers.len());
+    let (mut sorted, dependency_visit_count) = {
+        let graph = DependencyGraph::from_headers(
+            top_level_headers,
+            &module_symbols.facade_exports,
+            string_table,
+        );
+        let mut diagnostic_bag = DiagnosticBag::new();
 
-    // Build graph
-    for header in top_level_headers {
-        header_log!(header);
-        ordered_paths.push(header.tokens.src_path.to_owned());
-        graph.insert(header.tokens.src_path.to_owned(), header);
-    }
+        // Perform topological sort on header-provided dependency edges.
+        let mut tracker = DependencyTracker::new(graph.len());
+        let mut sorted: Vec<Header> = Vec::with_capacity(graph.len());
 
-    let order_lookup = ordered_paths
-        .iter()
-        .enumerate()
-        .map(|(index, path)| (path.to_owned(), index))
-        .collect::<FxHashMap<_, _>>();
+        for path in graph.ordered_paths() {
+            if !tracker.visited.contains(path) {
+                let diagnostic_location = graph
+                    .header_for_path(path)
+                    .map(|header| header.name_location.to_owned())
+                    .unwrap_or_default();
 
-    // Perform topological sort on header-provided dependency edges.
-    let mut tracker = DependencyTracker::new(graph.len());
-    let mut sorted: Vec<Header> = Vec::with_capacity(graph.len());
-
-    let facade_exports = &module_symbols.facade_exports;
-    for path in &ordered_paths {
-        if !tracker.visited.contains(path)
-            && let Err(error) = visit_node(
-                path,
-                &mut tracker,
-                &graph,
-                &order_lookup,
-                &mut sorted,
-                facade_exports,
-                string_table,
-            )
-        {
-            diagnostic_bag.push(error);
+                if let Err(error) = visit_node(
+                    path,
+                    &graph,
+                    &mut tracker,
+                    &mut sorted,
+                    string_table,
+                    diagnostic_location,
+                ) {
+                    diagnostic_bag.push(error);
+                }
+            }
         }
-    }
 
-    if diagnostic_bag.has_errors() {
-        return Err(diagnostic_bag);
-    }
+        if diagnostic_bag.has_errors() {
+            return Err(diagnostic_bag);
+        }
+
+        (sorted, tracker.visit_count)
+    };
 
     // Append start headers after the sorted top-level headers.
     // WHY: start sees all declarations and cannot be imported, so it must come last.
@@ -161,7 +397,10 @@ pub fn resolve_module_dependencies(
         dependency_header_count,
     );
     add_frontend_counter(FrontendCounter::DependencyEdgeCount, dependency_edge_count);
-    add_frontend_counter(FrontendCounter::DependencyVisitCount, tracker.visit_count);
+    add_frontend_counter(
+        FrontendCounter::DependencyVisitCount,
+        dependency_visit_count,
+    );
 
     Ok(SortedHeaders {
         headers: sorted,
@@ -176,164 +415,123 @@ pub fn resolve_module_dependencies(
 #[allow(clippy::result_large_err)]
 fn visit_node(
     node_path: &InternedPath,
+    graph: &DependencyGraph<'_>,
     tracker: &mut DependencyTracker,
-    graph: &FxHashMap<InternedPath, Header>,
-    order_lookup: &FxHashMap<InternedPath, usize>,
     sorted: &mut Vec<Header>,
-    facade_exports: &FxHashMap<String, FxHashSet<FacadeExportEntry>>,
     string_table: &mut StringTable,
+    diagnostic_location: SourceLocation,
 ) -> Result<(), CompilerDiagnostic> {
     tracker.visit_count += 1;
 
-    let Some(resolved_path) = resolve_graph_path(node_path, graph, facade_exports, string_table)
-    else {
+    let Some(resolved_graph_path) = graph.resolve_requested_path(node_path, string_table) else {
         return Err(CompilerDiagnostic::missing_import_target(
             node_path.to_owned(),
-            SourceLocation::default(),
+            diagnostic_location,
         ));
     };
 
-    // cycle?
-    if tracker.temp_mark.contains(&resolved_path) {
+    let resolved_path = match resolved_graph_path {
+        ResolvedGraphPath::Header(path) => path,
+        ResolvedGraphPath::SourceLibraryFacadeExport(path) => {
+            tracker.visited.insert(path);
+            return Ok(());
+        }
+    };
+
+    if tracker.is_in_current_stack(&resolved_path) {
         return Err(CompilerDiagnostic::circular_dependency(
             resolved_path,
-            SourceLocation::default(),
+            diagnostic_location,
         ));
     }
 
-    // only proceed if not already permanently marked
     if !tracker.visited.contains(&resolved_path) {
-        let Some(header) = graph.get(&resolved_path) else {
-            // Source-library public import paths can resolve to facade-declared symbols whose
-            // authored header path differs from the public prefix path. They have no additional
-            // ordering edge here beyond the facade entry itself.
-            if is_source_library_facade_export_path(&resolved_path, facade_exports, string_table) {
-                tracker.visited.insert(resolved_path);
-                return Ok(());
-            }
+        let Some(header) = graph.header_for_path(&resolved_path) else {
             return Err(CompilerError::new(
                 format!(
                     "Dependency ordering resolved '{}' but it was missing from the graph.",
                     resolved_path.to_portable_string(string_table)
                 ),
-                SourceLocation::default(),
+                diagnostic_location,
                 ErrorType::Compiler,
             )
             .into());
         };
 
-        // mark temporarily
-        tracker.temp_mark.insert(resolved_path.to_owned());
+        tracker.enter(resolved_path.to_owned());
 
         // Recurse on header-provided dependency edges.
         // WHY: edges include type surfaces and constant initializer references.
         // Executable body references are excluded.
-        let mut strict_imports = header.dependencies.iter().cloned().collect::<Vec<_>>();
-        strict_imports.sort_by(|left, right| {
-            let left_order = resolve_graph_path(left, graph, facade_exports, string_table)
-                .and_then(|path| order_lookup.get(&path).copied())
-                .unwrap_or(usize::MAX);
-            let right_order = resolve_graph_path(right, graph, facade_exports, string_table)
-                .and_then(|path| order_lookup.get(&path).copied())
-                .unwrap_or(usize::MAX);
+        let dependency_edges = graph.sorted_dependency_edges_for_header(header, string_table);
+        for edge in dependency_edges {
+            let dependency_result =
+                visit_dependency_edge(edge, graph, tracker, sorted, string_table);
 
-            left_order.cmp(&right_order).then_with(|| {
-                left.to_portable_string(string_table)
-                    .cmp(&right.to_portable_string(string_table))
-            })
-        });
-
-        for import in strict_imports {
-            if resolve_graph_path(&import, graph, facade_exports, string_table).is_none()
-                && is_same_file_symbol_hint(&import, &header.source_file)
-            {
-                // Same-file named-type edges are only ordering hints while header parsing is
-                // still discovering the file. If the target never materializes as a header, let
-                // later type resolution emit the user-facing "Unknown type" diagnostic.
-                continue;
+            if let Err(error) = dependency_result {
+                tracker.abandon(&resolved_path);
+                return Err(*error);
             }
-
-            visit_node(
-                &import,
-                tracker,
-                graph,
-                order_lookup,
-                sorted,
-                facade_exports,
-                string_table,
-            )?;
         }
 
-        // when children are done, push this node (clone of context)
         sorted.push(header.clone());
-
-        // un-mark temp, mark visited
-        tracker.temp_mark.remove(&resolved_path);
-        tracker.visited.insert(resolved_path);
+        tracker.finish(&resolved_path);
     }
 
     Ok(())
 }
 
-/// Resolves a requested dependency path to a graph key.
-///
-/// WHAT: performs a canonical graph key lookup.
-/// WHY: header edge producers (type dependencies, constant initializer dependencies, import
-/// dependencies) all emit canonical paths, so only exact graph membership and the facade
-/// fallback are needed.
-fn resolve_graph_path(
-    requested_path: &InternedPath,
-    graph: &FxHashMap<InternedPath, Header>,
-    facade_exports: &FxHashMap<String, FxHashSet<FacadeExportEntry>>,
-    string_table: &StringTable,
-) -> Option<InternedPath> {
-    if graph.contains_key(requested_path) {
-        return Some(requested_path.to_owned());
-    }
+fn visit_dependency_edge(
+    edge: ResolvedDependencyEdge,
+    graph: &DependencyGraph<'_>,
+    tracker: &mut DependencyTracker,
+    sorted: &mut Vec<Header>,
+    string_table: &mut StringTable,
+) -> Result<(), Box<CompilerDiagnostic>> {
+    match edge.kind {
+        DependencyEdgeKind::GraphHeader => {
+            let Some(resolved_path) = edge.resolved_path else {
+                return Err(Box::new(
+                    CompilerError::new(
+                        "Dependency edge was classified as a graph header without a resolved path.",
+                        edge.location,
+                        ErrorType::Compiler,
+                    )
+                    .into(),
+                ));
+            };
 
-    // Facade fallback: source-library imports can use a public prefix path that differs from the
-    // concrete `#mod.bst` header path. Return the path so visit_node can skip the public edge.
-    if is_source_library_facade_export_path(requested_path, facade_exports, string_table) {
-        return Some(requested_path.to_owned());
-    }
-
-    None
-}
-
-/// Checks whether a path refers to a symbol exported by a module facade.
-///
-/// WHAT: source-library facade files declare symbols that are visible through the library prefix.
-/// WHY: dependency edges can use the public prefix spelling even when the concrete graph key is
-/// the authored `#mod.bst` declaration path, so these public edges are accepted as facade edges
-/// rather than reported as missing imports.
-fn is_source_library_facade_export_path(
-    path: &InternedPath,
-    facade_exports: &FxHashMap<String, FxHashSet<FacadeExportEntry>>,
-    string_table: &StringTable,
-) -> bool {
-    let components = path.as_components();
-    if components.is_empty() {
-        return false;
-    }
-
-    let first_component = string_table.resolve(components[0]);
-    let Some(export_name) = path.name() else {
-        return false;
-    };
-
-    if let Some(entries) = facade_exports.get(first_component) {
-        for entry in entries {
-            if entry.export_name == export_name {
-                return true;
-            }
+            visit_node(
+                &resolved_path,
+                graph,
+                tracker,
+                sorted,
+                string_table,
+                edge.location,
+            )
+            .map_err(Box::new)
         }
+
+        DependencyEdgeKind::SourceLibraryFacadeExport => {
+            if let Some(resolved_path) = edge.resolved_path {
+                tracker.visited.insert(resolved_path);
+            }
+
+            Ok(())
+        }
+
+        DependencyEdgeKind::SameFileSymbolHint => {
+            // Same-file named-type edges are only ordering hints while header parsing is still
+            // discovering the file. If the target never materializes as a header, let later type
+            // resolution emit the user-facing "Unknown type" diagnostic.
+            Ok(())
+        }
+
+        DependencyEdgeKind::Missing => Err(Box::new(CompilerDiagnostic::missing_import_target(
+            edge.requested_path,
+            edge.location,
+        ))),
     }
-
-    false
-}
-
-fn is_same_file_symbol_hint(path: &InternedPath, source_file: &InternedPath) -> bool {
-    path.parent().as_ref() == Some(source_file)
 }
 
 #[cfg(test)]

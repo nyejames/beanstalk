@@ -1,0 +1,214 @@
+//! Receiving-site parser entrypoint for value-producing control flow.
+//!
+//! WHAT: detects `if` at closed receiver sites (declaration initialisers, assignment
+//! RHS, and return expressions) and routes to the correct parser for inline bool,
+//! inline single-predicate match, block if, or full match forms.
+//! WHY: this is the only place where `if` is permitted in expression position;
+//! general expression parsing continues to reject bare `if` everywhere else.
+//!
+//! This module must not make value blocks general expressions.
+
+use crate::compiler_frontend::ast::ContextKind;
+use crate::compiler_frontend::ast::ScopeContext;
+use crate::compiler_frontend::ast::expressions::expression::Expression;
+use crate::compiler_frontend::ast::expressions::parse_expression::create_expression_until;
+use crate::compiler_frontend::ast::statements::condition_validation::ensure_if_statement_condition;
+use crate::compiler_frontend::ast::statements::value_production::types::ValueReceiverKind;
+use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
+use crate::compiler_frontend::compiler_messages::{
+    CompilerDiagnostic, InvalidControlFlowStatementReason,
+};
+use crate::compiler_frontend::datatypes::ids::TypeId;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
+use crate::compiler_frontend::type_coercion::parse_context::ExpectedType;
+use crate::compiler_frontend::value_mode::ValueMode;
+
+mod block_if;
+mod detect;
+mod expression_build;
+mod full_match;
+mod inline_if;
+mod inline_match;
+mod inline_then_else;
+mod result_type;
+mod token_checkpoint;
+
+// Shared receiver helpers consumed by sibling value-production parsers.
+pub(super) use detect::current_if_header_is_full_match;
+pub(super) use full_match::validate_value_match_completeness;
+pub(super) use inline_then_else::same_logical_line;
+
+/// Forwards accumulated parser warnings into the outer scope.
+///
+/// WHAT: drains a local warning vec and emits each warning through the scope context.
+/// WHY: branch-local parsing (e.g. `function_body_to_ast`) may produce warnings
+/// that belong to the enclosing receiver site.
+pub(super) fn emit_collected_warnings(context: &ScopeContext, warnings: Vec<CompilerDiagnostic>) {
+    for warning in warnings {
+        context.emit_warning(warning);
+    }
+}
+
+/// Shared input for inline and block value-if parsers.
+///
+/// WHAT: bundles the common state needed after the condition has been parsed.
+pub(super) struct ValueIfParseInput<'a, 'b> {
+    pub(super) token_stream: &'a mut FileTokens,
+    pub(super) context: &'a ScopeContext,
+    pub(super) type_interner: &'a mut AstTypeInterner<'b>,
+    pub(super) expected_result_type_ids: &'a [TypeId],
+    pub(super) receiver_kind: ValueReceiverKind,
+    pub(super) string_table: &'a mut StringTable,
+    pub(super) condition: Expression,
+    pub(super) location: SourceLocation,
+}
+
+/// Attempts to parse a value-producing block when the current token is `if` at a
+/// closed receiving site.
+///
+/// WHAT: returns `None` if the current token is not `If`, otherwise parses the value
+/// block and returns the resulting expression (or a diagnostic on failure).
+/// WHY: this is the only place where `if` is permitted in expression position;
+/// `create_expression` continues to reject it everywhere else.
+#[allow(clippy::result_large_err)]
+pub fn try_parse_value_block_at_receiver(
+    token_stream: &mut FileTokens,
+    context: &ScopeContext,
+    type_interner: &mut AstTypeInterner<'_>,
+    expected_result_type_ids: &[TypeId],
+    receiver_kind: ValueReceiverKind,
+    string_table: &mut StringTable,
+) -> Option<Result<Expression, CompilerDiagnostic>> {
+    if token_stream.current_token_kind() != &TokenKind::If {
+        return None;
+    }
+
+    let location = token_stream.current_location();
+    token_stream.advance();
+
+    if let Some(reason) = detect::unsupported_optional_single_predicate_reason(
+        token_stream,
+        context,
+        type_interner.environment(),
+    ) {
+        return Some(Err(CompilerDiagnostic::invalid_control_flow_statement(
+            reason,
+            token_stream.current_location(),
+        )));
+    }
+
+    match detect::classify_value_if_header(token_stream) {
+        detect::ValueIfHeaderKind::FullMatch => Some(full_match::parse_value_match_at_receiver(
+            full_match::ValueMatchParseInput {
+                token_stream,
+                context,
+                type_interner,
+                expected_result_type_ids,
+                receiver_kind,
+                string_table,
+                location,
+            },
+        )),
+
+        detect::ValueIfHeaderKind::InlineSinglePredicate => {
+            if let Some(result) = inline_match::try_parse_inline_single_predicate_value_match(
+                token_stream,
+                context,
+                type_interner,
+                expected_result_type_ids,
+                receiver_kind,
+                string_table,
+                location.clone(),
+            ) {
+                return Some(result);
+            }
+
+            Some(parse_bool_value_if_after_condition(
+                token_stream,
+                context,
+                type_interner,
+                expected_result_type_ids,
+                receiver_kind,
+                string_table,
+                location,
+            ))
+        }
+
+        detect::ValueIfHeaderKind::BoolCondition => Some(parse_bool_value_if_after_condition(
+            token_stream,
+            context,
+            type_interner,
+            expected_result_type_ids,
+            receiver_kind,
+            string_table,
+            location,
+        )),
+    }
+}
+
+/// Parses a Bool condition value-if after the `if` keyword has been consumed.
+///
+/// WHAT: parses the condition expression, then routes to inline or block form
+/// depending on whether the next token is `then` or `:`.
+fn parse_bool_value_if_after_condition(
+    token_stream: &mut FileTokens,
+    context: &ScopeContext,
+    type_interner: &mut AstTypeInterner<'_>,
+    expected_result_type_ids: &[TypeId],
+    receiver_kind: ValueReceiverKind,
+    string_table: &mut StringTable,
+    location: SourceLocation,
+) -> Result<Expression, CompilerDiagnostic> {
+    let mut condition_type = ExpectedType::Infer;
+    let condition = create_expression_until(
+        token_stream,
+        &context.new_child_control_flow(ContextKind::Condition, string_table),
+        type_interner,
+        &mut condition_type,
+        &ValueMode::ImmutableOwned,
+        &[TokenKind::Then, TokenKind::Colon],
+        string_table,
+    )
+    .map_err(|error| -> CompilerDiagnostic { error.into() })?;
+
+    ensure_if_statement_condition(&condition, type_interner.environment())?;
+
+    if token_stream.current_token_kind() == &TokenKind::Then {
+        if !same_logical_line(&location, &token_stream.current_location()) {
+            return Err(CompilerDiagnostic::invalid_control_flow_statement(
+                InvalidControlFlowStatementReason::InlineValueIfMultiline,
+                token_stream.current_location(),
+            ));
+        }
+
+        return inline_if::parse_inline_value_if(ValueIfParseInput {
+            token_stream,
+            context,
+            type_interner,
+            expected_result_type_ids,
+            receiver_kind,
+            string_table,
+            condition,
+            location,
+        });
+    }
+
+    if token_stream.current_token_kind() == &TokenKind::Colon {
+        return block_if::parse_block_value_if(ValueIfParseInput {
+            token_stream,
+            context,
+            type_interner,
+            expected_result_type_ids,
+            receiver_kind,
+            string_table,
+            condition,
+            location,
+        });
+    }
+
+    Err(CompilerDiagnostic::invalid_control_flow_statement(
+        InvalidControlFlowStatementReason::ExpectedColonAfterCondition,
+        token_stream.current_location(),
+    ))
+}

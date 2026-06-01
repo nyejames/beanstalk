@@ -14,21 +14,16 @@ use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::match_patterns::{
     MatchArm, MatchPattern, RelationalPatternOp,
 };
-use crate::compiler_frontend::ast::statements::value_production::types::{
-    ValueIfBlock, ValueMatchBlock,
-};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::hir::blocks::HirBlock;
 use crate::compiler_frontend::hir::expressions::{
     HirExpression, HirExpressionKind, HirVariantCarrier, ValueKind,
 };
-use crate::compiler_frontend::hir::hir_builder::{HirBuilder, LoopTargets, ValueBlockTarget};
-use crate::compiler_frontend::hir::hir_expression::LoweredExpression;
+use crate::compiler_frontend::hir::hir_builder::{HirBuilder, LoopTargets};
 use crate::compiler_frontend::hir::hir_statement::match_captures::substitute_local_expressions;
 use crate::compiler_frontend::hir::ids::{BlockId, LocalId, RegionId};
 use crate::compiler_frontend::hir::patterns::{HirMatchArm, HirPattern, HirRelationalPatternOp};
-use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::regions::HirRegion;
 use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::hir::utils::terminator_targets;
@@ -175,209 +170,6 @@ impl<'a> HirBuilder<'a> {
         }
 
         self.set_current_block(merge_block, location)
-    }
-
-    /// Lowers a value-producing `if` expression into explicit CFG blocks.
-    ///
-    /// WHAT: allocates result locals (one per expected slot), creates then/else/merge blocks,
-    ///       lowers the condition and both branches, and returns a `Load` or `TupleConstruct`
-    ///       of the result locals as the expression value.
-    /// WHY: value-producing `if` has no dedicated HIR expression kind; it is represented as
-    ///      `HirTerminator::If` with branch bodies that assign to shared locals and jump to merge.
-    pub(crate) fn lower_value_block_if(
-        &mut self,
-        value_if: &ValueIfBlock,
-        location: &SourceLocation,
-        _result_type_id: TypeId,
-    ) -> Result<LoweredExpression, CompilerError> {
-        let parent_region = self.current_region_or_error(location)?;
-
-        // Allocate one result local per expected slot so both branches can assign.
-        // For single-return this is one local; for multi-return it is N locals.
-        let mut result_locals = Vec::with_capacity(value_if.result_type_ids.len());
-        for type_id in &value_if.result_type_ids {
-            let lowered_ty = self.lower_type_id(*type_id, location)?;
-            let local = self.allocate_temp_local(lowered_ty, Some(location.to_owned()))?;
-            result_locals.push(local);
-        }
-
-        // Create merge block upfront so ThenValue inside branches knows where to jump.
-        let merge_block = self.create_block(parent_region, location, "value-if-merge")?;
-
-        // Lower the condition into the current (pre-if) block.
-        let condition_value = self.lower_expression_value_to_current_block(&value_if.condition)?;
-        let condition_block = self.current_block_id_or_error(location)?;
-
-        // Create child regions and entry blocks for each branch.
-        let then_region = self.create_child_region(parent_region);
-        let else_region = self.create_child_region(parent_region);
-        let then_block = self.create_block(then_region, location, "value-if-then")?;
-        let else_block = self.create_block(else_region, location, "value-if-else")?;
-
-        // Emit the conditional branch from the condition block.
-        self.emit_terminator(
-            condition_block,
-            HirTerminator::If {
-                condition: condition_value,
-                then_block,
-                else_block,
-            },
-            location,
-        )?;
-
-        self.log_control_flow_edge(condition_block, then_block, "value-if.true");
-        self.log_control_flow_edge(condition_block, else_block, "value-if.false");
-
-        // Lower the then branch with the active value-block target.
-        self.set_current_block(then_block, location)?;
-        let previous_target = self.active_value_block_target.clone();
-        self.active_value_block_target = Some(ValueBlockTarget {
-            result_locals: result_locals.clone(),
-            merge_block,
-        });
-        let then_result = self.lower_statement_sequence(&value_if.then_body);
-        self.active_value_block_target = previous_target;
-        then_result?;
-
-        let then_tail_block = self.current_block_id_or_error(location)?;
-        let then_terminated = self.block_has_explicit_terminator(then_tail_block, location)?;
-        if !then_terminated {
-            self.emit_jump_to(
-                then_tail_block,
-                merge_block,
-                location,
-                "value-if.then.merge",
-            )?;
-        }
-
-        // Lower the else branch with the active value-block target.
-        self.set_current_block(else_block, location)?;
-        let previous_target = self.active_value_block_target.clone();
-        self.active_value_block_target = Some(ValueBlockTarget {
-            result_locals: result_locals.clone(),
-            merge_block,
-        });
-        let else_result = self.lower_statement_sequence(&value_if.else_body);
-        self.active_value_block_target = previous_target;
-        else_result?;
-
-        let else_tail_block = self.current_block_id_or_error(location)?;
-        let else_terminated = self.block_has_explicit_terminator(else_tail_block, location)?;
-        if !else_terminated {
-            self.emit_jump_to(
-                else_tail_block,
-                merge_block,
-                location,
-                "value-if.else.merge",
-            )?;
-        }
-
-        // Resume lowering in the merge block.
-        self.set_current_block(merge_block, location)?;
-
-        // The expression value is a single local load for arity 1,
-        // or an internal TupleConstruct from result-local loads for arity > 1.
-        let value = self.value_block_result_expression(
-            &result_locals,
-            &value_if.result_type_ids,
-            location,
-            parent_region,
-        )?;
-
-        Ok(LoweredExpression {
-            prelude: vec![],
-            value,
-        })
-    }
-
-    /// Lowers a value-producing full match by reusing statement match CFG lowering.
-    ///
-    /// WHAT: allocates result locals, lowers the match with `ThenValue` targeting
-    /// those locals, then resumes at the value-block merge.
-    /// WHY: pattern dispatch, guards, captures, defaults, and no-match runtime failures are
-    /// already owned by statement match lowering; the value form only changes what
-    /// `then` does inside each arm body.
-    pub(crate) fn lower_value_block_match(
-        &mut self,
-        value_match: &ValueMatchBlock,
-        location: &SourceLocation,
-        _result_type_id: TypeId,
-    ) -> Result<LoweredExpression, CompilerError> {
-        let parent_region = self.current_region_or_error(location)?;
-
-        let mut result_locals = Vec::with_capacity(value_match.result_type_ids.len());
-        for type_id in &value_match.result_type_ids {
-            let lowered_ty = self.lower_type_id(*type_id, location)?;
-            let local = self.allocate_temp_local(lowered_ty, Some(location.to_owned()))?;
-            result_locals.push(local);
-        }
-
-        let merge_block = self.create_block(parent_region, location, "value-match-merge")?;
-
-        let previous_target = self.active_value_block_target.clone();
-        self.active_value_block_target = Some(ValueBlockTarget {
-            result_locals: result_locals.clone(),
-            merge_block,
-        });
-        let lower_result = self.lower_match_statement(
-            &value_match.scrutinee,
-            &value_match.arms,
-            value_match.default.as_deref(),
-            value_match.exhaustiveness,
-            location,
-        );
-        self.active_value_block_target = previous_target;
-        lower_result?;
-
-        self.set_current_block(merge_block, location)?;
-
-        let value = self.value_block_result_expression(
-            &result_locals,
-            &value_match.result_type_ids,
-            location,
-            parent_region,
-        )?;
-
-        Ok(LoweredExpression {
-            prelude: vec![],
-            value,
-        })
-    }
-
-    pub(crate) fn value_block_result_expression(
-        &mut self,
-        result_locals: &[LocalId],
-        result_type_ids: &[TypeId],
-        location: &SourceLocation,
-        parent_region: RegionId,
-    ) -> Result<HirExpression, CompilerError> {
-        if result_locals.len() == 1 {
-            let result_ty = self.lower_type_id(result_type_ids[0], location)?;
-            return Ok(self.make_expression(
-                location,
-                HirExpressionKind::Load(HirPlace::Local(result_locals[0])),
-                result_ty,
-                ValueKind::RValue,
-                parent_region,
-            ));
-        }
-
-        let mut elements = Vec::with_capacity(result_locals.len());
-        let mut field_types = Vec::with_capacity(result_locals.len());
-        for (local, ast_type_id) in result_locals.iter().zip(result_type_ids.iter()) {
-            let ty = self.lower_type_id(*ast_type_id, location)?;
-            field_types.push(ty);
-            let element = self.make_local_load_expression(*local, ty, location, parent_region);
-            elements.push(element);
-        }
-        let tuple_type = self.type_environment.intern_tuple(field_types);
-        Ok(self.make_expression(
-            location,
-            HirExpressionKind::TupleConstruct { elements },
-            tuple_type,
-            ValueKind::RValue,
-            parent_region,
-        ))
     }
 
     pub(super) fn lower_break_statement(

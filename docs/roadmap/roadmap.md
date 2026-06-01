@@ -11,8 +11,10 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 ---
 
 # Plans / TODOS
-- Traits (plan todo)
-- `else => _` (Wildcards in value positions for pattern matching or default arguments in function calls)
+- Traits v1: `docs/roadmap/plans/traits_implementation_plan.md`
+- `.bmd` files (starts inside template body and cannot break out of template).
+Can be imported into regular beanstalk files as strings.
+- `project.config` file to replace the `#config.bst` file. This will use Beanstalk's struct syntax (starting inside a struct body) instead of having special parsing rules, and the compiler will just parse the struct it generates into project settings.
 - Replace JSON with beanstalk files (dogfooding for language as a way to store data / config stuff). These could be standardised as their own build system under `src/projects`.
 - Closures
 - Wasm backend plan based on docs inside `docs/wasm-notes`

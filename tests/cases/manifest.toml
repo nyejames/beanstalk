@@ -5983,3 +5983,23 @@ tags = ["integration", "diagnostics", "optionals", "match", "warnings"]
 id = "option_match_present_after_unguarded_warning"
 path = "option_match_present_after_unguarded_warning"
 tags = ["integration", "diagnostics", "optionals", "match", "warnings"]
+
+[[case]]
+id = "value_block_expression_statement_rejected"
+path = "value_block_expression_statement_rejected"
+tags = ["integration", "diagnostics", "value-blocks"]
+
+[[case]]
+id = "value_if_branch_fallthrough_rejected"
+path = "value_if_branch_fallthrough_rejected"
+tags = ["integration", "diagnostics", "value-blocks"]
+
+[[case]]
+id = "header_qualified_match_arm_not_declaration"
+path = "header_qualified_match_arm_not_declaration"
+tags = ["integration", "headers"]
+
+[[case]]
+id = "header_module_facade_runtime_template_rejected"
+path = "header_module_facade_runtime_template_rejected"
+tags = ["integration", "diagnostics", "headers"]

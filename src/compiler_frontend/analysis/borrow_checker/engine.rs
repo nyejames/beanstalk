@@ -152,21 +152,10 @@ impl<'a> BorrowChecker<'a> {
         worklist.push_back(function.entry);
 
         let mut summary = FunctionBorrowSummary {
-            entry_block: Some(function.entry),
             reachable_blocks: reachable_blocks.len(),
             mutable_call_sites: 0,
             alias_heavy_blocks: Vec::new(),
             worklist_iterations: 0,
-            param_mutability: self
-                .function_param_mutability
-                .get(&function.id)
-                .cloned()
-                .unwrap_or_default(),
-            return_alias: self
-                .function_return_alias
-                .get(&function.id)
-                .cloned()
-                .unwrap_or(FunctionReturnAliasSummary::Unknown),
         };
 
         let mut alias_heavy = FxHashSet::default();

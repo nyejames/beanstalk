@@ -51,6 +51,20 @@ page_head #= theme_head
         ;
     ]
 
+    Match arms are separated by the next line-starting arm header or by the final semicolon that closes the whole match.
+    There are no per-arm semicolons.
+
+    [codeblock, $code("bst"):
+        value = 1
+
+        if value is:
+            0 => io("zero")
+            else =>
+        ;
+    ]
+
+    This is the explicit way to say "match everything else and do nothing".
+
     Choices support unit and payload variant patterns.
     Exhaustive choice matches do not need a fallback arm when every variant is covered.
 
@@ -95,5 +109,7 @@ page_head #= theme_head
 
     Exhaustiveness is tag-level: [codesnippet: Err(message) =>] covers all [codesnippet: Err] values regardless of payload content.
     
-    Fallback match arms use [codesnippet: else => _ ], not a normal pattern arm.
+    Fallback match arms use [codesnippet: else =>].
+    The fallback body may be empty; an empty [codesnippet: else =>] catches all remaining cases and does nothing.
+    [codesnippet: _ =>] and [codesnippet: else => _] are not valid match syntax.
 ]

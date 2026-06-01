@@ -1,0 +1,76 @@
+//! AST node and expression construction for value-producing control flow.
+//!
+//! WHAT: builds `ThenValue` nodes, `ValueIfBlock`, `ValueMatchBlock`, and the
+//! wrapping `ExpressionKind::ValueBlock` that HIR lowering consumes.
+//! WHY: centralising construction keeps the parser modules focused on parsing
+//! and ensures consistent `ValueMode::ImmutableOwned` and diagnostic spelling.
+
+use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
+use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
+use crate::compiler_frontend::ast::statements::value_production::types::{
+    ProducedValues, ValueBlock, ValueIfBlock, ValueMatchBlock,
+};
+use crate::compiler_frontend::datatypes::diagnostic_type_spelling;
+use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
+use crate::compiler_frontend::datatypes::ids::TypeId;
+use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
+use crate::compiler_frontend::value_mode::ValueMode;
+
+/// Builds a `ThenValue` AST node from produced branch expressions.
+///
+/// WHAT: wraps the expressions in a `NodeKind::ThenValue` with the correct scope.
+/// WHY: inline single-predicate matches use the arm-local capture scope for the
+/// then branch, while bool conditions use the outer scope for both branches.
+pub(super) fn then_value_node(
+    expressions: Vec<Expression>,
+    location: SourceLocation,
+    scope: InternedPath,
+) -> AstNode {
+    AstNode {
+        kind: NodeKind::ThenValue(ProducedValues {
+            expressions,
+            location: location.clone(),
+        }),
+        location,
+        scope,
+    }
+}
+
+/// Builds a `ValueBlock::If` expression from a completed `ValueIfBlock`.
+pub(super) fn build_value_if_expression(
+    value_if: ValueIfBlock,
+    result_type_id: TypeId,
+    type_environment: &TypeEnvironment,
+) -> Expression {
+    let location = value_if.location.clone();
+
+    Expression::new(
+        ExpressionKind::ValueBlock {
+            block: Box::new(ValueBlock::If(value_if)),
+        },
+        location,
+        result_type_id,
+        diagnostic_type_spelling(result_type_id, type_environment),
+        ValueMode::ImmutableOwned,
+    )
+}
+
+/// Builds a `ValueBlock::Match` expression from a completed `ValueMatchBlock`.
+pub(super) fn build_value_match_expression(
+    value_match: ValueMatchBlock,
+    result_type_id: TypeId,
+    type_environment: &TypeEnvironment,
+) -> Expression {
+    let location = value_match.location.clone();
+
+    Expression::new(
+        ExpressionKind::ValueBlock {
+            block: Box::new(ValueBlock::Match(value_match)),
+        },
+        location,
+        result_type_id,
+        diagnostic_type_spelling(result_type_id, type_environment),
+        ValueMode::ImmutableOwned,
+    )
+}

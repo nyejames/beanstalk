@@ -73,34 +73,20 @@ pub(crate) struct BorrowCheckStats {
     pub conflicts_checked: usize,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub(crate) struct FunctionBorrowSummary {
-    #[allow(dead_code)] // Planned: explicit function entry block reporting for diagnostics.
-    pub entry_block: Option<BlockId>,
     pub reachable_blocks: usize,
     pub mutable_call_sites: usize,
     pub alias_heavy_blocks: Vec<BlockId>,
     pub worklist_iterations: usize,
-    #[allow(dead_code)] // Planned: parameter mutability summaries for future diagnostics.
-    pub param_mutability: Vec<bool>,
-    #[allow(dead_code)] // Planned: return alias summaries for backend/lint reporting.
-    pub return_alias: FunctionReturnAliasSummary,
 }
 
-impl Default for FunctionBorrowSummary {
-    fn default() -> Self {
-        Self {
-            entry_block: None,
-            reachable_blocks: 0,
-            mutable_call_sites: 0,
-            alias_heavy_blocks: Vec::new(),
-            worklist_iterations: 0,
-            param_mutability: Vec::new(),
-            return_alias: FunctionReturnAliasSummary::Unknown,
-        }
-    }
-}
-
+/// User-function return alias metadata consumed by call transfer.
+///
+/// WHAT: summarizes whether a function result is fresh, aliases specific
+/// parameters, or has an imprecise alias shape.
+/// WHY: borrow validation keeps this as side-table metadata so call-site
+/// transfer can enforce use-after-move rules without mutating HIR.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum FunctionReturnAliasSummary {
     Fresh,

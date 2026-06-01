@@ -204,16 +204,26 @@ fn reports_circular_dependencies() {
     let bag = resolve_module_dependencies(headers, &mut string_table)
         .expect_err("cycle should fail dependency sorting");
 
-    assert!(
-        bag.diagnostics().iter().any(|diagnostic| {
+    let cycle_diagnostic = bag
+        .diagnostics()
+        .iter()
+        .find(|diagnostic| {
             let DiagnosticPayload::CircularDependency { path } = &diagnostic.payload else {
                 return false;
             };
 
             let path = path.to_portable_string(&string_table);
             path.contains("Top") || path.contains("Middle")
-        }),
-        "expected a cycle diagnostic, got: {bag:?}"
+        })
+        .unwrap_or_else(|| panic!("expected a cycle diagnostic, got: {bag:?}"));
+
+    assert!(
+        cycle_diagnostic
+            .primary_location
+            .scope
+            .to_portable_string(&string_table)
+            .contains("src/"),
+        "cycle diagnostics should point at a declaration location instead of the default location"
     );
 }
 

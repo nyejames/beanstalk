@@ -1,0 +1,180 @@
+//! Full value-producing match parser.
+//!
+//! WHAT: parses `if <scrutinee> is: <arms> else => ...` at a closed receiver.
+//! WHY: reuses the statement match parser (`parse_match_block`) under an active
+//! value target so arms can contain `then` statements; this module does not own
+//! statement match parsing itself.
+
+use super::emit_collected_warnings;
+use super::expression_build::build_value_match_expression;
+use super::result_type::infer_value_match_result_type;
+use crate::compiler_frontend::ast::ContextKind;
+use crate::compiler_frontend::ast::ScopeContext;
+use crate::compiler_frontend::ast::ast_nodes::AstNode;
+use crate::compiler_frontend::ast::expressions::expression::Expression;
+use crate::compiler_frontend::ast::expressions::parse_expression::create_expression_until;
+use crate::compiler_frontend::ast::statements::branching::parse_match_block;
+use crate::compiler_frontend::ast::statements::match_patterns::MatchArm;
+use crate::compiler_frontend::ast::statements::value_production::completeness::analyze_branch_flow;
+use crate::compiler_frontend::ast::statements::value_production::types::{
+    ActiveValueProductionTarget, BranchFlow, ValueMatchBlock, ValueReceiverKind,
+};
+use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
+use crate::compiler_frontend::compiler_messages::{
+    CompilerDiagnostic, InvalidControlFlowStatementReason,
+};
+use crate::compiler_frontend::datatypes::ids::TypeId;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
+use crate::compiler_frontend::type_coercion::parse_context::ExpectedType;
+use crate::compiler_frontend::value_mode::ValueMode;
+
+/// Input for `parse_value_match_at_receiver`.
+pub(super) struct ValueMatchParseInput<'a, 'b> {
+    pub(super) token_stream: &'a mut FileTokens,
+    pub(super) context: &'a ScopeContext,
+    pub(super) type_interner: &'a mut AstTypeInterner<'b>,
+    pub(super) expected_result_type_ids: &'a [TypeId],
+    pub(super) receiver_kind: ValueReceiverKind,
+    pub(super) string_table: &'a mut StringTable,
+    pub(super) location: SourceLocation,
+}
+
+/// Parses a full value-producing match at a closed receiver.
+///
+/// WHAT: parses the scrutinee, consumes `is`, delegates to `parse_match_block`,
+/// validates completeness, infers the result type, and builds the expression.
+pub(super) fn parse_value_match_at_receiver(
+    input: ValueMatchParseInput<'_, '_>,
+) -> Result<Expression, CompilerDiagnostic> {
+    let ValueMatchParseInput {
+        token_stream,
+        context,
+        type_interner,
+        expected_result_type_ids,
+        receiver_kind,
+        string_table,
+        location,
+    } = input;
+
+    let mut scrutinee_type = ExpectedType::Infer;
+    let scrutinee = create_expression_until(
+        token_stream,
+        &context.new_child_control_flow(ContextKind::Condition, string_table),
+        type_interner,
+        &mut scrutinee_type,
+        &ValueMode::ImmutableOwned,
+        &[TokenKind::Is],
+        string_table,
+    )?;
+
+    if token_stream.current_token_kind() != &TokenKind::Is {
+        return Err(CompilerDiagnostic::invalid_control_flow_statement(
+            InvalidControlFlowStatementReason::ExpectedColonAfterCondition,
+            token_stream.current_location(),
+        ));
+    }
+    token_stream.advance();
+
+    let active_target = ActiveValueProductionTarget {
+        result_type_ids: expected_result_type_ids.to_vec(),
+        receiver_kind,
+        expected_arity: None,
+    };
+    let mut warnings = Vec::new();
+    let parsed_match = parse_match_block(
+        scrutinee,
+        token_stream,
+        context,
+        type_interner,
+        &mut warnings,
+        Some(active_target),
+        string_table,
+    )?;
+    emit_collected_warnings(context, warnings);
+
+    validate_value_match_completeness(
+        &parsed_match.arms,
+        parsed_match.default.as_deref(),
+        &location,
+    )?;
+
+    let result_type_id = infer_value_match_result_type(
+        &parsed_match.arms,
+        parsed_match.default.as_deref(),
+        expected_result_type_ids,
+        type_interner,
+        &location,
+        receiver_kind,
+    )?;
+    let result_type_ids = if expected_result_type_ids.is_empty() {
+        vec![result_type_id]
+    } else {
+        expected_result_type_ids.to_vec()
+    };
+
+    let value_match = ValueMatchBlock {
+        scrutinee: parsed_match.scrutinee,
+        arms: parsed_match.arms,
+        default: parsed_match.default,
+        exhaustiveness: parsed_match.exhaustiveness,
+        location: location.clone(),
+        result_type_ids,
+    };
+
+    Ok(build_value_match_expression(
+        value_match,
+        result_type_id,
+        type_interner.environment(),
+    ))
+}
+
+/// Validates that every arm in a value-producing match either produces a value
+/// or terminates, and that at least one path produces.
+///
+/// WHAT: checks branch flow for every arm and the optional default.
+/// WHY: value-producing matches must not have fallthrough arms.
+pub(in crate::compiler_frontend::ast::statements::value_production) fn validate_value_match_completeness(
+    arms: &[MatchArm],
+    default: Option<&[AstNode]>,
+    location: &SourceLocation,
+) -> Result<(), CompilerDiagnostic> {
+    let mut has_producing_path = false;
+
+    for arm in arms {
+        let flow = analyze_branch_flow(&arm.body);
+        match flow {
+            BranchFlow::ProducesValue => has_producing_path = true,
+            BranchFlow::Terminates => {}
+            BranchFlow::FallsThrough => {
+                return Err(CompilerDiagnostic::invalid_control_flow_statement(
+                    InvalidControlFlowStatementReason::ValueIfBranchFallsThrough,
+                    location.clone(),
+                ));
+            }
+        }
+    }
+
+    if let Some(default_body) = default {
+        let flow = analyze_branch_flow(default_body);
+        match flow {
+            BranchFlow::ProducesValue => has_producing_path = true,
+            BranchFlow::Terminates => {}
+            BranchFlow::FallsThrough => {
+                return Err(CompilerDiagnostic::invalid_control_flow_statement(
+                    InvalidControlFlowStatementReason::ValueIfBranchFallsThrough,
+                    location.clone(),
+                ));
+            }
+        }
+    }
+
+    if has_producing_path {
+        return Ok(());
+    }
+
+    Err(CompilerDiagnostic::invalid_control_flow_statement(
+        InvalidControlFlowStatementReason::ValueIfNoProducingPath,
+        location.clone(),
+    ))
+}

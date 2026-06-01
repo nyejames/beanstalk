@@ -353,7 +353,21 @@ body {
         <span class='bst-code-operator'>&gt;</span><span class='bst-code-operator'>=</span> <span class='bst-code-number'>70</span> <span class='bst-code-keyword'>if</span> true <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> result <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;passing&quot;</span>
         <span class='bst-code-keyword'>else</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> result <span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;retry&quot;</span>
     ;
-    </code></pre><p>    Choices support unit and payload variant patterns.     Exhaustive choice matches do not need a fallback arm when every variant is covered.</p><pre style="
+    </code></pre><p>    Match arms are separated by the next line-starting arm header or by the final semicolon that closes the whole match.     There are no per-arm semicolons.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    value <span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
+
+    <span class='bst-code-keyword'>if</span> value is<span class='bst-code-operator'>:</span>
+        <span class='bst-code-number'>0</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;zero&quot;</span><span class='bst-code-parenthesis'>)</span>
+        <span class='bst-code-keyword'>else</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span>
+    ;
+    </code></pre><p>    This is the explicit way to say &quot;match everything else and do nothing&quot;.</p><p>    Choices support unit and payload variant patterns.     Exhaustive choice matches do not need a fallback arm when every variant is covered.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -419,7 +433,16 @@ body {
     "> Err</span> values regardless of payload content.</p><p>    Fallback match arms use <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    "> else => _ </span>, not a normal pattern arm.</p></section>
+    "> else =></span>.     The fallback body may be empty; an empty <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    "> else =></span> catches all remaining cases and does nothing.</p><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    "> _ =></span> and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    "> else => _</span> are not valid match syntax.</p></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

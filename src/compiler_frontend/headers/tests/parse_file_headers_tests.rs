@@ -25,7 +25,9 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
-use crate::compiler_frontend::tokenizer::tokens::{TokenKind, TokenizeMode};
+use crate::compiler_frontend::tokenizer::tokens::{
+    FileTokens, SourceLocation, Token, TokenKind, TokenizeMode,
+};
 use crate::libraries::external_import_providers::resolution_table::ExternalImportResolutionTable;
 use std::path::{Path, PathBuf};
 
@@ -953,6 +955,36 @@ fn duplicate_top_level_function_names_error_during_header_parsing() {
             DiagnosticPayload::DuplicateDeclaration { .. }
         )
     }));
+}
+
+#[test]
+fn duplicate_header_detection_ignores_qualified_match_arms() {
+    let mut string_table = StringTable::new();
+    let source_file = InternedPath::from_single_str("src/#page.bst", &mut string_table);
+    let status = string_table.intern("Status");
+    let ready = string_table.intern("Ready");
+    let write = string_table.intern("write");
+    let location = SourceLocation::default();
+
+    let mut token_stream = FileTokens::new(
+        source_file,
+        vec![
+            Token::new(TokenKind::Symbol(status), location.clone()),
+            Token::new(TokenKind::DoubleColon, location.clone()),
+            Token::new(TokenKind::Symbol(ready), location.clone()),
+            Token::new(TokenKind::FatArrow, location.clone()),
+            Token::new(TokenKind::Symbol(write), location.clone()),
+            Token::new(TokenKind::Eof, location),
+        ],
+    );
+    token_stream.index = 1;
+
+    assert!(
+        !super::super::top_level_classifier::starts_duplicate_top_level_header_declaration(
+            &token_stream
+        ),
+        "qualified match arms in the start body are not choice declarations"
+    );
 }
 
 #[test]

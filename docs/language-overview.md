@@ -438,19 +438,32 @@ Rules:
 - Arms are delimited by the next line-initial arm, `else =>`, or the final `;`.
 - Per-arm semicolons are invalid.
 - Arm headers must start at the beginning of a logical line.
-- Arm forms are `<pattern> => <body>`, `<pattern> if <Bool> => <body>`, and `else => <body>`.
+- Arm forms are `<pattern> => <body>`, `<pattern> if <Bool> => <body>`, `else => <body>`, and bodyless `else =>`.
+- In statement matches, bodyless `else =>` catches all remaining cases and executes no statements.
 - Non-choice scrutinees require `else =>`.
 - Choice scrutinees require either `else =>` or coverage of every variant.
 - Any guarded choice arm requires `else =>`.
 - The same choice variant cannot be matched more than once.
-- The catch-all default is only `else =>`.
+- The catch-all default arm is only `else =>`. `_ => ...` is not a wildcard pattern.
+- `else => _` is invalid; use bodyless `else =>` for an explicit no-op fallback.
+
+A statement match can use an empty fallback arm to explicitly ignore all remaining cases:
+
+```beanstalk
+if value is:
+    0 => io("zero")
+    else =>
+;
+```
+
+Empty `else =>` is for statement matches. Value-producing matches must still produce the required `then` values on every selected path.
 
 Supported patterns:
 - literals: `1`, `"ok"`, `true`
 - choice variants: `Ready`, `Status::Ready`
 - choice payload captures: `Err(message)`, `Pending(retry_count, message)`
 - renamed payload captures: `Err(message as error_text)`
-- general capture: `captured`
+- general capture: `captured` binds the matched scrutinee value for that arm
 - relational scalar patterns: `< 0`, `<= 10`, `> 0`, `>= 100`
 
 Payload capture names must match declared field names unless renamed with `as`. Payload exhaustiveness is tag-level. Relational patterns support ordered scalar scrutinees: `Int`, `Float`, `Char`, and `String`; string ordering is backend-defined in Alpha. Nested choice payload patterns are deferred.

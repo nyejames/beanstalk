@@ -153,9 +153,10 @@ pub struct HirBuilder<'a> {
     /// Active target for value-block lowering.
     ///
     /// WHAT: when set, `ThenValue` statements inside the current statement-sequence lowering
-    ///       assign their produced value to `result_local` and jump to `merge_block`.
-    /// WHY: value-producing `if` branches use `ThenValue` to yield their result; HIR lowering
-    ///      needs to intercept those statements and wire them to a shared result local.
+    ///       assign their produced values to shared result locals and jump to `merge_block`.
+    /// WHY: value-producing `if`, match, and catch branches use `ThenValue` to yield their
+    ///      results; HIR lowering needs to intercept those statements and wire them to the
+    ///      shared merge locals.
     pub(super) active_value_block_target: Option<ValueBlockTarget>,
 }
 
@@ -270,6 +271,27 @@ impl<'a> HirBuilder<'a> {
             self.string_table,
         )
         .with_type_context_for_all_diagnostics(self.type_environment.clone())
+    }
+
+    /// Runs a lowering closure with `active_value_block_target` set to `target`.
+    ///
+    /// WHAT: scoped installation of the target consumed by `ThenValue` statements inside the
+    /// closure.
+    /// WHY: value-if, value-match, and catch recovery all use the same target protocol. Keeping
+    /// the save/restore path here prevents leaked target state when nested lowering or early
+    /// errors occur.
+    pub(in crate::compiler_frontend::hir) fn with_active_value_block_target<T>(
+        &mut self,
+        target: ValueBlockTarget,
+        emit: impl FnOnce(&mut HirBuilder<'_>) -> Result<T, CompilerError>,
+    ) -> Result<T, CompilerError> {
+        let previous_target = self.active_value_block_target.replace(target);
+
+        let result = emit(self);
+
+        self.active_value_block_target = previous_target;
+
+        result
     }
 
     fn hir_lowering_error_messages(&self, error: HirLoweringError) -> CompilerMessages {

@@ -189,16 +189,17 @@ impl<'a> HirBuilder<'a> {
                     self.emit_assign_local_statement(handler_error_local, error_payload, location)?;
                 }
 
-                let previous_target = self.active_value_block_target.clone();
                 if !result_locals.is_empty() {
-                    self.active_value_block_target = Some(ValueBlockTarget {
-                        result_locals: result_locals.clone(),
-                        merge_block,
-                    });
+                    self.with_active_value_block_target(
+                        ValueBlockTarget {
+                            result_locals: result_locals.clone(),
+                            merge_block,
+                        },
+                        |builder| builder.lower_statement_sequence(body),
+                    )?;
+                } else {
+                    self.lower_statement_sequence(body)?;
                 }
-                let lower_body_result = self.lower_statement_sequence(body);
-                self.active_value_block_target = previous_target;
-                lower_body_result?;
 
                 let error_tail_block = self.current_block_id_or_error(location)?;
                 if self.block_has_explicit_terminator(error_tail_block, location)? {

@@ -1,0 +1,107 @@
+#![allow(clippy::result_large_err)]
+
+//! Top-level `#` item handling for header parsing.
+//!
+//! WHAT: handles boundary `#` items, including valid entry-file const templates and removed
+//! legacy prefix forms such as `#import` and `#name`.
+//! WHY: the parser should keep valid and invalid hash-prefixed top-level forms in one place so
+//! `file_parser` can remain a high-level loop over classified items.
+
+use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
+use crate::compiler_frontend::headers::const_fragments::create_top_level_const_template;
+use crate::compiler_frontend::headers::file_state::HeaderFileParseState;
+use crate::compiler_frontend::headers::types::{
+    FileRole, HeaderBuildContext, HeaderParseContext, TopLevelConstFragment,
+};
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
+
+pub(super) fn handle_hash_item(
+    token_stream: &mut FileTokens,
+    state: &mut HeaderFileParseState,
+    context: &mut HeaderParseContext<'_>,
+    current_token: Token,
+    current_location: SourceLocation,
+    at_statement_boundary: bool,
+) -> Result<(), CompilerDiagnostic> {
+    if !at_statement_boundary {
+        state.push_start_body_token(current_token);
+        return Ok(());
+    }
+
+    match token_stream.current_token_kind() {
+        TokenKind::TemplateHead => {
+            handle_top_level_const_template(token_stream, state, context, current_location)
+        }
+
+        TokenKind::Import => Err(CompilerDiagnostic::legacy_import_syntax(current_location)),
+
+        TokenKind::Symbol(_) => Err(CompilerDiagnostic::old_prefix_declaration_syntax(
+            current_location,
+        )),
+
+        _ => {
+            state.push_start_body_token(current_token);
+            Ok(())
+        }
+    }
+}
+
+fn handle_top_level_const_template(
+    token_stream: &mut FileTokens,
+    state: &mut HeaderFileParseState,
+    context: &mut HeaderParseContext<'_>,
+    current_location: SourceLocation,
+) -> Result<(), CompilerDiagnostic> {
+    if context.file_role == FileRole::Normal {
+        return Err(CompilerDiagnostic::deferred_feature(
+            context
+                .string_table
+                .intern("top-level const templates in non-entry files"),
+            current_location,
+        ));
+    }
+
+    if context.file_role == FileRole::ModuleFacade {
+        return Err(CompilerDiagnostic::deferred_feature(
+            context
+                .string_table
+                .intern("top-level const templates in module facades"),
+            current_location,
+        ));
+    }
+
+    let template_token = token_stream.current_token();
+    token_stream.advance();
+
+    let source_file = token_stream.src_path.to_owned();
+    let mut build_context = HeaderBuildContext {
+        external_package_registry: context.external_package_registry,
+        warnings: &mut state.warnings,
+        source_file: &source_file,
+        file_imports: &state.file_import_paths,
+        file_import_entries: &state.file_imports,
+        file_constant_order: &mut state.file_constant_order,
+        string_table: context.string_table,
+        file_role: context.file_role,
+    };
+    let header = create_top_level_const_template(
+        token_stream.src_path.to_owned(),
+        template_token,
+        context.const_template_offset + state.const_template_count,
+        token_stream,
+        &mut build_context,
+    )?;
+
+    state.const_template_count += 1;
+
+    // Record placement metadata: runtime_insertion_index is the count of runtime fragments
+    // seen before this const fragment in source order.
+    let fragment = TopLevelConstFragment {
+        runtime_insertion_index: context.runtime_fragment_offset + state.runtime_fragment_count,
+        location: header.name_location.clone(),
+        header_path: header.tokens.src_path.clone(),
+    };
+    state.register_top_level_const_fragment(fragment, header);
+
+    Ok(())
+}

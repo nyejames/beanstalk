@@ -183,7 +183,7 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
             [: Partial]
             [: Broad literal, choice-match, and payload-capture coverage, including exhaustiveness and diagnostics.]
             [: JS / HTML]
-            [: Literal patterns, choice variant patterns, payload extraction, relational patterns including strings, guards, else arms, and general capture patterns are supported. Wildcard patterns using '_' are permanently rejected; use else => instead. Obvious unreachable arms warn. Full relational overlap analysis and nested choice payload patterns remain deferred.]
+            [: Literal patterns, choice variant patterns, payload extraction, relational patterns including strings, guards, [codesnippet:else =>] arms, empty [codesnippet:else =>] no-op fallback arms, and general capture patterns are supported. Wildcard patterns using [codesnippet:_] and no-op bodies such as [codesnippet:else => _] are permanently rejected; use [codesnippet:else =>] for fallback and an empty [codesnippet:else =>] to do nothing. Obvious unreachable arms warn. Full relational overlap analysis and nested choice payload patterns remain deferred.]
         ]
 
         [data:

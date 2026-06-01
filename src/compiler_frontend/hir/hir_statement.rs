@@ -21,9 +21,8 @@ use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorType};
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, InvalidReturnShapeReason};
 use crate::compiler_frontend::datatypes::ids::TypeId;
-use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
 use crate::compiler_frontend::external_packages::CallTarget;
-use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, ValueKind};
+use crate::compiler_frontend::hir::expressions::{HirExpressionKind, ValueKind};
 use crate::compiler_frontend::hir::hir_builder::{HirBuilder, HirLoweringError};
 use crate::compiler_frontend::hir::hir_expression::ExternalFallibleCallLoweringInput;
 use crate::compiler_frontend::hir::ids::{BlockId, FunctionId};
@@ -37,9 +36,11 @@ use crate::hir_log;
 
 mod control_flow;
 mod declarations;
+mod entry_start;
 mod loop_lowering;
 mod match_captures;
 mod returns;
+mod value_blocks;
 
 impl<'a> HirBuilder<'a> {
     // -------------------------
@@ -97,27 +98,7 @@ impl<'a> HirBuilder<'a> {
         // WHAT: for entry start(), allocate the Vec<String> fragment accumulator before lowering.
         // WHY: PushStartRuntimeFragment nodes in the body push to this local; the implicit return
         //      at end of entry start loads it as the function result.
-        if function_id == self.module.start_function {
-            let string_ty = builtin_type_ids::STRING;
-            let vec_ty = self.type_environment.intern_constructed(
-                crate::compiler_frontend::datatypes::ids::TypeConstructor::Builtin(
-                    crate::compiler_frontend::datatypes::ids::BuiltinTypeConstructor::Collection,
-                ),
-                Box::new([string_ty]),
-            );
-            let vec_local = self.allocate_temp_local(vec_ty, Some(location.clone()))?;
-
-            let region = self.current_region_or_error(location)?;
-            let empty_collection = self.make_expression(
-                location,
-                HirExpressionKind::Collection(vec![]),
-                vec_ty,
-                ValueKind::RValue,
-                region,
-            );
-            self.emit_assign_local_statement(vec_local, empty_collection, location)?;
-            self.entry_fragment_vec_local = Some(vec_local);
-        }
+        self.maybe_initialize_entry_fragment_accumulator(function_id, location)?;
 
         let lower_result = self.lower_function_body_inner(function_id, signature, body, location);
         self.leave_function();
@@ -172,13 +153,7 @@ impl<'a> HirBuilder<'a> {
         // WHAT: entry start() has an implicit return of the fragment vec accumulator.
         // WHY: the body contains only PushStartRuntimeFragment nodes with no explicit return;
         //      the return type is Vec<String> which the builder consumes as the fragment list.
-        if function_id == self.module.start_function
-            && let Some(vec_local) = self.entry_fragment_vec_local
-        {
-            let vec_type = self.local_type_id_or_error(vec_local, location)?;
-            let region = self.current_region_or_error(location)?;
-            let load_expr = self.make_local_load_expression(vec_local, vec_type, location, region);
-            self.emit_terminator(current_block, HirTerminator::Return(load_expr), location)?;
+        if self.maybe_emit_entry_fragment_return(function_id, current_block, location)? {
             return Ok(());
         }
 
@@ -335,51 +310,7 @@ impl<'a> HirBuilder<'a> {
             } => self.lower_collection_loop_statement(bindings, iterable, body, &node.location),
 
             NodeKind::ThenValue(produced_values) => {
-                let maybe_target = self.active_value_block_target.clone();
-                if let Some(target) = maybe_target {
-                    if produced_values.expressions.len() != target.result_locals.len() {
-                        return_hir_transformation_error!(
-                            format!(
-                                "ThenValue produced {} expressions but active target expects {} locals",
-                                produced_values.expressions.len(),
-                                target.result_locals.len()
-                            ),
-                            self.hir_error_location(&node.location)
-                        );
-                    }
-
-                    for (expr, result_local) in produced_values
-                        .expressions
-                        .iter()
-                        .zip(target.result_locals.iter())
-                    {
-                        let value = self.lower_expression_value_to_current_block(expr)?;
-                        let value = self.materialize_value_block_result(value, &node.location);
-                        self.emit_statement_kind(
-                            HirStatementKind::Assign {
-                                target: HirPlace::Local(*result_local),
-                                value,
-                            },
-                            &node.location,
-                        )?;
-                    }
-
-                    let current_block = self.current_block_id_or_error(&node.location)?;
-                    self.emit_terminator(
-                        current_block,
-                        HirTerminator::Jump {
-                            target: target.merge_block,
-                            args: vec![],
-                        },
-                        &node.location,
-                    )?;
-                    Ok(())
-                } else {
-                    return_hir_transformation_error!(
-                        "ThenValue encountered without active value block target",
-                        self.hir_error_location(&node.location)
-                    )
-                }
+                self.lower_then_value_statement(produced_values, &node.location)
             }
 
             NodeKind::Operator(_) => Ok(()),
@@ -420,31 +351,6 @@ impl<'a> HirBuilder<'a> {
         }
 
         result
-    }
-
-    /// Convert produced `then` places into plain values before assigning result locals.
-    ///
-    /// WHAT: value blocks produce values for closed receivers, not alias views. A `then name`
-    /// branch should therefore materialize the current value of `name` into the hidden result
-    /// local rather than making that result local borrow `name`.
-    /// WHY: preserving branch-local aliases makes value-match merges path-dependent (`then name`
-    /// aliases while `else "guest"` owns), which is both surprising at the language level and
-    /// invalid for the borrow checker join model.
-    fn materialize_value_block_result(
-        &mut self,
-        value: HirExpression,
-        location: &SourceLocation,
-    ) -> HirExpression {
-        match value.kind {
-            HirExpressionKind::Load(place) => self.make_expression(
-                location,
-                HirExpressionKind::Copy(place),
-                value.ty,
-                ValueKind::RValue,
-                value.region,
-            ),
-            _ => value,
-        }
     }
 
     // -------------------------
