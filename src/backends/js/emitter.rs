@@ -3,14 +3,16 @@
 //! WHAT: converts HIR control flow/expressions into executable JS and symbol maps.
 //! WHY: JS is the stable near-term backend and needs deterministic lowering output.
 
-use crate::backends::js::JsLoweringConfig;
 use crate::backends::js::JsModule;
+use crate::backends::js::{JsFunctionEmissionPolicy, JsLoweringConfig};
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::hir::blocks::HirBlock;
+use crate::compiler_frontend::hir::functions::HirFunction;
 use crate::compiler_frontend::hir::ids::{BlockId, FieldId, FunctionId, LocalId};
 use crate::compiler_frontend::hir::module::HirModule;
+use crate::compiler_frontend::hir::reachability::collect_reachability_from_start;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use std::collections::{HashMap, HashSet};
 
@@ -41,7 +43,7 @@ pub(crate) struct JsEmitter<'hir> {
     pub(crate) current_function: Option<FunctionId>,
     pub(crate) used_identifiers: HashSet<String>,
     pub(crate) temp_counter: usize,
-    /// Set of external function IDs referenced during lowering.
+    /// Set of external function IDs referenced while lowering emitted JS functions.
     /// Used to conditionally emit runtime helpers.
     pub(crate) referenced_external_functions:
         HashSet<crate::compiler_frontend::external_packages::ExternalFunctionId>,
@@ -87,8 +89,7 @@ impl<'hir> JsEmitter<'hir> {
         self.build_symbol_maps();
         self.emit_runtime_prelude();
 
-        let mut functions = self.hir.functions.iter().collect::<Vec<_>>();
-        functions.sort_by_key(|function| function.id.0);
+        let functions = self.functions_to_emit()?;
 
         for (index, function) in functions.into_iter().enumerate() {
             if index > 0 {
@@ -128,5 +129,30 @@ impl<'hir> JsEmitter<'hir> {
             function_name_by_id: self.function_name_by_id.clone(),
             referenced_external_functions: self.referenced_external_functions.clone(),
         })
+    }
+
+    fn functions_to_emit(&self) -> Result<Vec<&'hir HirFunction>, CompilerError> {
+        let reachable_functions = match self.config.function_emission_policy {
+            JsFunctionEmissionPolicy::AllFunctions => None,
+            JsFunctionEmissionPolicy::ReachableFromStart => {
+                Some(collect_reachability_from_start(self.hir)?.reachable_functions)
+            }
+        };
+
+        let mut functions = self
+            .hir
+            .functions
+            .iter()
+            .filter(|function| {
+                let Some(reachable) = reachable_functions.as_ref() else {
+                    return true;
+                };
+
+                reachable.contains(&function.id)
+            })
+            .collect::<Vec<_>>();
+        functions.sort_by_key(|function| function.id.0);
+
+        Ok(functions)
     }
 }

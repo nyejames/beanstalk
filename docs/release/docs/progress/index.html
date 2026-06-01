@@ -969,7 +969,10 @@ body {
     ">BST-IMPORT-0020</span>, and explicit external file extensions without an active provider are rejected with <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">BST-IMPORT-0021</span>. Grouped source import aliases and nested grouped source import aliases are supported. Same-module ordinary top-level declarations are importable by default without the old <span style="
+    ">BST-IMPORT-0021</span>. Grouped source import aliases, nested grouped source import aliases, and grouped imports for virtual external packages are supported. Grouped virtual external package imports resolve through external package metadata before source/module facade enforcement, preventing root/module facades from misclassifying imports such as <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">import @web/canvas { get_canvas }</span> while preserving strict direct symbol-path rejection and source facade privacy. Same-module ordinary top-level declarations are importable by default without the old <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">#</span> visibility prefix. Directories containing non-config <span style="
@@ -1055,7 +1058,19 @@ body {
     ">bstOk</span> / <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">bstErr</span> helpers or return the wrapper shape manually. The HTML builder provides the first built-in JS-backed package, <span style="
+    ">bstErr</span> helpers or return the wrapper shape manually. Runtime JS assets, generated glue, registered runtime modules, import-map entries, and unsupported-backend checks are driven by external function calls reachable from entry <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">start</span>, not by unused source-library/provider declarations. Unused <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">@web/canvas</span> / <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">@html</span> wrappers do not emit canvas assets or <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">@beanstalk/runtime</span>. The HTML builder provides the first built-in JS-backed package, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">@web/canvas</span>, with explicit imports, opaque <span style="
@@ -1106,10 +1121,13 @@ body {
     ">InlineExpression</span> JS lowering is implemented for pure expression external functions. Arguments are substituted positionally using `#0`, `#1`, ... placeholders; duplicate placeholders are rejected. No runtime helper is emitted for inline-only functions.</li><li>Provider-created JS functions carry <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">ExternalModuleExport</span> metadata with the original ES module export name for the generated-glue phase. They are intentionally not treated as direct inline runtime helpers.</li><li>Wasm lowering for external packages is experimental and should not be counted as Alpha support.</li><li>Unsupported external package function calls for the active backend are rejected with structured <span style="
+    ">ExternalModuleExport</span> metadata with the original ES module export name for the generated-glue phase. They are intentionally not treated as direct inline runtime helpers.</li><li>Wasm lowering for external packages is experimental and should not be counted as Alpha support. Reachable <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">BST-RULE-0058</span> diagnostics before backend lowering, not during LIR transformation.</li></ul></td>
+    ">@web/canvas</span> calls remain JS-backed and are rejected for HTML-Wasm with structured unsupported-backend diagnostics.</li><li>Unsupported external package function calls for the active backend are rejected with structured <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">BST-RULE-0058</span> diagnostics before backend lowering, not during LIR transformation. Validation is reachable-call-based so unused wrappers do not fail builds for backends that would reject the call if reached.</li></ul></td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -1366,7 +1384,22 @@ body {
      <td style="padding: 0.2em 0.5em;  "> Partial</td>
      <td style="padding: 0.2em 0.5em;  "> Targeted coverage for builder-provided source library root registration and HTML builder library.</td>
      <td style="padding: 0.2em 0.5em;  "> Frontend / HTML</td>
-     <td style="padding: 0.2em 0.5em;  "> Builders expose source libraries through `LibrarySet.source_libraries`. The HTML builder provides `@html` as a default source library with basic HTML tag helpers and formatting utilities. These libraries follow the same module visibility/facade rules as project modules. Prefix collisions between builder-provided and project-local libraries produce a hard config error.</td>
+     <td style="padding: 0.2em 0.5em;  "> Builders expose source libraries through `LibrarySet.source_libraries`. The HTML builder provides `@html` as a default source library with basic HTML tag helpers, formatting utilities, and authored canvas convenience helpers backed by <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">@web/canvas</span>. Imports inside <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">libraries/html/#mod.bst</span> remain local implementation details; raw <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">@web/canvas</span> symbols are not re-exported through <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">@html</span> unless <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">@html</span> authors real wrapper declarations. These libraries follow the same module visibility/facade rules as project modules. Prefix collisions between builder-provided and project-local libraries produce a hard config error.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -2248,13 +2281,13 @@ body {
      <td style="padding: 0.2em 0.5em;  "> Targeted frontend unit coverage for TypeId-native generic instance identity, generic binding consistency, TypeId binding/unification for generic parameters, collections, options, nominal generic instances, generic free-function templates, constructed-type substitution, type-identity compatibility keys, parameter scopes, generic parameter parsing, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">of</span> type applications, arity checks, collection generic substrate, recursive HIR-boundary generic-parameter rejection, and diagnostics. Integration coverage includes duplicate, invalid, builtin-colliding, and visible-type-colliding generic parameter diagnostics; generic struct and choice constructor inference; concrete generic aliases; imported generic types and aliases; named argument inference; conflicting inference diagnostics; generic function declaration parsing; generic body validation; local generic function call inference and instantiation; same-module grouped-import and namespace generic function calls; grouped alias calls; cross-file and facade expected-result inference; cross-file and facade optional returns; cross-file and facade fallible error slots; generic function value diagnostics; authored facade wrapper generic calls through grouped, namespace, and grouped-alias imports; facade privacy regressions; direct <span style="
+    ">of</span> type applications, arity checks, collection generic substrate, recursive HIR-boundary generic-parameter rejection, and diagnostics. Integration coverage includes duplicate, invalid, builtin-colliding, and visible-type-colliding generic parameter diagnostics; generic struct and choice constructor inference; concrete generic aliases; same-module imported generic types and aliases; named argument inference; conflicting inference diagnostics; generic function declaration parsing; generic body validation; local generic function call inference and instantiation; same-module grouped-import and namespace generic function calls; grouped alias calls; cross-file and facade expected-result inference; cross-file and facade optional returns; cross-file and facade fallible error slots; generic function value diagnostics; authored facade wrapper generic calls through grouped, namespace, and grouped-alias imports; facade privacy regressions; direct <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">#mod.bst</span> import rejection; facade import-alias non-reexport rejection; constructed collection returns; ambiguous/conflicting function inference diagnostics; recursive generic function instantiation rejection with call-site context; receiver rejection; nested <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">of</span> rejection; non-exported import rejection; and collection capacity parsing.</td>
+    ">of</span> rejection; collection capacity parsing; and HTML-Wasm reachable/unreachable generic-runtime validation.</td>
      <td style="padding: 0.2em 0.5em;  "> The current generic free-function import-hardening work is implemented through the AST generic free-function template and concrete instance model. Generic parameter metadata, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
@@ -2323,7 +2356,7 @@ body {
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">generic_recursive_type_deferred</span></td>
-     <td style="padding: 0.2em 0.5em;  "> Generic struct headers parse and resolve. Concrete constructor inference, field type substitution, named constructor arguments, imports and import aliases, collection element types, and concrete HIR lowering are supported. Recursive generic structs and generic receiver methods remain rejected. HTML-Wasm generic runtime values fail with structured unsupported-backend diagnostics before Wasm lowering.</td>
+     <td style="padding: 0.2em 0.5em;  "> Generic struct headers parse and resolve. Concrete constructor inference, field type substitution, named constructor arguments, imports and import aliases, collection element types, and concrete HIR lowering are supported. Recursive generic structs and generic receiver methods remain rejected. HTML-Wasm generic runtime values that are reachable from the exported entry roots fail with structured unsupported-backend diagnostics before Wasm lowering; unreachable generic-runtime code in unused functions is ignored by that backend-specific validation.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -2390,6 +2423,9 @@ body {
     ">generic_function_expected_context_success</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
+    ">generic_fn_nested_expected_parameter_intermediate_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
     ">generic_constructed_types_success</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
@@ -2400,6 +2436,9 @@ body {
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">generic_function_ambiguous_inference_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_fn_nested_expected_parameter_rejected</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">generic_function_conflicting_inference_rejected</span>, <span style="
@@ -2465,7 +2504,19 @@ body {
     ">generic_fn_value_use_return_rejected</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
+    ">generic_fn_value_use_facade_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
     ">generic_fn_namespace_synthetic_instance_inaccessible_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_fn_synthetic_grouped_import_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_fn_synthetic_direct_symbol_path_import_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_fn_synthetic_facade_export_rejected</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">generic_fn_facade_grouped_success</span>, <span style="
@@ -2499,7 +2550,10 @@ body {
      <td style="padding: 0.2em 0.5em;  "> Generic function headers parse into AST-owned templates with canonical signature <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">TypeId</span>s. Template-aware body validation rejects behavior-dependent operations on unconstrained generic parameters while allowing pass-through, generic-to-generic forwarding, generic wrapper construction, local annotations using generic parameters, constructed collection returns, contextual optional returns, and final generic error slots. Same-file, same-module grouped-import, same-module namespace, and authored facade-wrapper calls infer type arguments from immediate arguments and immediate expected success-result context, then emit concrete AST/HIR-bound function instances. Facade wrapper bodies resolve through the facade file's visibility, so private implementation generic helpers remain usable by the wrapper but hidden from outside importers. Generic optional returns and generic fallible error slots work across visible imports when immediate evidence solves the type parameters. Concrete instance body-emission diagnostics make the instantiating call site primary and keep the generic body failure span as secondary context. Generic fallible calls use the same postfix <span style="
+    ">TypeId</span>s. Template-aware body validation rejects behavior-dependent operations on unconstrained generic parameters while allowing pass-through, generic-to-generic forwarding, generic wrapper construction, local annotations using generic parameters, constructed collection returns, contextual optional returns, and final generic error slots. Same-file, same-module grouped-import, same-module namespace, and authored facade-wrapper calls infer type arguments from immediate arguments and immediate expected success-result context, then emit concrete AST/HIR-bound function instances. Synthetic generic instance paths stay internal and cannot be reached through namespace records, grouped imports, direct symbol-path imports, or facade import surfaces. Facade wrapper bodies resolve through the facade file's visibility, so private implementation generic helpers remain usable by the wrapper but hidden from outside importers. Generic optional returns and generic fallible error slots work across visible imports when immediate evidence solves the type parameters. Concrete instance body-emission diagnostics make the instantiating call site primary and keep the generic body failure span, declaration site, and concrete substitutions as diagnostic context. Conflicting inference diagnostics render both concrete <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">TypeId</span> names through the diagnostic type context, and cannot-infer diagnostics suggest ordinary receiving-site annotations. Generic fallible calls use the same postfix <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">!</span> and <span style="
@@ -2508,12 +2562,12 @@ body {
     ">catch</span> handling as ordinary fallible calls. <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">none</span> alone cannot infer a generic optional inner type. Generic functions must still be called and cannot be used as first-class values.</td>
+    ">none</span> alone cannot infer a generic optional inner type. Inference does not flow from later use or from an outer expected parameter context into a nested generic call. Generic functions must still be called and cannot be used as first-class values.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Generic type aliases</td>
-     <td style="padding: 0.2em 0.5em;  "> Partial</td>
+             <td style="padding: 0.2em 0.5em;  "> Concrete generic aliases</td>
+     <td style="padding: 0.2em 0.5em;  "> Supported</td>
      <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
@@ -2523,38 +2577,109 @@ body {
     ">generic_import_alias_concrete_alias_success</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">generic_nested_alias_workaround</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">generic_alias_rejected</span></td>
-     <td style="padding: 0.2em 0.5em;  "> Aliases to fully concrete generic instances are supported and transparent in annotations and declaration/constructor compatibility checks, including aliases to imported generic declarations. Generic aliases with parameters, partial type application, and type-constructor composition are rejected.</td>
+    ">generic_nested_alias_workaround</span></td>
+     <td style="padding: 0.2em 0.5em;  "> Aliases to fully concrete generic instances are supported and transparent in annotations and declaration/constructor compatibility checks, including aliases to imported generic declarations. Generic aliases with parameters are a separate deferred surface.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Trait bounds on generics</td>
      <td style="padding: 0.2em 0.5em;  "> Deferred</td>
-     <td style="padding: 0.2em 0.5em;  "> None</td>
-     <td style="padding: 0.2em 0.5em;  "> Required for operators, equality, methods, and behavior-dependent operations on unconstrained generic parameters.</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_constraint_syntax_deferred</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_where_constraint_syntax_rejected</span></td>
+     <td style="padding: 0.2em 0.5em;  "> Required for operators, equality, methods, and behavior-dependent operations on unconstrained generic parameters. Declaration-site <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">type A is Trait</span> constraints now produce a structured deferred diagnostic until traits/interfaces exist; <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">where</span> syntax is rejected because it is not part of the planned Alpha direction.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Explicit generic call-site application</td>
-     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
-     <td style="padding: 0.2em 0.5em;  "> Diagnostics only.</td>
+     <td style="padding: 0.2em 0.5em;  "> Rejected / Not Alpha</td>
      <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">identity of Int(42)</span> is rejected. Local generic function calls infer type arguments from immediate arguments and immediate expected context only.</td>
+    ">generic_explicit_call_of_syntax_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_explicit_call_of_spacing_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_explicit_call_angle_syntax_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_explicit_call_square_syntax_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_explicit_call_argument_type_syntax_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_explicit_call_inference_annotation_success</span></td>
+     <td style="padding: 0.2em 0.5em;  "> Explicit call-site type arguments such as <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">identity of Int(42)</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">identity<Int>(42)</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">identity[Int](42)</span>, and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">identity(42 Int)</span> are not Alpha syntax. Local generic function calls infer type arguments from immediate arguments and immediate expected result context only.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Generic function values</td>
+     <td style="padding: 0.2em 0.5em;  "> Rejected / Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_fn_value_use_grouped_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_fn_value_use_namespace_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_fn_value_use_collection_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_fn_value_use_argument_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_fn_value_use_return_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_fn_value_use_facade_rejected</span></td>
+     <td style="padding: 0.2em 0.5em;  "> Generic functions are callable declarations only. They cannot be assigned, passed as arguments, returned, collected, or used through namespace members or facade exports as first-class values.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Higher-order polymorphism</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> None</td>
+     <td style="padding: 0.2em 0.5em;  "> Generic function values, polymorphic function parameters, and higher-order generic calls are outside the Alpha surface.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Generic receiver methods</td>
-     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> Rejected / Deferred</td>
      <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">generic_receiver_rejected</span></td>
-     <td style="padding: 0.2em 0.5em;  "> Both generic receiver methods and receiver methods on concrete generic instantiated types are rejected with targeted diagnostics. Use free functions instead.</td>
+    ">generic_receiver_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_receiver_method_declaration_rejected</span></td>
+     <td style="padding: 0.2em 0.5em;  "> Declaration-site generic receiver methods and receiver methods on concrete generic instantiated types are not supported. Use free functions instead; broader method behavior waits for trait/constraint design.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -2572,7 +2697,7 @@ body {
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Nested generic type application</td>
-     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred / Rejected</td>
      <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
@@ -2587,10 +2712,58 @@ body {
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Generic aliases / partial type application</td>
-     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
-     <td style="padding: 0.2em 0.5em;  "> Diagnostics only.</td>
-     <td style="padding: 0.2em 0.5em;  "> Partial application and type-constructor composition are rejected. Alias a fully concrete generic instance instead.</td>
+             <td style="padding: 0.2em 0.5em;  "> Parameterized generic aliases</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred / Rejected</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_parameterized_alias_rejected</span></td>
+     <td style="padding: 0.2em 0.5em;  "> Alias a fully concrete generic instance for now. Alias parameter substitution is not implemented, and parameterized alias declarations are rejected during header parsing.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Partial type application</td>
+     <td style="padding: 0.2em 0.5em;  "> Rejected</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_partial_type_application_rejected</span></td>
+     <td style="padding: 0.2em 0.5em;  "> Partially applied type constructors and placeholder-style type arguments are not supported. Alias a fully concrete generic instance instead.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Generic external package functions</td>
+     <td style="padding: 0.2em 0.5em;  "> Deferred / Rejected</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">js_import_generic_signature_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">js_import_generic_opaque_type_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_external_opaque_type_application_rejected</span></td>
+     <td style="padding: 0.2em 0.5em;  "> External package functions and external package types are concrete only for Alpha. JS provider signatures, opaque declarations, source type annotations, and backend package metadata must expose concrete surfaces.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Type values / type-level CTFE</td>
+     <td style="padding: 0.2em 0.5em;  "> Not supported</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_type_name_value_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_type_application_value_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_namespace_type_value_rejected</span></td>
+     <td style="padding: 0.2em 0.5em;  "> Types are not runtime or compile-time values. Type-returning functions, type-level <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#if</span>, type inspection, and generic call-site type expressions are outside the Alpha model.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -3046,17 +3219,17 @@ body {
     return { tag: "err", value: __bs_make_error("Float(...) only accepts Int, Float, or string values", 210, null, null) };
     }
 
-    function b_fn0() {
-    let b_l0 = __bs_binding(undefined);
+    function b_fn1() {
+    let b_l3 = __bs_binding(undefined);
 
-    __bs_assign_value(b_l0, []);
-    return __bs_read(b_l0);
+    __bs_assign_value(b_l3, []);
+    return __bs_read(b_l3);
     }
 
     </script>
     <script>
     (function () {
-      if (typeof b_fn0 === "function") b_fn0();
+      if (typeof b_fn1 === "function") b_fn1();
     })();
     </script>
   </body>

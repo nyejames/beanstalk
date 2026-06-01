@@ -388,6 +388,7 @@ fn request_with_helper_exports() -> WasmBackendRequest {
             ..Default::default()
         },
         external_package_registry: Default::default(),
+        function_emission_policy: Default::default(),
     }
 }
 

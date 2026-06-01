@@ -312,10 +312,10 @@ body {
         </div>
     </nav>
      <h1 style="font-size: 2em;text-align: center;"> GENERICS IN BEANSTALK</h1>
-    <section class="container"><p>Generics are partially implemented for the current Alpha compiler.</p><p>The supported surface is intentionally small:</p><ul><li>generic parameter declarations with <span style="
+    <section class="container"><p>Generics are partially implemented for the current Alpha compiler.</p><p>The supported surface is intentionally small:</p><ul><li>declaration-site generic parameters with <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">type</span> on top-level structs and choices</li><li><span style="
+    ">type</span> on top-level structs, choices, and free functions</li><li><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">of</span> type application in type positions</li><li>concrete generic aliases to fully applied generic types</li><li>constructor inference for concrete generic structs and choices</li><li>collections as compiler-owned generic constructed types using <span style="
@@ -364,6 +364,30 @@ body {
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Explicit generic call syntax</td>
+     <td style="padding: 0.2em 0.5em;  "> Rejected / Not Alpha</td>
+     <td style="padding: 0.2em 0.5em;  "> Generic calls use ordinary call syntax and inference only.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Generic function values</td>
+     <td style="padding: 0.2em 0.5em;  "> Rejected / Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> Generic functions are callable declarations only, not first-class values.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Generic receiver methods</td>
+     <td style="padding: 0.2em 0.5em;  "> Rejected / Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> Use free functions until traits or another constraint model exists.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Type values / type-level CTFE</td>
+     <td style="padding: 0.2em 0.5em;  "> Not supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Types are compile-time annotation facts, not runtime or compile-time values.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Trait bounds</td>
      <td style="padding: 0.2em 0.5em;  "> Deferred</td>
      <td style="padding: 0.2em 0.5em;  "> Operators, equality, field access, formatting, and receiver calls on unconstrained generic parameters wait for traits or another constraint model.</td>
@@ -400,7 +424,7 @@ body {
     </code></pre><p><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">of</span> is type-position-only. It is not current Alpha syntax for explicit</p><p>generic function calls or runtime generic values.</p></section>
+    ">of</span> is type-position-only. It is not current Alpha syntax for explicit</p><p>generic function calls, runtime generic values, type values, or type-level computation.</p></section>
     <section class="container"><h1>Generic choices</h1><p>Generic choices use the same <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
@@ -514,7 +538,7 @@ body {
     <span class='bst-code-struct'>StringCount</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>Pair</span> of <span class='bst-code-struct'>String,</span> <span class='bst-code-type'>Int</span>
     value <span class='bst-code-struct'>Box</span> of <span class='bst-code-struct'>StringCount</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Box</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-struct'>Pair</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;count&quot;</span>, <span class='bst-code-number'>3</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>)</span>
     </code></pre></section>
-    <section class="container"><h1>Generic functions</h1><p>Generic free functions are callable when their type arguments can be inferred from the call itself or from an immediate expected result type. The same inference rules apply for same-file calls, grouped imports, namespace imports, and authored facade wrappers.</p><pre style="
+    <section class="container"><h1>Generic functions</h1><p>Generic free functions are callable when their type arguments can be inferred from the call itself or from an immediate expected result type. The same inference rules apply for same-file calls, grouped imports, namespace imports, and authored facade wrappers. There is no explicit generic call-site type argument syntax.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -570,7 +594,7 @@ body {
     ">Box of T</span>. Behavior-dependent operations on <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">T</span> are rejected until trait bounds or another constraint model exists.</p><p>Inference is deliberately immediate. Beanstalk does not infer a generic function&#39;s type arguments from later uses of the resulting value:</p><pre style="
+    ">T</span> are rejected until trait bounds or another constraint model exists.</p><p>Inference is deliberately immediate. Beanstalk does not infer a generic function&#39;s type arguments from later uses of the resulting value, whole-program analysis, HIR, borrow validation, or expected parameter context from an outer function call into a nested generic call:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -580,6 +604,16 @@ body {
     "><code class='codeblock'>
     <span class='bst-code-comment'>-- rejected: T is ambiguous at the declaration site</span>
     values <span class='bst-code-operator'>=</span> empty_values<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>Use an intermediate annotation when a nested generic call would otherwise need evidence from its parent call:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    user <span class='bst-code-struct'>User</span> <span class='bst-code-operator'>=</span> parse_json<span class='bst-code-parenthesis'>(</span>text<span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>!</span>
+    save_user<span class='bst-code-parenthesis'>(</span>user<span class='bst-code-parenthesis'>)</span>
     </code></pre><p>Generic functions may also return optional or fallible values, including across imports:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
@@ -693,10 +727,28 @@ body {
     <section class="container"><h1>Deferred features</h1><p>The following are not current Alpha generics:</p><ul><li>explicit generic call syntax such as <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">identity of Int(42)</span></li><li>generic function values and higher-order generic functions</li><li>trait bounds and <span style="
+    ">identity of Int(42)</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">where</span> clauses</li><li>recursive generic structs or choices</li><li>generic receiver methods</li><li>receiver methods on instantiated generic types</li><li>direct facade re-export syntax and function alias exports through <span style="
+    ">identity<Int>(42)</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">identity[Int](42)</span>, or <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">identity(42 Int)</span></li><li>inline generic sugar such as <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">|value type A|</span></li><li>generic function values and higher-order generic functions</li><li>trait bounds and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">where</span> clauses; the future direction is declaration-site <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">type A is Trait</span> constraints after traits exist</li><li>type values, type-returning functions, type-level <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#if</span>, and compile-time type inspection</li><li>recursive generic structs or choices</li><li>generic receiver methods</li><li>receiver methods on instantiated generic types</li><li>direct facade re-export syntax and function alias exports through <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">#mod.bst</span></li><li>generic JS or external package functions</li><li>generic aliases with parameters</li><li>partial type application</li><li>nested generic type application beyond the collection element exception</li><li>public <span style="
@@ -1000,17 +1052,17 @@ body {
     return { tag: "err", value: __bs_make_error("Float(...) only accepts Int, Float, or string values", 210, null, null) };
     }
 
-    function b_fn0() {
-    let b_l0 = __bs_binding(undefined);
+    function b_fn1() {
+    let b_l3 = __bs_binding(undefined);
 
-    __bs_assign_value(b_l0, []);
-    return __bs_read(b_l0);
+    __bs_assign_value(b_l3, []);
+    return __bs_read(b_l3);
     }
 
     </script>
     <script>
     (function () {
-      if (typeof b_fn0 === "function") b_fn0();
+      if (typeof b_fn1 === "function") b_fn1();
     })();
     </script>
   </body>

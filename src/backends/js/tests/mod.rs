@@ -9,6 +9,7 @@ mod support;
 mod bindings;
 mod choices;
 mod control_flow;
+mod emission_policy;
 mod expressions;
 mod host;
 mod inline_expressions;

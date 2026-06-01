@@ -27,6 +27,21 @@ pub(crate) struct WasmBackendRequest {
     /// WHY: dynamic external package IDs are synthetic today, so diagnostics need registry
     /// metadata to avoid reporting only `<synthetic>`.
     pub external_package_registry: ExternalPackageRegistry,
+    /// Selects which HIR functions are lowered into this Wasm module.
+    pub function_emission_policy: WasmFunctionEmissionPolicy,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub(crate) enum WasmFunctionEmissionPolicy {
+    /// Lower every HIR function. This preserves the generic Wasm backend test/default contract.
+    #[default]
+    AllFunctions,
+
+    /// Lower functions syntactically reachable from the requested export roots.
+    ///
+    /// WHY: HTML-Wasm page modules are entered through `bst_start`; unused source-library
+    /// wrappers must not request host imports or unsupported backend lowering.
+    ReachableFromExports,
 }
 
 #[derive(Debug, Clone, Default)]

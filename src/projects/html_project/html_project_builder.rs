@@ -3,7 +3,7 @@
 // WHAT: coordinates module output-path resolution, homepage checks, and backend selection.
 // WHY: project builders own artifact assembly policy while compiler backends stay generic.
 use crate::backends::external_package_validation::{
-    BackendTarget, validate_hir_external_package_support,
+    BackendTarget, ExternalPackageValidationError, validate_hir_external_package_support,
 };
 use crate::build_system::build::{BackendBuilder, CleanupPolicy, Module, OutputFile, Project};
 use crate::compiler_frontend::Flag;
@@ -310,7 +310,14 @@ impl HtmlProjectBuilder {
             backend_target,
             string_table,
         )
-        .map_err(|diagnostic| CompilerMessages::from_diagnostic_ref(diagnostic, string_table))?;
+        .map_err(|error| match error {
+            ExternalPackageValidationError::Diagnostic(diagnostic) => {
+                CompilerMessages::from_diagnostic_ref(*diagnostic, string_table)
+            }
+            ExternalPackageValidationError::Infrastructure(error) => {
+                CompilerMessages::from_error_ref(*error, string_table)
+            }
+        })?;
 
         let compile_input = HtmlModuleCompileInput {
             hir_module: &module.hir,

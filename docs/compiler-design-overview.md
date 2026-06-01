@@ -90,7 +90,7 @@ pub struct LibrarySet {
 ```
 
 Backend builders do not parse source files, discover modules, read project config directly, or perform semantic frontend compilation.
-They declare frontend-visible libraries/directives/config keys/external import providers, builder-runtime packages, validate config, and lower compiled modules into artifacts. `ProjectConfigKeyRegistry` is declarative Stage 0 metadata: it lists allowed core and backend-owned keys plus value shapes so `#config.bst` can reject unknown declarations, shape-invalid folded values, and closed-domain string values before core fields are applied or backend settings are stored. Config extraction consumes shared AST const facts for declarations authored in `#config.bst`; imported core/builder constants and types are support surface, not config entries. External import providers are builder-declared hooks that Stage 0/import preparation uses to turn non-Beanstalk files into typed external package surfaces before AST; for JS-backed providers, that provider result also carries registered runtime imports discovered while parsing the external source. Builder-runtime package metadata covers builder-owned JS-backed virtual packages such as `@web/canvas`; these packages are registered directly in `external_packages`, then attached to module external-import metadata only when HIR references one of their functions. Project-specific config validation remains in `BackendBuilder::validate_project_config`, which returns `ProjectConfigError` so normal user config mistakes stay as typed `CompilerDiagnostic` values while infrastructure failures remain explicit `CompilerError` values.
+They declare frontend-visible libraries/directives/config keys/external import providers, builder-runtime packages, validate config, and lower compiled modules into artifacts. `ProjectConfigKeyRegistry` is declarative Stage 0 metadata: it lists allowed core and backend-owned keys plus value shapes so `#config.bst` can reject unknown declarations, shape-invalid folded values, and closed-domain string values before core fields are applied or backend settings are stored. Config extraction consumes shared AST const facts for declarations authored in `#config.bst`; imported core/builder constants and types are support surface, not config entries. External import providers are builder-declared hooks that Stage 0/import preparation uses to turn non-Beanstalk files into typed external package surfaces before AST; for JS-backed providers, that provider result also carries registered runtime imports discovered while parsing the external source. Builder-runtime package metadata covers builder-owned JS-backed virtual packages such as `@web/canvas`; these packages are registered directly in `external_packages`, then attached to module external-import metadata only when entry-reachable HIR references one of their functions. Project-specific config validation remains in `BackendBuilder::validate_project_config`, which returns `ProjectConfigError` so normal user config mistakes stay as typed `CompilerDiagnostic` values while infrastructure failures remain explicit `CompilerError` values.
 
 Complex release optimizations should remain outside the fast frontend path unless they are required for correctness.
 
@@ -153,6 +153,7 @@ Compiler-facing rules:
 - External import providers live under `LibrarySet` and resolve non-Beanstalk import sources into typed package/type/function/method IDs before AST consumes visibility
 - Builder-runtime package metadata lets builder-owned packages share the same backend runtime asset/glue emission path as provider-created imports without pretending they were project-local files
 - External imports resolve to stable frontend IDs such as `ExternalFunctionId`
+- Grouped imports for virtual external packages resolve through external package metadata before source/module facade enforcement. Source imports still go through facade checks before source target resolution, so virtual package lookup does not weaken source-library or module privacy.
 - Explicit grouped receiver-method imports reserve their local spelling in the header-stage visible-name registry before adding receiver-call visibility, so aliases collide consistently with same-file declarations, imports, prelude symbols, builtins, and namespace records. Auto-imported receiver methods from type imports and namespace imports stay receiver-call-only and do not create ordinary visible value fields.
 - Grouped receiver-method imports require the receiver type to be visible in the importing file. Header import preparation validates source nominal types, external opaque type IDs, namespace records, grouped type imports, and language-visible scalar receivers before AST consumes the receiver-call visibility; AST retains the exact transparent source type-alias guard because type-alias targets are resolved there.
 - Expression/type resolution uses the active `ScopeContext` visibility maps and import records, not global bare-name lookup
@@ -471,6 +472,7 @@ HIR owns:
 * module constants as compile-time metadata
 * advisory private const-fact metadata projected from AST for future optimization consumers
 * stable external function IDs selected during AST resolution
+* backend-neutral syntactic reachability over functions, blocks, and external call IDs from explicit roots
 * enough structure for borrow validation and later backend lowering
 
 HIR does not:
@@ -491,6 +493,7 @@ Calls to builder-provided package functions lower to stable external call target
 HIR does not store package import syntax or backend runtime names.
 Borrow validation can resolve those IDs through the external package registry to recover access rules and return-alias metadata.
 Backends map the same IDs to target-specific helpers, imports, or runtime names.
+The HTML builder uses HIR reachability from the entry `start` function for runtime artifact planning and unsupported-backend validation. This is syntactic CFG/function reachability, not constant-condition dead-code elimination, optimization, or ownership analysis.
 
 ### Mutable rvalues
 
@@ -536,6 +539,7 @@ Backends consume compiled modules containing:
 Backends own target-specific output generation.
 They must preserve Beanstalk semantics even when backend representations differ.
 For the HTML JS path, backend lowering owns emitted JS assets, registered runtime modules, generated external-call glue, import-map HTML, and the final mapping from stable external function IDs to runtime wrapper names. Runtime module emission and import-map entries are driven by module external-import metadata recorded from accepted JS runtime imports, not by function fallibility.
+HTML JS page bundles emit the function set reachable from entry `start`; this keeps unused source-library wrappers from requesting glue or runtime assets. HTML-Wasm uses the same entry/export reachability for companion JS, Wasm function lowering, and backend feature validation, while reachable unsupported JS-backed external calls still fail with structured diagnostics.
 
 Ownership-aware backends may use borrow facts and memory-model metadata for optimization.
 GC-only backends can lower through the semantic baseline without deterministic drop behavior.

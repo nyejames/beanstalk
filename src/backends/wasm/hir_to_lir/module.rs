@@ -5,14 +5,18 @@ use crate::backends::wasm::hir_to_lir::exports::synthesize_export_wrappers;
 use crate::backends::wasm::hir_to_lir::function::lower_function;
 use crate::backends::wasm::hir_to_lir::imports::register_required_host_imports;
 use crate::backends::wasm::lir::types::WasmLirFunctionId;
-use crate::backends::wasm::request::WasmBackendRequest;
+use crate::backends::wasm::request::{WasmBackendRequest, WasmFunctionEmissionPolicy};
 use crate::compiler_frontend::analysis::borrow_checker::BorrowFacts;
 use crate::compiler_frontend::compiler_messages::compiler_errors::{
     CompilerError, CompilerMessages,
 };
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
+use crate::compiler_frontend::hir::functions::HirFunction;
+use crate::compiler_frontend::hir::ids::BlockId;
 use crate::compiler_frontend::hir::module::HirModule;
+use crate::compiler_frontend::hir::reachability::{HirReachabilityInput, collect_hir_reachability};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use rustc_hash::FxHashSet;
 
 pub(crate) fn lower_hir_module_to_lir(
     hir_module: &HirModule,
@@ -30,22 +34,18 @@ pub(crate) fn lower_hir_module_to_lir(
         string_table,
         type_environment,
     );
+    let function_selection = select_functions_for_lowering(hir_module, request, string_table)?;
 
     // WHAT: register stable function mappings before lowering any bodies.
     // WHY: call lowering depends on these mappings even for forward references.
-    register_function_maps(&mut context)
+    register_function_maps(&mut context, &function_selection.functions)
         .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
     // WHAT: pre-register host imports required by the module.
     // WHY: keeps import ids deterministic and avoids re-scan during statement lowering.
-    register_required_host_imports(&mut context)
+    register_required_host_imports(&mut context, function_selection.reachable_blocks.as_ref())
         .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
 
-    // WHAT: sort functions by id.
-    // WHY: ensures deterministic output regardless of source container ordering.
-    let mut functions = hir_module.functions.clone();
-    functions.sort_by_key(|function| function.id.0);
-
-    for hir_function in &functions {
+    for hir_function in &function_selection.functions {
         let lowered = lower_function(&mut context, hir_function)
             .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
         context.lir_module.functions.push(lowered);
@@ -59,10 +59,55 @@ pub(crate) fn lower_hir_module_to_lir(
     Ok(context.lir_module)
 }
 
-fn register_function_maps(context: &mut WasmLirLoweringContext<'_>) -> Result<(), CompilerError> {
+struct WasmFunctionLoweringSelection {
+    functions: Vec<HirFunction>,
+    reachable_blocks: Option<FxHashSet<BlockId>>,
+}
+
+fn select_functions_for_lowering(
+    hir_module: &HirModule,
+    request: &WasmBackendRequest,
+    string_table: &StringTable,
+) -> Result<WasmFunctionLoweringSelection, CompilerMessages> {
+    // WHAT: choose the backend function set before assigning LIR ids.
+    // WHY: HTML-Wasm page bundles must not lower unused source-library wrappers, while the
+    // generic Wasm backend keeps its existing all-functions default for direct tests.
+    match request.function_emission_policy {
+        WasmFunctionEmissionPolicy::AllFunctions => Ok(WasmFunctionLoweringSelection {
+            functions: sorted_functions(hir_module.functions.clone()),
+            reachable_blocks: None,
+        }),
+
+        WasmFunctionEmissionPolicy::ReachableFromExports => {
+            let reachability = collect_hir_reachability(HirReachabilityInput {
+                hir: hir_module,
+                root_functions: request.export_policy.exported_functions.clone(),
+            })
+            .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
+
+            let mut functions = hir_module.functions.clone();
+            functions.retain(|function| reachability.reachable_functions.contains(&function.id));
+
+            Ok(WasmFunctionLoweringSelection {
+                functions: sorted_functions(functions),
+                reachable_blocks: Some(reachability.reachable_blocks),
+            })
+        }
+    }
+}
+
+fn sorted_functions(mut functions: Vec<HirFunction>) -> Vec<HirFunction> {
+    functions.sort_by_key(|function| function.id.0);
+    functions
+}
+
+fn register_function_maps(
+    context: &mut WasmLirLoweringContext<'_>,
+    functions: &[HirFunction],
+) -> Result<(), CompilerError> {
     // This mapping is intentionally explicit so lowering, code-section ordering, and debug
     // correlation all share the same stable function ids.
-    for (next_id, function) in context.hir_module.functions.iter().enumerate() {
+    for (next_id, function) in functions.iter().enumerate() {
         context
             .function_map
             .insert(function.id, WasmLirFunctionId(next_id as u32));

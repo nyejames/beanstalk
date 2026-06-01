@@ -1,0 +1,1 @@
+-- This facade shape previously caused missing external symbols to report facade diagnostics.

@@ -4,7 +4,7 @@
 //! WHY: keeps backend contract translation in one place as request fields evolve.
 
 use crate::backends::wasm::request::{
-    WasmBackendRequest, WasmExportPolicy, WasmHelperExportPolicy,
+    WasmBackendRequest, WasmExportPolicy, WasmFunctionEmissionPolicy, WasmHelperExportPolicy,
 };
 use crate::projects::html_project::wasm::export_plan::HtmlWasmExportPlan;
 use rustc_hash::FxHashMap;
@@ -40,6 +40,7 @@ pub(crate) fn build_wasm_backend_request(export_plan: &HtmlWasmExportPlan) -> Wa
                 export_release: export_plan.helper_exports.export_release,
             },
         },
+        function_emission_policy: WasmFunctionEmissionPolicy::ReachableFromExports,
         ..WasmBackendRequest::default()
     }
 }

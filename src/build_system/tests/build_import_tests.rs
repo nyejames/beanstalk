@@ -243,6 +243,134 @@ fn build_html_project_fallible_js_without_runtime_import_does_not_emit_runtime_m
 }
 
 #[test]
+fn build_html_project_unreachable_provider_js_import_does_not_emit_runtime_artifacts() {
+    let root = temp_dir("html_project_unreachable_provider_js");
+    fs::create_dir_all(&root).expect("should create temp root");
+    fs::write(root.join("#config.bst"), "project = \"html\"\n").expect("should write config");
+    fs::write(
+        root.join("#page.bst"),
+        "import @./drawing.js { get_number }\nunused || -> Int, Error!:\n    return get_number()!\n;\nvalue = 1\n",
+    )
+    .expect("should write page");
+    fs::write(
+        root.join("drawing.js"),
+        "import { bstOk } from \"@beanstalk/runtime\";\n/**\n * @bst.sig get_number || -> Int, Error!\n */\nexport function getNumber() { return bstOk(7); }\n",
+    )
+    .expect("should write js");
+
+    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
+    let result = build_project(
+        &builder,
+        root.to_str().expect("temp dir should be UTF-8"),
+        &[],
+    )
+    .expect("unreachable project-local JS import should not request runtime artifacts");
+
+    let output_paths = result
+        .project
+        .output_files
+        .iter()
+        .map(|file| file.relative_output_path().to_path_buf())
+        .collect::<Vec<_>>();
+    assert!(
+        !output_paths
+            .iter()
+            .any(|path| path.to_string_lossy().contains("_beanstalk/js/glue/")),
+        "unreachable provider-created JS calls should not emit generated glue"
+    );
+    assert!(
+        !output_paths
+            .iter()
+            .any(|path| path.ends_with("_beanstalk/js/runtime/beanstalk-runtime.js")),
+        "unreachable provider-created JS calls should not emit runtime modules"
+    );
+
+    let html = result
+        .project
+        .output_files
+        .iter()
+        .find_map(|file| match file.file_kind() {
+            FileKind::Html(html) => Some(html.as_str()),
+            _ => None,
+        })
+        .expect("build should emit HTML");
+    assert!(
+        !html.contains("<script type=\"module\">"),
+        "unreachable provider-created JS calls should not force a module script"
+    );
+    assert!(
+        !html.contains("import { __bs_glue_fn"),
+        "unreachable provider-created JS calls should not add a glue preamble"
+    );
+    assert!(
+        !html.contains("<script type=\"importmap\">"),
+        "unreachable provider-created JS calls should not emit an import map"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn build_html_project_unreachable_html_canvas_helper_import_does_not_emit_runtime_artifacts() {
+    let root = temp_dir("html_project_unreachable_html_canvas_helper");
+    fs::create_dir_all(&root).expect("should create temp root");
+    fs::write(root.join("#config.bst"), "project = \"html\"\n").expect("should write config");
+    fs::write(
+        root.join("#page.bst"),
+        "import @html { canvas, get_canvas_context }\n#[canvas:\n  Unused helper import\n  320\n  180\n]\n",
+    )
+    .expect("should write page");
+
+    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
+    let result = build_project(
+        &builder,
+        root.to_str().expect("temp dir should be UTF-8"),
+        &[],
+    )
+    .expect("unused @html canvas helper should not request runtime artifacts");
+
+    let output_paths = result
+        .project
+        .output_files
+        .iter()
+        .map(|file| file.relative_output_path().to_path_buf())
+        .collect::<Vec<_>>();
+    assert!(
+        !output_paths
+            .iter()
+            .any(|path| path.to_string_lossy().starts_with("_beanstalk/js/canvas-")),
+        "unused @html canvas helper should not emit the built-in canvas asset"
+    );
+    assert!(
+        !output_paths
+            .iter()
+            .any(|path| path.to_string_lossy().contains("_beanstalk/js/glue/")),
+        "unused @html canvas helper should not emit generated glue"
+    );
+    assert!(
+        !output_paths
+            .iter()
+            .any(|path| path.ends_with("_beanstalk/js/runtime/beanstalk-runtime.js")),
+        "unused @html canvas helper should not emit the registered runtime module"
+    );
+
+    let html = result
+        .project
+        .output_files
+        .iter()
+        .find_map(|file| match file.file_kind() {
+            FileKind::Html(html) => Some(html.as_str()),
+            _ => None,
+        })
+        .expect("build should emit HTML");
+    assert!(html.contains("bst_builtin_canvas"));
+    assert!(!html.contains("<script type=\"module\">"));
+    assert!(!html.contains("<script type=\"importmap\">"));
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
 fn build_html_project_web_canvas_emits_builtin_js_asset_and_glue() {
     let root = temp_dir("html_project_web_canvas_asset");
     fs::create_dir_all(&root).expect("should create temp root");
@@ -301,6 +429,28 @@ fn build_html_project_web_canvas_emits_builtin_js_asset_and_glue() {
         "glue imports should be relative to the glue module"
     );
 
+    let html = result
+        .project
+        .output_files
+        .iter()
+        .find_map(|file| match file.file_kind() {
+            FileKind::Html(html) => Some(html.as_str()),
+            _ => None,
+        })
+        .expect("build should emit HTML");
+    assert!(
+        html.contains("<script type=\"module\">"),
+        "reachable @web/canvas glue should make the inline bundle a module script"
+    );
+    assert!(
+        html.contains("import { __bs_glue_"),
+        "reachable @web/canvas calls should add a glue import preamble"
+    );
+    assert!(
+        html.contains("<script type=\"importmap\">"),
+        "@web/canvas imports runtime helpers, so HTML should include an import map"
+    );
+
     let output_paths = result
         .project
         .output_files
@@ -312,6 +462,94 @@ fn build_html_project_web_canvas_emits_builtin_js_asset_and_glue() {
             .iter()
             .any(|path| path.ends_with("_beanstalk/js/runtime/beanstalk-runtime.js")),
         "@web/canvas imports runtime helpers, so the registered runtime module should be emitted"
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn build_html_project_html_canvas_helper_emits_builtin_js_asset_and_glue() {
+    let root = temp_dir("html_project_html_canvas_helper_asset");
+    fs::create_dir_all(&root).expect("should create temp root");
+    fs::write(root.join("#config.bst"), "project = \"html\"\n").expect("should write config");
+    fs::write(
+        root.join("#page.bst"),
+        "import @html { get_canvas_context }\ndraw || -> String, Error!:\n    context = get_canvas_context()!\n    return \"ok\"\n;\nresult = draw() catch:\n    then \"error\"\n;\nio(result)\n",
+    )
+    .expect("should write page");
+
+    let builder = ProjectBuilder::new(Box::new(HtmlProjectBuilder::new()));
+    let result = build_project(
+        &builder,
+        root.to_str().expect("temp dir should be UTF-8"),
+        &[],
+    )
+    .expect("reachable @html canvas helper should build through generated glue");
+
+    let canvas_asset = result
+        .project
+        .output_files
+        .iter()
+        .find_map(|file| {
+            let path = file.relative_output_path().to_string_lossy();
+            if !path.starts_with("_beanstalk/js/canvas-") {
+                return None;
+            }
+            match file.file_kind() {
+                FileKind::Js(source) => Some(source.as_str()),
+                _ => None,
+            }
+        })
+        .expect("reachable @html canvas helper should emit its built-in JS asset");
+    assert!(canvas_asset.contains("export function getCanvas"));
+    assert!(canvas_asset.contains("export function context2d"));
+
+    let glue = result
+        .project
+        .output_files
+        .iter()
+        .find_map(|file| {
+            let path = file.relative_output_path().to_string_lossy();
+            if !path.contains("_beanstalk/js/glue/") {
+                return None;
+            }
+            match file.file_kind() {
+                FileKind::Js(source) => Some(source.as_str()),
+                _ => None,
+            }
+        })
+        .expect("reachable @html canvas helper should emit generated glue");
+    assert!(glue.contains("getCanvas as __bs_external_fn"));
+    assert!(glue.contains("context2d as __bs_external_fn"));
+    assert!(
+        glue.contains("from \"../canvas-"),
+        "glue imports should be relative to the glue module"
+    );
+
+    let html = result
+        .project
+        .output_files
+        .iter()
+        .find_map(|file| match file.file_kind() {
+            FileKind::Html(html) => Some(html.as_str()),
+            _ => None,
+        })
+        .expect("build should emit HTML");
+    assert!(html.contains("<script type=\"module\">"));
+    assert!(html.contains("import { __bs_glue_"));
+    assert!(html.contains("<script type=\"importmap\">"));
+
+    let output_paths = result
+        .project
+        .output_files
+        .iter()
+        .map(|file| file.relative_output_path().to_path_buf())
+        .collect::<Vec<_>>();
+    assert!(
+        output_paths
+            .iter()
+            .any(|path| path.ends_with("_beanstalk/js/runtime/beanstalk-runtime.js")),
+        "@html canvas helper imports runtime helpers, so the registered runtime module should be emitted"
     );
 
     fs::remove_dir_all(&root).expect("should remove temp root");

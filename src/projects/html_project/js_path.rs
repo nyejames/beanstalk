@@ -13,7 +13,7 @@
 //!   4. A second inline `<script>` calls entry `start()` once. start() returns the
 //!      runtime fragment array and each element is hydrated into its slot in source order.
 
-use crate::backends::js::{JsLoweringConfig, lower_hir_to_js};
+use crate::backends::js::{JsFunctionEmissionPolicy, JsLoweringConfig, lower_hir_to_js};
 use crate::build_system::build::{FileKind, Module, OutputFile, ResolvedConstFragment};
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::hir::ids::FunctionId;
@@ -67,6 +67,7 @@ pub(crate) fn compile_html_module_js(
     let mut js_lowering_config = JsLoweringConfig::standard_html(input.release_build);
     js_lowering_config.external_package_registry = input.external_package_registry.clone();
     js_lowering_config.external_module_export_glue_enabled = true;
+    js_lowering_config.function_emission_policy = JsFunctionEmissionPolicy::ReachableFromStart;
 
     let js_module = lower_hir_to_js(
         input.hir_module,
@@ -77,8 +78,8 @@ pub(crate) fn compile_html_module_js(
     )
     .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
 
-    // Generate glue modules and import preamble if the module references ExternalModuleExport
-    // functions.
+    // Generate glue modules and import preamble only for external module exports referenced by
+    // emitted JS. In HTML page bundles, JS lowering has already filtered unreachable wrappers.
     let glue_result = generate_module_glue(
         module,
         &js_module.referenced_external_functions,

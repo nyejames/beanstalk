@@ -12,14 +12,14 @@ use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages}
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::external_packages::{
-    CallTarget, ExternalPackageId, ExternalPackageRegistry,
+    ExternalFunctionId, ExternalPackageId, ExternalPackageRegistry,
 };
 use crate::compiler_frontend::headers::parse_file_headers::{
     FileFrontendPrepareError, FileFrontendPrepareOutput, HeaderKind, HeaderParseOptions, Headers,
     parse_headers,
 };
 use crate::compiler_frontend::hir::module::HirModule;
-use crate::compiler_frontend::hir::statements::HirStatementKind;
+use crate::compiler_frontend::hir::reachability::collect_reachability_from_start;
 use crate::compiler_frontend::instrumentation::{FrontendCounter, add_frontend_counter};
 use crate::compiler_frontend::module_dependencies::SortedHeaders;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
@@ -136,14 +136,15 @@ impl FrontendModuleBuildContext<'_> {
                 })?;
             record_borrow_counters(&borrow_analysis);
 
-            // Scan HIR for referenced builder-runtime package functions so we only emit
-            // runtime assets for packages that are actually used by this module.
-            let referenced_builder_runtime_package_ids =
-                collect_referenced_builder_runtime_package_ids(
-                    &hir_module,
-                    self.builder_runtime_packages,
-                    &compiler.external_package_registry,
-                );
+            // Runtime import metadata is tied to calls that can execute from entry `start`.
+            // The registry and provider table stay fully populated for type checking and
+            // diagnostics; only the backend-facing module metadata is reachability-filtered.
+            let reachability = collect_reachability_from_start(&hir_module)
+                .map_err(|error| CompilerMessages::from_error_ref(error, &compiler.string_table))?;
+            let reachable_external_package_ids = collect_reachable_external_package_ids(
+                &reachability.reachable_external_functions,
+                &compiler.external_package_registry,
+            );
 
             // -------------------------
             //  Finalize Module Build
@@ -176,6 +177,9 @@ impl FrontendModuleBuildContext<'_> {
                 external_import_resolution_table
                     .collect_unique_resolved_imports_for_source_files(&source_logical_paths)
                     .into_iter()
+                    .filter(|resolved| {
+                        reachable_external_package_ids.contains(&resolved.package_id)
+                    })
                     .map(
                         |resolved| crate::build_system::build::ModuleExternalImport {
                             package_id: resolved.package_id,
@@ -185,10 +189,10 @@ impl FrontendModuleBuildContext<'_> {
                     )
                     .collect();
 
-            // Append builder-runtime packages whose functions are actually referenced in HIR
-            // so they share the same runtime asset/glue emission path as provider-resolved imports.
+            // Append reachable builder-runtime packages so they share the same runtime asset/glue
+            // emission path as reachable provider-resolved imports.
             for builder_runtime in self.builder_runtime_packages {
-                if referenced_builder_runtime_package_ids.contains(&builder_runtime.package_id) {
+                if reachable_external_package_ids.contains(&builder_runtime.package_id) {
                     module_external_imports.push(
                         crate::build_system::build::ModuleExternalImport {
                             package_id: builder_runtime.package_id,
@@ -588,41 +592,24 @@ fn timed_frontend_stage<T>(
     result
 }
 
-/// Collects the set of builder-runtime package IDs whose functions are actually referenced
-/// in the compiled HIR module.
+/// Maps reachable external functions to the packages that own them.
 ///
-/// WHAT: scans all HIR blocks for `CallTarget::ExternalFunction` statements and maps each
-///       referenced external function back to its package ID via the registry.
-/// WHY: builder-runtime packages (like `@web/canvas`) are registered unconditionally in the
-///      external package registry, but their runtime assets should only be emitted for modules
-///      that actually call their functions.
-fn collect_referenced_builder_runtime_package_ids(
-    hir_module: &HirModule,
-    builder_runtime_packages: &[BuilderRuntimePackageMetadata],
+/// WHY: provider-created packages and builder-runtime packages use the same backend metadata path,
+/// so the build boundary derives one package-ID set from HIR reachability and applies it to both
+/// sources of available runtime metadata.
+fn collect_reachable_external_package_ids(
+    reachable_external_functions: &FxHashSet<ExternalFunctionId>,
     registry: &ExternalPackageRegistry,
 ) -> FxHashSet<ExternalPackageId> {
-    let builder_runtime_ids: FxHashSet<_> = builder_runtime_packages
-        .iter()
-        .map(|meta| meta.package_id)
-        .collect();
+    let mut package_ids = FxHashSet::default();
 
-    let mut referenced = FxHashSet::default();
-
-    for block in &hir_module.blocks {
-        for statement in &block.statements {
-            if let HirStatementKind::Call {
-                target: CallTarget::ExternalFunction(id),
-                ..
-            } = &statement.kind
-                && let Some(package_id) = registry.resolve_function_package_id(*id)
-                && builder_runtime_ids.contains(&package_id)
-            {
-                referenced.insert(package_id);
-            }
+    for function_id in reachable_external_functions {
+        if let Some(package_id) = registry.resolve_function_package_id(*function_id) {
+            package_ids.insert(package_id);
         }
     }
 
-    referenced
+    package_ids
 }
 
 #[cfg(test)]
