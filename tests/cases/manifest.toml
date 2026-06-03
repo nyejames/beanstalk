@@ -3881,6 +3881,26 @@ path = "trait_declaration_parse_success"
 tags = ["integration","traits"]
 
 [[case]]
+id = "trait_requirement_generic_this_return_rejected"
+path = "trait_requirement_generic_this_return_rejected"
+tags = ["integration","traits","diagnostics"]
+
+[[case]]
+id = "trait_requirement_generic_this_param_rejected"
+path = "trait_requirement_generic_this_param_rejected"
+tags = ["integration","traits","diagnostics"]
+
+[[case]]
+id = "trait_requirement_bare_second_this_rejected"
+path = "trait_requirement_bare_second_this_rejected"
+tags = ["integration","traits","diagnostics"]
+
+[[case]]
+id = "trait_requirement_named_this_param_success"
+path = "trait_requirement_named_this_param_success"
+tags = ["integration","traits"]
+
+[[case]]
 id = "trait_displayable_scaffold_conformance_reference"
 path = "trait_displayable_scaffold_conformance_reference"
 tags = ["integration","traits"]
@@ -3999,6 +4019,11 @@ tags = ["integration","traits"]
 id = "trait_conformance_builtin_extension_success"
 path = "trait_conformance_builtin_extension_success"
 tags = ["integration","traits"]
+
+[[case]]
+id = "trait_conformance_builtin_extension_not_importable_rejected"
+path = "trait_conformance_builtin_extension_not_importable_rejected"
+tags = ["integration","traits","diagnostics"]
 
 [[case]]
 id = "trait_conformance_imported_source_extension_success"

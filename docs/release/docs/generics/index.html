@@ -321,7 +321,10 @@ body {
     ">of</span> type application in type positions</li><li>concrete generic aliases to fully applied generic types</li><li>constructor inference for concrete generic structs and choices</li><li>collections as compiler-owned generic constructed types using <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">{T}</span></li><li>generic free-function calls across same-file use, visible same-module imports, and authored facades</li></ul><p>Generic function headers are parsed and tracked by the frontend, and their bodies are validated against unconstrained generic parameters before any concrete call is accepted. Same-file calls, grouped cross-file imports, namespace cross-file imports, and authored facade wrapper calls infer type arguments from immediate arguments and immediate expected result context. Facade wrappers resolve their bodies through the facade file&#39;s own imports, so private implementation helpers stay hidden behind real public wrapper declarations.</p></section>
+    ">{T}</span></li><li>generic free-function calls across same-file use, visible same-module imports, and authored facades</li><li>declaration-site trait bounds with <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">type T is TRAIT</span></li></ul><p>Generic function headers are parsed and tracked by the frontend, and their bodies are validated against unconstrained generic parameters before any concrete call is accepted. Same-file calls, grouped cross-file imports, namespace cross-file imports, and authored facade wrapper calls infer type arguments from immediate arguments and immediate expected result context. Facade wrappers resolve their bodies through the facade file&#39;s own imports, so private implementation helpers stay hidden behind real public wrapper declarations.</p></section>
     <section class="container"><h1>Current status</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
         
     <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
@@ -377,8 +380,8 @@ body {
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Generic receiver methods</td>
-     <td style="padding: 0.2em 0.5em;  "> Rejected / Deferred</td>
-     <td style="padding: 0.2em 0.5em;  "> Use free functions until traits or another constraint model exists.</td>
+     <td style="padding: 0.2em 0.5em;  "> Partial</td>
+     <td style="padding: 0.2em 0.5em;  "> Declaration-site generic receiver methods are supported when the method generic parameters align exactly with the receiver constructor arguments. Bound-provided receiver calls are available through visible reusable trait evidence; receiver methods on fully instantiated generic types remain rejected.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -389,8 +392,17 @@ body {
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Trait bounds</td>
-     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
-     <td style="padding: 0.2em 0.5em;  "> Operators, equality, field access, formatting, and receiver calls on unconstrained generic parameters wait for traits or another constraint model.</td>
+     <td style="padding: 0.2em 0.5em;  "> Partial</td>
+     <td style="padding: 0.2em 0.5em;  "> Declaration-site <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">type T is TRAIT</span> and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">type T is A and B, U is C</span> bounds are supported for generic functions, structs, and choices. <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">where</span> clauses and file-local evidence-backed generic bound dispatch remain deferred.</td>
         </tr>
         
     </table></section>
@@ -591,10 +603,10 @@ body {
     ">{T}</span>, and <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">Box of T</span>. Behavior-dependent operations on <span style="
+    ">Box of T</span>. Behavior-dependent operations on unconstrained <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">T</span> are rejected until trait bounds or another constraint model exists.</p><p>Inference is deliberately immediate. Beanstalk does not infer a generic function&#39;s type arguments from later uses of the resulting value, whole-program analysis, HIR, borrow validation, or expected parameter context from an outer function call into a nested generic call:</p><pre style="
+    ">T</span> are rejected. A declaration-site trait bound can allow receiver calls supplied by a unique visible trait requirement. Arithmetic, equality, field access, template interpolation, and external/IO behavior still require concrete support or a future dedicated trait integration.</p><p>Inference is deliberately immediate. Beanstalk does not infer a generic function&#39;s type arguments from later uses of the resulting value, whole-program analysis, HIR, borrow validation, or expected parameter context from an outer function call into a nested generic call:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -724,6 +736,64 @@ body {
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">helpers.identity</span>. Direct facade re-export syntax is also deferred; expose imported behavior with real authored wrapper declarations.</p></section>
+    <section class="container"><h1>Trait bounds</h1><p>Generic bounds use <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">is</span>, not <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">must</span>.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    render type <span class='bst-code-struct'>Item</span> is <span class='bst-code-struct'>DISPLAY_TEXT</span> <span class='bst-code-operator'>|</span>item <span class='bst-code-struct'>Item</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> item.display<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
+    ;
+    </code></pre><p>Multiple bounds on one parameter use <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">and</span>. Commas still separate generic parameters:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    combine type <span class='bst-code-struct'>A</span> is <span class='bst-code-struct'>DISPLAY_TEXT,</span> <span class='bst-code-struct'>B</span> is <span class='bst-code-struct'>DISPLAY_TEXT</span> <span class='bst-code-operator'>|</span>left <span class='bst-code-struct'>A,</span> right <span class='bst-code-struct'>B</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> left.display<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>+</span> right.display<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
+    ;
+
+    render_named type <span class='bst-code-struct'>Item</span> is <span class='bst-code-struct'>DISPLAY_TEXT</span> and <span class='bst-code-struct'>NAMED</span> <span class='bst-code-operator'>|</span>item <span class='bst-code-struct'>Item</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> item.display<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
+    ;
+    </code></pre><p>Concrete generic function calls and concrete generic struct/choice instantiations require explicit visible reusable evidence for each concrete type argument. File-local extension evidence can support local dynamic values or local concrete fallback, but it cannot satisfy public/static generic API obligations across files.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>Label</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
+        text <span class='bst-code-struct'>String,</span>
+    <span class='bst-code-operator'>|</span>
+
+    display <span class='bst-code-operator'>|</span>this <span class='bst-code-struct'>Label</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> this.text
+    ;
+
+    <span class='bst-code-struct'>Label</span> must <span class='bst-code-struct'>DISPLAY_TEXT</span>
+
+    value <span class='bst-code-operator'>=</span> render<span class='bst-code-parenthesis'>(</span><span class='bst-code-struct'>Label</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;ok&quot;</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>A trait name in a normal type annotation means a dynamic trait value. A trait name in a generic bound constrains a concrete generic parameter. These are different features.</p><p>Dynamic trait values do not satisfy static generic bounds. Bound-provided receiver methods use the selected static evidence; dynamic wrappers use runtime dispatch and are a separate value representation.</p><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">where</span> clauses remain rejected; write bounds directly on the generic parameter list.</p></section>
     <section class="container"><h1>Deferred features</h1><p>The following are not current Alpha generics:</p><ul><li>explicit generic call syntax such as <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
@@ -739,16 +809,13 @@ body {
     ">identity(42 Int)</span></li><li>inline generic sugar such as <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">|value type A|</span></li><li>generic function values and higher-order generic functions</li><li>trait bounds and <span style="
+    ">|value type A|</span></li><li>generic function values and higher-order generic functions</li><li><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">where</span> clauses; the future direction is declaration-site <span style="
+    ">where</span> clauses and file-local evidence-backed generic bound dispatch</li><li>type values, type-returning functions, type-level <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">type A is Trait</span> constraints after traits exist</li><li>type values, type-returning functions, type-level <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#if</span>, and compile-time type inspection</li><li>recursive generic structs or choices</li><li>generic receiver methods</li><li>receiver methods on instantiated generic types</li><li>direct facade re-export syntax and function alias exports through <span style="
+    ">#if</span>, and compile-time type inspection</li><li>recursive generic structs or choices</li><li>receiver methods on instantiated generic types</li><li>direct facade re-export syntax and function alias exports through <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">#mod.bst</span></li><li>generic JS or external package functions</li><li>generic aliases with parameters</li><li>partial type application</li><li>nested generic type application beyond the collection element exception</li><li>public <span style="
@@ -897,6 +964,10 @@ body {
     };
     }
 
+    function __bs_error_result(message, code) {
+    return { tag: "err", value: __bs_make_error(message, code, null, null) };
+    }
+
     function __bs_error_with_location(error, location) {
     return __bs_make_error(error.message, error.code, location, error.__bst_trace);
     }
@@ -940,26 +1011,26 @@ body {
     throw new Error("Expected internal Result carrier during fallback handling");
     }
 
+    function __bs_collection_index_is_valid(collection, index) {
+    return Number.isInteger(index) && index >= 0 && index < collection.length;
+    }
+
     function __bs_collection_get(collection, index) {
     if (!Array.isArray(collection)) {
-    const err = __bs_make_error("Collection operation expects an ordered collection", 100, null, null);
-    return { tag: "err", value: err };
+    return __bs_error_result("Collection operation expects an ordered collection", 100);
     }
-    if (!Number.isInteger(index) || index < 0 || index >= collection.length) {
-    const err = __bs_make_error("Collection index out of bounds", 101, null, null);
-    return { tag: "err", value: err };
+    if (!__bs_collection_index_is_valid(collection, index)) {
+    return __bs_error_result("Collection index out of bounds", 101);
     }
     return { tag: "ok", value: collection[index] };
     }
 
     function __bs_collection_set(collection, index, value) {
     if (!Array.isArray(collection)) {
-    const err = __bs_make_error("Collection operation expects an ordered collection", 100, null, null);
-    return { tag: "err", value: err };
+    return __bs_error_result("Collection operation expects an ordered collection", 100);
     }
-    if (!Number.isInteger(index) || index < 0 || index >= collection.length) {
-    const err = __bs_make_error("Collection index out of bounds", 101, null, null);
-    return { tag: "err", value: err };
+    if (!__bs_collection_index_is_valid(collection, index)) {
+    return __bs_error_result("Collection index out of bounds", 101);
     }
     collection[index] = value;
     return { tag: "ok", value: null };
@@ -971,12 +1042,10 @@ body {
 
     function __bs_collection_remove(collection, index) {
     if (!Array.isArray(collection)) {
-    const err = __bs_make_error("Collection operation expects an ordered collection", 100, null, null);
-    return { tag: "err", value: err };
+    return __bs_error_result("Collection operation expects an ordered collection", 100);
     }
-    if (!Number.isInteger(index) || index < 0 || index >= collection.length) {
-    const err = __bs_make_error("Collection index out of bounds", 101, null, null);
-    return { tag: "err", value: err };
+    if (!__bs_collection_index_is_valid(collection, index)) {
+    return __bs_error_result("Collection index out of bounds", 101);
     }
     const removed = collection.splice(index, 1)[0];
     return { tag: "ok", value: removed };

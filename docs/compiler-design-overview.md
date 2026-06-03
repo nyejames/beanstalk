@@ -266,7 +266,7 @@ It parses top-level declaration shells so later stages do not reconstruct them f
 - import and re-export parsing
 - import path validation and normalization
 - file-local import/visibility environment construction
-- declaration shell parsing for constants/functions/structs/choices/type aliases
+- declaration shell parsing for constants/functions/structs/choices/type aliases/traits/conformances
 - top-level dependency edge generation
 - start-body token separation
 - top-level const fragment placement metadata
@@ -303,6 +303,8 @@ Examples:
 - struct shell: name, generic parameters, parsed field names/types/default token data where applicable
 - choice shell: name, generic parameters, variant names and payload field type shells
 - type alias shell: name, target type annotation. Parameterized generic aliases are rejected before shell creation.
+- trait shell: name, requirement signature shells, and requirement type-reference dependency edges
+- conformance shell: target type reference, trait references, and declaration source context
 - start shell: entry-file executable token body, excluded from dependency sorting
 
 ### Header and AST ownership boundary

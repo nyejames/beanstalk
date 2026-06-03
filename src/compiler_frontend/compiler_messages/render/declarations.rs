@@ -35,6 +35,10 @@ pub(crate) fn invalid_signature_member_message(reason: InvalidSignatureMemberRea
         InvalidSignatureMemberReason::TraitMutableThisOnlyFirstParameter => {
             "'~This' is only valid as the first parameter of a trait requirement.".to_string()
         }
+        InvalidSignatureMemberReason::TraitBareThisOnlyReceiver => {
+            "Bare `This` is only valid as the first trait receiver parameter. Name non-receiver `This` parameters, for example `other This`."
+                .to_string()
+        }
         InvalidSignatureMemberReason::TraitRequirementDefaultValue => {
             "Trait requirements cannot declare default parameter values.".to_string()
         }

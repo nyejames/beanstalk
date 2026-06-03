@@ -21,4 +21,5 @@ pub(crate) mod parse_file_headers;
 mod start_capture;
 mod symbol_collection;
 mod top_level_classifier;
+mod trait_headers;
 mod types;

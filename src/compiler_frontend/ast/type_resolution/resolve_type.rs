@@ -997,10 +997,8 @@ fn visible_dynamic_trait_id(
         return trait_id;
     }
 
-    if string_table.resolve(type_name)
-        == crate::compiler_frontend::traits::environment::DISPLAYABLE_TRAIT_NAME
-    {
-        return trait_environment.displayable_trait_id();
+    if let Some(id) = trait_environment.displayable_trait_id_for_name(type_name, string_table) {
+        return Some(id);
     }
 
     None

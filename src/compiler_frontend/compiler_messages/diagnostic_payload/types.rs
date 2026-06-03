@@ -534,6 +534,7 @@ pub enum InvalidSignatureMemberReason {
     TrailingComma,
     TraitReceiverMustBeThis,
     TraitMutableThisOnlyFirstParameter,
+    TraitBareThisOnlyReceiver,
     TraitRequirementDefaultValue,
 }
 

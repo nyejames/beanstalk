@@ -55,10 +55,12 @@ pub(crate) struct ReceiverMethodEntry {
 /// How a receiver method relates to the receiver type declaration.
 ///
 /// WHAT: canonical methods belong to the receiver type's declaring file and keep the existing
-/// import/export behavior. File-local extensions target imported or external receiver types and
-/// are visible only in their declaring file.
+/// import/export behavior. File-local extensions target imported, external, or builtin scalar
+/// receiver types and are visible only in their declaring file.
 /// WHY: trait evidence needs to distinguish reusable receiver evidence from local extension
-/// evidence without adding a second method catalog.
+/// evidence without adding a second method catalog. User-authored builtin scalar extensions are
+/// file-local because the compiler owns the canonical builtin surface; compiler-owned builtin
+/// methods are registered outside the user header catalog.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ReceiverMethodKind {
     Canonical,
@@ -326,7 +328,10 @@ fn receiver_method_kind_for_declaration(
 
         ReceiverKey::External(_) => {}
 
-        ReceiverKey::BuiltinScalar(_) => return Ok(ReceiverMethodKind::Canonical),
+        // User-authored builtin scalar receiver methods are file-local extensions.
+        // Compiler-owned builtin methods are not present in `sorted_headers`, so any
+        // `BuiltinScalar` method seen here is user-authored and should be file-local.
+        ReceiverKey::BuiltinScalar(_) => {}
     }
 
     if receiver_type_is_visible_in_file(

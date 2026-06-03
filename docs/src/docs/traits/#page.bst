@@ -55,6 +55,10 @@ page_head #= theme_head
     - [codesnippet:This] means an immutable receiver requirement
     - [codesnippet:~This] means a mutable receiver requirement
     - [codesnippet:~This] is valid only as the first parameter
+    - direct non-receiver [codesnippet:This] parameters must be named, such as [codesnippet:other This]
+    - bare non-receiver [codesnippet:This] is rejected because only the receiver may omit a name
+    - direct [codesnippet:This] returns are supported
+    - composed forms such as [codesnippet:This?], [codesnippet:{This}], and [codesnippet:Box of This] are rejected in the Alpha surface
     - lowercase [codesnippet:this] is not valid in trait requirements
     - [codesnippet:This] outside trait declarations is rejected
 ]
@@ -109,6 +113,8 @@ page_head #= theme_head
     ]
 
     File-local extension evidence is useful for local adapter code, but it is never exportable as a reusable conformance fact. It also cannot override visible canonical evidence.
+
+    User-authored conformances for builtin scalar types such as [codesnippet:Int must DISPLAY_TEXT] are file-local extensions. Compiler-owned builtin evidence is a separate metadata path, but it is not registered in the current Alpha scaffold.
 ]
 
 #[section, $markdown:
@@ -146,7 +152,7 @@ page_head #= theme_head
         text = render_dynamic(Label("hello"))
     ]
 
-    Dynamic trait values erase the concrete type and expose only the trait surface. They are opaque owning wrappers in the current Alpha surface.
+    Dynamic trait values erase the concrete type and expose only the trait surface. They are runtime-only opaque owning wrappers in the current Alpha surface, not static evidence for generic bounds.
 
     Dynamic coercion from a concrete value happens only at explicit typed boundaries:
 
@@ -196,11 +202,16 @@ page_head #= theme_head
     - trait inheritance and composition
     - generic traits and generic trait methods
     - specialized generic instance conformance such as [codesnippet:Box of Int must DISPLAY_TEXT]
+    - static requirements that are not receiver methods
+    - conditional conformances
+    - dynamic trait composition
     - dynamic trait aliases
     - downcasting, reflection, and pattern matching on erased concrete types
+    - composed [codesnippet:This] forms
     - file-local evidence-backed generic bound dispatch
     - automatic primitive conformances
     - output coercion through [codesnippet:DISPLAYABLE]
     - operator-to-trait integration
+    - Wasm dynamic trait runtime lowering
     - deriving, hashing, ordering, formatting, iteration, and serialization traits
 ]

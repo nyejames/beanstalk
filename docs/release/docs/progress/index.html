@@ -635,7 +635,7 @@ body {
      <td style="padding: 0.2em 0.5em;  "> Supported</td>
      <td style="padding: 0.2em 0.5em;  "> Broad parser, declaration, constructor, match, import, assignment, return, JS carrier-shape, payload coverage, unit equality, and payload structural equality coverage.</td>
      <td style="padding: 0.2em 0.5em;  "> JS / HTML</td>
-     <td style="padding: 0.2em 0.5em;  "> Unit variants, payload variants, constructor calls, imports, assignment, return, JS carrier shape, payload matching, and structural equality are supported. Structural equality compares variant identity and payload fields recursively when every payload field supports equality. Payload fields are immutable. Payload shorthand, generic choices, recursive choices, nested payload patterns, direct payload field access, and variant defaults remain deferred or rejected with diagnostics.</td>
+     <td style="padding: 0.2em 0.5em;  "> Unit variants, payload variants, constructor calls, imports, assignment, return, JS carrier shape, payload matching, receiver methods, and structural equality are supported. Structural equality compares variant identity and payload fields recursively when every payload field supports equality. Payload fields are immutable. Payload shorthand, generic choices, recursive choices, nested payload patterns, direct payload field access, and variant defaults remain deferred or rejected with diagnostics.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -946,6 +946,68 @@ body {
      <td style="padding: 0.2em 0.5em;  "> Broad type compatibility, contextual promotion, strict expression typing, call argument, and declaration coverage.</td>
      <td style="padding: 0.2em 0.5em;  "> Frontend-owned</td>
      <td style="padding: 0.2em 0.5em;  "> Keep strict expression typing separate from contextual declaration / return coercion.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Traits</td>
+     <td style="padding: 0.2em 0.5em;  "> Partial</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad declaration, conformance, visibility, generic-bound, dynamic coercion, JS runtime, and HTML-Wasm unsupported-backend coverage, including <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">trait_requirement_generic_this_return_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">trait_requirement_generic_this_param_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">trait_requirement_bare_second_this_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">trait_requirement_named_this_param_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">dynamic_trait_wasm_reachable_rejected</span>, and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">dynamic_trait_wasm_unreachable_ignored</span>.</td>
+     <td style="padding: 0.2em 0.5em;  "> Frontend / HIR / JS; HTML-Wasm rejects reachable dynamic runtime operations</td>
+     <td style="padding: 0.2em 0.5em;  "> Trait declarations, explicit <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Type must TRAIT</span> conformances, canonical and file-local extension evidence, static generic bounds with <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">type T is TRAIT</span>, dynamic-safe trait value annotations, explicit dynamic coercion boundaries, HIR dynamic operations, and JS dynamic wrappers are implemented. Trait requirement <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">This</span> is direct-only: receiver <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">This</span> / <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">~This</span>, named non-receiver <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">other This</span>, and direct return <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">This</span> are supported, while composed forms such as <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">This?</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">{This}</span>, and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Box of This</span> are rejected with structured syntax diagnostics. Method shape alone is not conformance. <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">DISPLAYABLE</span> is metadata only and does not affect <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">io</span>, templates, string coercion, or operators. Generic traits, associated types/constants, default methods, static non-method requirements, conditional or specialized conformances, dynamic trait composition, dynamic trait aliases, downcasting/pattern matching on dynamic trait values, output coercion, file-local evidence-backed generic bound dispatch, compiler-owned builtin conformance facts, Wasm dynamic trait runtime lowering, operator/boolean keyword trait integration, and the wider standard trait ecosystem remain deferred.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -1327,7 +1389,10 @@ body {
     ">min > max</span> the bounds are swapped automatically; when <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">min == max</span> the result is that value. Seeded random remains deferred. Wasm support is deferred; HTML-Wasm builds fail with a structured <span style="
+    ">min</span> equals <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">max</span> the result is that value. Seeded random remains deferred. Wasm support is deferred; HTML-Wasm builds fail with a structured <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">Rule</span> diagnostic before backend lowering.</td>
@@ -1637,9 +1702,9 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Receiver methods</td>
      <td style="padding: 0.2em 0.5em;  "> Supported</td>
-     <td style="padding: 0.2em 0.5em;  "> Broad method call, import, namespace import, grouped alias, receiver-method alias collision, grouped receiver-type visibility, same-file/imported same-name receiver dispatch, type auto-import, facade privacy, same-file restriction, unsupported receiver, collision, missing receiver-type, and mutable receiver diagnostics coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad method call, struct and choice receiver, file-local extension methods for imported source and external opaque receivers, import, namespace import, grouped alias, receiver-method alias collision, grouped receiver-type visibility, same-file/imported same-name receiver dispatch, type auto-import, facade privacy, same-file restriction, extension non-importability, canonical override rejection, unsupported receiver, collision, missing receiver-type, and mutable receiver diagnostics coverage.</td>
      <td style="padding: 0.2em 0.5em;  "> JS / HTML</td>
-     <td style="padding: 0.2em 0.5em;  "> User-defined struct methods stay statically resolved and same-file with the struct for Alpha. Receiver methods import through the receiver catalog, not as free functions or namespace-record fields. Receiver-method names may be shared by receiver methods because dispatch includes the receiver type, but they still collide with ordinary value/type/namespace/prelude/builtin names. Explicit grouped receiver-method aliases reserve local names for collision checks, and grouped receiver-method imports require the receiver type to be visible through a type import, namespace import, same grouped import, or exact transparent alias.</td>
+     <td style="padding: 0.2em 0.5em;  "> User-defined struct and choice methods stay statically resolved and same-file with the receiver type for Alpha. File-local extension methods may target visible imported source nominal types or exact external opaque types, are callable only in their declaring file, are never imported/exported as reusable receiver methods, and cannot override visible canonical source or external receiver methods. Receiver methods import through the receiver catalog, not as free functions or namespace-record fields. Receiver-method names may be shared by receiver methods because dispatch includes the receiver type, but they still collide with ordinary value/type/namespace/prelude/builtin names. Explicit grouped receiver-method aliases reserve local names for collision checks, and grouped receiver-method imports require the receiver type to be visible through a type import, namespace import, same grouped import, or exact transparent alias.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -1816,16 +1881,10 @@ body {
             
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Traits / interfaces</td>
+             <td style="padding: 0.2em 0.5em;  "> Trait ecosystem extensions</td>
      <td style="padding: 0.2em 0.5em;  "> Deferred</td>
-     <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">trait_declaration_reserved</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">trait_this_reserved</span></td>
-     <td style="padding: 0.2em 0.5em;  "> Syntax is reserved for future design work.</td>
+     <td style="padding: 0.2em 0.5em;  "> Current trait diagnostics and implemented trait fixtures are listed in the core Traits row.</td>
+     <td style="padding: 0.2em 0.5em;  "> Default methods, associated items, trait inheritance/composition, generic traits, specialized generic instance conformance, deriving, operator traits, formatting/display coercion, hashing, ordering, iteration, serialization, downcasting/reflection, and broad standard-trait library design remain outside the Alpha trait slice.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -2383,17 +2442,17 @@ body {
      <td style="padding: 0.2em 0.5em;  "> Targeted frontend unit coverage for TypeId-native generic instance identity, generic binding consistency, TypeId binding/unification for generic parameters, collections, options, nominal generic instances, generic free-function templates, constructed-type substitution, type-identity compatibility keys, parameter scopes, generic parameter parsing, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">of</span> type applications, arity checks, collection generic substrate, recursive HIR-boundary generic-parameter rejection, and diagnostics. Integration coverage includes duplicate, invalid, builtin-colliding, and visible-type-colliding generic parameter diagnostics; generic struct and choice constructor inference; concrete generic aliases; same-module imported generic types and aliases; named argument inference; conflicting inference diagnostics; generic function declaration parsing; generic body validation; local generic function call inference and instantiation; same-module grouped-import and namespace generic function calls; grouped alias calls; cross-file and facade expected-result inference; cross-file and facade optional returns; cross-file and facade fallible error slots; generic function value diagnostics; authored facade wrapper generic calls through grouped, namespace, and grouped-alias imports; facade privacy regressions; direct <span style="
+    ">of</span> type applications, arity checks, collection generic substrate, generic receiver constructor lookup, recursive HIR-boundary generic-parameter rejection, and diagnostics. Integration coverage includes duplicate, invalid, builtin-colliding, and visible-type-colliding generic parameter diagnostics; generic struct and choice constructor inference; concrete generic aliases; same-module imported generic types and aliases; named argument inference; conflicting inference diagnostics; generic function declaration parsing; generic body validation; local generic function call inference and instantiation; aligned declaration-site generic receiver methods; same-module grouped-import and namespace generic function calls; grouped alias calls; cross-file and facade expected-result inference; cross-file and facade optional returns; cross-file and facade fallible error slots; generic function value diagnostics; authored facade wrapper generic calls through grouped, namespace, and grouped-alias imports; facade privacy regressions; direct <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">#mod.bst</span> import rejection; facade import-alias non-reexport rejection; constructed collection returns; ambiguous/conflicting function inference diagnostics; recursive generic function instantiation rejection with call-site context; receiver rejection; nested <span style="
+    ">#mod.bst</span> import rejection; facade import-alias non-reexport rejection; constructed collection returns; ambiguous/conflicting function inference diagnostics; recursive generic function instantiation rejection with call-site context; unsupported receiver rejection; nested <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">of</span> rejection; collection capacity parsing; and HTML-Wasm reachable/unreachable generic-runtime validation.</td>
+    ">of</span> rejection; collection capacity parsing; generic function and nominal generic trait bounds; and HTML-Wasm reachable/unreachable generic-runtime validation.</td>
      <td style="padding: 0.2em 0.5em;  "> The current generic free-function import-hardening work is implemented through the AST generic free-function template and concrete instance model. Generic parameter metadata, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">of</span> type applications, concrete generic aliases, collection generic substrate, constructor inference, choice matching, AST unresolved-generic validation, concrete HIR nominal identity, HIR validation rejection for unresolved generic parameters, AST-owned generic function templates, template-aware generic body validation, same-file calls, same-module grouped-import or namespace calls, authored facade-wrapper calls, constructed-type substitution coverage, imported generic optional/fallible returns, and generic diagnostic hardening are implemented. The generic substrate is split by owner across <span style="
+    ">of</span> type applications, concrete generic aliases, collection generic substrate, constructor inference, choice matching, AST unresolved-generic validation, concrete HIR nominal identity, HIR validation rejection for unresolved generic parameters, AST-owned generic function templates, aligned generic receiver methods, template-aware generic body validation, same-file calls, same-module grouped-import or namespace calls, authored facade-wrapper calls, constructed-type substitution coverage, imported generic optional/fallible returns, generic function trait bounds, generic struct/choice trait-bound instantiation, bound-provided receiver calls for reusable evidence, and generic diagnostic hardening are implemented. Generic receiver calls reuse the generic function inference and concrete instance path instead of a separate method-instantiation system. The generic substrate is split by owner across <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">generic_parameters</span>, <span style="
@@ -2405,7 +2464,7 @@ body {
     ">generic_identity_bridge</span>, and <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">ast/generic_functions</span>. Nested inline generic applications, recursive generic types, generic aliases with parameters, partial application, explicit generic call syntax, generic function values, generic receiver methods, trait bounds, direct facade re-export syntax, and generic external package functions remain deferred or rejected.</td>
+    ">ast/generic_functions</span>. Nested inline generic applications, recursive generic types, generic aliases with parameters, partial application, explicit generic call syntax, generic function values, file-local evidence-backed generic bound dispatch, direct facade re-export syntax, concrete generic-instance receiver declarations, and generic external package functions remain deferred or rejected.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -2429,8 +2488,14 @@ body {
     ">generic_expected_unit_choice_success</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">generic_recursive_type_deferred</span></td>
-     <td style="padding: 0.2em 0.5em;  "> Generic choice headers and payload type parameters parse and resolve. Concrete constructor inference, named payload arguments, expected-type unit variants, and matching on concrete generic instances are supported. Recursive generic choices and generic receiver methods remain rejected.</td>
+    ">generic_choice_receiver_method_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_recursive_type_deferred</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">trait_bound_generic_choice_success</span></td>
+     <td style="padding: 0.2em 0.5em;  "> Generic choice headers and payload type parameters parse and resolve. Concrete constructor inference, named payload arguments, expected-type unit variants, matching on concrete generic instances, aligned declaration-site receiver methods, and declaration-site trait bounds requiring visible reusable evidence are supported. Recursive generic choices and concrete generic-instance receiver declarations remain rejected.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -2457,8 +2522,23 @@ body {
     ">generic_import_alias_concrete_alias_success</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">generic_recursive_type_deferred</span></td>
-     <td style="padding: 0.2em 0.5em;  "> Generic struct headers parse and resolve. Concrete constructor inference, field type substitution, named constructor arguments, imports and import aliases, collection element types, and concrete HIR lowering are supported. Recursive generic structs and generic receiver methods remain rejected. HTML-Wasm generic runtime values that are reachable from the exported entry roots fail with structured unsupported-backend diagnostics before Wasm lowering; unreachable generic-runtime code in unused functions is ignored by that backend-specific validation.</td>
+    ">generic_receiver_method_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_recursive_type_deferred</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">trait_bound_generic_struct_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">trait_bound_generic_struct_annotation_missing_evidence_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">trait_bound_generic_struct_constructor_missing_evidence_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">trait_bound_generic_alias_missing_evidence_rejected</span></td>
+     <td style="padding: 0.2em 0.5em;  "> Generic struct headers parse and resolve. Concrete constructor inference, field type substitution, named constructor arguments, imports and import aliases, collection element types, aligned declaration-site receiver methods, declaration-site trait bounds requiring visible reusable evidence, and concrete HIR lowering are supported. Recursive generic structs and concrete generic-instance receiver declarations remain rejected. HTML-Wasm generic runtime values that are reachable from the exported entry roots fail with structured unsupported-backend diagnostics before Wasm lowering; unreachable generic-runtime code in unused functions is ignored by that backend-specific validation.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -2685,21 +2765,108 @@ body {
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Trait bounds on generics</td>
-     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> Partial</td>
      <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">generic_constraint_syntax_deferred</span>, <span style="
+    ">trait_bound_function_success</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">generic_where_constraint_syntax_rejected</span></td>
-     <td style="padding: 0.2em 0.5em;  "> Required for operators, equality, methods, and behavior-dependent operations on unconstrained generic parameters. Declaration-site <span style="
+    ">trait_bound_multiple_and_success</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">type A is Trait</span> constraints now produce a structured deferred diagnostic until traits/interfaces exist; <span style="
+    ">trait_bound_multiple_params_success</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">where</span> syntax is rejected because it is not part of the planned Alpha direction.</td>
+    ">trait_bound_missing_evidence_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">trait_bound_imported_private_trait_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">public_generic_bound_public_trait_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">public_generic_bound_private_trait_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">trait_bound_cross_file_grouped_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">trait_bound_cross_file_namespace_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">trait_bound_cross_file_grouped_alias_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">trait_bound_facade_grouped_wrapper_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">trait_bound_must_syntax_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">trait_bound_invalid_trait_name_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_bound_receiver_call_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_bound_receiver_multiple_params_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_bound_receiver_same_concrete_params_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_bound_receiver_ambiguous_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_bound_file_local_evidence_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_where_constraint_syntax_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">trait_bound_dynamic_value_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">trait_bound_generic_struct_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">trait_bound_generic_choice_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">trait_bound_generic_struct_annotation_missing_evidence_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">trait_bound_generic_struct_constructor_missing_evidence_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">trait_bound_generic_alias_missing_evidence_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">trait_bound_generic_matching_method_without_conformance_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">trait_bound_generic_file_local_evidence_rejected</span></td>
+     <td style="padding: 0.2em 0.5em;  "> Declaration-site <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">type A is TRAIT</span> and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">type A is TRAIT_A and TRAIT_B</span> bounds are supported for generic functions, structs, and choices. Concrete generic function calls and concrete nominal generic instances require explicit visible reusable trait evidence for each inferred or substituted concrete type argument, and matching methods without <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Type must TRAIT</span> do not satisfy bounds. Public facade generic functions, structs, and choices reject private or non-exported trait bounds in their signatures. Bound generic functions work across grouped imports, grouped aliases, namespace function imports, and facade grouped wrappers when the needed trait and evidence are visible. Generic function bodies can call a unique receiver method supplied by a generic bound; ordinary visible concrete receiver methods still resolve first, multiple bound methods with the same name are rejected as ambiguous, and same-concrete multi-parameter instances retain each receiver parameter's source-bound surface. Dynamic trait value types do not satisfy static bounds and are rejected as concrete substitutions. Commas still separate generic parameters. <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">must</span> in a generic parameter list is rejected with guidance to use <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">is</span>, and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">where</span> syntax remains rejected. File-local evidence-backed generic bound dispatch remains deferred.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -2773,15 +2940,21 @@ body {
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Generic receiver methods</td>
-     <td style="padding: 0.2em 0.5em;  "> Rejected / Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> Partial</td>
      <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">generic_receiver_rejected</span>, <span style="
+    ">generic_receiver_method_success</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">generic_receiver_method_declaration_rejected</span></td>
-     <td style="padding: 0.2em 0.5em;  "> Declaration-site generic receiver methods and receiver methods on concrete generic instantiated types are not supported. Use free functions instead; broader method behavior waits for trait/constraint design.</td>
+    ">generic_choice_receiver_method_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_receiver_method_parameter_mismatch_rejected</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">generic_receiver_rejected</span></td>
+     <td style="padding: 0.2em 0.5em;  "> Aligned declaration-site generic receiver methods are supported for generic structs and choices when the method generic parameters exactly match the receiver constructor arguments. Calls on concrete generic instances reuse generic function inference and emit normal concrete function instances. Receiver methods declared directly on concrete generic instances and mismatched generic parameter order remain rejected; generic trait bounds are supported.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -3166,6 +3339,10 @@ body {
     };
     }
 
+    function __bs_error_result(message, code) {
+    return { tag: "err", value: __bs_make_error(message, code, null, null) };
+    }
+
     function __bs_error_with_location(error, location) {
     return __bs_make_error(error.message, error.code, location, error.__bst_trace);
     }
@@ -3209,26 +3386,26 @@ body {
     throw new Error("Expected internal Result carrier during fallback handling");
     }
 
+    function __bs_collection_index_is_valid(collection, index) {
+    return Number.isInteger(index) && index >= 0 && index < collection.length;
+    }
+
     function __bs_collection_get(collection, index) {
     if (!Array.isArray(collection)) {
-    const err = __bs_make_error("Collection operation expects an ordered collection", 100, null, null);
-    return { tag: "err", value: err };
+    return __bs_error_result("Collection operation expects an ordered collection", 100);
     }
-    if (!Number.isInteger(index) || index < 0 || index >= collection.length) {
-    const err = __bs_make_error("Collection index out of bounds", 101, null, null);
-    return { tag: "err", value: err };
+    if (!__bs_collection_index_is_valid(collection, index)) {
+    return __bs_error_result("Collection index out of bounds", 101);
     }
     return { tag: "ok", value: collection[index] };
     }
 
     function __bs_collection_set(collection, index, value) {
     if (!Array.isArray(collection)) {
-    const err = __bs_make_error("Collection operation expects an ordered collection", 100, null, null);
-    return { tag: "err", value: err };
+    return __bs_error_result("Collection operation expects an ordered collection", 100);
     }
-    if (!Number.isInteger(index) || index < 0 || index >= collection.length) {
-    const err = __bs_make_error("Collection index out of bounds", 101, null, null);
-    return { tag: "err", value: err };
+    if (!__bs_collection_index_is_valid(collection, index)) {
+    return __bs_error_result("Collection index out of bounds", 101);
     }
     collection[index] = value;
     return { tag: "ok", value: null };
@@ -3240,12 +3417,10 @@ body {
 
     function __bs_collection_remove(collection, index) {
     if (!Array.isArray(collection)) {
-    const err = __bs_make_error("Collection operation expects an ordered collection", 100, null, null);
-    return { tag: "err", value: err };
+    return __bs_error_result("Collection operation expects an ordered collection", 100);
     }
-    if (!Number.isInteger(index) || index < 0 || index >= collection.length) {
-    const err = __bs_make_error("Collection index out of bounds", 101, null, null);
-    return { tag: "err", value: err };
+    if (!__bs_collection_index_is_valid(collection, index)) {
+    return __bs_error_result("Collection index out of bounds", 101);
     }
     const removed = collection.splice(index, 1)[0];
     return { tag: "ok", value: removed };

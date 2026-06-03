@@ -113,8 +113,20 @@ impl TraitEnvironment {
         self.ids_by_path.get(path).copied()
     }
 
-    pub(crate) fn displayable_trait_id(&self) -> Option<TraitId> {
-        self.displayable_trait_id
+    /// Resolves the compiler-owned `DISPLAYABLE` scaffold by source spelling.
+    ///
+    /// WHY: core trait metadata is not registered through normal file visibility, but user source
+    /// still refers to it with the ordinary trait name in conformances and dynamic type positions.
+    pub(crate) fn displayable_trait_id_for_name(
+        &self,
+        trait_name: StringId,
+        string_table: &StringTable,
+    ) -> Option<TraitId> {
+        if string_table.resolve(trait_name) == DISPLAYABLE_TRAIT_NAME {
+            return self.displayable_trait_id;
+        }
+
+        None
     }
 
     pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {

@@ -183,7 +183,7 @@ body {
   <body style="">
     <div id="bst-slot-0"></div>
     <script type="module">
-    import { __bs_glue_fn42, __bs_glue_fn43, __bs_glue_fn44, __bs_glue_fn45, __bs_glue_fn46, __bs_glue_fn47 } from "./_beanstalk/js/glue/module-0ef71e2d2a2eb9f2.js";
+    import { __bs_glue_fn178, __bs_glue_fn179, __bs_glue_fn180, __bs_glue_fn181, __bs_glue_fn182, __bs_glue_fn183 } from "./_beanstalk/js/glue/module-0ef71e2d2a2eb9f2.js";
     function __bs_is_ref(value) {
         return value !== null && typeof value === "object" && value.__bs_ref === true;
     }
@@ -310,6 +310,10 @@ body {
         };
     }
 
+    function __bs_error_result(message, code) {
+        return { tag: "err", value: __bs_make_error(message, code, null, null) };
+    }
+
     function __bs_error_with_location(error, location) {
         return __bs_make_error(error.message, error.code, location, error.__bst_trace);
     }
@@ -353,26 +357,26 @@ body {
         throw new Error("Expected internal Result carrier during fallback handling");
     }
 
+    function __bs_collection_index_is_valid(collection, index) {
+        return Number.isInteger(index) && index >= 0 && index < collection.length;
+    }
+
     function __bs_collection_get(collection, index) {
         if (!Array.isArray(collection)) {
-            const err = __bs_make_error("Collection operation expects an ordered collection", 100, null, null);
-            return { tag: "err", value: err };
+            return __bs_error_result("Collection operation expects an ordered collection", 100);
         }
-        if (!Number.isInteger(index) || index < 0 || index >= collection.length) {
-            const err = __bs_make_error("Collection index out of bounds", 101, null, null);
-            return { tag: "err", value: err };
+        if (!__bs_collection_index_is_valid(collection, index)) {
+            return __bs_error_result("Collection index out of bounds", 101);
         }
         return { tag: "ok", value: collection[index] };
     }
 
     function __bs_collection_set(collection, index, value) {
         if (!Array.isArray(collection)) {
-            const err = __bs_make_error("Collection operation expects an ordered collection", 100, null, null);
-            return { tag: "err", value: err };
+            return __bs_error_result("Collection operation expects an ordered collection", 100);
         }
-        if (!Number.isInteger(index) || index < 0 || index >= collection.length) {
-            const err = __bs_make_error("Collection index out of bounds", 101, null, null);
-            return { tag: "err", value: err };
+        if (!__bs_collection_index_is_valid(collection, index)) {
+            return __bs_error_result("Collection index out of bounds", 101);
         }
         collection[index] = value;
         return { tag: "ok", value: null };
@@ -384,12 +388,10 @@ body {
 
     function __bs_collection_remove(collection, index) {
         if (!Array.isArray(collection)) {
-            const err = __bs_make_error("Collection operation expects an ordered collection", 100, null, null);
-            return { tag: "err", value: err };
+            return __bs_error_result("Collection operation expects an ordered collection", 100);
         }
-        if (!Number.isInteger(index) || index < 0 || index >= collection.length) {
-            const err = __bs_make_error("Collection index out of bounds", 101, null, null);
-            return { tag: "err", value: err };
+        if (!__bs_collection_index_is_valid(collection, index)) {
+            return __bs_error_result("Collection index out of bounds", 101);
         }
         const removed = collection.splice(index, 1)[0];
         return { tag: "ok", value: removed };
@@ -465,62 +467,62 @@ body {
         return { tag: "err", value: __bs_make_error("Float(...) only accepts Int, Float, or string values", 210, null, null) };
     }
 
-    function bst_start_fn0() {
-        let bst___hir_tmp_0_l0 = __bs_binding(undefined);
-        let bst_metric_l1 = __bs_binding(undefined);
-        let bst___hir_tmp_1_l2 = __bs_binding(undefined);
-        let bst_direct_label_l3 = __bs_binding(undefined);
-        let bst___hir_tmp_2_l4 = __bs_binding(undefined);
-        let bst_fallback_label_l5 = __bs_binding(undefined);
-        let bst___hir_tmp_3_l6 = __bs_binding(undefined);
+    function bst_start_fn1() {
+        let bst___hir_tmp_2_l3 = __bs_binding(undefined);
+        let bst_metric_l4 = __bs_binding(undefined);
+        let bst___hir_tmp_3_l5 = __bs_binding(undefined);
+        let bst_direct_label_l6 = __bs_binding(undefined);
         let bst___hir_tmp_4_l7 = __bs_binding(undefined);
-        let bst_summary_l8 = __bs_binding(undefined);
+        let bst_fallback_label_l8 = __bs_binding(undefined);
         let bst___hir_tmp_5_l9 = __bs_binding(undefined);
-        let bst_emphasized_l10 = __bs_binding(undefined);
-        let bst___hir_tmp_6_l11 = __bs_binding(undefined);
-        let bst_angle_l12 = __bs_binding(undefined);
-        let bst___hir_tmp_7_l13 = __bs_binding(undefined);
+        let bst___hir_tmp_6_l10 = __bs_binding(undefined);
+        let bst_summary_l11 = __bs_binding(undefined);
+        let bst___hir_tmp_7_l12 = __bs_binding(undefined);
+        let bst_emphasized_l13 = __bs_binding(undefined);
         let bst___hir_tmp_8_l14 = __bs_binding(undefined);
-        let bst___hir_tmp_9_l15 = __bs_binding(undefined);
-        let bst___hir_tmp_10_l16 = __bs_binding(undefined);
+        let bst_angle_l15 = __bs_binding(undefined);
+        let bst___hir_tmp_9_l16 = __bs_binding(undefined);
+        let bst___hir_tmp_10_l17 = __bs_binding(undefined);
+        let bst___hir_tmp_11_l18 = __bs_binding(undefined);
+        let bst___hir_tmp_12_l19 = __bs_binding(undefined);
         
-        __bs_assign_value(bst___hir_tmp_0_l0, []);
-        __bs_assign_value(bst___hir_tmp_1_l2, __bs_glue_fn42("alpha", 7));
-        __bs_assign_borrow(bst_metric_l1, bst___hir_tmp_1_l2);
-        __bs_glue_fn45(__bs_read(bst_metric_l1), 21);
-        __bs_assign_value(bst___hir_tmp_2_l4, __bs_glue_fn43(__bs_read(bst_metric_l1)));
-        __bs_assign_borrow(bst_direct_label_l3, bst___hir_tmp_2_l4);
-        __bs_assign_value(bst___hir_tmp_3_l6, __bs_glue_fn44(""));
-        if (((__bs_read(bst___hir_tmp_3_l6)).tag === "ok")) {
-            __bs_assign_value(bst___hir_tmp_4_l7, ((__bs_read(bst___hir_tmp_3_l6)).value));
+        __bs_assign_value(bst___hir_tmp_2_l3, []);
+        __bs_assign_value(bst___hir_tmp_3_l5, __bs_glue_fn178("alpha", 7));
+        __bs_assign_borrow(bst_metric_l4, bst___hir_tmp_3_l5);
+        __bs_glue_fn181(__bs_read(bst_metric_l4), 21);
+        __bs_assign_value(bst___hir_tmp_4_l7, __bs_glue_fn179(__bs_read(bst_metric_l4)));
+        __bs_assign_borrow(bst_direct_label_l6, bst___hir_tmp_4_l7);
+        __bs_assign_value(bst___hir_tmp_5_l9, __bs_glue_fn180(""));
+        if (((__bs_read(bst___hir_tmp_5_l9)).tag === "ok")) {
+            __bs_assign_value(bst___hir_tmp_6_l10, ((__bs_read(bst___hir_tmp_5_l9)).value));
         } else {
-            __bs_assign_value(bst___hir_tmp_4_l7, "metric:missing");
+            __bs_assign_value(bst___hir_tmp_6_l10, "metric:missing");
         }
-        __bs_assign_borrow(bst_fallback_label_l5, bst___hir_tmp_4_l7);
-        __bs_assign_value(bst___hir_tmp_5_l9, __bs_glue_fn47("external-js", __bs_read(bst_direct_label_l3)));
-        __bs_assign_borrow(bst_summary_l8, bst___hir_tmp_5_l9);
-        __bs_assign_value(bst___hir_tmp_6_l11, __bs_glue_fn46(__bs_read(bst_fallback_label_l5)));
-        __bs_assign_borrow(bst_emphasized_l10, bst___hir_tmp_6_l11);
-        __bs_assign_value(bst_angle_l12, 1.5707963267948966);
-        __bs_assign_value(bst___hir_tmp_7_l13, "");
-        __bs_assign_value(bst___hir_tmp_7_l13, (__bs_read(bst___hir_tmp_7_l13) + "<section>\n    <h1>"));
-        __bs_assign_value(bst___hir_tmp_8_l14, "");
-        __bs_assign_value(bst___hir_tmp_8_l14, (__bs_read(bst___hir_tmp_8_l14) + __bs_read(bst_summary_l8)));
-        __bs_assign_value(bst___hir_tmp_7_l13, (__bs_read(bst___hir_tmp_7_l13) + __bs_clone_value(__bs_read(bst___hir_tmp_8_l14))));
-        __bs_assign_value(bst___hir_tmp_7_l13, (__bs_read(bst___hir_tmp_7_l13) + "<\/h1>\n    <p>"));
-        __bs_assign_value(bst___hir_tmp_9_l15, "");
-        __bs_assign_value(bst___hir_tmp_9_l15, (__bs_read(bst___hir_tmp_9_l15) + __bs_read(bst_emphasized_l10)));
-        __bs_assign_value(bst___hir_tmp_7_l13, (__bs_read(bst___hir_tmp_7_l13) + __bs_clone_value(__bs_read(bst___hir_tmp_9_l15))));
-        __bs_assign_value(bst___hir_tmp_7_l13, (__bs_read(bst___hir_tmp_7_l13) + "<\/p>\n    <p>angle="));
-        __bs_assign_value(bst___hir_tmp_10_l16, "");
-        __bs_assign_value(bst___hir_tmp_10_l16, (__bs_read(bst___hir_tmp_10_l16) + ("" + __bs_read(bst_angle_l12))));
-        __bs_assign_value(bst___hir_tmp_7_l13, (__bs_read(bst___hir_tmp_7_l13) + __bs_clone_value(__bs_read(bst___hir_tmp_10_l16))));
-        __bs_assign_value(bst___hir_tmp_7_l13, (__bs_read(bst___hir_tmp_7_l13) + "<\/p>\n<\/section>"));
-        __bs_read(bst___hir_tmp_0_l0).push(__bs_clone_value(__bs_read(bst___hir_tmp_7_l13)));
-        return __bs_read(bst___hir_tmp_0_l0);
+        __bs_assign_borrow(bst_fallback_label_l8, bst___hir_tmp_6_l10);
+        __bs_assign_value(bst___hir_tmp_7_l12, __bs_glue_fn183("external-js", __bs_read(bst_direct_label_l6)));
+        __bs_assign_borrow(bst_summary_l11, bst___hir_tmp_7_l12);
+        __bs_assign_value(bst___hir_tmp_8_l14, __bs_glue_fn182(__bs_read(bst_fallback_label_l8)));
+        __bs_assign_borrow(bst_emphasized_l13, bst___hir_tmp_8_l14);
+        __bs_assign_value(bst_angle_l15, 1.5707963267948966);
+        __bs_assign_value(bst___hir_tmp_9_l16, "");
+        __bs_assign_value(bst___hir_tmp_9_l16, (__bs_read(bst___hir_tmp_9_l16) + "<section>\n    <h1>"));
+        __bs_assign_value(bst___hir_tmp_10_l17, "");
+        __bs_assign_value(bst___hir_tmp_10_l17, (__bs_read(bst___hir_tmp_10_l17) + __bs_read(bst_summary_l11)));
+        __bs_assign_value(bst___hir_tmp_9_l16, (__bs_read(bst___hir_tmp_9_l16) + __bs_clone_value(__bs_read(bst___hir_tmp_10_l17))));
+        __bs_assign_value(bst___hir_tmp_9_l16, (__bs_read(bst___hir_tmp_9_l16) + "<\/h1>\n    <p>"));
+        __bs_assign_value(bst___hir_tmp_11_l18, "");
+        __bs_assign_value(bst___hir_tmp_11_l18, (__bs_read(bst___hir_tmp_11_l18) + __bs_read(bst_emphasized_l13)));
+        __bs_assign_value(bst___hir_tmp_9_l16, (__bs_read(bst___hir_tmp_9_l16) + __bs_clone_value(__bs_read(bst___hir_tmp_11_l18))));
+        __bs_assign_value(bst___hir_tmp_9_l16, (__bs_read(bst___hir_tmp_9_l16) + "<\/p>\n    <p>angle="));
+        __bs_assign_value(bst___hir_tmp_12_l19, "");
+        __bs_assign_value(bst___hir_tmp_12_l19, (__bs_read(bst___hir_tmp_12_l19) + ("" + __bs_read(bst_angle_l15))));
+        __bs_assign_value(bst___hir_tmp_9_l16, (__bs_read(bst___hir_tmp_9_l16) + __bs_clone_value(__bs_read(bst___hir_tmp_12_l19))));
+        __bs_assign_value(bst___hir_tmp_9_l16, (__bs_read(bst___hir_tmp_9_l16) + "<\/p>\n<\/section>"));
+        __bs_read(bst___hir_tmp_2_l3).push(__bs_clone_value(__bs_read(bst___hir_tmp_9_l16)));
+        return __bs_read(bst___hir_tmp_2_l3);
     }
 
-    var bst_frags = bst_start_fn0();
+    var bst_frags = bst_start_fn1();
     var bst_slots = [
       "bst-slot-0",
     ];

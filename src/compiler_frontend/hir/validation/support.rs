@@ -11,6 +11,7 @@ use crate::compiler_frontend::datatypes::definitions::TypeDefinition;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::hir::hir_side_table::HirLocation;
 use crate::compiler_frontend::hir::ids::{BlockId, FieldId, LocalId, RegionId, StructId};
+use crate::compiler_frontend::traits::ids::{TraitEvidenceId, TraitId, TraitRequirementId};
 use rustc_hash::FxHashSet;
 
 impl<'a> HirValidator<'a> {
@@ -84,6 +85,106 @@ impl<'a> HirValidator<'a> {
         anchor: Option<HirLocation>,
     ) -> Result<(), CompilerError> {
         self.require_concrete_type_id(type_id, anchor, &mut FxHashSet::default())
+    }
+
+    pub(super) fn require_dynamic_trait_type_for_trait(
+        &self,
+        type_id: TypeId,
+        trait_id: TraitId,
+        anchor: Option<HirLocation>,
+    ) -> Result<(), CompilerError> {
+        match self.type_environment.get(type_id) {
+            Some(TypeDefinition::DynamicTrait(definition)) if definition.trait_id == trait_id => {
+                Ok(())
+            }
+            Some(TypeDefinition::DynamicTrait(definition)) => Err(self.error_with_hir(
+                format!(
+                    "Dynamic trait HIR type {type_id:?} carries trait {:?}, not {trait_id:?}",
+                    definition.trait_id
+                ),
+                anchor,
+            )),
+            Some(_) => Err(self.error_with_hir(
+                format!("HIR type {type_id:?} is not a dynamic trait type"),
+                anchor,
+            )),
+            None => Err(self.error_with_hir(format!("Unknown HIR type id {type_id:?}"), anchor)),
+        }
+    }
+
+    pub(super) fn require_trait_id(
+        &self,
+        trait_id: TraitId,
+        anchor: Option<HirLocation>,
+    ) -> Result<(), CompilerError> {
+        if self.module.trait_environment.get(trait_id).is_some() {
+            return Ok(());
+        }
+
+        Err(self.error_with_hir(format!("Unknown HIR trait id {trait_id:?}"), anchor))
+    }
+
+    pub(super) fn require_trait_requirement_id(
+        &self,
+        trait_id: TraitId,
+        requirement_id: TraitRequirementId,
+        anchor: Option<HirLocation>,
+    ) -> Result<(), CompilerError> {
+        let Some(trait_definition) = self.module.trait_environment.get(trait_id) else {
+            return Err(self.error_with_hir(format!("Unknown HIR trait id {trait_id:?}"), anchor));
+        };
+
+        if trait_definition
+            .requirements
+            .iter()
+            .any(|requirement| requirement.id == requirement_id)
+        {
+            return Ok(());
+        }
+
+        Err(self.error_with_hir(
+            format!(
+                "Trait requirement id {requirement_id:?} does not belong to HIR trait {trait_id:?}"
+            ),
+            anchor,
+        ))
+    }
+
+    pub(super) fn require_trait_evidence_id(
+        &self,
+        evidence_id: TraitEvidenceId,
+        expected_trait_id: TraitId,
+        expected_target_type_id: TypeId,
+        anchor: Option<HirLocation>,
+    ) -> Result<(), CompilerError> {
+        let Some(evidence) = self.module.trait_evidence_environment.get(evidence_id) else {
+            return Err(self.error_with_hir(
+                format!("Unknown HIR trait evidence id {evidence_id:?}"),
+                anchor,
+            ));
+        };
+
+        if evidence.trait_id == expected_trait_id {
+            if evidence.target_type_id == expected_target_type_id {
+                return Ok(());
+            }
+
+            return Err(self.error_with_hir(
+                format!(
+                    "Trait evidence id {evidence_id:?} targets type {:?}, not {:?}",
+                    evidence.target_type_id, expected_target_type_id
+                ),
+                anchor,
+            ));
+        }
+
+        Err(self.error_with_hir(
+            format!(
+                "Trait evidence id {evidence_id:?} proves trait {:?}, not {:?}",
+                evidence.trait_id, expected_trait_id
+            ),
+            anchor,
+        ))
     }
 
     fn require_concrete_type_id(

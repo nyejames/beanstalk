@@ -83,6 +83,15 @@ pub struct TypeEnvironment {
     // Generic parameter -> TypeId lookup.
     generic_parameter_ids: FxHashMap<GenericParameterId, TypeId>,
 
+    // Direct index from generic parameter ID to its declaration-site trait bounds.
+    //
+    // INVARIANT: this map and `GenericParameter.trait_bounds` inside each list in
+    // `generic_parameter_lists` are updated together by `register_generic_parameter_list`
+    // and `update_generic_parameter_bounds`. Callers that hold a `GenericParameterList`
+    // may still inspect `GenericParameter.trait_bounds` directly; this index exists so
+    // that `trait_bounds_for_generic_parameter` does not scan every list.
+    trait_bounds_by_generic_parameter_id: FxHashMap<GenericParameterId, Vec<TraitId>>,
+
     // Path -> NominalTypeId lookup.
     nominal_by_path: FxHashMap<InternedPath, NominalTypeId>,
 
@@ -230,6 +239,7 @@ impl TypeEnvironment {
             choice_definitions: Vec::new(),
             generic_parameter_lists: Vec::new(),
             generic_parameter_ids: FxHashMap::default(),
+            trait_bounds_by_generic_parameter_id: FxHashMap::default(),
             nominal_by_path: FxHashMap::default(),
             nominal_to_type_id: FxHashMap::default(),
             next_generic_parameter_id: 0,
@@ -330,7 +340,7 @@ impl TypeEnvironment {
 
     /// Returns the trait bounds recorded on a canonical generic parameter.
     ///
-    /// WHAT: looks up the parameter by semantic ID across the environment-owned generic lists.
+    /// WHAT: looks up the parameter by semantic ID using the direct index.
     /// WHY: executable body parsing can see only a receiver `TypeId` or concrete substitution;
     ///      bound-method dispatch still needs the declaration-site bounds without rebuilding
     ///      generic metadata in AST lookup code.
@@ -338,17 +348,9 @@ impl TypeEnvironment {
         &self,
         parameter_id: GenericParameterId,
     ) -> Option<&[TraitId]> {
-        for list in &self.generic_parameter_lists {
-            if let Some(parameter) = list
-                .parameters
-                .iter()
-                .find(|parameter| parameter.id == parameter_id)
-            {
-                return Some(parameter.trait_bounds.as_slice());
-            }
-        }
-
-        None
+        self.trait_bounds_by_generic_parameter_id
+            .get(&parameter_id)
+            .map(|bounds| bounds.as_slice())
     }
 
     /// Registers a parsed generic parameter list and returns its canonical semantic IDs.
@@ -369,13 +371,18 @@ impl TypeEnvironment {
             // Registering the list also interns each parameter as a type so later
             // resolution can query a stable TypeId without re-promoting local IDs.
             self.intern_generic_parameter(canonical_id, parameter.name);
+            let trait_bounds = resolved_bounds_by_local
+                .get(&parameter.id)
+                .cloned()
+                .unwrap_or_default();
+
+            self.trait_bounds_by_generic_parameter_id
+                .insert(canonical_id, trait_bounds.clone());
+
             parameters.push(GenericParameter {
                 id: canonical_id,
                 name: parameter.name,
-                trait_bounds: resolved_bounds_by_local
-                    .get(&parameter.id)
-                    .cloned()
-                    .unwrap_or_default(),
+                trait_bounds,
             });
         }
 
@@ -414,10 +421,14 @@ impl TypeEnvironment {
                 continue;
             };
 
-            parameter.trait_bounds = resolved_bounds_by_local
+            let trait_bounds = resolved_bounds_by_local
                 .get(local_id)
                 .cloned()
                 .unwrap_or_default();
+
+            parameter.trait_bounds = trait_bounds.clone();
+            self.trait_bounds_by_generic_parameter_id
+                .insert(*canonical_id, trait_bounds);
         }
     }
 

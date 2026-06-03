@@ -408,10 +408,8 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             return Ok(id);
         }
 
-        let displayable_name = string_table
-            .intern(crate::compiler_frontend::traits::environment::DISPLAYABLE_TRAIT_NAME);
-        if trait_ref.name == displayable_name
-            && let Some(id) = trait_environment.displayable_trait_id()
+        if let Some(id) =
+            trait_environment.displayable_trait_id_for_name(trait_ref.name, string_table)
         {
             return Ok(id);
         }

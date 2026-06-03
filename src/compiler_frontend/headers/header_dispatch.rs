@@ -7,9 +7,7 @@
 //! WHY: declaration-kind parsing is separate from per-file token walking and from dependency sorting.
 
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorType};
-use crate::compiler_frontend::compiler_messages::{
-    CompilerDiagnostic, InvalidDeclarationReason, InvalidSignatureMemberReason,
-};
+use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, InvalidDeclarationReason};
 use crate::compiler_frontend::datatypes::generic_parameters::GenericParameterList;
 
 use crate::compiler_frontend::declaration_syntax::choice::parse_choice_shell as parse_choice_header_payload;
@@ -17,14 +15,17 @@ use crate::compiler_frontend::declaration_syntax::declaration_shell::{
     DeclarationSyntax, parse_declaration_syntax,
 };
 use crate::compiler_frontend::declaration_syntax::generic_parameters::parse_generic_parameter_list_after_type_keyword;
-use crate::compiler_frontend::declaration_syntax::signature_members::{
-    parse_function_signature_syntax, parse_trait_requirement_signature_syntax,
-};
+use crate::compiler_frontend::declaration_syntax::signature_members::parse_function_signature_syntax;
+
 use crate::compiler_frontend::declaration_syntax::r#struct::parse_struct_shell;
 use crate::compiler_frontend::declaration_syntax::type_syntax::{
     TypeAnnotationContext, for_each_named_type_in_parsed_ref, parse_type_annotation,
 };
 
+use super::trait_headers::{
+    conformance_header_path, ensure_trait_name_is_all_caps, parse_specialized_conformance_target,
+    parse_trait_conformance, parse_trait_declaration,
+};
 use crate::compiler_frontend::external_packages::ExternalSymbolId;
 use crate::compiler_frontend::headers::dependency_edges::{
     collect_constant_type_dependencies, collect_named_type_dependency_edge,
@@ -32,15 +33,11 @@ use crate::compiler_frontend::headers::dependency_edges::{
 use crate::compiler_frontend::headers::types::{Header, HeaderBuildContext, HeaderKind};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::identifier_policy::{
-    IdentifierNamingKind, ensure_not_keyword_shadow_identifier, is_uppercase_constant_name,
-    naming_warning_for_identifier,
+    IdentifierNamingKind, ensure_not_keyword_shadow_identifier, naming_warning_for_identifier,
 };
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
-use crate::compiler_frontend::traits::syntax::{
-    ConformanceTargetKind, ConformanceTargetSyntax, TraitConformanceSyntax, TraitDeclarationSyntax,
-    TraitReferenceSyntax, TraitRequirementSyntax, TraitThisUsage,
-};
+use crate::compiler_frontend::traits::syntax::{ConformanceTargetKind, ConformanceTargetSyntax};
 use rustc_hash::FxHashSet;
 use std::collections::HashSet;
 
@@ -514,22 +511,6 @@ fn generic_parameter_forbidden_names(
     forbidden_names
 }
 
-fn ensure_trait_name_is_all_caps(
-    trait_name: crate::compiler_frontend::symbols::string_interning::StringId,
-    location: SourceLocation,
-    string_table: &StringTable,
-) -> Result<(), CompilerDiagnostic> {
-    if is_uppercase_constant_name(string_table.resolve(trait_name)) {
-        return Ok(());
-    }
-
-    Err(CompilerDiagnostic::invalid_declaration(
-        InvalidDeclarationReason::InvalidTraitName,
-        Some(trait_name),
-        location,
-    ))
-}
-
 fn collect_type_dependency_edges(
     type_ref: &crate::compiler_frontend::datatypes::parsed::ParsedTypeRef,
     generic_parameters: &GenericParameterList,
@@ -642,275 +623,6 @@ fn create_constant_header_payload(
     *context.file_constant_order += 1;
 
     Ok((declaration_syntax, source_order))
-}
-
-// ------------------------
-//  Trait declaration parsing
-// ------------------------
-
-fn parse_trait_declaration(
-    token_stream: &mut FileTokens,
-    declaration_name: crate::compiler_frontend::symbols::string_interning::StringId,
-    name_location: SourceLocation,
-    context: &mut HeaderBuildContext<'_>,
-) -> Result<TraitDeclarationSyntax, CompilerDiagnostic> {
-    let mut requirements = Vec::new();
-
-    token_stream.skip_newlines();
-
-    loop {
-        match token_stream.current_token_kind() {
-            TokenKind::End => {
-                token_stream.advance();
-                break;
-            }
-
-            TokenKind::Eof => {
-                return Err(CompilerDiagnostic::unexpected_end_of_file(
-                    Some(context.string_table.intern(";")),
-                    token_stream.current_location(),
-                ));
-            }
-
-            TokenKind::Newline => {
-                token_stream.skip_newlines();
-            }
-
-            _ => {
-                let requirement = parse_trait_requirement(token_stream, context)?;
-                requirements.push(requirement);
-            }
-        }
-    }
-
-    Ok(TraitDeclarationSyntax {
-        name: declaration_name,
-        name_location: name_location.clone(),
-        requirements,
-        location: name_location,
-    })
-}
-
-fn parse_trait_requirement(
-    token_stream: &mut FileTokens,
-    context: &mut HeaderBuildContext<'_>,
-) -> Result<TraitRequirementSyntax, CompilerDiagnostic> {
-    let name_location = token_stream.current_location();
-
-    let TokenKind::Symbol(method_name) = token_stream.current_token_kind() else {
-        return Err(CompilerDiagnostic::unexpected_token_in_declaration(
-            token_stream.current_location(),
-        ));
-    };
-    let method_name = *method_name;
-    token_stream.advance();
-
-    if token_stream.current_token_kind() != &TokenKind::TypeParameterBracket {
-        return Err(CompilerDiagnostic::unexpected_token_in_declaration(
-            token_stream.current_location(),
-        ));
-    }
-
-    let method_path = InternedPath::from_single_str("trait_requirement", context.string_table)
-        .append(method_name);
-
-    let signature = parse_trait_requirement_signature_syntax(
-        token_stream,
-        context.warnings,
-        context.string_table,
-        &method_path,
-    )?;
-
-    // Every non-empty requirement must start with `This` or `~This`.
-    let this_usage = if let Some(first_param) = signature.parameters.first() {
-        let param_name = first_param
-            .id
-            .name()
-            .map(|id| context.string_table.resolve(id))
-            .unwrap_or("");
-        if param_name != "This" {
-            return Err(CompilerDiagnostic::invalid_signature_member(
-                InvalidSignatureMemberReason::TraitReceiverMustBeThis,
-                first_param.location.clone(),
-            ));
-        }
-
-        if first_param.value_mode.is_mutable() {
-            TraitThisUsage::Mutable
-        } else {
-            TraitThisUsage::Immutable
-        }
-    } else {
-        return Err(CompilerDiagnostic::invalid_signature_member(
-            InvalidSignatureMemberReason::TraitReceiverMustBeThis,
-            name_location.clone(),
-        ));
-    };
-
-    // Reject lowercase `this` in trait requirements.
-    for (param_index, param) in signature.parameters.iter().enumerate() {
-        let param_name = param
-            .id
-            .name()
-            .map(|id| context.string_table.resolve(id))
-            .unwrap_or("");
-        if param_name == "this" {
-            return Err(CompilerDiagnostic::invalid_signature_member(
-                InvalidSignatureMemberReason::ThisNotAllowed,
-                param.location.clone(),
-            ));
-        }
-
-        if param_index > 0
-            && matches!(
-                param.type_annotation,
-                crate::compiler_frontend::datatypes::parsed::ParsedTypeRef::This { .. }
-            )
-            && param.value_mode.is_mutable()
-        {
-            return Err(CompilerDiagnostic::invalid_signature_member(
-                InvalidSignatureMemberReason::TraitMutableThisOnlyFirstParameter,
-                param.location.clone(),
-            ));
-        }
-    }
-
-    Ok(TraitRequirementSyntax {
-        name: method_name,
-        name_location: name_location.clone(),
-        this_usage,
-        signature,
-        location: name_location,
-    })
-}
-
-// ------------------------
-//  Trait conformance parsing
-// ------------------------
-
-fn parse_trait_conformance(
-    token_stream: &mut FileTokens,
-    target: ConformanceTargetSyntax,
-    context: &mut HeaderBuildContext<'_>,
-) -> Result<TraitConformanceSyntax, CompilerDiagnostic> {
-    let mut traits = Vec::new();
-
-    loop {
-        match token_stream.current_token_kind() {
-            TokenKind::Symbol(trait_name) => {
-                let trait_location = token_stream.current_location();
-                ensure_trait_name_is_all_caps(
-                    *trait_name,
-                    trait_location.clone(),
-                    context.string_table,
-                )?;
-
-                traits.push(TraitReferenceSyntax {
-                    name: *trait_name,
-                    location: trait_location,
-                });
-                token_stream.advance();
-            }
-
-            _ => {
-                if traits.is_empty() {
-                    return Err(CompilerDiagnostic::invalid_declaration(
-                        InvalidDeclarationReason::TraitConformanceMissingTrait,
-                        Some(target.name),
-                        token_stream.current_location(),
-                    ));
-                }
-
-                return Err(CompilerDiagnostic::unexpected_token_in_declaration(
-                    token_stream.current_location(),
-                ));
-            }
-        }
-
-        match token_stream.current_token_kind() {
-            TokenKind::Comma => {
-                let comma_location = token_stream.current_location();
-                token_stream.advance();
-                token_stream.skip_newlines();
-
-                // A comma may continue across newlines, but it must still be followed by a trait.
-                if matches!(
-                    token_stream.current_token_kind(),
-                    TokenKind::End | TokenKind::Eof
-                ) {
-                    return Err(CompilerDiagnostic::unexpected_trailing_comma(
-                        comma_location,
-                    ));
-                }
-            }
-
-            TokenKind::Newline | TokenKind::Eof => {
-                break;
-            }
-
-            TokenKind::End => {
-                return Err(CompilerDiagnostic::invalid_declaration(
-                    InvalidDeclarationReason::TraitConformanceSemicolon,
-                    Some(target.name),
-                    token_stream.current_location(),
-                ));
-            }
-
-            _ => {
-                return Err(CompilerDiagnostic::unexpected_token_in_declaration(
-                    token_stream.current_location(),
-                ));
-            }
-        }
-    }
-
-    Ok(TraitConformanceSyntax {
-        location: target.location.clone(),
-        target,
-        traits,
-    })
-}
-
-fn parse_specialized_conformance_target(
-    token_stream: &mut FileTokens,
-    target_name: crate::compiler_frontend::symbols::string_interning::StringId,
-    name_location: SourceLocation,
-) -> Result<ConformanceTargetSyntax, CompilerDiagnostic> {
-    token_stream.advance(); // past `of`
-
-    loop {
-        match token_stream.current_token_kind() {
-            TokenKind::Must => {
-                return Ok(ConformanceTargetSyntax {
-                    name: target_name,
-                    kind: ConformanceTargetKind::SpecializedGenericInstance,
-                    location: name_location,
-                });
-            }
-
-            TokenKind::Newline | TokenKind::End | TokenKind::Eof => {
-                return Err(CompilerDiagnostic::unexpected_token_in_declaration(
-                    token_stream.current_location(),
-                ));
-            }
-
-            _ => token_stream.advance(),
-        }
-    }
-}
-
-fn conformance_header_path(
-    target_path: &InternedPath,
-    location: &SourceLocation,
-    string_table: &mut StringTable,
-) -> InternedPath {
-    target_path.join_str(
-        &format!(
-            "__trait_conformance_{}_{}",
-            location.start_pos.line_number, location.start_pos.char_column
-        ),
-        string_table,
-    )
 }
 
 fn internal_header_dispatch_error(

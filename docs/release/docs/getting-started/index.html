@@ -999,6 +999,10 @@ body {
     };
     }
 
+    function __bs_error_result(message, code) {
+    return { tag: "err", value: __bs_make_error(message, code, null, null) };
+    }
+
     function __bs_error_with_location(error, location) {
     return __bs_make_error(error.message, error.code, location, error.__bst_trace);
     }
@@ -1042,26 +1046,26 @@ body {
     throw new Error("Expected internal Result carrier during fallback handling");
     }
 
+    function __bs_collection_index_is_valid(collection, index) {
+    return Number.isInteger(index) && index >= 0 && index < collection.length;
+    }
+
     function __bs_collection_get(collection, index) {
     if (!Array.isArray(collection)) {
-    const err = __bs_make_error("Collection operation expects an ordered collection", 100, null, null);
-    return { tag: "err", value: err };
+    return __bs_error_result("Collection operation expects an ordered collection", 100);
     }
-    if (!Number.isInteger(index) || index < 0 || index >= collection.length) {
-    const err = __bs_make_error("Collection index out of bounds", 101, null, null);
-    return { tag: "err", value: err };
+    if (!__bs_collection_index_is_valid(collection, index)) {
+    return __bs_error_result("Collection index out of bounds", 101);
     }
     return { tag: "ok", value: collection[index] };
     }
 
     function __bs_collection_set(collection, index, value) {
     if (!Array.isArray(collection)) {
-    const err = __bs_make_error("Collection operation expects an ordered collection", 100, null, null);
-    return { tag: "err", value: err };
+    return __bs_error_result("Collection operation expects an ordered collection", 100);
     }
-    if (!Number.isInteger(index) || index < 0 || index >= collection.length) {
-    const err = __bs_make_error("Collection index out of bounds", 101, null, null);
-    return { tag: "err", value: err };
+    if (!__bs_collection_index_is_valid(collection, index)) {
+    return __bs_error_result("Collection index out of bounds", 101);
     }
     collection[index] = value;
     return { tag: "ok", value: null };
@@ -1073,12 +1077,10 @@ body {
 
     function __bs_collection_remove(collection, index) {
     if (!Array.isArray(collection)) {
-    const err = __bs_make_error("Collection operation expects an ordered collection", 100, null, null);
-    return { tag: "err", value: err };
+    return __bs_error_result("Collection operation expects an ordered collection", 100);
     }
-    if (!Number.isInteger(index) || index < 0 || index >= collection.length) {
-    const err = __bs_make_error("Collection index out of bounds", 101, null, null);
-    return { tag: "err", value: err };
+    if (!__bs_collection_index_is_valid(collection, index)) {
+    return __bs_error_result("Collection index out of bounds", 101);
     }
     const removed = collection.splice(index, 1)[0];
     return { tag: "ok", value: removed };

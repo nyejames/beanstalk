@@ -80,7 +80,7 @@ page_head #= theme_head
         [data:
             [: Generic receiver methods]
             [: Partial]
-            [: Declaration-site generic receiver methods are supported when the method generic parameters align exactly with the receiver constructor arguments. Receiver methods on fully instantiated generic types remain rejected.]
+            [: Declaration-site generic receiver methods are supported when the method generic parameters align exactly with the receiver constructor arguments. Bound-provided receiver calls are available through visible reusable trait evidence; receiver methods on fully instantiated generic types remain rejected.]
         ]
 
         [data:
@@ -92,7 +92,7 @@ page_head #= theme_head
         [data:
             [: Trait bounds]
             [: Partial]
-            [: Declaration-site [codesnippet:type T is TRAIT] bounds are supported for generic functions, structs, and choices. [codesnippet:where] clauses and file-local evidence-backed generic bound dispatch remain deferred.]
+            [: Declaration-site [codesnippet:type T is TRAIT] and [codesnippet:type T is A and B, U is C] bounds are supported for generic functions, structs, and choices. [codesnippet:where] clauses and file-local evidence-backed generic bound dispatch remain deferred.]
         ]
     ]
 ]
@@ -391,7 +391,9 @@ page_head #= theme_head
     ]
 
     Concrete generic function calls and concrete generic struct/choice instantiations require
-    explicit visible reusable evidence for each concrete type argument.
+    explicit visible reusable evidence for each concrete type argument. File-local extension
+    evidence can support local dynamic values or local concrete fallback, but it cannot satisfy
+    public/static generic API obligations across files.
 
     [codeblock, $code("bst"):
         Label = |
@@ -412,6 +414,8 @@ page_head #= theme_head
     These are different features.
 
     Dynamic trait values do not satisfy static generic bounds.
+    Bound-provided receiver methods use the selected static evidence; dynamic wrappers use runtime
+    dispatch and are a separate value representation.
     [codesnippet:where] clauses remain rejected; write bounds directly on the generic parameter list.
 ]
 

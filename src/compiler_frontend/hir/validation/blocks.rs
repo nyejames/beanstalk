@@ -169,11 +169,17 @@ impl<'a> HirValidator<'a> {
 
             HirStatementKind::CallDynamicTraitMethod {
                 receiver,
+                trait_id,
+                requirement_id,
                 args,
                 result,
                 ..
             } => {
+                self.require_trait_requirement_id(*trait_id, *requirement_id, anchor)?;
+
                 self.validate_expression(receiver, anchor)?;
+                self.require_dynamic_trait_type_for_trait(receiver.ty, *trait_id, anchor)?;
+
                 for arg in args {
                     self.validate_expression(&arg.value, anchor)?;
                 }

@@ -44,7 +44,6 @@ pub enum HirStatementKind {
         receiver_effect: HirDynamicTraitCallArgumentEffect,
         #[allow(dead_code)] // Reserved for backend validation and future table selection.
         trait_id: TraitId,
-        #[allow(dead_code)] // JS uses this to select the exact dynamic requirement slot.
         requirement_id: TraitRequirementId,
         args: Vec<HirDynamicTraitCallArgument>,
         result: Option<LocalId>,

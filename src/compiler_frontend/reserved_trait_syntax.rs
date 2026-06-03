@@ -7,7 +7,7 @@
 //! WHY: multiple parser stages need to reject the same reserved keywords with typed diagnostics
 //! while keeping parser-dispatch mismatches on the internal compiler-error path.
 //!
-//! NOTE: full trait declaration and conformance parsing lives in `headers/header_dispatch.rs`.
+//! NOTE: full trait declaration and conformance parsing lives in `headers/trait_headers.rs`.
 //! This module is retained only for the diagnostic helpers used by parser paths that must reject
 //! trait-only keywords outside valid trait syntax.
 

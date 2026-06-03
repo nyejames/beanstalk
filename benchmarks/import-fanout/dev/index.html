@@ -302,6 +302,10 @@ body {
         };
     }
 
+    function __bs_error_result(message, code) {
+        return { tag: "err", value: __bs_make_error(message, code, null, null) };
+    }
+
     function __bs_error_with_location(error, location) {
         return __bs_make_error(error.message, error.code, location, error.__bst_trace);
     }
@@ -345,26 +349,26 @@ body {
         throw new Error("Expected internal Result carrier during fallback handling");
     }
 
+    function __bs_collection_index_is_valid(collection, index) {
+        return Number.isInteger(index) && index >= 0 && index < collection.length;
+    }
+
     function __bs_collection_get(collection, index) {
         if (!Array.isArray(collection)) {
-            const err = __bs_make_error("Collection operation expects an ordered collection", 100, null, null);
-            return { tag: "err", value: err };
+            return __bs_error_result("Collection operation expects an ordered collection", 100);
         }
-        if (!Number.isInteger(index) || index < 0 || index >= collection.length) {
-            const err = __bs_make_error("Collection index out of bounds", 101, null, null);
-            return { tag: "err", value: err };
+        if (!__bs_collection_index_is_valid(collection, index)) {
+            return __bs_error_result("Collection index out of bounds", 101);
         }
         return { tag: "ok", value: collection[index] };
     }
 
     function __bs_collection_set(collection, index, value) {
         if (!Array.isArray(collection)) {
-            const err = __bs_make_error("Collection operation expects an ordered collection", 100, null, null);
-            return { tag: "err", value: err };
+            return __bs_error_result("Collection operation expects an ordered collection", 100);
         }
-        if (!Number.isInteger(index) || index < 0 || index >= collection.length) {
-            const err = __bs_make_error("Collection index out of bounds", 101, null, null);
-            return { tag: "err", value: err };
+        if (!__bs_collection_index_is_valid(collection, index)) {
+            return __bs_error_result("Collection index out of bounds", 101);
         }
         collection[index] = value;
         return { tag: "ok", value: null };
@@ -376,12 +380,10 @@ body {
 
     function __bs_collection_remove(collection, index) {
         if (!Array.isArray(collection)) {
-            const err = __bs_make_error("Collection operation expects an ordered collection", 100, null, null);
-            return { tag: "err", value: err };
+            return __bs_error_result("Collection operation expects an ordered collection", 100);
         }
-        if (!Number.isInteger(index) || index < 0 || index >= collection.length) {
-            const err = __bs_make_error("Collection index out of bounds", 101, null, null);
-            return { tag: "err", value: err };
+        if (!__bs_collection_index_is_valid(collection, index)) {
+            return __bs_error_result("Collection index out of bounds", 101);
         }
         const removed = collection.splice(index, 1)[0];
         return { tag: "ok", value: removed };
@@ -561,52 +563,6 @@ body {
         return __bs_clone_value(__bs_read(bst___hir_tmp_16_l20));
     }
 
-    function bst_format_currency_fn4(bst_amount_l22) {
-        let bst___hir_tmp_18_l23 = __bs_binding(undefined);
-        let bst___hir_tmp_19_l24 = __bs_binding(undefined);
-        
-        bst_amount_l22 = __bs_param_binding(bst_amount_l22);
-        
-        __bs_assign_value(bst___hir_tmp_18_l23, "");
-        __bs_assign_value(bst___hir_tmp_18_l23, (__bs_read(bst___hir_tmp_18_l23) + " $"));
-        __bs_assign_value(bst___hir_tmp_19_l24, "");
-        __bs_assign_value(bst___hir_tmp_19_l24, (__bs_read(bst___hir_tmp_19_l24) + ("" + __bs_read(bst_amount_l22))));
-        __bs_assign_value(bst___hir_tmp_18_l23, (__bs_read(bst___hir_tmp_18_l23) + __bs_clone_value(__bs_read(bst___hir_tmp_19_l24))));
-        return __bs_clone_value(__bs_read(bst___hir_tmp_18_l23));
-    }
-
-    function bst_clamp_fn5(bst_value_l25, bst_minimum_l26, bst_maximum_l27) {
-        
-        bst_value_l25 = __bs_param_binding(bst_value_l25);
-        bst_minimum_l26 = __bs_param_binding(bst_minimum_l26);
-        bst_maximum_l27 = __bs_param_binding(bst_maximum_l27);
-        
-        if ((__bs_read(bst_value_l25) < __bs_read(bst_minimum_l26))) {
-            return __bs_clone_value(__bs_read(bst_minimum_l26));
-        } else {
-        }
-        if ((__bs_read(bst_value_l25) > __bs_read(bst_maximum_l27))) {
-            return __bs_clone_value(__bs_read(bst_maximum_l27));
-        } else {
-        }
-        return __bs_clone_value(__bs_read(bst_value_l25));
-    }
-
-    function bst_scale_value_fn6(bst_value_l28, bst_factor_l29) {
-        
-        bst_value_l28 = __bs_param_binding(bst_value_l28);
-        bst_factor_l29 = __bs_param_binding(bst_factor_l29);
-        
-        return (__bs_read(bst_value_l28) * __bs_read(bst_factor_l29));
-    }
-
-    function bst_squared_fn7(bst_value_l30) {
-        
-        bst_value_l30 = __bs_param_binding(bst_value_l30);
-        
-        return (__bs_read(bst_value_l30) * __bs_read(bst_value_l30));
-    }
-
     function bst_render_badge_fn8(bst_level_l31) {
         let bst___hir_tmp_20_l32 = __bs_binding(undefined);
         let bst___hir_tmp_21_l33 = __bs_binding(undefined);
@@ -718,59 +674,59 @@ body {
         return __bs_clone_value(__bs_read(bst___hir_tmp_37_l52));
     }
 
-    function bst_start_fn12() {
-        let bst___hir_tmp_41_l56 = __bs_binding(undefined);
-        let bst_user_l57 = __bs_binding(undefined);
-        let bst_profile_l58 = __bs_binding(undefined);
-        let bst_card_a_l59 = __bs_binding(undefined);
-        let bst___hir_tmp_42_l60 = __bs_binding(undefined);
-        let bst___hir_tmp_43_l61 = __bs_binding(undefined);
-        let bst_card_b_l62 = __bs_binding(undefined);
+    function bst_start_fn13() {
+        let bst___hir_tmp_43_l59 = __bs_binding(undefined);
+        let bst_user_l60 = __bs_binding(undefined);
+        let bst_profile_l61 = __bs_binding(undefined);
+        let bst_card_a_l62 = __bs_binding(undefined);
         let bst___hir_tmp_44_l63 = __bs_binding(undefined);
         let bst___hir_tmp_45_l64 = __bs_binding(undefined);
-        let bst___hir_tmp_46_l65 = __bs_binding(undefined);
-        let bst___hir_tmp_47_l66 = __bs_binding(undefined);
-        let bst___hir_tmp_48_l67 = __bs_binding(undefined);
-        let bst___hir_tmp_49_l68 = __bs_binding(undefined);
-        let bst___hir_tmp_50_l69 = __bs_binding(undefined);
-        let bst___hir_tmp_51_l70 = __bs_binding(undefined);
-        let bst___hir_tmp_52_l71 = __bs_binding(undefined);
-        let bst___hir_tmp_53_l72 = __bs_binding(undefined);
-        let bst___hir_tmp_54_l73 = __bs_binding(undefined);
+        let bst_card_b_l65 = __bs_binding(undefined);
+        let bst___hir_tmp_46_l66 = __bs_binding(undefined);
+        let bst___hir_tmp_47_l67 = __bs_binding(undefined);
+        let bst___hir_tmp_48_l68 = __bs_binding(undefined);
+        let bst___hir_tmp_49_l69 = __bs_binding(undefined);
+        let bst___hir_tmp_50_l70 = __bs_binding(undefined);
+        let bst___hir_tmp_51_l71 = __bs_binding(undefined);
+        let bst___hir_tmp_52_l72 = __bs_binding(undefined);
+        let bst___hir_tmp_53_l73 = __bs_binding(undefined);
+        let bst___hir_tmp_54_l74 = __bs_binding(undefined);
+        let bst___hir_tmp_55_l75 = __bs_binding(undefined);
+        let bst___hir_tmp_56_l76 = __bs_binding(undefined);
         
-        __bs_assign_value(bst___hir_tmp_41_l56, []);
-        __bs_assign_value(bst_user_l57, { bst_username_fld5: "admin", bst_email_fld6: "admin@example.com", bst_status_fld7: { tag: 0 } });
-        __bs_assign_value(bst_profile_l58, { bst_display_name_fld2: "Admin User", bst_role_fld3: "Administrator", bst_priority_fld4: { tag: 2 } });
-        __bs_assign_value(bst___hir_tmp_42_l60, bst_format_label_fn2(__bs_binding("Home")));
-        __bs_assign_value(bst___hir_tmp_43_l61, bst_render_home_fn1(bst_user_l57));
-        __bs_assign_value(bst_card_a_l59, { bst_title_fld22: __bs_read(bst___hir_tmp_42_l60), bst_body_fld23: __bs_read(bst___hir_tmp_43_l61) });
-        __bs_assign_value(bst___hir_tmp_44_l63, bst_format_label_fn2(__bs_binding("About")));
-        __bs_assign_value(bst___hir_tmp_45_l64, bst_render_about_fn0(bst_profile_l58));
-        __bs_assign_value(bst_card_b_l62, { bst_title_fld22: __bs_read(bst___hir_tmp_44_l63), bst_body_fld23: __bs_read(bst___hir_tmp_45_l64) });
-        __bs_assign_value(bst___hir_tmp_46_l65, "");
-        __bs_assign_value(bst___hir_tmp_46_l65, (__bs_read(bst___hir_tmp_46_l65) + ""));
-        __bs_assign_value(bst___hir_tmp_47_l66, "");
-        __bs_assign_value(bst___hir_tmp_48_l67, bst_render_header_fn11(__bs_binding(" Import Fanout Benchmark v1.0.0")));
-        __bs_assign_value(bst___hir_tmp_47_l66, (__bs_read(bst___hir_tmp_47_l66) + __bs_read(bst___hir_tmp_48_l67)));
-        __bs_assign_value(bst___hir_tmp_46_l65, (__bs_read(bst___hir_tmp_46_l65) + __bs_clone_value(__bs_read(bst___hir_tmp_47_l66))));
-        __bs_assign_value(bst___hir_tmp_46_l65, (__bs_read(bst___hir_tmp_46_l65) + "\n<main>\n    "));
-        __bs_assign_value(bst___hir_tmp_49_l68, "");
-        __bs_assign_value(bst___hir_tmp_50_l69, bst_render_card_fn9(bst_card_a_l59));
-        __bs_assign_value(bst___hir_tmp_49_l68, (__bs_read(bst___hir_tmp_49_l68) + __bs_read(bst___hir_tmp_50_l69)));
-        __bs_assign_value(bst___hir_tmp_46_l65, (__bs_read(bst___hir_tmp_46_l65) + __bs_clone_value(__bs_read(bst___hir_tmp_49_l68))));
-        __bs_assign_value(bst___hir_tmp_46_l65, (__bs_read(bst___hir_tmp_46_l65) + "\n    "));
-        __bs_assign_value(bst___hir_tmp_51_l70, "");
-        __bs_assign_value(bst___hir_tmp_52_l71, bst_render_card_fn9(bst_card_b_l62));
-        __bs_assign_value(bst___hir_tmp_51_l70, (__bs_read(bst___hir_tmp_51_l70) + __bs_read(bst___hir_tmp_52_l71)));
-        __bs_assign_value(bst___hir_tmp_46_l65, (__bs_read(bst___hir_tmp_46_l65) + __bs_clone_value(__bs_read(bst___hir_tmp_51_l70))));
-        __bs_assign_value(bst___hir_tmp_46_l65, (__bs_read(bst___hir_tmp_46_l65) + "\n<\/main>\n"));
-        __bs_assign_value(bst___hir_tmp_53_l72, "");
-        __bs_assign_value(bst___hir_tmp_54_l73, bst_render_footer_fn10(__bs_binding("2026-05-20T10:00:00Z")));
-        __bs_assign_value(bst___hir_tmp_53_l72, (__bs_read(bst___hir_tmp_53_l72) + __bs_read(bst___hir_tmp_54_l73)));
-        __bs_assign_value(bst___hir_tmp_46_l65, (__bs_read(bst___hir_tmp_46_l65) + __bs_clone_value(__bs_read(bst___hir_tmp_53_l72))));
-        __bs_assign_value(bst___hir_tmp_46_l65, (__bs_read(bst___hir_tmp_46_l65) + ""));
-        __bs_read(bst___hir_tmp_41_l56).push(__bs_clone_value(__bs_read(bst___hir_tmp_46_l65)));
-        return __bs_read(bst___hir_tmp_41_l56);
+        __bs_assign_value(bst___hir_tmp_43_l59, []);
+        __bs_assign_value(bst_user_l60, { bst_username_fld5: "admin", bst_email_fld6: "admin@example.com", bst_status_fld7: { tag: 0 } });
+        __bs_assign_value(bst_profile_l61, { bst_display_name_fld2: "Admin User", bst_role_fld3: "Administrator", bst_priority_fld4: { tag: 2 } });
+        __bs_assign_value(bst___hir_tmp_44_l63, bst_format_label_fn2(__bs_binding("Home")));
+        __bs_assign_value(bst___hir_tmp_45_l64, bst_render_home_fn1(bst_user_l60));
+        __bs_assign_value(bst_card_a_l62, { bst_title_fld22: __bs_read(bst___hir_tmp_44_l63), bst_body_fld23: __bs_read(bst___hir_tmp_45_l64) });
+        __bs_assign_value(bst___hir_tmp_46_l66, bst_format_label_fn2(__bs_binding("About")));
+        __bs_assign_value(bst___hir_tmp_47_l67, bst_render_about_fn0(bst_profile_l61));
+        __bs_assign_value(bst_card_b_l65, { bst_title_fld22: __bs_read(bst___hir_tmp_46_l66), bst_body_fld23: __bs_read(bst___hir_tmp_47_l67) });
+        __bs_assign_value(bst___hir_tmp_48_l68, "");
+        __bs_assign_value(bst___hir_tmp_48_l68, (__bs_read(bst___hir_tmp_48_l68) + ""));
+        __bs_assign_value(bst___hir_tmp_49_l69, "");
+        __bs_assign_value(bst___hir_tmp_50_l70, bst_render_header_fn11(__bs_binding(" Import Fanout Benchmark v1.0.0")));
+        __bs_assign_value(bst___hir_tmp_49_l69, (__bs_read(bst___hir_tmp_49_l69) + __bs_read(bst___hir_tmp_50_l70)));
+        __bs_assign_value(bst___hir_tmp_48_l68, (__bs_read(bst___hir_tmp_48_l68) + __bs_clone_value(__bs_read(bst___hir_tmp_49_l69))));
+        __bs_assign_value(bst___hir_tmp_48_l68, (__bs_read(bst___hir_tmp_48_l68) + "\n<main>\n    "));
+        __bs_assign_value(bst___hir_tmp_51_l71, "");
+        __bs_assign_value(bst___hir_tmp_52_l72, bst_render_card_fn9(bst_card_a_l62));
+        __bs_assign_value(bst___hir_tmp_51_l71, (__bs_read(bst___hir_tmp_51_l71) + __bs_read(bst___hir_tmp_52_l72)));
+        __bs_assign_value(bst___hir_tmp_48_l68, (__bs_read(bst___hir_tmp_48_l68) + __bs_clone_value(__bs_read(bst___hir_tmp_51_l71))));
+        __bs_assign_value(bst___hir_tmp_48_l68, (__bs_read(bst___hir_tmp_48_l68) + "\n    "));
+        __bs_assign_value(bst___hir_tmp_53_l73, "");
+        __bs_assign_value(bst___hir_tmp_54_l74, bst_render_card_fn9(bst_card_b_l65));
+        __bs_assign_value(bst___hir_tmp_53_l73, (__bs_read(bst___hir_tmp_53_l73) + __bs_read(bst___hir_tmp_54_l74)));
+        __bs_assign_value(bst___hir_tmp_48_l68, (__bs_read(bst___hir_tmp_48_l68) + __bs_clone_value(__bs_read(bst___hir_tmp_53_l73))));
+        __bs_assign_value(bst___hir_tmp_48_l68, (__bs_read(bst___hir_tmp_48_l68) + "\n<\/main>\n"));
+        __bs_assign_value(bst___hir_tmp_55_l75, "");
+        __bs_assign_value(bst___hir_tmp_56_l76, bst_render_footer_fn10(__bs_binding("2026-05-20T10:00:00Z")));
+        __bs_assign_value(bst___hir_tmp_55_l75, (__bs_read(bst___hir_tmp_55_l75) + __bs_read(bst___hir_tmp_56_l76)));
+        __bs_assign_value(bst___hir_tmp_48_l68, (__bs_read(bst___hir_tmp_48_l68) + __bs_clone_value(__bs_read(bst___hir_tmp_55_l75))));
+        __bs_assign_value(bst___hir_tmp_48_l68, (__bs_read(bst___hir_tmp_48_l68) + ""));
+        __bs_read(bst___hir_tmp_43_l59).push(__bs_clone_value(__bs_read(bst___hir_tmp_48_l68)));
+        return __bs_read(bst___hir_tmp_43_l59);
     }
     function __bs_choice_eq(a, b) {
         if (a === b) return true;
@@ -794,7 +750,7 @@ body {
     </script>
     <script>
     (function () {
-      var bst_frags = bst_start_fn12();
+      var bst_frags = bst_start_fn13();
       var bst_slots = [
         "bst-slot-0",
       ];

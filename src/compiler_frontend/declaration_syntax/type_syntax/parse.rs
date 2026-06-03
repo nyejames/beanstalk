@@ -281,9 +281,7 @@ fn parse_collection_type(
     } else {
         parse_required_type_with_generic_application(token_stream, context, true)?
     };
-    if parsed_type_contains_trait_this(&inner.parsed_type) {
-        return Err(trait_this_composition_error(context, location));
-    }
+    reject_trait_this_composition(&inner.parsed_type, context, location.clone())?;
 
     // Check for optional capacity after the element type.
     let capacity = if let TokenKind::IntLiteral(value) = token_stream.current_token_kind() {
@@ -413,7 +411,10 @@ fn parse_generic_type_argument(
     token_stream: &mut FileTokens,
     context: TypeAnnotationContext,
 ) -> Result<ParsedTypeRef, CompilerDiagnostic> {
+    let argument_location = token_stream.current_location();
     let parsed_argument = parse_type_atom(token_stream, context)?;
+
+    reject_trait_this_composition(&parsed_argument.parsed_type, context, argument_location)?;
 
     if token_stream.current_token_kind() == &TokenKind::Of {
         return Err(nested_generic_application_error(
@@ -461,12 +462,7 @@ fn parse_optional_type_suffix(
         return Ok(parsed_type);
     }
 
-    if matches!(parsed_type.parsed_type, ParsedTypeRef::This { .. }) {
-        return Err(trait_this_composition_error(
-            context,
-            token_stream.current_location(),
-        ));
-    }
+    reject_trait_this_composition(&parsed_type.parsed_type, context, location.clone())?;
 
     if matches!(parsed_type.parsed_type, ParsedTypeRef::Optional { .. }) {
         return Err(CompilerDiagnostic::invalid_type_annotation(
@@ -516,6 +512,17 @@ fn parsed_type_contains_trait_this(parsed_type: &ParsedTypeRef) -> bool {
 
         _ => false,
     }
+}
+
+fn reject_trait_this_composition(
+    parsed_type: &ParsedTypeRef,
+    context: TypeAnnotationContext,
+    location: SourceLocation,
+) -> Result<(), CompilerDiagnostic> {
+    if parsed_type_contains_trait_this(parsed_type) {
+        return Err(trait_this_composition_error(context, location));
+    }
+    Ok(())
 }
 
 fn trait_this_composition_error(

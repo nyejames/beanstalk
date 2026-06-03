@@ -11,14 +11,13 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 ---
 
 # Plans / TODOS
-- traits follow up refactor: `docs/roadmap/plans/traits_followup_refactor_plan.md`
 - Module facade refactor, introducing `export` keyword: `docs/roadmap/plans/facade-export-keyword-implementation-plan.md`
 - `.bmd` files (starts inside template body and cannot break out of template).
 Can be imported into regular beanstalk files as strings.
 - `Config.struct` file to replace the `#config.bst` file. This will use Beanstalk's struct syntax (starting inside a struct body) instead of having special parsing rules, and the compiler will just parse the struct it generates into project settings.
 - Collection capacity type extension `{64 Int}`
 - Build out core math library
-- Replace JSON with beanstalk files (dogfooding for language as a way to store data / config stuff). These could be standardised as their own build system under `src/projects`.
+- Replace JSON with beanstalk `.struct` files (dogfooding for language as a way to store data / config stuff). These could be standardised as their own build system under `src/projects`.
 - Closures
 - Wasm backend plan based on docs inside `docs/wasm-notes`
 - Hash Maps (core library)
@@ -27,11 +26,12 @@ Can be imported into regular beanstalk files as strings.
 
 # Notes
 - Trait ecosystem follow-ups after Traits v1: default methods, associated types/constants,
-  trait inheritance/composition, generic traits/methods, specialized generic instance
-  conformances, dynamic trait aliases/downcasting/reflection, file-local evidence-backed generic
-  bound dispatch, compiler-owned builtin conformances, `DISPLAYABLE` output coercion,
-  operator/standard trait ecosystem design, automatic primitive conformances, and Wasm dynamic
-  trait lowering.
+  static non-method requirements, trait inheritance/composition, generic traits/methods,
+  conditional and specialized generic instance conformances, dynamic trait composition,
+  aliases/downcasting/reflection, file-local evidence-backed generic bound dispatch,
+  compiler-owned builtin conformances, `DISPLAYABLE` output coercion, operator/boolean keyword
+  integration, broader standard trait taxonomy, automatic primitive conformances, and Wasm
+  dynamic trait lowering.
 
 - Time library follow-ups after the first `@core/time` JS slice: civil/calendar types
   (`Date`, `TimeOfDay`, `DateTime`, `TimeZone`, `ZonedDateTime`, `Period`),

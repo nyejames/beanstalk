@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
     <title>Traits in Beanstalk | Beanstalk</title>
-    <meta name="description" content="Design draft for nominal, explicit, statically resolved traits in Beanstalk.">
+    <meta name="description" content="Current Alpha trait declarations, explicit conformance, static bounds, and dynamic trait values.">
     <style>
 /*!
   BS CSS CORE (absolute basics CSS reset)
@@ -312,19 +312,14 @@ body {
         </div>
     </nav>
      <h1 style="font-size: 2em;text-align: center;"> TRAITS IN BEANSTALK</h1>
-    <section class="container"><p><strong>Design draft:</strong> This page is a future-facing design document for language and compiler planning. It is not final user-facing documentation, and the syntax, semantics, and implementation details may change before this feature is implemented.</p><p>Traits define a named behavioural contract for a type.</p><p>They are intended to be simple, explicit, and cheap for the compiler to resolve.</p><p>Beanstalk traits are designed to support static method resolution by default without pushing the language toward Rust-level trait-system complexity or runtime interface-object semantics.</p><p>Current compiler status:</p><ul><li>traits are deferred for Alpha</li><li><span style="
+    <section class="container"><p>Traits define named behavioural contracts for types.</p><p>Beanstalk traits are explicit and nominal: a type satisfies a trait only when source declares <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">must</span> is reserved</li><li><span style="
+    ">Type must TRAIT</span>. Matching method shapes alone are not conformance.</p><p>A trait name in a normal type annotation means a dynamic trait value. A trait name in a generic bound constrains a concrete generic parameter. These are different features.</p></section>
+    <section class="container"><h1>Trait declarations</h1><p>Trait declarations use <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">This</span> is reserved</li><li>both reserved tokens should reject with structured diagnostics when used incorrectly</li></ul><p>This page is a design reference, not current compiler support.</p></section>
-    <section class="container"><h1>Design goals</h1><p>Traits in Beanstalk are designed to:</p><ul><li>Keep traits nominal and explicit</li><li>Keep method lookup statically resolved by default</li><li>Avoid implicit structural conformance</li><li>Avoid runtime trait objects in v1</li><li>Preserve compile speed</li><li>Keep the implementation tractable</li><li>Leave room for later generic constraints and optional optimisations</li></ul><p>Trait names should be fully capitalised.</p><p>Traits are the only planned language construct that uses this naming convention.</p><p>This makes trait contracts visually distinct from types, choices, structs, functions, and variables.</p></section>
-    <section class="container"><h1>Non-goals for v1</h1><p>Traits are not intended to be:</p><ul><li>runtime interface objects</li><li>implicit duck typing</li><li>inheritance</li><li>a full Rust-style trait solver</li><li>a source of large compile-time or code-size blowups</li></ul><p>The first version should stay intentionally narrow.</p><p>The goal is a small trait system that fits Beanstalk&#39;s receiver method model, not a maximal abstraction system.</p></section>
-    <section class="container"><h1>Syntax</h1><p>Trait declarations use <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">must</span>.</p><pre style="
+    ">must:</span> and contain method requirements.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -332,153 +327,14 @@ body {
         white-space: pre;
         overflow-x: auto;
     "><code class='codeblock'>
-    <span class='bst-code-struct'>DRAWABLE</span> must<span class='bst-code-operator'>:</span>
-        draw <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This,</span> surface <span class='bst-code-struct'>Surface</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span>
-        bounds <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Rect,</span> <span class='bst-code-type'>Bool</span>
-    ;
-    </code></pre><p>This reads as:</p><p>&gt; Any type claiming to satisfy <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">DRAWABLE</span> must provide these methods.</p><p>A trait declaration contains required method signatures.</p><p>It does not provide fields, storage, or default behavior in v1.</p></section>
-    <section class="container"><h1>The This placeholder</h1><p>Inside a trait declaration, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">This</span> refers to the concrete implementing type.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-struct'>RESIZABLE</span> must<span class='bst-code-operator'>:</span>
-        resize <span class='bst-code-operator'>|</span><span class='bst-code-operator'>~</span><span class='bst-code-struct'>This,</span> width <span class='bst-code-struct'>Int,</span> height <span class='bst-code-type'>Int</span><span class='bst-code-operator'>|</span>;
-    ;
-    </code></pre><p>Rules:</p><ul><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">This</span> means an immutable receiver requirement</li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">~This</span> means a mutable receiver requirement</li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">This</span> is trait-local syntax</li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">This</span> does not name a real user-defined type</li><li>trait signatures describe required methods only</li><li>trait signatures do not provide storage or fields</li></ul><p>This keeps trait method requirements aligned with Beanstalk&#39;s receiver-based method model.</p><p>It also avoids pretending that a trait signature has a literal <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">this</span> parameter name.</p></section>
-    <section class="container"><h1>Semantics</h1><p>Traits are intended to follow a small set of rules.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
-        
-    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
-         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Rule</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Meaning</th> 
-    </tr>
-
-            
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Nominal </td>
-     <td style="padding: 0.2em 0.5em;  "> A type satisfies a trait only through an explicit implementation. </td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Explicit </td>
-     <td style="padding: 0.2em 0.5em;  "> Conformance is declared deliberately. It is never inferred from matching method shapes. </td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Statically resolved by default </td>
-     <td style="padding: 0.2em 0.5em;  "> Concrete receiver calls resolve directly to known methods. </td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> No runtime trait objects in v1 </td>
-     <td style="padding: 0.2em 0.5em;  "> Traits do not imply boxed dynamic values, vtables, or subtype-style object polymorphism. </td>
-        </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> No implicit structural matching </td>
-     <td style="padding: 0.2em 0.5em;  "> Similar method signatures alone do not make two types interchangeable. </td>
-        </tr>
-        
-    </table><p>This fits Beanstalk better than Go-style interfaces or TypeScript-style structural interfaces.</p></section>
-    <section class="container"><h1>Implementation model</h1><p>The exact implementation syntax can be finalised separately.</p><p>The model should remain:</p><ul><li>explicit</li><li>nominal</li><li>local and readable</li><li>checked against the declared trait surface</li></ul><p>The compiler should verify that every required method exists with the correct:</p><ul><li>receiver mutability</li><li>parameter types</li><li>return signature</li></ul><p>A type should not satisfy a trait accidentally.</p><p>Conformance should be something the programmer writes deliberately and the compiler verifies directly.</p></section>
-    <section class="container"><h1>Concrete dispatch</h1><p>When the receiver type is known, trait methods should resolve directly at compile time.</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    shape.draw<span class='bst-code-parenthesis'>(</span>surface<span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>If <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">shape</span> is known to be a <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Circle</span>, this should lower directly to the concrete <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Circle</span> method implementation.</p><p>This keeps ordinary method calls cheap and predictable.</p><p>Traits should not add dynamic dispatch overhead to concrete calls.</p></section>
-    <section class="container"><h1>Generic trait-bounded code</h1><p>If trait-bounded generics are added, Beanstalk should prefer a shared-body strategy by default rather than mandatory monomorphization.</p><p>That means a generic function can be compiled once and receive trait method information through an internal witness or dictionary-style mechanism.</p><p>This trades some runtime performance for:</p><ul><li>more stable compile times</li><li>less duplicated generated code</li><li>smaller code size</li><li>a simpler backend model</li></ul><p>Selective monomorphization can still be added later as a release-build optimisation.</p><p>It should not define the semantic model of traits.</p></section>
-    <section class="container"><h1>Why avoid a Rust-style trait system?</h1><p>Rust-style trait systems become expensive mostly when several powerful features stack together:</p><ul><li>heavy monomorphization</li><li>deep trait solving</li><li>blanket implementations</li><li>specialization</li><li>associated types</li><li>overlapping or highly generic trait relationships</li></ul><p>Beanstalk should avoid this in the first trait design.</p><p>The first version should solve one problem well:</p><p>&gt; A type can explicitly promise that it provides a named set of methods, and the compiler can check that promise.</p></section>
-    <section class="container"><h1>Recommended v1 scope</h1><p>The first implementation should include:</p><ul><li>trait declarations with <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">must</span></li><li>explicit implementations</li><li>required methods only</li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">This</span> and <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">~This</span> receiver requirements</li><li>static resolution for concrete calls</li><li>structured diagnostics for unsupported or invalid trait usage</li></ul><p>Traits should not initially include:</p><ul><li>runtime trait objects</li><li>default methods</li><li>trait inheritance</li><li>blanket implementations</li><li>specialization</li><li>associated types</li><li>implicit conformance</li></ul><p>Default methods can be added later if they still fit the language cleanly.</p></section>
-    <section class="container"><h1>Diagnostics</h1><p>Unsupported trait syntax or partially implemented trait features should produce intentional, structured diagnostics.</p><p>Useful diagnostic cases include:</p><ul><li>trait declared correctly, but full implementation is not yet supported</li><li>invalid <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">This</span> usage outside trait declarations</li><li>missing required method in a trait implementation</li><li>wrong receiver mutability</li><li>method parameter mismatch</li><li>method return signature mismatch</li><li>trait name not using the fully capitalised convention</li></ul><p>Traits should never fail through parser ambiguity or accidental fallback into unrelated constructs.</p></section>
-    <section class="container"><h1>Invalid This usage</h1><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">This</span> is valid only inside trait declarations.</p><p>Invalid:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    value <span class='bst-code-struct'>This</span> <span class='bst-code-operator'>=</span> something
-
-    function <span class='bst-code-operator'>|</span>input <span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
-        io<span class='bst-code-parenthesis'>(</span>input<span class='bst-code-parenthesis'>)</span>
-    ;
-    </code></pre><p>The compiler should reject this clearly.</p><p>Example diagnostic direction:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-string'>&#39;This&#39;</span> is only valid inside trait declarations.
-    <span class='bst-code-struct'>Use</span> a concrete type name here.
-    </code></pre></section>
-    <section class="container"><h1>Receiver mutability</h1><p>Trait method requirements must distinguish immutable and mutable receivers.</p><p>Immutable receiver requirement:</p><pre style="
-        background-color: hsla(0, 0%, 42%, 0.12);
-        padding-left: 1em;
-        border-radius: 5px;
-        max-width: 100%;
-        white-space: pre;
-        overflow-x: auto;
-    "><code class='codeblock'>
-    <span class='bst-code-struct'>DISPLAY</span> must<span class='bst-code-operator'>:</span>
+    <span class='bst-code-struct'>DISPLAY_TEXT</span> must<span class='bst-code-operator'>:</span>
         display <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span>
     ;
-    </code></pre><p>Mutable receiver requirement:</p><pre style="
+    </code></pre><p>Rules:</p><ul><li>trait names are all caps</li><li>trait declarations are top-level declarations</li><li>requirements are method signatures only</li><li>empty marker traits are valid</li><li>default methods, associated types, associated constants, trait inheritance, generic traits, and generic trait methods are deferred</li></ul></section>
+    <section class="container"><h1>This and mutable receivers</h1><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">This</span> is valid only inside trait declarations. It means the concrete implementing type.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -489,20 +345,50 @@ body {
     <span class='bst-code-struct'>RESETTABLE</span> must<span class='bst-code-operator'>:</span>
         reset <span class='bst-code-operator'>|</span><span class='bst-code-operator'>~</span><span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span>
     ;
-    </code></pre><p>A method that only accepts <span style="
+    </code></pre><p>Rules:</p><ul><li>the first requirement parameter must be <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">This</span> should not satisfy a <span style="
+    ">This</span> or <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">~This</span> requirement.</p><p>A method that requires <span style="
+    ">~This</span></li><li><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">~This</span> should not satisfy an immutable <span style="
+    ">This</span> means an immutable receiver requirement</li><li><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">This</span> requirement.</p><p>Receiver access is part of the contract.</p></section>
-    <section class="container"><h1>Relationship to methods</h1><p>Traits should build on Beanstalk&#39;s existing receiver method model.</p><p>Regular methods are already top-level functions with a receiver-style first parameter.</p><p>Example concrete method:</p><pre style="
+    ">~This</span> means a mutable receiver requirement</li><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">~This</span> is valid only as the first parameter</li><li>direct non-receiver <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">This</span> parameters must be named, such as <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">other This</span></li><li>bare non-receiver <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">This</span> is rejected because only the receiver may omit a name</li><li>direct <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">This</span> returns are supported</li><li>composed forms such as <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">This?</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">{This}</span>, and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Box of This</span> are rejected in the Alpha surface</li><li>lowercase <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">this</span> is not valid in trait requirements</li><li><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">This</span> outside trait declarations is rejected</li></ul></section>
+    <section class="container"><h1>Explicit conformance</h1><p>A conformance declaration states that a type implements one or more traits.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -510,14 +396,16 @@ body {
         white-space: pre;
         overflow-x: auto;
     "><code class='codeblock'>
-    <span class='bst-code-struct'>Circle</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
-        radius <span class='bst-code-struct'>Float,</span>
+    <span class='bst-code-struct'>Label</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
+        text <span class='bst-code-struct'>String,</span>
     <span class='bst-code-operator'>|</span>
 
-    draw <span class='bst-code-operator'>|</span>this <span class='bst-code-struct'>Circle,</span> surface <span class='bst-code-struct'>Surface</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
-        <span class='bst-code-keyword'>return</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Drawing</span> circle<span class='bst-code-parenthesis'>]</span>
+    display <span class='bst-code-operator'>|</span>this <span class='bst-code-struct'>Label</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> this.text
     ;
-    </code></pre><p>A trait requirement describes the required shape without naming a concrete type:</p><pre style="
+
+    <span class='bst-code-struct'>Label</span> must <span class='bst-code-struct'>DISPLAY_TEXT</span>
+    </code></pre><p>Conformance declarations are bodyless, top-level declarations. They do not end with a semicolon.</p><p>Multiple traits can be listed with commas:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -525,16 +413,39 @@ body {
         white-space: pre;
         overflow-x: auto;
     "><code class='codeblock'>
-    <span class='bst-code-struct'>DRAWABLE</span> must<span class='bst-code-operator'>:</span>
-        draw <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This,</span> surface <span class='bst-code-struct'>Surface</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span>
-    ;
-    </code></pre><p>The concrete method and the trait requirement should line up by receiver type, parameter list, and return list.</p></section>
-    <section class="container"><h1>Design tradeoffs</h1><p>This design deliberately chooses:</p><ul><li>simpler rules over maximal flexibility</li><li>explicit conformance over implicit convenience</li><li>predictable compile times over aggressive zero-cost abstraction by default</li><li>a narrow feature slice now so the language can grow without syntax churn later</li></ul><p>This matches Beanstalk&#39;s broader design priorities:</p><ul><li>readability first</li><li>strong, intentional syntax</li><li>static correctness</li><li>implementation tractability</li><li>room for future optimisation without changing source semantics</li></ul></section>
-    <section class="container"><h1>Deferred features</h1><p>These features should be deferred until the core trait model is stable:</p><ul><li>runtime trait objects</li><li>default method bodies</li><li>trait inheritance</li><li>associated types</li><li>specialization</li><li>blanket implementations</li><li>conditional implementations</li><li>negative implementations</li><li>structural conformance</li><li>automatic deriving</li><li>dynamic dispatch syntax</li></ul><p>These are powerful features, but adding them too early would make traits a compiler complexity trap.</p><p>The first version should stay deliberately boring.</p></section>
-    <section class="container"><h1>Summary</h1><p>Traits in Beanstalk are behavioural contracts written with <span style="
+    <span class='bst-code-struct'>Label</span> must <span class='bst-code-struct'>DISPLAY_TEXT,</span> <span class='bst-code-struct'>SERIALIZABLE</span>
+    </code></pre><p>The compiler validates that every required method exists with the exact receiver mutability, parameter types, return types, and return channels required by the trait. Parameter names are not part of the contract.</p></section>
+    <section class="container"><h1>Canonical and file-local evidence</h1><p>Beanstalk stores explicit conformance as evidence selected by the frontend.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+        
+    <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
+         <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Evidence</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> When it is created</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Visibility</th> 
+    </tr>
+
+            
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Canonical</td>
+     <td style="padding: 0.2em 0.5em;  "> The conformance target is a struct, choice, or generic type constructor declared in the same file.</td>
+     <td style="padding: 0.2em 0.5em;  "> Reusable wherever both the target type and trait are visible.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> File-local extension</td>
+     <td style="padding: 0.2em 0.5em;  "> The conformance target is imported, builtin, external, or otherwise not declared in the current file.</td>
+     <td style="padding: 0.2em 0.5em;  "> Usable only in the declaring file.</td>
+        </tr>
+        
+    </table><p>File-local extension evidence is useful for local adapter code, but it is never exportable as a reusable conformance fact. It also cannot override visible canonical evidence.</p><p>User-authored conformances for builtin scalar types such as <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">must</span>.</p><p>They are intended to be:</p><ul><li>nominal</li><li>explicit</li><li>statically resolved by default</li><li>non-structural</li><li>non-object-based in v1</li></ul><p>The core syntax is:</p><pre style="
+    ">Int must DISPLAY_TEXT</span> are file-local extensions. Compiler-owned builtin evidence is a separate metadata path, but it is not registered in the current Alpha scaffold.</p></section>
+    <section class="container"><h1>Static generic bounds</h1><p>Generic bounds use <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">is</span>, not <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">must</span>.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -542,10 +453,72 @@ body {
         white-space: pre;
         overflow-x: auto;
     "><code class='codeblock'>
-    <span class='bst-code-struct'>DRAWABLE</span> must<span class='bst-code-operator'>:</span>
-        draw <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This,</span> surface <span class='bst-code-struct'>Surface</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span>
+    render type <span class='bst-code-struct'>Item</span> is <span class='bst-code-struct'>DISPLAY_TEXT</span> <span class='bst-code-operator'>|</span>item <span class='bst-code-struct'>Item</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> item.display<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
     ;
-    </code></pre><p>The core rule is:</p><p>&gt; A trait is a named promise that a type provides a required method surface.</p><p>This keeps traits aligned with Beanstalk&#39;s existing method model while avoiding the complexity and compile-time cost of a more ambitious trait system too early.</p></section>
+    </code></pre><p>Multiple bounds on one parameter use <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">and</span>:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    render type <span class='bst-code-struct'>Item</span> is <span class='bst-code-struct'>DISPLAY_TEXT</span> and <span class='bst-code-struct'>NAMED</span> <span class='bst-code-operator'>|</span>item <span class='bst-code-struct'>Item</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> item.display<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
+    ;
+    </code></pre><p>Concrete calls and generic struct/choice instantiations require visible reusable evidence for the chosen concrete type. A dynamic trait value does not satisfy a static generic bound.</p></section>
+    <section class="container"><h1>Dynamic trait values</h1><p>A trait name in a normal type annotation creates a dynamic trait value type.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    render_dynamic <span class='bst-code-operator'>|</span>value <span class='bst-code-struct'>DISPLAY_TEXT</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> value.display<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
+    ;
+
+    text <span class='bst-code-operator'>=</span> render_dynamic<span class='bst-code-parenthesis'>(</span><span class='bst-code-struct'>Label</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;hello&quot;</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>Dynamic trait values erase the concrete type and expose only the trait surface. They are runtime-only opaque owning wrappers in the current Alpha surface, not static evidence for generic bounds.</p><p>Dynamic coercion from a concrete value happens only at explicit typed boundaries:</p><ul><li>annotated declarations</li><li>function arguments</li><li>function returns</li><li>struct fields</li><li>choice payloads</li><li>explicitly typed collection elements</li></ul><p>Unannotated locals and collection literals do not infer trait values.</p></section>
+    <section class="container"><h1>Dynamic-safe traits</h1><p>All traits can be used as generic bounds. Only dynamic-safe traits can be used as dynamic value types.</p><p>A trait is dynamic-safe when its requirements do not need the erased concrete type again after wrapping. Requirements that return <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">This</span>, take <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">This</span> as a non-receiver parameter, or otherwise require concrete identity are bound-only and cannot be used as dynamic value annotations.</p><p>When static dispatch is intended, write a generic bound with <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">type T is TRAIT</span> instead of annotating a value directly with <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">TRAIT</span>.</p></section>
+    <section class="container"><h1>Dispatch and backends</h1><p>Ordinary concrete receiver methods resolve before trait evidence. If no ordinary method is visible, visible trait evidence can make a trait-surface method callable.</p><p>Dynamic trait method calls dispatch through the wrapper&#39;s method table in the JavaScript backend. HTML-Wasm rejects reachable dynamic trait construction and dynamic dispatch with a structured unsupported-backend diagnostic before Wasm lowering. Dynamic-only helper functions that are not reachable from the page entry do not block an HTML-Wasm build.</p></section>
+    <section class="container"><h1>DISPLAYABLE scaffold</h1><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">DISPLAYABLE</span> exists as compiler-owned trait metadata for conformance and generic-bound tests.</p><p>It does not change <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">io(...)</span>, template interpolation, string coercion, equality, or operators. Implement <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">display |This| -> String</span> yourself and call it explicitly.</p></section>
+    <section class="container"><h1>Deferred trait ecosystem</h1><p>Deferred surfaces include:</p><ul><li>default methods</li><li>associated types and associated constants</li><li>trait inheritance and composition</li><li>generic traits and generic trait methods</li><li>specialized generic instance conformance such as <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Box of Int must DISPLAY_TEXT</span></li><li>static requirements that are not receiver methods</li><li>conditional conformances</li><li>dynamic trait composition</li><li>dynamic trait aliases</li><li>downcasting, reflection, and pattern matching on erased concrete types</li><li>composed <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">This</span> forms</li><li>file-local evidence-backed generic bound dispatch</li><li>automatic primitive conformances</li><li>output coercion through <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">DISPLAYABLE</span></li><li>operator-to-trait integration</li><li>Wasm dynamic trait runtime lowering</li><li>deriving, hashing, ordering, formatting, iteration, and serialization traits</li></ul></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;
@@ -673,6 +646,10 @@ body {
     };
     }
 
+    function __bs_error_result(message, code) {
+    return { tag: "err", value: __bs_make_error(message, code, null, null) };
+    }
+
     function __bs_error_with_location(error, location) {
     return __bs_make_error(error.message, error.code, location, error.__bst_trace);
     }
@@ -716,26 +693,26 @@ body {
     throw new Error("Expected internal Result carrier during fallback handling");
     }
 
+    function __bs_collection_index_is_valid(collection, index) {
+    return Number.isInteger(index) && index >= 0 && index < collection.length;
+    }
+
     function __bs_collection_get(collection, index) {
     if (!Array.isArray(collection)) {
-    const err = __bs_make_error("Collection operation expects an ordered collection", 100, null, null);
-    return { tag: "err", value: err };
+    return __bs_error_result("Collection operation expects an ordered collection", 100);
     }
-    if (!Number.isInteger(index) || index < 0 || index >= collection.length) {
-    const err = __bs_make_error("Collection index out of bounds", 101, null, null);
-    return { tag: "err", value: err };
+    if (!__bs_collection_index_is_valid(collection, index)) {
+    return __bs_error_result("Collection index out of bounds", 101);
     }
     return { tag: "ok", value: collection[index] };
     }
 
     function __bs_collection_set(collection, index, value) {
     if (!Array.isArray(collection)) {
-    const err = __bs_make_error("Collection operation expects an ordered collection", 100, null, null);
-    return { tag: "err", value: err };
+    return __bs_error_result("Collection operation expects an ordered collection", 100);
     }
-    if (!Number.isInteger(index) || index < 0 || index >= collection.length) {
-    const err = __bs_make_error("Collection index out of bounds", 101, null, null);
-    return { tag: "err", value: err };
+    if (!__bs_collection_index_is_valid(collection, index)) {
+    return __bs_error_result("Collection index out of bounds", 101);
     }
     collection[index] = value;
     return { tag: "ok", value: null };
@@ -747,12 +724,10 @@ body {
 
     function __bs_collection_remove(collection, index) {
     if (!Array.isArray(collection)) {
-    const err = __bs_make_error("Collection operation expects an ordered collection", 100, null, null);
-    return { tag: "err", value: err };
+    return __bs_error_result("Collection operation expects an ordered collection", 100);
     }
-    if (!Number.isInteger(index) || index < 0 || index >= collection.length) {
-    const err = __bs_make_error("Collection index out of bounds", 101, null, null);
-    return { tag: "err", value: err };
+    if (!__bs_collection_index_is_valid(collection, index)) {
+    return __bs_error_result("Collection index out of bounds", 101);
     }
     const removed = collection.splice(index, 1)[0];
     return { tag: "ok", value: removed };

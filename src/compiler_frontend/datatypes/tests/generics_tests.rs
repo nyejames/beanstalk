@@ -23,6 +23,7 @@ use crate::compiler_frontend::datatypes::ids::{
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
+use crate::compiler_frontend::traits::ids::TraitId;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 fn location() -> SourceLocation {
@@ -694,5 +695,96 @@ fn generic_display_uses_beanstalk_surface_style() {
     assert_eq!(
         fallible_function.display_with_table(&string_table),
         "Function( -> Int, Error!)"
+    );
+}
+
+#[test]
+fn trait_bounds_lookup_succeeds_after_registration() {
+    let mut type_environment = TypeEnvironment::new();
+    let mut string_table = StringTable::new();
+
+    let parsed_parameters = GenericParameterList {
+        parameters: vec![
+            GenericParameter {
+                id: TypeParameterId(0),
+                name: string_table.intern("T"),
+                location: location(),
+                trait_bounds: Vec::new(),
+            },
+            GenericParameter {
+                id: TypeParameterId(1),
+                name: string_table.intern("U"),
+                location: location(),
+                trait_bounds: Vec::new(),
+            },
+        ],
+    };
+
+    let mut resolved_bounds = FxHashMap::default();
+    resolved_bounds.insert(TypeParameterId(0), vec![TraitId(0), TraitId(1)]);
+    resolved_bounds.insert(TypeParameterId(1), vec![TraitId(2)]);
+
+    let registered =
+        type_environment.register_generic_parameter_list(&parsed_parameters, &resolved_bounds);
+    let canonical_t = registered.canonical_by_local[&TypeParameterId(0)];
+    let canonical_u = registered.canonical_by_local[&TypeParameterId(1)];
+
+    assert_eq!(
+        type_environment.trait_bounds_for_generic_parameter(canonical_t),
+        Some(&[TraitId(0), TraitId(1)][..]),
+    );
+    assert_eq!(
+        type_environment.trait_bounds_for_generic_parameter(canonical_u),
+        Some(&[TraitId(2)][..]),
+    );
+}
+
+#[test]
+fn trait_bounds_lookup_succeeds_after_update() {
+    let mut type_environment = TypeEnvironment::new();
+    let mut string_table = StringTable::new();
+
+    let parsed_parameters = GenericParameterList {
+        parameters: vec![GenericParameter {
+            id: TypeParameterId(0),
+            name: string_table.intern("T"),
+            location: location(),
+            trait_bounds: Vec::new(),
+        }],
+    };
+
+    // Register with empty bounds initially.
+    let registered =
+        type_environment.register_generic_parameter_list(&parsed_parameters, &Default::default());
+    let canonical_t = registered.canonical_by_local[&TypeParameterId(0)];
+
+    assert_eq!(
+        type_environment.trait_bounds_for_generic_parameter(canonical_t),
+        Some(&[][..]),
+    );
+
+    // Update bounds once trait definitions are resolved.
+    let mut updated_bounds = FxHashMap::default();
+    updated_bounds.insert(TypeParameterId(0), vec![TraitId(5)]);
+
+    type_environment.update_generic_parameter_bounds(
+        registered.list_id,
+        &updated_bounds,
+        &registered.canonical_by_local,
+    );
+
+    assert_eq!(
+        type_environment.trait_bounds_for_generic_parameter(canonical_t),
+        Some(&[TraitId(5)][..]),
+    );
+}
+
+#[test]
+fn trait_bounds_lookup_returns_none_for_unknown_parameter_id() {
+    let type_environment = TypeEnvironment::new();
+
+    assert_eq!(
+        type_environment.trait_bounds_for_generic_parameter(GenericParameterId(999)),
+        None,
     );
 }

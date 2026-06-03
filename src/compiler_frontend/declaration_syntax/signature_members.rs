@@ -225,6 +225,7 @@ pub fn parse_signature_members_syntax(
 ) -> Result<Vec<SignatureMemberSyntax>, CompilerDiagnostic> {
     let mut members = Vec::with_capacity(1);
     let mut expecting_member = true;
+    let mut member_index = 0;
 
     while token_stream.index < token_stream.tokens.len() {
         match token_stream.current_token_kind().to_owned() {
@@ -266,6 +267,7 @@ pub fn parse_signature_members_syntax(
 
                 members.push(member);
                 expecting_member = false;
+                member_index += 1;
             }
 
             TokenKind::This if member_context == SignatureMemberContext::FunctionParameter => {
@@ -289,6 +291,7 @@ pub fn parse_signature_members_syntax(
 
                 members.push(member);
                 expecting_member = false;
+                member_index += 1;
             }
 
             TokenKind::This => {
@@ -307,6 +310,13 @@ pub fn parse_signature_members_syntax(
                     ));
                 }
 
+                if member_index > 0 {
+                    return Err(CompilerDiagnostic::invalid_signature_member(
+                        InvalidSignatureMemberReason::TraitBareThisOnlyReceiver,
+                        token_stream.current_location(),
+                    ));
+                }
+
                 let this_id = string_table.intern("This");
                 let member = parse_trait_this_member_syntax(
                     token_stream,
@@ -316,6 +326,7 @@ pub fn parse_signature_members_syntax(
 
                 members.push(member);
                 expecting_member = false;
+                member_index += 1;
             }
 
             TokenKind::Mutable if member_context == SignatureMemberContext::TraitRequirement => {
@@ -336,6 +347,13 @@ pub fn parse_signature_members_syntax(
                     ));
                 }
 
+                if member_index > 0 {
+                    return Err(CompilerDiagnostic::invalid_signature_member(
+                        InvalidSignatureMemberReason::TraitMutableThisOnlyFirstParameter,
+                        token_stream.current_location(),
+                    ));
+                }
+
                 let this_id = string_table.intern("This");
                 let member = parse_trait_this_member_syntax(
                     token_stream,
@@ -345,6 +363,7 @@ pub fn parse_signature_members_syntax(
 
                 members.push(member);
                 expecting_member = false;
+                member_index += 1;
             }
 
             TokenKind::Comma => {

@@ -579,6 +579,10 @@ Rules:
 - `TRAIT must:` declares a top-level trait contract.
 - Trait requirements are method signatures only; marker traits with no requirements are valid.
 - Requirement receivers use `This` or `~This`, not lowercase `this`.
+- Bare `This` and `~This` are receiver-only and valid only as the first requirement parameter.
+- Direct non-receiver `This` parameters must be named, for example `other This`.
+- Direct return `This` is supported.
+- Composed `This` forms such as `This?`, `{This}`, and `Box of This` are rejected in the Alpha surface.
 - `This` is trait-local syntax and is rejected outside trait declarations.
 - `Type must TRAIT` declares explicit conformance. It is bodyless and newline-terminated; do not add a semicolon.
 - A matching method without `Type must TRAIT` is not conformance.
@@ -606,7 +610,7 @@ All traits can be generic bounds. Only dynamic-safe traits can be value types. A
 
 Dynamic trait runtime lowering is supported by the JavaScript backend. HTML-Wasm rejects reachable dynamic trait construction and dispatch with structured unsupported-backend diagnostics; unreachable dynamic-only helper functions are ignored by that reachability validation. Static trait declarations, conformances, and generic bounds remain frontend semantics and are backend-independent.
 
-Deferred trait surfaces include default methods, associated types/constants, inheritance, generic traits, generic trait methods, specialized generic instance conformance, dynamic trait aliases, file-local evidence-backed generic bound dispatch, automatic primitive conformances, `DISPLAYABLE` output coercion, and operator-to-trait integration.
+Deferred trait surfaces include default methods, associated types/constants, static non-method requirements, inheritance, generic traits, generic trait methods, specialized or conditional conformance, dynamic trait aliases/composition/downcasting, file-local evidence-backed generic bound dispatch, automatic primitive conformances, Wasm dynamic trait runtime lowering, `DISPLAYABLE` output coercion, and operator-to-trait integration.
 
 ## Choices
 
