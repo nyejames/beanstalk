@@ -24,22 +24,29 @@ impl<'hir> JsEmitter<'hir> {
         let out_of_bounds_code = out_of_bounds.as_i64();
         let out_of_bounds_message = out_of_bounds.default_message();
 
+        self.emit_line("function __bs_collection_index_is_valid(collection, index) {");
+        self.with_indent(|emitter| {
+            emitter.emit_line(
+                "return Number.isInteger(index) && index >= 0 && index < collection.length;",
+            );
+        });
+        self.emit_line("}");
+        self.emit_line("");
+
         self.emit_line("function __bs_collection_get(collection, index) {");
         self.with_indent(|emitter| {
             emitter.emit_line("if (!Array.isArray(collection)) {");
             emitter.with_indent(|em| {
                 em.emit_line(&format!(
-                    "const err = __bs_make_error(\"{invalid_collection_message}\", {invalid_collection_code}, null, null);",
+                    "return __bs_error_result(\"{invalid_collection_message}\", {invalid_collection_code});",
                 ));
-                em.emit_line("return { tag: \"err\", value: err };");
             });
             emitter.emit_line("}");
-            emitter.emit_line("if (!Number.isInteger(index) || index < 0 || index >= collection.length) {");
+            emitter.emit_line("if (!__bs_collection_index_is_valid(collection, index)) {");
             emitter.with_indent(|em| {
                 em.emit_line(&format!(
-                    "const err = __bs_make_error(\"{out_of_bounds_message}\", {out_of_bounds_code}, null, null);",
+                    "return __bs_error_result(\"{out_of_bounds_message}\", {out_of_bounds_code});",
                 ));
-                em.emit_line("return { tag: \"err\", value: err };");
             });
             emitter.emit_line("}");
             emitter.emit_line("return { tag: \"ok\", value: collection[index] };");
@@ -52,17 +59,15 @@ impl<'hir> JsEmitter<'hir> {
             emitter.emit_line("if (!Array.isArray(collection)) {");
             emitter.with_indent(|em| {
                 em.emit_line(&format!(
-                    "const err = __bs_make_error(\"{invalid_collection_message}\", {invalid_collection_code}, null, null);",
+                    "return __bs_error_result(\"{invalid_collection_message}\", {invalid_collection_code});",
                 ));
-                em.emit_line("return { tag: \"err\", value: err };");
             });
             emitter.emit_line("}");
-            emitter.emit_line("if (!Number.isInteger(index) || index < 0 || index >= collection.length) {");
+            emitter.emit_line("if (!__bs_collection_index_is_valid(collection, index)) {");
             emitter.with_indent(|em| {
                 em.emit_line(&format!(
-                    "const err = __bs_make_error(\"{out_of_bounds_message}\", {out_of_bounds_code}, null, null);",
+                    "return __bs_error_result(\"{out_of_bounds_message}\", {out_of_bounds_code});",
                 ));
-                em.emit_line("return { tag: \"err\", value: err };");
             });
             emitter.emit_line("}");
             emitter.emit_line("collection[index] = value;");
@@ -83,17 +88,15 @@ impl<'hir> JsEmitter<'hir> {
             emitter.emit_line("if (!Array.isArray(collection)) {");
             emitter.with_indent(|em| {
                 em.emit_line(&format!(
-                    "const err = __bs_make_error(\"{invalid_collection_message}\", {invalid_collection_code}, null, null);",
+                    "return __bs_error_result(\"{invalid_collection_message}\", {invalid_collection_code});",
                 ));
-                em.emit_line("return { tag: \"err\", value: err };");
             });
             emitter.emit_line("}");
-            emitter.emit_line("if (!Number.isInteger(index) || index < 0 || index >= collection.length) {");
+            emitter.emit_line("if (!__bs_collection_index_is_valid(collection, index)) {");
             emitter.with_indent(|em| {
                 em.emit_line(&format!(
-                    "const err = __bs_make_error(\"{out_of_bounds_message}\", {out_of_bounds_code}, null, null);",
+                    "return __bs_error_result(\"{out_of_bounds_message}\", {out_of_bounds_code});",
                 ));
-                em.emit_line("return { tag: \"err\", value: err };");
             });
             emitter.emit_line("}");
             emitter.emit_line("const removed = collection.splice(index, 1)[0];");

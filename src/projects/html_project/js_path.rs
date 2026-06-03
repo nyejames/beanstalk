@@ -13,7 +13,7 @@
 //!   4. A second inline `<script>` calls entry `start()` once. start() returns the
 //!      runtime fragment array and each element is hydrated into its slot in source order.
 
-use crate::backends::js::{JsFunctionEmissionPolicy, JsLoweringConfig, lower_hir_to_js};
+use crate::backends::js::{JsLoweringConfig, lower_hir_to_js};
 use crate::build_system::build::{FileKind, Module, OutputFile, ResolvedConstFragment};
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::hir::ids::FunctionId;
@@ -64,10 +64,10 @@ pub(crate) fn compile_html_module_js(
     string_table: &mut StringTable,
     output_path: PathBuf,
 ) -> Result<CompiledHtmlJsModule, CompilerMessages> {
-    let mut js_lowering_config = JsLoweringConfig::standard_html(input.release_build);
-    js_lowering_config.external_package_registry = input.external_package_registry.clone();
-    js_lowering_config.external_module_export_glue_enabled = true;
-    js_lowering_config.function_emission_policy = JsFunctionEmissionPolicy::ReachableFromStart;
+    let js_lowering_config = JsLoweringConfig::html_page_bundle(
+        input.release_build,
+        input.external_package_registry.clone(),
+    );
 
     let js_module = lower_hir_to_js(
         input.hir_module,

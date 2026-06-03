@@ -1,5 +1,9 @@
 //! Tests for generated HTML JS glue and runtime module resolution.
 
+use super::import_map::build_import_map_html;
+use super::paths::relative_url_path;
+use super::runtime_modules::emit_build_runtime_modules;
+use super::source::{generate_fallible_wrapper, generate_infallible_wrapper};
 use super::*;
 use crate::build_system::build::{FileKind, Module};
 use crate::compiler_frontend::external_packages::{
@@ -72,6 +76,43 @@ fn generate_module_glue_returns_empty_when_no_external_exports() {
 }
 
 #[test]
+fn generate_module_glue_empty_when_export_registered_but_not_referenced() {
+    let mut string_table = StringTable::new();
+    let mut module = create_test_module(PathBuf::from("#page.bst"), &mut string_table);
+    module
+        .module_external_imports
+        .push(crate::build_system::build::ModuleExternalImport {
+            package_id: ExternalPackageId(0),
+            runtime_asset: Some(
+                crate::libraries::external_import_providers::provider::RuntimeAssetIdentity {
+                    canonical_source_path: PathBuf::from("/project/lib.js"),
+                    asset_kind: "js".to_owned(),
+                },
+            ),
+            required_runtime_imports: Vec::new(),
+        });
+
+    let (registry, _function_id, package_id) = create_registry_with_export("get_value", "getValue");
+    module.module_external_imports[0].package_id = package_id;
+
+    // Export is registered but not referenced by emitted JS.
+    let referenced = HashSet::new();
+
+    let result = generate_module_glue(
+        &module,
+        &referenced,
+        &registry,
+        &PathBuf::from("index.html"),
+        false,
+    )
+    .expect("glue generation should succeed");
+
+    assert!(result.glue_output_files.is_empty());
+    assert!(result.bundle_import_preamble.is_none());
+    assert!(result.import_map_html.is_none());
+}
+
+#[test]
 fn generate_module_glue_emits_glue_file_for_referenced_export() {
     let mut string_table = StringTable::new();
     let mut module = create_test_module(PathBuf::from("#page.bst"), &mut string_table);
@@ -124,6 +165,85 @@ fn generate_module_glue_emits_glue_file_for_referenced_export() {
     let preamble = result.bundle_import_preamble.unwrap();
     assert!(preamble.starts_with("import { __bs_glue_fn"));
     assert!(preamble.contains("from \""));
+}
+
+#[test]
+fn generate_module_glue_nested_html_output_path() {
+    let mut string_table = StringTable::new();
+    let mut module = create_test_module(PathBuf::from("#page.bst"), &mut string_table);
+    module
+        .module_external_imports
+        .push(crate::build_system::build::ModuleExternalImport {
+            package_id: ExternalPackageId(0),
+            runtime_asset: Some(
+                crate::libraries::external_import_providers::provider::RuntimeAssetIdentity {
+                    canonical_source_path: PathBuf::from("/project/lib.js"),
+                    asset_kind: "js".to_owned(),
+                },
+            ),
+            required_runtime_imports: Vec::new(),
+        });
+
+    let (registry, function_id, package_id) = create_registry_with_export("get_value", "getValue");
+    module.module_external_imports[0].package_id = package_id;
+    let referenced = HashSet::from([function_id]);
+
+    let result = generate_module_glue(
+        &module,
+        &referenced,
+        &registry,
+        &PathBuf::from("a/b/index.html"),
+        false,
+    )
+    .expect("glue generation should succeed");
+
+    assert!(result.bundle_import_preamble.is_some());
+    let preamble = result.bundle_import_preamble.unwrap();
+    assert!(
+        preamble.contains("from \"../../_beanstalk/js/glue/module-"),
+        "expected nested relative path in preamble, got:\n{preamble}"
+    );
+}
+
+#[test]
+fn generate_module_glue_asset_import_relative_to_glue_module() {
+    let mut string_table = StringTable::new();
+    let mut module = create_test_module(PathBuf::from("#page.bst"), &mut string_table);
+    module
+        .module_external_imports
+        .push(crate::build_system::build::ModuleExternalImport {
+            package_id: ExternalPackageId(0),
+            runtime_asset: Some(
+                crate::libraries::external_import_providers::provider::RuntimeAssetIdentity {
+                    canonical_source_path: PathBuf::from("/project/lib.js"),
+                    asset_kind: "js".to_owned(),
+                },
+            ),
+            required_runtime_imports: Vec::new(),
+        });
+
+    let (registry, function_id, package_id) = create_registry_with_export("get_value", "getValue");
+    module.module_external_imports[0].package_id = package_id;
+    let referenced = HashSet::from([function_id]);
+
+    let result = generate_module_glue(
+        &module,
+        &referenced,
+        &registry,
+        &PathBuf::from("index.html"),
+        false,
+    )
+    .expect("glue generation should succeed");
+
+    let FileKind::Js(source) = result.glue_output_files[0].file_kind() else {
+        panic!("glue file must be JS");
+    };
+    // Asset is at _beanstalk/js/lib-{hash}.js; glue is at _beanstalk/js/glue/module-{hash}.js.
+    // Relative path from glue to asset should be ../lib-{hash}.js.
+    assert!(
+        source.contains("from \"../lib-"),
+        "expected asset import relative to glue module, got:\n{source}"
+    );
 }
 
 #[test]
@@ -181,6 +301,13 @@ fn fallible_wrapper_handles_invalid_shape_differently_for_debug_and_release() {
 }
 
 #[test]
+fn infallible_wrapper_forwards_raw_arguments_and_return() {
+    let source = generate_infallible_wrapper("__bs_glue_fn1", "__bs_external_fn1");
+    assert!(source.contains("export function __bs_glue_fn1(...args)"));
+    assert!(source.contains("return __bs_external_fn1(...args)"));
+}
+
+#[test]
 fn emit_build_runtime_modules_dedupes_by_specifier() {
     let module_a = create_module_with_runtime_requirement();
     let module_b = create_module_with_runtime_requirement();
@@ -233,6 +360,33 @@ fn build_import_map_html_includes_beanstalk_runtime() {
     assert!(map.contains("<script type=\"importmap\">"));
     assert!(map.contains("@beanstalk/runtime"));
     assert!(map.contains("./_beanstalk/js/runtime/beanstalk-runtime.js"));
+}
+
+#[test]
+fn build_import_map_html_deduplicates_by_specifier() {
+    let mut module = create_module_with_runtime_requirement();
+    module
+        .module_external_imports
+        .push(crate::build_system::build::ModuleExternalImport {
+            package_id: ExternalPackageId(1),
+            runtime_asset: None,
+            required_runtime_imports: vec![
+                crate::libraries::external_import_providers::provider::RequiredRuntimeImport {
+                    module_name: "@beanstalk/runtime".to_owned(),
+                    imported_names: vec!["bstOk".to_owned()],
+                },
+            ],
+        });
+
+    let html = build_import_map_html(&module, &PathBuf::from("index.html"));
+    assert!(html.is_some());
+    let map = html.unwrap();
+
+    let occurrences = map.matches("@beanstalk/runtime").count();
+    assert_eq!(
+        occurrences, 1,
+        "expected exactly one @beanstalk/runtime entry, got:\n{map}"
+    );
 }
 
 // Test helpers

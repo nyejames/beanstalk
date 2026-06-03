@@ -11,7 +11,7 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 ---
 
 # Plans / TODOS
-- JS backend refactoring / tidy up: `docs/roadmap/plans/js-backend-refactor.md`
+- traits follow up refactor: `docs/roadmap/plans/traits_followup_refactor_plan.md`
 - Module facade refactor, introducing `export` keyword: `docs/roadmap/plans/facade-export-keyword-implementation-plan.md`
 - `.bmd` files (starts inside template body and cannot break out of template).
 Can be imported into regular beanstalk files as strings.

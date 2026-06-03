@@ -4,7 +4,7 @@
 //! WHY: this keeps orchestration concerns local to the builder and avoids leaking HTML policy
 //! into backend lowering/emission modules.
 
-use crate::backends::js::{JsFunctionEmissionPolicy, JsLoweringConfig, lower_hir_to_js};
+use crate::backends::js::{JsLoweringConfig, lower_hir_to_js};
 use crate::backends::wasm::backend::lower_hir_to_wasm_module;
 use crate::backends::wasm::request::WasmBackendRequest;
 use crate::build_system::build::{FileKind, OutputFile};
@@ -112,11 +112,10 @@ pub(crate) fn compile_html_module_wasm(
     let output_plan = plan_wasm_output_from_logical_html_path(logical_html_output_path)
         .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
 
-    let mut js_lowering_config = JsLoweringConfig::standard_html(input.release_build);
-    js_lowering_config.external_package_registry = input.external_package_registry.clone();
-    // Only functions reachable from entry `start` should keep companion JS glue or runtime
-    // assets alive.
-    js_lowering_config.function_emission_policy = JsFunctionEmissionPolicy::ReachableFromStart;
+    let js_lowering_config = JsLoweringConfig::html_wasm_companion(
+        input.release_build,
+        input.external_package_registry.clone(),
+    );
     let js_module = lower_hir_to_js(
         input.hir_module,
         input.borrow_analysis,

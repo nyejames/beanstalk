@@ -4,6 +4,7 @@
 //! binding and alias helper conventions.
 
 use crate::backends::js::JsEmitter;
+use crate::backends::js::value_use::JsValueUse;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::hir::expressions::{
@@ -68,13 +69,9 @@ impl<'hir> JsEmitter<'hir> {
             HirExpressionKind::Char(value) => Ok(escape_js_char(*value)),
             HirExpressionKind::StringLiteral(value) => Ok(escape_js_string(value)),
 
-            HirExpressionKind::Load(place) => {
-                Ok(format!("__bs_read({})", self.lower_place(place)?))
+            HirExpressionKind::Load(_) | HirExpressionKind::Copy(_) => {
+                self.lower_expression_for_use(expression, JsValueUse::PlainExpression)
             }
-            HirExpressionKind::Copy(place) => Ok(format!(
-                "__bs_clone_value(__bs_read({}))",
-                self.lower_place(place)?
-            )),
 
             HirExpressionKind::BinOp { left, op, right } => self.lower_bin_op(left, *op, right),
             HirExpressionKind::UnaryOp { op, operand } => self.lower_unary_op(*op, operand),
@@ -172,37 +169,7 @@ impl<'hir> JsEmitter<'hir> {
         &mut self,
         expression: &HirExpression,
     ) -> Result<String, CompilerError> {
-        match &expression.kind {
-            HirExpressionKind::Load(place) => self.lower_place(place),
-            HirExpressionKind::Copy(place) => Ok(format!(
-                "__bs_clone_value(__bs_read({}))",
-                self.lower_place(place)?
-            )),
-            HirExpressionKind::TupleConstruct { elements } => {
-                let lowered = elements
-                    .iter()
-                    .map(|element| self.lower_return_value_expression(element))
-                    .collect::<Result<Vec<_>, _>>()?;
-                Ok(format!("[{}]", lowered.join(", ")))
-            }
-            _ => self.lower_expr(expression),
-        }
-    }
-
-    pub(crate) fn lower_call_argument(
-        &mut self,
-        expression: &HirExpression,
-    ) -> Result<String, CompilerError> {
-        // User-defined Beanstalk functions speak the reference ABI: places stay as refs and
-        // rvalues are wrapped into fresh bindings so the callee can alias or overwrite them.
-        match &expression.kind {
-            HirExpressionKind::Load(place) => self.lower_place(place),
-            HirExpressionKind::Copy(place) => Ok(format!(
-                "__bs_binding(__bs_clone_value(__bs_read({})))",
-                self.lower_place(place)?
-            )),
-            _ => Ok(format!("__bs_binding({})", self.lower_expr(expression)?)),
-        }
+        self.lower_expression_for_use(expression, JsValueUse::ReturnValue)
     }
 
     // WHAT: lowers a variant construction into a JS object literal.
@@ -273,15 +240,6 @@ impl<'hir> JsEmitter<'hir> {
             HirVariantCarrier::Option | HirVariantCarrier::Fallible => "\"value\"".to_owned(),
         };
         Ok(format!("({source_js})[{field_name_js}]"))
-    }
-
-    pub(crate) fn lower_host_call_argument(
-        &mut self,
-        expression: &HirExpression,
-    ) -> Result<String, CompilerError> {
-        // Host calls are raw JavaScript boundaries, not Beanstalk functions, so they need the
-        // concrete JS value rather than a binding wrapper.
-        self.lower_expr(expression)
     }
 
     pub(crate) fn is_unit_expression(&self, expression: &HirExpression) -> bool {

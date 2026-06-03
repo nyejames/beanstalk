@@ -5,13 +5,18 @@
 
 mod dynamic_traits;
 mod emitter;
+mod identifiers;
+mod js_calls;
 mod js_expr;
 mod js_function;
 mod js_statement;
 mod libraries;
+mod lookups;
+mod output;
+mod reachability;
 mod runtime;
 mod symbols;
-mod utils;
+mod value_use;
 
 #[cfg(test)]
 pub(crate) mod test_symbol_helpers;
@@ -63,8 +68,13 @@ pub struct JsLoweringConfig {
 }
 
 impl JsLoweringConfig {
-    /// Standard HTML builder lowering config.
-    pub fn standard_html(release_build: bool) -> Self {
+    /// Direct JS backend lowering config.
+    ///
+    /// WHAT: emits every HIR function with glue disabled. Used by direct JS/backend tests
+    /// and any caller that needs a complete standalone JS bundle without HTML glue.
+    /// WHY: the default must be all-functions emission so tests see every function;
+    /// glue is disabled because no HTML builder is involved.
+    pub fn direct_js(release_build: bool) -> Self {
         JsLoweringConfig {
             pretty: !release_build,
             emit_locations: false,
@@ -73,6 +83,40 @@ impl JsLoweringConfig {
             external_package_registry: ExternalPackageRegistry::new(),
             external_module_export_glue_enabled: false,
         }
+    }
+
+    /// JS-only HTML page-bundle lowering config.
+    ///
+    /// WHAT: emits only entry-reachable functions and enables ES module glue generation.
+    /// WHY: HTML page bundles execute from one entry point, so unreachable source-library
+    /// wrappers must not request runtime glue or assets. The supplied external package
+    /// registry is stored directly because the HTML builder already owns it.
+    pub fn html_page_bundle(
+        release_build: bool,
+        external_package_registry: ExternalPackageRegistry,
+    ) -> Self {
+        let mut config = Self::direct_js(release_build);
+        config.function_emission_policy = JsFunctionEmissionPolicy::ReachableFromStart;
+        config.external_package_registry = external_package_registry;
+        config.external_module_export_glue_enabled = true;
+        config
+    }
+
+    /// HTML-Wasm companion-JS lowering config.
+    ///
+    /// WHAT: emits only entry-reachable JS used by the Wasm bootstrap while keeping generated
+    /// ES module glue disabled.
+    /// WHY: this path emits bootstrap JS and Wasm artifacts, not generated glue modules.
+    /// Reachable JS-backed external calls must be rejected by Wasm validation rather than
+    /// silently lowered through glue that the artifact path cannot emit.
+    pub(crate) fn html_wasm_companion(
+        release_build: bool,
+        external_package_registry: ExternalPackageRegistry,
+    ) -> Self {
+        let mut config = Self::direct_js(release_build);
+        config.function_emission_policy = JsFunctionEmissionPolicy::ReachableFromStart;
+        config.external_package_registry = external_package_registry;
+        config
     }
 }
 

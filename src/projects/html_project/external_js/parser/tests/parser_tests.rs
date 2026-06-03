@@ -859,6 +859,26 @@ export function doThing() {
 }
 
 #[test]
+fn runtime_import_duplicate_names_are_deduplicated() {
+    let source = r#"
+import { bstOk } from "@beanstalk/runtime";
+import { bstOk } from "@beanstalk/runtime";
+
+/**
+ * @bst.sig do_thing || -> Int, Error!
+ */
+export function doThing() {
+    return bstOk(7);
+}
+"#;
+    let library = parse(source);
+    assert_no_diagnostics(&library);
+    assert_eq!(library.runtime_imports.len(), 1);
+    assert_eq!(library.runtime_imports[0].module_name, "@beanstalk/runtime");
+    assert_eq!(library.runtime_imports[0].imported_names, vec!["bstOk"]);
+}
+
+#[test]
 fn explicit_registry_injected_into_parser() {
     let source = r#"
 import { bstOk } from "@beanstalk/runtime";
@@ -947,6 +967,85 @@ export function tricky() {
     let library = parse(source);
     assert_no_diagnostics(&library);
     assert_free_functions(&library, &["tricky"]);
+}
+
+#[test]
+fn export_inside_template_literal_is_ignored() {
+    let source = r#"
+const hint = `export function fake() {}`;
+"#;
+    let library = parse(source);
+    assert_no_diagnostics(&library);
+    assert!(library.free_functions.is_empty());
+}
+
+#[test]
+fn import_inside_line_comment_is_ignored() {
+    let source = r#"
+// import { foo } from "./helper.js";
+const x = 1;
+"#;
+    let library = parse(source);
+    assert_no_diagnostics(&library);
+    assert!(library.runtime_imports.is_empty());
+}
+
+#[test]
+fn import_inside_block_comment_is_ignored() {
+    let source = r#"
+/* import { foo } from "./helper.js"; */
+const x = 1;
+"#;
+    let library = parse(source);
+    assert_no_diagnostics(&library);
+    assert!(library.runtime_imports.is_empty());
+}
+
+#[test]
+fn import_inside_template_literal_is_ignored() {
+    let source = r#"
+const hint = `import { foo } from "./helper.js";`;
+"#;
+    let library = parse(source);
+    assert_no_diagnostics(&library);
+    assert!(library.runtime_imports.is_empty());
+}
+
+#[test]
+fn template_literal_at_top_level_before_export() {
+    let source = r#"
+const hint = `}; export function fake() {}`;
+
+/**
+ * @bst.sig real || -> Int
+ */
+export function real() {
+    return 1;
+}
+"#;
+    let library = parse(source);
+    assert_no_diagnostics(&library);
+    assert_free_functions(&library, &["real"]);
+}
+
+#[test]
+fn import_statement_with_comment_containing_semicolon() {
+    let source = r#"
+import {
+    bstOk, // this is ok;
+    bstErr // this is err;
+} from "@beanstalk/runtime";
+
+/**
+ * @bst.sig do_thing || -> Int, Error!
+ */
+export function doThing() {
+    return bstOk(7);
+}
+"#;
+    let library = parse(source);
+    assert_no_diagnostics(&library);
+    assert_runtime_imports(&library, &[("@beanstalk/runtime", &["bstErr", "bstOk"])]);
 }
 
 #[test]

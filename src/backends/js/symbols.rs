@@ -4,7 +4,7 @@
 //! field before code emission begins.
 
 use crate::backends::js::JsEmitter;
-use crate::backends::js::utils::{is_js_reserved, sanitize_identifier};
+use crate::backends::js::identifiers::{is_js_reserved, sanitize_identifier};
 
 impl<'hir> JsEmitter<'hir> {
     pub(crate) fn build_symbol_maps(&mut self) {

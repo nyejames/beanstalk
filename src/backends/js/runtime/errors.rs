@@ -50,6 +50,15 @@ impl<'hir> JsEmitter<'hir> {
         self.emit_line("}");
         self.emit_line("");
 
+        self.emit_line("function __bs_error_result(message, code) {");
+        self.with_indent(|emitter| {
+            emitter.emit_line(
+                "return { tag: \"err\", value: __bs_make_error(message, code, null, null) };",
+            );
+        });
+        self.emit_line("}");
+        self.emit_line("");
+
         self.emit_line("function __bs_error_with_location(error, location) {");
         self.with_indent(|emitter| {
             emitter.emit_line(

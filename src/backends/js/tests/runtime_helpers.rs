@@ -1,6 +1,7 @@
 //! Runtime helper source contract tests for JavaScript output.
 
 use super::support::*;
+use crate::compiler_frontend::builtins::error_codes::BuiltinErrorCode;
 use crate::compiler_frontend::hir::blocks::HirBlock;
 use crate::compiler_frontend::hir::expressions::{HirExpressionKind, ValueKind};
 use crate::compiler_frontend::hir::functions::HirFunction;
@@ -109,6 +110,71 @@ fn clone_value_iterates_object_keys() {
     );
 }
 
+/// Verifies that `__bs_error_result` wraps `__bs_make_error` in an err carrier. [error]
+#[test]
+fn error_result_helper_wraps_make_error_in_err_carrier() {
+    let source = lower_minimal_module("main");
+    let helper = helper_source(&source, "__bs_error_result");
+
+    assert!(
+        helper.contains("__bs_make_error(message, code, null, null)")
+            && helper.contains("tag: \"err\""),
+        "__bs_error_result must wrap __bs_make_error in an err result carrier"
+    );
+}
+
+/// Verifies that `__bs_collection_index_is_valid` checks integer, bounds, and length. [collection]
+#[test]
+fn collection_index_is_valid_checks_integer_bounds_and_length() {
+    let source = lower_minimal_module("main");
+    let helper = helper_source(&source, "__bs_collection_index_is_valid");
+
+    assert!(
+        helper.contains("Number.isInteger(index)")
+            && helper.contains("index >= 0")
+            && helper.contains("index < collection.length"),
+        "__bs_collection_index_is_valid must validate integer, non-negative, and in-bounds"
+    );
+}
+
+/// Verifies that collection helpers use the expected error code for invalid receivers. [collection]
+#[test]
+fn collection_helpers_use_expected_error_code_for_invalid_receiver() {
+    let source = lower_minimal_module("main");
+    let get = helper_source(&source, "__bs_collection_get");
+    let set = helper_source(&source, "__bs_collection_set");
+    let remove = helper_source(&source, "__bs_collection_remove");
+
+    let expected_error = BuiltinErrorCode::CollectionExpectedOrderedCollection;
+    let expected_message = expected_error.default_message();
+    let expected_code = expected_error.as_i64();
+    let expected = format!(r#"__bs_error_result("{expected_message}", {expected_code})"#);
+
+    assert!(
+        get.contains(&expected) && set.contains(&expected) && remove.contains(&expected),
+        "collection helpers must use CollectionExpectedOrderedCollection for invalid receivers"
+    );
+}
+
+/// Verifies that collection helpers use the expected error code for out-of-bounds indices. [collection]
+#[test]
+fn collection_helpers_use_expected_error_code_for_out_of_bounds() {
+    let source = lower_minimal_module("main");
+    let get = helper_source(&source, "__bs_collection_get");
+    let set = helper_source(&source, "__bs_collection_set");
+    let remove = helper_source(&source, "__bs_collection_remove");
+
+    let expected_error = BuiltinErrorCode::CollectionIndexOutOfBounds;
+    let expected_message = expected_error.default_message();
+    let expected_code = expected_error.as_i64();
+    let expected = format!(r#"__bs_error_result("{expected_message}", {expected_code})"#);
+
+    assert!(
+        get.contains(&expected) && set.contains(&expected) && remove.contains(&expected),
+        "collection helpers must use CollectionIndexOutOfBounds for invalid indices"
+    );
+}
+
 /// Verifies that `__bs_collection_get` returns an err carrier for non-array inputs. [collection]
 #[test]
 fn collection_get_returns_err_for_non_array() {
@@ -116,7 +182,7 @@ fn collection_get_returns_err_for_non_array() {
     let get = helper_source(&source, "__bs_collection_get");
 
     assert!(
-        get.contains("!Array.isArray(collection)") && get.contains("{ tag: \"err\", value: err }"),
+        get.contains("!Array.isArray(collection)") && get.contains("__bs_error_result"),
         "__bs_collection_get must return a Result-typed err for non-array inputs"
     );
 }
@@ -128,8 +194,8 @@ fn collection_get_returns_err_for_out_of_bounds() {
     let get = helper_source(&source, "__bs_collection_get");
 
     assert!(
-        get.contains("index < 0 || index >= collection.length")
-            && get.contains("{ tag: \"err\", value: err }"),
+        get.contains("!__bs_collection_index_is_valid(collection, index)")
+            && get.contains("__bs_error_result"),
         "__bs_collection_get must return a Result-typed err for out-of-bounds indices"
     );
 }
@@ -153,8 +219,8 @@ fn collection_set_returns_err_for_out_of_bounds() {
     let set = helper_source(&source, "__bs_collection_set");
 
     assert!(
-        set.contains("index < 0 || index >= collection.length")
-            && set.contains("{ tag: \"err\", value: err }"),
+        set.contains("!__bs_collection_index_is_valid(collection, index)")
+            && set.contains("__bs_error_result"),
         "__bs_collection_set must return a Result-typed err for out-of-bounds indices"
     );
 }
@@ -190,8 +256,7 @@ fn collection_remove_returns_err_for_non_array() {
     let remove = helper_source(&source, "__bs_collection_remove");
 
     assert!(
-        remove.contains("!Array.isArray(collection)")
-            && remove.contains("{ tag: \"err\", value: err }"),
+        remove.contains("!Array.isArray(collection)") && remove.contains("__bs_error_result"),
         "__bs_collection_remove must return a Result-typed err for non-array inputs"
     );
 }
@@ -203,8 +268,8 @@ fn collection_remove_returns_err_for_out_of_bounds() {
     let remove = helper_source(&source, "__bs_collection_remove");
 
     assert!(
-        remove.contains("index < 0 || index >= collection.length")
-            && remove.contains("{ tag: \"err\", value: err }"),
+        remove.contains("!__bs_collection_index_is_valid(collection, index)")
+            && remove.contains("__bs_error_result"),
         "__bs_collection_remove must return a Result-typed err for out-of-bounds indices"
     );
 }
@@ -358,6 +423,14 @@ fn collection_remove_call_is_not_wrapped_with_result_propagate() {
     )
     .expect("JS lowering should succeed");
 
+    let removed_name = expected_dev_local_name("removed", 0);
+
+    assert!(
+        output.source.contains(&format!(
+            "__bs_assign_value({removed_name}, __bs_collection_remove("
+        )),
+        "external fallible call result carriers must be assigned as fresh values"
+    );
     assert!(
         output.source.contains("__bs_collection_remove(")
             && !output

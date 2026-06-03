@@ -4,7 +4,6 @@
 //! WHY: optional core libraries are builder-provided surface; keeping helper emission here
 //! prevents the generic runtime prelude from becoming a library implementation dump.
 
-mod math;
 mod random;
 mod text;
 mod time;
@@ -14,7 +13,6 @@ use crate::compiler_frontend::external_packages::ExternalJsLowering;
 
 impl<'hir> JsEmitter<'hir> {
     pub(crate) fn emit_core_library_helpers(&mut self) {
-        self.emit_core_math_helpers();
         self.emit_core_text_helpers();
         self.emit_core_random_helpers();
         self.emit_core_time_helpers();

@@ -18,7 +18,7 @@ use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::datatypes::ids::{
     BuiltinTypeConstructor, NominalTypeId, TypeConstructor,
 };
-pub(super) use crate::compiler_frontend::external_packages::{CallTarget, ExternalPackageRegistry};
+pub(super) use crate::compiler_frontend::external_packages::CallTarget;
 use crate::compiler_frontend::hir::blocks::{HirBlock, HirLocal};
 use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, ValueKind};
 use crate::compiler_frontend::hir::functions::HirFunction;
@@ -231,14 +231,7 @@ pub(super) fn lower_minimal_module(function_name: &str) -> String {
         &module,
         &BorrowCheckReport::default(),
         &string_table,
-        JsLoweringConfig {
-            pretty: true,
-            emit_locations: false,
-            auto_invoke_start: false,
-            function_emission_policy: JsFunctionEmissionPolicy::AllFunctions,
-            external_package_registry: ExternalPackageRegistry::new(),
-            external_module_export_glue_enabled: false,
-        },
+        JsLoweringConfig::direct_js(false),
         &type_environment,
     )
     .expect("JS lowering should succeed")
@@ -246,12 +239,5 @@ pub(super) fn lower_minimal_module(function_name: &str) -> String {
 }
 
 pub(super) fn default_config() -> JsLoweringConfig {
-    JsLoweringConfig {
-        pretty: true,
-        emit_locations: false,
-        auto_invoke_start: false,
-        function_emission_policy: JsFunctionEmissionPolicy::AllFunctions,
-        external_package_registry: ExternalPackageRegistry::new(),
-        external_module_export_glue_enabled: false,
-    }
+    JsLoweringConfig::direct_js(false)
 }

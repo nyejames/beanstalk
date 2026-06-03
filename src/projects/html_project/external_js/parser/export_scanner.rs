@@ -971,7 +971,7 @@ fn parse_named_import_names(statement: &str) -> Result<Vec<String>, ()> {
     let trimmed = statement.trim_start();
     let after_brace = trimmed.strip_prefix('{').ok_or(())?;
     let close_brace = after_brace.find('}').ok_or(())?;
-    let content = &after_brace[..close_brace];
+    let content = strip_js_comments_from_named_import_list(&after_brace[..close_brace]);
     let from_clause = after_brace[close_brace + 1..].trim_start();
     let after_from = from_clause.strip_prefix("from").ok_or(())?;
 
@@ -1001,6 +1001,50 @@ fn parse_named_import_names(statement: &str) -> Result<Vec<String>, ()> {
     }
 
     Ok(names)
+}
+
+/// Removes comments from a named runtime import list before identifier validation.
+///
+/// WHAT: accepts comments inside the `{ ... }` portion of a runtime import without treating
+///       comment text as part of an imported name.
+/// WHY: statement scanning already treats comments as lexical trivia, and import-list parsing
+///      should preserve that same boundary without growing into a full JavaScript lexer.
+fn strip_js_comments_from_named_import_list(content: &str) -> String {
+    let mut stripped = String::new();
+    let mut chars = content.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if ch != '/' {
+            stripped.push(ch);
+            continue;
+        }
+
+        match chars.peek().copied() {
+            Some('/') => {
+                chars.next();
+                for comment_ch in chars.by_ref() {
+                    if comment_ch == '\n' {
+                        stripped.push('\n');
+                        break;
+                    }
+                }
+            }
+            Some('*') => {
+                chars.next();
+                let mut previous = '\0';
+                for comment_ch in chars.by_ref() {
+                    if previous == '*' && comment_ch == '/' {
+                        break;
+                    }
+                    previous = comment_ch;
+                }
+                stripped.push(' ');
+            }
+            _ => stripped.push(ch),
+        }
+    }
+
+    stripped
 }
 
 fn is_runtime_import_identifier(name: &str) -> bool {

@@ -7,7 +7,7 @@
 //!      that stays separate from per-module glue generation.
 //!
 //! This module must not decide per-module glue or import-map content. Those remain
-//! module-local concerns owned by `runtime_glue.rs`.
+//! module-local concerns owned by `runtime_glue`.
 
 use crate::build_system::build::Module;
 use crate::libraries::external_import_providers::provider::RuntimeAssetIdentity;

@@ -1,6 +1,6 @@
 //! JavaScript inline external expression lowering tests.
 
-use crate::backends::js::js_statement::substitute_inline_expression;
+use crate::backends::js::js_calls::substitute_inline_expression;
 
 #[test]
 fn inline_expression_substitutes_each_argument_once() {
