@@ -326,6 +326,46 @@ fn tokenizes_assert_as_reserved_keyword() {
 }
 
 #[test]
+fn tokenizes_export_as_reserved_keyword() {
+    let (file_tokens, _string_table) = tokenize_source("export\n");
+
+    assert!(
+        matches!(file_tokens.tokens[1].kind, TokenKind::Export),
+        "expected 'export' to lex as a reserved keyword token"
+    );
+    assert!(
+        !matches!(file_tokens.tokens[1].kind, TokenKind::Symbol(_)),
+        "'export' should not remain a user symbol"
+    );
+}
+
+#[test]
+fn template_body_preserves_export_as_literal_text() {
+    let (file_tokens, string_table) = tokenize_source("[: this contains export keyword]");
+
+    let body_literal = file_tokens
+        .tokens
+        .iter()
+        .find_map(|token| match token.kind {
+            TokenKind::StringSliceLiteral(id) => {
+                let value = string_table.resolve(id);
+                value.contains("export").then_some(value)
+            }
+            _ => None,
+        })
+        .expect("expected template body text to preserve 'export' as literal text");
+
+    assert!(
+        !file_tokens
+            .tokens
+            .iter()
+            .any(|token| matches!(token.kind, TokenKind::Export)),
+        "export inside a template body should not tokenize as a keyword"
+    );
+    assert!(body_literal.contains("export"));
+}
+
+#[test]
 fn tokenizes_panic_as_normal_symbol() {
     let (file_tokens, string_table) = tokenize_source("panic\n");
 

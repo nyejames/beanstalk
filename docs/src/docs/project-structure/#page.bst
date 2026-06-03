@@ -423,7 +423,7 @@ page_head #= theme_head
 
     - [codesnippet:src/] contains the root page, the root [codesnippet:#mod.bst] facade, and ordinary source files.
     - [codesnippet:#page.bst] files define HTML pages and make their folders module boundaries.
-    - [codesnippet:styles/docs.bst] is a normal source file imported by the root facade and then exposed to nested page modules through [codesnippet:src/#mod.bst].
+    - [codesnippet:styles/docs.bst] is a normal source file imported by the root facade and then selectively exposed to nested page modules with [codesnippet:export] declarations in [codesnippet:src/#mod.bst].
     - [codesnippet:@html] is provided by the HTML builder.
     - [codesnippet:lib/local_helpers/#mod.bst] would expose a project-local [codesnippet:@local_helpers] source library.
     - [codesnippet:assets/] is a normal project folder for static files such as images.
@@ -470,10 +470,31 @@ page_head #= theme_head
 
     Keep facades small and intentional:
 
-    - define public wrapper functions, public type aliases, public structs, public choices, and public constants there
+    - mark public wrapper functions, type aliases, structs, choices, traits, and constants with [codesnippet:export]
+    - re-export grouped symbols with [codesnippet:export import @path { Symbol }] or [codesnippet:export @path { Symbol }]
+    - keep unmarked declarations and normal imports private to the facade file
     - import private implementation details inside the facade when a wrapper needs them
     - do not put runtime top-level statements or runtime top-level templates in a facade
     - do not expect a normal import inside [codesnippet:#mod.bst] to become public by itself
+
+    [codeblock, $code("bst"):
+        -- src/#mod.bst
+
+        import @core/text {length as private_length}
+
+        private_prefix #= "docs"
+
+        export page_label #= "Documentation"
+
+        export title_length |title String| -> Int:
+            return private_length(title)
+        ;
+
+        export @components/card {
+            CardData as Card,
+            render_card,
+        }
+    ]
 
     The same facade idea is used by project-local source libraries under [codesnippet:lib/<name>/#mod.bst].
     The detailed library, facade, core package, and JavaScript import guide is @../libraries (Libraries and modules).

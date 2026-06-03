@@ -1,0 +1,5 @@
+import @sub {
+    render,
+}
+
+[: loaded]

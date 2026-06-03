@@ -100,11 +100,15 @@ impl HeaderFileParseState {
     pub(super) fn into_non_entry_output(
         self,
         token_stream: &FileTokens,
+        file_role: FileRole,
     ) -> FileFrontendPrepareOutput {
         FileFrontendPrepareOutput {
             source_file: token_stream.src_path.to_owned(),
             file_id: token_stream.file_id,
             token_count: self.token_count,
+            file_role,
+            file_imports: self.file_imports,
+            canonical_os_path: token_stream.canonical_os_path.clone(),
             headers: self.headers,
             top_level_const_fragments: self.top_level_const_fragments,
             const_template_count: self.const_template_count,
@@ -118,6 +122,8 @@ impl HeaderFileParseState {
         token_stream: &FileTokens,
         file_role: FileRole,
     ) -> FileFrontendPrepareOutput {
+        use crate::compiler_frontend::headers::types::HeaderExportMode;
+
         // Entry file: build the start function header for later AST body parsing.
         // `start` is never a dependency-graph participant, so this header keeps no graph edges.
         let mut start_tokens = FileTokens::new_with_file_id(
@@ -130,17 +136,20 @@ impl HeaderFileParseState {
         self.headers.push(Header {
             kind: HeaderKind::StartFunction,
             file_role,
+            export_mode: HeaderExportMode::Private,
             dependencies: HashSet::new(),
             name_location: SourceLocation::default(),
             tokens: start_tokens,
             source_file: token_stream.src_path.to_owned(),
-            file_imports: self.file_imports,
         });
 
         FileFrontendPrepareOutput {
             source_file: token_stream.src_path.to_owned(),
             file_id: token_stream.file_id,
             token_count: self.token_count,
+            file_role,
+            file_imports: self.file_imports,
+            canonical_os_path: token_stream.canonical_os_path.clone(),
             headers: self.headers,
             top_level_const_fragments: self.top_level_const_fragments,
             const_template_count: self.const_template_count,

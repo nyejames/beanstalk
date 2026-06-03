@@ -18,36 +18,61 @@ use crate::compiler_frontend::declaration_syntax::signature_members::FunctionSig
 use crate::compiler_frontend::headers::module_symbols::{
     GenericDeclarationKind, GenericDeclarationMetadata, ModuleSymbols, register_declared_symbol,
 };
-use crate::compiler_frontend::headers::types::{Header, HeaderKind};
+use crate::compiler_frontend::headers::types::{
+    FileFrontendPrepareOutput, FileRole, Header, HeaderExportMode, HeaderKind,
+};
 use crate::compiler_frontend::symbols::identifier_policy::ensure_not_keyword_shadow_identifier;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 
 /// Collect all order-independent top-level symbol metadata from parsed (unsorted) headers.
+///
+/// WHAT: registers every prepared file path, per-file imports, and declared symbols.
+/// WHY: import-only files may produce no declaration headers but still contribute file metadata
+/// and imports to the module symbol package.
 pub(super) fn build_module_symbols(
-    headers: &[Header],
+    prepared_files: &[FileFrontendPrepareOutput],
     string_table: &mut StringTable,
 ) -> Result<ModuleSymbols, DiagnosticBag> {
     let mut module_symbols = ModuleSymbols::empty();
     let mut diagnostic_bag = DiagnosticBag::new();
 
-    for header in headers {
-        if !validate_declared_name(header, string_table, &mut diagnostic_bag) {
-            continue;
-        }
-
+    for file_output in prepared_files {
         module_symbols
             .module_file_paths
-            .insert(header.source_file.to_owned());
-        // Mutation: canonical OS paths are project-derived inputs that must be interned
-        // before downstream stages can use them as InternedPath values.
-        module_symbols.canonical_source_by_symbol_path.insert(
-            header.tokens.src_path.to_owned(),
-            header.canonical_source_file(string_table),
-        );
+            .insert(file_output.source_file.to_owned());
+        module_symbols
+            .file_roles_by_source
+            .insert(file_output.source_file.to_owned(), file_output.file_role);
 
-        merge_header_imports(&mut module_symbols, header);
-        register_header_symbol(&mut module_symbols, header, string_table);
+        if let Some(canonical_os_path) = &file_output.canonical_os_path {
+            module_symbols.canonical_os_path_by_source.insert(
+                file_output.source_file.to_owned(),
+                canonical_os_path.to_owned(),
+            );
+        }
+
+        if !file_output.file_imports.is_empty() {
+            module_symbols.file_imports_by_source.insert(
+                file_output.source_file.to_owned(),
+                file_output.file_imports.to_owned(),
+            );
+        }
+
+        for header in &file_output.headers {
+            if !validate_declared_name(header, string_table, &mut diagnostic_bag) {
+                continue;
+            }
+
+            // Mutation: canonical OS paths are project-derived inputs that must be interned
+            // before downstream stages can use them as InternedPath values.
+            module_symbols.canonical_source_by_symbol_path.insert(
+                header.tokens.src_path.to_owned(),
+                header.canonical_source_file(string_table),
+            );
+
+            register_header_symbol(&mut module_symbols, header, string_table);
+        }
     }
 
     if diagnostic_bag.has_errors() {
@@ -88,23 +113,6 @@ fn validate_declared_name(
     }
 
     true
-}
-
-fn merge_header_imports(module_symbols: &mut ModuleSymbols, header: &Header) {
-    module_symbols
-        .file_imports_by_source
-        .entry(header.source_file.to_owned())
-        .and_modify(|existing| {
-            for import in &header.file_imports {
-                let already_present = existing.iter().any(|entry| {
-                    entry.header_path == import.header_path && entry.alias == import.alias
-                });
-                if !already_present {
-                    existing.push(import.clone());
-                }
-            }
-        })
-        .or_insert_with(|| header.file_imports.to_owned());
 }
 
 /// Detect whether a parsed function signature is a receiver method candidate.
@@ -153,6 +161,16 @@ fn receiver_method_receiver_name(
     }
 }
 
+fn is_importable_for_symbol_collection(header: &Header) -> bool {
+    if header.file_role == FileRole::ModuleFacade {
+        // In a facade file, only explicit `export` declarations are visible outside the file.
+        return header.export_mode == HeaderExportMode::Public;
+    }
+
+    // Non-facade files expose all authored declarations within the module.
+    true
+}
+
 fn register_header_symbol(
     module_symbols: &mut ModuleSymbols,
     header: &Header,
@@ -167,7 +185,7 @@ fn register_header_symbol(
                 module_symbols,
                 &header.tokens.src_path,
                 &header.source_file,
-                Some(true),
+                is_importable_for_symbol_collection(header),
             );
             register_generic_declaration_metadata(
                 module_symbols,
@@ -196,7 +214,7 @@ fn register_header_symbol(
                 module_symbols,
                 &header.tokens.src_path,
                 &header.source_file,
-                Some(true),
+                is_importable_for_symbol_collection(header),
             );
             module_symbols
                 .nominal_type_paths
@@ -216,7 +234,7 @@ fn register_header_symbol(
                 module_symbols,
                 &header.tokens.src_path,
                 &header.source_file,
-                Some(true),
+                is_importable_for_symbol_collection(header),
             );
             module_symbols
                 .nominal_type_paths
@@ -234,7 +252,7 @@ fn register_header_symbol(
             let start_name = header
                 .source_file
                 .join_str(IMPLICIT_START_FUNC_NAME, string_table);
-            register_declared_symbol(module_symbols, &start_name, &header.source_file, None);
+            register_declared_symbol(module_symbols, &start_name, &header.source_file, false);
         }
 
         HeaderKind::Constant { .. } => {
@@ -242,7 +260,7 @@ fn register_header_symbol(
                 module_symbols,
                 &header.tokens.src_path,
                 &header.source_file,
-                Some(true),
+                is_importable_for_symbol_collection(header),
             );
         }
 
@@ -251,7 +269,7 @@ fn register_header_symbol(
                 module_symbols,
                 &header.tokens.src_path,
                 &header.source_file,
-                Some(true),
+                is_importable_for_symbol_collection(header),
             );
             module_symbols
                 .type_alias_paths
@@ -265,7 +283,7 @@ fn register_header_symbol(
                 module_symbols,
                 &header.tokens.src_path,
                 &header.source_file,
-                Some(true),
+                is_importable_for_symbol_collection(header),
             );
             module_symbols
                 .trait_paths

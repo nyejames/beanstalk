@@ -1,3 +1,3 @@
-exported_function || -> String:
+export exported_function || -> String:
     return "hello"
 ;

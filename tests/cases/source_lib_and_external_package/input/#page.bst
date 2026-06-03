@@ -1,5 +1,5 @@
 import @core/math {sin, PI}
-import @helper/utils {double}
+import @helper {double}
 
 angle = PI / 2.0
 s = sin(angle)

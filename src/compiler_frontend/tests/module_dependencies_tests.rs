@@ -337,8 +337,8 @@ fn module_root_facade_export_dependencies_order_facade_before_consumers() {
     let nested_page = entry_root.join("docs/#page.bst");
 
     let root_facade_source = "\
-import @styles/docs { theme_head as internal_theme_head }\n\
-theme_head #= internal_theme_head\n";
+export import @styles/docs { theme_head as internal_theme_head }\n\
+export theme_head #= internal_theme_head\n";
     let styles_source = "theme_head #String = \"head\"\n";
     let nested_page_source = "\
 import @styles/docs { theme_head }\n\

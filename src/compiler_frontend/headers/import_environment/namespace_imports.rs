@@ -8,20 +8,22 @@
 
 use super::{
     FileVisibility, ImportEnvironmentBuilder, NamespaceRecord, NamespaceRecordSource,
-    NamespaceTypeMember, NamespaceValueMember, ResolvedNamespaceTarget, VisibleNameBinding,
-    VisibleNameRegistry,
+    NamespaceTypeMember, NamespaceValueMember, ResolvedNamespaceTarget, SourceImportAccess,
+    VisibleNameBinding, VisibleNameRegistry,
 };
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, ImportFacadeType};
 use crate::compiler_frontend::external_packages::ExternalSymbolId;
 use crate::compiler_frontend::headers::import_environment::diagnostics;
-use crate::compiler_frontend::headers::module_symbols::GenericDeclarationKind;
+use crate::compiler_frontend::headers::module_symbols::{
+    FacadeExportEntry, FacadeExportTarget, GenericDeclarationKind,
+};
 use crate::compiler_frontend::headers::parse_file_headers::FileImport;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::keywords::is_valid_identifier;
 use crate::compiler_frontend::source_libraries::mod_file::MOD_FILE_NAME;
 use crate::compiler_frontend::symbols::string_interning::StringId;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum SymbolKind {
@@ -42,11 +44,28 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         namespace_target: ResolvedNamespaceTarget,
     ) -> Result<(), CompilerDiagnostic> {
         let local_name = self.derive_namespace_name(import)?;
+        let source_namespace_access =
+            if let ResolvedNamespaceTarget::SourceFile(file_path) = &namespace_target {
+                Some(
+                    self.source_namespace_receiver_access(file_path, source_file)
+                        .unwrap_or(SourceImportAccess::Internal),
+                )
+            } else {
+                None
+            };
 
         let record = match namespace_target {
             ResolvedNamespaceTarget::SourceFile(ref file_path) => {
                 self.validate_namespace_source_boundary(file_path, import, source_file)?;
-                self.build_source_namespace_record(file_path, &import.location)?
+                match source_namespace_access.as_ref() {
+                    Some(SourceImportAccess::Facade { exported_entries }) => self
+                        .build_facade_namespace_record(
+                            file_path,
+                            exported_entries,
+                            &import.location,
+                        )?,
+                    _ => self.build_source_namespace_record(file_path, &import.location)?,
+                }
             }
             ResolvedNamespaceTarget::ExternalPackage { package_path } => {
                 self.build_external_namespace_record(package_path, &import.location)?
@@ -78,21 +97,13 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         // through the receiver catalog under their original names.
         match &namespace_target {
             ResolvedNamespaceTarget::SourceFile(file_path) => {
-                if let Some(declared_paths) =
-                    self.module_symbols.declared_paths_by_file.get(file_path)
-                {
-                    for path in declared_paths {
-                        if self.module_symbols.receiver_method_paths.contains(path)
-                            && let Some(name) = path.name()
-                        {
-                            Self::add_visible_receiver_method(
-                                file_visibility,
-                                name,
-                                path,
-                                import.location.clone(),
-                            );
-                        }
-                    }
+                if let Some(access) = source_namespace_access.as_ref() {
+                    self.add_source_namespace_receiver_methods(
+                        file_visibility,
+                        file_path,
+                        access,
+                        import.location.clone(),
+                    );
                 }
             }
             ResolvedNamespaceTarget::ExternalPackage { package_path } => {
@@ -106,6 +117,99 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         }
 
         Ok(())
+    }
+
+    fn add_source_namespace_receiver_methods(
+        &self,
+        file_visibility: &mut FileVisibility,
+        namespace_file: &InternedPath,
+        access: &SourceImportAccess,
+        location: SourceLocation,
+    ) {
+        match access {
+            SourceImportAccess::Facade { exported_entries } => {
+                for entry in exported_entries {
+                    let FacadeExportTarget::Source(path) = &entry.target else {
+                        continue;
+                    };
+
+                    if self.module_symbols.receiver_method_paths.contains(path)
+                        && let Some(name) = path.name()
+                    {
+                        Self::add_visible_receiver_method(
+                            file_visibility,
+                            name,
+                            path,
+                            location.clone(),
+                        );
+                    }
+                }
+            }
+
+            SourceImportAccess::Internal | SourceImportAccess::DirectSourceExport => {
+                if let Some(declared_paths) = self
+                    .module_symbols
+                    .declared_paths_by_file
+                    .get(namespace_file)
+                {
+                    for path in declared_paths {
+                        if self.module_symbols.receiver_method_paths.contains(path)
+                            && self.receiver_method_visible_for_source_access(path, access)
+                            && let Some(name) = path.name()
+                        {
+                            Self::add_visible_receiver_method(
+                                file_visibility,
+                                name,
+                                path,
+                                location.clone(),
+                            );
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Receiver-method access model for a source namespace import.
+    ///
+    /// WHAT: internal source namespaces retain all receiver methods from that file. Facade
+    /// namespaces expose only receiver methods in the facade's explicit public export map.
+    fn source_namespace_receiver_access(
+        &self,
+        namespace_file: &InternedPath,
+        importer_file: &InternedPath,
+    ) -> Option<SourceImportAccess> {
+        if self.source_files_share_import_boundary(importer_file, namespace_file) {
+            return Some(SourceImportAccess::Internal);
+        }
+
+        self.facade_entries_for_source_file(namespace_file)
+            .map(|exported_entries| SourceImportAccess::Facade { exported_entries })
+    }
+
+    /// Public facade entries for a concrete facade source file, if this source is a facade.
+    fn facade_entries_for_source_file(
+        &self,
+        source_file: &InternedPath,
+    ) -> Option<FxHashSet<FacadeExportEntry>> {
+        for (library_prefix, facade_file) in &self.module_symbols.source_library_facade_files {
+            if facade_file == source_file {
+                return self
+                    .module_symbols
+                    .facade_exports
+                    .get(library_prefix)
+                    .cloned();
+            }
+        }
+
+        let module_root = self
+            .module_symbols
+            .file_module_membership
+            .get(source_file)?;
+        self.module_symbols
+            .module_root_facade_exports
+            .get(module_root)
+            .cloned()
     }
 
     /// Resolve a bare import that names a public facade namespace.
@@ -341,8 +445,8 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             // Skip compiler-owned synthetic declarations (e.g. implicit start function).
             if !self
                 .module_symbols
-                .importable_symbol_exported
-                .contains_key(&symbol_path)
+                .importable_source_symbol_paths
+                .contains(&symbol_path)
             {
                 continue;
             }
@@ -375,6 +479,78 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         }
 
         self.check_duplicate_namespace_members(file_path, &value_members, &type_members, location)?;
+
+        Ok(NamespaceRecord {
+            value_members,
+            type_members,
+        })
+    }
+
+    /// Build a namespace record from a facade's explicit public export entries.
+    ///
+    /// WHAT: namespace imports of a facade expose the same public API as grouped facade imports,
+    /// including import-only facades and grouped re-export aliases. Receiver methods remain
+    /// receiver-call-only and are registered through `add_source_namespace_receiver_methods`.
+    fn build_facade_namespace_record(
+        &self,
+        facade_file: &InternedPath,
+        exported_entries: &FxHashSet<FacadeExportEntry>,
+        location: &SourceLocation,
+    ) -> Result<NamespaceRecord, CompilerDiagnostic> {
+        let mut value_members = FxHashMap::default();
+        let mut type_members = FxHashMap::default();
+
+        for entry in exported_entries {
+            match &entry.target {
+                FacadeExportTarget::Source(symbol_path) => {
+                    if self
+                        .module_symbols
+                        .receiver_method_paths
+                        .contains(symbol_path)
+                        || self.module_symbols.trait_paths.contains(symbol_path)
+                    {
+                        continue;
+                    }
+
+                    match self.classify_symbol_kind(symbol_path) {
+                        SymbolKind::Type => {
+                            type_members.insert(
+                                entry.export_name,
+                                NamespaceTypeMember::SourceDeclaration(symbol_path.clone()),
+                            );
+                        }
+                        SymbolKind::Value => {
+                            value_members.insert(
+                                entry.export_name,
+                                NamespaceValueMember::SourceDeclaration(symbol_path.clone()),
+                            );
+                        }
+                    }
+                }
+
+                FacadeExportTarget::External(symbol_id) => match symbol_id {
+                    ExternalSymbolId::Function(_) | ExternalSymbolId::Constant(_) => {
+                        value_members.insert(
+                            entry.export_name,
+                            NamespaceValueMember::ExternalSymbol(*symbol_id),
+                        );
+                    }
+                    ExternalSymbolId::Type(_) => {
+                        type_members.insert(
+                            entry.export_name,
+                            NamespaceTypeMember::ExternalSymbol(*symbol_id),
+                        );
+                    }
+                },
+            }
+        }
+
+        self.check_duplicate_namespace_members(
+            facade_file,
+            &value_members,
+            &type_members,
+            location,
+        )?;
 
         Ok(NamespaceRecord {
             value_members,

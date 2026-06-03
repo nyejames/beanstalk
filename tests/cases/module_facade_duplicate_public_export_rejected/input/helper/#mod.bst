@@ -1,0 +1,2 @@
+export greet #= "direct"
+export @./internal { internal_greet as greet }

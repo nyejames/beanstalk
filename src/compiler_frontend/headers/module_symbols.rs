@@ -35,20 +35,25 @@ use crate::compiler_frontend::datatypes::{DataType, builtin_type_ids};
 use crate::compiler_frontend::declaration_syntax::declaration_shell::DeclarationSyntax;
 use crate::compiler_frontend::declaration_syntax::type_syntax::parsed_ref_to_data_type;
 
-use crate::compiler_frontend::headers::parse_file_headers::{FileImport, Header, HeaderKind};
+use crate::compiler_frontend::headers::parse_file_headers::{
+    FileImport, FileRole, Header, HeaderKind,
+};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::value_mode::ValueMode;
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 use rustc_hash::{FxHashMap, FxHashSet};
+use std::path::PathBuf;
 
 /// Resolved target of a facade export entry.
 ///
-/// WHAT: a facade export exposes a source declaration from an authored `#mod.bst` declaration.
+/// WHAT: a facade export exposes either a source declaration or an external package symbol
+/// through the module facade.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum FacadeExportTarget {
     Source(InternedPath),
+    External(crate::compiler_frontend::external_packages::ExternalSymbolId),
 }
 
 /// One exported symbol in a module facade.
@@ -103,8 +108,15 @@ pub(crate) struct ModuleSymbols {
     // Order-independent maps built during header parsing.
     pub(crate) canonical_source_by_symbol_path: FxHashMap<InternedPath, InternedPath>,
     pub(crate) module_file_paths: FxHashSet<InternedPath>,
+    // Per-file metadata is recorded for every prepared file, including import-only facades that
+    // produce no declaration headers.
+    pub(crate) file_roles_by_source: FxHashMap<InternedPath, FileRole>,
+    pub(crate) canonical_os_path_by_source: FxHashMap<InternedPath, PathBuf>,
     pub(crate) file_imports_by_source: FxHashMap<InternedPath, Vec<FileImport>>,
-    pub(crate) importable_symbol_exported: FxHashMap<InternedPath, bool>,
+    // Source declarations eligible for import-environment source surfaces. Private facade
+    // declarations are intentionally absent because they are reachable only inside the facade
+    // file that authored them.
+    pub(crate) importable_source_symbol_paths: FxHashSet<InternedPath>,
     pub(crate) declared_paths_by_file: FxHashMap<InternedPath, FxHashSet<InternedPath>>,
     pub(crate) declared_names_by_file: FxHashMap<InternedPath, FxHashSet<StringId>>,
     pub(crate) type_alias_paths: FxHashSet<InternedPath>,
@@ -158,8 +170,10 @@ impl ModuleSymbols {
             builtin_declarations: Vec::new(),
             canonical_source_by_symbol_path: FxHashMap::default(),
             module_file_paths: FxHashSet::default(),
+            file_roles_by_source: FxHashMap::default(),
+            canonical_os_path_by_source: FxHashMap::default(),
             file_imports_by_source: FxHashMap::default(),
-            importable_symbol_exported: FxHashMap::default(),
+            importable_source_symbol_paths: FxHashSet::default(),
             declared_paths_by_file: FxHashMap::default(),
             declared_names_by_file: FxHashMap::default(),
             builtin_visible_symbol_paths: FxHashSet::default(),
@@ -317,17 +331,17 @@ fn constant_declaration_placeholder(
 }
 
 /// Register a symbol into the declared-path and declared-name tables.
-/// When `exported` is `Some`, also records the symbol's export visibility.
+/// Importable source symbols are also recorded for direct import resolution.
 pub(crate) fn register_declared_symbol(
     module_symbols: &mut ModuleSymbols,
     symbol_path: &InternedPath,
     source_file: &InternedPath,
-    exported: Option<bool>,
+    is_importable_source_symbol: bool,
 ) {
-    if let Some(is_exported) = exported {
+    if is_importable_source_symbol {
         module_symbols
-            .importable_symbol_exported
-            .insert(symbol_path.to_owned(), is_exported);
+            .importable_source_symbol_paths
+            .insert(symbol_path.to_owned());
     }
     module_symbols
         .declared_paths_by_file

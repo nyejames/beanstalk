@@ -330,7 +330,7 @@ page_head #= theme_head
         value = helpers.identity(42)
     ]
 
-    Public facade wrappers are ordinary authored generic functions in [codesnippet:#mod.bst].
+    Public facade wrappers are ordinary authored generic functions marked with [codesnippet:export] in [codesnippet:#mod.bst].
     Normal imports inside the facade remain private and are only usable by the wrapper body:
 
     [codeblock, $code("bst"):
@@ -342,7 +342,7 @@ page_head #= theme_head
         -- lib/utils/#mod.bst
         import @./internal {identity_impl}
 
-        identity type T |value T| -> T:
+        export identity type T |value T| -> T:
             return identity_impl(value)
         ;
 
@@ -431,7 +431,7 @@ page_head #= theme_head
     - type values, type-returning functions, type-level [codesnippet:#if], and compile-time type inspection
     - recursive generic structs or choices
     - receiver methods on instantiated generic types
-    - direct facade re-export syntax and function alias exports through [codesnippet:#mod.bst]
+    - namespace or wildcard facade exports and function alias exports through [codesnippet:#mod.bst]
     - generic JS or external package functions
     - generic aliases with parameters
     - partial type application

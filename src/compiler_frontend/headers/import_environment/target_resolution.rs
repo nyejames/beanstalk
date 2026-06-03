@@ -10,6 +10,7 @@
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::external_packages::{ExternalPackageRegistry, ExternalSymbolId};
 use crate::compiler_frontend::headers::import_environment::diagnostics;
+use crate::compiler_frontend::headers::module_symbols::FacadeExportEntry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
@@ -21,20 +22,26 @@ use rustc_hash::FxHashSet;
 pub(crate) enum ResolvedImportTarget {
     Source {
         symbol_path: InternedPath,
-        export_requirement: ExportRequirement,
+        access: SourceImportAccess,
     },
     External {
         symbol_id: ExternalSymbolId,
     },
 }
 
-/// Whether the source symbol still needs an export check.
+/// Visibility surface that allowed a source import.
 ///
-/// WHY: facade-resolved imports are already validated by the facade; direct file imports must
-/// still check the source file's export flag.
-pub(crate) enum ExportRequirement {
-    AlreadyValidatedByFacade,
-    MustBeExportedFromSourceFile,
+/// WHY: receiver methods travel with imported receiver types, but the set of methods that may
+/// travel depends on how the type was imported. Internal imports keep the module-local behavior,
+/// direct source imports use source-file exports, and facade imports use the explicit facade API
+/// surface that resolved the type.
+#[derive(Clone, Debug)]
+pub(crate) enum SourceImportAccess {
+    Internal,
+    DirectSourceExport,
+    Facade {
+        exported_entries: FxHashSet<FacadeExportEntry>,
+    },
 }
 
 /// Input bundle for resolving one import target.
@@ -102,8 +109,8 @@ pub(crate) fn resolve_external_package_symbol(
 /// WHAT: performs source-symbol resolution (exact match and suffix match with optional `.bst`
 /// extension), file→symbol inference, and virtual-package lookup.
 ///
-/// Returns `MustBeExportedFromSourceFile` for all source targets because this function does not
-/// know whether the caller already validated the path through a facade.
+/// Returns `DirectSourceExport` for all source targets because this function does not know whether
+/// the caller will later prove a more specific internal or facade access surface.
 // The typed diagnostic payload is still large enough to trigger clippy::result_large_err here.
 #[allow(clippy::result_large_err)]
 pub(crate) fn resolve_import_target(
@@ -117,7 +124,7 @@ pub(crate) fn resolve_import_target(
     ) {
         ImportPathMatch::Resolved(symbol_path) => Ok(ResolvedImportTarget::Source {
             symbol_path,
-            export_requirement: ExportRequirement::MustBeExportedFromSourceFile,
+            access: SourceImportAccess::DirectSourceExport,
         }),
         ImportPathMatch::Ambiguous => Err(diagnostics::ambiguous_import_target(
             input.import_path,
@@ -141,7 +148,7 @@ pub(crate) fn resolve_import_target(
                     ImportPathMatch::Resolved(symbol_path) => {
                         return Ok(ResolvedImportTarget::Source {
                             symbol_path,
-                            export_requirement: ExportRequirement::MustBeExportedFromSourceFile,
+                            access: SourceImportAccess::DirectSourceExport,
                         });
                     }
                     ImportPathMatch::Ambiguous => {
@@ -335,7 +342,7 @@ fn exact_path_matches_candidate(
     )
 }
 
-fn suffix_matches_with_optional_bst_extension(
+pub(super) fn suffix_matches_with_optional_bst_extension(
     candidate: &InternedPath,
     requested: &InternedPath,
     string_table: &StringTable,

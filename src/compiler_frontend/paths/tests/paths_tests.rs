@@ -767,3 +767,56 @@ fn parse_grouped_import_mixed_aliased_and_plain() {
     );
     assert_eq!(string_table.resolve(items[2].alias.unwrap()), "cosine");
 }
+
+#[test]
+fn reject_grouped_import_alias_that_is_a_keyword() {
+    let mut string_table = StringTable::new();
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let source_path = InternedPath::from_single_str("test.bst", &mut string_table);
+
+    let diagnostic = tokenize(
+        "import @core/math { PI as export }",
+        &source_path,
+        TokenizeMode::Normal,
+        &style_directives,
+        &mut string_table,
+        None,
+    )
+    .expect_err("keyword alias should be rejected during tokenization");
+
+    assert_import_clause_error(
+        diagnostic,
+        ImportClauseKind::Alias,
+        InvalidImportClauseReason::AliasIsKeyword,
+    );
+}
+
+// ---- Stage 0 export path collection tests ----
+
+#[test]
+fn collect_import_paths_from_tokens_sees_export_import() {
+    let paths = collect_import_path_values("export import @./button { Card }\n");
+    assert_eq!(paths, vec!["./button/Card".to_string()]);
+}
+
+#[test]
+fn collect_import_paths_from_tokens_sees_export_path_sugar() {
+    let paths = collect_import_path_values("export @./card { Button, render }\n");
+    assert_eq!(
+        paths,
+        vec!["./card/Button".to_string(), "./card/render".to_string()]
+    );
+}
+
+#[test]
+fn collect_import_paths_from_tokens_ignores_exported_declarations() {
+    let paths =
+        collect_import_path_values("export Button = | label String |\nexport import @./x { A }\n");
+    assert_eq!(paths, vec!["./x/A".to_string()]);
+}
+
+#[test]
+fn collect_import_paths_from_tokens_ignores_bare_namespace_export() {
+    let paths = collect_import_path_values("export @./layout\n");
+    assert!(paths.is_empty());
+}

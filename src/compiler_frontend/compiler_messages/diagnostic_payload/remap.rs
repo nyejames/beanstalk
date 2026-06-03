@@ -285,6 +285,14 @@ impl DiagnosticPayload {
             | DiagnosticPayload::InvalidReceiverDeclaration { .. }
             | DiagnosticPayload::InvalidCopyTarget { .. } => {}
 
+            DiagnosticPayload::DuplicatePublicExport { name } => {
+                *name = remap.get(*name);
+            }
+
+            DiagnosticPayload::PrivateTypeInExportedApi { exported_name, .. } => {
+                *exported_name = remap.get(*exported_name);
+            }
+
             DiagnosticPayload::InvalidControlFlowStatement { .. }
             | DiagnosticPayload::InvalidResultHandling { .. }
             | DiagnosticPayload::CompileTimeEvaluationError { .. } => {}

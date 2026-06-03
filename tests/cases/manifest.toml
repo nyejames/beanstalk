@@ -1050,6 +1050,11 @@ path = "public_generic_bound_public_trait_success"
 tags = ["integration","generics","traits","functions","imports","facade"]
 
 [[case]]
+id = "public_generic_bound_reexported_trait_success"
+path = "public_generic_bound_reexported_trait_success"
+tags = ["integration","generics","traits","functions","imports","facade"]
+
+[[case]]
 id = "trait_evidence_method_visible_without_concrete_method_export_success"
 path = "trait_evidence_method_visible_without_concrete_method_export_success"
 tags = ["integration","traits","receivers","imports","facade"]
@@ -4277,6 +4282,31 @@ path = "receiver_type_import_auto_imports_methods"
 tags = ["integration", "receiver-methods", "imports"]
 
 [[case]]
+id = "receiver_facade_type_import_no_private_method"
+path = "receiver_facade_type_import_no_private_method"
+tags = ["integration", "receiver-methods", "imports", "facade", "diagnostics"]
+
+[[case]]
+id = "receiver_facade_type_import_exported_method_success"
+path = "receiver_facade_type_import_exported_method_success"
+tags = ["integration", "receiver-methods", "imports", "facade"]
+
+[[case]]
+id = "receiver_facade_method_reexport_without_type_rejected"
+path = "receiver_facade_method_reexport_without_type_rejected"
+tags = ["integration", "receiver-methods", "imports", "facade", "diagnostics"]
+
+[[case]]
+id = "receiver_facade_namespace_no_private_method"
+path = "receiver_facade_namespace_no_private_method"
+tags = ["integration", "receiver-methods", "imports", "namespace-imports", "facade", "diagnostics"]
+
+[[case]]
+id = "receiver_facade_namespace_exported_method_success"
+path = "receiver_facade_namespace_exported_method_success"
+tags = ["integration", "receiver-methods", "imports", "namespace-imports", "facade"]
+
+[[case]]
 id = "choice_receiver_method_basic_call"
 path = "choice_receiver_method_basic_call"
 tags = ["integration", "receiver-methods", "choices"]
@@ -5438,6 +5468,21 @@ path = "source_lib_reexport_alias"
 tags = ["integration", "language", "imports", "facade"]
 
 [[case]]
+id = "source_lib_reexport_namespace_success"
+path = "source_lib_reexport_namespace_success"
+tags = ["integration", "language", "imports", "facade", "namespace-imports"]
+
+[[case]]
+id = "source_lib_facade_private_path_rejected"
+path = "source_lib_facade_private_path_rejected"
+tags = ["integration", "language", "imports", "facade", "diagnostics"]
+
+[[case]]
+id = "source_lib_facade_alias_private_path_rejected"
+path = "source_lib_facade_alias_private_path_rejected"
+tags = ["integration", "language", "imports", "facade", "diagnostics"]
+
+[[case]]
 id = "source_lib_reexport_grouped"
 path = "source_lib_reexport_grouped"
 tags = ["integration", "language", "imports", "facade"]
@@ -5690,6 +5735,11 @@ path = "namespace_import_module_facade_success"
 tags = ["integration", "imports", "namespace-imports", "facade"]
 
 [[case]]
+id = "module_facade_reexport_namespace_success"
+path = "module_facade_reexport_namespace_success"
+tags = ["integration", "imports", "namespace-imports", "facade"]
+
+[[case]]
 id = "namespace_import_module_bypass_rejected"
 path = "namespace_import_module_bypass_rejected"
 tags = ["integration", "imports", "namespace-imports", "facade", "diagnostics"]
@@ -5773,6 +5823,16 @@ tags = ["integration", "imports", "module-privacy", "diagnostics"]
 id = "module_boundary_cross_module_facade_allowed"
 path = "module_boundary_cross_module_facade_allowed"
 tags = ["integration", "imports", "module-privacy"]
+
+[[case]]
+id = "module_facade_private_path_rejected"
+path = "module_facade_private_path_rejected"
+tags = ["integration", "imports", "module-privacy", "facades", "diagnostics"]
+
+[[case]]
+id = "entry_root_facade_private_path_rejected"
+path = "entry_root_facade_private_path_rejected"
+tags = ["integration", "imports", "module-privacy", "facades", "diagnostics"]
 
 [[case]]
 id = "module_boundary_no_facade_no_api"
@@ -6443,3 +6503,73 @@ tags = ["integration", "headers"]
 id = "header_module_facade_runtime_template_rejected"
 path = "header_module_facade_runtime_template_rejected"
 tags = ["integration", "diagnostics", "headers"]
+
+[[case]]
+id = "module_facade_duplicate_public_export_rejected"
+path = "module_facade_duplicate_public_export_rejected"
+tags = ["integration", "diagnostics", "imports"]
+
+[[case]]
+id = "module_facade_explicit_export_surface_success"
+path = "module_facade_explicit_export_surface_success"
+tags = ["integration", "imports", "facades"]
+
+[[case]]
+id = "export_outside_ordinary_file_rejected"
+path = "export_outside_ordinary_file_rejected"
+tags = ["integration", "diagnostics", "imports", "facades"]
+
+[[case]]
+id = "export_outside_page_file_rejected"
+path = "export_outside_page_file_rejected"
+tags = ["integration", "diagnostics", "imports", "facades"]
+
+[[case]]
+id = "export_outside_config_file_rejected"
+path = "export_outside_config_file_rejected"
+tags = ["integration", "diagnostics", "config", "facades"]
+
+[[case]]
+id = "facade_namespace_export_rejected"
+path = "facade_namespace_export_rejected"
+tags = ["integration", "diagnostics", "imports", "facades"]
+
+[[case]]
+id = "facade_export_private_function_type_rejected"
+path = "facade_export_private_function_type_rejected"
+tags = ["integration", "diagnostics", "imports", "facades"]
+
+[[case]]
+id = "facade_export_private_struct_field_rejected"
+path = "facade_export_private_struct_field_rejected"
+tags = ["integration", "diagnostics", "imports", "facades"]
+
+[[case]]
+id = "facade_export_private_choice_payload_rejected"
+path = "facade_export_private_choice_payload_rejected"
+tags = ["integration", "diagnostics", "imports", "facades"]
+
+[[case]]
+id = "facade_export_private_alias_target_rejected"
+path = "facade_export_private_alias_target_rejected"
+tags = ["integration", "diagnostics", "imports", "facades"]
+
+[[case]]
+id = "facade_export_private_constant_annotation_rejected"
+path = "facade_export_private_constant_annotation_rejected"
+tags = ["integration", "diagnostics", "imports", "facades"]
+
+[[case]]
+id = "facade_export_private_inferred_constant_rejected"
+path = "facade_export_private_inferred_constant_rejected"
+tags = ["integration", "diagnostics", "imports", "facades"]
+
+[[case]]
+id = "facade_export_public_inferred_constant_success"
+path = "facade_export_public_inferred_constant_success"
+tags = ["integration", "imports", "facades"]
+
+[[case]]
+id = "facade_export_private_imported_type_rejected"
+path = "facade_export_private_imported_type_rejected"
+tags = ["integration", "diagnostics", "imports", "facades"]

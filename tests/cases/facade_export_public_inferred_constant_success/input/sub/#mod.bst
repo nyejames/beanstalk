@@ -1,0 +1,5 @@
+export PublicData = |
+    value String,
+|
+
+export public_value #= PublicData("shown")

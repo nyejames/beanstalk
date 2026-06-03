@@ -542,7 +542,7 @@ fn accepts_config_imported_builder_source_library_constant() {
     fs::create_dir_all(&library_root).expect("should create builder library");
     fs::write(
         library_root.join("#mod.bst"),
-        "default_entry_root #= \"src\"\n",
+        "export default_entry_root #= \"src\"\n",
     )
     .expect("should write builder facade");
     let config_path = root.join(settings::CONFIG_FILE_NAME);
@@ -579,7 +579,7 @@ fn accepts_config_imported_constant_that_depends_on_imported_constant() {
     fs::create_dir_all(&library_root).expect("should create builder library");
     fs::write(
         library_root.join("#mod.bst"),
-        "root_folder #= \"src\"\ndefault_entry_root #= root_folder\n",
+        "root_folder #= \"src\"\nexport default_entry_root #= root_folder\n",
     )
     .expect("should write builder facade");
     let config_path = root.join(settings::CONFIG_FILE_NAME);
@@ -616,7 +616,7 @@ fn accepts_config_imported_constant_reexported_from_builder_source_library_file(
     fs::create_dir_all(&library_root).expect("should create builder library");
     fs::write(
         library_root.join("#mod.bst"),
-        "import @./values { root_folder as internal_root }\ndefault_entry_root #= internal_root\n",
+        "import @./values { root_folder as internal_root }\nexport default_entry_root #= internal_root\n",
     )
     .expect("should write builder facade");
     fs::write(library_root.join("values.bst"), "root_folder #= \"src\"\n")
@@ -655,7 +655,7 @@ fn accepts_config_imported_type_declarations_as_support_surface() {
     fs::create_dir_all(&library_root).expect("should create builder library");
     fs::write(
         library_root.join("#mod.bst"),
-        "EntryRoot as String\nConfig = |\n    value String,\n|\nMode ::\n    Ready,\n;\ndefault_entry_root #= \"src\"\n",
+        "export EntryRoot as String\nexport Config = |\n    value String,\n|\nexport Mode ::\n    Ready,\n;\nexport default_entry_root #= \"src\"\n",
     )
     .expect("should write builder facade");
     let config_path = root.join(settings::CONFIG_FILE_NAME);
@@ -737,7 +737,7 @@ fn rejects_config_call_to_imported_builder_source_library_function() {
     fs::create_dir_all(&library_root).expect("should create builder library");
     fs::write(
         library_root.join("#mod.bst"),
-        "default_entry_root || -> String:\n    return \"src\"\n;\n",
+        "export default_entry_root || -> String:\n    return \"src\"\n;\n",
     )
     .expect("should write builder facade");
     let config_path = root.join(settings::CONFIG_FILE_NAME);

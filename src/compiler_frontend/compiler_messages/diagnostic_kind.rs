@@ -246,6 +246,12 @@ pub enum RuleDiagnosticKind {
     GenericBoundPrivateSurfaceLeak,
     InvalidDynamicTraitType,
     InvalidTraitKeywordUsage,
+    ExportOutsideModuleFacade,
+    MissingExportTarget,
+    DeferredNamespaceExport,
+    InvalidExportTarget,
+    DuplicatePublicExport,
+    PrivateTypeInExportedApi,
 }
 
 #[cfg(test)]
@@ -319,6 +325,12 @@ impl RuleDiagnosticKind {
             Self::GenericBoundPrivateSurfaceLeak,
             Self::InvalidDynamicTraitType,
             Self::InvalidTraitKeywordUsage,
+            Self::ExportOutsideModuleFacade,
+            Self::MissingExportTarget,
+            Self::DeferredNamespaceExport,
+            Self::InvalidExportTarget,
+            Self::DuplicatePublicExport,
+            Self::PrivateTypeInExportedApi,
         ]
         .into_iter()
     }

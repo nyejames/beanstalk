@@ -29,6 +29,25 @@ pub fn parse_import_clause_items(
     )
 }
 
+/// Parse an `export @path { ... }` sugar clause into import items.
+///
+/// WHAT: `export @path { Symbol }` is syntactic sugar for `export import @path { Symbol }`.
+/// WHY: Stage 0 path collection and header parsing both need to resolve the path items inside
+///      `export @path` without an explicit `import` token.
+pub fn parse_export_path_clause_items(
+    tokens: &[Token],
+    start_index: usize,
+    string_table: &StringTable,
+) -> Result<(Vec<ParsedImportItem>, usize), CompilerDiagnostic> {
+    parse_path_clause_items(
+        tokens,
+        start_index,
+        TokenKind::Export,
+        "export",
+        string_table,
+    )
+}
+
 fn parse_path_clause_items(
     tokens: &[Token],
     start_index: usize,
@@ -208,10 +227,53 @@ pub fn collect_paths_from_tokens(
             continue;
         }
 
+        // Collect paths from `export import @path { ... }` and `export @path { ... }`.
+        // Exported authored declarations do not carry import paths and are ignored here.
+        if matches!(tokens[index].kind, TokenKind::Export) {
+            if previous_significant_token_is_hash(tokens, index) {
+                index += 1;
+                continue;
+            }
+
+            // `export import @path { ... }`
+            if tokens
+                .get(index + 1)
+                .is_some_and(|token| matches!(token.kind, TokenKind::Import))
+            {
+                let (paths, next_index) = parse_import_clause_tokens(tokens, index + 1)?;
+                parsed_paths.extend(paths);
+                index = next_index;
+                continue;
+            }
+
+            // `export @path { ... }` sugar — only if the next token is a path.
+            if tokens
+                .get(index + 1)
+                .is_some_and(path_token_uses_grouped_syntax)
+            {
+                let string_table = StringTable::new();
+                let (items, next_index) =
+                    parse_export_path_clause_items(tokens, index, &string_table)?;
+                parsed_paths.extend(items.into_iter().map(|item| item.path));
+                index = next_index;
+                continue;
+            }
+
+            index += 1;
+            continue;
+        }
+
         index += 1;
     }
 
     Ok(parsed_paths)
+}
+
+fn path_token_uses_grouped_syntax(token: &Token) -> bool {
+    match &token.kind {
+        TokenKind::Path(items) => items.iter().any(|item| item.from_grouped),
+        _ => false,
+    }
 }
 
 fn previous_significant_token_is_hash(tokens: &[Token], index: usize) -> bool {

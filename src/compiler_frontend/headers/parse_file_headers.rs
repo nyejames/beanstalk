@@ -125,6 +125,8 @@ pub fn parse_headers(
     project_path_resolver: Option<&ProjectPathResolver>,
     string_table: &mut StringTable,
 ) -> Result<Headers, DiagnosticBag> {
+    let mut module_symbols = build_module_symbols(&prepared_files, string_table)?;
+
     let mut headers: Vec<Header> = Vec::new();
     let mut top_level_const_fragments = Vec::new();
     let mut runtime_fragment_count = 0usize;
@@ -135,16 +137,19 @@ pub fn parse_headers(
         runtime_fragment_count += output.runtime_fragment_count;
     }
 
-    let mut module_symbols = build_module_symbols(&headers, string_table)?;
-
     if let Some(resolver) = project_path_resolver {
-        build_facade_data(&mut module_symbols, &headers, resolver, string_table).map_err(
-            |diagnostic| {
-                let mut bag = DiagnosticBag::new();
-                bag.push(diagnostic);
-                bag
-            },
-        )?;
+        build_facade_data(
+            &mut module_symbols,
+            &headers,
+            resolver,
+            external_package_registry,
+            string_table,
+        )
+        .map_err(|diagnostic| {
+            let mut bag = DiagnosticBag::new();
+            bag.push(diagnostic);
+            bag
+        })?;
     }
 
     let import_environment = prepare_import_environment(ImportEnvironmentInput {
@@ -155,7 +160,11 @@ pub fn parse_headers(
     })
     .map_err(|messages| DiagnosticBag::from_diagnostics(messages.into_diagnostics()))?;
 
-    canonicalize_header_dependencies(&mut headers, &import_environment)?;
+    canonicalize_header_dependencies(
+        &mut headers,
+        &import_environment,
+        &module_symbols.file_imports_by_source,
+    )?;
 
     let _constant_report = add_constant_initializer_dependencies(ConstantDependencyInput {
         headers: &mut headers,

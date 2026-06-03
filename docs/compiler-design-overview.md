@@ -140,7 +140,7 @@ The frontend owns a single `TypeEnvironment` per module. It is the canonical sou
 ### Import, library, and external package contract
 Stage 0 discovers source libraries and provider-backed external files as normal build inputs.
 
-Header parsing/import preparation resolves imports, aliases, facade boundaries, namespace/import records, receiver-method visibility, external package symbols, prelude symbols, builtins, and file-local visibility. It produces the visibility environment consumed by dependency sorting and AST.
+Header parsing/import preparation resolves imports, aliases, facade boundaries, explicit `#mod.bst` export metadata, namespace/import records, receiver-method visibility, external package symbols, prelude symbols, builtins, and file-local visibility. It produces the visibility environment consumed by dependency sorting and AST.
 
 Dependency sorting uses header-provided dependency edges.
 
@@ -148,7 +148,8 @@ AST consumes file-local visibility through `ScopeContext`. It validates semantic
 
 Compiler-facing rules:
 
-- Source libraries are normal modules behind `#mod.bst` facades and participate in module-level dependency sorting
+- Source libraries are normal modules behind explicit `#mod.bst` facades and participate in module-level dependency sorting
+- Facade public API maps are built from public authored `#mod.bst` headers and public grouped facade imports such as `export import @path { Symbol }` or `export @path { Symbol }`; ordinary facade imports and unmarked facade declarations remain private to the facade file
 - External packages are virtual typed symbols provided by backend metadata, not `.bst` source files
 - External package membership uses stable `ExternalPackageId` values plus readable package paths and origin metadata, so built-in and provider-created packages share one identity model
 - External import providers live under `LibrarySet` and resolve non-Beanstalk import sources into typed package/type/function/method IDs before AST consumes visibility
@@ -264,6 +265,7 @@ Header parsing is the only stage that discovers module-wide top-level declaratio
 It parses top-level declaration shells so later stages do not reconstruct them from raw tokens. It owns:
 
 - import and re-export parsing
+- facade-only `export` parsing and public/private facade metadata
 - import path validation and normalization
 - file-local import/visibility environment construction
 - declaration shell parsing for constants/functions/structs/choices/type aliases/traits/conformances
@@ -283,7 +285,7 @@ Header dependency edges include every top-level declaration dependency needed be
 Header parsing does not type-check executable bodies or fold expressions. It should prefer storing normalized, validated path/reference forms instead of raw import/path syntax where enough context exists for later stages to consume.
 Declaration-shell parsers are shared with AST body-local declaration parsing so top-level and body-local declaration syntax stays equivalent. Header parsing records parsed type-reference shells and dependency edges; AST owns resolving those shells into canonical `TypeId`s.
 
-Header parsing/import preparation builds the file-local import environment used by dependency sorting and AST. It validates and normalizes source imports, re-exports, external package imports, aliases, prelude/builtin reservations, and collision rules where they can be checked structurally.
+Header parsing/import preparation builds the file-local import environment used by dependency sorting and AST. It validates and normalizes source imports, facade re-exports, external package imports, aliases, prelude/builtin reservations, and collision rules where they can be checked structurally.
 
 Constants are compile-time declarations. Header parsing records symbol-shaped references found in constant initializer tokens and resolves them far enough to create dependency edges to other constants.
 
@@ -334,7 +336,7 @@ Dependency sorting orders constants using header-provided constant initializer d
 
 ### Facades and source libraries in dependency sorting
 
-Module-root facades (`#mod.bst` files that belong to a project module root) participate in dependency sorting like other top-level declaration providers. They remain boundary export layers for visibility, but exported constants and type surfaces must still be ordered before declarations in outside modules that import them through the facade. Other files inside the same module should not depend on symbols declared directly inside the module-root facade; header import visibility, not dependency sorting, enforces that boundary.
+Module-root facades (`#mod.bst` files that belong to a project module root) participate in dependency sorting like other top-level declaration providers. They remain boundary export layers for visibility, but public authored declarations, public re-exports, exported constants, and exported type surfaces must still be ordered before declarations in outside modules that import them through the facade. Other files inside the same module should not depend on symbols declared directly inside the module-root facade; header import visibility, not dependency sorting, enforces that boundary.
 
 Source-library facades (`#mod.bst` files provided by builder source libraries such as `@html`) also participate in dependency sorting. Their declarations are first-class providers to the consuming module, not opaque boundaries. Because source libraries have no outgoing dependency edges to project files, the topological sort naturally places them before project files that import them.
 

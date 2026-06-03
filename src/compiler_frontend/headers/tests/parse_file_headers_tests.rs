@@ -21,6 +21,7 @@ use crate::compiler_frontend::declaration_syntax::signature_members::{
     FunctionReturnSyntax, FunctionSignatureSyntax, ReturnChannelSyntax, ReturnSlotSyntax,
 };
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
+use crate::compiler_frontend::headers::types::HeaderExportMode;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -2083,4 +2084,352 @@ fn module_facade_rejects_top_level_const_template() {
         "expected deferred feature diagnostic, got {:?}",
         diag.kind
     );
+}
+
+#[test]
+fn import_only_file_contributes_file_imports_and_module_file_paths() {
+    use crate::compiler_frontend::headers::symbol_collection::build_module_symbols;
+
+    let mut string_table = StringTable::new();
+    let file_path = PathBuf::from("src/helper.bst");
+    let entry_file_path = PathBuf::from("src/#page.bst");
+    let helper_output = prepare_single_file(
+        "import @core/math\n",
+        &file_path,
+        &entry_file_path,
+        &mut string_table,
+    );
+
+    let page_output = prepare_single_file(
+        "value #= 1\n",
+        &PathBuf::from("src/#page.bst"),
+        &entry_file_path,
+        &mut string_table,
+    );
+
+    let module_symbols = build_module_symbols(&[helper_output, page_output], &mut string_table)
+        .expect("module symbols should build");
+
+    let helper_path =
+        InternedPath::from_path_buf(&PathBuf::from("src/helper.bst"), &mut string_table);
+    let page_path = InternedPath::from_path_buf(&PathBuf::from("src/#page.bst"), &mut string_table);
+
+    assert!(
+        module_symbols.module_file_paths.contains(&helper_path),
+        "import-only files must contribute to module_file_paths"
+    );
+    assert!(
+        module_symbols.module_file_paths.contains(&page_path),
+        "entry files must contribute to module_file_paths"
+    );
+
+    let helper_imports = module_symbols
+        .file_imports_by_source
+        .get(&helper_path)
+        .expect("import-only file imports must be registered");
+
+    assert_eq!(helper_imports.len(), 1);
+    assert_eq!(
+        helper_imports[0]
+            .header_path
+            .to_portable_string(&string_table),
+        "core/math"
+    );
+    assert_eq!(
+        helper_imports[0].export_mode,
+        crate::compiler_frontend::headers::types::HeaderExportMode::Private
+    );
+}
+
+#[test]
+fn per_file_prepare_output_preserves_file_role_and_imports_on_output() {
+    let mut string_table = StringTable::new();
+    let file_path = PathBuf::from("src/helper.bst");
+    let entry_file_path = PathBuf::from("src/#page.bst");
+    let output = prepare_single_file(
+        "import @core/math\n",
+        &file_path,
+        &entry_file_path,
+        &mut string_table,
+    );
+
+    assert_eq!(output.file_role, FileRole::Normal);
+    assert_eq!(output.file_imports.len(), 1);
+    assert_eq!(
+        output.file_imports[0]
+            .header_path
+            .to_portable_string(&string_table),
+        "core/math"
+    );
+}
+
+#[test]
+fn module_facade_prepare_output_has_module_facade_role() {
+    let mut string_table = StringTable::new();
+    let file_path = PathBuf::from("src/#mod.bst");
+    let entry_file_path = PathBuf::from("src/#page.bst");
+    let output = prepare_single_file(
+        "Button = | label String |\n",
+        &file_path,
+        &entry_file_path,
+        &mut string_table,
+    );
+
+    assert_eq!(output.file_role, FileRole::ModuleFacade);
+    assert!(output.file_imports.is_empty());
+}
+
+// ------------------------------
+//  Export keyword parsing tests
+// ------------------------------
+
+#[test]
+fn export_outside_module_facade_is_rejected() {
+    let result = parse_single_file_headers_with_entry(
+        "export Button = | label String |\n",
+        "src/helper.bst",
+        "src/#page.bst",
+    );
+    let errors = expect_header_error(result, "export outside #mod.bst should be rejected");
+
+    assert!(errors.diagnostics.iter().any(|diagnostic| diagnostic.kind
+        == DiagnosticKind::Rule(RuleDiagnosticKind::ExportOutsideModuleFacade)));
+}
+
+#[test]
+fn export_alone_is_rejected() {
+    let result = parse_single_file_headers_with_entry("export\n", "src/#mod.bst", "src/#page.bst");
+    let errors = expect_header_error(result, "export alone should be rejected");
+
+    assert!(errors.diagnostics.iter().any(|diagnostic| diagnostic.kind
+        == DiagnosticKind::Rule(RuleDiagnosticKind::MissingExportTarget)));
+}
+
+#[test]
+fn export_import_path_parsed_as_public_import() {
+    let mut string_table = StringTable::new();
+    let output = prepare_single_file(
+        "export import @./button { Button }\n",
+        &PathBuf::from("src/#mod.bst"),
+        &PathBuf::from("src/#page.bst"),
+        &mut string_table,
+    );
+
+    assert_eq!(output.file_imports.len(), 1);
+    assert_eq!(output.file_imports[0].export_mode, HeaderExportMode::Public);
+    assert_eq!(
+        output.file_imports[0]
+            .header_path
+            .to_portable_string(&string_table),
+        "src/button/Button"
+    );
+}
+
+#[test]
+fn export_path_sugar_parsed_as_public_import() {
+    let mut string_table = StringTable::new();
+    let output = prepare_single_file(
+        "export @./card { Card, render as render_card }\n",
+        &PathBuf::from("src/#mod.bst"),
+        &PathBuf::from("src/#page.bst"),
+        &mut string_table,
+    );
+
+    assert_eq!(output.file_imports.len(), 2);
+    assert!(
+        output
+            .file_imports
+            .iter()
+            .all(|import| import.export_mode == HeaderExportMode::Public)
+    );
+}
+
+#[test]
+fn export_bare_path_rejected_as_deferred_namespace_export() {
+    let result =
+        parse_single_file_headers_with_entry("export @./layout\n", "src/#mod.bst", "src/#page.bst");
+    let errors = expect_header_error(
+        result,
+        "bare namespace export should be rejected as deferred",
+    );
+
+    assert!(errors.diagnostics.iter().any(|diagnostic| diagnostic.kind
+        == DiagnosticKind::Rule(RuleDiagnosticKind::DeferredNamespaceExport)));
+}
+
+#[test]
+fn export_before_authored_declaration_marks_header_public() {
+    let source = "export Button = | label String |\nexport render |button Button| -> String:\n    return button.label\n;\n";
+    let headers = parse_single_file_headers_with_entry(source, "src/#mod.bst", "src/#page.bst")
+        .expect("headers should parse");
+
+    let public_headers: Vec<_> = headers
+        .headers
+        .iter()
+        .filter(|header| header.export_mode == HeaderExportMode::Public)
+        .collect();
+
+    assert_eq!(
+        public_headers.len(),
+        2,
+        "expected two public headers: struct and function"
+    );
+}
+
+#[test]
+fn unmarked_authored_declarations_in_mod_facade_remain_private() {
+    let source = "Button = | label String |\nrender |button Button| -> String:\n    return button.label\n;\n";
+    let headers = parse_single_file_headers_with_entry(source, "src/#mod.bst", "src/#page.bst")
+        .expect("headers should parse");
+
+    let non_start_headers: Vec<_> = headers
+        .headers
+        .iter()
+        .filter(|header| !matches!(header.kind, HeaderKind::StartFunction))
+        .collect();
+
+    assert!(
+        non_start_headers
+            .iter()
+            .all(|header| header.export_mode == HeaderExportMode::Private),
+        "unmarked declarations in #mod.bst should remain private"
+    );
+}
+
+#[test]
+fn duplicate_declaration_detection_works_with_exported_declarations() {
+    let result = parse_single_file_headers_with_entry(
+        "export Button = | label String |\nButton = | title String |\n",
+        "src/#mod.bst",
+        "src/#page.bst",
+    );
+    let errors = expect_header_error(
+        result,
+        "duplicate declaration with export should still be rejected",
+    );
+
+    assert!(errors.diagnostics.iter().any(|diagnostic| matches!(
+        diagnostic.payload,
+        DiagnosticPayload::DuplicateDeclaration { .. }
+    )));
+}
+
+#[test]
+fn export_before_constant_marks_header_public() {
+    let source = "export theme #= \"dark\"\nexport threshold #Int = 42\n";
+    let headers = parse_single_file_headers_with_entry(source, "src/#mod.bst", "src/#page.bst")
+        .expect("headers should parse");
+
+    let public_constants: Vec<_> = headers
+        .headers
+        .iter()
+        .filter(|header| {
+            matches!(header.kind, HeaderKind::Constant { .. })
+                && header.export_mode == HeaderExportMode::Public
+        })
+        .collect();
+
+    assert_eq!(
+        public_constants.len(),
+        2,
+        "expected two public constant headers"
+    );
+}
+
+#[test]
+fn export_before_type_alias_marks_header_public() {
+    let source = "export UserId as Int\n";
+    let headers = parse_single_file_headers_with_entry(source, "src/#mod.bst", "src/#page.bst")
+        .expect("headers should parse");
+
+    let alias_header = headers
+        .headers
+        .iter()
+        .find(|header| matches!(header.kind, HeaderKind::TypeAlias { .. }))
+        .expect("expected type alias header");
+
+    assert_eq!(alias_header.export_mode, HeaderExportMode::Public);
+}
+
+#[test]
+fn export_before_choice_marks_header_public() {
+    let source = "export Status :: Ready, Failed | message String |;\n";
+    let headers = parse_single_file_headers_with_entry(source, "src/#mod.bst", "src/#page.bst")
+        .expect("headers should parse");
+
+    let choice_header = headers
+        .headers
+        .iter()
+        .find(|header| matches!(header.kind, HeaderKind::Choice { .. }))
+        .expect("expected choice header");
+
+    assert_eq!(choice_header.export_mode, HeaderExportMode::Public);
+}
+
+#[test]
+fn export_before_trait_declaration_marks_header_public() {
+    let source = "export DISPLAY_TEXT must:\n    display |This| -> String\n;\n";
+    let headers = parse_single_file_headers_with_entry(source, "src/#mod.bst", "src/#page.bst")
+        .expect("headers should parse");
+
+    let trait_header = headers
+        .headers
+        .iter()
+        .find(|header| matches!(header.kind, HeaderKind::Trait { .. }))
+        .expect("expected trait header");
+
+    assert_eq!(trait_header.export_mode, HeaderExportMode::Public);
+}
+
+#[test]
+fn export_before_trait_conformance_is_rejected() {
+    let result = parse_single_file_headers_with_entry(
+        "export Label must DISPLAY_TEXT\n",
+        "src/#mod.bst",
+        "src/#page.bst",
+    );
+    let errors = expect_header_error(result, "trait conformance should not be exported");
+
+    assert!(errors.diagnostics.iter().any(|diagnostic| diagnostic.kind
+        == DiagnosticKind::Rule(RuleDiagnosticKind::InvalidExportTarget)));
+}
+
+#[test]
+fn export_before_unsupported_runtime_statement_is_rejected() {
+    let result = parse_single_file_headers_with_entry(
+        "export io(\"hello\")\n",
+        "src/#mod.bst",
+        "src/#page.bst",
+    );
+    let errors = expect_header_error(result, "export before runtime statement should be rejected");
+
+    assert!(errors.diagnostics.iter().any(|diagnostic| diagnostic.kind
+        == DiagnosticKind::Rule(RuleDiagnosticKind::InvalidExportTarget)));
+}
+
+#[test]
+fn export_before_runtime_template_is_rejected() {
+    let result = parse_single_file_headers_with_entry(
+        "export [: hello ]\n",
+        "src/#mod.bst",
+        "src/#page.bst",
+    );
+    let errors = expect_header_error(result, "export before runtime template should be rejected");
+
+    assert!(errors.diagnostics.iter().any(|diagnostic| diagnostic.kind
+        == DiagnosticKind::Rule(RuleDiagnosticKind::RuntimeTemplateInModuleFacade)));
+}
+
+#[test]
+fn export_import_and_private_import_normalize_to_one_public_record() {
+    let mut string_table = StringTable::new();
+    let output = prepare_single_file(
+        "import @./button { Button }\nexport import @./button { Button }\n",
+        &PathBuf::from("src/#mod.bst"),
+        &PathBuf::from("src/#page.bst"),
+        &mut string_table,
+    );
+
+    assert_eq!(output.file_imports.len(), 1);
+    assert_eq!(output.file_imports[0].export_mode, HeaderExportMode::Public);
 }

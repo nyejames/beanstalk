@@ -30,7 +30,9 @@ use crate::compiler_frontend::external_packages::ExternalSymbolId;
 use crate::compiler_frontend::headers::dependency_edges::{
     collect_constant_type_dependencies, collect_named_type_dependency_edge,
 };
-use crate::compiler_frontend::headers::types::{Header, HeaderBuildContext, HeaderKind};
+use crate::compiler_frontend::headers::types::{
+    Header, HeaderBuildContext, HeaderExportMode, HeaderKind,
+};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::identifier_policy::{
     IdentifierNamingKind, ensure_not_keyword_shadow_identifier, naming_warning_for_identifier,
@@ -61,6 +63,7 @@ pub(super) fn create_header(
     full_name: InternedPath,
     token_stream: &mut FileTokens,
     name_location: SourceLocation,
+    export_mode: HeaderExportMode,
     context: &mut HeaderBuildContext<'_>,
 ) -> Result<Header, CompilerDiagnostic> {
     let Some(declaration_name) = full_name.name() else {
@@ -105,11 +108,11 @@ pub(super) fn create_header(
         return Ok(Header {
             kind,
             file_role: context.file_role,
+            export_mode,
             dependencies,
             name_location,
             tokens: header_tokens,
             source_file: context.source_file.to_owned(),
-            file_imports: context.file_import_entries.to_vec(),
         });
     }
 
@@ -204,11 +207,11 @@ pub(super) fn create_header(
         return Ok(Header {
             kind,
             file_role: context.file_role,
+            export_mode,
             dependencies,
             name_location,
             tokens: header_tokens,
             source_file: context.source_file.to_owned(),
-            file_imports: context.file_import_entries.to_vec(),
         });
     }
 
@@ -451,11 +454,11 @@ pub(super) fn create_header(
     Ok(Header {
         kind,
         file_role: context.file_role,
+        export_mode,
         dependencies,
         name_location,
         tokens: header_tokens,
         source_file: context.source_file.to_owned(),
-        file_imports: context.file_import_entries.to_vec(),
     })
 }
 

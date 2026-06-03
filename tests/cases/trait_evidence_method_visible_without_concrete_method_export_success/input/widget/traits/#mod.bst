@@ -1,3 +1,3 @@
-DISPLAY_TEXT must:
+export DISPLAY_TEXT must:
     display |This| -> String
 ;

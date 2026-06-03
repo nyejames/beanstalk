@@ -9,8 +9,10 @@
 use crate::compiler_frontend::compiler_errors::compiler_error_to_diagnostic;
 use crate::compiler_frontend::compiler_messages::DiagnosticBag;
 use crate::compiler_frontend::headers::import_environment::HeaderImportEnvironment;
+use crate::compiler_frontend::headers::parse_file_headers::FileImport;
 use crate::compiler_frontend::headers::types::Header;
 use crate::compiler_frontend::interned_path::InternedPath;
+use rustc_hash::FxHashMap;
 
 use std::collections::HashSet;
 
@@ -18,6 +20,7 @@ use std::collections::HashSet;
 pub(super) fn canonicalize_header_dependencies(
     headers: &mut [Header],
     import_environment: &HeaderImportEnvironment,
+    file_imports_by_source: &FxHashMap<InternedPath, Vec<FileImport>>,
 ) -> Result<(), DiagnosticBag> {
     let mut diagnostic_bag = DiagnosticBag::new();
 
@@ -30,12 +33,16 @@ pub(super) fn canonicalize_header_dependencies(
             }
         };
 
+        let file_imports = file_imports_by_source
+            .get(&header.source_file)
+            .map(|imports| imports.as_slice())
+            .unwrap_or(&[]);
+
         let mut canonical: HashSet<InternedPath> =
             HashSet::with_capacity(header.dependencies.len());
 
         for dependency in header.dependencies.drain() {
-            let matching_import = header
-                .file_imports
+            let matching_import = file_imports
                 .iter()
                 .find(|import| import.header_path == dependency);
 

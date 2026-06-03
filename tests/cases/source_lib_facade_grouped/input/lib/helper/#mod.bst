@@ -1,2 +1,2 @@
-greet #= "Hello"
-farewell #= "Goodbye"
+export greet #= "Hello"
+export farewell #= "Goodbye"

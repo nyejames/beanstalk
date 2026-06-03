@@ -11,10 +11,8 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 ---
 
 # Plans / TODOS
-- Module facade refactor, introducing `export` keyword: `docs/roadmap/plans/facade-export-keyword-implementation-plan.md`
 - `.bmd` files (starts inside template body and cannot break out of template).
 Can be imported into regular beanstalk files as strings.
-- `Config.struct` file to replace the `#config.bst` file. This will use Beanstalk's struct syntax (starting inside a struct body) instead of having special parsing rules, and the compiler will just parse the struct it generates into project settings.
 - Collection capacity type extension `{64 Int}`
 - Build out core math library
 - Replace JSON with beanstalk `.struct` files (dogfooding for language as a way to store data / config stuff). These could be standardised as their own build system under `src/projects`.
@@ -41,9 +39,7 @@ Can be imported into regular beanstalk files as strings.
   package rather than `@core/time`, Wasm/native lowerings, and higher-precision or
   nanosecond timestamp representation if wider numeric ABI work lands.
 
-- Deliberately deferred library-system follow-ups after the canvas reachability refactor: direct
-  facade re-export syntax, wildcard imports, automatic re-export of receiver methods through
-  facade type aliases, source-library HIR caching, user-authored external binding files, broader
+- Deliberately deferred library-system follow-ups after the canvas reachability refactor:
   JS-backed external package APIs, and Wasm implementations for JS-backed packages such as
   `@web/canvas`. Current reachability is artifact-planning correctness, not general JS
   tree-shaking/minification.

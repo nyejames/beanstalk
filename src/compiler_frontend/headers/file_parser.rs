@@ -8,7 +8,9 @@
 //! item handling; this module keeps the high-level loop visible while delegated modules own details.
 
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
-use crate::compiler_frontend::headers::file_imports::parse_and_record_imports;
+use crate::compiler_frontend::headers::file_imports::{
+    parse_and_record_export_path_clause, parse_and_record_imports, parse_and_record_public_imports,
+};
 use crate::compiler_frontend::headers::file_state::HeaderFileParseState;
 use crate::compiler_frontend::headers::hash_items::handle_hash_item;
 use crate::compiler_frontend::headers::header_dispatch::create_header;
@@ -18,8 +20,8 @@ use crate::compiler_frontend::headers::top_level_classifier::{
     starts_specialized_generic_conformance_declaration, starts_trait_declaration_after_must,
 };
 use crate::compiler_frontend::headers::types::{
-    FileFrontendPrepareError, FileFrontendPrepareOutput, FileRole, HeaderBuildContext, HeaderKind,
-    HeaderParseContext,
+    FileFrontendPrepareError, FileFrontendPrepareOutput, FileRole, HeaderBuildContext,
+    HeaderExportMode, HeaderKind, HeaderParseContext,
 };
 use crate::compiler_frontend::reserved_trait_syntax::{
     reserved_trait_keyword, reserved_trait_keyword_error,
@@ -81,6 +83,16 @@ fn parse_headers_in_file_inner(
                 parse_and_record_imports(token_stream, state, context, current_location)?;
             }
 
+            HeaderFileItem::Export => {
+                handle_export_item(
+                    token_stream,
+                    state,
+                    context,
+                    current_token,
+                    current_location,
+                )?;
+            }
+
             HeaderFileItem::Hash {
                 at_statement_boundary,
             } => {
@@ -122,6 +134,119 @@ fn parse_headers_in_file_inner(
     Ok(())
 }
 
+fn handle_export_item(
+    token_stream: &mut FileTokens,
+    state: &mut HeaderFileParseState,
+    context: &mut HeaderParseContext<'_>,
+    _export_token: Token,
+    export_location: SourceLocation,
+) -> Result<(), CompilerDiagnostic> {
+    // `export` is a facade-only keyword; ordinary files cannot use it.
+    if context.file_role != FileRole::ModuleFacade {
+        return Err(CompilerDiagnostic::export_outside_module_facade(
+            export_location,
+        ));
+    }
+
+    // `export` must have a target on the same logical line.
+    if matches!(
+        token_stream.current_token_kind(),
+        TokenKind::Newline | TokenKind::End | TokenKind::Eof
+    ) {
+        return Err(CompilerDiagnostic::missing_export_target(export_location));
+    }
+
+    match token_stream.current_token_kind() {
+        // `export import @path { ... }` — public re-export of imported symbols.
+        TokenKind::Import => {
+            parse_and_record_public_imports(
+                token_stream,
+                state,
+                context,
+                export_location,
+                token_stream.index,
+            )?;
+        }
+
+        // `export @path { ... }` — syntactic sugar for public grouped imports.
+        TokenKind::Path(_) => {
+            let has_grouped = if let TokenKind::Path(items) = &token_stream.current_token().kind {
+                items.iter().any(|item| item.from_grouped)
+            } else {
+                false
+            };
+
+            if !has_grouped {
+                return Err(CompilerDiagnostic::deferred_namespace_export(
+                    export_location,
+                ));
+            }
+
+            parse_and_record_export_path_clause(
+                token_stream,
+                state,
+                context,
+                export_location,
+                token_stream.index.saturating_sub(1),
+            )?;
+        }
+
+        // Exported authored declaration: `export name = ...`, `export name #= ...`, etc.
+        TokenKind::Symbol(name_id) => {
+            let name_id = *name_id;
+            let symbol_token = token_stream.current_token();
+            let symbol_location = token_stream.current_location();
+            token_stream.advance();
+
+            if starts_exported_trait_conformance(token_stream) {
+                return Err(CompilerDiagnostic::invalid_export_target(export_location));
+            }
+
+            if !starts_duplicate_top_level_header_declaration(token_stream) {
+                return Err(CompilerDiagnostic::invalid_export_target(export_location));
+            }
+
+            handle_symbol_item_with_export_mode(
+                token_stream,
+                state,
+                context,
+                symbol_token,
+                name_id,
+                symbol_location,
+                HeaderExportMode::Public,
+            )?;
+        }
+
+        // `export` before a runtime template is invalid in a facade.
+        TokenKind::TemplateHead => {
+            return Err(CompilerDiagnostic::runtime_template_in_module_facade(
+                export_location,
+            ));
+        }
+
+        // `export` before reserved trait syntax.
+        TokenKind::Must | TokenKind::TraitThis => {
+            if let Some(keyword) = reserved_trait_keyword(token_stream.current_token_kind()) {
+                return Err(reserved_trait_keyword_error(keyword, export_location));
+            }
+            return Err(CompilerDiagnostic::invalid_export_target(export_location));
+        }
+
+        // `export` before any other token is unsupported.
+        _ => {
+            return Err(CompilerDiagnostic::invalid_export_target(export_location));
+        }
+    }
+
+    Ok(())
+}
+
+fn starts_exported_trait_conformance(token_stream: &FileTokens) -> bool {
+    (token_stream.current_token_kind() == &TokenKind::Must
+        && !starts_trait_declaration_after_must(token_stream))
+        || starts_specialized_generic_conformance_declaration(token_stream)
+}
+
 fn handle_symbol_item(
     token_stream: &mut FileTokens,
     state: &mut HeaderFileParseState,
@@ -129,6 +254,26 @@ fn handle_symbol_item(
     current_token: Token,
     name_id: StringId,
     current_location: SourceLocation,
+) -> Result<(), CompilerDiagnostic> {
+    handle_symbol_item_with_export_mode(
+        token_stream,
+        state,
+        context,
+        current_token,
+        name_id,
+        current_location,
+        HeaderExportMode::Private,
+    )
+}
+
+fn handle_symbol_item_with_export_mode(
+    token_stream: &mut FileTokens,
+    state: &mut HeaderFileParseState,
+    context: &mut HeaderParseContext<'_>,
+    current_token: Token,
+    name_id: StringId,
+    current_location: SourceLocation,
+    export_mode: HeaderExportMode,
 ) -> Result<(), CompilerDiagnostic> {
     // Only prelude-visible external symbols block local declarations; package-scoped symbols that
     // are not imported should not prevent a file from declaring its own symbol with the same name.
@@ -189,6 +334,7 @@ fn handle_symbol_item(
         token_stream.src_path.append(name_id),
         token_stream,
         current_location,
+        export_mode,
         &mut build_context,
     )?;
 
@@ -293,6 +439,6 @@ fn finish_file_output(
     if context.file_role == FileRole::Entry {
         Ok(state.into_entry_output(token_stream, context.file_role))
     } else {
-        Ok(state.into_non_entry_output(token_stream))
+        Ok(state.into_non_entry_output(token_stream, context.file_role))
     }
 }

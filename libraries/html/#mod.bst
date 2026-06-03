@@ -3,41 +3,41 @@
 import @web/canvas {get_canvas, context_2d, Canvas2d}
 
 -- Basic tags
-p #String = [$html:<p style="[$slot("style")]">[$slot]</p>]
-h1 #String = [$html:<h1 style="[$slot("style")]">[$slot]</h1>]
-h2 #String = [$html:<h2 style="[$slot("style")]">[$slot]</h2>]
-h3 #String = [$html:<h3 style="[$slot("style")]">[$slot]</h3>]
-h4 #String = [$html:<h4 style="[$slot("style")]">[$slot]</h4>]
-h5 #String = [$html:<h5 style="[$slot("style")]">[$slot]</h5>]
-h6 #String = [$html:<h6 style="[$slot("style")]">[$slot]</h6>]
+export p #String = [$html:<p style="[$slot("style")]">[$slot]</p>]
+export h1 #String = [$html:<h1 style="[$slot("style")]">[$slot]</h1>]
+export h2 #String = [$html:<h2 style="[$slot("style")]">[$slot]</h2>]
+export h3 #String = [$html:<h3 style="[$slot("style")]">[$slot]</h3>]
+export h4 #String = [$html:<h4 style="[$slot("style")]">[$slot]</h4>]
+export h5 #String = [$html:<h5 style="[$slot("style")]">[$slot]</h5>]
+export h6 #String = [$html:<h6 style="[$slot("style")]">[$slot]</h6>]
 
-img #String = [$html:<img src="[$slot(1)]" style="[$slot("style")]" alt="[$slot]">]
-small #String = [$html:<small style="[$slot("style")]">[$slot]</small>]
-large #String = [$html:<large style="[$slot("style")]">[$slot]</large>]
+export img #String = [$html:<img src="[$slot(1)]" style="[$slot("style")]" alt="[$slot]">]
+export small #String = [$html:<small style="[$slot("style")]">[$slot]</small>]
+export large #String = [$html:<large style="[$slot("style")]">[$slot]</large>]
 
 -- Formatting helpers
-underline #String = [$html:<u style="[$slot("style")]">[$slot]</u>]
-strikethrough #String = [$html:<s style="[$slot("style")]">[$slot]</s>]
-table #String = [$html:
+export underline #String = [$html:<u style="[$slot("style")]">[$slot]</u>]
+export strikethrough #String = [$html:<s style="[$slot("style")]">[$slot]</s>]
+export table #String = [$html:
   <table style="[$slot("style")]">
     [$slot]
   </table>
 ]
 
 -- Utility style inserts
-center #String = [$insert("style"):text-align: center;]
-right #String = [$insert("style"):text-align: right;]
-left #String = [$insert("style"):text-align: left;]
-smaller #String = [$insert("style"):font-size: smaller;]
-medium #String = [$insert("style"):font-size: medium;]
-larger #String = [$insert("style"):font-size: larger;]
+export center #String = [$insert("style"):text-align: center;]
+export right #String = [$insert("style"):text-align: right;]
+export left #String = [$insert("style"):text-align: left;]
+export smaller #String = [$insert("style"):font-size: smaller;]
+export medium #String = [$insert("style"):font-size: medium;]
+export larger #String = [$insert("style"):font-size: larger;]
 
 -- Basic Canvas component
-CANVAS_ID #= "bst_builtin_canvas"
-canvas #String = [$html:<canvas id="[CANVAS_ID]" width="[$slot(2)]" height="[$slot(3)]" style="[$slot("style")]"></canvas>]
+export CANVAS_ID #= "bst_builtin_canvas"
+export canvas #String = [$html:<canvas id="[CANVAS_ID]" width="[$slot(2)]" height="[$slot(3)]" style="[$slot("style")]"></canvas>]
 
 -- Get the basic canvas element and 2D context for drawing (opaque JS interop)
-get_canvas_context || -> Canvas2d, Error!:
+export get_canvas_context || -> Canvas2d, Error!:
     canvas_element = get_canvas(CANVAS_ID)!
     return context_2d(canvas_element)!
 ;

@@ -302,6 +302,14 @@ fn render_payload_message(
             string_table.resolve(*function_name),
             string_table.resolve(*trait_name)
         ),
+        DiagnosticPayload::PrivateTypeInExportedApi {
+            exported_name,
+            private_type,
+        } => format!(
+            "Exported declaration '{}' exposes private type {}. Export that type through the same facade surface or hide it behind a public wrapper.",
+            string_table.resolve(*exported_name),
+            diagnostic_type_name(*private_type, context)
+        ),
         DiagnosticPayload::UnsupportedTraitFeature {
             trait_name,
             feature,
@@ -313,6 +321,10 @@ fn render_payload_message(
         DiagnosticPayload::InvalidTraitKeywordUsage { reason } => {
             invalid_trait_keyword_usage_message(*reason).to_owned()
         }
+        DiagnosticPayload::DuplicatePublicExport { name } => format!(
+            "Duplicate public export '{}' in module facade. Each exported name must be unique.",
+            string_table.resolve(*name)
+        ),
         DiagnosticPayload::InvalidTraitConformance {
             target_name,
             trait_name,

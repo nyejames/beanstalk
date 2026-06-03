@@ -1185,6 +1185,61 @@ impl CompilerDiagnostic {
         )
     }
 
+    pub(crate) fn export_outside_module_facade(location: SourceLocation) -> Self {
+        Self::new(
+            DiagnosticKind::Rule(RuleDiagnosticKind::ExportOutsideModuleFacade),
+            location,
+            DiagnosticPayload::None,
+        )
+    }
+
+    pub(crate) fn missing_export_target(location: SourceLocation) -> Self {
+        Self::new(
+            DiagnosticKind::Rule(RuleDiagnosticKind::MissingExportTarget),
+            location,
+            DiagnosticPayload::None,
+        )
+    }
+
+    pub(crate) fn deferred_namespace_export(location: SourceLocation) -> Self {
+        Self::new(
+            DiagnosticKind::Rule(RuleDiagnosticKind::DeferredNamespaceExport),
+            location,
+            DiagnosticPayload::None,
+        )
+    }
+
+    pub(crate) fn invalid_export_target(location: SourceLocation) -> Self {
+        Self::new(
+            DiagnosticKind::Rule(RuleDiagnosticKind::InvalidExportTarget),
+            location,
+            DiagnosticPayload::None,
+        )
+    }
+
+    pub(crate) fn duplicate_public_export(name: StringId, location: SourceLocation) -> Self {
+        Self::new(
+            DiagnosticKind::Rule(RuleDiagnosticKind::DuplicatePublicExport),
+            location,
+            DiagnosticPayload::DuplicatePublicExport { name },
+        )
+    }
+
+    pub(crate) fn private_type_in_exported_api(
+        exported_name: StringId,
+        private_type: TypeId,
+        location: SourceLocation,
+    ) -> Self {
+        Self::new(
+            DiagnosticKind::Rule(RuleDiagnosticKind::PrivateTypeInExportedApi),
+            location,
+            DiagnosticPayload::PrivateTypeInExportedApi {
+                exported_name,
+                private_type,
+            },
+        )
+    }
+
     pub(crate) fn invalid_trait_conformance(
         target_name: StringId,
         trait_name: Option<StringId>,

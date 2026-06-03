@@ -1,0 +1,420 @@
+//! Public facade API type-surface validation.
+//!
+//! WHAT: rejects explicit `export` declarations in `#mod.bst` whose authored type surfaces
+//! require a type name that is not part of the same public facade API.
+//! WHY: after facade exports become explicit, importers can only name declarations exposed by
+//! the facade. AST environment owns this check because it has canonical `TypeId`s plus the
+//! header-built facade export maps.
+
+use super::builder::AstModuleEnvironmentBuilder;
+
+use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
+use crate::compiler_frontend::ast::type_resolution::resolve_diagnostic_type_to_type_id_checked;
+use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
+use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
+use crate::compiler_frontend::datatypes::definitions::TypeDefinition;
+use crate::compiler_frontend::datatypes::ids::{NominalTypeId, TypeConstructor, TypeId};
+use crate::compiler_frontend::headers::module_symbols::{FacadeExportEntry, FacadeExportTarget};
+use crate::compiler_frontend::headers::parse_file_headers::{FileRole, Header, HeaderKind};
+use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
+use crate::compiler_frontend::traits::definitions::TraitVisibility;
+use crate::compiler_frontend::traits::environment::TraitEnvironment;
+
+use rustc_hash::FxHashSet;
+
+impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
+    /// Validate all explicit public authored declarations in `#mod.bst`.
+    ///
+    /// WHAT: walks the resolved type IDs for signatures, fields, payloads, aliases, and explicit
+    /// constant annotations. The walk recurses through option/collection/function/generic shapes.
+    /// WHY: exported declarations are consumed from the facade alone, so every named type they
+    /// expose must also be public through that facade surface.
+    pub(in crate::compiler_frontend::ast) fn validate_public_facade_type_surfaces(
+        &mut self,
+        sorted_headers: &[Header],
+        trait_environment: &TraitEnvironment,
+        string_table: &mut StringTable,
+    ) -> Result<(), CompilerMessages> {
+        for header in sorted_headers {
+            if !header_is_public_facade_declaration(header) {
+                continue;
+            }
+
+            let exported_name = header.tokens.src_path.name().ok_or_else(|| {
+                self.error_messages(
+                    CompilerError::compiler_error("Public facade header had no source-path name."),
+                    string_table,
+                )
+            })?;
+
+            match &header.kind {
+                HeaderKind::Function { .. } => {
+                    let Some(resolved_signature) = self
+                        .resolved_function_signatures_by_path
+                        .get(&header.tokens.src_path)
+                    else {
+                        continue;
+                    };
+                    self.validate_public_function_surface(
+                        exported_name,
+                        &resolved_signature.signature,
+                        &header.source_file,
+                        header.name_location.clone(),
+                        trait_environment,
+                        string_table,
+                    )?;
+                }
+
+                HeaderKind::Struct { .. } => {
+                    let Some(fields) = self
+                        .resolved_struct_fields_by_path
+                        .get(&header.tokens.src_path)
+                    else {
+                        continue;
+                    };
+
+                    for field in fields {
+                        self.validate_public_type_id(
+                            exported_name,
+                            field.value.type_id,
+                            &header.source_file,
+                            field.value.location.clone(),
+                            trait_environment,
+                            string_table,
+                        )?;
+                    }
+                }
+
+                HeaderKind::Choice { .. } => {
+                    let Some(variants) = self
+                        .choice_variant_shells_by_path
+                        .get(&header.tokens.src_path)
+                    else {
+                        continue;
+                    };
+
+                    for variant in variants {
+                        let crate::compiler_frontend::declaration_syntax::choice::ChoiceVariantPayload::Record {
+                            fields,
+                        } = &variant.payload
+                        else {
+                            continue;
+                        };
+
+                        for field in fields {
+                            self.validate_public_type_id(
+                                exported_name,
+                                field.value.type_id,
+                                &header.source_file,
+                                field.value.location.clone(),
+                                trait_environment,
+                                string_table,
+                            )?;
+                        }
+                    }
+                }
+
+                HeaderKind::TypeAlias { .. } => {
+                    let Some(resolved_target) = self
+                        .resolved_type_aliases_by_path
+                        .get(&header.tokens.src_path)
+                        .cloned()
+                    else {
+                        continue;
+                    };
+
+                    let type_id = resolve_diagnostic_type_to_type_id_checked(
+                        &resolved_target,
+                        &mut self.type_environment,
+                        &header.name_location,
+                    )
+                    .map_err(|diagnostic| self.diagnostic_messages(*diagnostic, string_table))?;
+
+                    self.validate_public_type_id(
+                        exported_name,
+                        type_id,
+                        &header.source_file,
+                        header.name_location.clone(),
+                        trait_environment,
+                        string_table,
+                    )?;
+                }
+
+                HeaderKind::Constant { declaration, .. } => {
+                    let Some(resolved_declaration) =
+                        self.declaration_table.get_by_path(&header.tokens.src_path)
+                    else {
+                        continue;
+                    };
+
+                    self.validate_public_type_id(
+                        exported_name,
+                        resolved_declaration.value.type_id,
+                        &header.source_file,
+                        declaration.location.clone(),
+                        trait_environment,
+                        string_table,
+                    )?;
+                }
+
+                HeaderKind::Trait { .. } => {}
+
+                HeaderKind::ConstTemplate { .. }
+                | HeaderKind::StartFunction
+                | HeaderKind::TraitConformance { .. } => {}
+            }
+        }
+
+        Ok(())
+    }
+
+    fn validate_public_function_surface(
+        &self,
+        exported_name: StringId,
+        signature: &FunctionSignature,
+        public_facade_file: &InternedPath,
+        return_location: SourceLocation,
+        trait_environment: &TraitEnvironment,
+        string_table: &StringTable,
+    ) -> Result<(), CompilerMessages> {
+        for parameter in &signature.parameters {
+            self.validate_public_type_id(
+                exported_name,
+                parameter.value.type_id,
+                public_facade_file,
+                parameter.value.location.clone(),
+                trait_environment,
+                string_table,
+            )?;
+        }
+
+        for return_slot in &signature.returns {
+            let Some(type_id) = return_slot.type_id else {
+                continue;
+            };
+
+            self.validate_public_type_id(
+                exported_name,
+                type_id,
+                public_facade_file,
+                return_location.clone(),
+                trait_environment,
+                string_table,
+            )?;
+        }
+
+        Ok(())
+    }
+
+    fn validate_public_type_id(
+        &self,
+        exported_name: StringId,
+        type_id: TypeId,
+        public_facade_file: &InternedPath,
+        location: SourceLocation,
+        trait_environment: &TraitEnvironment,
+        string_table: &StringTable,
+    ) -> Result<(), CompilerMessages> {
+        let mut visited_types = FxHashSet::default();
+        if self.public_type_id_is_nameable(
+            type_id,
+            public_facade_file,
+            trait_environment,
+            &mut visited_types,
+        ) {
+            return Ok(());
+        }
+
+        Err(self.diagnostic_messages(
+            CompilerDiagnostic::private_type_in_exported_api(exported_name, type_id, location),
+            string_table,
+        ))
+    }
+
+    pub(in crate::compiler_frontend::ast) fn public_type_id_is_nameable(
+        &self,
+        type_id: TypeId,
+        public_facade_file: &InternedPath,
+        trait_environment: &TraitEnvironment,
+        visited_types: &mut FxHashSet<TypeId>,
+    ) -> bool {
+        if !visited_types.insert(type_id) {
+            return true;
+        }
+
+        match self.type_environment.get(type_id) {
+            Some(TypeDefinition::Builtin(..))
+            | Some(TypeDefinition::External(..))
+            | Some(TypeDefinition::GenericParameter(..)) => true,
+
+            Some(TypeDefinition::Struct(definition)) => {
+                self.source_path_is_public_from_facade(&definition.path, public_facade_file)
+            }
+
+            Some(TypeDefinition::Choice(definition)) => {
+                self.source_path_is_public_from_facade(&definition.path, public_facade_file)
+            }
+
+            Some(TypeDefinition::DynamicTrait(definition)) => trait_environment
+                .get(definition.trait_id)
+                .is_some_and(|trait_definition| {
+                    self.public_trait_definition_is_nameable(trait_definition, public_facade_file)
+                }),
+
+            Some(TypeDefinition::Constructed(definition)) => {
+                self.type_constructor_is_public(&definition.constructor, public_facade_file)
+                    && definition.arguments.iter().all(|argument| {
+                        self.public_type_id_is_nameable(
+                            *argument,
+                            public_facade_file,
+                            trait_environment,
+                            visited_types,
+                        )
+                    })
+            }
+
+            Some(TypeDefinition::Function(definition)) => {
+                definition.parameters.iter().all(|parameter| {
+                    self.public_type_id_is_nameable(
+                        parameter.type_id,
+                        public_facade_file,
+                        trait_environment,
+                        visited_types,
+                    )
+                }) && definition.returns.iter().all(|return_type| {
+                    self.public_type_id_is_nameable(
+                        *return_type,
+                        public_facade_file,
+                        trait_environment,
+                        visited_types,
+                    )
+                }) && definition.error_return.is_none_or(|error_type| {
+                    self.public_type_id_is_nameable(
+                        error_type,
+                        public_facade_file,
+                        trait_environment,
+                        visited_types,
+                    )
+                })
+            }
+
+            Some(TypeDefinition::GenericInstance(definition)) => {
+                self.nominal_id_is_public(definition.base, public_facade_file)
+                    && definition.arguments.iter().all(|argument| {
+                        self.public_type_id_is_nameable(
+                            *argument,
+                            public_facade_file,
+                            trait_environment,
+                            visited_types,
+                        )
+                    })
+            }
+
+            None => false,
+        }
+    }
+
+    fn type_constructor_is_public(
+        &self,
+        constructor: &TypeConstructor,
+        public_facade_file: &InternedPath,
+    ) -> bool {
+        match constructor {
+            TypeConstructor::Builtin(_) => true,
+            TypeConstructor::Nominal(nominal_id) => {
+                self.nominal_id_is_public(*nominal_id, public_facade_file)
+            }
+            TypeConstructor::External(_) => true,
+        }
+    }
+
+    fn nominal_id_is_public(
+        &self,
+        nominal_id: NominalTypeId,
+        public_facade_file: &InternedPath,
+    ) -> bool {
+        self.type_environment
+            .nominal_path_by_id(nominal_id)
+            .is_some_and(|path| self.source_path_is_public_from_facade(path, public_facade_file))
+    }
+
+    pub(in crate::compiler_frontend::ast) fn public_trait_definition_is_nameable(
+        &self,
+        trait_definition: &crate::compiler_frontend::traits::definitions::ResolvedTraitDefinition,
+        public_facade_file: &InternedPath,
+    ) -> bool {
+        match trait_definition.visibility {
+            TraitVisibility::Core => true,
+            TraitVisibility::Source { .. } => self.source_path_is_public_from_facade(
+                &trait_definition.canonical_path,
+                public_facade_file,
+            ),
+        }
+    }
+
+    pub(in crate::compiler_frontend::ast) fn source_path_is_public_from_facade(
+        &self,
+        path: &InternedPath,
+        public_facade_file: &InternedPath,
+    ) -> bool {
+        if self
+            .module_symbols
+            .builtin_visible_symbol_paths
+            .contains(path)
+        {
+            return true;
+        }
+
+        if let Some(library_prefix) = self
+            .module_symbols
+            .file_library_membership
+            .get(public_facade_file)
+            && let Some(entries) = self.module_symbols.facade_exports.get(library_prefix)
+            && entries
+                .iter()
+                .any(|entry| facade_export_targets_source_path(entry, path))
+        {
+            return true;
+        }
+
+        if let Some(module_root) = self
+            .module_symbols
+            .file_module_membership
+            .get(public_facade_file)
+            && let Some(entries) = self
+                .module_symbols
+                .module_root_facade_exports
+                .get(module_root)
+            && entries
+                .iter()
+                .any(|entry| facade_export_targets_source_path(entry, path))
+        {
+            return true;
+        }
+
+        false
+    }
+}
+
+fn facade_export_targets_source_path(entry: &FacadeExportEntry, path: &InternedPath) -> bool {
+    match &entry.target {
+        FacadeExportTarget::Source(exported_path) => exported_path == path,
+        FacadeExportTarget::External(_) => false,
+    }
+}
+
+fn header_is_public_facade_declaration(header: &Header) -> bool {
+    header.file_role == FileRole::ModuleFacade
+        && header.export_mode.is_public()
+        && matches!(
+            header.kind,
+            HeaderKind::Function { .. }
+                | HeaderKind::Struct { .. }
+                | HeaderKind::Choice { .. }
+                | HeaderKind::TypeAlias { .. }
+                | HeaderKind::Constant { .. }
+                | HeaderKind::Trait { .. }
+        )
+}

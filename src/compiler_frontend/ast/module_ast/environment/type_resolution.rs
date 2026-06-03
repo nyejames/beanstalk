@@ -40,7 +40,7 @@ use crate::compiler_frontend::declaration_syntax::choice::{
 use crate::compiler_frontend::declaration_syntax::signature_members::SignatureMemberSyntax;
 
 use crate::compiler_frontend::headers::import_environment::FileVisibility;
-use crate::compiler_frontend::headers::parse_file_headers::{FileRole, Header, HeaderKind};
+use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::traits::environment::TraitEnvironment;
@@ -605,7 +605,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 string_table,
             )?;
 
-            if header.file_role == FileRole::ModuleFacade {
+            if header.export_mode.is_public() {
                 let owner_name = header.tokens.src_path.name().ok_or_else(|| {
                     self.error_messages(
                         CompilerError::compiler_error(
@@ -618,6 +618,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                     owner_name,
                     generic_parameters,
                     &resolved_bounds_by_local,
+                    &header.source_file,
                     trait_environment,
                     string_table,
                 )?;

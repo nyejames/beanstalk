@@ -12,6 +12,7 @@ pub(super) enum HeaderFileItem {
     Symbol(StringId),
     BuiltinTypeConformanceTarget(&'static str),
     Import,
+    Export,
     Hash { at_statement_boundary: bool },
     RuntimeTemplate,
     ReservedTraitSyntax,
@@ -47,6 +48,12 @@ pub(super) fn classify_current_item(
         }
 
         TokenKind::Import => HeaderFileItem::Import,
+
+        TokenKind::Export if current_item_started_at_statement_boundary(token_stream) => {
+            HeaderFileItem::Export
+        }
+
+        TokenKind::Export => HeaderFileItem::StartBodyToken,
 
         TokenKind::Hash => HeaderFileItem::Hash {
             at_statement_boundary: current_item_started_at_statement_boundary(token_stream),

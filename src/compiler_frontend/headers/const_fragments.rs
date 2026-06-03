@@ -10,7 +10,9 @@ use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::declaration_syntax::declaration_shell::{
     InitializerReference, collect_initializer_references,
 };
-use crate::compiler_frontend::headers::types::{Header, HeaderBuildContext, HeaderKind};
+use crate::compiler_frontend::headers::types::{
+    Header, HeaderBuildContext, HeaderExportMode, HeaderKind,
+};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::token_scan::NestingDepth;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
@@ -77,11 +79,11 @@ pub(super) fn create_top_level_const_template(
             source_order: next_const_fragment_source_order(context),
         },
         file_role: context.file_role,
+        export_mode: HeaderExportMode::Private,
         dependencies,
         name_location,
         tokens: template_tokens,
         source_file: context.source_file.to_owned(),
-        file_imports: context.file_import_entries.to_vec(),
     })
 }
 

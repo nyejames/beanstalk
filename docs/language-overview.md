@@ -30,6 +30,7 @@ Design principles:
 | Mutability | `~` marks mutable bindings/access. In declarations it appears before the type: `name ~Type = value`. |
 | References | Shared immutable access is the default for stack and heap values. |
 | Constants | `#` marks compile-time constants: `name #= value`. |
+| Facade exports | `export` is reserved everywhere and valid only in `#mod.bst` to mark public facade declarations or grouped re-exports. |
 | Copies | Copies must be explicit unless an expression constructs a new value from references. |
 | Parameters/fields | Function parameters and struct/choice fields use `|...|`. Defaults use `=`. |
 | Results/options | Error returns use `Error!`; options use `T?`. |
@@ -840,9 +841,14 @@ Execution and visibility:
 - Other files contribute declarations that must be imported explicitly.
 - `#page.bst` may import same-module files but exports nothing unless `#mod.bst` exposes declarations.
 - `#mod.bst` is an API facade, not a runtime entry or shared implementation file.
-- `#mod.bst` may contain imports for wrappers plus authored top-level functions, structs, choices, type aliases, and `#` constants.
+- `#mod.bst` may contain private imports plus private or public authored top-level functions, structs, choices, type aliases, traits, and `#` constants.
 - `#mod.bst` may not contain top-level runtime statements, runtime templates/start code, or `#[...]` page fragments.
-- Facade exports require real declarations; direct facade re-export syntax, legacy `#import`, function alias exports, and automatic method re-export through facade type aliases are not part of the Alpha surface.
+- Public authored facade declarations require `export`.
+- Regular `import` in `#mod.bst` is private to that facade file.
+- `export import @path { Symbol }` and `export @path { Symbol }` re-export imported symbols through the facade; grouped aliases define the public API name.
+- Public facade APIs must not expose private facade-only types in signatures, fields, aliases, generic bounds, or exported constant types.
+- Receiver methods are visible through a facade only when the receiver method is explicitly exported by the same facade surface; type aliases in `#mod.bst` do not automatically re-export private implementation methods.
+- Bare namespace exports such as `export @path`, wildcard exports, legacy `#import`, and function alias exports are not part of the Alpha surface.
 
 Import resolution:
 - `@./x` resolves from the importing file’s directory.
@@ -908,7 +914,7 @@ Deferred library-system features:
 - package manager, versions, remote fetching, lockfiles, and override/shadowing rules
 - source-library HIR caching
 - user-authored external binding files
-- wildcard imports and direct facade re-export syntax
+- wildcard imports/exports and namespace facade exports such as `export @path`
 - automatic docs/API extraction from `#mod.bst`
 - seeded random, full date/time/time-zone/calendar APIs, Temporal-backed calendar implementation, locale-aware formatting/parsing, local time-zone lookup, async timers/sleep/intervals, browser animation scheduling packages, and non-JS lowerings for JS-backed core packages
 

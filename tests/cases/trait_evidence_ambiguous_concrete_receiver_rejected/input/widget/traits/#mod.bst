@@ -1,7 +1,7 @@
-DISPLAY_A must:
+export DISPLAY_A must:
     display |This| -> String
 ;
 
-DISPLAY_B must:
+export DISPLAY_B must:
     display |This| -> String
 ;

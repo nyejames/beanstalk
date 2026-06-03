@@ -41,7 +41,6 @@ use crate::compiler_frontend::headers::parse_file_headers::Header;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::compiler_frontend::traits::definitions::TraitVisibility;
 use crate::compiler_frontend::traits::environment::TraitEnvironment;
 use crate::compiler_frontend::traits::evidence::{
     TraitEvidenceEnvironment, ValidateTraitEvidenceInput, validate_trait_evidence,
@@ -277,6 +276,21 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             "AST/environment/nominal generic bound surfaces validated in: "
         );
         let _ = nominal_bound_surface_start;
+
+        // --------------------------------------
+        //  Validate public facade type surface
+        // --------------------------------------
+        let public_surface_start = Instant::now();
+        self.validate_public_facade_type_surfaces(
+            sorted_headers,
+            &trait_environment,
+            string_table,
+        )?;
+        timer_log!(
+            public_surface_start,
+            "AST/environment/public facade type surfaces validated in: "
+        );
+        let _ = public_surface_start;
 
         benchmark_timer_log!(
             environment_start,
@@ -518,6 +532,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         owner_name: crate::compiler_frontend::symbols::string_interning::StringId,
         generic_parameters: &GenericParameterList,
         resolved_bounds_by_local: &FxHashMap<TypeParameterId, Vec<TraitId>>,
+        public_facade_file: &InternedPath,
         trait_environment: &TraitEnvironment,
         string_table: &mut StringTable,
     ) -> Result<(), CompilerMessages> {
@@ -538,10 +553,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
 
                 // Public generic signatures are consumed through the facade alone, so every
                 // bound trait on that public surface must be available from the same facade.
-                if matches!(
-                    trait_definition.visibility,
-                    TraitVisibility::Core | TraitVisibility::Source { exported: true }
-                ) {
+                if self.public_trait_definition_is_nameable(trait_definition, public_facade_file) {
                     continue;
                 }
 

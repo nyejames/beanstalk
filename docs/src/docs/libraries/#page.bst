@@ -19,7 +19,7 @@ page_head #= theme_head
 
         [data:
             [: Source library]
-            [: [codesnippet:import @helper/utils {double}] ]
+            [: [codesnippet:import @helper {double}] ]
             [: Normal [codesnippet:.bst] source behind a [codesnippet:#mod.bst] facade.]
         ]
 
@@ -87,7 +87,7 @@ page_head #= theme_head
         import @./drawing.js {draw}
 
         -- Import a project-local source library.
-        import @helper/utils {double}
+        import @helper {double}
     ]
 
     General rules:
@@ -146,7 +146,7 @@ page_head #= theme_head
     [codeblock, $code("bst"):
         -- lib/helper/#mod.bst
 
-        double |x Int| -> Int:
+        export double |x Int| -> Int:
             return x * 2
         ;
     ]
@@ -170,21 +170,32 @@ page_head #= theme_head
 
         import @core/math {sin as internal_sin}
 
-        sine |x Float| -> Float:
+        export sine |x Float| -> Float:
             return internal_sin(x)
         ;
     ]
 
+    Facades can also re-export a grouped public surface directly:
+
+    [codeblock, $code("bst"):
+        -- lib/helper/#mod.bst
+
+        export @./utils {
+            double,
+            label as helper_label,
+        }
+    ]
+
     Facade rules:
 
-    - outside importers can only see declarations authored by [codesnippet:#mod.bst]
-    - internal implementation files are not public unless the facade wraps them with real declarations
+    - outside importers can only see declarations and grouped imports marked with [codesnippet:export] in [codesnippet:#mod.bst]
+    - internal implementation files are not public unless the facade wraps or re-exports them intentionally
     - normal imports inside [codesnippet:#mod.bst] are local implementation details
+    - exported signatures cannot expose private facade-only types
+    - receiver methods do not become public through facade type aliases; export the receiver method or a wrapper explicitly
     - [codesnippet:#mod.bst] is not shared implementation code for sibling files
     - runtime top-level statements and runtime top-level templates are invalid in [codesnippet:#mod.bst]
-
-    This is why facade examples use wrappers and aliases instead of direct re-export syntax.
-    Direct facade re-export syntax is not part of the current Alpha surface.
+    - bare namespace exports such as [codesnippet:export @./utils] and wildcard exports remain deferred
 ]
 
 #[section, $markdown:

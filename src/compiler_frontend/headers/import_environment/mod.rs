@@ -22,13 +22,15 @@ pub(crate) use bindings::{
     NamespaceTypeMember, NamespaceValueMember, ReceiverMethodVisibility,
 };
 pub(crate) use facade_resolution::{
-    FacadeLookupResult, FacadeResolutionInput, resolve_facade_import,
+    FacadeLookupResult, FacadeResolutionInput, FacadeType, ModuleBoundaryCheckInput,
+    SourceLibraryBoundaryCheckInput, check_module_boundary, check_source_library_boundary,
+    resolve_facade_import,
 };
 
 pub(crate) use target_resolution::{
-    ExportRequirement, ExternalPackageSymbolLookup, ExternalPackageSymbolResolutionInput,
-    ImportTargetResolutionInput, NamespaceTargetResolutionInput, ResolvedImportTarget,
-    ResolvedNamespaceTarget, has_explicit_bst_extension, resolve_external_package_symbol,
+    ExternalPackageSymbolLookup, ExternalPackageSymbolResolutionInput, ImportTargetResolutionInput,
+    NamespaceTargetResolutionInput, ResolvedImportTarget, ResolvedNamespaceTarget,
+    SourceImportAccess, has_explicit_bst_extension, resolve_external_package_symbol,
     resolve_import_target, resolve_namespace_target,
 };
 pub(crate) use visible_names::{
@@ -69,12 +71,7 @@ pub(crate) struct ImportEnvironmentInput<'a> {
 pub(crate) fn prepare_import_environment(
     input: ImportEnvironmentInput<'_>,
 ) -> Result<HeaderImportEnvironment, CompilerMessages> {
-    let importable_symbol_paths: FxHashSet<_> = input
-        .module_symbols
-        .importable_symbol_exported
-        .keys()
-        .cloned()
-        .collect();
+    let importable_symbol_paths = input.module_symbols.importable_source_symbol_paths.clone();
 
     let mut builder = ImportEnvironmentBuilder {
         module_symbols: input.module_symbols,
@@ -158,6 +155,41 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         ) {
             self.warnings.push(warning);
         }
+    }
+
+    /// Whether two source files share the same non-facade import boundary.
+    ///
+    /// WHAT: source-library members, same module-root members, and files in the implicit entry
+    /// module can see each other's ordinary source declarations directly.
+    /// WHY: grouped source imports and namespace imports both need the same boundary answer
+    /// before deciding whether receiver methods may travel with the imported surface.
+    fn source_files_share_import_boundary(
+        &self,
+        importer_file: &InternedPath,
+        target_file: &InternedPath,
+    ) -> bool {
+        let importer_library = self
+            .module_symbols
+            .file_library_membership
+            .get(importer_file);
+        let target_library = self.module_symbols.file_library_membership.get(target_file);
+        if importer_library == target_library && importer_library.is_some() {
+            return true;
+        }
+
+        let importer_module = self
+            .module_symbols
+            .file_module_membership
+            .get(importer_file);
+        let target_module = self.module_symbols.file_module_membership.get(target_file);
+        if importer_module == target_module && importer_module.is_some() {
+            return true;
+        }
+
+        let importer_has_explicit_module = importer_library.is_some() || importer_module.is_some();
+        let target_has_explicit_module = target_library.is_some() || target_module.is_some();
+
+        !importer_has_explicit_module && !target_has_explicit_module
     }
 
     // The typed diagnostic payload is still large enough to trigger clippy::result_large_err here.
@@ -383,13 +415,24 @@ impl<'a> ImportEnvironmentBuilder<'a> {
 
         if let Some(facade_result) = resolve_facade_import(&facade_input) {
             match facade_result {
-                FacadeLookupResult::ExportedSource(path) => {
+                FacadeLookupResult::ExportedSource {
+                    path,
+                    exported_entries,
+                } => {
                     return self.register_source_import(
                         file_visibility,
                         registry,
                         &path,
                         import,
-                        ExportRequirement::AlreadyValidatedByFacade,
+                        SourceImportAccess::Facade { exported_entries },
+                    );
+                }
+                FacadeLookupResult::ExportedExternal { symbol_id } => {
+                    return self.register_external_import(
+                        file_visibility,
+                        registry,
+                        import,
+                        symbol_id,
                     );
                 }
                 FacadeLookupResult::NotExported {
@@ -429,13 +472,24 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         match target {
             ResolvedImportTarget::Source {
                 symbol_path,
-                export_requirement,
+                access,
             } => {
                 if let Some(target_file) = self
                     .module_symbols
                     .canonical_source_by_symbol_path
                     .get(&symbol_path)
                 {
+                    check_source_library_boundary(SourceLibraryBoundaryCheckInput {
+                        importer_file: source_file,
+                        target_file,
+                        requested_path: &import.header_path,
+                        location: import.location.clone(),
+                        file_library_membership: &self.module_symbols.file_library_membership,
+                        source_library_facade_files: &self
+                            .module_symbols
+                            .source_library_facade_files,
+                        string_table: self.string_table,
+                    })?;
                     facade_resolution::check_module_boundary(
                         facade_resolution::ModuleBoundaryCheckInput {
                             importer_file: source_file,
@@ -451,9 +505,9 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                 }
 
                 let effective_requirement = if self.is_internal_import(source_file, &symbol_path) {
-                    ExportRequirement::AlreadyValidatedByFacade
+                    SourceImportAccess::Internal
                 } else {
-                    export_requirement
+                    access
                 };
 
                 self.register_source_import(

@@ -135,6 +135,25 @@ pub enum HeaderKind {
     },
 }
 
+/// Explicit export mode for a parsed header or file import.
+///
+/// WHAT: distinguishes private source-file items from public facade API surface.
+/// WHY: `#mod.bst` uses explicit `export` to mark public declarations and re-exports.
+/// All other files keep every declaration as `Private` in this phase.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HeaderExportMode {
+    /// Private to the source file or importing file.
+    Private,
+    /// Public facade API entry exposed through `#mod.bst`.
+    Public,
+}
+
+impl HeaderExportMode {
+    pub fn is_public(&self) -> bool {
+        matches!(self, HeaderExportMode::Public)
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Header {
     pub kind: HeaderKind,
@@ -144,6 +163,12 @@ pub struct Header {
     /// WHY: visibility and export decisions now depend on file role and declaration kind,
     /// not just the old `exported` boolean.
     pub file_role: FileRole,
+    /// Whether this header is part of the public facade API.
+    ///
+    /// WHAT: `Public` only for explicit `export` items in `#mod.bst`; `Private` everywhere else.
+    /// WHY: import preparation builds module APIs from explicit facade metadata, not from file role
+    /// alone.
+    pub export_mode: HeaderExportMode,
     // Module-level dependency edges required before AST construction can lower this header.
     pub dependencies: HashSet<InternedPath>,
     pub name_location: SourceLocation,
@@ -152,7 +177,6 @@ pub struct Header {
     pub tokens: FileTokens,
 
     pub source_file: InternedPath,
-    pub file_imports: Vec<FileImport>,
 }
 
 impl Display for Header {
@@ -288,10 +312,12 @@ impl Header {
     /// Remap every interned string owned by this header into the merged global string table.
     ///
     /// WHAT: remaps the kind payload, dependency paths, source locations, token stream,
-    ///       source file, and imports.
+    ///       and source file.
     /// WHY: per-file frontend preparation uses local string tables; merging them into the module
     ///      table requires shifting every `StringId`, `InternedPath`, and `SourceLocation` so later
     ///      stages resolve names through the global table.
+    /// NOTE: file imports are no longer stored on `Header`; they are remapped through
+    ///       `FileFrontendPrepareOutput::remap_string_ids` instead.
     // Called when merging per-file frontend outputs into the module-wide compilation.
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         self.kind.remap_string_ids(remap);
@@ -308,10 +334,6 @@ impl Header {
         self.name_location.remap_string_ids(remap);
         self.tokens.remap_string_ids(remap);
         self.source_file.remap_string_ids(remap);
-
-        for import in &mut self.file_imports {
-            import.remap_string_ids(remap);
-        }
     }
 
     /// Returns the canonical (real OS) filesystem path for the source file that owns this header.
@@ -338,6 +360,11 @@ pub struct FileImport {
     pub path_location: SourceLocation,
     pub alias_location: Option<SourceLocation>,
     pub from_grouped: bool,
+    /// Whether this import is part of the public facade API.
+    ///
+    /// WHAT: `Public` for `export import` or `export @path` items in `#mod.bst`;
+    /// `Private` for ordinary imports.
+    pub export_mode: HeaderExportMode,
 }
 
 /// Classification of a source file's role within the module.
@@ -372,6 +399,25 @@ pub struct FileFrontendPrepareOutput {
     /// WHY: benchmark instrumentation needs module-level token volume without retokenizing or
     /// walking source text after the Stage 2 preparation boundary.
     pub token_count: usize,
+    /// The role of this source file within the module.
+    ///
+    /// WHAT: distinguishes entry files, normal source files, and module facades.
+    /// WHY: module-wide symbol collection needs file roles for every prepared file,
+    /// including import-only files that may produce no headers.
+    pub file_role: FileRole,
+    /// Parsed imports for this source file.
+    ///
+    /// WHAT: file-level import records are stored once per file instead of duplicated onto
+    /// every header from that file.
+    /// WHY: import-only facades may produce no declaration headers but still contribute
+    /// imports to the module symbol package.
+    pub file_imports: Vec<FileImport>,
+    /// Canonical OS filesystem path for this source file, if available.
+    ///
+    /// WHAT: the real filesystem path used by Stage 0 path resolution.
+    /// WHY: import-only files and files without declaration headers still need path metadata
+    /// for module membership and facade data registration.
+    pub canonical_os_path: Option<std::path::PathBuf>,
     pub headers: Vec<Header>,
     pub top_level_const_fragments: Vec<TopLevelConstFragment>,
     /// Number of const templates parsed in this file.
@@ -405,13 +451,17 @@ pub struct FileFrontendPrepareError {
 impl FileFrontendPrepareOutput {
     /// Remap every interned string owned by this per-file output into the merged global string table.
     ///
-    /// WHAT: remaps source file, headers, const fragments, and warnings.
+    /// WHAT: remaps source file, file imports, headers, const fragments, and warnings.
     /// WHY: per-file frontend preparation uses local string tables; merging them into the module
     ///      table requires shifting every `StringId`, `InternedPath`, and `SourceLocation` so later
     ///      stages resolve names through the global table.
     // Called when merging per-file frontend outputs into the module-wide compilation.
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         self.source_file.remap_string_ids(remap);
+
+        for import in &mut self.file_imports {
+            import.remap_string_ids(remap);
+        }
 
         for header in &mut self.headers {
             header.remap_string_ids(remap);

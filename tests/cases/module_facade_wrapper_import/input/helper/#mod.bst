@@ -1,5 +1,1 @@
-import @./impl { helper }
-
-greet || -> String:
-    return helper()
-;
+export @./impl { helper as greet }

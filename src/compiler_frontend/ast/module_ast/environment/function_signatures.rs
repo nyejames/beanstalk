@@ -37,7 +37,7 @@ use crate::compiler_frontend::datatypes::ids::{
 };
 use crate::compiler_frontend::datatypes::{DataType, ReceiverKey};
 use crate::compiler_frontend::headers::import_environment::ReceiverMethodVisibility;
-use crate::compiler_frontend::headers::parse_file_headers::{FileRole, Header, HeaderKind};
+use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::traits::environment::TraitEnvironment;
 use crate::compiler_frontend::type_coercion::compatibility::TypeCompatibilityCache;
@@ -83,7 +83,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 trait_environment,
                 string_table,
             )?;
-            if header.file_role == FileRole::ModuleFacade {
+            if header.export_mode.is_public() {
                 let function_name = header.tokens.src_path.name().ok_or_else(|| {
                     self.error_messages(
                         CompilerError::compiler_error(
@@ -96,6 +96,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                     function_name,
                     generic_parameters,
                     &resolved_bounds_by_local,
+                    &header.source_file,
                     trait_environment,
                     string_table,
                 )?;

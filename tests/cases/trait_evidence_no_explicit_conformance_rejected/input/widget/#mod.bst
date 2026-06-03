@@ -1,7 +1,9 @@
 import @./impl { Label, make_label_impl }
 
-PublicLabel as Label
+export @./impl { Label }
 
-make_label || -> PublicLabel:
+export PublicLabel as Label
+
+export make_label || -> PublicLabel:
     return make_label_impl()
 ;

@@ -9,20 +9,82 @@
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::headers::file_state::HeaderFileParseState;
 use crate::compiler_frontend::headers::imports::normalize_import_dependency_path;
-use crate::compiler_frontend::headers::types::{FileImport, HeaderParseContext};
-use crate::compiler_frontend::paths::const_paths::parse_import_clause_items;
+use crate::compiler_frontend::headers::types::{FileImport, HeaderExportMode, HeaderParseContext};
+use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::paths::const_paths::{
+    parse_export_path_clause_items, parse_import_clause_items,
+};
+use crate::compiler_frontend::symbols::string_interning::StringId;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation};
 
+struct ImportItemRecord {
+    header_path: InternedPath,
+    alias: Option<StringId>,
+    location: SourceLocation,
+    path_location: SourceLocation,
+    alias_location: Option<SourceLocation>,
+    from_grouped: bool,
+    export_mode: HeaderExportMode,
+}
+
+/// Parse and record imports from an explicit `import` clause.
+///
+/// WHAT: handles ordinary `import @path` by delegating to the shared clause parser with
+/// `export_mode: Private`.
 pub(super) fn parse_and_record_imports(
     token_stream: &mut FileTokens,
     state: &mut HeaderFileParseState,
     context: &mut HeaderParseContext<'_>,
     import_location: SourceLocation,
 ) -> Result<(), CompilerDiagnostic> {
-    let import_index = token_stream.index.saturating_sub(1);
+    parse_and_record_import_clause(
+        token_stream,
+        state,
+        context,
+        HeaderExportMode::Private,
+        import_location,
+        token_stream.index.saturating_sub(1),
+    )
+}
 
-    let (items, next_index) =
-        parse_import_clause_items(&token_stream.tokens, import_index, context.string_table)?;
+/// Parse and record imports from an `export import @path { ... }` clause.
+///
+/// WHAT: public re-export of imported symbols; shares the same clause parser but records
+/// `export_mode: Public`.
+pub(super) fn parse_and_record_public_imports(
+    token_stream: &mut FileTokens,
+    state: &mut HeaderFileParseState,
+    context: &mut HeaderParseContext<'_>,
+    import_location: SourceLocation,
+    clause_token_index: usize,
+) -> Result<(), CompilerDiagnostic> {
+    parse_and_record_import_clause(
+        token_stream,
+        state,
+        context,
+        HeaderExportMode::Public,
+        import_location,
+        clause_token_index,
+    )
+}
+
+/// Parse and record imports from an `export @path { ... }` sugar clause.
+///
+/// WHAT: `export @path { Symbol }` is syntactic sugar for `export import @path { Symbol }`.
+/// WHY: the tokenizer produces a `Path` token directly after `export`, so this helper uses the
+/// export-path clause parser and records every item as public.
+pub(super) fn parse_and_record_export_path_clause(
+    token_stream: &mut FileTokens,
+    state: &mut HeaderFileParseState,
+    context: &mut HeaderParseContext<'_>,
+    export_location: SourceLocation,
+    clause_token_index: usize,
+) -> Result<(), CompilerDiagnostic> {
+    let (items, next_index) = parse_export_path_clause_items(
+        &token_stream.tokens,
+        clause_token_index,
+        context.string_table,
+    )?;
 
     for item in items {
         let normalized_path = normalize_import_dependency_path(
@@ -32,30 +94,103 @@ pub(super) fn parse_and_record_imports(
             context.string_table,
         )?;
 
-        let local_name = item.alias.or_else(|| normalized_path.name());
-        if let Some(name) = local_name {
-            state
-                .encountered_symbols
-                .insert(name, import_location.clone());
-        }
-
-        if state
-            .seen_imports
-            .insert((normalized_path.to_owned(), item.alias))
-        {
-            state.file_import_paths.insert(normalized_path.to_owned());
-            state.file_imports.push(FileImport {
+        record_import_item(
+            state,
+            ImportItemRecord {
                 header_path: normalized_path,
                 alias: item.alias,
-                location: import_location.clone(),
+                location: export_location.clone(),
                 path_location: item.path_location,
                 alias_location: item.alias_location,
                 from_grouped: item.from_grouped,
-            });
-        }
+                export_mode: HeaderExportMode::Public,
+            },
+        );
     }
 
     token_stream.index = next_index;
 
     Ok(())
+}
+
+fn parse_and_record_import_clause(
+    token_stream: &mut FileTokens,
+    state: &mut HeaderFileParseState,
+    context: &mut HeaderParseContext<'_>,
+    export_mode: HeaderExportMode,
+    clause_location: SourceLocation,
+    clause_token_index: usize,
+) -> Result<(), CompilerDiagnostic> {
+    let (items, next_index) = parse_import_clause_items(
+        &token_stream.tokens,
+        clause_token_index,
+        context.string_table,
+    )?;
+
+    for item in items {
+        let normalized_path = normalize_import_dependency_path(
+            &item.path,
+            &token_stream.src_path,
+            &item.path_location,
+            context.string_table,
+        )?;
+
+        record_import_item(
+            state,
+            ImportItemRecord {
+                header_path: normalized_path,
+                alias: item.alias,
+                location: clause_location.clone(),
+                path_location: item.path_location,
+                alias_location: item.alias_location,
+                from_grouped: item.from_grouped,
+                export_mode,
+            },
+        );
+    }
+
+    token_stream.index = next_index;
+
+    Ok(())
+}
+
+/// Record one parsed import item, normalizing duplicate (path, alias) pairs into a single record.
+///
+/// WHAT: same path + same alias + any public occurrence results in one public import record.
+/// WHY: a facade may repeat an import as a re-export, or import and re-export the same symbol
+/// under the same local name; normalization avoids duplicate records while preserving visibility.
+fn record_import_item(state: &mut HeaderFileParseState, record: ImportItemRecord) {
+    let local_name = record.alias.or_else(|| record.header_path.name());
+    if let Some(name) = local_name {
+        state
+            .encountered_symbols
+            .insert(name, record.location.clone());
+    }
+
+    let key = (record.header_path.to_owned(), record.alias);
+
+    if state.seen_imports.insert(key.clone()) {
+        state
+            .file_import_paths
+            .insert(record.header_path.to_owned());
+        state.file_imports.push(FileImport {
+            header_path: record.header_path,
+            alias: record.alias,
+            location: record.location,
+            path_location: record.path_location,
+            alias_location: record.alias_location,
+            from_grouped: record.from_grouped,
+            export_mode: record.export_mode,
+        });
+    } else {
+        // Normalization: if any occurrence is public, upgrade the existing record to public.
+        if record.export_mode.is_public() {
+            for import in &mut state.file_imports {
+                if import.header_path == key.0 && import.alias == key.1 {
+                    import.export_mode = HeaderExportMode::Public;
+                    break;
+                }
+            }
+        }
+    }
 }

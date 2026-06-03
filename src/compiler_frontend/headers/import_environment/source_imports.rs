@@ -7,11 +7,12 @@
 //! MUST NOT: register external package symbols or build namespace records.
 
 use super::{
-    ExportRequirement, FileVisibility, ImportEnvironmentBuilder, ReceiverMethodImportTarget,
+    FileVisibility, ImportEnvironmentBuilder, ReceiverMethodImportTarget, SourceImportAccess,
     VisibleNameBinding, VisibleNameRegistry,
 };
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::headers::import_environment::diagnostics;
+use crate::compiler_frontend::headers::module_symbols::FacadeExportTarget;
 use crate::compiler_frontend::headers::parse_file_headers::FileImport;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
@@ -27,6 +28,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         file_visibility: &mut FileVisibility,
         nominal_type_path: &InternedPath,
         target_file: &InternedPath,
+        access: &SourceImportAccess,
     ) {
         let Some(receiver_type_name) = nominal_type_path.name() else {
             return;
@@ -48,6 +50,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                 .canonical_source_by_symbol_path
                 .get(path)
                 .is_some_and(|source_file| source_file == target_file)
+                && self.receiver_method_visible_for_source_access(path, access)
                 && let Some(name) = path.name()
             {
                 Self::add_visible_receiver_method(
@@ -78,35 +81,29 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             return false;
         };
 
-        // Same source library?
-        let importer_library = self
-            .module_symbols
-            .file_library_membership
-            .get(importer_file);
-        let target_library = self.module_symbols.file_library_membership.get(target_file);
-        if importer_library == target_library && importer_library.is_some() {
-            return true;
-        }
+        self.source_files_share_import_boundary(importer_file, target_file)
+    }
 
-        // Same module root?
-        let importer_module = self
-            .module_symbols
-            .file_module_membership
-            .get(importer_file);
-        let target_module = self.module_symbols.file_module_membership.get(target_file);
-        if importer_module == target_module && importer_module.is_some() {
-            return true;
+    /// Whether a receiver method can travel with a source type imported through this access path.
+    ///
+    /// WHAT: internal imports preserve the existing file/module-local receiver behavior; direct
+    /// source imports require the method itself to be importable from its source file; facade
+    /// imports use the exact explicit facade surface that exposed the receiver type.
+    pub(super) fn receiver_method_visible_for_source_access(
+        &self,
+        method_path: &InternedPath,
+        access: &SourceImportAccess,
+    ) -> bool {
+        match access {
+            SourceImportAccess::Internal => true,
+            SourceImportAccess::DirectSourceExport => self
+                .module_symbols
+                .importable_source_symbol_paths
+                .contains(method_path),
+            SourceImportAccess::Facade { exported_entries } => exported_entries.iter().any(
+                |entry| matches!(&entry.target, FacadeExportTarget::Source(path) if path == method_path),
+            ),
         }
-
-        // If neither file belongs to an explicit library or module root, they are both in the
-        // default entry-root module and can see each other's declarations.
-        let importer_has_explicit_module = importer_library.is_some() || importer_module.is_some();
-        let target_has_explicit_module = target_library.is_some() || target_module.is_some();
-        if !importer_has_explicit_module && !target_has_explicit_module {
-            return true;
-        }
-
-        false
     }
 
     // The typed diagnostic payload is still large enough to trigger clippy::result_large_err here.
@@ -117,20 +114,15 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         registry: &mut VisibleNameRegistry,
         symbol_path: &InternedPath,
         import: &FileImport,
-        export_requirement: ExportRequirement,
+        access: SourceImportAccess,
     ) -> Result<(), CompilerDiagnostic> {
         // Check export requirement.
-        if matches!(
-            export_requirement,
-            ExportRequirement::MustBeExportedFromSourceFile
-        ) {
-            let is_exported = self
+        if matches!(&access, SourceImportAccess::DirectSourceExport) {
+            let is_importable = self
                 .module_symbols
-                .importable_symbol_exported
-                .get(symbol_path)
-                .copied()
-                .unwrap_or(false);
-            if !is_exported {
+                .importable_source_symbol_paths
+                .contains(symbol_path);
+            if !is_importable {
                 return Err(diagnostics::not_exported_by_source_file(
                     symbol_path,
                     import.location.clone(),
@@ -227,7 +219,12 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                 .canonical_source_by_symbol_path
                 .get(symbol_path)
         {
-            self.auto_import_receiver_methods_for_type(file_visibility, symbol_path, target_file);
+            self.auto_import_receiver_methods_for_type(
+                file_visibility,
+                symbol_path,
+                target_file,
+                &access,
+            );
         }
 
         Ok(())

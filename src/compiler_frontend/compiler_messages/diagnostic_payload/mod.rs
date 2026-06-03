@@ -522,6 +522,15 @@ pub enum DiagnosticPayload {
         reason: InvalidTraitKeywordUsageReason,
     },
 
+    DuplicatePublicExport {
+        name: StringId,
+    },
+
+    PrivateTypeInExportedApi {
+        exported_name: StringId,
+        private_type: TypeId,
+    },
+
     InvalidTraitConformance {
         target_name: StringId,
         trait_name: Option<StringId>,

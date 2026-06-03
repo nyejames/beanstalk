@@ -20,6 +20,10 @@ fn keyword_shadow_matching_ignores_case_and_leading_underscores() {
     assert_eq!(keyword_shadow_match("assert"), Some("assert"));
     assert_eq!(keyword_shadow_match("ASSERT"), Some("assert"));
     assert_eq!(keyword_shadow_match("_assert"), Some("assert"));
+
+    assert_eq!(keyword_shadow_match("export"), Some("export"));
+    assert_eq!(keyword_shadow_match("EXPORT"), Some("export"));
+    assert_eq!(keyword_shadow_match("_export"), Some("export"));
 }
 
 #[test]

@@ -16,7 +16,6 @@ use crate::compiler_frontend::ast::type_resolution::{
 };
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
-use crate::compiler_frontend::datatypes::definitions::TypeDefinition;
 use crate::compiler_frontend::datatypes::generic_parameters::{
     GenericParameter, GenericParameterList, GenericParameterScope, TypeParameterId,
 };
@@ -25,9 +24,7 @@ use crate::compiler_frontend::datatypes::parsed::ParsedTypeRef;
 use crate::compiler_frontend::declaration_syntax::signature_members::{
     FunctionReturnSyntax, FunctionSignatureSyntax, ReturnSlotSyntax, SignatureMemberSyntax,
 };
-use crate::compiler_frontend::headers::module_symbols::FacadeExportTarget;
-use crate::compiler_frontend::headers::parse_file_headers::{FileRole, Header, HeaderKind};
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::traits::definitions::{
@@ -184,8 +181,14 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             next_requirement_id.0 += 1;
         }
 
-        if header.file_role == FileRole::ModuleFacade {
-            self.validate_exported_trait_surface(declaration.name, &requirements, string_table)?;
+        if header.export_mode.is_public() {
+            self.validate_exported_trait_surface(
+                declaration.name,
+                &requirements,
+                &header.source_file,
+                trait_environment,
+                string_table,
+            )?;
         }
 
         let dynamic_safety = classify_trait_dynamic_safety(this_type, &requirements);
@@ -199,7 +202,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             requirements,
             declaration_location: declaration.name_location.clone(),
             visibility: TraitVisibility::Source {
-                exported: header.file_role == FileRole::ModuleFacade,
+                exported: header.export_mode.is_public(),
             },
             dynamic_safety,
         })
@@ -424,6 +427,8 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         &mut self,
         trait_name: StringId,
         requirements: &[ResolvedTraitRequirement],
+        public_facade_file: &crate::compiler_frontend::interned_path::InternedPath,
+        trait_environment: &TraitEnvironment,
         string_table: &mut StringTable,
     ) -> Result<(), CompilerMessages> {
         for requirement in requirements {
@@ -431,7 +436,9 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 self.validate_public_trait_type(
                     trait_name,
                     parameter.type_id,
+                    public_facade_file,
                     parameter.location.clone(),
+                    trait_environment,
                     string_table,
                 )?;
             }
@@ -440,7 +447,9 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 self.validate_public_trait_type(
                     trait_name,
                     return_slot.type_id,
+                    public_facade_file,
                     return_slot.location.clone(),
+                    trait_environment,
                     string_table,
                 )?;
             }
@@ -453,11 +462,18 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         &self,
         trait_name: StringId,
         type_id: crate::compiler_frontend::datatypes::ids::TypeId,
+        public_facade_file: &crate::compiler_frontend::interned_path::InternedPath,
         location: SourceLocation,
+        trait_environment: &TraitEnvironment,
         string_table: &StringTable,
     ) -> Result<(), CompilerMessages> {
         let mut visited_types = FxHashSet::default();
-        if self.public_trait_type_is_visible(type_id, &mut visited_types) {
+        if self.public_type_id_is_nameable(
+            type_id,
+            public_facade_file,
+            trait_environment,
+            &mut visited_types,
+        ) {
             return Ok(());
         }
 
@@ -465,77 +481,6 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             CompilerDiagnostic::trait_private_surface_leak(trait_name, type_id, location),
             string_table,
         ))
-    }
-
-    fn public_trait_type_is_visible(
-        &self,
-        type_id: TypeId,
-        visited_types: &mut FxHashSet<TypeId>,
-    ) -> bool {
-        if !visited_types.insert(type_id) {
-            return true;
-        }
-
-        match self.type_environment.get(type_id) {
-            Some(TypeDefinition::Builtin(..))
-            | Some(TypeDefinition::External(..))
-            | Some(TypeDefinition::GenericParameter(..))
-            | Some(TypeDefinition::DynamicTrait(..)) => true,
-
-            Some(TypeDefinition::Struct(definition)) => {
-                self.nominal_path_is_exported(&definition.path)
-            }
-
-            Some(TypeDefinition::Choice(definition)) => {
-                self.nominal_path_is_exported(&definition.path)
-            }
-
-            Some(TypeDefinition::Constructed(definition)) => definition
-                .arguments
-                .iter()
-                .all(|argument| self.public_trait_type_is_visible(*argument, visited_types)),
-
-            Some(TypeDefinition::Function(definition)) => {
-                definition.parameters.iter().all(|parameter| {
-                    self.public_trait_type_is_visible(parameter.type_id, visited_types)
-                }) && definition.returns.iter().all(|return_type| {
-                    self.public_trait_type_is_visible(*return_type, visited_types)
-                }) && definition.error_return.is_none_or(|error_type| {
-                    self.public_trait_type_is_visible(error_type, visited_types)
-                })
-            }
-
-            Some(TypeDefinition::GenericInstance(definition)) => {
-                let Some(base_path) = self.type_environment.nominal_path_by_id(definition.base)
-                else {
-                    return false;
-                };
-
-                self.nominal_path_is_exported(base_path)
-                    && definition
-                        .arguments
-                        .iter()
-                        .all(|argument| self.public_trait_type_is_visible(*argument, visited_types))
-            }
-
-            None => false,
-        }
-    }
-
-    fn nominal_path_is_exported(&self, path: &InternedPath) -> bool {
-        self.module_symbols.facade_exports.values().any(|entries| {
-            entries.iter().any(|entry| match &entry.target {
-                FacadeExportTarget::Source(exported_path) => exported_path == path,
-            })
-        }) || self
-            .module_symbols
-            .module_root_facade_exports
-            .values()
-            .any(|entries| {
-                entries.iter().any(|entry| match &entry.target {
-                    FacadeExportTarget::Source(exported_path) => exported_path == path,
-                })
-            })
     }
 }
 

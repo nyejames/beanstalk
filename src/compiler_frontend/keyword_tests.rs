@@ -8,6 +8,7 @@ use crate::compiler_frontend::tokenizer::tokens::TokenKind;
 fn keyword_policy_maps_exact_tokenizer_spellings() {
     let exact_keywords = [
         ("import", TokenKind::Import),
+        ("export", TokenKind::Export),
         ("this", TokenKind::This),
         ("This", TokenKind::TraitThis),
         ("true", TokenKind::BoolLiteral(true)),
@@ -38,6 +39,10 @@ fn keyword_shadow_policy_shares_the_canonical_keyword_set() {
     assert_eq!(keyword_shadow_match("__LoOp"), Some("loop"));
     assert_eq!(keyword_shadow_match("_FALSE"), Some("false"));
     assert_eq!(keyword_shadow_match("_not_a_keyword"), None);
+
+    assert_eq!(keyword_shadow_match("export"), Some("export"));
+    assert_eq!(keyword_shadow_match("EXPORT"), Some("export"));
+    assert_eq!(keyword_shadow_match("_export"), Some("export"));
 }
 
 #[test]

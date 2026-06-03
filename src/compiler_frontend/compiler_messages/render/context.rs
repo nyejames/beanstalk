@@ -105,6 +105,7 @@ pub(crate) fn token_kind_name(token_kind: &TokenKind, string_table: &StringTable
         TokenKind::ModuleStart => "module start".to_owned(),
         TokenKind::Eof => "end of file".to_owned(),
         TokenKind::Import => "`import`".to_owned(),
+        TokenKind::Export => "`export`".to_owned(),
         TokenKind::Hash => "`#`".to_owned(),
         TokenKind::Arrow => "`->`".to_owned(),
         TokenKind::Symbol(name) => format!("name `{}`", string_table.resolve(*name)),

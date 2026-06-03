@@ -1,4 +1,4 @@
-import @alpha/math {two}
-import @beta/math {five}
+import @alpha {two}
+import @beta {five}
 
 io(two + five)

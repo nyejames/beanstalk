@@ -24,8 +24,8 @@ use crate::compiler_frontend::declaration_syntax::signature_members::{
     FunctionSignatureSyntax, SignatureMemberSyntax,
 };
 use crate::compiler_frontend::headers::types::{
-    FileFrontendPrepareError, FileFrontendPrepareOutput, FileImport, FileRole, Header, HeaderKind,
-    TopLevelConstFragment,
+    FileFrontendPrepareError, FileFrontendPrepareOutput, FileImport, FileRole, Header,
+    HeaderExportMode, HeaderKind, TopLevelConstFragment,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -128,6 +128,7 @@ fn file_import_remaps_all_fields_without_alias() {
         path_location,
         alias_location: None,
         from_grouped: false,
+        export_mode: HeaderExportMode::Private,
     };
 
     let remap = global.merge_from(&local);
@@ -138,6 +139,7 @@ fn file_import_remaps_all_fields_without_alias() {
     assert_location_resolves_to(&import.location, "test.bst", &global);
     assert_location_resolves_to(&import.path_location, "test.bst", &global);
     assert!(import.alias_location.is_none());
+    assert_eq!(import.export_mode, HeaderExportMode::Private);
 }
 
 #[test]
@@ -158,6 +160,7 @@ fn file_import_remaps_all_fields_with_alias() {
         path_location,
         alias_location,
         from_grouped: false,
+        export_mode: HeaderExportMode::Public,
     };
 
     let remap = global.merge_from(&local);
@@ -168,6 +171,7 @@ fn file_import_remaps_all_fields_with_alias() {
     assert_location_resolves_to(&import.location, "test.bst", &global);
     assert_location_resolves_to(&import.path_location, "test.bst", &global);
     assert_location_resolves_to(&import.alias_location.unwrap(), "test.bst", &global);
+    assert_eq!(import.export_mode, HeaderExportMode::Public);
 }
 
 #[test]
@@ -192,6 +196,7 @@ fn remap_preserves_correct_ids_when_global_has_preexisting_strings() {
         path_location,
         alias_location,
         from_grouped: false,
+        export_mode: HeaderExportMode::Public,
     };
 
     let mut fragment = TopLevelConstFragment {
@@ -434,26 +439,17 @@ fn header_remaps_kind_dependencies_locations_tokens_source_file_and_imports() {
     let mut dependencies = HashSet::new();
     dependencies.insert(InternedPath::from_single_str("@core/prelude", &mut local));
 
-    let import = FileImport {
-        header_path: InternedPath::from_single_str("@html/head", &mut local),
-        alias: Some(local.intern("h")),
-        location: make_location("test.bst", &mut local),
-        path_location: make_location("test.bst", &mut local),
-        alias_location: Some(make_location("test.bst", &mut local)),
-        from_grouped: false,
-    };
-
     let mut header = Header {
         kind: HeaderKind::Function {
             generic_parameters,
             signature: FunctionSignatureSyntax::default(),
         },
         file_role: FileRole::Normal,
+        export_mode: HeaderExportMode::Private,
         dependencies,
         name_location: make_location("test.bst", &mut local),
         tokens: make_file_tokens("my_symbol", &mut local),
         source_file: InternedPath::from_single_str("test.bst", &mut local),
-        file_imports: vec![import],
     };
 
     let remap = global.merge_from(&local);
@@ -489,12 +485,6 @@ fn header_remaps_kind_dependencies_locations_tokens_source_file_and_imports() {
 
     // Verify source file remapped.
     assert_eq!(header.source_file.to_portable_string(&global), "test.bst");
-
-    // Verify imports remapped.
-    assert_eq!(header.file_imports.len(), 1);
-    let import = &header.file_imports[0];
-    assert_eq!(import.header_path.to_portable_string(&global), "@html/head");
-    assert_eq!(global.resolve(import.alias.unwrap()), "h");
 }
 
 #[test]
@@ -516,11 +506,11 @@ fn header_remap_preserves_correct_ids_when_global_has_preexisting_strings() {
             signature: FunctionSignatureSyntax::default(),
         },
         file_role: FileRole::Normal,
+        export_mode: HeaderExportMode::Public,
         dependencies,
         name_location: make_location("test.bst", &mut local),
         tokens: make_file_tokens("my_symbol", &mut local),
         source_file: InternedPath::from_single_str("test.bst", &mut local),
-        file_imports: vec![],
     };
 
     let remap = global.merge_from(&local);
@@ -585,26 +575,17 @@ fn file_frontend_prepare_output_remaps_all_string_id_fields() {
     let mut dependencies = HashSet::new();
     dependencies.insert(InternedPath::from_single_str("@core/prelude", &mut local));
 
-    let import = FileImport {
-        header_path: InternedPath::from_single_str("@html/head", &mut local),
-        alias: Some(local.intern("h")),
-        location: make_location("test.bst", &mut local),
-        path_location: make_location("test.bst", &mut local),
-        alias_location: Some(make_location("test.bst", &mut local)),
-        from_grouped: false,
-    };
-
     let header = Header {
         kind: HeaderKind::Function {
             generic_parameters,
             signature: FunctionSignatureSyntax::default(),
         },
         file_role: FileRole::Normal,
+        export_mode: HeaderExportMode::Private,
         dependencies,
         name_location: make_location("test.bst", &mut local),
         tokens: make_file_tokens("my_func", &mut local),
         source_file: InternedPath::from_single_str("test.bst", &mut local),
-        file_imports: vec![import],
     };
 
     let fragment = TopLevelConstFragment {
@@ -615,10 +596,23 @@ fn file_frontend_prepare_output_remaps_all_string_id_fields() {
 
     let warning = make_unknown_name_diagnostic("warn_name", &mut local);
 
+    let import = FileImport {
+        header_path: InternedPath::from_single_str("@html/head", &mut local),
+        alias: Some(local.intern("h")),
+        location: make_location("test.bst", &mut local),
+        path_location: make_location("test.bst", &mut local),
+        alias_location: Some(make_location("test.bst", &mut local)),
+        from_grouped: false,
+        export_mode: HeaderExportMode::Public,
+    };
+
     let mut output = FileFrontendPrepareOutput {
         source_file,
         file_id: None,
         token_count: 12,
+        file_role: FileRole::Normal,
+        file_imports: vec![import],
+        canonical_os_path: None,
         headers: vec![header],
         top_level_const_fragments: vec![fragment],
         const_template_count: 5,
@@ -664,11 +658,12 @@ fn file_frontend_prepare_output_remaps_all_string_id_fields() {
     assert_eq!(global.resolve(*symbol_id), "my_func");
     assert_eq!(header.source_file.to_portable_string(&global), "test.bst");
 
-    // Header imports remapped.
-    assert_eq!(header.file_imports.len(), 1);
-    let import = &header.file_imports[0];
+    // Per-file imports remapped.
+    assert_eq!(output.file_imports.len(), 1);
+    let import = &output.file_imports[0];
     assert_eq!(import.header_path.to_portable_string(&global), "@html/head");
     assert_eq!(global.resolve(import.alias.unwrap()), "h");
+    assert_eq!(import.export_mode, HeaderExportMode::Public);
 
     // Const fragment remapped.
     assert_eq!(output.top_level_const_fragments.len(), 1);

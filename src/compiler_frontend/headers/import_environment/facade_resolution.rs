@@ -6,10 +6,11 @@
 //! `#mod.bst` facade; external importers cannot bypass it to import internal symbols.
 //! MUST NOT: perform general import target resolution (that belongs in `target_resolution.rs`).
 
-use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
-
+use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, ImportFacadeType};
+use crate::compiler_frontend::external_packages::ExternalSymbolId;
 use crate::compiler_frontend::headers::import_environment::diagnostics;
-use crate::compiler_frontend::headers::module_symbols::FacadeExportEntry;
+use crate::compiler_frontend::headers::import_environment::target_resolution::suffix_matches_with_optional_bst_extension;
+use crate::compiler_frontend::headers::module_symbols::{FacadeExportEntry, FacadeExportTarget};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
@@ -19,8 +20,13 @@ use rustc_hash::{FxHashMap, FxHashSet};
 pub(crate) enum FacadeLookupResult {
     /// This import does not target a facade; use normal file-based resolution.
     NotAFacadeImport,
-    /// Facade exports a source symbol with this canonical path.
-    ExportedSource(InternedPath),
+    /// Facade exports a source symbol with this canonical path and public surface.
+    ExportedSource {
+        path: InternedPath,
+        exported_entries: FxHashSet<FacadeExportEntry>,
+    },
+    /// Facade exports an external package symbol.
+    ExportedExternal { symbol_id: ExternalSymbolId },
     /// Import targets a facade but the requested symbol is not exported.
     NotExported {
         facade_name: String,
@@ -87,16 +93,30 @@ fn try_resolve_library_facade_import(
         return Some(FacadeLookupResult::NotAFacadeImport);
     }
 
-    // External import — look up the symbol name in the facade exports.
-    let symbol_name = input.header_path.name()?;
+    // Imports from outside the source library must request exactly one public symbol from the
+    // facade root. Extra path components are implementation details, not part of the facade API.
+    if components.len() != 2 {
+        return Some(FacadeLookupResult::NotExported {
+            facade_name: library_prefix.clone(),
+            facade_type: FacadeType::SourceLibrary,
+        });
+    }
+
+    let symbol_name = components[1];
     let exports = input.facade_exports.get(library_prefix)?;
     for entry in exports {
         if entry.export_name == symbol_name {
             match &entry.target {
-                crate::compiler_frontend::headers::module_symbols::FacadeExportTarget::Source(
-                    path,
-                ) => {
-                    return Some(FacadeLookupResult::ExportedSource(path.clone()));
+                FacadeExportTarget::Source(path) => {
+                    return Some(FacadeLookupResult::ExportedSource {
+                        path: path.clone(),
+                        exported_entries: exports.clone(),
+                    });
+                }
+                FacadeExportTarget::External(symbol_id) => {
+                    return Some(FacadeLookupResult::ExportedExternal {
+                        symbol_id: *symbol_id,
+                    });
                 }
             }
         }
@@ -150,14 +170,61 @@ fn try_resolve_module_root_facade_import(
                 return Some(FacadeLookupResult::NotAFacadeImport);
             }
 
-            // External import — look up the symbol name in the facade exports.
-            let symbol_name = input.header_path.name()?;
+            // Named module roots use the root path as their public API prefix. The entry-root
+            // facade has no prefix, so its public re-exports stay addressable at their real
+            // source paths, but arbitrary paths with the same final name must not match.
+            let prefix_len = prefix.as_components().len();
+            let effective_components = effective_path.as_components();
+            let public_suffix = &effective_components[prefix_len..];
             let exports = input.module_root_facade_exports.get(module_root)?;
+
+            if prefix_len == 0 {
+                for entry in exports {
+                    if let FacadeExportTarget::Source(path) = &entry.target
+                        && suffix_matches_with_optional_bst_extension(
+                            path,
+                            &effective_path,
+                            input.string_table,
+                        )
+                    {
+                        return Some(FacadeLookupResult::ExportedSource {
+                            path: path.clone(),
+                            exported_entries: exports.clone(),
+                        });
+                    }
+                }
+
+                return Some(FacadeLookupResult::NotExported {
+                    facade_name: prefix.to_portable_string(input.string_table),
+                    facade_type: FacadeType::ModuleRoot,
+                });
+            }
+
+            let symbol_name = if public_suffix.len() == 1 {
+                Some(public_suffix[0])
+            } else {
+                None
+            };
+            let Some(symbol_name) = symbol_name else {
+                return Some(FacadeLookupResult::NotExported {
+                    facade_name: prefix.to_portable_string(input.string_table),
+                    facade_type: FacadeType::ModuleRoot,
+                });
+            };
+
             for entry in exports {
                 if entry.export_name == symbol_name {
                     match &entry.target {
-                        crate::compiler_frontend::headers::module_symbols::FacadeExportTarget::Source(path) => {
-                            return Some(FacadeLookupResult::ExportedSource(path.clone()));
+                        FacadeExportTarget::Source(path) => {
+                            return Some(FacadeLookupResult::ExportedSource {
+                                path: path.clone(),
+                                exported_entries: exports.clone(),
+                            });
+                        }
+                        FacadeExportTarget::External(symbol_id) => {
+                            return Some(FacadeLookupResult::ExportedExternal {
+                                symbol_id: *symbol_id,
+                            });
                         }
                     }
                 }
@@ -170,6 +237,51 @@ fn try_resolve_module_root_facade_import(
     }
 
     None
+}
+
+/// Input bundle for source-library boundary checking.
+pub(crate) struct SourceLibraryBoundaryCheckInput<'a> {
+    pub(crate) importer_file: &'a InternedPath,
+    pub(crate) target_file: &'a InternedPath,
+    pub(crate) requested_path: &'a InternedPath,
+    pub(crate) location: SourceLocation,
+    pub(crate) file_library_membership: &'a FxHashMap<InternedPath, String>,
+    pub(crate) source_library_facade_files: &'a FxHashMap<String, InternedPath>,
+    pub(crate) string_table: &'a mut StringTable,
+}
+
+/// Enforces source-library facade privacy for concrete source-file imports.
+///
+/// WHAT: after normal source resolution reaches a file inside a source library, an importer
+/// outside that library may only import the library's facade file. Grouped public symbol imports
+/// should already have resolved through `resolve_facade_import`.
+pub(crate) fn check_source_library_boundary(
+    input: SourceLibraryBoundaryCheckInput<'_>,
+) -> Result<(), CompilerDiagnostic> {
+    let Some(target_library) = input.file_library_membership.get(input.target_file) else {
+        return Ok(());
+    };
+
+    let importer_library = input.file_library_membership.get(input.importer_file);
+    if importer_library.map(String::as_str) == Some(target_library.as_str()) {
+        return Ok(());
+    }
+
+    if input
+        .source_library_facade_files
+        .get(target_library)
+        .is_some_and(|facade_file| input.target_file == facade_file)
+    {
+        return Ok(());
+    }
+
+    let facade_name_id = input.string_table.intern(target_library);
+    Err(CompilerDiagnostic::not_exported_by_facade(
+        input.requested_path.clone(),
+        facade_name_id,
+        ImportFacadeType::SourceLibrary,
+        input.location,
+    ))
 }
 
 /// Input bundle for module boundary checking.
@@ -190,8 +302,8 @@ pub(crate) struct ModuleBoundaryCheckInput<'a> {
 ///
 /// WHAT: after an import resolves to a concrete source file, if the importer and target are in
 /// different module roots, the symbol must be exported by the target module's facade.
-/// WHY: `#` exports are visible across files in the same module, but not automatically visible
-/// to files in other modules.
+/// WHY: ordinary source declarations are importable inside one module, but cross-module imports
+/// must use the target module's explicit facade surface.
 // The typed diagnostic payload is still large enough to trigger clippy::result_large_err here.
 #[allow(clippy::result_large_err)]
 pub(crate) fn check_module_boundary(
@@ -210,15 +322,9 @@ pub(crate) fn check_module_boundary(
         return Ok(());
     }
 
-    // Different module roots: must go through facade.
-    if let Some(facade_exports) = input.module_root_facade_exports.get(target_root) {
-        if let Some(symbol_name) = input.symbol_path.name() {
-            let exported = facade_exports.iter().any(|e| e.export_name == symbol_name);
-            if exported {
-                return Ok(());
-            }
-        }
-
+    // Different module roots: grouped public imports should already have resolved through the
+    // target facade. Direct source-path resolution here is therefore a boundary violation.
+    if input.module_root_facade_exports.contains_key(target_root) {
         return Err(diagnostics::cross_module_import_not_exported(
             input.symbol_path,
             input.location,
