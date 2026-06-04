@@ -15,10 +15,15 @@ pub fn frontend_test_style_directives() -> StyleDirectiveRegistry {
         .expect("HTML style directives should merge with core.")
 }
 
-/// Creates a unique temporary directory path for test isolation.
+/// Returns a unique temporary directory path for test isolation.
 ///
-/// WHAT: joins `std::env::temp_dir()` with a prefix and a nanosecond timestamp.
+/// WHAT: joins `std::env::temp_dir()` with a prefix, process ID, nanosecond timestamp, and
+///       sequence counter to produce an unused path.
 /// WHY: prevents test collisions when multiple tests run concurrently or in sequence.
+///
+/// NOTE: this returns an unmanaged path. It does not create the directory and does not clean it
+///       up. Callers that need an actual created-and-removed directory should use
+///       `tempfile::tempdir()` instead.
 pub fn temp_dir(prefix: &str) -> PathBuf {
     static TEMP_DIR_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 

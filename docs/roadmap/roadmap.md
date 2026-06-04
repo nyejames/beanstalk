@@ -11,8 +11,7 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 ---
 
 # Plans / TODOS
-- `.bmd` files (starts inside template body and cannot break out of template).
-Can be imported into regular beanstalk files as strings.
+- `.bmd` files "beandown", a bit like markdown files. (starts inside template body and cannot break out of template). `docs/roadmap/plans/beandown-implementation-plan.md`. Intended to be simple. Can be imported into regular beanstalk files as compile time strings.
 - Collection capacity type extension `{64 Int}`
 - Build out core math library
 - Replace JSON with beanstalk `.struct` files (dogfooding for language as a way to store data / config stuff). These could be standardised as their own build system under `src/projects`.

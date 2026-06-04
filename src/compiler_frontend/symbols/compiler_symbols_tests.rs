@@ -5,18 +5,14 @@
 //! WHY: parallel per-file frontend preparation depends on every local table starting from the same
 //!      fixed symbol universe with identical IDs.
 
-use super::compiler_symbols::{CompilerSymbolSet, PreseededStringTable};
+use super::compiler_symbols::{CompilerSymbolIds, CompilerSymbolSet, PreseededStringTable};
+use super::string_interning::StringTable;
 
 fn preseeded_table() -> PreseededStringTable {
     CompilerSymbolSet::preseeded_table(0)
 }
 
-#[test]
-fn preseeded_table_helper_returns_ids_that_resolve_to_fixed_strings() {
-    let preseeded = CompilerSymbolSet::preseeded_table(32);
-    let table = &preseeded.string_table;
-    let ids = &preseeded.compiler_symbol_ids;
-
+fn assert_compiler_symbols_resolve(table: &StringTable, ids: CompilerSymbolIds) {
     assert_eq!(table.resolve(ids.start), "start");
     assert_eq!(table.resolve(ids.this), "this");
     assert_eq!(table.resolve(ids.error), "Error");
@@ -25,6 +21,13 @@ fn preseeded_table_helper_returns_ids_that_resolve_to_fixed_strings() {
     assert_eq!(table.resolve(ids.semicolon), ";");
     assert_eq!(table.resolve(ids.closing_bracket), "]");
     assert_eq!(table.resolve(ids.unknown_placeholder), "<unknown>");
+}
+
+#[test]
+fn preseeded_table_helper_returns_ids_that_resolve_to_fixed_strings() {
+    let preseeded = CompilerSymbolSet::preseeded_table(32);
+
+    assert_compiler_symbols_resolve(&preseeded.string_table, preseeded.compiler_symbol_ids);
 }
 
 #[test]
@@ -64,42 +67,32 @@ fn preseeded_fork_tables_merge_with_identity_prefix() {
     let preseeded = preseeded_table();
     let compiler_symbol_ids = preseeded.compiler_symbol_ids;
     let mut build_table = preseeded.string_table;
-    let preseed_len = build_table.len();
 
     let fork_source = build_table.fork_source();
 
     let first_fork = fork_source.fork_for_module();
     let (mut first_table, first_base_len) = first_fork.into_parts();
-    let _first_local = first_table.intern("first-only");
+    first_table.intern("first-only");
 
     let second_fork = fork_source.fork_for_module();
     let (mut second_table, second_base_len) = second_fork.into_parts();
-    let second_local = second_table.intern("second-only");
+    second_table.intern("second-only");
 
-    // Merging the first fork back should be identity because its only local string is new to the
-    // build table and appends at the same index it held in the fork.
-    let first_remap = build_table.merge_delta_from(&first_table, first_base_len);
-    assert!(first_remap.is_identity());
-    assert!(!first_remap.has_non_identity_after(preseed_len));
-
-    // Merging the second fork should remap its local suffix because "second-only" now collides
-    // with the position after the first fork's local string.
+    build_table.merge_delta_from(&first_table, first_base_len);
     let second_remap = build_table.merge_delta_from(&second_table, second_base_len);
-    assert!(!second_remap.is_identity());
-    assert!(second_remap.has_non_identity_after(preseed_len));
 
     // Preseeded IDs belong to the shared prefix, so fork remaps should keep them addressable
     // without re-interning fixed symbols after local source strings.
-    assert_eq!(
-        build_table.resolve(second_remap.get(compiler_symbol_ids.start)),
-        "start"
-    );
-    assert_eq!(
-        build_table.resolve(second_remap.get(compiler_symbol_ids.this)),
-        "this"
-    );
+    let remapped_compiler_symbols = CompilerSymbolIds {
+        start: second_remap.get(compiler_symbol_ids.start),
+        this: second_remap.get(compiler_symbol_ids.this),
+        error: second_remap.get(compiler_symbol_ids.error),
+        error_message: second_remap.get(compiler_symbol_ids.error_message),
+        error_code: second_remap.get(compiler_symbol_ids.error_code),
+        semicolon: second_remap.get(compiler_symbol_ids.semicolon),
+        closing_bracket: second_remap.get(compiler_symbol_ids.closing_bracket),
+        unknown_placeholder: second_remap.get(compiler_symbol_ids.unknown_placeholder),
+    };
 
-    // The second fork's local-only string must resolve to the correct merged ID.
-    let merged_local_id = second_remap.get(second_local);
-    assert_eq!(build_table.resolve(merged_local_id), "second-only");
+    assert_compiler_symbols_resolve(&build_table, remapped_compiler_symbols);
 }

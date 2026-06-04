@@ -328,7 +328,3 @@ mod build_directive_tests;
 mod build_import_tests;
 mod build_infrastructure_tests;
 mod build_orchestration_tests;
-mod build_receiver_tests;
-mod build_runtime_tests;
-mod build_struct_tests;
-mod build_template_tests;

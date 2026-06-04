@@ -15,10 +15,12 @@ use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
 use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::compiler_frontend::tests::test_support::{
-    build_ast, default_external_package_registry, entry_and_start, function_node, lower_hir,
-    make_test_variable, node, reference_expr, run_borrow_checker, symbol, test_location,
+use crate::compiler_frontend::tests::ast_fixture_support::{
+    function_node, make_test_variable, node, reference_expr, symbol, test_location,
 };
+use crate::compiler_frontend::tests::borrow_fixture_support::run_borrow_checker;
+use crate::compiler_frontend::tests::external_package_support::default_external_package_registry;
+use crate::compiler_frontend::tests::hir_fixture_support::{build_ast, entry_and_start, lower_hir};
 use crate::compiler_frontend::value_mode::ValueMode;
 use rustc_hash::FxHashSet;
 use std::collections::VecDeque;

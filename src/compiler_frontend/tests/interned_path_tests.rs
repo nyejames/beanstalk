@@ -1,6 +1,4 @@
 use super::*;
-use std::fs;
-use std::time::SystemTime;
 
 #[test]
 fn to_portable_string_normalizes_windows_separator() {
@@ -17,20 +15,16 @@ fn to_portable_string_normalizes_windows_separator() {
 #[test]
 fn from_path_buf_round_trips_temp_directory_path() {
     let mut string_table = StringTable::new();
-    let unique = SystemTime::now()
-        .duration_since(SystemTime::UNIX_EPOCH)
-        .expect("system time should be after unix epoch")
-        .as_nanos();
-    let temp_dir = std::env::temp_dir().join(format!("beanstalk_interned_path_{unique}"));
-    fs::create_dir_all(&temp_dir).expect("should create temp directory");
+    let temp_dir = tempfile::tempdir().expect("should create temp directory");
 
     let canonical = temp_dir
+        .path()
         .canonicalize()
         .expect("temp directory should canonicalize");
-    let path = InternedPath::from_path_buf(&canonical, &mut string_table);
-    assert_eq!(path.to_path_buf(&string_table), canonical);
 
-    fs::remove_dir_all(&temp_dir).expect("should remove temp directory");
+    let path = InternedPath::from_path_buf(&canonical, &mut string_table);
+
+    assert_eq!(path.to_path_buf(&string_table), canonical);
 }
 
 #[test]

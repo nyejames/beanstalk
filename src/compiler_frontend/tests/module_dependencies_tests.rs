@@ -12,14 +12,10 @@ use crate::compiler_frontend::headers::parse_file_headers::{
     HeaderKind, HeaderParseOptions, Headers, parse_headers, prepare_file_from_tokens,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::TokenizeMode;
-use crate::libraries::SourceLibraryRegistry;
 use crate::libraries::external_import_providers::resolution_table::ExternalImportResolutionTable;
-use std::fs;
-use std::path::Path;
 use std::path::PathBuf;
 
 fn parse_module_headers(files: &[(&str, &str)], entry_path: &str) -> (Headers, StringTable) {
@@ -49,71 +45,6 @@ fn parse_module_headers(files: &[(&str, &str)], entry_path: &str) -> (Headers, S
         let output = prepare_file_from_tokens(
             file_tokens,
             &entry_path_buf,
-            &options,
-            &external_package_registry,
-            &mut string_table,
-            const_template_offset,
-            runtime_fragment_offset,
-        )
-        .expect("preparation should succeed");
-
-        const_template_offset += output.const_template_count;
-        runtime_fragment_offset += output.runtime_fragment_count;
-        prepared_outputs.push(output);
-    }
-
-    let headers = parse_headers(
-        prepared_outputs,
-        &external_package_registry,
-        &ExternalImportResolutionTable::default(),
-        options.project_path_resolver.as_ref(),
-        &mut string_table,
-    )
-    .expect("header parsing should succeed");
-
-    (headers, string_table)
-}
-
-fn parse_module_headers_with_project_resolver(
-    files: &[(PathBuf, &str)],
-    entry_path: &Path,
-    project_path_resolver: ProjectPathResolver,
-) -> (Headers, StringTable) {
-    let mut string_table = StringTable::new();
-    let external_package_registry = ExternalPackageRegistry::new();
-    let options = HeaderParseOptions {
-        project_path_resolver: Some(project_path_resolver),
-        ..HeaderParseOptions::default()
-    };
-    let style_directives = StyleDirectiveRegistry::built_ins();
-
-    let mut prepared_outputs = Vec::with_capacity(files.len());
-    let mut const_template_offset = 0usize;
-    let mut runtime_fragment_offset = 0usize;
-
-    for (path, source) in files {
-        let canonical_path = fs::canonicalize(path).expect("test source should canonicalize");
-        let logical_path = options
-            .project_path_resolver
-            .as_ref()
-            .expect("test resolver should be present")
-            .logical_path_for_canonical_file(&canonical_path, &mut string_table)
-            .expect("test source should have a logical path");
-        let interned_path = InternedPath::from_path_buf(&logical_path, &mut string_table);
-        let mut file_tokens = tokenize(
-            source,
-            &interned_path,
-            TokenizeMode::Normal,
-            &style_directives,
-            &mut string_table,
-            None,
-        )
-        .expect("tokenization should succeed");
-        file_tokens.canonical_os_path = Some(canonical_path);
-
-        let output = prepare_file_from_tokens(
-            file_tokens,
-            entry_path,
             &options,
             &external_package_registry,
             &mut string_table,
@@ -319,138 +250,5 @@ fn function_error_return_dependency_orders_error_type_before_function() {
         non_start_names,
         vec!["AppError", "parse"],
         "error payload type must be sorted before the fallible function signature"
-    );
-}
-
-#[test]
-fn module_root_facade_export_dependencies_order_facade_before_consumers() {
-    let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
-    let project_root =
-        fs::canonicalize(temp_dir.path()).expect("temp project root should canonicalize");
-    let entry_root = project_root.join("src");
-
-    fs::create_dir_all(entry_root.join("styles")).expect("should create styles dir");
-    fs::create_dir_all(entry_root.join("docs")).expect("should create nested docs dir");
-
-    let root_facade = entry_root.join("#mod.bst");
-    let styles_file = entry_root.join("styles/docs.bst");
-    let nested_page = entry_root.join("docs/#page.bst");
-
-    let root_facade_source = "\
-export import @styles/docs { theme_head as internal_theme_head }\n\
-export theme_head #= internal_theme_head\n";
-    let styles_source = "theme_head #String = \"head\"\n";
-    let nested_page_source = "\
-import @styles/docs { theme_head }\n\
-page_head #= theme_head\n";
-
-    fs::write(&root_facade, root_facade_source).expect("should write root facade");
-    fs::write(&styles_file, styles_source).expect("should write style source");
-    fs::write(&nested_page, nested_page_source).expect("should write nested page");
-
-    let project_path_resolver =
-        ProjectPathResolver::new(project_root, entry_root, &SourceLibraryRegistry::default())
-            .expect("resolver creation should succeed");
-
-    let (headers, mut string_table) = parse_module_headers_with_project_resolver(
-        &[
-            (root_facade, root_facade_source),
-            (styles_file, styles_source),
-            (nested_page, nested_page_source),
-        ],
-        Path::new("docs/#page.bst"),
-        project_path_resolver,
-    );
-
-    let sorted = resolve_module_dependencies(headers, &mut string_table)
-        .expect("module-root facade dependency edge should order the facade before consumers");
-
-    let non_start_paths = sorted
-        .headers
-        .iter()
-        .filter(|header| !matches!(header.kind, HeaderKind::StartFunction))
-        .map(|header| header.tokens.src_path.to_portable_string(&string_table))
-        .collect::<Vec<_>>();
-
-    assert_eq!(
-        non_start_paths,
-        vec![
-            "styles/docs.bst/theme_head",
-            "#mod.bst/theme_head",
-            "docs/#page.bst/page_head",
-        ],
-        "public facade constants must be sorted before external module constants that import them"
-    );
-}
-
-#[test]
-fn reports_ambiguous_suffix_import_resolution() {
-    let mut string_table = StringTable::new();
-    let external_package_registry = ExternalPackageRegistry::new();
-    let options = HeaderParseOptions::default();
-    let style_directives = StyleDirectiveRegistry::built_ins();
-    let entry_path = PathBuf::from("src/app.bst");
-
-    let mut prepared_outputs = Vec::with_capacity(3);
-    let mut const_template_offset = 0usize;
-    let mut runtime_fragment_offset = 0usize;
-
-    for (path, source) in &[
-        (
-            "src/app.bst",
-            "import @shared/util/Thing\nTop #Thing = Thing\n",
-        ),
-        ("src/features/shared/util.bst", "Thing #Int = 1\n"),
-        ("src/lib/shared/util.bst", "Thing #Int = 2\n"),
-    ] {
-        let path_buf = PathBuf::from(path);
-        let interned_path = InternedPath::from_path_buf(&path_buf, &mut string_table);
-        let file_tokens = tokenize(
-            source,
-            &interned_path,
-            TokenizeMode::Normal,
-            &style_directives,
-            &mut string_table,
-            None,
-        )
-        .expect("tokenization should succeed");
-
-        let output = prepare_file_from_tokens(
-            file_tokens,
-            &entry_path,
-            &options,
-            &external_package_registry,
-            &mut string_table,
-            const_template_offset,
-            runtime_fragment_offset,
-        )
-        .expect("preparation should succeed");
-
-        const_template_offset += output.const_template_count;
-        runtime_fragment_offset += output.runtime_fragment_count;
-        prepared_outputs.push(output);
-    }
-
-    let bag = match parse_headers(
-        prepared_outputs,
-        &external_package_registry,
-        &ExternalImportResolutionTable::default(),
-        options.project_path_resolver.as_ref(),
-        &mut string_table,
-    ) {
-        Ok(_) => panic!("ambiguous suffix import should fail header parsing"),
-        Err(bag) => bag,
-    };
-
-    assert!(
-        bag.diagnostics().iter().any(|diagnostic| {
-            let DiagnosticPayload::AmbiguousImportTarget { path } = &diagnostic.payload else {
-                return false;
-            };
-
-            path.to_portable_string(&string_table)
-                .contains("shared/util/Thing")
-        }),
-        "expected an ambiguous-import diagnostic, got: {bag:?}"
     );
 }

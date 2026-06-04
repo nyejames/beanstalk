@@ -1350,6 +1350,11 @@ path = "generic_namespace_type_value_rejected"
 tags = ["integration","generics","imports","diagnostics"]
 
 [[case]]
+id = "unresolved_namespaced_type_rejected"
+path = "unresolved_namespaced_type_rejected"
+tags = ["integration","imports","diagnostics"]
+
+[[case]]
 id = "choice_variant_default_value_deferred"
 path = "choice_variant_default_value_deferred"
 tags = ["integration","diagnostics","choices"]
@@ -1700,6 +1705,11 @@ path = "config_plain_immutable_success"
 tags = ["integration","config"]
 
 [[case]]
+id = "config_hash_key_constant_folds_success"
+path = "config_hash_key_constant_folds_success"
+tags = ["integration","config","constants"]
+
+[[case]]
 id = "config_private_const_refs_success"
 path = "config_private_const_refs_success"
 tags = ["integration","config"]
@@ -2003,6 +2013,16 @@ tags = ["integration","diagnostics","pattern-matching","choices"]
 id = "pattern_wildcard_not_capture_binding"
 path = "pattern_wildcard_not_capture_binding"
 tags = ["integration","diagnostics","pattern-matching","choices"]
+
+[[case]]
+id = "pattern_match_bodyless_else_noop_success"
+path = "pattern_match_bodyless_else_noop_success"
+tags = ["integration","pattern-matching"]
+
+[[case]]
+id = "pattern_match_else_arrow_underscore_rejected"
+path = "pattern_match_else_arrow_underscore_rejected"
+tags = ["integration","diagnostics","pattern-matching"]
 
 [[case]]
 id = "diagnostic_quality_test"
@@ -2732,6 +2752,11 @@ tags = ["integration","results","diagnostics"]
 [[case]]
 id = "multi_bind_wrong_arity_rejected"
 path = "multi_bind_wrong_arity_rejected"
+tags = ["integration","results","diagnostics"]
+
+[[case]]
+id = "multi_bind_malformed_targets_rejected"
+path = "multi_bind_malformed_targets_rejected"
 tags = ["integration","results","diagnostics"]
 
 [[case]]
@@ -3951,6 +3976,11 @@ path = "trait_must_signature_parameter_reserved"
 tags = ["integration","diagnostics"]
 
 [[case]]
+id = "trait_reserved_must_outside_trait_rejected"
+path = "trait_reserved_must_outside_trait_rejected"
+tags = ["integration","diagnostics"]
+
+[[case]]
 id = "reserved_trait_keyword_in_postfix_member"
 path = "reserved_trait_keyword_in_postfix_member"
 tags = ["integration","diagnostics"]
@@ -4822,6 +4852,11 @@ path = "constant_cross_file_dependency_chain"
 tags = ["integration", "constants", "dependency-resolution", "imports"]
 
 [[case]]
+id = "function_body_reference_does_not_order_headers_success"
+path = "function_body_reference_does_not_order_headers_success"
+tags = ["integration", "functions", "dependency-resolution"]
+
+[[case]]
 id = "constant_imported_non_constant_rejected"
 path = "constant_imported_non_constant_rejected"
 tags = ["integration", "constants", "dependency-resolution", "imports", "diagnostics"]
@@ -5451,6 +5486,11 @@ tags = ["integration", "language", "imports", "constants"]
 id = "module_facade_wrapper_import"
 path = "module_facade_wrapper_import"
 tags = ["integration", "language", "imports", "facades"]
+
+[[case]]
+id = "module_facade_export_constant_dependency_success"
+path = "module_facade_export_constant_dependency_success"
+tags = ["integration", "constants", "dependency-resolution", "imports", "facades"]
 
 [[case]]
 id = "module_facade_import_not_auto_exported"

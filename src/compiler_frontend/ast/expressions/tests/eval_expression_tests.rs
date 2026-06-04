@@ -23,7 +23,7 @@ use crate::compiler_frontend::paths::compile_time_paths::{
 };
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::compiler_frontend::tests::test_support::{
+use crate::compiler_frontend::tests::parse_support::{
     parse_single_file_ast, parse_single_file_ast_diagnostic,
 };
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;

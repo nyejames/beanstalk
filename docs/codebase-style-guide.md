@@ -375,6 +375,25 @@ return_compiler_error!(
 ## Testing Workflow
 The primary goal is end-to-end language correctness. Prefer real usage patterns and full language snippets over narrow isolated tests.
 
+### Test ownership and pruning
+Use one clear owner for each behavior:
+
+| Behavior | Owner |
+|---|---|
+| Pure data/invariant behavior | Focused unit test near that subsystem. |
+| Compiler stage invariant | Stage-local unit test with the invariant named in the test or a short comment. |
+| Stage-boundary smoke path | Minimal pipeline/build test that proves orchestration, not feature behavior. |
+| User-facing language behavior | Integration case under `tests/cases`. |
+| Backend artifact behavior | Backend-specific integration assertions or goldens, unless the unit test protects backend-internal planning policy. |
+
+Retain unit tests only when they protect an internal invariant, impossible state, side-table fact,
+or backend policy that integration output cannot inspect directly. Split broad cross-stage test
+support into focused modules when import usage shows real stage boundaries, and localize one-caller
+fixtures instead of creating shared helpers. Prefer `tempfile::tempdir()` for tests that create
+directories or files; use unmanaged temp-path helpers only when the caller intentionally needs a
+unique path and owns cleanup. HIR tests should assert relationships such as branch joins, merge
+locals, and jump arguments instead of exact block indexes unless exact layout is the invariant.
+
 ### Unit Testing
 - Do not keep tests in the same files as production code
 - Module-specific tests should live in that module’s test directory, for example `src/compiler_frontend/hir/tests/`

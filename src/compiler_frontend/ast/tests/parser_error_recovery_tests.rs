@@ -9,7 +9,24 @@ use crate::compiler_frontend::compiler_messages::{
     InvalidStatementPositionReason, InvalidThisUsageReason, InvalidTraitKeywordUsageReason,
     InvalidTypeAnnotationReason, RuleDiagnosticKind, SyntaxDiagnosticKind, TypeAnnotationContext,
 };
-use crate::compiler_frontend::tests::test_support::parse_single_file_ast_diagnostic;
+use crate::compiler_frontend::tests::parse_support::parse_single_file_ast_diagnostic;
+
+struct InvalidMatchPatternCase {
+    name: &'static str,
+    source: &'static str,
+    expected_reason: InvalidMatchPatternReason,
+}
+
+struct MultiBindUnsupportedRhsCase {
+    name: &'static str,
+    source: &'static str,
+}
+
+struct ReservedTraitKeywordCase {
+    name: &'static str,
+    source: &'static str,
+    expected_reason: InvalidTraitKeywordUsageReason,
+}
 
 #[test]
 fn reports_missing_signature_colon() {
@@ -44,23 +61,45 @@ fn reports_stray_comma_in_function_body() {
 }
 
 #[test]
-fn reports_wildcard_match_arms_as_permanent_rule_errors() {
-    let diagnostic =
-        parse_single_file_ast_diagnostic("value = 1\nif value is:\n    _ => io(\"one\")\n;\n");
+fn reports_invalid_match_pattern_forms_as_permanent_rule_errors() {
+    let cases = [
+        InvalidMatchPatternCase {
+            name: "scalar wildcard arm",
+            source: "value = 1\nif value is:\n    _ => io(\"one\")\n;\n",
+            expected_reason: InvalidMatchPatternReason::WildcardNotSupported,
+        },
+        InvalidMatchPatternCase {
+            name: "choice payload wildcard capture",
+            source: "Result :: Ok, Err | message String |;\n\nresult = Result::Err(\"bad\")\nif result is:\n    Err(_) => io(\"err\")\n;\n",
+            expected_reason: InvalidMatchPatternReason::WildcardNotSupported,
+        },
+    ];
 
-    assert_eq!(
-        diagnostic.kind,
-        DiagnosticKind::Rule(RuleDiagnosticKind::InvalidMatchPattern)
-    );
-    assert_eq!(
-        diagnostic.payload,
-        DiagnosticPayload::InvalidMatchPattern {
-            reason: InvalidMatchPatternReason::WildcardNotSupported,
-            variant_name: None,
-            scrutinee_name: None,
-        }
-    );
-    assert!(diagnostic.primary_location.start_pos.char_column > 0);
+    for case in cases {
+        let diagnostic = parse_single_file_ast_diagnostic(case.source);
+
+        assert_eq!(
+            diagnostic.kind,
+            DiagnosticKind::Rule(RuleDiagnosticKind::InvalidMatchPattern),
+            "{}",
+            case.name
+        );
+        assert_eq!(
+            diagnostic.payload,
+            DiagnosticPayload::InvalidMatchPattern {
+                reason: case.expected_reason,
+                variant_name: None,
+                scrutinee_name: None,
+            },
+            "{}",
+            case.name
+        );
+        assert!(
+            diagnostic.primary_location.start_pos.char_column > 0,
+            "{}",
+            case.name
+        );
+    }
 }
 
 #[test]
@@ -141,81 +180,100 @@ fn reports_multi_bind_mutable_target_without_explicit_type() {
 }
 
 #[test]
-fn reports_multi_bind_with_variable_rhs_rejected() {
-    let diagnostic = parse_single_file_ast_diagnostic("value ~= 1\na, b = value\n");
+fn reports_multi_bind_with_unsupported_rhs_forms_rejected() {
+    let cases = [
+        MultiBindUnsupportedRhsCase {
+            name: "variable",
+            source: "value ~= 1\na, b = value\n",
+        },
+        MultiBindUnsupportedRhsCase {
+            name: "literal",
+            source: "a, b = 1\n",
+        },
+        MultiBindUnsupportedRhsCase {
+            name: "field access",
+            source: "Thing = |\n    x Int,\n    y Int,\n|\nthing ~= Thing(1, 2)\na, b = thing.x\n",
+        },
+    ];
 
-    assert_eq!(
-        diagnostic.kind,
-        DiagnosticKind::Rule(RuleDiagnosticKind::InvalidMultiBind)
-    );
-    assert_eq!(
-        diagnostic.payload,
-        DiagnosticPayload::InvalidMultiBind {
-            reason: InvalidMultiBindReason::UnsupportedRhs,
-            target_name: None,
-        }
-    );
+    for case in cases {
+        let diagnostic = parse_single_file_ast_diagnostic(case.source);
+
+        assert_eq!(
+            diagnostic.kind,
+            DiagnosticKind::Rule(RuleDiagnosticKind::InvalidMultiBind),
+            "{}",
+            case.name
+        );
+        assert_eq!(
+            diagnostic.payload,
+            DiagnosticPayload::InvalidMultiBind {
+                reason: InvalidMultiBindReason::UnsupportedRhs,
+                target_name: None,
+            },
+            "{}",
+            case.name
+        );
+    }
 }
 
 #[test]
-fn reports_multi_bind_with_literal_rhs_rejected() {
-    let diagnostic = parse_single_file_ast_diagnostic("a, b = 1\n");
+fn reports_reserved_trait_keywords_outside_trait_syntax() {
+    let cases = [
+        ReservedTraitKeywordCase {
+            name: "must binding",
+            source: "must = 1\n",
+            expected_reason: InvalidTraitKeywordUsageReason::MustOutsideTraitSyntax,
+        },
+        ReservedTraitKeywordCase {
+            name: "This statement",
+            source: "f||:\n    This\n;\n",
+            expected_reason: InvalidTraitKeywordUsageReason::ThisOutsideTraitSyntax,
+        },
+        ReservedTraitKeywordCase {
+            name: "must expression",
+            source: "value = must\n",
+            expected_reason: InvalidTraitKeywordUsageReason::MustOutsideTraitSyntax,
+        },
+        ReservedTraitKeywordCase {
+            name: "This expression",
+            source: "value = This\n",
+            expected_reason: InvalidTraitKeywordUsageReason::ThisOutsideTraitSyntax,
+        },
+        ReservedTraitKeywordCase {
+            name: "must copy target",
+            source: "value = copy must\n",
+            expected_reason: InvalidTraitKeywordUsageReason::MustOutsideTraitSyntax,
+        },
+        ReservedTraitKeywordCase {
+            name: "must signature parameter",
+            source: "sum|must Int| -> Int:\n    return 1\n;\n",
+            expected_reason: InvalidTraitKeywordUsageReason::MustOutsideTraitSyntax,
+        },
+        ReservedTraitKeywordCase {
+            name: "must postfix member",
+            source: "Point = |\n    value Int = 1,\n|\n\npoint ~= Point()\nvalue = point.must\n",
+            expected_reason: InvalidTraitKeywordUsageReason::MustOutsideTraitSyntax,
+        },
+    ];
 
-    assert_eq!(
-        diagnostic.kind,
-        DiagnosticKind::Rule(RuleDiagnosticKind::InvalidMultiBind)
-    );
-    assert_eq!(
-        diagnostic.payload,
-        DiagnosticPayload::InvalidMultiBind {
-            reason: InvalidMultiBindReason::UnsupportedRhs,
-            target_name: None,
-        }
-    );
-}
+    for case in cases {
+        let diagnostic = parse_single_file_ast_diagnostic(case.source);
 
-#[test]
-fn reports_multi_bind_with_field_access_rhs_rejected() {
-    let diagnostic = parse_single_file_ast_diagnostic(
-        "Thing = |\n    x Int,\n    y Int,\n|\nthing ~= Thing(1, 2)\na, b = thing.x\n",
-    );
-
-    assert_eq!(
-        diagnostic.kind,
-        DiagnosticKind::Rule(RuleDiagnosticKind::InvalidMultiBind)
-    );
-    assert_eq!(
-        diagnostic.payload,
-        DiagnosticPayload::InvalidMultiBind {
-            reason: InvalidMultiBindReason::UnsupportedRhs,
-            target_name: None,
-        }
-    );
-}
-
-#[test]
-fn reports_reserved_must_keyword_in_function_body() {
-    let diagnostic = parse_single_file_ast_diagnostic("must = 1\n");
-
-    assert_eq!(
-        diagnostic.payload,
-        DiagnosticPayload::InvalidTraitKeywordUsage {
-            reason: InvalidTraitKeywordUsageReason::MustOutsideTraitSyntax
-        }
-    );
-    assert!(diagnostic.primary_location.start_pos.char_column > 0);
-}
-
-#[test]
-fn reports_reserved_this_keyword_in_function_body_statement_position() {
-    let diagnostic = parse_single_file_ast_diagnostic("f||:\n    This\n;\n");
-
-    assert_eq!(
-        diagnostic.payload,
-        DiagnosticPayload::InvalidTraitKeywordUsage {
-            reason: InvalidTraitKeywordUsageReason::ThisOutsideTraitSyntax
-        }
-    );
+        assert_eq!(
+            diagnostic.payload,
+            DiagnosticPayload::InvalidTraitKeywordUsage {
+                reason: case.expected_reason,
+            },
+            "{}",
+            case.name
+        );
+        assert!(
+            diagnostic.primary_location.start_pos.char_column > 0,
+            "{}",
+            case.name
+        );
+    }
 }
 
 #[test]
@@ -226,68 +284,6 @@ fn reports_trait_this_keyword_outside_trait_declaration_type_position() {
         diagnostic.payload,
         DiagnosticPayload::InvalidThisUsage {
             reason: InvalidThisUsageReason::OutsideTraitDeclaration
-        }
-    );
-}
-
-#[test]
-fn reports_reserved_must_keyword_in_expression_position() {
-    let diagnostic = parse_single_file_ast_diagnostic("value = must\n");
-
-    assert_eq!(
-        diagnostic.payload,
-        DiagnosticPayload::InvalidTraitKeywordUsage {
-            reason: InvalidTraitKeywordUsageReason::MustOutsideTraitSyntax
-        }
-    );
-}
-
-#[test]
-fn reports_reserved_this_keyword_in_expression_position() {
-    let diagnostic = parse_single_file_ast_diagnostic("value = This\n");
-
-    assert_eq!(
-        diagnostic.payload,
-        DiagnosticPayload::InvalidTraitKeywordUsage {
-            reason: InvalidTraitKeywordUsageReason::ThisOutsideTraitSyntax
-        }
-    );
-}
-
-#[test]
-fn reports_reserved_must_keyword_in_copy_place_position() {
-    let diagnostic = parse_single_file_ast_diagnostic("value = copy must\n");
-
-    assert_eq!(
-        diagnostic.payload,
-        DiagnosticPayload::InvalidTraitKeywordUsage {
-            reason: InvalidTraitKeywordUsageReason::MustOutsideTraitSyntax
-        }
-    );
-}
-
-#[test]
-fn reports_reserved_must_keyword_in_signature_member_position() {
-    let diagnostic = parse_single_file_ast_diagnostic("sum|must Int| -> Int:\n    return 1\n;\n");
-
-    assert_eq!(
-        diagnostic.payload,
-        DiagnosticPayload::InvalidTraitKeywordUsage {
-            reason: InvalidTraitKeywordUsageReason::MustOutsideTraitSyntax
-        }
-    );
-}
-
-#[test]
-fn reports_reserved_must_keyword_in_postfix_member_position() {
-    let diagnostic = parse_single_file_ast_diagnostic(
-        "Point = |\n    value Int = 1,\n|\n\npoint ~= Point()\nvalue = point.must\n",
-    );
-
-    assert_eq!(
-        diagnostic.payload,
-        DiagnosticPayload::InvalidTraitKeywordUsage {
-            reason: InvalidTraitKeywordUsageReason::MustOutsideTraitSyntax
         }
     );
 }

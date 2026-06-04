@@ -10,7 +10,8 @@ use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::compiler_frontend::tests::test_support::{function_node, node, test_location};
+use crate::compiler_frontend::tests::ast_fixture_support::{function_node, node, test_location};
+
 use crate::compiler_frontend::value_mode::ValueMode;
 
 use crate::compiler_frontend::hir::hir_builder::{build_ast, lower_ast};

@@ -11,7 +11,7 @@ use crate::compiler_frontend::ast::const_values::facts::{
     AstConstDeclarationFact, ConstBindingScope, ConstBindingSource,
 };
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::compiler_frontend::tests::test_support::parse_single_file_ast;
+use crate::compiler_frontend::tests::parse_support::parse_single_file_ast;
 
 fn assert_has_fact(ast: &Ast, string_table: &StringTable, name: &str) {
     assert!(
@@ -99,8 +99,8 @@ dev_folder = output_folder
 
 // NOTE: The current parser rejects forward references in the start body with
 // `UnknownValueName` before AST finalization runs. This means the fact
-// collector never sees a forward reference in practice. The resolver unit
-// tests in `const_values/tests/mod.rs` already verify that unresolved
+// collector never sees a forward reference in practice. The const resolver unit
+// tests in `src/compiler_frontend/ast/const_values/tests/mod.rs` verify that unresolved
 // references fail const resolution with `ConstResolutionError::UnresolvedReference`.
 
 // ------------------------------

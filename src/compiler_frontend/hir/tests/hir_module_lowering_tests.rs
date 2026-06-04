@@ -15,9 +15,10 @@ use crate::compiler_frontend::hir::constants::{HirConstValue, HirDocFragmentKind
 use crate::compiler_frontend::hir::expressions::HirExpressionKind;
 use crate::compiler_frontend::hir::statements::HirStatementKind;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::compiler_frontend::tests::test_support::{
+use crate::compiler_frontend::tests::ast_fixture_support::{
     function_node, make_test_variable, node, test_location,
 };
+
 use crate::compiler_frontend::value_mode::ValueMode;
 
 use crate::compiler_frontend::hir::hir_builder::{build_ast, lower_ast};

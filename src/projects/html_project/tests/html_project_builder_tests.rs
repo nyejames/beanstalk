@@ -16,9 +16,8 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_tests::test_support::temp_dir;
 use crate::libraries::external_import_providers::provider::RuntimeAssetIdentity;
 use crate::projects::html_project::tests::test_support::{
-    RenderedPathUsageInput, assert_fragment_before_body_close, assert_has_basic_shell,
-    collect_output_paths, create_test_module, expect_bytes_output, expect_html_output,
-    expect_js_output, rendered_path_usage,
+    RenderedPathUsageInput, collect_output_paths, create_test_module, expect_bytes_output,
+    expect_html_output, expect_js_output, rendered_path_usage,
 };
 use crate::projects::settings::Config;
 use std::fs;
@@ -73,43 +72,6 @@ fn build_backend_emits_single_html_output_file() {
         project.output_files[0].file_kind(),
         FileKind::Html(_)
     ));
-}
-
-#[test]
-fn build_backend_respects_release_pretty_toggle() {
-    let builder = HtmlProjectBuilder::new();
-    let entry_path = PathBuf::from("#page.bst");
-
-    let dev_project = build_with_test_modules(
-        &builder,
-        vec![entry_path.clone()],
-        &Config::new(entry_path.clone()),
-        &[],
-    )
-    .expect("dev build should succeed");
-    let release_project = build_with_test_modules(
-        &builder,
-        vec![entry_path.clone()],
-        &Config::new(entry_path),
-        &[Flag::Release],
-    )
-    .expect("release build should succeed");
-
-    let dev_html = expect_html_output(&dev_project.output_files, "index.html");
-    let release_html = expect_html_output(&release_project.output_files, "index.html");
-
-    assert!(
-        dev_html.contains("\n        return;\n"),
-        "dev build should include pretty indentation for statements"
-    );
-    assert!(
-        release_html.contains("return;"),
-        "release build should still emit valid JS statements"
-    );
-    assert!(
-        !release_html.contains("\n        return;\n"),
-        "release build should avoid pretty indentation"
-    );
 }
 
 #[test]
@@ -196,7 +158,6 @@ fn emits_const_fragment_and_calls_start() {
     let html = expect_html_output(&project.output_files, "index.html");
     let start_name = expected_dev_function_name("start_entry", 0);
 
-    assert_has_basic_shell(html);
     assert!(html.contains("<meta charset=\"utf-8\">"));
     assert!(
         html.contains(&format!("{start_name}()")),
@@ -498,15 +459,6 @@ fn wasm_flag_emits_html_js_and_wasm_artifacts() {
     assert!(output_paths.contains(&PathBuf::from("page.js")));
     assert!(output_paths.contains(&PathBuf::from("page.wasm")));
     assert_eq!(project.entry_page_rel, Some(PathBuf::from("index.html")));
-
-    let html = expect_html_output(&project.output_files, "index.html");
-    assert_has_basic_shell(html);
-    assert!(html.contains("<script src=\"./page.js\"></script>"));
-    assert_fragment_before_body_close(html, "<script src=\"./page.js\"></script>");
-
-    let js = expect_js_output(&project.output_files, "page.js");
-    assert!(js.contains("WebAssembly.instantiateStreaming"));
-    assert!(js.contains("bst_str_ptr"));
     assert!(
         project
             .output_files

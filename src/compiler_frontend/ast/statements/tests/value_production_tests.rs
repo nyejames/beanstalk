@@ -9,7 +9,8 @@ use super::{BranchFlow, ProducedValues, analyze_branch_flow};
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, MatchExhaustiveness, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::match_patterns::{MatchArm, MatchPattern};
-use crate::compiler_frontend::tests::test_support::{node, test_location};
+use crate::compiler_frontend::tests::ast_fixture_support::{node, test_location};
+
 use crate::compiler_frontend::value_mode::ValueMode;
 
 fn then_value(line: i32) -> AstNode {

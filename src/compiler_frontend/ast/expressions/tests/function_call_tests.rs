@@ -17,7 +17,7 @@ use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::compiler_frontend::tests::test_support::{
+use crate::compiler_frontend::tests::parse_support::{
     parse_single_file_ast, parse_single_file_ast_diagnostic,
 };
 use crate::compiler_frontend::tokenizer::lexer::tokenize;

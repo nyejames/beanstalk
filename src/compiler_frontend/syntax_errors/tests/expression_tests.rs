@@ -1,5 +1,5 @@
 use crate::compiler_frontend::compiler_messages::{CommonSyntaxMistakeReason, DiagnosticPayload};
-use crate::compiler_frontend::tests::test_support::parse_single_file_ast_diagnostic;
+use crate::compiler_frontend::tests::parse_support::parse_single_file_ast_diagnostic;
 
 fn assert_common_syntax_mistake(source: &str, expected_reason: CommonSyntaxMistakeReason) {
     let diagnostic = parse_single_file_ast_diagnostic(source);

@@ -11,10 +11,13 @@ use crate::compiler_frontend::datatypes::{DataType, builtin_type_ids};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::compiler_frontend::tests::test_support::{
-    assignment_target, build_ast, default_external_package_registry, entry_and_start,
-    function_node, make_test_variable, node, run_borrow_checker, symbol, test_location,
+use crate::compiler_frontend::tests::ast_fixture_support::{
+    assignment_target, function_node, make_test_variable, node, symbol, test_location,
 };
+use crate::compiler_frontend::tests::borrow_fixture_support::run_borrow_checker;
+use crate::compiler_frontend::tests::external_package_support::default_external_package_registry;
+use crate::compiler_frontend::tests::hir_fixture_support::{build_ast, entry_and_start};
+
 use crate::compiler_frontend::value_mode::ValueMode;
 
 fn lower_hir(

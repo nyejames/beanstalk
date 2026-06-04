@@ -23,9 +23,10 @@ use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::statements::HirStatementKind;
 use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::compiler_frontend::tests::test_support::{
+use crate::compiler_frontend::tests::ast_fixture_support::{
     function_node, make_test_variable, node, test_location,
 };
+
 use crate::compiler_frontend::tests::type_id_fixture_support::{
     param_with_type_id, reference_expr,
 };
@@ -53,12 +54,12 @@ fn value_block_result_assignment(
         })
         .expect("value-block branch should assign a hidden result local");
 
-    let merge_block = match block.terminator {
-        HirTerminator::Jump { target, .. } => target,
-        _ => panic!("value-block branch should jump to the merge block"),
+    super::assert_block_has_jump_args(module, block_id, 0);
+    let HirTerminator::Jump { target, .. } = block.terminator else {
+        panic!("value-block branch should jump to the merge block");
     };
 
-    (result_local, value_kind, merge_block)
+    (result_local, value_kind, target)
 }
 
 #[test]
@@ -164,7 +165,7 @@ fn value_match_lowering_uses_shared_result_local_and_merge_block() {
         lower_ast(build_ast(vec![start_fn], entry_path), &mut string_table)
             .expect("value-match lowering should succeed");
 
-    let start = &module.functions[module.start_function.0 as usize];
+    let start = super::start_function(&module);
     let entry_block = &module.blocks[start.entry.0 as usize];
 
     let match_terminator = match &entry_block.terminator {

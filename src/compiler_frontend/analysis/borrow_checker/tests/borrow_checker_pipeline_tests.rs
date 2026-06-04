@@ -8,16 +8,19 @@ use crate::compiler_frontend::CompilerFrontend;
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
-use crate::compiler_frontend::compiler_messages::DiagnosticCategory;
+use crate::compiler_frontend::compiler_messages::{BorrowDiagnosticKind, DiagnosticKind};
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::builtin_type_ids;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::compiler_frontend::tests::test_support::{
-    assignment_target, build_ast, default_external_package_registry, entry_and_start,
-    function_node, lower_hir, make_test_variable, node, reference_expr, run_borrow_checker, symbol,
+use crate::compiler_frontend::tests::ast_fixture_support::{
+    assignment_target, function_node, make_test_variable, node, reference_expr, symbol,
     test_location,
 };
+use crate::compiler_frontend::tests::borrow_fixture_support::run_borrow_checker;
+use crate::compiler_frontend::tests::external_package_support::default_external_package_registry;
+use crate::compiler_frontend::tests::hir_fixture_support::{build_ast, entry_and_start, lower_hir};
+
 use crate::compiler_frontend::value_mode::ValueMode;
 use crate::projects::settings::Config;
 
@@ -84,7 +87,8 @@ fn frontend_check_borrows_propagates_failures() {
     assert!(
         messages
             .error_diagnostics()
-            .any(|diagnostic| diagnostic.kind.category() == DiagnosticCategory::Borrow)
+            .any(|diagnostic| diagnostic.kind
+                == DiagnosticKind::Borrow(BorrowDiagnosticKind::SharedMutableConflict))
     );
 }
 

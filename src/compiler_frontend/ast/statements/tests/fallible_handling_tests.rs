@@ -11,8 +11,9 @@ use crate::compiler_frontend::compiler_messages::{
     DiagnosticPayload, InvalidAssignmentTargetReason, InvalidResultHandlingReason,
     InvalidReturnShapeReason, TypeMismatchContext,
 };
-use crate::compiler_frontend::tests::test_support::{
-    function_body_by_name, parse_single_file_ast, parse_single_file_ast_diagnostic,
+use crate::compiler_frontend::tests::ast_fixture_support::function_body_by_name;
+use crate::compiler_frontend::tests::parse_support::{
+    parse_single_file_ast, parse_single_file_ast_diagnostic,
 };
 
 // --------------------------

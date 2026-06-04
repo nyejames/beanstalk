@@ -254,37 +254,6 @@ fn module_contains_external_module_export(
     })
 }
 
-// ── Single-file flow ──────────────────────────────────────────────────────────
-
-#[test]
-fn single_file_compiles_minimal_bst() {
-    let dir = temp_dir("single_file_ok");
-    fs::create_dir_all(&dir).expect("should create temp dir");
-    let bst_path = dir.join("test.bst");
-    fs::write(&bst_path, "x ~= 10\n").expect("should write .bst");
-
-    let mut config = Config::new(bst_path.clone());
-    let style_directives = StyleDirectiveRegistry::built_ins();
-    let mut string_table = StringTable::new();
-
-    let result = compile_project_frontend(
-        &mut config,
-        &[],
-        &style_directives,
-        &mut LibrarySet::with_mandatory_core(),
-        &mut string_table,
-    );
-
-    assert!(result.is_ok(), "expected Ok for minimal .bst file");
-    assert_eq!(
-        result.expect("checked above").len(),
-        1,
-        "expected exactly one module"
-    );
-
-    fs::remove_dir_all(&dir).expect("should remove temp dir");
-}
-
 // -------------------------
 //  Provider metadata carry
 // -------------------------
@@ -772,38 +741,6 @@ fn single_file_rejects_optional_core_package_not_exposed_by_builder() {
 }
 
 // ── Directory-project flow ────────────────────────────────────────────────────
-
-#[test]
-fn directory_project_compiles_single_entry_module() {
-    let dir = temp_dir("dir_single_module");
-    fs::create_dir_all(&dir).expect("should create temp dir");
-    fs::write(dir.join("#config.bst"), "").expect("should write config");
-    fs::write(dir.join("#page.bst"), "x ~= 10\n").expect("should write entry");
-
-    let mut config = Config::new(dir.clone());
-    let style_directives = StyleDirectiveRegistry::built_ins();
-    let mut string_table = StringTable::new();
-
-    let result = compile_project_frontend(
-        &mut config,
-        &[],
-        &style_directives,
-        &mut LibrarySet::with_mandatory_core(),
-        &mut string_table,
-    );
-
-    assert!(
-        result.is_ok(),
-        "expected Ok for single-module directory project"
-    );
-    assert_eq!(
-        result.expect("checked above").len(),
-        1,
-        "expected exactly one module"
-    );
-
-    fs::remove_dir_all(&dir).expect("should remove temp dir");
-}
 
 #[test]
 fn directory_project_discovers_multiple_entry_modules() {

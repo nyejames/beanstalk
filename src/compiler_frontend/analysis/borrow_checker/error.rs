@@ -7,8 +7,6 @@
 
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
-#[cfg(test)]
-use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 #[derive(Debug, Clone)]
 pub(crate) enum BorrowCheckError {
@@ -39,21 +37,6 @@ impl BorrowCheckError {
         match self {
             BorrowCheckError::Diagnostic(_) => None,
             BorrowCheckError::Infrastructure(error) => Some(error.as_ref()),
-        }
-    }
-
-    #[cfg(test)]
-    pub(crate) fn rendered_message_for_tests(&self, string_table: &StringTable) -> String {
-        match self {
-            BorrowCheckError::Diagnostic(diagnostic) => {
-                let diagnostic = diagnostic.as_ref();
-                crate::compiler_frontend::compiler_messages::render::terse::format_terse_diagnostics(
-                    std::slice::from_ref(diagnostic),
-                    string_table,
-                )
-                .join("\n")
-            }
-            BorrowCheckError::Infrastructure(error) => error.msg.clone(),
         }
     }
 }

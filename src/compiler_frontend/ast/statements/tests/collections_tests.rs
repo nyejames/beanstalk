@@ -15,9 +15,11 @@ use crate::compiler_frontend::compiler_messages::{
     TypeMismatchContext,
 };
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
-use crate::compiler_frontend::tests::test_support::{
-    function_body_by_name, parse_single_file_ast, parse_single_file_ast_diagnostic,
-    start_function_body,
+use crate::compiler_frontend::tests::ast_fixture_support::{
+    function_body_by_name, start_function_body,
+};
+use crate::compiler_frontend::tests::parse_support::{
+    parse_single_file_ast, parse_single_file_ast_diagnostic,
 };
 
 fn runtime_collection_builtin_op(expression: &Expression) -> CollectionBuiltinOp {

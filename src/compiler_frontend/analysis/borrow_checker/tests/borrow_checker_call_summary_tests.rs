@@ -3,7 +3,6 @@
 //! WHAT: verifies how call return aliases and host-call access summaries affect borrow facts.
 //! WHY: call boundaries are where alias metadata is easiest to get wrong and hardest to debug.
 
-use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckError;
 use crate::compiler_frontend::ast::ast_nodes::NodeKind;
 use crate::compiler_frontend::ast::expressions::call_argument::{
     CallAccessMode, CallArgument, CallPassingMode,
@@ -15,7 +14,9 @@ use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnChannel, ReturnSlot,
 };
 use crate::compiler_frontend::compiler_errors::ErrorType;
-use crate::compiler_frontend::compiler_messages::DiagnosticCategory;
+use crate::compiler_frontend::compiler_messages::{
+    BorrowAccessKind, BorrowDiagnosticKind, DiagnosticPayload, InvalidMutableAccessReason,
+};
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::{DataType, builtin_type_ids};
 use crate::compiler_frontend::external_packages::test_support::{
@@ -23,19 +24,20 @@ use crate::compiler_frontend::external_packages::test_support::{
     TestExternalReturnAlias as ExternalReturnAlias,
 };
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::compiler_frontend::tests::test_support::{
-    assignment_target, build_ast, default_external_package_registry, entry_and_start,
-    fresh_success_returns, function_node, lower_hir, make_test_variable, node, param,
-    reference_expr, register_external_function, run_borrow_checker, symbol, test_location,
+use crate::compiler_frontend::tests::ast_fixture_support::{
+    assignment_target, fresh_success_returns, function_node, make_test_variable, node, param,
+    reference_expr, symbol, test_location,
 };
-use crate::compiler_frontend::value_mode::ValueMode;
+use crate::compiler_frontend::tests::borrow_fixture_support::{
+    assert_borrow_error_kind, assert_infrastructure_error_contains,
+    assert_invalid_mutable_access_reason, run_borrow_checker,
+};
+use crate::compiler_frontend::tests::external_package_support::{
+    default_external_package_registry, register_external_function,
+};
+use crate::compiler_frontend::tests::hir_fixture_support::{build_ast, entry_and_start, lower_hir};
 
-fn assert_borrow_diagnostic(error: &BorrowCheckError) {
-    let diagnostic = error
-        .diagnostic()
-        .expect("borrow user failure should remain a typed diagnostic");
-    assert_eq!(diagnostic.kind.category(), DiagnosticCategory::Borrow);
-}
+use crate::compiler_frontend::value_mode::ValueMode;
 
 #[test]
 fn user_function_returning_param_aliases_caller_root() {
@@ -132,11 +134,9 @@ fn user_function_returning_param_aliases_caller_root() {
     );
     let error = run_borrow_checker(&hir, &external_package_registry, &string_table)
         .expect_err("callee return alias should keep caller root aliased");
-    assert_borrow_diagnostic(&error);
-    assert!(
-        error
-            .rendered_message_for_tests(&string_table)
-            .contains("may alias")
+    assert_invalid_mutable_access_reason(
+        &error,
+        InvalidMutableAccessReason::AliasedValueRequiresExclusiveAccess,
     );
 }
 
@@ -650,12 +650,7 @@ fn host_mutable_parameter_requires_mutable_access() {
     let hir = lower_hir(build_ast(vec![start], entry_path), &mut string_table);
     let error = run_borrow_checker(&hir, &external_package_registry, &string_table)
         .expect_err("mutable host parameter should enforce mutable access");
-    assert_borrow_diagnostic(&error);
-    assert!(
-        error
-            .rendered_message_for_tests(&string_table)
-            .contains("mutably access")
-    );
+    assert_invalid_mutable_access_reason(&error, InvalidMutableAccessReason::ImmutablePlace);
 }
 
 #[test]
@@ -768,6 +763,7 @@ fn two_mutable_args_to_same_root_are_rejected() {
     let a = symbol("a", &mut string_table);
     let b = symbol("b", &mut string_table);
     let x = symbol("x", &mut string_table);
+    let y = symbol("y", &mut string_table);
 
     let callee = function_node(
         mut2.clone(),
@@ -824,7 +820,7 @@ fn two_mutable_args_to_same_root_are_rejected() {
                         ),
                         CallArgument::positional(
                             reference_expr(
-                                x,
+                                x.clone(),
                                 DataType::Int,
                                 builtin_type_ids::INT,
                                 test_location(11),
@@ -838,6 +834,13 @@ fn two_mutable_args_to_same_root_are_rejected() {
                 },
                 test_location(11),
             ),
+            node(
+                NodeKind::VariableDeclaration(make_test_variable(
+                    y,
+                    reference_expr(x, DataType::Int, builtin_type_ids::INT, test_location(12)),
+                )),
+                test_location(12),
+            ),
         ],
         test_location(10),
     );
@@ -848,7 +851,7 @@ fn two_mutable_args_to_same_root_are_rejected() {
     );
     let error = run_borrow_checker(&hir, &external_package_registry, &string_table)
         .expect_err("two mutable args to the same root should fail");
-    assert_borrow_diagnostic(&error);
+    assert_borrow_error_kind(&error, BorrowDiagnosticKind::MultipleMutableBorrows);
 }
 
 #[test]
@@ -941,12 +944,18 @@ fn shared_then_mutable_args_to_same_root_are_rejected() {
     );
     let error = run_borrow_checker(&hir, &external_package_registry, &string_table)
         .expect_err("shared then mutable access to same root in a call must fail");
-    assert_borrow_diagnostic(&error);
-    let rendered_error = error.rendered_message_for_tests(&string_table);
-    assert!(
-        rendered_error.contains("Cannot mutably access"),
-        "expected shared-then-mutable conflict message, got: {}",
-        rendered_error
+    let payload = assert_borrow_error_kind(&error, BorrowDiagnosticKind::SharedMutableConflict);
+    let DiagnosticPayload::SharedMutableConflict {
+        existing_access,
+        requested_access,
+        ..
+    } = payload
+    else {
+        panic!("expected shared/mutable conflict payload, found {payload:?}");
+    };
+    assert_eq!(
+        (*existing_access, *requested_access),
+        (BorrowAccessKind::Shared, BorrowAccessKind::Mutable)
     );
 }
 
@@ -1009,13 +1018,10 @@ fn unresolved_or_mismatched_host_signature_errors() {
 
     let error = run_borrow_checker(&hir, &external_package_registry, &string_table)
         .expect_err("missing host or mismatched signature should fail");
-    let infrastructure_error = error
-        .infrastructure()
-        .expect("invalid host metadata should be an infrastructure failure");
-    assert_eq!(infrastructure_error.error_type, ErrorType::Compiler);
-    assert!(
-        infrastructure_error.msg.contains("host call target")
-            || infrastructure_error.msg.contains("argument count mismatch")
+    assert_infrastructure_error_contains(
+        &error,
+        ErrorType::Compiler,
+        &["host call target", "argument count mismatch"],
     );
 }
 
@@ -1095,12 +1101,7 @@ fn mutable_user_parameter_rejects_immutable_argument_reused_after_call() {
     );
     let error = run_borrow_checker(&hir, &external_package_registry, &string_table)
         .expect_err("immutable argument passed to mutable user param and reused must fail");
-    assert_borrow_diagnostic(&error);
-    assert!(
-        error
-            .rendered_message_for_tests(&string_table)
-            .contains("immutable local")
-    );
+    assert_invalid_mutable_access_reason(&error, InvalidMutableAccessReason::ImmutablePlace);
 }
 
 #[test]
@@ -1152,14 +1153,10 @@ fn out_of_range_return_alias_metadata_is_reported_at_call_site() {
 
     let error = run_borrow_checker(&hir, &external_package_registry, &string_table)
         .expect_err("out-of-range return alias metadata should fail at call site");
-    let infrastructure_error = error
-        .infrastructure()
-        .expect("invalid return-alias metadata should be an infrastructure failure");
-    assert_eq!(infrastructure_error.error_type, ErrorType::Compiler);
-    assert!(
-        infrastructure_error
-            .msg
-            .contains("out-of-range return-alias index")
+    assert_infrastructure_error_contains(
+        &error,
+        ErrorType::Compiler,
+        &["out-of-range return-alias index"],
     );
 }
 

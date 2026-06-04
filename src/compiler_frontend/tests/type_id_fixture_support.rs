@@ -46,7 +46,7 @@ pub(crate) struct HirTestChoiceDefinition {
 // Return-slot helpers
 // ---------------------------------------------------------------------------
 
-pub(crate) use crate::compiler_frontend::tests::test_support::fresh_success_returns;
+pub(crate) use crate::compiler_frontend::tests::ast_fixture_support::fresh_success_returns;
 
 pub(crate) fn success_return_slot(type_id: TypeId) -> ReturnSlot {
     ReturnSlot {

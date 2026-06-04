@@ -197,7 +197,7 @@ fn hash_from_tokenized_source_rejected() {
     );
 }
 
-use crate::compiler_frontend::tests::test_support::parse_single_file_ast_diagnostic;
+use crate::compiler_frontend::tests::parse_support::parse_single_file_ast_diagnostic;
 
 #[test]
 fn full_frontend_stray_hash_error() {

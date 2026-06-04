@@ -82,6 +82,10 @@ mod keyword_tests;
 
 #[cfg(test)]
 pub(crate) mod tests {
-    pub(crate) mod test_support;
+    pub(crate) mod ast_fixture_support;
+    pub(crate) mod borrow_fixture_support;
+    pub(crate) mod external_package_support;
+    pub(crate) mod hir_fixture_support;
+    pub(crate) mod parse_support;
     pub(crate) mod type_id_fixture_support;
 }

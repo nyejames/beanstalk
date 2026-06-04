@@ -1,0 +1,143 @@
+//! Parser-stage frontend test support.
+//!
+//! WHAT: turns single-file source snippets into ASTs or typed diagnostics.
+//! WHY: parser and AST diagnostics tests need a stable frontend setup without depending on HIR
+//!      lowering or borrow-checker helpers.
+
+use crate::compiler_frontend::FrontendBuildProfile;
+use crate::compiler_frontend::ast::{Ast, AstBuildContext, AstBuildInput};
+use crate::compiler_frontend::compiler_errors::{CompilerError, compiler_error_to_diagnostic};
+use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
+use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
+use crate::compiler_frontend::headers::parse_file_headers::{
+    HeaderParseOptions, parse_headers, prepare_file_from_tokens,
+};
+use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::module_dependencies::resolve_module_dependencies;
+use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
+use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
+use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::tokenizer::lexer::tokenize;
+use crate::compiler_frontend::tokenizer::tokens::TokenizeMode;
+use crate::libraries::external_import_providers::resolution_table::ExternalImportResolutionTable;
+use crate::projects::settings::DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS;
+
+pub(crate) fn test_project_path_resolver() -> ProjectPathResolver {
+    let cwd = std::env::temp_dir();
+    ProjectPathResolver::new(
+        cwd.clone(),
+        cwd,
+        &crate::libraries::SourceLibraryRegistry::default(),
+    )
+    .expect("test path resolver should be valid")
+}
+
+fn parse_single_file_ast_result(
+    source: &str,
+) -> Result<(Ast, StringTable), Box<CompilerDiagnostic>> {
+    let mut string_table = StringTable::new();
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let external_package_registry = ExternalPackageRegistry::new();
+    let file_path = std::path::PathBuf::from("#page.bst");
+
+    let options = HeaderParseOptions {
+        entry_file_id: None,
+        project_path_resolver: Some(test_project_path_resolver()),
+    };
+
+    let interned_path = InternedPath::from_path_buf(&file_path, &mut string_table);
+    let file_tokens = tokenize(
+        source,
+        &interned_path,
+        TokenizeMode::Normal,
+        &style_directives,
+        &mut string_table,
+        None,
+    )
+    .map_err(Box::new)?;
+
+    let output = prepare_file_from_tokens(
+        file_tokens,
+        &file_path,
+        &options,
+        &external_package_registry,
+        &mut string_table,
+        0,
+        0,
+    )
+    .map_err(|error| error.diagnostic)?;
+
+    let headers = parse_headers(
+        vec![output],
+        &external_package_registry,
+        &ExternalImportResolutionTable::default(),
+        options.project_path_resolver.as_ref(),
+        &mut string_table,
+    )
+    .map_err(|bag| {
+        Box::new(
+            bag.into_diagnostics()
+                .into_iter()
+                .next()
+                .unwrap_or_else(|| {
+                    compiler_error_to_diagnostic(&CompilerError::compiler_error(
+                        "unknown header parsing error",
+                    ))
+                }),
+        )
+    })?;
+
+    let sorted = resolve_module_dependencies(headers, &mut string_table).map_err(|bag| {
+        Box::new(
+            bag.into_diagnostics()
+                .into_iter()
+                .next()
+                .unwrap_or_else(|| {
+                    compiler_error_to_diagnostic(&CompilerError::compiler_error(
+                        "unknown dependency sorting error",
+                    ))
+                }),
+        )
+    })?;
+
+    let entry_path = InternedPath::from_single_str("#page.bst", &mut string_table);
+    let ast = Ast::new(
+        AstBuildInput {
+            headers: sorted.headers,
+            module_symbols: sorted.module_symbols,
+            import_environment: sorted.import_environment,
+            top_level_const_fragments: sorted.top_level_const_fragments,
+        },
+        AstBuildContext {
+            external_package_registry: &external_package_registry,
+            style_directives: &style_directives,
+            string_table: &mut string_table,
+            entry_dir: entry_path,
+            build_profile: FrontendBuildProfile::Dev,
+            project_path_resolver: Some(test_project_path_resolver()),
+            path_format_config: PathStringFormatConfig::default(),
+            template_const_loop_iteration_limit: DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS,
+        },
+    )
+    .map_err(|messages| {
+        if let Some(diagnostic) = messages.first_error() {
+            Box::new(diagnostic.clone())
+        } else {
+            panic!("frontend parsing failed without an error diagnostic")
+        }
+    })?;
+
+    Ok((ast, string_table))
+}
+
+pub(crate) fn parse_single_file_ast(source: &str) -> (Ast, StringTable) {
+    parse_single_file_ast_result(source).expect("source should parse into AST")
+}
+
+pub(crate) fn parse_single_file_ast_diagnostic(source: &str) -> CompilerDiagnostic {
+    match parse_single_file_ast_result(source) {
+        Ok(_) => panic!("source should fail during frontend parsing"),
+        Err(diagnostic) => *diagnostic,
+    }
+}

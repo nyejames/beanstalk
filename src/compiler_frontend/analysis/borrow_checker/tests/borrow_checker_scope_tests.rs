@@ -7,18 +7,23 @@ use crate::compiler_frontend::ast::ast_nodes::{MatchExhaustiveness, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::statements::match_patterns::{MatchArm, MatchPattern};
-use crate::compiler_frontend::compiler_messages::DiagnosticCategory;
+use crate::compiler_frontend::compiler_messages::BorrowDiagnosticKind;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::builtin_type_ids::BOOL;
 use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, ValueKind};
 use crate::compiler_frontend::hir::ids::{HirNodeId, HirValueId};
 use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::compiler_frontend::tests::test_support::{
-    assignment_target, build_ast, default_external_package_registry, entry_and_start,
-    function_node, lower_hir, make_test_variable, node, reference_expr, run_borrow_checker, symbol,
+use crate::compiler_frontend::tests::ast_fixture_support::{
+    assignment_target, function_node, make_test_variable, node, reference_expr, symbol,
     test_location,
 };
+use crate::compiler_frontend::tests::borrow_fixture_support::{
+    assert_borrow_error_kind, run_borrow_checker,
+};
+use crate::compiler_frontend::tests::external_package_support::default_external_package_registry;
+use crate::compiler_frontend::tests::hir_fixture_support::{build_ast, entry_and_start, lower_hir};
+
 use crate::compiler_frontend::value_mode::ValueMode;
 
 #[test]
@@ -294,13 +299,5 @@ fn dead_local_access_reports_borrow_error() {
 
     let error = run_borrow_checker(&hir, &external_package_registry, &string_table)
         .expect_err("dead local access should fail");
-    let diagnostic = error
-        .diagnostic()
-        .expect("dead local access should remain a typed borrow diagnostic");
-    assert_eq!(diagnostic.kind.category(), DiagnosticCategory::Borrow);
-    assert!(
-        error
-            .rendered_message_for_tests(&string_table)
-            .contains("before initialization or after scope end")
-    );
+    assert_borrow_error_kind(&error, BorrowDiagnosticKind::UseOfUninitializedLocal);
 }

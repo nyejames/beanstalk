@@ -1,0 +1,5 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["pattern_match_bodyless_else_noop_success"]
+rendered_output_not_contains = ["one"]
