@@ -13,7 +13,7 @@ use crate::compiler_frontend::Flag;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::style_directives::StyleDirectiveSpec;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::libraries::LibrarySet;
+use crate::libraries::{LibrarySet, SourceFileKind};
 use crate::projects::html_project::compile_input::HtmlModuleCompileInput;
 use crate::projects::html_project::diagnostics::{
     duplicate_html_output_path_messages, tracked_asset_builder_output_conflict_messages,
@@ -247,6 +247,11 @@ impl BackendBuilder for HtmlProjectBuilder {
         libraries.builder_runtime_packages.push(canvas_metadata);
 
         Self::register_html_config_keys(&mut libraries);
+
+        libraries.source_file_kinds.register(
+            SourceFileKind::Beandown.extension(),
+            SourceFileKind::Beandown,
+        );
 
         libraries
             .external_import_providers

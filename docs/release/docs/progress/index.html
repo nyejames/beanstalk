@@ -623,6 +623,100 @@ body {
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Beandown <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">.bd</span> content assets</td>
+     <td style="padding: 0.2em 0.5em;  "> Partial</td>
+     <td style="padding: 0.2em 0.5em;  "> Targeted unit coverage for builder-declared source-kind registration, extensionless path resolution, Beandown token entry behavior, synthetic <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">content #String</span> headers, escaped and unescaped outer template closes, markdown folding, compile-time template <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">if</span> and collection <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">loop</span> folding, non-foldable condition, runtime-call, external/prelude-call, and dynamic-loop rejection, explicit facade re-export syntax, grouped and namespace <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">content</span> imports into normal <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">.bst</span> constants, namespace-record constant dependency sorting, flat <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">@html</span> constant visibility, same-directory facade constant visibility, const-record field projection, override ordering, non-constant filtering, facade-supplied <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">content</span> references, self-originating re-export exclusion, no-runtime/start header and AST behavior for imported <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">.bd</span> files, and direct API file, directory, recursive directory, file-list, in-memory source, duplicate-input, invalid caller-scope, and no-artifact behavior. Integration coverage now includes HTML namespace imports, grouped aliases, explicit facade re-exports, source-library imports, unimported <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">.bd</span> files, direct <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">.bd</span> entry rejection, direct <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">.bd</span> extension-import rejection, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">.bd</span> import ambiguities, body-scope runtime/type/API rejection, unescaped outer-close diagnostics, and HTML-Wasm compile-path parity.</td>
+     <td style="padding: 0.2em 0.5em;  "> HTML builder / frontend</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">.bd</span> is implemented as a builder-supported source kind that synthesizes a private compile-time <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">content #String</span> constant from an implicit <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">$markdown</span> template body. Current support covers source-kind discovery, Beandown entry tokenization, synthetic header preparation, dependency-sorted AST folding, normal HTML project imports, crate-local HTML-project direct API compilation, user-facing documentation, and final redundancy/output-artifact auditing. <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">@html</span> exported constants and same-directory <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#mod.bst</span> exported constants are visible flat in compiler-integrated Beandown bodies, const-record field projection folds through the existing AST template-head path, grouped imports and namespace imports such as <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">intro.content</span> fold into normal <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">.bst</span> constants, functions/types/runtime APIs are not visible, generated self <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">content</span> is excluded, recognized source-asset entries such as direct <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">.bd</span> page builds are rejected with a dedicated diagnostic, and direct API duplicate/caller-scope mistakes use dedicated stable diagnostics. Direct caller-supplied folded scope conversion, CLI <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">bean beandown</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">project = "beandown"</span>, generated standalone HTML files, frontmatter/metadata/raw-source retention, and generic Markdown/CSS/JSON source handlers remain deferred.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
+             <td style="padding: 0.2em 0.5em;  "> Builder-supported source file kinds</td>
+     <td style="padding: 0.2em 0.5em;  "> Partial</td>
+     <td style="padding: 0.2em 0.5em;  "> Targeted coverage through Beandown source-kind registry, extensionless resolution, unsupported-kind diagnostics, explicit source-extension diagnostics, direct-entry rejection, ambiguity handling, source discovery, and tokenizer entry-mode tests.</td>
+     <td style="padding: 0.2em 0.5em;  "> Stage 0 / frontend</td>
+     <td style="padding: 0.2em 0.5em;  "> Builders can declare non-<span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">.bst</span> source file kinds that participate in source import discovery and frontend preparation. V1 implements only Beandown <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">.bd</span> for the HTML builder. This is not a general source-handler plugin system yet; future Markdown/CSS/JSON handlers remain deferred until each has a concrete semantic owner.</td>
+        </tr>
+
+    <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Structs, records, and receiver methods</td>
      <td style="padding: 0.2em 0.5em;  "> Supported</td>
      <td style="padding: 0.2em 0.5em;  "> Broad integration coverage with targeted parser, struct-default, constructor-default, and receiver-catalog unit coverage.</td>
@@ -1076,13 +1170,28 @@ body {
     ">name/</span> collisions are rejected during Stage 0 project discovery, while <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">.js</span> files are excluded from that specific collision rule. Authored declarations in <span style="
+    ">.js</span> files are excluded from that specific collision rule. Explicit facade status: authored declarations in <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">#mod.bst</span> are exported automatically, while normal imports inside <span style="
+    ">#mod.bst</span> are public only when marked with <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">#mod.bst</span> stay local unless wrapped by authored facade declarations. Import aliases are file-local and do not create public facade names. Alias and visible-name collisions are hard errors across same-file declarations, source imports, external imports, namespace records, type aliases, prelude symbols, builtins, and facade public names. Direct imports of special files such as <span style="
+    ">export</span>, while unmarked declarations and ordinary imports stay private to the facade file. <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">export import @path { Symbol }</span> and grouped <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">export @path { Symbol }</span> public re-exports are supported for source and external package symbols, aliases define the public facade name, duplicate public names are rejected with <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">BST-RULE-0081</span>, public authored facade APIs reject private type surfaces, including inferred exported constant types, with <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">BST-RULE-0082</span>, and bare namespace exports such as <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">export @path</span> remain deferred. Alias and visible-name collisions are hard errors across same-file declarations, source imports, external imports, namespace records, type aliases, prelude symbols, builtins, and facade public names. Direct imports of special files such as <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">#mod.bst</span>, <span style="
@@ -1537,7 +1646,7 @@ body {
     ">name/</span> collisions under the entry root or source-library roots are hard project-structure errors. All module roots enforce facade boundaries: any directory with a non-config <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">#*.bst</span> file is a boundary, modules that export outside themselves must do so through `#mod.bst`, and outside importers cannot bypass the facade. `#mod.bst` is facade-only: private top-level declarations, top-level runtime statements, and runtime templates are rejected.</td>
+    ">#*.bst</span> file is a boundary, modules that export outside themselves must do so through `#mod.bst`, and outside importers cannot bypass the facade. `#mod.bst` is facade-only: unmarked top-level declarations and ordinary imports are private to the facade, while top-level runtime statements and runtime templates are rejected.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -1702,9 +1811,9 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Receiver methods</td>
      <td style="padding: 0.2em 0.5em;  "> Supported</td>
-     <td style="padding: 0.2em 0.5em;  "> Broad method call, struct and choice receiver, file-local extension methods for imported source and external opaque receivers, import, namespace import, grouped alias, receiver-method alias collision, grouped receiver-type visibility, same-file/imported same-name receiver dispatch, type auto-import, facade privacy, same-file restriction, extension non-importability, canonical override rejection, unsupported receiver, collision, missing receiver-type, and mutable receiver diagnostics coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad method call, struct and choice receiver, file-local extension methods for imported source and external opaque receivers, import, namespace import, grouped alias, receiver-method alias collision, grouped receiver-type visibility, same-file/imported same-name receiver dispatch, type auto-import, facade privacy, facade-exported receiver-method auto-import, same-file restriction, extension non-importability, canonical override rejection, unsupported receiver, collision, missing receiver-type, and mutable receiver diagnostics coverage.</td>
      <td style="padding: 0.2em 0.5em;  "> JS / HTML</td>
-     <td style="padding: 0.2em 0.5em;  "> User-defined struct and choice methods stay statically resolved and same-file with the receiver type for Alpha. File-local extension methods may target visible imported source nominal types or exact external opaque types, are callable only in their declaring file, are never imported/exported as reusable receiver methods, and cannot override visible canonical source or external receiver methods. Receiver methods import through the receiver catalog, not as free functions or namespace-record fields. Receiver-method names may be shared by receiver methods because dispatch includes the receiver type, but they still collide with ordinary value/type/namespace/prelude/builtin names. Explicit grouped receiver-method aliases reserve local names for collision checks, and grouped receiver-method imports require the receiver type to be visible through a type import, namespace import, same grouped import, or exact transparent alias.</td>
+     <td style="padding: 0.2em 0.5em;  "> User-defined struct and choice methods stay statically resolved and same-file with the receiver type for Alpha. File-local extension methods may target visible imported source nominal types or exact external opaque types, are callable only in their declaring file, are never imported/exported as reusable receiver methods, and cannot override visible canonical source or external receiver methods. Receiver methods import through the receiver catalog, not as free functions or namespace-record fields. Cross-facade receiver type imports auto-import only receiver methods exported by the same facade surface, and public receiver-method re-exports require the receiver type to be public through that facade. Receiver-method names may be shared by receiver methods because dispatch includes the receiver type, but they still collide with ordinary value/type/namespace/prelude/builtin names. Explicit grouped receiver-method aliases reserve local names for collision checks, and grouped receiver-method imports require the receiver type to be visible through a type import, namespace import, same grouped import, or exact transparent alias.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -2338,28 +2447,73 @@ body {
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> Direct facade re-export syntax</td>
-     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
-     <td style="padding: 0.2em 0.5em;  "> Legacy <span style="
+             <td style="padding: 0.2em 0.5em;  "> Explicit facade export/re-export syntax</td>
+     <td style="padding: 0.2em 0.5em;  "> Partial</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">#import</span> rejection coverage plus wrapper-declaration facade coverage for source and external functions.</td>
-     <td style="padding: 0.2em 0.5em;  "> Direct facade re-export syntax has been removed from the Alpha surface. Legacy <span style="
+    ">module_facade_explicit_export_surface_success</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">#import</span> now fails with <span style="
+    ">module_facade_private_path_rejected</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">BST-RULE-0025</span>. Until a new direct export syntax is designed, <span style="
+    ">entry_root_facade_private_path_rejected</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">#mod.bst</span> facades expose imported behavior through real authored declarations: compile-time bindings for constants, type aliases for types, and wrapper functions for callable values. Function alias exports and automatic method re-export through <span style="
+    ">source_lib_facade_private_path_rejected</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">#mod.bst</span> type aliases remain deferred. Normal imports inside <span style="
+    ">source_lib_facade_alias_private_path_rejected</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">#mod.bst</span> remain local implementation details.</td>
+    ">module_facade_reexport_namespace_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">source_lib_reexport_namespace_success</span>, placement diagnostics for <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">export</span> outside <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#mod.bst</span>, bare namespace-export diagnostics, legacy <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#import</span> rejection coverage, plus explicit <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">export import</span>, grouped <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">export @path { Symbol }</span>, alias, external-symbol, module-root, source-library, and duplicate-public-name coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#mod.bst</span> facades now expose authored declarations with <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">export</span> and imported behavior with <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">export import @path { Symbol }</span> or <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">export @path { Symbol }</span> sugar. Unmarked facade declarations and ordinary <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">import</span> entries remain private to the facade file, so private helpers, private facade-only types, and private imports can support public wrappers without becoming API. Re-export aliases define the public API name, source and external package targets are supported, namespace imports over re-export-only facades expose the public facade entries, and public exported APIs reject private type surfaces with <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">BST-RULE-0082</span>. Cross-module, entry-root, and source-library importers cannot bypass facades by spelling private implementation paths, even when an exported symbol shares the same final name. Legacy <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#import</span> still fails with <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">BST-RULE-0025</span>. Bare namespace exports, wildcard exports, function alias values, and automatic method re-export through <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#mod.bst</span> type aliases remain deferred.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -2395,7 +2549,7 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Namespace / wildcard imports</td>
      <td style="padding: 0.2em 0.5em;  "> Partial</td>
-     <td style="padding: 0.2em 0.5em;  "> Source-file, module-facade, receiver-method, Rust-side external package, and provider-backed JS package namespace records are covered; wildcard imports remain deferred.</td>
+     <td style="padding: 0.2em 0.5em;  "> Source-file, module-facade, re-export-only facade, receiver-method, Rust-side external package, and provider-backed JS package namespace records are covered; wildcard imports remain deferred.</td>
      <td style="padding: 0.2em 0.5em;  "> Namespace imports such as <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
@@ -2420,7 +2574,7 @@ body {
     ">models.User</span> or <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">canvas.Canvas2d</span>, and receiver methods from the imported surface are available only through receiver-call syntax. Import records cannot be used as values, namespace records do not expose nested filesystem traversal, receiver methods are not namespace fields, and wildcard syntax such as <span style="
+    ">canvas.Canvas2d</span>, and receiver methods from the imported surface are available only through receiver-call syntax. Facade namespace imports use the explicit facade public export set, including import-only and re-export-only facades. Import records cannot be used as values, namespace records do not expose nested filesystem traversal, receiver methods are not namespace fields, and wildcard syntax such as <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">import @pkg.*</span> remains unsupported.</td>
@@ -2464,7 +2618,7 @@ body {
     ">generic_identity_bridge</span>, and <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">ast/generic_functions</span>. Nested inline generic applications, recursive generic types, generic aliases with parameters, partial application, explicit generic call syntax, generic function values, file-local evidence-backed generic bound dispatch, direct facade re-export syntax, concrete generic-instance receiver declarations, and generic external package functions remain deferred or rejected.</td>
+    ">ast/generic_functions</span>. Nested inline generic applications, recursive generic types, generic aliases with parameters, partial application, explicit generic call syntax, generic function values, file-local evidence-backed generic bound dispatch, namespace/wildcard facade exports, concrete generic-instance receiver declarations, and generic external package functions remain deferred or rejected.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -2787,6 +2941,9 @@ body {
     ">public_generic_bound_public_trait_success</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
+    ">public_generic_bound_reexported_trait_success</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
     ">public_generic_bound_private_trait_rejected</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
@@ -2857,7 +3014,7 @@ body {
     ">type A is TRAIT_A and TRAIT_B</span> bounds are supported for generic functions, structs, and choices. Concrete generic function calls and concrete nominal generic instances require explicit visible reusable trait evidence for each inferred or substituted concrete type argument, and matching methods without <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">Type must TRAIT</span> do not satisfy bounds. Public facade generic functions, structs, and choices reject private or non-exported trait bounds in their signatures. Bound generic functions work across grouped imports, grouped aliases, namespace function imports, and facade grouped wrappers when the needed trait and evidence are visible. Generic function bodies can call a unique receiver method supplied by a generic bound; ordinary visible concrete receiver methods still resolve first, multiple bound methods with the same name are rejected as ambiguous, and same-concrete multi-parameter instances retain each receiver parameter's source-bound surface. Dynamic trait value types do not satisfy static bounds and are rejected as concrete substitutions. Commas still separate generic parameters. <span style="
+    ">Type must TRAIT</span> do not satisfy bounds. Public facade generic functions, structs, and choices reject private or non-exported trait bounds in their signatures, while traits re-exported through the same facade surface are accepted. Bound generic functions work across grouped imports, grouped aliases, namespace function imports, and facade grouped wrappers when the needed trait and evidence are visible. Generic function bodies can call a unique receiver method supplied by a generic bound; ordinary visible concrete receiver methods still resolve first, multiple bound methods with the same name are rejected as ambiguous, and same-concrete multi-parameter instances retain each receiver parameter's source-bound surface. Dynamic trait value types do not satisfy static bounds and are rejected as concrete substitutions. Commas still separate generic parameters. <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">must</span> in a generic parameter list is rejected with guidance to use <span style="

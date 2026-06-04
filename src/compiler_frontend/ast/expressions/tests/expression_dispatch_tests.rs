@@ -18,7 +18,7 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::{
-    FileTokens, SourceLocation, Token, TokenKind, TokenizeMode,
+    FileTokens, SourceLocation, Token, TokenKind, TokenizerEntryMode,
 };
 use crate::compiler_frontend::type_coercion::compatibility::TypeCompatibilityCache;
 use crate::compiler_frontend::type_coercion::parse_context::ExpectedType;
@@ -146,7 +146,7 @@ fn hash_from_tokenized_source_rejected() {
     let file_tokens = tokenize(
         source,
         &file_path,
-        TokenizeMode::Normal,
+        TokenizerEntryMode::SourceFile,
         &crate::compiler_frontend::style_directives::StyleDirectiveRegistry::built_ins(),
         &mut string_table,
         None,

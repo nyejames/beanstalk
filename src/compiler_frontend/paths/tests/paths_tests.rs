@@ -5,7 +5,7 @@ use crate::compiler_frontend::compiler_messages::{
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
-use crate::compiler_frontend::tokenizer::tokens::{PathTokenItem, TokenizeMode};
+use crate::compiler_frontend::tokenizer::tokens::{PathTokenItem, TokenizerEntryMode};
 
 fn first_path_token_values(source: &str) -> Vec<String> {
     let (items, string_table) = first_path_token(source);
@@ -23,7 +23,7 @@ fn first_path_token(source: &str) -> (Vec<PathTokenItem>, StringTable) {
     let file_tokens = tokenize(
         source,
         &source_path,
-        TokenizeMode::Normal,
+        TokenizerEntryMode::SourceFile,
         &style_directives,
         &mut string_table,
         None,
@@ -52,7 +52,7 @@ fn tokenize_path_error(source: &str) -> CompilerDiagnostic {
     tokenize(
         source,
         &source_path,
-        TokenizeMode::Normal,
+        TokenizerEntryMode::SourceFile,
         &style_directives,
         &mut string_table,
         None,
@@ -98,7 +98,7 @@ fn collect_import_path_values(source: &str) -> Vec<String> {
     let file_tokens = tokenize(
         source,
         &source_path,
-        TokenizeMode::Normal,
+        TokenizerEntryMode::SourceFile,
         &style_directives,
         &mut string_table,
         None,
@@ -155,7 +155,7 @@ fn parse_file_path_rejects_public_root_backslash_variant() {
     let result = tokenize(
         "import @\\\n",
         &source_path,
-        TokenizeMode::Normal,
+        TokenizerEntryMode::SourceFile,
         &style_directives,
         &mut string_table,
         None,
@@ -173,7 +173,7 @@ fn parse_file_path_rejects_parenthesis_wrapper_syntax() {
     let result = tokenize(
         "import @(a/b/c)\n",
         &source_path,
-        TokenizeMode::Normal,
+        TokenizerEntryMode::SourceFile,
         &style_directives,
         &mut string_table,
         None,
@@ -375,7 +375,7 @@ fn parse_file_path_rejects_grouped_path_with_multiple_commas() {
     let result = tokenize(
         "import @docs { a.md,, b.md }\n",
         &source_path,
-        TokenizeMode::Normal,
+        TokenizerEntryMode::SourceFile,
         &style_directives,
         &mut string_table,
         None,
@@ -421,7 +421,7 @@ fn parse_file_path_rejects_slash_before_group_with_whitespace() {
     let result = tokenize(
         "import @docs/   {a.md}\n",
         &source_path,
-        TokenizeMode::Normal,
+        TokenizerEntryMode::SourceFile,
         &style_directives,
         &mut string_table,
         None,
@@ -442,7 +442,7 @@ fn parse_file_path_rejects_nested_slash_before_group() {
     let result = tokenize(
         "import @docs { subfolder/ { a.md } }\n",
         &source_path,
-        TokenizeMode::Normal,
+        TokenizerEntryMode::SourceFile,
         &style_directives,
         &mut string_table,
         None,
@@ -468,7 +468,7 @@ fn parse_file_path_rejects_empty_path_component_in_grouped_entry() {
     let result = tokenize(
         "import @docs { subfolder//a.md }\n",
         &source_path,
-        TokenizeMode::Normal,
+        TokenizerEntryMode::SourceFile,
         &style_directives,
         &mut string_table,
         None,
@@ -499,7 +499,7 @@ fn parse_file_path_rejects_non_leading_dot_segments() {
     let result = tokenize(
         "import @docs/../content\n",
         &source_path,
-        TokenizeMode::Normal,
+        TokenizerEntryMode::SourceFile,
         &style_directives,
         &mut string_table,
         None,
@@ -574,7 +574,7 @@ fn collect_import_paths_from_tokens_rejects_missing_path() {
     let file_tokens = tokenize(
         "import\nfooter\n",
         &source_path,
-        TokenizeMode::Normal,
+        TokenizerEntryMode::SourceFile,
         &style_directives,
         &mut string_table,
         None,
@@ -601,7 +601,7 @@ fn parse_import_clause_items_reads_alias() {
     let file_tokens = tokenize(
         "import @core/io/io as print",
         &source_path,
-        TokenizeMode::Normal,
+        TokenizerEntryMode::SourceFile,
         &style_directives,
         &mut string_table,
         None,
@@ -682,7 +682,7 @@ fn reject_group_level_alias() {
     let file_tokens = tokenize(
         "import @components { render, Button } as ui",
         &source_path,
-        TokenizeMode::Normal,
+        TokenizerEntryMode::SourceFile,
         &style_directives,
         &mut string_table,
         None,
@@ -713,7 +713,7 @@ fn reject_double_alias() {
     let file_tokens = tokenize(
         "import @x { foo as bar } as baz",
         &source_path,
-        TokenizeMode::Normal,
+        TokenizerEntryMode::SourceFile,
         &style_directives,
         &mut string_table,
         None,
@@ -777,7 +777,7 @@ fn reject_grouped_import_alias_that_is_a_keyword() {
     let diagnostic = tokenize(
         "import @core/math { PI as export }",
         &source_path,
-        TokenizeMode::Normal,
+        TokenizerEntryMode::SourceFile,
         &style_directives,
         &mut string_table,
         None,

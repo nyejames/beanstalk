@@ -394,6 +394,7 @@ fn header_kind_const_template_remaps_condition_references() {
     let mut kind = HeaderKind::ConstTemplate {
         condition_references: vec![InitializerReference {
             name: show_banner,
+            dot_member: None,
             location: make_location("test.bst", &mut local),
             followed_by_call: false,
             followed_by_choice_namespace: false,

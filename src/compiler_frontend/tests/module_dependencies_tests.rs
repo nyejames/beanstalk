@@ -14,7 +14,7 @@ use crate::compiler_frontend::headers::parse_file_headers::{
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
-use crate::compiler_frontend::tokenizer::tokens::TokenizeMode;
+use crate::compiler_frontend::tokenizer::tokens::TokenizerEntryMode;
 use crate::libraries::external_import_providers::resolution_table::ExternalImportResolutionTable;
 use std::path::PathBuf;
 
@@ -35,7 +35,7 @@ fn parse_module_headers(files: &[(&str, &str)], entry_path: &str) -> (Headers, S
         let file_tokens = tokenize(
             source,
             &interned_path,
-            TokenizeMode::Normal,
+            TokenizerEntryMode::SourceFile,
             &style_directives,
             &mut string_table,
             None,

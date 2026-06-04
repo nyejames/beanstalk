@@ -80,8 +80,11 @@ page_head #= theme_head
 
         -- Collection must have the mutable symbol to call mutating methods on it
         ~fruit_array.set(1, "bananas") catch:
+            assert(false, "This should never fail since the index is in bounds and the collection is mutable")
         ;
+        
         ~fruit_array.set(0, "pineapple") catch:
+            assert(false, "This should never fail since the index is in bounds and the collection is mutable")
         ;
 
         -- Get doesn't need a mutable reference to the collection since it doesn't mutate

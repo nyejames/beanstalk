@@ -357,6 +357,68 @@ pub(crate) fn explicit_bst_extension_message(
     )
 }
 
+pub(crate) fn explicit_source_extension_message(
+    path: &InternedPath,
+    extension: StringId,
+    string_table: &StringTable,
+) -> String {
+    let path_text = path.to_portable_string(string_table);
+    let extension = string_table.resolve(extension);
+    let suffix = format!(".{extension}");
+    let extensionless_path = path_text.strip_suffix(&suffix).unwrap_or(&path_text);
+    format!(
+        "Import paths must not include the `.{extension}` source-file extension: `@{path_text}`.\n\
+         Use `@{extensionless_path}` instead.",
+    )
+}
+
+pub(crate) fn unsupported_source_file_kind_message(
+    path: &InternedPath,
+    extension: StringId,
+    string_table: &StringTable,
+) -> String {
+    let path = path.to_portable_string(string_table);
+    let extension = string_table.resolve(extension);
+    format!(
+        "Import `{path}` resolves to a recognized source file kind `.{extension}`, but this builder does not support it.\n\
+         Use a builder that supports `.{extension}` files or import a Beanstalk source file instead.",
+    )
+}
+
+pub(crate) fn invalid_source_file_entry_message(
+    path: &InternedPath,
+    extension: StringId,
+    string_table: &StringTable,
+) -> String {
+    let path = path.to_portable_string(string_table);
+    let extension = string_table.resolve(extension);
+    format!(
+        "Entry file `{path}` uses the `.{extension}` source-file kind, but source assets cannot be compiled as page or module entries.\n\
+         Import this file from a `.bst` entry file using extensionless import syntax, or use a `.bst`/`#page.bst` file as the build entry.",
+    )
+}
+
+pub(crate) fn invalid_beandown_api_scope_item_message(
+    path: &InternedPath,
+    string_table: &StringTable,
+) -> String {
+    let path = path.to_portable_string(string_table);
+    format!(
+        "Direct Beandown compilation for `{path}` does not support caller-supplied scope constants yet.\n\
+         Remove the scope constants from the request, or expose compile-time constants through the compiler-integrated `@html` and same-directory `#mod.bst` facade paths."
+    )
+}
+
+pub(crate) fn duplicate_beandown_input_path_message(
+    path: &InternedPath,
+    string_table: &StringTable,
+) -> String {
+    let path = path.to_portable_string(string_table);
+    format!(
+        "Beandown input path `{path}` was provided more than once. Each file or in-memory display path in one direct compile request must be unique."
+    )
+}
+
 pub(crate) fn unsupported_external_extension_message(
     path: &InternedPath,
     extension: StringId,

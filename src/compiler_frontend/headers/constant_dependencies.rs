@@ -11,7 +11,7 @@ use crate::compiler_frontend::compiler_messages::{
 use crate::compiler_frontend::declaration_syntax::declaration_shell::InitializerReference;
 use crate::compiler_frontend::external_packages::ExternalSymbolId;
 use crate::compiler_frontend::headers::import_environment::{
-    FileVisibility, HeaderImportEnvironment,
+    FileVisibility, HeaderImportEnvironment, NamespaceTypeMember, NamespaceValueMember,
 };
 use crate::compiler_frontend::headers::module_symbols::{GenericDeclarationKind, ModuleSymbols};
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
@@ -238,13 +238,91 @@ fn classify_reference(
         };
     }
 
-    // 3. Source-visible names: may be constants, constructors, or non-constants.
+    // 3. Namespace records: a shallow `namespace.member` access can name a source constant that
+    // must be ordered before this initializer folds. Full member semantics stay in AST.
+    if let Some(record) = visibility.visible_namespace_records.get(&reference.name) {
+        let Some(member_name) = reference.dot_member else {
+            return ConstantReferenceResolution::NotVisible {
+                name: reference.name,
+            };
+        };
+
+        if let Some(member) = record.value_members.get(&member_name) {
+            return classify_namespace_value_member(
+                member,
+                constant_paths,
+                struct_or_choice_paths,
+                module_symbols,
+                reference,
+            );
+        }
+
+        if let Some(NamespaceTypeMember::SourceDeclaration(path)) =
+            record.type_members.get(&member_name)
+        {
+            return ConstantReferenceResolution::SourceTypeAlias {
+                _path: path.clone(),
+            };
+        }
+
+        return ConstantReferenceResolution::NotVisible { name: member_name };
+    };
+
+    // 4. Source-visible names: may be constants, constructors, or non-constants.
     let Some(target_path) = visibility.visible_source_names.get(&reference.name) else {
         return ConstantReferenceResolution::NotVisible {
             name: reference.name,
         };
     };
 
+    classify_source_declaration_reference(
+        target_path,
+        constant_paths,
+        struct_or_choice_paths,
+        module_symbols,
+        reference,
+    )
+}
+
+fn classify_namespace_value_member(
+    member: &NamespaceValueMember,
+    constant_paths: &FxHashSet<InternedPath>,
+    struct_or_choice_paths: &FxHashSet<InternedPath>,
+    module_symbols: &ModuleSymbols,
+    reference: &InitializerReference,
+) -> ConstantReferenceResolution {
+    match member {
+        NamespaceValueMember::SourceDeclaration(target_path) => {
+            classify_source_declaration_reference(
+                target_path,
+                constant_paths,
+                struct_or_choice_paths,
+                module_symbols,
+                reference,
+            )
+        }
+
+        NamespaceValueMember::ExternalSymbol(symbol_id) => {
+            if matches!(symbol_id, ExternalSymbolId::Constant(_)) {
+                ConstantReferenceResolution::ExternalConstant {
+                    _symbol_id: *symbol_id,
+                }
+            } else {
+                ConstantReferenceResolution::ExternalNonConstant {
+                    _symbol_id: *symbol_id,
+                }
+            }
+        }
+    }
+}
+
+fn classify_source_declaration_reference(
+    target_path: &InternedPath,
+    constant_paths: &FxHashSet<InternedPath>,
+    struct_or_choice_paths: &FxHashSet<InternedPath>,
+    module_symbols: &ModuleSymbols,
+    reference: &InitializerReference,
+) -> ConstantReferenceResolution {
     let is_constant = constant_paths.contains(target_path);
 
     if is_constant {

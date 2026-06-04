@@ -7,10 +7,29 @@
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::compile_time_paths::CompileTimePathBase;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::projects::settings::BEANSTALK_FILE_EXTENSION;
-use std::ffi::OsStr;
+use crate::libraries::{SourceFileKind, SourceFileKindRegistry};
 use std::fs;
 use std::path::{Path, PathBuf};
+
+/// A source-file import candidate derived from one extensionless import path.
+///
+/// WHAT: carries the concrete filesystem candidate plus its typed source kind.
+/// WHY: Stage 0 must keep Beanstalk `.bst` and builder-supported kinds such as Beandown `.bd`
+///      distinct before later frontend stages choose the right preparation path.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ImportCandidate {
+    pub(crate) path: PathBuf,
+    pub(crate) kind: SourceFileKind,
+    pub(crate) support: ImportCandidateSupport,
+    pub(crate) is_parent_fallback: bool,
+}
+
+/// Whether an import candidate can be used by the active builder.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ImportCandidateSupport {
+    Supported,
+    RecognizedButUnsupported,
+}
 
 /// WHAT: checks whether an import path contains any `..` components.
 /// WHY: parent-directory traversal is not supported in Beanstalk imports.
@@ -57,27 +76,62 @@ pub(crate) fn join_and_normalize_path(
     joined
 }
 
-pub(crate) fn candidate_import_files(
+pub(crate) fn candidate_import_files_for_source_kinds(
     normalized_import_path: &Path,
     import_component_len: usize,
-) -> Vec<PathBuf> {
-    let mut candidates = Vec::with_capacity(2);
-    candidates.push(with_bst_extension(normalized_import_path.to_path_buf()));
+    source_file_kinds: &SourceFileKindRegistry,
+) -> Vec<ImportCandidate> {
+    let mut candidates = Vec::new();
+
+    add_source_kind_candidates(
+        &mut candidates,
+        normalized_import_path.to_path_buf(),
+        false,
+        source_file_kinds,
+    );
 
     if import_component_len > 1
         && let Some(parent) = normalized_import_path.parent()
     {
-        candidates.push(with_bst_extension(parent.to_path_buf()));
+        add_source_kind_candidates(
+            &mut candidates,
+            parent.to_path_buf(),
+            true,
+            source_file_kinds,
+        );
     }
 
     candidates
 }
 
-fn with_bst_extension(path: PathBuf) -> PathBuf {
-    if path.extension() == Some(OsStr::new(BEANSTALK_FILE_EXTENSION)) {
+fn add_source_kind_candidates(
+    candidates: &mut Vec<ImportCandidate>,
+    base_path: PathBuf,
+    is_parent_fallback: bool,
+    source_file_kinds: &SourceFileKindRegistry,
+) {
+    for recognized in SourceFileKind::recognized_kinds() {
+        let path = with_extension(base_path.clone(), recognized.extension);
+        let support = if source_file_kinds.supports_recognized_extension(recognized.extension) {
+            ImportCandidateSupport::Supported
+        } else {
+            ImportCandidateSupport::RecognizedButUnsupported
+        };
+
+        candidates.push(ImportCandidate {
+            path,
+            kind: recognized.kind,
+            support,
+            is_parent_fallback,
+        });
+    }
+}
+
+fn with_extension(path: PathBuf, extension: &str) -> PathBuf {
+    if path.extension().and_then(|value| value.to_str()) == Some(extension) {
         path
     } else {
-        path.with_extension(BEANSTALK_FILE_EXTENSION)
+        path.with_extension(extension)
     }
 }
 

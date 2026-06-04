@@ -19,7 +19,7 @@ use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
-use crate::compiler_frontend::tokenizer::tokens::TokenizeMode;
+use crate::compiler_frontend::tokenizer::tokens::TokenizerEntryMode;
 use crate::libraries::external_import_providers::resolution_table::ExternalImportResolutionTable;
 use crate::projects::settings::DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS;
 
@@ -29,6 +29,7 @@ pub(crate) fn test_project_path_resolver() -> ProjectPathResolver {
         cwd.clone(),
         cwd,
         &crate::libraries::SourceLibraryRegistry::default(),
+        &crate::libraries::SourceFileKindRegistry::default(),
     )
     .expect("test path resolver should be valid")
 }
@@ -50,7 +51,7 @@ fn parse_single_file_ast_result(
     let file_tokens = tokenize(
         source,
         &interned_path,
-        TokenizeMode::Normal,
+        TokenizerEntryMode::SourceFile,
         &style_directives,
         &mut string_table,
         None,

@@ -21,7 +21,7 @@ use crate::compiler_frontend::tests::parse_support::{
     parse_single_file_ast, parse_single_file_ast_diagnostic,
 };
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
-use crate::compiler_frontend::tokenizer::tokens::{TokenKind, TokenizeMode};
+use crate::compiler_frontend::tokenizer::tokens::{TokenKind, TokenizerEntryMode};
 use crate::compiler_frontend::type_coercion::compatibility::TypeCompatibilityCache;
 use std::rc::Rc;
 
@@ -33,7 +33,7 @@ fn parse_args(
     let mut tokens = tokenize(
         source,
         &file_path,
-        TokenizeMode::Normal,
+        TokenizerEntryMode::SourceFile,
         &crate::compiler_frontend::style_directives::StyleDirectiveRegistry::built_ins(),
         &mut string_table,
         None,
@@ -65,7 +65,7 @@ fn parse_args_diagnostic(source: &str) -> CompilerDiagnostic {
     let mut tokens = tokenize(
         source,
         &file_path,
-        TokenizeMode::Normal,
+        TokenizerEntryMode::SourceFile,
         &crate::compiler_frontend::style_directives::StyleDirectiveRegistry::built_ins(),
         &mut string_table,
         None,

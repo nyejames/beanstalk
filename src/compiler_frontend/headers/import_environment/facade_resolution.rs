@@ -9,7 +9,7 @@
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, ImportFacadeType};
 use crate::compiler_frontend::external_packages::ExternalSymbolId;
 use crate::compiler_frontend::headers::import_environment::diagnostics;
-use crate::compiler_frontend::headers::import_environment::target_resolution::suffix_matches_with_optional_bst_extension;
+use crate::compiler_frontend::headers::import_environment::target_resolution::suffix_matches_with_optional_source_extension;
 use crate::compiler_frontend::headers::module_symbols::{FacadeExportEntry, FacadeExportTarget};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
@@ -181,7 +181,7 @@ fn try_resolve_module_root_facade_import(
             if prefix_len == 0 {
                 for entry in exports {
                     if let FacadeExportTarget::Source(path) = &entry.target
-                        && suffix_matches_with_optional_bst_extension(
+                        && suffix_matches_with_optional_source_extension(
                             path,
                             &effective_path,
                             input.string_table,

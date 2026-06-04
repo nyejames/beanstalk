@@ -901,7 +901,10 @@ body {
     ">#page.bst</span> files define HTML pages and make their folders module boundaries.</li><li><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">styles/docs.bst</span> is a normal source file imported by the root facade and then exposed to nested page modules through <span style="
+    ">styles/docs.bst</span> is a normal source file imported by the root facade and then selectively exposed to nested page modules with <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">export</span> declarations in <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">src/#mod.bst</span>.</li><li><span style="
@@ -972,10 +975,43 @@ body {
     <section class="container"><h1>Module facades at a glance</h1><p><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">#mod.bst</span> is the public surface for a module root.</p><p>It is not a shared implementation file, and sibling files do not see its declarations automatically.</p><p>Keep facades small and intentional:</p><ul><li>define public wrapper functions, public type aliases, public structs, public choices, and public constants there</li><li>import private implementation details inside the facade when a wrapper needs them</li><li>do not put runtime top-level statements or runtime top-level templates in a facade</li><li>do not expect a normal import inside <span style="
+    ">#mod.bst</span> is the public surface for a module root.</p><p>It is not a shared implementation file, and sibling files do not see its declarations automatically.</p><p>Keep facades small and intentional:</p><ul><li>mark public wrapper functions, type aliases, structs, choices, traits, and constants with <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">#mod.bst</span> to become public by itself</li></ul><p>The same facade idea is used by project-local source libraries under <span style="
+    ">export</span></li><li>re-export grouped symbols with <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">export import @path { Symbol }</span> or <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">export @path { Symbol }</span></li><li>keep unmarked declarations and normal imports private to the facade file</li><li>import private implementation details inside the facade when a wrapper needs them</li><li>do not put runtime top-level statements or runtime top-level templates in a facade</li><li>do not expect a normal import inside <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#mod.bst</span> to become public by itself</li></ul><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-comment'>-- src/#mod.bst</span>
+
+    import <span class='bst-code-operator'>@</span>core<span class='bst-code-operator'>/</span>text <span class='bst-code-parenthesis'>{</span>length <span class='bst-code-keyword'>as</span> private_length<span class='bst-code-parenthesis'>}</span>
+
+    private_prefix <span class='bst-code-operator'>#</span><span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;docs&quot;</span>
+
+    export page_label <span class='bst-code-operator'>#</span><span class='bst-code-operator'>=</span> <span class='bst-code-string'>&quot;Documentation&quot;</span>
+
+    export title_length <span class='bst-code-operator'>|</span>title <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Int</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> private_length<span class='bst-code-parenthesis'>(</span>title<span class='bst-code-parenthesis'>)</span>
+    ;
+
+    export <span class='bst-code-operator'>@</span>components<span class='bst-code-operator'>/</span>card <span class='bst-code-parenthesis'>{</span>
+        <span class='bst-code-struct'>CardData</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>Card,</span>
+        render_card,
+    <span class='bst-code-parenthesis'>}</span>
+    </code></pre><p>The same facade idea is used by project-local source libraries under <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">lib/<name>/#mod.bst</span>. The detailed library, facade, core package, and JavaScript import guide is <a href="../libraries">Libraries and modules</a>.</p><h1>Future extension points</h1><h2>#test.bst test modules</h2><p>A future <span style="

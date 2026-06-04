@@ -10,6 +10,7 @@ use crate::libraries::external_import_providers::cache::ExternalImportProviderCa
 use crate::libraries::external_import_providers::provider::BuilderRuntimePackageMetadata;
 use crate::libraries::external_import_providers::registry::ExternalImportProviderRegistry;
 use crate::libraries::external_import_providers::resolution_table::ExternalImportResolutionTable;
+use crate::libraries::source_file_kind_registry::SourceFileKindRegistry;
 use crate::libraries::source_library_registry::SourceLibraryRegistry;
 use std::path::PathBuf;
 
@@ -27,6 +28,7 @@ pub struct LibrarySet {
     pub external_import_cache: ExternalImportProviderCache,
     pub external_import_resolution_table: ExternalImportResolutionTable,
     pub builder_runtime_packages: Vec<BuilderRuntimePackageMetadata>,
+    pub source_file_kinds: SourceFileKindRegistry,
 }
 
 const BUILTIN_SOURCE_LIBRARIES_DIR: &str = "libraries";
@@ -63,6 +65,7 @@ impl LibrarySet {
             external_import_cache: ExternalImportProviderCache::new(),
             external_import_resolution_table: ExternalImportResolutionTable::new(),
             builder_runtime_packages: Vec::new(),
+            source_file_kinds: SourceFileKindRegistry::new(),
         }
     }
 

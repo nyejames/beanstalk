@@ -25,6 +25,7 @@ use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap};
 use crate::compiler_frontend::tokenizer::tokens::TokenKind;
+use crate::libraries::SourceFileKind;
 #[derive(Clone, Debug, PartialEq)]
 pub struct CompilerDiagnostic {
     pub kind: DiagnosticKind,
@@ -96,6 +97,17 @@ impl CompilerDiagnostic {
             DiagnosticKind::Syntax(SyntaxDiagnosticKind::UnexpectedTrailingComma),
             location,
             DiagnosticPayload::UnexpectedTrailingComma,
+        )
+    }
+
+    pub(crate) fn unescaped_implicit_template_close(
+        source_kind: SourceFileKind,
+        location: SourceLocation,
+    ) -> Self {
+        Self::new(
+            DiagnosticKind::Syntax(SyntaxDiagnosticKind::UnescapedImplicitTemplateClose),
+            location,
+            DiagnosticPayload::UnescapedImplicitTemplateClose { source_kind },
         )
     }
 
@@ -283,6 +295,73 @@ impl CompilerDiagnostic {
             location,
             DiagnosticPayload::ExplicitBstExtension { path },
         )
+    }
+
+    pub(crate) fn explicit_source_extension(
+        path: InternedPath,
+        extension: StringId,
+        location: SourceLocation,
+    ) -> Self {
+        Self::new(
+            DiagnosticKind::Import(ImportDiagnosticKind::ExplicitSourceExtension),
+            location,
+            DiagnosticPayload::ExplicitSourceExtension { path, extension },
+        )
+    }
+
+    pub(crate) fn unsupported_source_file_kind(
+        path: InternedPath,
+        extension: StringId,
+        location: SourceLocation,
+    ) -> Self {
+        Self::new(
+            DiagnosticKind::Import(ImportDiagnosticKind::UnsupportedSourceFileKind),
+            location,
+            DiagnosticPayload::UnsupportedSourceFileKind { path, extension },
+        )
+    }
+
+    pub(crate) fn invalid_source_file_entry(
+        path: InternedPath,
+        extension: StringId,
+        location: SourceLocation,
+    ) -> Self {
+        Self::new(
+            DiagnosticKind::Import(ImportDiagnosticKind::InvalidSourceFileEntry),
+            location,
+            DiagnosticPayload::InvalidSourceFileEntry { path, extension },
+        )
+    }
+
+    pub(crate) fn invalid_beandown_api_scope_item(
+        path: InternedPath,
+        location: SourceLocation,
+    ) -> Self {
+        Self::new(
+            DiagnosticKind::Import(ImportDiagnosticKind::InvalidBeandownApiScopeItem),
+            location,
+            DiagnosticPayload::InvalidBeandownApiScopeItem { path },
+        )
+    }
+
+    pub(crate) fn duplicate_beandown_input_path(
+        path: InternedPath,
+        first_location: SourceLocation,
+        duplicate_location: SourceLocation,
+    ) -> Self {
+        let payload_first_location = first_location.clone();
+        Self::new(
+            DiagnosticKind::Import(ImportDiagnosticKind::DuplicateBeandownInputPath),
+            duplicate_location.clone(),
+            DiagnosticPayload::DuplicateBeandownInputPath {
+                path,
+                first_location: payload_first_location,
+            },
+        )
+        .with_labels(vec![
+            DiagnosticLabel::primary(duplicate_location),
+            DiagnosticLabel::secondary(first_location, None),
+        ])
     }
 
     pub(crate) fn unsupported_external_extension(

@@ -314,6 +314,7 @@ impl FrontendModuleBuildContext<'_> {
                     let input = FrontendFilePrepareInput {
                         source_code: &file.source_code,
                         source_path: &file.source_path,
+                        source_kind: file.source_kind,
                         const_template_offset,
                         runtime_fragment_offset,
                     };
@@ -721,6 +722,7 @@ mod tests {
                     let input = FrontendFilePrepareInput {
                         source_code,
                         source_path,
+                        source_kind: crate::libraries::SourceFileKind::Beanstalk,
                         const_template_offset,
                         runtime_fragment_offset,
                     };
@@ -896,14 +898,17 @@ mod tests {
             InputFile {
                 source_code: "alpha = 1\n#[hello]\n[runtime]\n".to_owned(),
                 source_path: canonical_a.clone(),
+                source_kind: crate::libraries::SourceFileKind::Beanstalk,
             },
             InputFile {
                 source_code: "Beta #= 2\n".to_owned(),
                 source_path: canonical_b.clone(),
+                source_kind: crate::libraries::SourceFileKind::Beanstalk,
             },
             InputFile {
                 source_code: "Gamma #= 3\n".to_owned(),
                 source_path: canonical_c.clone(),
+                source_kind: crate::libraries::SourceFileKind::Beanstalk,
             },
         ];
 

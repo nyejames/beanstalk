@@ -180,6 +180,11 @@ fn syntax_descriptor(kind: SyntaxDiagnosticKind) -> DiagnosticDescriptor {
             "Common syntax mistake",
             DiagnosticSeverity::Error,
         ),
+        SyntaxDiagnosticKind::UnescapedImplicitTemplateClose => DiagnosticDescriptor::new(
+            "BST-SYNTAX-0032",
+            "Unescaped implicit template close",
+            DiagnosticSeverity::Error,
+        ),
     }
 }
 
@@ -683,6 +688,31 @@ fn import_descriptor(kind: ImportDiagnosticKind) -> DiagnosticDescriptor {
                 DiagnosticSeverity::Error,
             )
         }
+        ImportDiagnosticKind::ExplicitSourceExtension => DiagnosticDescriptor::new(
+            "BST-IMPORT-0024",
+            "Explicit source extension in import",
+            DiagnosticSeverity::Error,
+        ),
+        ImportDiagnosticKind::UnsupportedSourceFileKind => DiagnosticDescriptor::new(
+            "BST-IMPORT-0025",
+            "Unsupported source file kind",
+            DiagnosticSeverity::Error,
+        ),
+        ImportDiagnosticKind::InvalidSourceFileEntry => DiagnosticDescriptor::new(
+            "BST-IMPORT-0026",
+            "Source file kind cannot be used as an entry",
+            DiagnosticSeverity::Error,
+        ),
+        ImportDiagnosticKind::InvalidBeandownApiScopeItem => DiagnosticDescriptor::new(
+            "BST-IMPORT-0027",
+            "Invalid Beandown API scope item",
+            DiagnosticSeverity::Error,
+        ),
+        ImportDiagnosticKind::DuplicateBeandownInputPath => DiagnosticDescriptor::new(
+            "BST-IMPORT-0028",
+            "Duplicate Beandown input path",
+            DiagnosticSeverity::Error,
+        ),
     }
 }
 

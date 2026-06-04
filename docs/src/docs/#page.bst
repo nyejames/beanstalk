@@ -38,6 +38,7 @@ page_head #= theme_head
 
     ## Project Structure
     - @./project-structure (The shape of Beanstalk projects)
+    - @./beandown (Beandown content files)
     - @./libraries (Libraries and modules)
     - @./libraries/core (Core libraries)
 

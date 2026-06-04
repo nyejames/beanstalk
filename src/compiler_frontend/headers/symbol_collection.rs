@@ -262,6 +262,9 @@ fn register_header_symbol(
                 &header.source_file,
                 is_importable_for_symbol_collection(header),
             );
+            module_symbols
+                .constant_paths
+                .insert(header.tokens.src_path.to_owned());
         }
 
         HeaderKind::TypeAlias { .. } => {

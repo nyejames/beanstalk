@@ -9,9 +9,11 @@ pub mod config_key_registry;
 pub mod core;
 pub mod external_import_providers;
 pub mod library_set;
+pub mod source_file_kind_registry;
 pub mod source_library_registry;
 
 pub use library_set::LibrarySet;
+pub use source_file_kind_registry::{SourceFileKind, SourceFileKindRegistry};
 pub use source_library_registry::{ProvidedSourceRoot, SourceLibraryRegistry};
 
 #[cfg(test)]

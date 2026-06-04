@@ -27,7 +27,7 @@ use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::{ImportRootPolicy, ProjectPathResolver};
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
-use crate::compiler_frontend::tokenizer::tokens::{Token, TokenKind, TokenizeMode};
+use crate::compiler_frontend::tokenizer::tokens::{Token, TokenKind, TokenizerEntryMode};
 use crate::libraries::external_import_providers::resolution_table::ExternalImportResolutionTable;
 use crate::projects::settings::DEFAULT_TEMPLATE_CONST_LOOP_ITERATIONS;
 
@@ -81,6 +81,7 @@ pub(super) fn parse_config_file(
         canonical_dir.clone(),
         canonical_dir,
         &services.libraries.source_libraries,
+        &services.libraries.source_file_kinds,
     ) {
         Ok(resolver) => resolver
             .with_import_root_policy(ImportRootPolicy::SourceLibrariesAndExternalPackagesOnly),
@@ -289,12 +290,13 @@ fn build_config_source_set(
                 continue;
             }
 
-            let resolved = match project_path_resolver.resolve_import_to_file_with_facade_fallback(
-                import_path,
-                &canonical_file,
-                string_table,
-            ) {
-                Ok(path) => path,
+            let resolved = match project_path_resolver
+                .resolve_import_to_source_file_with_facade_fallback(
+                    import_path,
+                    &canonical_file,
+                    string_table,
+                ) {
+                Ok(resolved) => resolved.path,
                 Err(ImportPathResolutionError::Diagnostic(diagnostic)) => {
                     errors.push(diagnostic);
                     continue;
@@ -336,7 +338,7 @@ fn prepare_one_config_file(
     let mut token_stream = match tokenize(
         &source,
         &interned_path,
-        TokenizeMode::Normal,
+        TokenizerEntryMode::SourceFile,
         services.style_directives,
         string_table,
         None,

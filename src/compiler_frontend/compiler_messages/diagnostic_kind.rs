@@ -111,6 +111,7 @@ pub enum SyntaxDiagnosticKind {
     InvalidLoopHeader,
     InvalidStatementPosition,
     CommonSyntaxMistake,
+    UnescapedImplicitTemplateClose,
 }
 
 #[cfg(test)]
@@ -148,6 +149,7 @@ impl SyntaxDiagnosticKind {
             Self::InvalidLoopHeader,
             Self::InvalidStatementPosition,
             Self::CommonSyntaxMistake,
+            Self::UnescapedImplicitTemplateClose,
         ]
         .into_iter()
     }
@@ -355,6 +357,11 @@ pub enum ImportDiagnosticKind {
     InvalidNamespaceDefaultName,
     DuplicateImportSurfaceMember,
     ExplicitBstExtension,
+    ExplicitSourceExtension,
+    UnsupportedSourceFileKind,
+    InvalidSourceFileEntry,
+    InvalidBeandownApiScopeItem,
+    DuplicateBeandownInputPath,
     UnsupportedExternalExtension,
     InvalidExternalLibrary,
     ReceiverMethodImportRequiresVisibleReceiverType,
@@ -381,6 +388,11 @@ impl ImportDiagnosticKind {
             Self::InvalidNamespaceDefaultName,
             Self::DuplicateImportSurfaceMember,
             Self::ExplicitBstExtension,
+            Self::ExplicitSourceExtension,
+            Self::UnsupportedSourceFileKind,
+            Self::InvalidSourceFileEntry,
+            Self::InvalidBeandownApiScopeItem,
+            Self::DuplicateBeandownInputPath,
             Self::UnsupportedExternalExtension,
             Self::InvalidExternalLibrary,
             Self::ReceiverMethodImportRequiresVisibleReceiverType,

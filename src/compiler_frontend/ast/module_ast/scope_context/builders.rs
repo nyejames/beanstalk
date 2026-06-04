@@ -101,22 +101,6 @@ impl ScopeContext {
         self
     }
 
-    /// Register visible trait names for type-resolution in constant headers.
-    ///
-    /// WHAT: maps source-level trait names to canonical trait paths so that
-    /// dynamic trait annotations can be resolved in `#` constant declarations.
-    /// WHY: constant-header parsing runs before body emission and builds its
-    /// scope context manually; trait visibility must be injected explicitly.
-    pub fn with_visible_trait_names(
-        mut self,
-        trait_names: FxHashMap<StringId, InternedPath>,
-    ) -> ScopeContext {
-        self.update_file_visibility(|file_visibility| {
-            file_visibility.visible_trait_names = trait_names;
-        });
-        self
-    }
-
     /// Apply a header-built `FileVisibility` to this scope context.
     ///
     /// WHAT: copies all visibility maps from the prepared header environment.

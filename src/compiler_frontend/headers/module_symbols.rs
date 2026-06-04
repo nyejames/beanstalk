@@ -119,6 +119,10 @@ pub(crate) struct ModuleSymbols {
     pub(crate) importable_source_symbol_paths: FxHashSet<InternedPath>,
     pub(crate) declared_paths_by_file: FxHashMap<InternedPath, FxHashSet<InternedPath>>,
     pub(crate) declared_names_by_file: FxHashMap<InternedPath, FxHashSet<StringId>>,
+    // Source constants detected during header symbol collection.
+    // WHY: Beandown's implicit body scope is header-stage visibility over source constants only.
+    // AST later decides whether those constants actually fold to plain values or const records.
+    pub(crate) constant_paths: FxHashSet<InternedPath>,
     pub(crate) type_alias_paths: FxHashSet<InternedPath>,
     pub(crate) nominal_type_paths: FxHashSet<InternedPath>,
     pub(crate) trait_paths: FxHashSet<InternedPath>,
@@ -176,6 +180,7 @@ impl ModuleSymbols {
             importable_source_symbol_paths: FxHashSet::default(),
             declared_paths_by_file: FxHashMap::default(),
             declared_names_by_file: FxHashMap::default(),
+            constant_paths: FxHashSet::default(),
             builtin_visible_symbol_paths: FxHashSet::default(),
             builtin_struct_ast_nodes: Vec::new(),
             resolved_struct_fields_by_path: FxHashMap::default(),

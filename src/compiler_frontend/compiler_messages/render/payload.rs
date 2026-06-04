@@ -10,6 +10,7 @@ use crate::compiler_frontend::compiler_messages::{
     InvalidTraitConformanceReason, InvalidTraitKeywordUsageReason, NamingConvention,
     ReservedNameOwner,
 };
+use crate::libraries::SourceFileKind;
 
 pub(crate) struct RenderedPayload {
     pub(crate) message: String,
@@ -28,6 +29,9 @@ pub(crate) fn render_payload(
                 common_syntax_mistake_suggestion(reason)
             )]
         }
+        DiagnosticPayload::UnescapedImplicitTemplateClose { .. } => vec![
+            "Escape a literal closing bracket as `\\]`, or insert one through a nested expression such as `[']']`.".to_owned(),
+        ],
         DiagnosticPayload::TypeMismatch {
             expected, found, ..
         } => vec![
@@ -70,6 +74,12 @@ fn render_payload_message(
             unexpected_token_message(found, string_table)
         }
         DiagnosticPayload::UnexpectedTrailingComma => "Unexpected trailing comma".to_owned(),
+        DiagnosticPayload::UnescapedImplicitTemplateClose { source_kind } => {
+            format!(
+                "{} starts inside an implicit template body, so an unescaped `]` would close a template that is not written in the source file.",
+                source_kind_name(*source_kind)
+            )
+        }
         DiagnosticPayload::UnknownName { name, namespace } => {
             unknown_name_message(*name, *namespace, string_table)
         }
@@ -101,6 +111,11 @@ fn render_payload_message(
         | DiagnosticPayload::InvalidNamespaceDefaultName { .. }
         | DiagnosticPayload::DuplicateImportSurfaceMember { .. }
         | DiagnosticPayload::ExplicitBstExtension { .. }
+        | DiagnosticPayload::ExplicitSourceExtension { .. }
+        | DiagnosticPayload::UnsupportedSourceFileKind { .. }
+        | DiagnosticPayload::InvalidSourceFileEntry { .. }
+        | DiagnosticPayload::InvalidBeandownApiScopeItem { .. }
+        | DiagnosticPayload::DuplicateBeandownInputPath { .. }
         | DiagnosticPayload::UnsupportedExternalExtension { .. }
         | DiagnosticPayload::InvalidExternalLibrary { .. }
         | DiagnosticPayload::ReceiverMethodImportRequiresVisibleReceiverType { .. } => {
@@ -465,6 +480,13 @@ fn render_payload_message(
     }
 }
 
+fn source_kind_name(source_kind: SourceFileKind) -> &'static str {
+    match source_kind {
+        SourceFileKind::Beanstalk => "Beanstalk `.bst` source",
+        SourceFileKind::Beandown => "Beandown `.bd` source",
+    }
+}
+
 fn invalid_trait_conformance_message(
     target_name: StringId,
     trait_name: Option<StringId>,
@@ -732,6 +754,21 @@ fn import_payload_message(payload: &DiagnosticPayload, string_table: &StringTabl
         } => duplicate_import_surface_member_message(surface_path, *member_name, string_table),
         DiagnosticPayload::ExplicitBstExtension { path } => {
             explicit_bst_extension_message(path, string_table)
+        }
+        DiagnosticPayload::ExplicitSourceExtension { path, extension } => {
+            explicit_source_extension_message(path, *extension, string_table)
+        }
+        DiagnosticPayload::UnsupportedSourceFileKind { path, extension } => {
+            unsupported_source_file_kind_message(path, *extension, string_table)
+        }
+        DiagnosticPayload::InvalidSourceFileEntry { path, extension } => {
+            invalid_source_file_entry_message(path, *extension, string_table)
+        }
+        DiagnosticPayload::InvalidBeandownApiScopeItem { path } => {
+            invalid_beandown_api_scope_item_message(path, string_table)
+        }
+        DiagnosticPayload::DuplicateBeandownInputPath { path, .. } => {
+            duplicate_beandown_input_path_message(path, string_table)
         }
         DiagnosticPayload::UnsupportedExternalExtension { path, extension } => {
             unsupported_external_extension_message(path, *extension, string_table)

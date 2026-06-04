@@ -58,7 +58,7 @@ fn template_tokens_from_source_with_style_directives(
     let mut tokens = tokenize(
         source,
         &scope,
-        crate::compiler_frontend::tokenizer::tokens::TokenizeMode::Normal,
+        crate::compiler_frontend::tokenizer::tokens::TokenizerEntryMode::SourceFile,
         style_directives,
         string_table,
         None,
@@ -99,6 +99,7 @@ fn test_project_path_resolver() -> ProjectPathResolver {
         cwd.clone(),
         cwd,
         &crate::libraries::SourceLibraryRegistry::default(),
+        &crate::libraries::SourceFileKindRegistry::default(),
     )
     .expect("test path resolver should be valid")
 }
@@ -318,7 +319,7 @@ fn template_parse_rendered_error_with_style_directives(
     let mut token_stream = match tokenize(
         source,
         &scope,
-        crate::compiler_frontend::tokenizer::tokens::TokenizeMode::Normal,
+        crate::compiler_frontend::tokenizer::tokens::TokenizerEntryMode::SourceFile,
         style_directives,
         &mut string_table,
         None,

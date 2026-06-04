@@ -23,6 +23,7 @@ use crate::compiler_frontend::tokenizer::text_modes::{
 };
 use crate::compiler_frontend::tokenizer::tokens::{
     FileTokens, SourceLocation, TemplateBodyMode, Token, TokenKind, TokenStream, TokenizeMode,
+    TokenizerEntryMode,
 };
 use crate::projects::settings;
 use crate::token_log;
@@ -43,7 +44,7 @@ macro_rules! return_token {
 pub fn tokenize(
     source_code: &str,
     src_path: &InternedPath,
-    mode: TokenizeMode,
+    entry_mode: TokenizerEntryMode,
     style_directives: &StyleDirectiveRegistry,
     string_table: &mut StringTable,
     file_id: Option<FileId>,
@@ -53,7 +54,7 @@ pub fn tokenize(
     let initial_capacity = source_code.len() / settings::SRC_TO_TOKEN_RATIO;
 
     let mut tokens: Vec<Token> = Vec::with_capacity(initial_capacity);
-    let mut stream = TokenStream::new(source_code, src_path, mode);
+    let mut stream = TokenStream::new(source_code, src_path, entry_mode);
 
     let mut token: Token = Token::new(TokenKind::ModuleStart, SourceLocation::default());
 
@@ -161,6 +162,13 @@ pub fn get_token_kind(
         }
 
         if current_char == ']' {
+            if let Some(source_kind) = stream.initial_template_close_rejection() {
+                return Err(CompilerDiagnostic::unescaped_implicit_template_close(
+                    source_kind,
+                    stream.new_location(),
+                ));
+            }
+
             // Closing a template restores the parent template's mode.
             stream.pop_template_mode();
             return_token!(TokenKind::TemplateClose, stream);

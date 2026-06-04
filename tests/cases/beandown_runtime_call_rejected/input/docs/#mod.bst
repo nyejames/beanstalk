@@ -1,0 +1,7 @@
+export @./intro {
+    content as intro_content,
+}
+
+export render_local || -> String:
+    return "runtime"
+;

@@ -40,14 +40,18 @@ pub(crate) use visible_names::{
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, ImportFacadeType};
 use crate::compiler_frontend::external_packages::{ExternalFunctionId, ExternalPackageRegistry};
-use crate::compiler_frontend::headers::module_symbols::ModuleSymbols;
+use crate::compiler_frontend::headers::module_symbols::{
+    FacadeExportEntry, FacadeExportTarget, ModuleSymbols,
+};
 use crate::compiler_frontend::headers::parse_file_headers::FileImport;
+use crate::compiler_frontend::headers::types::FileRole;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::source_libraries::mod_file::import_path_references_special_file;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
+use crate::libraries::SourceFileKind;
 use crate::libraries::external_import_providers::resolution_table::ExternalImportResolutionTable;
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 /// Input bundle for preparing the module-wide import environment.
 ///
@@ -346,6 +350,11 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             }
         }
 
+        // 6. Add Beandown's compiler-integrated implicit constant scope.
+        // WHY: `.bd` bodies are synthetic constant initializers, so they need the same
+        // file-local visibility maps as authored constants without a user-visible import record.
+        self.register_implicit_beandown_constant_scope(&mut file_visibility, source_file);
+
         // Sort receiver method paths for deterministic lookup ordering.
         // WHY: same method name from different sources must resolve consistently
         //      across compilations; lexicographic order by function path is stable.
@@ -371,6 +380,237 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             .file_visibility_by_source
             .insert(source_file.clone(), file_visibility);
         Ok(())
+    }
+
+    fn register_implicit_beandown_constant_scope(
+        &self,
+        file_visibility: &mut FileVisibility,
+        source_file: &InternedPath,
+    ) {
+        if !self.is_beandown_source_file(source_file) {
+            return;
+        }
+
+        let mut implicit_constants = FxHashMap::default();
+        self.remove_beandown_generated_self_constants(file_visibility, source_file);
+
+        // Layer 1: exported constants from the HTML source-library facade.
+        self.collect_html_facade_constants(&mut implicit_constants);
+
+        // Layer 2: exported constants from the exact same-directory facade. Later inserts
+        // intentionally replace HTML names so local facade constants win on collisions.
+        self.collect_same_directory_facade_constants(source_file, &mut implicit_constants);
+
+        for (name, path) in implicit_constants {
+            file_visibility
+                .visible_declaration_paths
+                .insert(path.clone());
+            file_visibility.visible_source_names.insert(name, path);
+        }
+    }
+
+    fn remove_beandown_generated_self_constants(
+        &self,
+        file_visibility: &mut FileVisibility,
+        source_file: &InternedPath,
+    ) {
+        let Some((content_name, content_path)) = file_visibility
+            .visible_source_names
+            .iter()
+            .find_map(|(name, path)| {
+                if self.string_table.resolve(*name) != "content" {
+                    return None;
+                }
+
+                if !self.module_symbols.constant_paths.contains(path) {
+                    return None;
+                }
+
+                if self.symbol_origin_matches_source(path, source_file) {
+                    Some((*name, path.clone()))
+                } else {
+                    None
+                }
+            })
+        else {
+            return;
+        };
+
+        file_visibility
+            .visible_declaration_paths
+            .remove(&content_path);
+        if file_visibility.visible_source_names.get(&content_name) == Some(&content_path) {
+            file_visibility.visible_source_names.remove(&content_name);
+        }
+    }
+
+    fn collect_html_facade_constants(
+        &self,
+        implicit_constants: &mut FxHashMap<StringId, InternedPath>,
+    ) {
+        let Some(entries) = self.module_symbols.facade_exports.get("html") else {
+            return;
+        };
+
+        self.collect_constant_exports(entries, implicit_constants, None);
+    }
+
+    fn collect_same_directory_facade_constants(
+        &self,
+        source_file: &InternedPath,
+        implicit_constants: &mut FxHashMap<StringId, InternedPath>,
+    ) {
+        let Some(facade_file) = self.same_directory_facade_file(source_file) else {
+            return;
+        };
+
+        if let Some(entries) = self.source_library_facade_exports_for_file(&facade_file) {
+            self.collect_constant_exports(entries, implicit_constants, Some(source_file));
+        }
+
+        if let Some(entries) = self.module_root_facade_exports_for_file(&facade_file) {
+            self.collect_constant_exports(entries, implicit_constants, Some(source_file));
+        }
+    }
+
+    fn collect_constant_exports(
+        &self,
+        entries: &FxHashSet<FacadeExportEntry>,
+        implicit_constants: &mut FxHashMap<StringId, InternedPath>,
+        excluded_source_file: Option<&InternedPath>,
+    ) {
+        for entry in entries {
+            let FacadeExportTarget::Source(path) = &entry.target else {
+                continue;
+            };
+
+            if !self.module_symbols.constant_paths.contains(path) {
+                continue;
+            }
+
+            if excluded_source_file
+                .is_some_and(|source_file| self.symbol_origin_matches_source(path, source_file))
+            {
+                continue;
+            }
+
+            implicit_constants.insert(entry.export_name, path.clone());
+        }
+    }
+
+    fn symbol_origin_matches_source(
+        &self,
+        symbol_path: &InternedPath,
+        source_file: &InternedPath,
+    ) -> bool {
+        let Some(origin) = self
+            .module_symbols
+            .canonical_source_by_symbol_path
+            .get(symbol_path)
+        else {
+            return false;
+        };
+
+        if origin == source_file {
+            return true;
+        }
+
+        let Some(canonical_source_path) = self
+            .module_symbols
+            .canonical_os_path_by_source
+            .get(source_file)
+        else {
+            return false;
+        };
+
+        origin.to_path_buf(self.string_table) == *canonical_source_path
+    }
+
+    fn is_beandown_source_file(&self, source_file: &InternedPath) -> bool {
+        let Some(path) = self
+            .module_symbols
+            .canonical_os_path_by_source
+            .get(source_file)
+        else {
+            return source_file
+                .to_path_buf(self.string_table)
+                .extension()
+                .and_then(|extension| extension.to_str())
+                .and_then(SourceFileKind::from_extension)
+                == Some(SourceFileKind::Beandown);
+        };
+
+        path.extension()
+            .and_then(|extension| extension.to_str())
+            .and_then(SourceFileKind::from_extension)
+            == Some(SourceFileKind::Beandown)
+    }
+
+    fn same_directory_facade_file(&self, source_file: &InternedPath) -> Option<InternedPath> {
+        let beandown_directory = self.source_directory(source_file)?;
+
+        self.module_symbols
+            .file_roles_by_source
+            .iter()
+            .find_map(|(candidate_source, role)| {
+                if role != &FileRole::ModuleFacade {
+                    return None;
+                }
+
+                let candidate_directory = self.source_directory(candidate_source)?;
+                if candidate_directory == beandown_directory {
+                    Some(candidate_source.clone())
+                } else {
+                    None
+                }
+            })
+    }
+
+    fn source_directory(&self, source_file: &InternedPath) -> Option<std::path::PathBuf> {
+        if let Some(path) = self
+            .module_symbols
+            .canonical_os_path_by_source
+            .get(source_file)
+        {
+            return path.parent().map(|parent| parent.to_path_buf());
+        }
+
+        source_file
+            .parent()
+            .map(|parent| parent.to_path_buf(self.string_table))
+    }
+
+    fn source_library_facade_exports_for_file(
+        &self,
+        facade_file: &InternedPath,
+    ) -> Option<&FxHashSet<FacadeExportEntry>> {
+        let prefix = self
+            .module_symbols
+            .source_library_facade_files
+            .iter()
+            .find_map(|(prefix, source)| {
+                if source == facade_file {
+                    Some(prefix)
+                } else {
+                    None
+                }
+            })?;
+
+        self.module_symbols.facade_exports.get(prefix)
+    }
+
+    fn module_root_facade_exports_for_file(
+        &self,
+        facade_file: &InternedPath,
+    ) -> Option<&FxHashSet<FacadeExportEntry>> {
+        let module_root = self
+            .module_symbols
+            .file_module_membership
+            .get(facade_file)?;
+
+        self.module_symbols
+            .module_root_facade_exports
+            .get(module_root)
     }
 
     // The typed diagnostic payload is still large enough to trigger clippy::result_large_err here.

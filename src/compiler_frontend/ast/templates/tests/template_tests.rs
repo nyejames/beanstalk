@@ -86,6 +86,7 @@ fn test_project_path_resolver() -> ProjectPathResolver {
         cwd.clone(),
         cwd,
         &crate::libraries::SourceLibraryRegistry::default(),
+        &crate::libraries::SourceFileKindRegistry::default(),
     )
     .expect("test path resolver should be valid")
 }

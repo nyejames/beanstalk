@@ -693,7 +693,10 @@ body {
     import <span class='bst-code-operator'>@</span>.<span class='bst-code-operator'>/</span>helpers <span class='bst-code-keyword'>as</span> helpers
 
     value <span class='bst-code-operator'>=</span> helpers.identity<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>42</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>Public facade wrappers are ordinary authored generic functions in <span style="
+    </code></pre><p>Public facade wrappers are ordinary authored generic functions marked with <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">export</span> in <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">#mod.bst</span>. Normal imports inside the facade remain private and are only usable by the wrapper body:</p><pre style="
@@ -712,7 +715,7 @@ body {
     <span class='bst-code-comment'>-- lib/utils/#mod.bst</span>
     import <span class='bst-code-operator'>@</span>.<span class='bst-code-operator'>/</span>internal <span class='bst-code-parenthesis'>{</span>identity_impl<span class='bst-code-parenthesis'>}</span>
 
-    identity type <span class='bst-code-struct'>T</span> <span class='bst-code-operator'>|</span>value <span class='bst-code-struct'>T</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>T</span><span class='bst-code-operator'>:</span>
+    export identity type <span class='bst-code-struct'>T</span> <span class='bst-code-operator'>|</span>value <span class='bst-code-struct'>T</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>T</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-keyword'>return</span> identity_impl<span class='bst-code-parenthesis'>(</span>value<span class='bst-code-parenthesis'>)</span>
     ;
 
@@ -815,7 +818,7 @@ body {
     ">where</span> clauses and file-local evidence-backed generic bound dispatch</li><li>type values, type-returning functions, type-level <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">#if</span>, and compile-time type inspection</li><li>recursive generic structs or choices</li><li>receiver methods on instantiated generic types</li><li>direct facade re-export syntax and function alias exports through <span style="
+    ">#if</span>, and compile-time type inspection</li><li>recursive generic structs or choices</li><li>receiver methods on instantiated generic types</li><li>namespace or wildcard facade exports and function alias exports through <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">#mod.bst</span></li><li>generic JS or external package functions</li><li>generic aliases with parameters</li><li>partial type application</li><li>nested generic type application beyond the collection element exception</li><li>public <span style="

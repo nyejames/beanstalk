@@ -18,7 +18,9 @@ use crate::compiler_frontend::style_directives::{
 };
 use crate::compiler_frontend::symbols::identity::SourceFileTable;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TemplateBodyMode, TokenizeMode};
+use crate::compiler_frontend::tokenizer::tokens::{
+    FileTokens, TemplateBodyMode, TokenizerEntryMode,
+};
 use crate::compiler_frontend::{CompilerFrontend, FrontendBuildProfile};
 use crate::libraries::external_import_providers::resolution_table::ExternalImportResolutionTable;
 use crate::projects::settings::Config;
@@ -68,6 +70,7 @@ impl FrontendProject {
             canonical_project_root.clone(),
             canonical_entry_root,
             &crate::libraries::SourceLibraryRegistry::default(),
+            &crate::libraries::SourceFileKindRegistry::default(),
         )
         .expect("project path resolver should build");
 
@@ -117,7 +120,7 @@ impl FrontendProject {
             let source = fs::read_to_string(file).expect("should read source file");
             tokenized_files.push(
                 self.frontend
-                    .source_to_tokens(&source, file, TokenizeMode::Normal)
+                    .source_to_tokens(&source, file, TokenizerEntryMode::SourceFile)
                     .expect("tokenization should succeed"),
             );
         }

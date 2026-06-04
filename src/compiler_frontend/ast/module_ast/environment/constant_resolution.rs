@@ -19,7 +19,7 @@ use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
-use crate::compiler_frontend::external_packages::ExternalSymbolId;
+use crate::compiler_frontend::headers::import_environment::FileVisibility;
 use crate::compiler_frontend::headers::module_symbols::GenericDeclarationMetadata;
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
 use crate::compiler_frontend::interned_path::InternedPath;
@@ -27,10 +27,10 @@ use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
-use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::traits::environment::TraitEnvironment;
 use crate::compiler_frontend::type_coercion::compatibility::TypeCompatibilityCache;
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -39,10 +39,7 @@ use std::rc::Rc;
 /// overly-wide function signatures that are harder to maintain.
 pub(crate) struct ConstantHeaderParseContext<'a> {
     pub top_level_declarations: Rc<TopLevelDeclarationTable>,
-    pub visible_declaration_ids: &'a FxHashSet<InternedPath>,
-    pub visible_external_symbols: &'a FxHashMap<StringId, ExternalSymbolId>,
-    pub visible_source_bindings: &'a FxHashMap<StringId, InternedPath>,
-    pub visible_type_aliases: &'a FxHashMap<StringId, InternedPath>,
+    pub file_visibility: &'a FileVisibility,
     pub resolved_type_aliases: Rc<FxHashMap<InternedPath, DataType>>,
     pub generic_declarations_by_path: Rc<FxHashMap<InternedPath, GenericDeclarationMetadata>>,
     pub resolved_struct_fields_by_path: Rc<FxHashMap<InternedPath, Vec<Declaration>>>,
@@ -59,7 +56,6 @@ pub(crate) struct ConstantHeaderParseContext<'a> {
     pub rendered_path_usages: Rc<RefCell<Vec<RenderedPathUsage>>>,
     pub string_table: &'a mut StringTable,
     pub trait_environment: Option<Rc<TraitEnvironment>>,
-    pub visible_trait_names: &'a FxHashMap<StringId, InternedPath>,
 }
 
 pub(crate) fn parse_constant_header_declaration(
@@ -70,10 +66,7 @@ pub(crate) fn parse_constant_header_declaration(
     // and resolver calls without borrow-checker conflicts.
     let ConstantHeaderParseContext {
         top_level_declarations,
-        visible_declaration_ids,
-        visible_external_symbols,
-        visible_source_bindings,
-        visible_type_aliases,
+        file_visibility,
         resolved_type_aliases,
         generic_declarations_by_path,
         resolved_struct_fields_by_path,
@@ -90,7 +83,6 @@ pub(crate) fn parse_constant_header_declaration(
         rendered_path_usages,
         string_table,
         trait_environment,
-        visible_trait_names,
     } = context;
 
     let HeaderKind::Constant { declaration, .. } = &header.kind else {
@@ -126,13 +118,10 @@ pub(crate) fn parse_constant_header_declaration(
     .with_path_format_config(path_format_config)
     .with_template_const_loop_iteration_limit(template_const_loop_iteration_limit)
     .with_rendered_path_usage_sink(rendered_path_usages)
-    // Keep full module declarations for path identity, but explicitly gate what this file
-    // can see to enforce import boundaries and prevent cross-file leakage.
-    .with_visible_declarations(visible_declaration_ids.to_owned())
-    .with_visible_external_symbols(visible_external_symbols.to_owned())
-    .with_visible_source_bindings(visible_source_bindings.to_owned())
-    .with_visible_type_aliases(visible_type_aliases.to_owned())
-    .with_visible_trait_names(visible_trait_names.to_owned())
+    // Keep full module declarations for path identity, but gate every file-local lookup through
+    // the header-built visibility package so namespace imports and aliases behave exactly like
+    // they do in function/start body contexts.
+    .with_file_visibility(Rc::new(file_visibility.clone()))
     // Type resolution support
     .with_resolved_type_aliases(Rc::clone(&resolved_type_aliases))
     .with_generic_declarations(Rc::clone(&generic_declarations_by_path))

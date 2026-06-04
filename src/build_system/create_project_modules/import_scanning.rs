@@ -10,7 +10,7 @@ use crate::compiler_frontend::paths::const_paths::collect_paths_from_tokens;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
-use crate::compiler_frontend::tokenizer::tokens::TokenizeMode;
+use crate::compiler_frontend::tokenizer::tokens::TokenizerEntryMode;
 
 use std::path::Path;
 
@@ -35,7 +35,7 @@ pub(crate) fn extract_import_paths(
     let tokens = tokenize(
         &source,
         &interned_path,
-        TokenizeMode::Normal,
+        TokenizerEntryMode::SourceFile,
         style_directives,
         string_table,
         None,

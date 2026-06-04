@@ -1,11 +1,18 @@
 use super::*;
-use crate::compiler_frontend::compiler_messages::{DiagnosticPayload, NumberLiteralErrorReason};
+use crate::compiler_frontend::compiler_messages::render::{
+    DiagnosticRenderContext, terminal::format_payload_guidance,
+};
+use crate::compiler_frontend::compiler_messages::{
+    CompilerDiagnostic, DiagnosticKind, DiagnosticPayload, NumberLiteralErrorReason,
+    SyntaxDiagnosticKind,
+};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::style_directives::{
     StyleDirectiveHandlerSpec, StyleDirectiveRegistry, StyleDirectiveSpec,
     TemplateHeadCompatibility,
 };
 use crate::compiler_tests::test_support::frontend_test_style_directives;
+use crate::libraries::SourceFileKind;
 use crate::projects::html_project::style_directives::html_project_style_directives;
 
 fn html_project_test_style_directives() -> StyleDirectiveRegistry {
@@ -32,7 +39,7 @@ fn tokenize_source_with_registry(
     let file_tokens = tokenize(
         source,
         &source_path,
-        TokenizeMode::Normal,
+        TokenizerEntryMode::SourceFile,
         style_directives,
         &mut string_table,
         None,
@@ -52,13 +59,45 @@ fn tokenize_source_with_directives(
     let file_tokens = tokenize(
         source,
         &source_path,
-        TokenizeMode::Normal,
+        TokenizerEntryMode::SourceFile,
         &registry,
         &mut string_table,
         None,
     )
     .expect("tokenization should succeed");
     (file_tokens, string_table)
+}
+
+fn tokenize_beandown_source(source: &str) -> (FileTokens, StringTable) {
+    let mut string_table = StringTable::new();
+    let style_directives = frontend_test_style_directives();
+    let source_path = InternedPath::from_single_str("test.bd", &mut string_table);
+    let file_tokens = tokenize(
+        source,
+        &source_path,
+        TokenizerEntryMode::for_source_file_kind(SourceFileKind::Beandown),
+        &style_directives,
+        &mut string_table,
+        None,
+    )
+    .expect("Beandown tokenization should succeed");
+    (file_tokens, string_table)
+}
+
+fn tokenize_beandown_error(source: &str) -> (CompilerDiagnostic, StringTable) {
+    let mut string_table = StringTable::new();
+    let style_directives = frontend_test_style_directives();
+    let source_path = InternedPath::from_single_str("test.bd", &mut string_table);
+    let diagnostic = tokenize(
+        source,
+        &source_path,
+        TokenizerEntryMode::for_source_file_kind(SourceFileKind::Beandown),
+        &style_directives,
+        &mut string_table,
+        None,
+    )
+    .expect_err("Beandown tokenization should fail");
+    (diagnostic, string_table)
 }
 
 fn find_token_index(tokens: &[Token], predicate: impl Fn(&TokenKind) -> bool) -> usize {
@@ -127,6 +166,104 @@ fn normalizes_template_body_newlines_from_crlf_and_bare_cr() {
 }
 
 #[test]
+fn normal_template_body_escapes_closing_square_bracket_as_literal_text() {
+    let (file_tokens, string_table) = tokenize_source("[:\\]]");
+    let texts = collect_literal_texts(&file_tokens, &string_table);
+
+    assert_eq!(texts, vec!["]"]);
+}
+
+#[test]
+fn normal_template_body_escapes_opening_square_bracket_as_literal_text() {
+    let (file_tokens, string_table) = tokenize_source("[:\\[]");
+    let texts = collect_literal_texts(&file_tokens, &string_table);
+
+    assert_eq!(texts, vec!["["]);
+}
+
+#[test]
+fn normal_template_body_escapes_backslash_as_literal_text() {
+    let (file_tokens, string_table) = tokenize_source("[:\\\\]");
+    let texts = collect_literal_texts(&file_tokens, &string_table);
+
+    assert_eq!(texts, vec!["\\"]);
+}
+
+#[test]
+fn beandown_entry_body_escapes_square_brackets_and_backslash_as_literal_text() {
+    let (closing_tokens, closing_table) = tokenize_beandown_source("\\]");
+    let (opening_tokens, opening_table) = tokenize_beandown_source("\\[");
+    let (backslash_tokens, backslash_table) = tokenize_beandown_source("\\\\");
+
+    assert_eq!(
+        collect_literal_texts(&closing_tokens, &closing_table),
+        vec!["]"]
+    );
+    assert_eq!(
+        collect_literal_texts(&opening_tokens, &opening_table),
+        vec!["["]
+    );
+    assert_eq!(
+        collect_literal_texts(&backslash_tokens, &backslash_table),
+        vec!["\\"]
+    );
+}
+
+#[test]
+fn beandown_entry_body_rejects_unescaped_outer_template_close() {
+    let (diagnostic, string_table) = tokenize_beandown_error("]");
+
+    assert_eq!(
+        diagnostic.kind,
+        DiagnosticKind::Syntax(SyntaxDiagnosticKind::UnescapedImplicitTemplateClose)
+    );
+    assert!(matches!(
+        &diagnostic.payload,
+        DiagnosticPayload::UnescapedImplicitTemplateClose {
+            source_kind: SourceFileKind::Beandown
+        }
+    ));
+    assert_eq!(
+        diagnostic
+            .primary_location
+            .scope
+            .to_portable_string(&string_table),
+        "test.bd"
+    );
+
+    let guidance = format_payload_guidance(
+        &diagnostic.payload,
+        DiagnosticRenderContext::new(&string_table),
+    )
+    .join("\n");
+    assert!(guidance.contains("Beandown `.bd` source"));
+    assert!(guidance.contains("\\]"));
+    assert!(guidance.contains("[']']"));
+}
+
+#[test]
+fn beandown_entry_body_allows_nested_template_close() {
+    let (file_tokens, string_table) = tokenize_beandown_source("before [:inner] after");
+    let template_closes = file_tokens
+        .tokens
+        .iter()
+        .filter(|token| matches!(token.kind, TokenKind::TemplateClose))
+        .count();
+    let texts = collect_literal_texts(&file_tokens, &string_table);
+
+    assert_eq!(template_closes, 1);
+    assert_eq!(texts, vec!["before ", "inner", " after"]);
+}
+
+#[test]
+fn beandown_entry_body_keeps_double_dash_as_text() {
+    let (file_tokens, string_table) = tokenize_beandown_source("alpha -- still text\nbeta");
+    let texts = collect_literal_texts(&file_tokens, &string_table);
+
+    assert_eq!(texts, vec!["alpha -- still text\nbeta"]);
+}
+
+#[test]
 fn normalizes_code_template_body_newlines_from_crlf_and_bare_cr() {
     let (file_tokens, string_table) =
         tokenize_source("[$code:\r\nalpha\nline\rbravo\r\ncharlie\r\ndelta\r]");
@@ -189,7 +326,7 @@ fn rejects_non_finite_float_literal_values() {
     let error = tokenize(
         &source,
         &source_path,
-        TokenizeMode::Normal,
+        TokenizerEntryMode::SourceFile,
         &style_directives,
         &mut string_table,
         None,
@@ -545,7 +682,7 @@ fn rejects_legacy_reset_style_directive_name() {
     let error = tokenize(
         "[$reset: body]",
         &source_path,
-        TokenizeMode::Normal,
+        TokenizerEntryMode::SourceFile,
         &style_directives,
         &mut string_table,
         None,
@@ -635,7 +772,7 @@ fn rejects_legacy_style_child_template_prefix_syntax() {
     let result = tokenize(
         "[$[:prefix], $markdown:\nhello\n]",
         &source_path,
-        TokenizeMode::Normal,
+        TokenizerEntryMode::SourceFile,
         &style_directives,
         &mut string_table,
         None,
@@ -655,7 +792,7 @@ fn rejects_style_directives_outside_template_heads() {
     let result = tokenize(
         "$markdown\n",
         &source_path,
-        TokenizeMode::Normal,
+        TokenizerEntryMode::SourceFile,
         &style_directives,
         &mut string_table,
         None,
@@ -675,7 +812,7 @@ fn unknown_style_directives_fail_under_strict_registry() {
     let result = tokenize(
         "[$unknown: value]",
         &source_path,
-        TokenizeMode::Normal,
+        TokenizerEntryMode::SourceFile,
         &style_directives,
         &mut string_table,
         None,
@@ -726,7 +863,7 @@ fn rejects_numeric_slot_directive_prefixes() {
     let result = tokenize(
         "[wrapper: [$1: first]]",
         &source_path,
-        TokenizeMode::Normal,
+        TokenizerEntryMode::SourceFile,
         &style_directives,
         &mut string_table,
         None,

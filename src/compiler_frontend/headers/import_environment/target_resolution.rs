@@ -14,6 +14,7 @@ use crate::compiler_frontend::headers::module_symbols::FacadeExportEntry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
+use crate::libraries::SourceFileKind;
 use rustc_hash::FxHashSet;
 
 /// Resolved target of a single import path.
@@ -217,10 +218,10 @@ enum ImportPathMatch {
 
 /// Match a requested path against a set of candidate paths.
 ///
-/// WHAT: first tries exact component match (with optional `.bst` extension), then tries suffix
-/// match (with optional `.bst` extension).
-/// WHY: `@path/to/symbol` may match `@path/to/symbol.bst` or a longer path ending in the
-/// requested suffix.
+/// WHAT: first tries exact component match (with optional source-file extensions), then tries
+/// suffix match with the same source-file extension rules.
+/// WHY: `@path/to/symbol` may match `@path/to/symbol.bst` or Beandown's generated
+/// `@path/to/file.bd/content` symbol while user import syntax stays extensionless.
 fn resolve_import_target_path(
     requested_path: &InternedPath,
     candidates: &FxHashSet<InternedPath>,
@@ -247,7 +248,7 @@ fn resolve_import_target_path(
         .iter()
         .filter(|candidate| {
             candidate.ends_with(requested_path)
-                || suffix_matches_with_optional_bst_extension(
+                || suffix_matches_with_optional_source_extension(
                     candidate,
                     requested_path,
                     string_table,
@@ -335,14 +336,14 @@ fn exact_path_matches_candidate(
     requested: &InternedPath,
     string_table: &StringTable,
 ) -> bool {
-    components_match_with_optional_bst_extension(
+    source_components_match(
         candidate.as_components(),
         requested.as_components(),
         string_table,
     )
 }
 
-pub(super) fn suffix_matches_with_optional_bst_extension(
+pub(super) fn suffix_matches_with_optional_source_extension(
     candidate: &InternedPath,
     requested: &InternedPath,
     string_table: &StringTable,
@@ -355,11 +356,24 @@ pub(super) fn suffix_matches_with_optional_bst_extension(
     let requested_components = requested.as_components();
     let start_index = candidate_components.len() - requested_components.len();
 
-    components_match_with_optional_bst_extension(
+    source_components_match(
         &candidate_components[start_index..],
         requested_components,
         string_table,
     )
+}
+
+fn source_components_match(
+    candidate: &[StringId],
+    requested: &[StringId],
+    string_table: &StringTable,
+) -> bool {
+    components_match_with_optional_bst_extension(candidate, requested, string_table)
+        || components_match_with_optional_beandown_file_extension(
+            candidate,
+            requested,
+            string_table,
+        )
 }
 
 fn components_match_with_optional_bst_extension(
@@ -382,8 +396,35 @@ fn components_match_with_optional_bst_extension(
             let candidate_str = string_table.resolve(*candidate_component);
             let requested_str = string_table.resolve(*requested_component);
 
-            candidate_str.strip_suffix(".bst") == Some(requested_str)
-                || requested_str.strip_suffix(".bst") == Some(candidate_str)
+            candidate_str.strip_suffix(SourceFileKind::Beanstalk.extension_suffix())
+                == Some(requested_str)
+                || requested_str.strip_suffix(SourceFileKind::Beanstalk.extension_suffix())
+                    == Some(candidate_str)
+        })
+}
+
+fn components_match_with_optional_beandown_file_extension(
+    candidate_components: &[StringId],
+    requested_components: &[StringId],
+    string_table: &StringTable,
+) -> bool {
+    if candidate_components.len() != requested_components.len() {
+        return false;
+    }
+
+    candidate_components
+        .iter()
+        .zip(requested_components.iter())
+        .all(|(candidate_component, requested_component)| {
+            if candidate_component == requested_component {
+                return true;
+            }
+
+            let candidate_str = string_table.resolve(*candidate_component);
+            let requested_str = string_table.resolve(*requested_component);
+
+            candidate_str.strip_suffix(SourceFileKind::Beandown.extension_suffix())
+                == Some(requested_str)
         })
 }
 

@@ -39,7 +39,7 @@ fn template_tokens_from_source(source: &str, string_table: &mut StringTable) -> 
     let mut tokens = tokenize(
         source,
         &scope,
-        crate::compiler_frontend::tokenizer::tokens::TokenizeMode::Normal,
+        crate::compiler_frontend::tokenizer::tokens::TokenizerEntryMode::SourceFile,
         &style_directives,
         string_table,
         None,
@@ -61,6 +61,7 @@ fn test_constant_context(scope: InternedPath) -> ScopeContext {
         cwd.clone(),
         cwd,
         &crate::libraries::SourceLibraryRegistry::default(),
+        &crate::libraries::SourceFileKindRegistry::default(),
     )
     .expect("test path resolver should be valid");
     ScopeContext::new(

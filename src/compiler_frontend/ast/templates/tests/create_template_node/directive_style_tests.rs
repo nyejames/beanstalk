@@ -16,7 +16,7 @@ use crate::compiler_frontend::compiler_messages::{
 };
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::compiler_frontend::tokenizer::tokens::TokenizeMode;
+use crate::compiler_frontend::tokenizer::tokens::TokenizerEntryMode;
 use crate::compiler_frontend::type_coercion::compatibility::TypeCompatibilityCache;
 
 fn directive_tokens(source: &str, string_table: &mut StringTable) -> FileTokens {
@@ -25,7 +25,7 @@ fn directive_tokens(source: &str, string_table: &mut StringTable) -> FileTokens 
     let mut tokens = tokenize(
         source,
         &scope,
-        TokenizeMode::Normal,
+        TokenizerEntryMode::SourceFile,
         &style_directives,
         string_table,
         None,
@@ -47,6 +47,7 @@ fn test_context(scope: InternedPath) -> ScopeContext {
         cwd.clone(),
         cwd,
         &crate::libraries::SourceLibraryRegistry::default(),
+        &crate::libraries::SourceFileKindRegistry::default(),
     )
     .expect("test path resolver should be valid");
     ScopeContext::new(

@@ -7,11 +7,14 @@ use crate::build_system::build::{CompiledModuleResult, Module};
 
 use crate::compiler_frontend::FrontendBuildProfile;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
+use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
+use crate::compiler_frontend::compiler_messages::source_location::SourceLocation;
+use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
-use crate::libraries::LibrarySet;
+use crate::libraries::{LibrarySet, SourceFileKind};
 use crate::projects::settings::{BEANSTALK_FILE_EXTENSION, Config};
 
 use rayon::prelude::*;
@@ -39,7 +42,21 @@ pub(crate) fn compile_single_file_frontend(
     string_table: &mut StringTable,
 ) -> Result<Vec<Module>, CompilerMessages> {
     // 1. Verify standard Beanstalk file extension.
-    if extension.to_str().unwrap_or_default() != BEANSTALK_FILE_EXTENSION {
+    let extension_text = extension.to_str().unwrap_or_default();
+    if extension_text != BEANSTALK_FILE_EXTENSION {
+        if SourceFileKind::from_extension(extension_text).is_some() {
+            let path = InternedPath::from_path_buf(&config.entry_dir, string_table);
+            let extension = string_table.intern(extension_text);
+            let location = SourceLocation::from_path(&config.entry_dir, string_table);
+            let diagnostic =
+                CompilerDiagnostic::invalid_source_file_entry(path, extension, location);
+
+            return Err(CompilerMessages::from_diagnostic(
+                diagnostic,
+                string_table.clone(),
+            ));
+        }
+
         let err = CompilerError::file_error(
             &config.entry_dir,
             format!(
@@ -74,6 +91,7 @@ pub(crate) fn compile_single_file_frontend(
         source_root.clone(),
         source_root.clone(),
         &libraries.source_libraries,
+        &libraries.source_file_kinds,
     ) {
         Ok(resolver) => resolver,
         Err(error) => return Err(CompilerMessages::from_error_ref(error, string_table)),
@@ -152,6 +170,7 @@ pub(crate) fn compile_directory_frontend(
     let project_path_resolver = project_roots::build_project_path_resolver(
         config,
         &libraries.source_libraries,
+        &libraries.source_file_kinds,
         string_table,
     )?;
 

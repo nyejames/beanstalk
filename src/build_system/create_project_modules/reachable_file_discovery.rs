@@ -16,8 +16,10 @@ use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_normalization::join_and_normalize_path;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
+use crate::compiler_frontend::source_libraries::mod_file::MOD_FILE_NAME;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::libraries::SourceFileKind;
 use crate::libraries::external_import_providers::cache::ExternalImportCacheKey;
 use crate::libraries::external_import_providers::cache::ExternalImportProviderCache;
 use crate::libraries::external_import_providers::provider::{
@@ -47,6 +49,13 @@ pub(crate) struct ExternalImportDiscoveryState<'a> {
     pub(super) resolution_table: &'a mut ExternalImportResolutionTable,
 }
 
+/// A reachable source file plus the source kind selected by import resolution.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub(super) struct ReachableSourceFile {
+    pub(super) path: PathBuf,
+    pub(super) kind: SourceFileKind,
+}
+
 // -------------------------
 //  Public API
 // -------------------------
@@ -60,7 +69,7 @@ pub(super) fn collect_reachable_input_files(
     string_table: &mut StringTable,
 ) -> Result<Vec<InputFile>, CompilerMessages> {
     // 1. Traverse the import graph to find all paths.
-    let reachable_files = match discover_reachable_files(
+    let reachable_files = match discover_reachable_source_files(
         entry_path,
         project_path_resolver,
         style_directives,
@@ -74,15 +83,16 @@ pub(super) fn collect_reachable_input_files(
     // 2. Load the content of each discovered file.
     let mut input_files = Vec::with_capacity(reachable_files.len());
 
-    for source_path in reachable_files {
-        let source_code = match extract_source_code(&source_path, string_table) {
+    for source_file in reachable_files {
+        let source_code = match extract_source_code(&source_file.path, string_table) {
             Ok(code) => code,
             Err(error) => return Err(SourceDiscoveryError::from(error).into_messages(string_table)),
         };
 
         input_files.push(InputFile {
             source_code,
-            source_path,
+            source_path: source_file.path,
+            source_kind: source_file.kind,
         });
     }
 
@@ -93,43 +103,58 @@ pub(super) fn collect_reachable_input_files(
 //  Reachable Discovery
 // -------------------------
 
-/// BFS over import declarations starting from `entry_point`.
+/// BFS over import declarations starting from `entry_point`, preserving source kind.
 ///
-/// WHAT: follows each file's declared imports, resolves them to canonical paths, and returns the
-/// full ordered set of files reachable from the entry point.
-/// WHY: the set is built with a `BTreeSet` so the output order is deterministic, and each path is
-/// only visited once to handle import cycles safely.
-pub(super) fn discover_reachable_files(
+/// WHAT: follows each Beanstalk file's declared imports, resolves them to canonical typed source
+/// files, and returns the full ordered set of files reachable from the entry point.
+/// WHY: source kind belongs to Stage 0 input discovery. Beandown files can be loaded and carried
+/// forward without being scanned for imports or treated as module roots.
+pub(super) fn discover_reachable_source_files(
     entry_point: &Path,
     project_path_resolver: &ProjectPathResolver,
     style_directives: &StyleDirectiveRegistry,
     external_imports: &mut ExternalImportDiscoveryState<'_>,
     string_table: &mut StringTable,
-) -> Result<Vec<PathBuf>, SourceDiscoveryError> {
+) -> Result<Vec<ReachableSourceFile>, SourceDiscoveryError> {
     let mut reachable = BTreeSet::new();
     let mut queue = VecDeque::new();
 
     // 1. Seed with entry point.
-    queue.push_back(entry_point.to_path_buf());
+    queue.push_back(ReachableSourceFile {
+        path: entry_point.to_path_buf(),
+        kind: SourceFileKind::Beanstalk,
+    });
 
     // 2. Seed all source library facade files so authored facade declarations are available.
     // WHY: imports may directly resolve to a target file after Stage 0 path scanning, but the
     // facade still needs to be compiled so its public declaration surface can be checked later.
     for facade_path in project_path_resolver.facade_files().values() {
-        queue.push_back(facade_path.clone());
+        queue.push_back(ReachableSourceFile {
+            path: facade_path.clone(),
+            kind: SourceFileKind::Beanstalk,
+        });
     }
 
     // 3. Process the queue.
     while let Some(next_file) = queue.pop_front() {
-        let canonical_file = fs::canonicalize(&next_file).map_err(|error| {
+        let canonical_file = fs::canonicalize(&next_file.path).map_err(|error| {
             CompilerError::file_error(
-                &next_file,
+                &next_file.path,
                 format!("Failed to canonicalize module file path: {error}"),
                 string_table,
             )
         })?;
+        let reachable_file = ReachableSourceFile {
+            path: canonical_file.clone(),
+            kind: next_file.kind,
+        };
 
-        if !reachable.insert(canonical_file.clone()) {
+        if !reachable.insert(reachable_file.clone()) {
+            continue;
+        }
+
+        if next_file.kind == SourceFileKind::Beandown {
+            queue_same_directory_facade_for_beandown(&canonical_file, &reachable, &mut queue);
             continue;
         }
 
@@ -192,7 +217,7 @@ pub(super) fn discover_reachable_files(
 
             // 8. Resolve the import to a filesystem path.
             let resolved = project_path_resolver
-                .resolve_import_to_file_with_facade_fallback(
+                .resolve_import_to_source_file_with_facade_fallback(
                     import_path,
                     &canonical_file,
                     string_table,
@@ -203,24 +228,62 @@ pub(super) fn discover_reachable_files(
             // WHY: when an import resolves to an implementation file in another module root,
             //      the facade must be available so AST can validate boundary enforcement.
             if let Some(importer_root) = project_path_resolver.module_root_for_file(&canonical_file)
-                && let Some(target_root) = project_path_resolver.module_root_for_file(&resolved)
+                && let Some(target_root) =
+                    project_path_resolver.module_root_for_file(&resolved.path)
                 && importer_root != target_root
                 && let Some(facade_path) = project_path_resolver
                     .module_root_facades()
                     .get(&target_root)
-                && !reachable.contains(facade_path)
+                && !reachable.contains(&ReachableSourceFile {
+                    path: facade_path.clone(),
+                    kind: SourceFileKind::Beanstalk,
+                })
             {
-                queue.push_back(facade_path.clone());
+                queue.push_back(ReachableSourceFile {
+                    path: facade_path.clone(),
+                    kind: SourceFileKind::Beanstalk,
+                });
             }
 
             // 10. Queue the resolved implementation file if not already visited.
-            if !reachable.contains(&resolved) {
-                queue.push_back(resolved);
+            let resolved_source_file = resolved_source_file(&resolved.path, resolved.kind);
+            if !reachable.contains(&resolved_source_file) {
+                queue.push_back(resolved_source_file);
             }
         }
     }
 
     Ok(reachable.into_iter().collect())
+}
+
+fn resolved_source_file(path: &Path, kind: SourceFileKind) -> ReachableSourceFile {
+    ReachableSourceFile {
+        path: path.to_path_buf(),
+        kind,
+    }
+}
+
+fn queue_same_directory_facade_for_beandown(
+    beandown_path: &Path,
+    reachable: &BTreeSet<ReachableSourceFile>,
+    queue: &mut VecDeque<ReachableSourceFile>,
+) {
+    let Some(directory) = beandown_path.parent() else {
+        return;
+    };
+
+    let facade_path = directory.join(MOD_FILE_NAME);
+    if !facade_path.is_file() {
+        return;
+    }
+
+    let facade_source_file = ReachableSourceFile {
+        path: fs::canonicalize(&facade_path).unwrap_or(facade_path),
+        kind: SourceFileKind::Beanstalk,
+    };
+    if !reachable.contains(&facade_source_file) {
+        queue.push_back(facade_source_file);
+    }
 }
 
 // -------------------------
@@ -254,7 +317,7 @@ fn provider_backed_import_prefix<'a>(
             continue;
         };
 
-        if extension == "bst" {
+        if SourceFileKind::from_extension(extension).is_some() {
             continue;
         }
 

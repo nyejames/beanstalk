@@ -27,7 +27,7 @@ use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::{
-    FileTokens, SourceLocation, Token, TokenKind, TokenizeMode,
+    FileTokens, SourceLocation, Token, TokenKind, TokenizerEntryMode,
 };
 use crate::compiler_frontend::traits::syntax::TraitThisUsage;
 use crate::libraries::external_import_providers::resolution_table::ExternalImportResolutionTable;
@@ -59,7 +59,7 @@ fn prepare_single_file(
     let file_tokens = tokenize(
         source,
         &interned_path,
-        TokenizeMode::Normal,
+        TokenizerEntryMode::SourceFile,
         &style_directives,
         string_table,
         None,
@@ -90,7 +90,7 @@ fn prepare_test_source_file(
     let file_tokens = match tokenize(
         source,
         &interned_path,
-        TokenizeMode::Normal,
+        TokenizerEntryMode::SourceFile,
         context.style_directives,
         string_table,
         None,
@@ -185,7 +185,7 @@ fn parse_single_file_headers_with_entry(
     let file_tokens = tokenize(
         source,
         &interned_path,
-        TokenizeMode::Normal,
+        TokenizerEntryMode::SourceFile,
         &style_directives,
         &mut string_table,
         None,

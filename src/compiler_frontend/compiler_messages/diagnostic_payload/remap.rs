@@ -12,6 +12,7 @@ impl DiagnosticPayload {
         match self {
             DiagnosticPayload::None
             | DiagnosticPayload::UnexpectedTrailingComma
+            | DiagnosticPayload::UnescapedImplicitTemplateClose { .. }
             | DiagnosticPayload::TypeMismatch { .. }
             | DiagnosticPayload::UnreachableMatchArm
             | DiagnosticPayload::OldPrefixDeclarationSyntax => {}
@@ -55,8 +56,17 @@ impl DiagnosticPayload {
                 ..
             }
             | DiagnosticPayload::MissingModuleFacade { symbol_path: path }
-            | DiagnosticPayload::CrossModuleImportNotExported { symbol_path: path } => {
+            | DiagnosticPayload::CrossModuleImportNotExported { symbol_path: path }
+            | DiagnosticPayload::InvalidBeandownApiScopeItem { path } => {
                 remap_path_import_payload(path, remap);
+            }
+
+            DiagnosticPayload::DuplicateBeandownInputPath {
+                path,
+                first_location,
+            } => {
+                remap_path_import_payload(path, remap);
+                first_location.remap_string_ids(remap);
             }
 
             DiagnosticPayload::InvalidImportPath { path, reason } => {
@@ -505,7 +515,10 @@ impl DiagnosticPayload {
                 path.remap_string_ids(remap);
             }
 
-            DiagnosticPayload::UnsupportedExternalExtension { path, extension } => {
+            DiagnosticPayload::ExplicitSourceExtension { path, extension }
+            | DiagnosticPayload::UnsupportedSourceFileKind { path, extension }
+            | DiagnosticPayload::InvalidSourceFileEntry { path, extension }
+            | DiagnosticPayload::UnsupportedExternalExtension { path, extension } => {
                 path.remap_string_ids(remap);
                 *extension = remap.get(*extension);
             }

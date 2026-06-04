@@ -6,7 +6,7 @@
 use super::MemberStepContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
-use crate::compiler_frontend::ast::expressions::expression::Expression;
+use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::expression_types::ConstRecordState;
 use crate::compiler_frontend::ast::instrumentation::{AstCounter, increment_ast_counter};
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
@@ -66,11 +66,16 @@ fn const_field_value<'a>(
 }
 
 fn const_inline_field_value(
+    receiver_node: &AstNode,
     receiver_type_id: TypeId,
     field_name: StringId,
     type_environment: &TypeEnvironment,
     resolved_struct_fields_by_path: Option<&FxHashMap<InternedPath, Vec<Declaration>>>,
 ) -> Option<Expression> {
+    if let Some(field_value) = const_inline_field_value_from_receiver(receiver_node, field_name) {
+        return Some(field_value);
+    }
+
     let field_value = const_field_value(
         receiver_type_id,
         field_name,
@@ -87,7 +92,37 @@ fn const_inline_field_value(
     }
 }
 
+fn const_inline_field_value_from_receiver(
+    receiver_node: &AstNode,
+    field_name: StringId,
+) -> Option<Expression> {
+    let receiver_value = match &receiver_node.kind {
+        NodeKind::Rvalue(expression) => expression,
+        NodeKind::VariableDeclaration(declaration) => &declaration.value,
+        _ => return None,
+    };
+
+    let ExpressionKind::StructInstance(fields) = &receiver_value.kind else {
+        return None;
+    };
+
+    let field_value = fields
+        .iter()
+        .find(|field| field.id.name() == Some(field_name))?
+        .value
+        .to_owned();
+
+    if !field_value.is_compile_time_constant() {
+        return None;
+    }
+
+    let mut inlined_expression = field_value;
+    inlined_expression.value_mode = ValueMode::ImmutableOwned;
+    Some(inlined_expression)
+}
+
 fn resolve_field_member(
+    receiver_node: &AstNode,
     receiver_type_id: TypeId,
     field_name: StringId,
     type_environment: &TypeEnvironment,
@@ -119,8 +154,11 @@ fn resolve_field_member(
     let const_inline_value = if should_try_const_inline {
         // Const records need full declaration values for field inlining. The
         // TypeEnvironment owns semantic field types, while the resolved struct
-        // field side table owns foldable default expressions.
+        // field side table owns foldable default expressions. Prefer the
+        // already-inlined receiver instance so const records preserve authored
+        // constructor values such as `HtmlDefaults(color = "green")`.
         const_inline_field_value(
+            receiver_node,
             receiver_type_id,
             field_name,
             type_environment,
@@ -205,6 +243,7 @@ pub(super) fn parse_field_member_access_typed(
     let receiver_is_const_record = receiver_node.expression_is_const_record_value()?;
 
     let Some(field) = resolve_field_member(
+        receiver_node,
         receiver_type_id,
         member_name,
         type_interner.environment(),

@@ -1,0 +1,11 @@
+export @./intro {
+    content as intro_content,
+}
+
+export LocalCard = |
+    title String,
+|
+
+export render_local || -> String:
+    return "runtime"
+;

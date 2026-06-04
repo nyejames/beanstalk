@@ -41,6 +41,7 @@ pub struct DeclarationSyntax {
 #[derive(Clone, Debug)]
 pub struct InitializerReference {
     pub name: StringId,
+    pub dot_member: Option<StringId>,
     pub location: SourceLocation,
     pub followed_by_call: bool,
     pub followed_by_choice_namespace: bool,
@@ -64,6 +65,9 @@ impl InitializerReference {
     #[allow(dead_code)]
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         self.name = remap.get(self.name);
+        if let Some(dot_member) = &mut self.dot_member {
+            *dot_member = remap.get(*dot_member);
+        }
         self.location.remap_string_ids(remap);
     }
 }
@@ -184,8 +188,23 @@ pub(crate) fn collect_initializer_references(tokens: &[Token]) -> Vec<Initialize
             continue;
         }
 
+        // Header dependency sorting only needs a shallow member hint. AST still owns the full
+        // expression parse, but `namespace.member` constants need this member name so imports
+        // like `intro.content` can create an ordering edge to the imported constant.
+        let dot_member = if matches!(next, Some(TokenKind::Dot)) {
+            tokens
+                .get(index + 2)
+                .and_then(|member_token| match &member_token.kind {
+                    TokenKind::Symbol(member_name) => Some(*member_name),
+                    _ => None,
+                })
+        } else {
+            None
+        };
+
         references.push(InitializerReference {
             name: *name,
+            dot_member,
             location: token.location.clone(),
             followed_by_call: matches!(next, Some(TokenKind::OpenParenthesis)),
             followed_by_choice_namespace: matches!(next, Some(TokenKind::DoubleColon)),

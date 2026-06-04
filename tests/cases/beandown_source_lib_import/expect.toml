@@ -1,0 +1,7 @@
+entry = "."
+
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["beandown_source_lib_import library content"]
+

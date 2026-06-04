@@ -38,6 +38,7 @@ impl TestHarness {
             project_root.clone(),
             entry_root,
             &crate::libraries::SourceLibraryRegistry::default(),
+            &crate::libraries::SourceFileKindRegistry::default(),
         )
         .expect("resolver should build");
 

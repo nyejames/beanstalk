@@ -163,6 +163,22 @@ green #= [$css("inline"): background-color: rgb(109, 232, 138)]
         ]
 
         [data:
+            [: Beandown [codesnippet:.bd] content assets]
+            [: Partial]
+            [: Targeted unit coverage for builder-declared source-kind registration, extensionless path resolution, Beandown token entry behavior, synthetic [codesnippet:content #String] headers, escaped and unescaped outer template closes, markdown folding, compile-time template [codesnippet:if] and collection [codesnippet:loop] folding, non-foldable condition, runtime-call, external/prelude-call, and dynamic-loop rejection, explicit facade re-export syntax, grouped and namespace [codesnippet:content] imports into normal [codesnippet:.bst] constants, namespace-record constant dependency sorting, flat [codesnippet:@html] constant visibility, same-directory facade constant visibility, const-record field projection, override ordering, non-constant filtering, facade-supplied [codesnippet:content] references, self-originating re-export exclusion, no-runtime/start header and AST behavior for imported [codesnippet:.bd] files, and direct API file, directory, recursive directory, file-list, in-memory source, duplicate-input, invalid caller-scope, and no-artifact behavior. Integration coverage now includes HTML namespace imports, grouped aliases, explicit facade re-exports, source-library imports, unimported [codesnippet:.bd] files, direct [codesnippet:.bd] entry rejection, direct [codesnippet:.bd] extension-import rejection, [codesnippet:.bd] import ambiguities, body-scope runtime/type/API rejection, unescaped outer-close diagnostics, and HTML-Wasm compile-path parity.]
+            [: HTML builder / frontend]
+            [: [codesnippet:.bd] is implemented as a builder-supported source kind that synthesizes a private compile-time [codesnippet:content #String] constant from an implicit [codesnippet:$markdown] template body. Current support covers source-kind discovery, Beandown entry tokenization, synthetic header preparation, dependency-sorted AST folding, normal HTML project imports, crate-local HTML-project direct API compilation, user-facing documentation, and final redundancy/output-artifact auditing. [codesnippet:@html] exported constants and same-directory [codesnippet:#mod.bst] exported constants are visible flat in compiler-integrated Beandown bodies, const-record field projection folds through the existing AST template-head path, grouped imports and namespace imports such as [codesnippet:intro.content] fold into normal [codesnippet:.bst] constants, functions/types/runtime APIs are not visible, generated self [codesnippet:content] is excluded, recognized source-asset entries such as direct [codesnippet:.bd] page builds are rejected with a dedicated diagnostic, and direct API duplicate/caller-scope mistakes use dedicated stable diagnostics. Direct caller-supplied folded scope conversion, CLI [codesnippet:bean beandown], [codesnippet:project = "beandown"], generated standalone HTML files, frontmatter/metadata/raw-source retention, and generic Markdown/CSS/JSON source handlers remain deferred.]
+        ]
+
+        [data:
+            [: Builder-supported source file kinds]
+            [: Partial]
+            [: Targeted coverage through Beandown source-kind registry, extensionless resolution, unsupported-kind diagnostics, explicit source-extension diagnostics, direct-entry rejection, ambiguity handling, source discovery, and tokenizer entry-mode tests.]
+            [: Stage 0 / frontend]
+            [: Builders can declare non-[codesnippet:.bst] source file kinds that participate in source import discovery and frontend preparation. V1 implements only Beandown [codesnippet:.bd] for the HTML builder. This is not a general source-handler plugin system yet; future Markdown/CSS/JSON handlers remain deferred until each has a concrete semantic owner.]
+        ]
+
+        [data:
             [: Structs, records, and receiver methods]
             [: Supported]
             [: Broad integration coverage with targeted parser, struct-default, constructor-default, and receiver-catalog unit coverage.]

@@ -985,10 +985,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 header,
                 ConstantHeaderParseContext {
                     top_level_declarations: Rc::clone(&self.declaration_table),
-                    visible_declaration_ids: &visibility.visible_declaration_paths,
-                    visible_external_symbols: &visibility.visible_external_symbols,
-                    visible_source_bindings: &visibility.visible_source_names,
-                    visible_type_aliases: &visibility.visible_type_alias_names,
+                    file_visibility: visibility,
                     resolved_type_aliases: Rc::clone(&resolved_type_aliases),
                     generic_declarations_by_path: Rc::clone(&generic_declarations),
                     resolved_struct_fields_by_path: Rc::clone(&resolved_struct_fields_by_path),
@@ -1007,7 +1004,6 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                     rendered_path_usages: self.rendered_path_usages.clone(),
                     string_table,
                     trait_environment: Some(Rc::clone(&trait_environment)),
-                    visible_trait_names: &visibility.visible_trait_names,
                 },
             )
             .map_err(|diagnostic| self.diagnostic_messages(*diagnostic, string_table))?;
@@ -1147,10 +1143,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         .with_path_format_config(self.context.path_format_config.clone())
         .with_template_const_loop_iteration_limit(self.context.template_const_loop_iteration_limit)
         .with_rendered_path_usage_sink(Rc::clone(&self.rendered_path_usages))
-        .with_visible_declarations(visibility.visible_declaration_paths.clone())
-        .with_visible_external_symbols(visibility.visible_external_symbols.clone())
-        .with_visible_source_bindings(visibility.visible_source_names.clone())
-        .with_visible_type_aliases(visibility.visible_type_alias_names.clone())
+        .with_file_visibility(Rc::new(visibility.clone()))
         .with_resolved_type_aliases(Rc::new(self.resolved_type_aliases_by_path.clone()))
         .with_generic_declarations(Rc::new(
             self.module_symbols.generic_declarations_by_path.clone(),

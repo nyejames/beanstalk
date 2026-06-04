@@ -1,0 +1,10 @@
+entry = "."
+
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["beandown_namespace_import_html_parity intro namespace content"]
+
+[backends.html_wasm]
+mode = "success"
+warnings = "forbid"

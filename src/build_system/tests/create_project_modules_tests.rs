@@ -18,6 +18,16 @@ use std::ffi::OsStr;
 use std::path::PathBuf;
 
 fn configured_resolver(config: &Config) -> ProjectPathResolver {
+    configured_resolver_with_source_file_kinds(
+        config,
+        &crate::libraries::SourceFileKindRegistry::default(),
+    )
+}
+
+fn configured_resolver_with_source_file_kinds(
+    config: &Config,
+    source_file_kinds: &crate::libraries::SourceFileKindRegistry,
+) -> ProjectPathResolver {
     // WHAT: rebuilds the same canonical resolver the real project build uses.
     // WHY: module-discovery tests should exercise the exact path rules used in production.
     let project_root = fs::canonicalize(&config.entry_dir).expect("project root should resolve");
@@ -28,6 +38,7 @@ fn configured_resolver(config: &Config) -> ProjectPathResolver {
         project_root,
         entry_root,
         &crate::libraries::SourceLibraryRegistry::default(),
+        source_file_kinds,
     )
     .expect("project path resolver should build")
 }
@@ -800,6 +811,7 @@ fn library_prefix_collision_with_entry_root_folder_rejected() {
     let result = super::project_roots::build_project_path_resolver(
         &config,
         &crate::libraries::SourceLibraryRegistry::default(),
+        &crate::libraries::SourceFileKindRegistry::default(),
         &mut string_table,
     );
 
@@ -1055,6 +1067,7 @@ fn missing_default_library_folder_is_ignored() {
     let resolver = super::project_roots::build_project_path_resolver(
         &config,
         &crate::libraries::SourceLibraryRegistry::default(),
+        &crate::libraries::SourceFileKindRegistry::default(),
         &mut string_table,
     )
     .expect("resolver should build even when default /lib is missing");
@@ -2148,6 +2161,7 @@ fn project_local_lib_directory_is_discovered_as_source_library_root() {
     let resolver = super::project_roots::build_project_path_resolver(
         &config,
         &crate::libraries::SourceLibraryRegistry::default(),
+        &crate::libraries::SourceFileKindRegistry::default(),
         &mut string_table,
     )
     .expect("resolver should build");
@@ -2159,8 +2173,9 @@ fn project_local_lib_directory_is_discovered_as_source_library_root() {
 
     let importer = root.join("src/#page.bst");
     let resolved = resolver
-        .resolve_import_to_file(&path, &importer, &mut string_table)
-        .expect("should resolve source library import");
+        .resolve_import_to_source_file(&path, &importer, &mut string_table)
+        .expect("should resolve source library import")
+        .path;
 
     assert_eq!(
         resolved,
@@ -2190,6 +2205,7 @@ fn library_prefix_collision_with_builder_library_rejected() {
     let result = super::project_roots::build_project_path_resolver(
         &config,
         &builder_libraries,
+        &crate::libraries::SourceFileKindRegistry::default(),
         &mut string_table,
     );
 
@@ -2240,6 +2256,7 @@ fn configured_library_folder_is_discovered_as_source_library_root() {
     let resolver = super::project_roots::build_project_path_resolver(
         &config,
         &crate::libraries::SourceLibraryRegistry::default(),
+        &crate::libraries::SourceFileKindRegistry::default(),
         &mut string_table,
     )
     .expect("resolver should build");
@@ -2250,8 +2267,9 @@ fn configured_library_folder_is_discovered_as_source_library_root() {
 
     let importer = root.join("src/#page.bst");
     let resolved = resolver
-        .resolve_import_to_file(&path, &importer, &mut string_table)
-        .expect("should resolve source library import");
+        .resolve_import_to_source_file(&path, &importer, &mut string_table)
+        .expect("should resolve source library import")
+        .path;
 
     assert_eq!(
         resolved,
@@ -2286,6 +2304,7 @@ fn missing_explicit_library_folder_is_error() {
     let result = super::project_roots::build_project_path_resolver(
         &config,
         &crate::libraries::SourceLibraryRegistry::default(),
+        &crate::libraries::SourceFileKindRegistry::default(),
         &mut string_table,
     );
 
@@ -2333,6 +2352,7 @@ fn explicit_library_folder_must_be_directory() {
     let result = super::project_roots::build_project_path_resolver(
         &config,
         &crate::libraries::SourceLibraryRegistry::default(),
+        &crate::libraries::SourceFileKindRegistry::default(),
         &mut string_table,
     );
 
@@ -2366,6 +2386,7 @@ fn source_library_requires_mod_facade() {
     let result = super::project_roots::build_project_path_resolver(
         &config,
         &crate::libraries::SourceLibraryRegistry::default(),
+        &crate::libraries::SourceFileKindRegistry::default(),
         &mut string_table,
     );
 
@@ -2406,6 +2427,7 @@ fn library_prefix_collision_across_scan_roots_rejected() {
     let result = super::project_roots::build_project_path_resolver(
         &config,
         &crate::libraries::SourceLibraryRegistry::default(),
+        &crate::libraries::SourceFileKindRegistry::default(),
         &mut string_table,
     );
 
@@ -2479,6 +2501,7 @@ fn rejects_bst_file_and_folder_collision_in_same_directory() {
     let result = super::project_roots::build_project_path_resolver(
         &config,
         &crate::libraries::SourceLibraryRegistry::default(),
+        &crate::libraries::SourceFileKindRegistry::default(),
         &mut string_table,
     );
 
@@ -2516,6 +2539,7 @@ fn allows_same_stem_in_different_directories() {
     super::project_roots::build_project_path_resolver(
         &config,
         &crate::libraries::SourceLibraryRegistry::default(),
+        &crate::libraries::SourceFileKindRegistry::default(),
         &mut string_table,
     )
     .expect("same stem in different directories should be allowed");
@@ -2544,6 +2568,7 @@ fn rejects_collision_with_empty_folder() {
     let result = super::project_roots::build_project_path_resolver(
         &config,
         &crate::libraries::SourceLibraryRegistry::default(),
+        &crate::libraries::SourceFileKindRegistry::default(),
         &mut string_table,
     );
 
@@ -2582,6 +2607,7 @@ fn js_file_with_same_stem_as_folder_does_not_trigger_collision() {
     super::project_roots::build_project_path_resolver(
         &config,
         &crate::libraries::SourceLibraryRegistry::default(),
+        &crate::libraries::SourceFileKindRegistry::default(),
         &mut string_table,
     )
     .expect(".js file with same stem as folder should not trigger collision");
@@ -2617,6 +2643,7 @@ fn rejects_bst_file_and_folder_collision_in_source_library() {
     let result = super::project_roots::build_project_path_resolver(
         &config,
         &crate::libraries::SourceLibraryRegistry::default(),
+        &crate::libraries::SourceFileKindRegistry::default(),
         &mut string_table,
     );
 
@@ -2742,6 +2769,260 @@ fn explicit_bst_extension_still_reports_bst_import_0020() {
         ),
         "unexpected diagnostic payload: {:?}",
         diagnostic.payload
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn unsupported_beandown_import_without_builder_support_reports_bst_import_0025() {
+    let root = temp_dir("unsupported_beandown_import");
+    let src = root.join("src");
+    fs::create_dir_all(&src).expect("should create src dir");
+
+    fs::write(
+        root.join(settings::CONFIG_FILE_NAME),
+        "entry_root #= \"src\"\n",
+    )
+    .expect("should write config");
+
+    fs::write(src.join("#page.bst"), "import @./intro\n#[:ok]\n").expect("should write entry");
+    fs::write(src.join("intro.bd"), "hello\n").expect("should write beandown file");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+    let resolver = configured_resolver(&config);
+
+    let messages = match discover_modules_for_test(&config, &resolver, &style_directives) {
+        Ok(_) => panic!("unsupported .bd import should fail discovery"),
+        Err(messages) => messages,
+    };
+
+    let diagnostic = first_error_diagnostic(&messages);
+    assert_eq!(
+        diagnostic.kind.code(),
+        "BST-IMPORT-0025",
+        "expected unsupported source file kind diagnostic, got {:?}",
+        diagnostic
+    );
+    assert!(matches!(
+        &diagnostic.payload,
+        DiagnosticPayload::UnsupportedSourceFileKind { .. }
+    ));
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn direct_beandown_extension_import_reports_bst_import_0024() {
+    let root = temp_dir("direct_beandown_extension");
+    let src = root.join("src");
+    fs::create_dir_all(&src).expect("should create src dir");
+
+    fs::write(
+        root.join(settings::CONFIG_FILE_NAME),
+        "entry_root #= \"src\"\n",
+    )
+    .expect("should write config");
+
+    fs::write(src.join("#page.bst"), "import @./intro.bd\n#[:ok]\n").expect("should write entry");
+    fs::write(src.join("intro.bd"), "hello\n").expect("should write beandown file");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+
+    let mut source_file_kinds = crate::libraries::SourceFileKindRegistry::new();
+    source_file_kinds.register("bd", crate::libraries::SourceFileKind::Beandown);
+    let resolver = configured_resolver_with_source_file_kinds(&config, &source_file_kinds);
+
+    let messages = match discover_modules_for_test(&config, &resolver, &style_directives) {
+        Ok(_) => panic!("direct .bd import should fail discovery"),
+        Err(messages) => messages,
+    };
+
+    let diagnostic = first_error_diagnostic(&messages);
+    assert_eq!(
+        diagnostic.kind.code(),
+        "BST-IMPORT-0024",
+        "expected explicit source extension diagnostic, got {:?}",
+        diagnostic
+    );
+    assert!(matches!(
+        &diagnostic.payload,
+        DiagnosticPayload::ExplicitSourceExtension { .. }
+    ));
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn beandown_files_are_reachable_without_import_scanning() {
+    let root = temp_dir("beandown_no_import_scanning");
+    let src = root.join("src");
+    fs::create_dir_all(&src).expect("should create src dir");
+
+    fs::write(
+        root.join(settings::CONFIG_FILE_NAME),
+        "entry_root #= \"src\"\n",
+    )
+    .expect("should write config");
+
+    fs::write(src.join("#page.bst"), "import @./intro\n#[:ok]\n").expect("should write entry");
+    fs::write(src.join("intro.bd"), "import @./missing\n").expect("should write beandown file");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+
+    let mut source_file_kinds = crate::libraries::SourceFileKindRegistry::new();
+    source_file_kinds.register("bd", crate::libraries::SourceFileKind::Beandown);
+    let resolver = configured_resolver_with_source_file_kinds(&config, &source_file_kinds);
+
+    let modules = discover_modules_for_test(&config, &resolver, &style_directives)
+        .expect(".bd body text must not be scanned for imports");
+
+    let input_paths: HashSet<_> = modules[0]
+        .input_files
+        .iter()
+        .map(|input| input.source_path.file_name().unwrap().to_owned())
+        .collect();
+    assert!(input_paths.contains(OsStr::new("#page.bst")));
+    assert!(input_paths.contains(OsStr::new("intro.bd")));
+
+    let beandown_input = modules[0]
+        .input_files
+        .iter()
+        .find(|input| input.source_path.file_name() == Some(OsStr::new("intro.bd")))
+        .expect("intro.bd should be in discovered inputs");
+    assert_eq!(
+        beandown_input.source_kind,
+        crate::libraries::SourceFileKind::Beandown
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn reachable_beandown_queues_same_directory_mod_file() {
+    let root = temp_dir("beandown_same_directory_facade");
+    let src = root.join("src");
+    let docs = src.join("docs");
+    fs::create_dir_all(&docs).expect("should create docs dir");
+
+    fs::write(
+        root.join(settings::CONFIG_FILE_NAME),
+        "entry_root #= \"src\"\n",
+    )
+    .expect("should write config");
+
+    fs::write(src.join("#page.bst"), "import @docs/intro\n#[:ok]\n").expect("should write entry");
+    fs::write(docs.join("intro.bd"), "hello\n").expect("should write beandown file");
+    fs::write(docs.join("#mod.bst"), "title #= \"Docs\"\n").expect("should write facade");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+
+    let mut source_file_kinds = crate::libraries::SourceFileKindRegistry::new();
+    source_file_kinds.register("bd", crate::libraries::SourceFileKind::Beandown);
+    let resolver = configured_resolver_with_source_file_kinds(&config, &source_file_kinds);
+
+    let modules = discover_modules_for_test(&config, &resolver, &style_directives)
+        .expect("reachable .bd should discover same-directory #mod.bst");
+
+    let input_paths: HashSet<_> = modules[0]
+        .input_files
+        .iter()
+        .map(|input| input.source_path.file_name().unwrap().to_owned())
+        .collect();
+    assert!(input_paths.contains(OsStr::new("#page.bst")));
+    assert!(input_paths.contains(OsStr::new("intro.bd")));
+    assert!(input_paths.contains(OsStr::new("#mod.bst")));
+
+    let beandown_input = modules[0]
+        .input_files
+        .iter()
+        .find(|input| input.source_path.file_name() == Some(OsStr::new("intro.bd")))
+        .expect("intro.bd should be in discovered inputs");
+    assert_eq!(
+        beandown_input.source_kind,
+        crate::libraries::SourceFileKind::Beandown
+    );
+
+    let facade_input = modules[0]
+        .input_files
+        .iter()
+        .find(|input| input.source_path.file_name() == Some(OsStr::new("#mod.bst")))
+        .expect("#mod.bst should be in discovered inputs");
+    assert_eq!(
+        facade_input.source_kind,
+        crate::libraries::SourceFileKind::Beanstalk
+    );
+
+    fs::remove_dir_all(&root).expect("should remove temp root");
+}
+
+#[test]
+fn unimported_beandown_file_under_entry_root_is_ignored() {
+    let root = temp_dir("unimported_beandown_ignored");
+    let src = root.join("src");
+    fs::create_dir_all(&src).expect("should create src dir");
+
+    fs::write(
+        root.join(settings::CONFIG_FILE_NAME),
+        "entry_root #= \"src\"\n",
+    )
+    .expect("should write config");
+
+    fs::write(src.join("#page.bst"), "#[:ok]\n").expect("should write entry");
+    fs::write(src.join("intro.bd"), "hello\n").expect("should write beandown file");
+
+    let mut config = Config::new(root.clone());
+    let style_directives = test_style_directives();
+    parse_project_config_for_test(
+        &mut config,
+        &root.join(settings::CONFIG_FILE_NAME),
+        &style_directives,
+    )
+    .expect("config should parse");
+
+    let mut source_file_kinds = crate::libraries::SourceFileKindRegistry::new();
+    source_file_kinds.register("bd", crate::libraries::SourceFileKind::Beandown);
+    let resolver = configured_resolver_with_source_file_kinds(&config, &source_file_kinds);
+
+    let modules = discover_modules_for_test(&config, &resolver, &style_directives)
+        .expect("unimported .bd file should not affect discovery");
+
+    assert_eq!(modules[0].input_files.len(), 1);
+    assert_eq!(
+        modules[0].input_files[0].source_path.file_name().unwrap(),
+        OsStr::new("#page.bst")
+    );
+    assert_eq!(
+        modules[0].input_files[0].source_kind,
+        crate::libraries::SourceFileKind::Beanstalk
     );
 
     fs::remove_dir_all(&root).expect("should remove temp root");

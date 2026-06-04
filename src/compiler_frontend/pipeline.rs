@@ -12,6 +12,7 @@ use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, DiagnosticBag};
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
+use crate::compiler_frontend::headers::beandown_prepare::prepare_beandown_file;
 use crate::compiler_frontend::headers::parse_file_headers::{
     FileFrontendPrepareError, FileFrontendPrepareOutput, HeaderParseOptions, Headers,
     parse_file_headers_with_table,
@@ -26,7 +27,8 @@ use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::identity::SourceFileTable;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
-use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenizeMode};
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenizerEntryMode};
+use crate::libraries::SourceFileKind;
 use crate::projects::settings::Config;
 use std::path::{Path, PathBuf};
 
@@ -61,6 +63,7 @@ pub(crate) struct FrontendFilePrepareContext<'a> {
 pub(crate) struct FrontendFilePrepareInput<'a> {
     pub(crate) source_code: &'a str,
     pub(crate) source_path: &'a PathBuf,
+    pub(crate) source_kind: SourceFileKind,
     pub(crate) const_template_offset: usize,
     pub(crate) runtime_fragment_offset: usize,
 }
@@ -110,7 +113,7 @@ impl CompilerFrontend {
         &mut self,
         source_code: &str,
         module_path: &PathBuf,
-        tokenizer_mode: TokenizeMode,
+        tokenizer_entry_mode: TokenizerEntryMode,
     ) -> Result<FileTokens, CompilerDiagnostic> {
         let source_files = &self.source_files;
         let style_directives = &self.style_directives;
@@ -121,7 +124,7 @@ impl CompilerFrontend {
             style_directives,
             source_code,
             module_path,
-            tokenizer_mode,
+            tokenizer_entry_mode,
             string_table,
         )
     }
@@ -138,7 +141,7 @@ impl CompilerFrontend {
         style_directives: &StyleDirectiveRegistry,
         source_code: &str,
         module_path: &PathBuf,
-        tokenizer_mode: TokenizeMode,
+        tokenizer_entry_mode: TokenizerEntryMode,
         string_table: &mut StringTable,
     ) -> Result<FileTokens, CompilerDiagnostic> {
         let (logical_path, file_id, canonical_os_path) =
@@ -158,7 +161,7 @@ impl CompilerFrontend {
         let mut tokens = tokenize(
             source_code,
             &logical_path,
-            tokenizer_mode,
+            tokenizer_entry_mode,
             style_directives,
             string_table,
             file_id,
@@ -178,12 +181,14 @@ impl CompilerFrontend {
         input: FrontendFilePrepareInput<'_>,
         local_string_table: &mut StringTable,
     ) -> Result<FileFrontendPrepareOutput, FileFrontendPrepareError> {
+        let tokenizer_entry_mode = TokenizerEntryMode::for_source_file_kind(input.source_kind);
+
         let tokenization = Self::tokenize_source(
             context.source_files,
             context.style_directives,
             input.source_code,
             input.source_path,
-            TokenizeMode::Normal,
+            tokenizer_entry_mode,
             local_string_table,
         );
 
@@ -197,15 +202,18 @@ impl CompilerFrontend {
             }
         };
 
-        parse_file_headers_with_table(
-            &mut file_tokens,
-            context.entry_file_path,
-            context.options,
-            context.external_package_registry,
-            local_string_table,
-            input.const_template_offset,
-            input.runtime_fragment_offset,
-        )
+        match input.source_kind {
+            SourceFileKind::Beanstalk => parse_file_headers_with_table(
+                &mut file_tokens,
+                context.entry_file_path,
+                context.options,
+                context.external_package_registry,
+                local_string_table,
+                input.const_template_offset,
+                input.runtime_fragment_offset,
+            ),
+            SourceFileKind::Beandown => Ok(prepare_beandown_file(file_tokens, local_string_table)),
+        }
     }
 
     // ---------------------------

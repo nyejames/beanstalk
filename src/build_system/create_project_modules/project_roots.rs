@@ -9,7 +9,7 @@ use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages}
 use crate::compiler_frontend::compiler_messages::InvalidConfigReason;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::libraries::SourceLibraryRegistry;
+use crate::libraries::{SourceFileKindRegistry, SourceLibraryRegistry};
 use crate::projects::settings::Config;
 
 use std::fs;
@@ -36,6 +36,7 @@ pub(super) struct ProjectRootResolution {
 pub(super) fn build_project_path_resolver(
     config: &Config,
     builder_source_libraries: &SourceLibraryRegistry,
+    source_file_kinds: &SourceFileKindRegistry,
     string_table: &mut StringTable,
 ) -> Result<ProjectPathResolver, CompilerMessages> {
     let roots = resolve_project_roots(config, string_table)?;
@@ -58,9 +59,13 @@ pub(super) fn build_project_path_resolver(
 
     let entry_root = roots.entry_root.clone();
 
-    let resolver =
-        ProjectPathResolver::new(roots.project_root, entry_root.clone(), &merged_libraries)
-            .map_err(|error| CompilerMessages::from_error_ref(error, string_table))?;
+    let resolver = ProjectPathResolver::new(
+        roots.project_root,
+        entry_root.clone(),
+        &merged_libraries,
+        source_file_kinds,
+    )
+    .map_err(|error| CompilerMessages::from_error_ref(error, string_table))?;
 
     validate_source_library_facades(&resolver, string_table)?;
 

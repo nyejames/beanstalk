@@ -325,7 +325,7 @@ body {
      <td style="padding: 0.2em 0.5em;  "> <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">import @helper/utils {double}</span> </td>
+    ">import @helper {double}</span> </td>
      <td style="padding: 0.2em 0.5em;  "> Normal <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
@@ -409,7 +409,7 @@ body {
     import <span class='bst-code-operator'>@</span>.<span class='bst-code-operator'>/</span>drawing.js <span class='bst-code-parenthesis'>{</span>draw<span class='bst-code-parenthesis'>}</span>
 
     <span class='bst-code-comment'>-- Import a project-local source library.</span>
-    import <span class='bst-code-operator'>@</span>helper<span class='bst-code-operator'>/</span>utils <span class='bst-code-parenthesis'>{</span>double<span class='bst-code-parenthesis'>}</span>
+    import <span class='bst-code-operator'>@</span>helper <span class='bst-code-parenthesis'>{</span>double<span class='bst-code-parenthesis'>}</span>
     </code></pre><p>General rules:</p><ul><li><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
@@ -518,7 +518,7 @@ body {
     "><code class='codeblock'>
     <span class='bst-code-comment'>-- lib/helper/#mod.bst</span>
 
-    double <span class='bst-code-operator'>|</span>x <span class='bst-code-type'>Int</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Int</span><span class='bst-code-operator'>:</span>
+    export double <span class='bst-code-operator'>|</span>x <span class='bst-code-type'>Int</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Int</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-keyword'>return</span> x <span class='bst-code-operator'>*</span> <span class='bst-code-number'>2</span>
     ;
     </code></pre><p>A page can then import from that source library:</p><pre style="
@@ -547,22 +547,42 @@ body {
 
     import <span class='bst-code-operator'>@</span>core<span class='bst-code-operator'>/</span>math <span class='bst-code-parenthesis'>{</span>sin <span class='bst-code-keyword'>as</span> internal_sin<span class='bst-code-parenthesis'>}</span>
 
-    sine <span class='bst-code-operator'>|</span>x <span class='bst-code-type'>Float</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Float</span><span class='bst-code-operator'>:</span>
+    export sine <span class='bst-code-operator'>|</span>x <span class='bst-code-type'>Float</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>Float</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-keyword'>return</span> internal_sin<span class='bst-code-parenthesis'>(</span>x<span class='bst-code-parenthesis'>)</span>
     ;
-    </code></pre><p>Facade rules:</p><ul><li>outside importers can only see declarations authored by <span style="
+    </code></pre><p>Facades can also re-export a grouped public surface directly:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-comment'>-- lib/helper/#mod.bst</span>
+
+    export <span class='bst-code-operator'>@</span>.<span class='bst-code-operator'>/</span>utils <span class='bst-code-parenthesis'>{</span>
+        double,
+        label <span class='bst-code-keyword'>as</span> helper_label,
+    <span class='bst-code-parenthesis'>}</span>
+    </code></pre><p>Facade rules:</p><ul><li>outside importers can only see declarations and grouped imports marked with <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">#mod.bst</span></li><li>internal implementation files are not public unless the facade wraps them with real declarations</li><li>normal imports inside <span style="
+    ">export</span> in <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">#mod.bst</span> are local implementation details</li><li><span style="
+    ">#mod.bst</span></li><li>internal implementation files are not public unless the facade wraps or re-exports them intentionally</li><li>normal imports inside <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">#mod.bst</span> are local implementation details</li><li>exported signatures cannot expose private facade-only types</li><li>receiver methods do not become public through facade type aliases; export the receiver method or a wrapper explicitly</li><li><span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">#mod.bst</span> is not shared implementation code for sibling files</li><li>runtime top-level statements and runtime top-level templates are invalid in <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">#mod.bst</span></li></ul><p>This is why facade examples use wrappers and aliases instead of direct re-export syntax. Direct facade re-export syntax is not part of the current Alpha surface.</p></section>
+    ">#mod.bst</span></li><li>bare namespace exports such as <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">export @./utils</span> and wildcard exports remain deferred</li></ul></section>
     <section class="container"><h1>Builder source libraries</h1><p>Builders can provide source libraries without requiring those files to exist in the user&#39;s project. The HTML builder provides the <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);

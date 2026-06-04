@@ -11,15 +11,33 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 ---
 
 # Plans / TODOS
-- `.bmd` files "beandown", a bit like markdown files. (starts inside template body and cannot break out of template). `docs/roadmap/plans/beandown-implementation-plan.md`. Intended to be simple. Can be imported into regular beanstalk files as compile time strings.
 - Collection capacity type extension `{64 Int}`
 - Build out core math library
-- Replace JSON with beanstalk `.struct` files (dogfooding for language as a way to store data / config stuff). These could be standardised as their own build system under `src/projects`.
-- Closures
-- Wasm backend plan based on docs inside `docs/wasm-notes`
 - Hash Maps (core library)
+- first class Reactivity syntax with message / action patterns in templates
 - Compile time arbitary precision aritmetic + Decimals Type support
 - Move to more specific explicit type declarations for numbers (I32, I64, F32, F64).JS backend just makes all an F64 and accepts the precision loss, more for future Wasm backend
+
+- Write a Wasm backend design baseline covering the v1 target, explicit deferred features, ABI/layout rules, runtime helper contracts, and HTML-Wasm bootstrap contract.
+- Freeze Wasm v1 as core Wasm, linear-memory handles, single-result ABI, dispatcher-loop CFG, JS/host bootstrap, no Wasm GC, no reference types, no Component Model.
+- Add a Wasm capability matrix tracking scalar operations, strings/templates, structs, choices, options/results, collections, generics, traits, external packages, core libraries, assertions, IO, and runtime memory helpers.
+- Harden reachable unsupported-backend diagnostics so every unsupported Wasm feature fails before HIR-to-LIR lowering or byte emission.
+- Stabilize the HIR-to-Wasm-LIR contract and document which HIR constructs are accepted, rejected, or lowered through runtime helpers.
+- Define the Wasm ABI type mapping for scalars, handles, strings, collections, structs, choices, options, results, errors, and dynamic wrappers.
+- Complete the runtime string model: allocation, UTF-8 layout, interpolation helpers, host string extraction, release hooks, and replacement of bridge-only helpers.
+- Design and implement Wasm layout for structs, including field offsets, alignment, construction, field access, mutation, and ownership hooks.
+- Design and implement Wasm layout for choices, including unit variants, payload variants, tag representation, payload storage, equality, matching, and generic choices.
+- Design and implement Wasm lowering for options, fallible results, multi-return carriers, `catch`, postfix `!`, postfix `?`, and error payload propagation.
+- Decide the v1 generic runtime policy: monomorphized concrete layouts, explicit rejection boundaries, or a handle-erased fallback for specific cases.
+- Keep dynamic trait runtime lowering deferred until static trait/generic behavior and concrete layout rules are stable.
+- Define the Wasm external package policy: host imports, JS-backed package rejection, core library native lowerings, and future package-provided Wasm imports.
+- Add Wasm lowerings for selected core packages in order: `@core/math`, `@core/text`, `@core/random`, then `@core/time`.
+- Split HTML-Wasm integration from generic Wasm module output so browser bootstrap policy does not leak into the core backend.
+- Keep ownership optimization deferred: preserve `DropIfOwned` / `Release` hooks, but make v1 correctness GC/handle-first.
+- Add Wasm validation and artifact assertions to canonical integration cases, using backend-specific `expect.toml` sections and `golden/html_wasm/` outputs.
+- Decide when dispatcher-loop CFG is acceptable permanently and when to add structured CFG lowering as an optimization pass.
+- Add a follow-up plan for future Component Model / Wasm module-system integration after core module ABI and external package semantics are stable.
+
 
 # Notes
 - Trait ecosystem follow-ups after Traits v1: default methods, associated types/constants,

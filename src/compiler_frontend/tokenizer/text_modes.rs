@@ -79,20 +79,13 @@ pub(super) fn tokenize_template_body(
     string_table: &mut StringTable,
 ) -> Result<Token, CompilerDiagnostic> {
     let mut token_value = String::new();
-
-    if current_char == '\r' {
-        token_value.push_str(normalize_consumed_carriage_return_newline(stream));
-    } else {
-        token_value.push(current_char);
-    }
+    append_template_body_char(current_char, &mut token_value, stream);
 
     while let Some(ch) = stream.peek() {
         match ch {
             '\\' => {
                 stream.next();
-                if let Some(next_char) = stream.next() {
-                    token_value.push(next_char);
-                }
+                append_template_body_escape(&mut token_value, stream);
             }
 
             '[' | ']' => {
@@ -117,6 +110,26 @@ pub(super) fn tokenize_template_body(
 
     let interned_string = string_table.intern(&token_value);
     return_token!(TokenKind::StringSliceLiteral(interned_string), stream);
+}
+
+fn append_template_body_char(
+    current_char: char,
+    token_value: &mut String,
+    stream: &mut TokenStream<'_>,
+) {
+    match current_char {
+        '\\' => append_template_body_escape(token_value, stream),
+        '\r' => token_value.push_str(normalize_consumed_carriage_return_newline(stream)),
+        _ => token_value.push(current_char),
+    }
+}
+
+fn append_template_body_escape(token_value: &mut String, stream: &mut TokenStream<'_>) {
+    match stream.next() {
+        Some('\r') => token_value.push_str(normalize_consumed_carriage_return_newline(stream)),
+        Some(escaped_char) => token_value.push(escaped_char),
+        None => token_value.push('\\'),
+    }
 }
 
 pub(super) fn tokenize_code_template_body(

@@ -4,6 +4,7 @@
 //! WHY: HTML builds stitch together several focused subsystems around the shared frontend/HIR
 //! pipeline.
 
+pub(crate) mod beandown;
 pub(crate) mod compile_input;
 pub(crate) mod diagnostics;
 pub(crate) mod document_config;

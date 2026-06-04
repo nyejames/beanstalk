@@ -9,6 +9,7 @@ use crate::compiler_frontend::datatypes::ids::{GenericParameterId, TypeId};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap};
 use crate::compiler_frontend::tokenizer::tokens::TokenKind;
+use crate::libraries::SourceFileKind;
 
 mod remap;
 mod types;
@@ -36,6 +37,10 @@ pub enum DiagnosticPayload {
     },
 
     UnexpectedTrailingComma,
+
+    UnescapedImplicitTemplateClose {
+        source_kind: SourceFileKind,
+    },
 
     UnknownName {
         name: StringId,
@@ -120,6 +125,30 @@ pub enum DiagnosticPayload {
 
     ExplicitBstExtension {
         path: InternedPath,
+    },
+
+    ExplicitSourceExtension {
+        path: InternedPath,
+        extension: StringId,
+    },
+
+    UnsupportedSourceFileKind {
+        path: InternedPath,
+        extension: StringId,
+    },
+
+    InvalidSourceFileEntry {
+        path: InternedPath,
+        extension: StringId,
+    },
+
+    InvalidBeandownApiScopeItem {
+        path: InternedPath,
+    },
+
+    DuplicateBeandownInputPath {
+        path: InternedPath,
+        first_location: SourceLocation,
     },
 
     UnsupportedExternalExtension {

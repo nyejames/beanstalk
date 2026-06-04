@@ -21,8 +21,9 @@ use crate::compiler_frontend::compiler_messages::{
     DiagnosticPayload, InvalidTemplateStructureReason,
 };
 use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::datatypes::definitions::{FieldDefinition, StructTypeDefinition};
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
-use crate::compiler_frontend::datatypes::ids::{TypeId, builtin_type_ids};
+use crate::compiler_frontend::datatypes::ids::{NominalTypeId, TypeId, builtin_type_ids};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::type_coercion::compatibility::TypeCompatibilityCache;
@@ -71,6 +72,70 @@ fn single_item_template_head_with_close_is_foldable() {
     assert!(matches!(template.kind, TemplateType::String));
     let folded = fold_template_in_context(&template, &context, &mut string_table);
     assert_eq!(string_table.resolve(folded), "3");
+}
+
+#[test]
+fn const_required_template_head_folds_const_record_instance_field() {
+    let mut string_table = StringTable::new();
+    let mut token_stream = template_tokens_from_source("[html_defaults.color]", &mut string_table);
+    let scope = token_stream.src_path.clone();
+
+    let mut type_environment = TypeEnvironment::new();
+    let string_type_id = type_environment.builtins().string;
+    let struct_name = string_table.intern("HtmlDefaults");
+    let field_name = string_table.intern("color");
+    let struct_path = scope.append(struct_name);
+    let field_path = struct_path.append(field_name);
+    let (_, struct_type_id) = type_environment.register_nominal_struct(StructTypeDefinition {
+        id: NominalTypeId(0),
+        path: struct_path.clone(),
+        fields: vec![FieldDefinition {
+            name: field_path.clone(),
+            type_id: string_type_id,
+            location: SourceLocation::default(),
+        }]
+        .into_boxed_slice(),
+        generic_parameters: None,
+        const_record: false,
+    });
+
+    let field_value = Expression::string_slice(
+        string_table.intern("green"),
+        SourceLocation::default(),
+        ValueMode::ImmutableOwned,
+    );
+    let record_value = Expression::struct_instance(
+        struct_path,
+        vec![Declaration {
+            id: field_path,
+            value: field_value,
+        }],
+        SourceLocation::default(),
+        ValueMode::ImmutableOwned,
+        true,
+        None,
+        struct_type_id,
+    );
+    let record_name = string_table.intern("html_defaults");
+    let declaration = Declaration {
+        id: scope.append(record_name),
+        value: record_value,
+    };
+    let context = constant_template_context(&scope, &[declaration]);
+    let mut compatibility_cache = TypeCompatibilityCache::new();
+    let mut type_interner = AstTypeInterner::new(&mut type_environment, &mut compatibility_cache);
+
+    let template = Template::new_const_required_with_type_interner(
+        &mut token_stream,
+        &context,
+        &mut type_interner,
+        vec![],
+        &mut string_table,
+    )
+    .expect("const-required template head should project const-record field values");
+    let folded = fold_template_in_context(&template, &context, &mut string_table);
+
+    assert_eq!(string_table.resolve(folded), "green");
 }
 
 #[test]

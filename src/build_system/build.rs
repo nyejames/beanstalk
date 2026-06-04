@@ -25,10 +25,10 @@ use crate::compiler_frontend::symbols::compiler_symbols::CompilerSymbolSet;
 use crate::compiler_frontend::symbols::string_interning::{StringIdRemap, StringTable};
 
 use crate::compiler_frontend::external_packages::{ExternalPackageId, ExternalPackageRegistry};
-use crate::libraries::LibrarySet;
 use crate::libraries::external_import_providers::provider::{
     RequiredRuntimeImport, RuntimeAssetIdentity,
 };
+use crate::libraries::{LibrarySet, SourceFileKind};
 use crate::projects::settings::{Config, ProjectConfigError};
 
 use std::collections::HashSet;
@@ -192,6 +192,7 @@ pub(crate) struct BuildBootstrap {
 pub struct InputFile {
     pub source_code: String,
     pub source_path: PathBuf,
+    pub source_kind: SourceFileKind,
 }
 
 pub struct OutputFile {

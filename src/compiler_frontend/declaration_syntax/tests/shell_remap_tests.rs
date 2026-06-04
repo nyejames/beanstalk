@@ -98,9 +98,11 @@ fn initializer_reference_remaps_name_and_location() {
     let mut global = StringTable::new();
 
     let ref_name = local.intern("other_const");
+    let member_name = local.intern("content");
 
     let mut reference = InitializerReference {
         name: ref_name,
+        dot_member: Some(member_name),
         location: make_location(&mut local),
         followed_by_call: false,
         followed_by_choice_namespace: false,
@@ -110,6 +112,10 @@ fn initializer_reference_remaps_name_and_location() {
     reference.remap_string_ids(&remap);
 
     assert_eq!(global.resolve(reference.name), "other_const");
+    assert_eq!(
+        reference.dot_member.map(|member| global.resolve(member)),
+        Some("content")
+    );
     assert_test_location(&reference.location, &global);
 }
 
@@ -135,6 +141,7 @@ fn declaration_syntax_remaps_all_fields() {
         initializer_tokens: vec![make_symbol_token(init_name, &mut local)],
         initializer_references: vec![InitializerReference {
             name: ref_name,
+            dot_member: None,
             location: make_location(&mut local),
             followed_by_call: true,
             followed_by_choice_namespace: false,

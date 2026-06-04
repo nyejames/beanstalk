@@ -9,10 +9,54 @@ pub use crate::compiler_frontend::compiler_messages::source_location::{
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::identity::FileId;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap};
+use crate::libraries::SourceFileKind;
 use crate::token_log;
 use std::iter::Peekable;
 use std::path::PathBuf;
 use std::str::Chars;
+
+/// Entry policy for one tokenizer invocation.
+///
+/// `TokenizeMode` remains the current lexical state while tokenization is
+/// running. This type only decides which lexical state the stream starts in and
+/// how the initial frame should behave when the source is a synthetic template
+/// body such as Beandown.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum TokenizerEntryMode {
+    SourceFile,
+    TemplateBody {
+        initial_close_policy: InitialTemplateClosePolicy,
+    },
+}
+
+impl TokenizerEntryMode {
+    fn initial_tokenize_mode(self) -> TokenizeMode {
+        match self {
+            Self::SourceFile => TokenizeMode::Normal,
+            Self::TemplateBody { .. } => TokenizeMode::TemplateBody,
+        }
+    }
+
+    pub fn for_source_file_kind(source_kind: SourceFileKind) -> Self {
+        match source_kind {
+            SourceFileKind::Beanstalk => Self::SourceFile,
+            SourceFileKind::Beandown => Self::TemplateBody {
+                initial_close_policy: InitialTemplateClosePolicy::RejectOuterClose { source_kind },
+            },
+        }
+    }
+}
+
+/// Close-delimiter policy for tokenizers that start inside a template body.
+///
+/// Normal authored templates can close their own opening `[`. Synthetic entry
+/// bodies have no authored outer `[`, so the initial `]` should be rejected
+/// instead of letting the stream silently escape to source-file mode.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InitialTemplateClosePolicy {
+    Allow,
+    RejectOuterClose { source_kind: SourceFileKind },
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TokenizeMode {
@@ -236,14 +280,16 @@ pub struct TokenStream<'a> {
 //
 // WHY: directives are declared in a template head, but affect only that template's
 // body tokenization. This frame carries that intent across `:` (head -> body),
-// tracks bracket balance for balanced body modes, and ensures nested templates
-// cannot accidentally inherit or overwrite the parent's body behavior.
+// tracks bracket balance for balanced body modes, carries initial-frame close
+// policy, and ensures nested templates cannot accidentally inherit or overwrite
+// the parent's body behavior.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct TemplateModeFrame {
     pub mode: TokenizeMode,
     pub body_mode: TemplateBodyMode,
     pub body_open_square_brackets: usize,
     pub body_closed_square_brackets: usize,
+    pub initial_close_policy: InitialTemplateClosePolicy,
 }
 
 impl TemplateModeFrame {
@@ -253,19 +299,39 @@ impl TemplateModeFrame {
             body_mode: TemplateBodyMode::Normal,
             body_open_square_brackets: 0,
             body_closed_square_brackets: 0,
+            initial_close_policy: InitialTemplateClosePolicy::Allow,
+        }
+    }
+
+    fn initial(mode: TokenizeMode, close_policy: InitialTemplateClosePolicy) -> Self {
+        Self {
+            initial_close_policy: close_policy,
+            ..Self::new(mode)
         }
     }
 }
 
 impl<'a> TokenStream<'a> {
-    pub fn new(source_code: &'a str, file_path: &'a InternedPath, mode: TokenizeMode) -> Self {
+    pub fn new(
+        source_code: &'a str,
+        file_path: &'a InternedPath,
+        entry_mode: TokenizerEntryMode,
+    ) -> Self {
+        let mode = entry_mode.initial_tokenize_mode();
+        let initial_close_policy = match entry_mode {
+            TokenizerEntryMode::SourceFile => InitialTemplateClosePolicy::Allow,
+            TokenizerEntryMode::TemplateBody {
+                initial_close_policy,
+            } => initial_close_policy,
+        };
+
         Self {
             file_path,
             chars: source_code.chars().peekable(),
             position: CharPosition::default(),
             start_position: Default::default(),
             mode,
-            template_mode_stack: vec![TemplateModeFrame::new(mode)],
+            template_mode_stack: vec![TemplateModeFrame::initial(mode, initial_close_policy)],
         }
     }
 
@@ -335,6 +401,19 @@ impl<'a> TokenStream<'a> {
             .last()
             .map(|frame| &frame.mode)
             .unwrap_or(&TokenizeMode::Normal);
+    }
+
+    pub fn initial_template_close_rejection(&self) -> Option<SourceFileKind> {
+        let current_mode = self.template_mode_stack.last()?;
+
+        if self.template_mode_stack.len() != 1 || current_mode.mode != TokenizeMode::TemplateBody {
+            return None;
+        }
+
+        match current_mode.initial_close_policy {
+            InitialTemplateClosePolicy::Allow => None,
+            InitialTemplateClosePolicy::RejectOuterClose { source_kind } => Some(source_kind),
+        }
     }
 
     pub fn mark_current_template_body_mode(&mut self, body_mode: TemplateBodyMode) {

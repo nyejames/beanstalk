@@ -1,0 +1,13 @@
+entry = "."
+
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+diagnostic_codes = ["BST-SYNTAX-0032"]
+message_contains = ["Escape a literal closing bracket as `\\]`"]
+
+[backends.html_wasm]
+mode = "failure"
+warnings = "forbid"
+diagnostic_codes = ["BST-SYNTAX-0032"]
+message_contains = ["Escape a literal closing bracket as `\\]`"]

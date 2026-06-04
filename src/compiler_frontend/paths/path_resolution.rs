@@ -8,7 +8,8 @@
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_messages::source_location::SourceLocation;
 use crate::compiler_frontend::compiler_messages::{
-    CompilerDiagnostic, InvalidCompileTimePathReason, InvalidConfigReason, InvalidImportPathReason,
+    CompilerDiagnostic, DiagnosticKind, ImportDiagnosticKind, InvalidCompileTimePathReason,
+    InvalidConfigReason, InvalidImportPathReason,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::compile_time_paths::{
@@ -20,12 +21,13 @@ use crate::compiler_frontend::paths::import_resolution::{
 };
 use crate::compiler_frontend::paths::module_roots::{discover_module_roots, module_root_for_file};
 use crate::compiler_frontend::paths::path_normalization::{
-    build_public_path, candidate_import_files, canonicalize_best_effort, import_contains_dotdot,
+    ImportCandidate, ImportCandidateSupport, build_public_path,
+    candidate_import_files_for_source_kinds, canonicalize_best_effort, import_contains_dotdot,
     is_relative_import_path, join_and_normalize_path,
 };
 use crate::compiler_frontend::source_libraries::mod_file::MOD_FILE_NAME;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::libraries::SourceLibraryRegistry;
+use crate::libraries::{SourceFileKind, SourceFileKindRegistry, SourceLibraryRegistry};
 use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -41,6 +43,13 @@ pub(crate) enum ImportRootPolicy {
     Normal,
     /// Only source-library roots and external package imports are allowed (config mode).
     SourceLibrariesAndExternalPackagesOnly,
+}
+
+/// Concrete source-file import selected by path resolution.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ResolvedImportFile {
+    pub(crate) path: PathBuf,
+    pub(crate) kind: SourceFileKind,
 }
 
 /// WHAT: resolves project-aware import paths using the configured entry root and source libraries.
@@ -60,6 +69,8 @@ pub(crate) struct ProjectPathResolver {
     module_root_facades: HashMap<PathBuf, PathBuf>,
     /// Import root policy enforced during import resolution.
     import_root_policy: ImportRootPolicy,
+    /// Builder-supported source file kinds available for this project.
+    source_file_kinds: SourceFileKindRegistry,
 }
 
 impl ProjectPathResolver {
@@ -69,6 +80,7 @@ impl ProjectPathResolver {
         project_root: PathBuf,
         entry_root: PathBuf,
         source_libraries: &SourceLibraryRegistry,
+        source_file_kinds: &SourceFileKindRegistry,
     ) -> Result<Self, CompilerError> {
         let mut source_library_roots = HashMap::new();
         for root in source_libraries.iter() {
@@ -103,6 +115,7 @@ impl ProjectPathResolver {
             module_roots_set: discovered_module_roots.module_roots_set,
             module_root_facades: discovered_module_roots.module_root_facades,
             import_root_policy: ImportRootPolicy::Normal,
+            source_file_kinds: source_file_kinds.clone(),
         })
     }
 
@@ -136,6 +149,12 @@ impl ProjectPathResolver {
 
     pub(crate) fn module_roots(&self) -> &[PathBuf] {
         &self.module_roots
+    }
+
+    /// WHAT: returns the builder-supported source file kinds for this project.
+    /// WHY: Stage 0 and import resolution need to know which non-`.bst` extensions are valid.
+    pub(crate) fn source_file_kinds(&self) -> &SourceFileKindRegistry {
+        &self.source_file_kinds
     }
 
     /// WHAT: returns the module root that contains the given file.
@@ -185,38 +204,58 @@ impl ProjectPathResolver {
         ))
     }
 
-    /// WHAT: resolves one import path to a concrete `.bst` source file on disk.
-    /// WHY: Stage 0 must follow the same import resolution rules the frontend uses later.
-    pub(crate) fn resolve_import_to_file(
+    /// WHAT: resolves an import path to a concrete source file and its source kind.
+    /// WHY: Stage 0 must preserve the source kind so `.bd` files can be discovered without being
+    ///      scanned or prepared as normal Beanstalk source.
+    pub(crate) fn resolve_import_to_source_file(
         &self,
         import_path: &InternedPath,
         importer_file: &Path,
         string_table: &mut StringTable,
-    ) -> Result<PathBuf, ImportPathResolutionError> {
+    ) -> Result<ResolvedImportFile, ImportPathResolutionError> {
         let (_, canonical) =
             self.resolve_import_as_compile_time_path(import_path, importer_file, string_table)?;
-        Ok(canonical)
+        let source_kind = self
+            .source_kind_for_canonical_path(&canonical)
+            .ok_or_else(|| {
+                CompilerError::file_error(
+                    importer_file,
+                    format!(
+                        "Resolved import '{}' to '{}' but could not determine its source kind.",
+                        import_path.to_portable_string(string_table),
+                        canonical.display()
+                    ),
+                    string_table,
+                )
+            })?;
+
+        Ok(ResolvedImportFile {
+            path: canonical,
+            kind: source_kind,
+        })
     }
 
-    /// WHAT: resolves an import path, falling back to the library's `#mod.bst` facade file
-    /// when normal file resolution fails for a library import.
-    /// WHY: source library imports target facade-exported symbols, not individual files.
-    ///      Stage 0 must still discover the facade file so the frontend can validate exports.
-    pub(crate) fn resolve_import_to_file_with_facade_fallback(
+    /// WHAT: resolves an import path with facade fallback while preserving source kind.
+    /// WHY: Stage 0 needs source kind for implementation files and Beanstalk kind for facade files.
+    pub(crate) fn resolve_import_to_source_file_with_facade_fallback(
         &self,
         import_path: &InternedPath,
         importer_file: &Path,
         string_table: &mut StringTable,
-    ) -> Result<PathBuf, ImportPathResolutionError> {
-        match self.resolve_import_to_file(import_path, importer_file, string_table) {
-            Ok(path) => Ok(path),
+    ) -> Result<ResolvedImportFile, ImportPathResolutionError> {
+        match self.resolve_import_to_source_file(import_path, importer_file, string_table) {
+            Ok(resolved) => Ok(resolved),
             Err(original_error) => {
+                if !is_missing_import_target_error(&original_error) {
+                    return Err(original_error);
+                }
+
                 if let Some(facade_file) = self.resolve_facade_fallback(import_path, string_table) {
-                    Ok(facade_file)
+                    Ok(ResolvedImportFile {
+                        path: facade_file,
+                        kind: SourceFileKind::Beanstalk,
+                    })
                 } else {
-                    // Config parsing may import builder/core source-library facades, but it must
-                    // not recover project-local module facades after the root policy has rejected
-                    // entry-root or relative imports.
                     if self.import_root_policy
                         == ImportRootPolicy::SourceLibrariesAndExternalPackagesOnly
                     {
@@ -228,7 +267,10 @@ impl ProjectPathResolver {
                         importer_file,
                         string_table,
                     ) {
-                        Ok(Some(facade_file)) => Ok(facade_file),
+                        Ok(Some(facade_file)) => Ok(ResolvedImportFile {
+                            path: facade_file,
+                            kind: SourceFileKind::Beanstalk,
+                        }),
                         Ok(None) => Err(original_error),
                         Err(diagnostic_error) => Err(diagnostic_error),
                     }
@@ -316,14 +358,18 @@ impl ProjectPathResolver {
         importer_file: &Path,
         string_table: &mut StringTable,
     ) -> Result<(CompileTimePath, PathBuf), ImportPathResolutionError> {
-        if import_path
-            .as_components()
-            .iter()
-            .any(|component| string_table.resolve(*component).ends_with(".bst"))
-        {
+        if let Some(extension) = explicit_source_extension(import_path, string_table) {
             let location = SourceLocation::from_path(importer_file, string_table);
-            let diagnostic =
-                CompilerDiagnostic::explicit_bst_extension(import_path.to_owned(), location);
+            let diagnostic = if extension == SourceFileKind::Beanstalk.extension() {
+                CompilerDiagnostic::explicit_bst_extension(import_path.to_owned(), location)
+            } else {
+                let extension_id = string_table.intern(&extension);
+                CompilerDiagnostic::explicit_source_extension(
+                    import_path.to_owned(),
+                    extension_id,
+                    location,
+                )
+            };
             return Err(ImportPathResolutionError::Diagnostic(diagnostic));
         }
 
@@ -373,54 +419,77 @@ impl ProjectPathResolver {
             join_and_normalize_path(&filesystem_base, import_path, string_table)
         };
 
-        let candidates = candidate_import_files(&normalized, import_path.len());
-        for (candidate_index, candidate) in candidates.iter().enumerate() {
-            if candidate.is_file() {
-                let canonical = fs::canonicalize(candidate).map_err(|error| {
-                    CompilerError::file_error(
-                        importer_file,
-                        format!(
-                            "Failed to canonicalize resolved import '{}': {error}",
-                            import_path.to_portable_string(string_table)
-                        ),
-                        string_table,
-                    )
-                })?;
+        let candidates = candidate_import_files_for_source_kinds(
+            &normalized,
+            import_path.len(),
+            self.source_file_kinds(),
+        );
+        let existing_candidates = existing_import_candidates(&candidates);
+        let folder_exists = normalized.is_dir();
 
-                validate_import_boundary(
-                    &canonical,
-                    &base_kind,
-                    &filesystem_base,
-                    import_path,
-                    importer_file,
-                    string_table,
-                )?;
-                validate_import_case_sensitivity(
-                    import_path,
-                    &base_kind,
-                    &filesystem_base,
-                    &canonical,
-                    candidate_index == 1,
-                    importer_file,
-                    string_table,
-                )?;
-
-                let public_path = build_public_path(import_path, &base_kind, string_table);
-                let ct_path = CompileTimePath {
-                    source_path: import_path.clone(),
-                    filesystem_path: canonical.clone(),
-                    public_path,
-                    base: base_kind,
-                    kind: CompileTimePathKind::File,
-                };
-                return Ok((ct_path, canonical));
-            }
+        if existing_candidates.len() + usize::from(folder_exists) > 1 {
+            let location = SourceLocation::from_path(importer_file, string_table);
+            let diagnostic =
+                CompilerDiagnostic::ambiguous_import_target(import_path.to_owned(), location);
+            return Err(ImportPathResolutionError::Diagnostic(diagnostic));
         }
 
-        let location = SourceLocation::from_path(importer_file, string_table);
-        Err(ImportPathResolutionError::Diagnostic(
-            CompilerDiagnostic::missing_import_target(import_path.clone(), location),
-        ))
+        let Some(candidate) = existing_candidates.first() else {
+            let location = SourceLocation::from_path(importer_file, string_table);
+            return Err(ImportPathResolutionError::Diagnostic(
+                CompilerDiagnostic::missing_import_target(import_path.clone(), location),
+            ));
+        };
+
+        if candidate.support == ImportCandidateSupport::RecognizedButUnsupported {
+            let location = SourceLocation::from_path(importer_file, string_table);
+            let extension_id = string_table.intern(candidate.kind.extension());
+            let diagnostic = CompilerDiagnostic::unsupported_source_file_kind(
+                import_path.to_owned(),
+                extension_id,
+                location,
+            );
+            return Err(ImportPathResolutionError::Diagnostic(diagnostic));
+        }
+
+        let canonical = fs::canonicalize(&candidate.path).map_err(|error| {
+            CompilerError::file_error(
+                importer_file,
+                format!(
+                    "Failed to canonicalize resolved import '{}': {error}",
+                    import_path.to_portable_string(string_table)
+                ),
+                string_table,
+            )
+        })?;
+
+        validate_import_boundary(
+            &canonical,
+            &base_kind,
+            &filesystem_base,
+            import_path,
+            importer_file,
+            string_table,
+        )?;
+        validate_import_case_sensitivity(
+            import_path,
+            &base_kind,
+            &filesystem_base,
+            &canonical,
+            candidate.is_parent_fallback,
+            importer_file,
+            string_table,
+        )?;
+
+        let public_path = build_public_path(import_path, &base_kind, string_table);
+        let ct_path = CompileTimePath {
+            source_path: import_path.clone(),
+            filesystem_path: canonical.clone(),
+            public_path,
+            base: base_kind,
+            kind: CompileTimePathKind::File,
+        };
+        Ok((ct_path, canonical))
     }
 
     /// WHAT: returns whether the import path starts with a registered source library prefix.
@@ -541,6 +610,11 @@ impl ProjectPathResolver {
         }
     }
 
+    fn source_kind_for_canonical_path(&self, path: &Path) -> Option<SourceFileKind> {
+        let extension = path.extension().and_then(|extension| extension.to_str())?;
+        SourceFileKind::from_extension(extension)
+    }
+
     /// WHAT: rejects paths that would escape the project root after normalization.
     /// WHY: paths outside the project root are a semantic error in Beanstalk.
     ///
@@ -582,6 +656,45 @@ impl ProjectPathResolver {
 
         Ok(())
     }
+}
+
+fn explicit_source_extension(
+    import_path: &InternedPath,
+    string_table: &StringTable,
+) -> Option<String> {
+    for component in import_path.as_components() {
+        let segment = string_table.resolve(*component);
+        let Some(extension) = Path::new(segment)
+            .extension()
+            .and_then(|extension| extension.to_str())
+        else {
+            continue;
+        };
+
+        if SourceFileKind::from_extension(extension).is_some() {
+            return Some(extension.to_owned());
+        }
+    }
+
+    None
+}
+
+fn is_missing_import_target_error(error: &ImportPathResolutionError) -> bool {
+    matches!(
+        error,
+        ImportPathResolutionError::Diagnostic(diagnostic)
+            if matches!(
+                diagnostic.kind,
+                DiagnosticKind::Import(ImportDiagnosticKind::MissingImportTarget)
+            )
+    )
+}
+
+fn existing_import_candidates(candidates: &[ImportCandidate]) -> Vec<&ImportCandidate> {
+    candidates
+        .iter()
+        .filter(|candidate| candidate.path.is_file())
+        .collect()
 }
 
 #[cfg(test)]

@@ -361,8 +361,11 @@ body {
 
     <span class='bst-code-comment'>-- Collection must have the mutable symbol to call mutating methods on it</span>
     <span class='bst-code-operator'>~</span>fruit_array.set<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>1</span>, <span class='bst-code-string'>&quot;bananas&quot;</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
+        assert<span class='bst-code-parenthesis'>(</span>false, <span class='bst-code-string'>&quot;This should never fail since the index is in bounds and the collection is mutable&quot;</span><span class='bst-code-parenthesis'>)</span>
     ;
+
     <span class='bst-code-operator'>~</span>fruit_array.set<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>0</span>, <span class='bst-code-string'>&quot;pineapple&quot;</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
+        assert<span class='bst-code-parenthesis'>(</span>false, <span class='bst-code-string'>&quot;This should never fail since the index is in bounds and the collection is mutable&quot;</span><span class='bst-code-parenthesis'>)</span>
     ;
 
     <span class='bst-code-comment'>-- Get doesn&#39;t need a mutable reference to the collection since it doesn&#39;t mutate</span>

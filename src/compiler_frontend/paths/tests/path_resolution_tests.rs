@@ -14,6 +14,7 @@ use crate::compiler_frontend::paths::compile_time_paths::{
 use crate::compiler_frontend::paths::import_resolution::ImportPathResolutionError;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::libraries::{SourceFileKind, SourceFileKindRegistry};
 use std::fs;
 use std::path::PathBuf;
 
@@ -31,6 +32,23 @@ impl TestHarness {
     }
 
     fn with_source_libraries(source_libraries: &crate::libraries::SourceLibraryRegistry) -> Self {
+        Self::with_libraries_and_source_file_kinds(
+            source_libraries,
+            &SourceFileKindRegistry::default(),
+        )
+    }
+
+    fn with_source_file_kinds(source_file_kinds: &SourceFileKindRegistry) -> Self {
+        Self::with_libraries_and_source_file_kinds(
+            &crate::libraries::SourceLibraryRegistry::default(),
+            source_file_kinds,
+        )
+    }
+
+    fn with_libraries_and_source_file_kinds(
+        source_libraries: &crate::libraries::SourceLibraryRegistry,
+        source_file_kinds: &SourceFileKindRegistry,
+    ) -> Self {
         let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
         let project_root = temp_dir.path().to_path_buf();
         let entry_root = project_root.join("src");
@@ -45,8 +63,13 @@ impl TestHarness {
         fs::write(entry_root.join("index.bst"), b"").unwrap();
         fs::write(project_root.join("docs/readme.txt"), b"").unwrap();
 
-        let resolver = ProjectPathResolver::new(project_root.clone(), entry_root, source_libraries)
-            .expect("resolver creation should succeed");
+        let resolver = ProjectPathResolver::new(
+            project_root.clone(),
+            entry_root,
+            source_libraries,
+            source_file_kinds,
+        )
+        .expect("resolver creation should succeed");
 
         TestHarness {
             project_root,
@@ -339,9 +362,13 @@ fn source_library_import_resolves_to_library_root() {
     let mut source_libraries = crate::libraries::SourceLibraryRegistry::new();
     source_libraries.register_filesystem_root("helper", library_root.clone());
 
-    let resolver =
-        ProjectPathResolver::new(project_root.clone(), entry_root.clone(), &source_libraries)
-            .expect("resolver creation should succeed");
+    let resolver = ProjectPathResolver::new(
+        project_root.clone(),
+        entry_root.clone(),
+        &source_libraries,
+        &crate::libraries::SourceFileKindRegistry::default(),
+    )
+    .expect("resolver creation should succeed");
 
     let mut string_table = StringTable::new();
     let mut path = InternedPath::new();
@@ -379,9 +406,13 @@ fn source_library_prefix_takes_priority_over_entry_root() {
     let mut source_libraries = crate::libraries::SourceLibraryRegistry::new();
     source_libraries.register_filesystem_root("helper", library_root.clone());
 
-    let resolver =
-        ProjectPathResolver::new(project_root.clone(), entry_root.clone(), &source_libraries)
-            .expect("resolver creation should succeed");
+    let resolver = ProjectPathResolver::new(
+        project_root.clone(),
+        entry_root.clone(),
+        &source_libraries,
+        &crate::libraries::SourceFileKindRegistry::default(),
+    )
+    .expect("resolver creation should succeed");
 
     let mut string_table = StringTable::new();
     let mut path = InternedPath::new();
@@ -397,6 +428,174 @@ fn source_library_prefix_takes_priority_over_entry_root() {
     assert_eq!(
         result.1,
         fs::canonicalize(library_root.join("utils.bst")).unwrap()
+    );
+}
+
+#[test]
+fn extensionless_import_resolves_supported_beandown_candidate() {
+    let mut registry = SourceFileKindRegistry::new();
+    registry.register("bd", SourceFileKind::Beandown);
+    let mut h = TestHarness::with_source_file_kinds(&registry);
+    fs::create_dir_all(h.project_root.join("src/docs")).unwrap();
+    fs::write(h.project_root.join("src/docs/intro.bd"), "hello").unwrap();
+
+    let path = h.make_path(&["docs", "intro"]);
+    let importer = h.importer();
+
+    let result = h
+        .resolver
+        .resolve_import_to_source_file(&path, &importer, &mut h.string_table)
+        .expect("supported .bd import should resolve");
+
+    assert_eq!(result.kind, SourceFileKind::Beandown);
+    assert!(result.path.ends_with("src/docs/intro.bd"));
+}
+
+#[test]
+fn recognized_unsupported_beandown_candidate_reports_source_kind_diagnostic() {
+    let mut h = TestHarness::new();
+    fs::create_dir_all(h.project_root.join("src/docs")).unwrap();
+    fs::write(h.project_root.join("src/docs/intro.bd"), "hello").unwrap();
+
+    let path = h.make_path(&["docs", "intro"]);
+    let importer = h.importer();
+
+    let error = h
+        .resolver
+        .resolve_import_to_source_file(&path, &importer, &mut h.string_table)
+        .expect_err("unsupported .bd import should fail");
+    let diagnostic = typed_import_diagnostic(&error);
+
+    assert_eq!(
+        diagnostic.kind,
+        crate::compiler_frontend::compiler_messages::DiagnosticKind::Import(
+            ImportDiagnosticKind::UnsupportedSourceFileKind
+        )
+    );
+    assert!(matches!(
+        &diagnostic.payload,
+        DiagnosticPayload::UnsupportedSourceFileKind { .. }
+    ));
+}
+
+#[test]
+fn direct_beandown_extension_import_is_rejected_as_source_extension() {
+    let mut registry = SourceFileKindRegistry::new();
+    registry.register("bd", SourceFileKind::Beandown);
+    let mut h = TestHarness::with_source_file_kinds(&registry);
+    fs::create_dir_all(h.project_root.join("src/docs")).unwrap();
+    fs::write(h.project_root.join("src/docs/intro.bd"), "hello").unwrap();
+
+    let path = h.make_path(&["docs", "intro.bd"]);
+    let importer = h.importer();
+
+    let error = h
+        .resolver
+        .resolve_import_to_source_file(&path, &importer, &mut h.string_table)
+        .expect_err("direct .bd import should fail");
+    let diagnostic = typed_import_diagnostic(&error);
+
+    assert_eq!(
+        diagnostic.kind,
+        crate::compiler_frontend::compiler_messages::DiagnosticKind::Import(
+            ImportDiagnosticKind::ExplicitSourceExtension
+        )
+    );
+    assert!(matches!(
+        &diagnostic.payload,
+        DiagnosticPayload::ExplicitSourceExtension { .. }
+    ));
+}
+
+#[test]
+fn beandown_and_beanstalk_same_stem_are_ambiguous() {
+    let mut registry = SourceFileKindRegistry::new();
+    registry.register("bd", SourceFileKind::Beandown);
+    let mut h = TestHarness::with_source_file_kinds(&registry);
+    fs::create_dir_all(h.project_root.join("src/docs")).unwrap();
+    fs::write(h.project_root.join("src/docs/intro.bst"), "").unwrap();
+    fs::write(h.project_root.join("src/docs/intro.bd"), "hello").unwrap();
+
+    let path = h.make_path(&["docs", "intro"]);
+    let importer = h.importer();
+
+    let error = h
+        .resolver
+        .resolve_import_to_source_file(&path, &importer, &mut h.string_table)
+        .expect_err("same-stem .bst and .bd should be ambiguous");
+    let diagnostic = typed_import_diagnostic(&error);
+
+    assert_eq!(
+        diagnostic.kind,
+        crate::compiler_frontend::compiler_messages::DiagnosticKind::Import(
+            ImportDiagnosticKind::AmbiguousImportTarget
+        )
+    );
+}
+
+#[test]
+fn beandown_and_folder_same_stem_are_ambiguous() {
+    let mut registry = SourceFileKindRegistry::new();
+    registry.register("bd", SourceFileKind::Beandown);
+    let mut h = TestHarness::with_source_file_kinds(&registry);
+    fs::create_dir_all(h.project_root.join("src/docs/intro")).unwrap();
+    fs::write(h.project_root.join("src/docs/intro.bd"), "hello").unwrap();
+
+    let path = h.make_path(&["docs", "intro"]);
+    let importer = h.importer();
+
+    let error = h
+        .resolver
+        .resolve_import_to_source_file(&path, &importer, &mut h.string_table)
+        .expect_err(".bd and folder with same stem should be ambiguous");
+    let diagnostic = typed_import_diagnostic(&error);
+
+    assert_eq!(
+        diagnostic.kind,
+        crate::compiler_frontend::compiler_messages::DiagnosticKind::Import(
+            ImportDiagnosticKind::AmbiguousImportTarget
+        )
+    );
+}
+
+#[test]
+fn facade_fallback_preserves_beandown_folder_ambiguity() {
+    let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
+    let project_root = temp_dir.path().to_path_buf();
+    let entry_root = project_root.join("src");
+
+    fs::create_dir_all(entry_root.join("docs/intro")).unwrap();
+    fs::write(entry_root.join("index.bst"), b"").unwrap();
+    fs::write(entry_root.join("docs/intro.bd"), b"hello").unwrap();
+    fs::write(entry_root.join("docs/intro/#mod.bst"), b"").unwrap();
+
+    let mut registry = SourceFileKindRegistry::new();
+    registry.register("bd", SourceFileKind::Beandown);
+    let source_libraries = crate::libraries::SourceLibraryRegistry::new();
+    let resolver = ProjectPathResolver::new(
+        project_root.clone(),
+        entry_root.clone(),
+        &source_libraries,
+        &registry,
+    )
+    .expect("resolver creation should succeed");
+
+    let mut string_table = StringTable::new();
+    let mut path = InternedPath::new();
+    path.push_str("docs", &mut string_table);
+    path.push_str("intro", &mut string_table);
+
+    let importer = entry_root.join("index.bst");
+    let error = resolver
+        .resolve_import_to_source_file_with_facade_fallback(&path, &importer, &mut string_table)
+        .expect_err("facade fallback must not hide .bd/folder ambiguity");
+    let diagnostic = typed_import_diagnostic(&error);
+
+    assert_eq!(
+        diagnostic.kind,
+        crate::compiler_frontend::compiler_messages::DiagnosticKind::Import(
+            ImportDiagnosticKind::AmbiguousImportTarget
+        )
     );
 }
 
@@ -417,8 +616,13 @@ fn canonicalized_source_library_file_resolves_to_library_prefixed_logical_path()
     let mut source_libraries = crate::libraries::SourceLibraryRegistry::new();
     source_libraries.register_filesystem_root("html", library_root.clone());
 
-    let resolver = ProjectPathResolver::new(project_root, entry_root, &source_libraries)
-        .expect("resolver creation should succeed");
+    let resolver = ProjectPathResolver::new(
+        project_root,
+        entry_root,
+        &source_libraries,
+        &crate::libraries::SourceFileKindRegistry::default(),
+    )
+    .expect("resolver creation should succeed");
 
     let canonical_root = fs::canonicalize(&library_root).expect("should canonicalize library root");
     assert_eq!(
@@ -457,9 +661,13 @@ fn library_scan_root_name_is_not_import_prefix() {
     let mut source_libraries = crate::libraries::SourceLibraryRegistry::new();
     source_libraries.register_filesystem_root("helper", library_root.clone());
 
-    let resolver =
-        ProjectPathResolver::new(project_root.clone(), entry_root.clone(), &source_libraries)
-            .expect("resolver creation should succeed");
+    let resolver = ProjectPathResolver::new(
+        project_root.clone(),
+        entry_root.clone(),
+        &source_libraries,
+        &crate::libraries::SourceFileKindRegistry::default(),
+    )
+    .expect("resolver creation should succeed");
 
     let mut string_table = StringTable::new();
     let mut path = InternedPath::new();
@@ -493,9 +701,13 @@ fn library_direct_child_is_import_prefix() {
     let mut source_libraries = crate::libraries::SourceLibraryRegistry::new();
     source_libraries.register_filesystem_root("helper", library_root.clone());
 
-    let resolver =
-        ProjectPathResolver::new(project_root.clone(), entry_root.clone(), &source_libraries)
-            .expect("resolver creation should succeed");
+    let resolver = ProjectPathResolver::new(
+        project_root.clone(),
+        entry_root.clone(),
+        &source_libraries,
+        &crate::libraries::SourceFileKindRegistry::default(),
+    )
+    .expect("resolver creation should succeed");
 
     let mut string_table = StringTable::new();
     let mut path = InternedPath::new();
@@ -526,9 +738,13 @@ fn entry_root_import_fallback_success() {
     fs::write(entry_root.join("index.bst"), b"").unwrap();
 
     let source_libraries = crate::libraries::SourceLibraryRegistry::new();
-    let resolver =
-        ProjectPathResolver::new(project_root.clone(), entry_root.clone(), &source_libraries)
-            .expect("resolver creation should succeed");
+    let resolver = ProjectPathResolver::new(
+        project_root.clone(),
+        entry_root.clone(),
+        &source_libraries,
+        &crate::libraries::SourceFileKindRegistry::default(),
+    )
+    .expect("resolver creation should succeed");
 
     let mut string_table = StringTable::new();
     let mut path = InternedPath::new();
@@ -565,9 +781,13 @@ fn source_library_prefix_wins_consistently() {
     let mut source_libraries = crate::libraries::SourceLibraryRegistry::new();
     source_libraries.register_filesystem_root("helper", library_root.clone());
 
-    let resolver =
-        ProjectPathResolver::new(project_root.clone(), entry_root.clone(), &source_libraries)
-            .expect("resolver creation should succeed");
+    let resolver = ProjectPathResolver::new(
+        project_root.clone(),
+        entry_root.clone(),
+        &source_libraries,
+        &crate::libraries::SourceFileKindRegistry::default(),
+    )
+    .expect("resolver creation should succeed");
 
     let mut string_table = StringTable::new();
     let mut path = InternedPath::new();
@@ -604,9 +824,13 @@ fn import_dotdot_rejected() {
     fs::write(entry_root.join("index.bst"), b"").unwrap();
 
     let source_libraries = crate::libraries::SourceLibraryRegistry::new();
-    let resolver =
-        ProjectPathResolver::new(project_root.clone(), entry_root.clone(), &source_libraries)
-            .expect("resolver creation should succeed");
+    let resolver = ProjectPathResolver::new(
+        project_root.clone(),
+        entry_root.clone(),
+        &source_libraries,
+        &crate::libraries::SourceFileKindRegistry::default(),
+    )
+    .expect("resolver creation should succeed");
 
     let mut string_table = StringTable::new();
     let mut path = InternedPath::new();
@@ -637,9 +861,13 @@ fn missing_import_target_is_typed_diagnostic() {
     fs::write(entry_root.join("index.bst"), b"").unwrap();
 
     let source_libraries = crate::libraries::SourceLibraryRegistry::new();
-    let resolver =
-        ProjectPathResolver::new(project_root.clone(), entry_root.clone(), &source_libraries)
-            .expect("resolver creation should succeed");
+    let resolver = ProjectPathResolver::new(
+        project_root.clone(),
+        entry_root.clone(),
+        &source_libraries,
+        &crate::libraries::SourceFileKindRegistry::default(),
+    )
+    .expect("resolver creation should succeed");
 
     let mut string_table = StringTable::new();
     let mut path = InternedPath::new();
@@ -674,9 +902,13 @@ fn import_escape_project_root_rejected() {
     fs::write(entry_root.join("index.bst"), b"").unwrap();
 
     let source_libraries = crate::libraries::SourceLibraryRegistry::new();
-    let resolver =
-        ProjectPathResolver::new(project_root.clone(), entry_root.clone(), &source_libraries)
-            .expect("resolver creation should succeed");
+    let resolver = ProjectPathResolver::new(
+        project_root.clone(),
+        entry_root.clone(),
+        &source_libraries,
+        &crate::libraries::SourceFileKindRegistry::default(),
+    )
+    .expect("resolver creation should succeed");
 
     let mut string_table = StringTable::new();
     let mut path = InternedPath::new();
@@ -719,9 +951,13 @@ fn import_escape_library_root_rejected() {
     let mut source_libraries = crate::libraries::SourceLibraryRegistry::new();
     source_libraries.register_filesystem_root("helper", library_root.clone());
 
-    let resolver =
-        ProjectPathResolver::new(project_root.clone(), entry_root.clone(), &source_libraries)
-            .expect("resolver creation should succeed");
+    let resolver = ProjectPathResolver::new(
+        project_root.clone(),
+        entry_root.clone(),
+        &source_libraries,
+        &crate::libraries::SourceFileKindRegistry::default(),
+    )
+    .expect("resolver creation should succeed");
 
     let mut string_table = StringTable::new();
     let mut path = InternedPath::new();
@@ -761,24 +997,31 @@ fn module_root_facade_fallback_resolves_plain_folder_import() {
     fs::write(entry_root.join("index.bst"), b"").unwrap();
 
     let source_libraries = crate::libraries::SourceLibraryRegistry::new();
-    let resolver =
-        ProjectPathResolver::new(project_root.clone(), entry_root.clone(), &source_libraries)
-            .expect("resolver creation should succeed");
+    let resolver = ProjectPathResolver::new(
+        project_root.clone(),
+        entry_root.clone(),
+        &source_libraries,
+        &crate::libraries::SourceFileKindRegistry::default(),
+    )
+    .expect("resolver creation should succeed");
 
     let mut string_table = StringTable::new();
     let mut path = InternedPath::new();
     path.push_str("helper", &mut string_table);
 
     let importer = entry_root.join("index.bst");
-    let result =
-        resolver.resolve_import_to_file_with_facade_fallback(&path, &importer, &mut string_table);
+    let result = resolver.resolve_import_to_source_file_with_facade_fallback(
+        &path,
+        &importer,
+        &mut string_table,
+    );
 
     assert!(
         result.is_ok(),
         "plain folder import should resolve to module root facade"
     );
     assert_eq!(
-        result.unwrap(),
+        result.unwrap().path,
         fs::canonicalize(entry_root.join("helper/#mod.bst")).unwrap()
     );
 }
@@ -795,9 +1038,13 @@ fn plain_folder_import_to_module_root_without_facade_is_rejected() {
     fs::write(entry_root.join("index.bst"), b"").unwrap();
 
     let source_libraries = crate::libraries::SourceLibraryRegistry::new();
-    let resolver =
-        ProjectPathResolver::new(project_root.clone(), entry_root.clone(), &source_libraries)
-            .expect("resolver creation should succeed");
+    let resolver = ProjectPathResolver::new(
+        project_root.clone(),
+        entry_root.clone(),
+        &source_libraries,
+        &crate::libraries::SourceFileKindRegistry::default(),
+    )
+    .expect("resolver creation should succeed");
 
     let mut string_table = StringTable::new();
     let mut path = InternedPath::new();
@@ -805,7 +1052,7 @@ fn plain_folder_import_to_module_root_without_facade_is_rejected() {
 
     let importer = entry_root.join("index.bst");
     let err = resolver
-        .resolve_import_to_file_with_facade_fallback(&path, &importer, &mut string_table)
+        .resolve_import_to_source_file_with_facade_fallback(&path, &importer, &mut string_table)
         .expect_err("plain folder import to module root without facade should fail");
 
     let diagnostic = typed_import_diagnostic(&err);
@@ -836,9 +1083,13 @@ fn concrete_file_import_inside_module_root_is_accepted() {
     fs::write(entry_root.join("index.bst"), b"").unwrap();
 
     let source_libraries = crate::libraries::SourceLibraryRegistry::new();
-    let resolver =
-        ProjectPathResolver::new(project_root.clone(), entry_root.clone(), &source_libraries)
-            .expect("resolver creation should succeed");
+    let resolver = ProjectPathResolver::new(
+        project_root.clone(),
+        entry_root.clone(),
+        &source_libraries,
+        &crate::libraries::SourceFileKindRegistry::default(),
+    )
+    .expect("resolver creation should succeed");
 
     let mut string_table = StringTable::new();
     let mut path = InternedPath::new();
@@ -846,8 +1097,11 @@ fn concrete_file_import_inside_module_root_is_accepted() {
     path.push_str("thing", &mut string_table);
 
     let importer = entry_root.join("index.bst");
-    let result =
-        resolver.resolve_import_to_file_with_facade_fallback(&path, &importer, &mut string_table);
+    let result = resolver.resolve_import_to_source_file_with_facade_fallback(
+        &path,
+        &importer,
+        &mut string_table,
+    );
 
     assert!(
         result.is_ok(),
@@ -867,9 +1121,13 @@ fn import_case_sensitive_symbol_mismatch_rejected() {
     fs::write(entry_root.join("index.bst"), b"").unwrap();
 
     let source_libraries = crate::libraries::SourceLibraryRegistry::new();
-    let resolver =
-        ProjectPathResolver::new(project_root.clone(), entry_root.clone(), &source_libraries)
-            .expect("resolver creation should succeed");
+    let resolver = ProjectPathResolver::new(
+        project_root.clone(),
+        entry_root.clone(),
+        &source_libraries,
+        &crate::libraries::SourceFileKindRegistry::default(),
+    )
+    .expect("resolver creation should succeed");
 
     let mut string_table = StringTable::new();
     let mut path = InternedPath::new();

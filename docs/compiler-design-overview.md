@@ -87,11 +87,12 @@ pub struct LibrarySet {
     pub external_import_cache: ExternalImportProviderCache,
     pub external_import_resolution_table: ExternalImportResolutionTable,
     pub builder_runtime_packages: Vec<BuilderRuntimePackageMetadata>,
+    pub source_file_kinds: SourceFileKindRegistry,
 }
 ```
 
 Backend builders do not parse source files, discover modules, read project config directly, or perform semantic frontend compilation.
-They declare frontend-visible libraries/directives/config keys/external import providers, builder-runtime packages, validate config, and lower compiled modules into artifacts. `ProjectConfigKeyRegistry` is declarative Stage 0 metadata: it lists allowed core and backend-owned keys plus value shapes so `#config.bst` can reject unknown declarations, shape-invalid folded values, and closed-domain string values before core fields are applied or backend settings are stored. Config extraction consumes shared AST const facts for declarations authored in `#config.bst`; imported core/builder constants and types are support surface, not config entries. External import providers are builder-declared hooks that Stage 0/import preparation uses to turn non-Beanstalk files into typed external package surfaces before AST; for JS-backed providers, that provider result also carries registered runtime imports discovered while parsing the external source. Builder-runtime package metadata covers builder-owned JS-backed virtual packages such as `@web/canvas`; these packages are registered directly in `external_packages`, then attached to module external-import metadata only when entry-reachable HIR references one of their functions. Project-specific config validation remains in `BackendBuilder::validate_project_config`, which returns `ProjectConfigError` so normal user config mistakes stay as typed `CompilerDiagnostic` values while infrastructure failures remain explicit `CompilerError` values.
+They declare frontend-visible libraries/directives/config keys/external import providers, builder-runtime packages, builder-supported source file kinds, validate config, and lower compiled modules into artifacts. `ProjectConfigKeyRegistry` is declarative Stage 0 metadata: it lists allowed core and backend-owned keys plus value shapes so `#config.bst` can reject unknown declarations, shape-invalid folded values, and closed-domain string values before core fields are applied or backend settings are stored. Config extraction consumes shared AST const facts for declarations authored in `#config.bst`; imported core/builder constants and types are support surface, not config entries. External import providers are builder-declared hooks that Stage 0/import preparation uses to turn non-Beanstalk files into typed external package surfaces before AST; for JS-backed providers, that provider result also carries registered runtime imports discovered while parsing the external source. Builder-runtime package metadata covers builder-owned JS-backed virtual packages such as `@web/canvas`; these packages are registered directly in `external_packages`, then attached to module external-import metadata only when entry-reachable HIR references one of their functions. Source file kind metadata lets builders opt in to source assets that participate in normal source import discovery without becoming Beanstalk modules; HTML registers Beandown `.bd` files this way. Project-specific config validation remains in `BackendBuilder::validate_project_config`, which returns `ProjectConfigError` so normal user config mistakes stay as typed `CompilerDiagnostic` values while infrastructure failures remain explicit `CompilerError` values.
 
 Complex release optimizations should remain outside the fast frontend path unless they are required for correctness.
 
@@ -138,7 +139,7 @@ The frontend owns a single `TypeEnvironment` per module. It is the canonical sou
 - External package types that have no frontend mapping use `ExpectedParameterType::UnknownExternal` instead of sentinel `TypeId`s. Call validation skips type compatibility for unknown external parameters
 
 ### Import, library, and external package contract
-Stage 0 discovers source libraries and provider-backed external files as normal build inputs.
+Stage 0 discovers source libraries, builder-supported source assets, and provider-backed external files as normal build inputs.
 
 Header parsing/import preparation resolves imports, aliases, facade boundaries, explicit `#mod.bst` export metadata, namespace/import records, receiver-method visibility, external package symbols, prelude symbols, builtins, and file-local visibility. It produces the visibility environment consumed by dependency sorting and AST.
 
@@ -149,6 +150,7 @@ AST consumes file-local visibility through `ScopeContext`. It validates semantic
 Compiler-facing rules:
 
 - Source libraries are normal modules behind explicit `#mod.bst` facades and participate in module-level dependency sorting
+- Builder-supported source file kinds, such as Beandown `.bd`, resolve through the same extensionless source import path as `.bst` files when the active builder declares support. Recognized but unsupported source kinds are rejected with typed import diagnostics.
 - Facade public API maps are built from public authored `#mod.bst` headers and public grouped facade imports such as `export import @path { Symbol }` or `export @path { Symbol }`; ordinary facade imports and unmarked facade declarations remain private to the facade file
 - External packages are virtual typed symbols provided by backend metadata, not `.bst` source files
 - External package membership uses stable `ExternalPackageId` values plus readable package paths and origin metadata, so built-in and provider-created packages share one identity model
@@ -212,9 +214,9 @@ Binding-mode syntax, constant rules, facade visibility, and top-level template s
 
 The compiler frontend and build system process modules through these stages:
 
-0. **Project Structure**: discovers config, module roots, reachable source files, source libraries, and external package namespaces
-1. **Tokenization**: converts source text to located tokens. In project builds this runs per file against worker-local string tables.
-2. **Header Parsing**: parses imports, declaration shells, top-level dependency edges, constant initializer reference edges, and captures entry start body separately. In project builds this is fused with tokenization as per-file preparation before deterministic string-table merge/remap and module-wide aggregation.
+0. **Project Structure**: discovers config, module roots, reachable source files, builder-supported source assets, source libraries, and external package namespaces
+1. **Tokenization**: converts source text to located tokens. In project builds this runs per file against worker-local string tables and a source-kind-specific tokenizer entry mode.
+2. **Header Parsing**: parses imports, declaration shells, top-level dependency edges, constant initializer reference edges, and captures entry start body separately. Source-kind adapters such as Beandown synthesize ordinary declaration headers here. In project builds this is fused with tokenization as per-file preparation before deterministic string-table merge/remap and module-wide aggregation.
 3. **Dependency Sorting**: orders top-level declaration headers by all header-provided top-level dependency edges
 4. **AST Construction**: consumes sorted headers linearly, resolves and validates semantic information, parses executable bodies, type-checks expressions, and prepares templates/constants for HIR/builders
 5. **HIR Generation**: lowers the typed AST into backend-facing semantic IR with explicit control flow
@@ -231,9 +233,10 @@ Stage 0 builds the module inputs consumed by the frontend. It:
 - allows config imports only from core/builder libraries and keeps project-local config imports rejected by design
 - stops config compilation at AST; config does not need HIR
 - discovers module roots from build-system entry files
-- expands each module to reachable `.bst` files through imports
+- expands each module to reachable `.bst` files and builder-supported source assets through imports
 - detects source-library roots visible to imports
 - recognizes external package prefixes so virtual imports are not treated as filesystem paths
+- resolves source-kind candidates through the builder-provided registry, including ambiguity checks such as `name.bst` + `name.bd` and `name.bd` + `name/`
 - resolves provider-backed external file imports before AST and stores their typed package metadata in the external import resolution table
 - rejects sibling `.bst` file/folder import-name collisions and special-file imports before semantic compilation
 - records source file identities for later diagnostics and path rendering
@@ -257,6 +260,8 @@ Tokenization converts source text into structured tokens with source locations. 
 - style directive token recognition through the merged directive registry
 - syntax-level rejection of unsupported or unknown directive forms where applicable
 
+`TokenizerEntryMode` chooses the initial lexical state for a source file kind. Normal `.bst` files start in ordinary code mode. Beandown `.bd` files start inside an implicit template body, which lets the tokenizer preserve original Beandown source locations while rejecting an unescaped outer `]`. `TokenizeMode` remains the internal lexical stack state used while scanning nested templates.
+
 ## Stage 2: Header Parsing
 
 Path: `src/compiler_frontend/headers/parse_file_headers.rs`
@@ -272,6 +277,7 @@ It parses top-level declaration shells so later stages do not reconstruct them f
 - top-level dependency edge generation
 - start-body token separation
 - top-level const fragment placement metadata
+- source-kind preparation hooks that turn non-`.bst` inputs into ordinary headers
 
 Header dependency edges include every top-level declaration dependency needed before AST can resolve declarations linearly:
 - imported declaration references
@@ -295,6 +301,8 @@ Function bodies and other executable tokens are captured for AST.
 Executable function/start body references do not participate in dependency sorting.
 Body-local declarations do not participate in dependency sorting.
 The implicit entry start header is always appended last.
+
+Beandown header preparation lives here. A `.bd` input contributes one private synthetic constant declaration, `content #String`, whose initializer is a structurally built `$markdown` template over the original `.bd` body tokens. Later dependency sorting and AST folding treat that declaration like any other compile-time constant; there is no Beandown-specific HIR path.
 
 ### Declaration shells
 A declaration shell is a structured top-level header payload, not a fully resolved AST node.
@@ -385,6 +393,8 @@ AST owns:
 
 AST should be described by this ownership and data-flow contract, not by a fixed internal pass count.
 The internal substeps inside each phase are implementation details and may change as the stage is simplified.
+
+The direct HTML-project Beandown API uses the same tokenizer, synthetic-header preparation, dependency sorting, and AST folding path as compiler-integrated `.bd` imports, then extracts the folded `content` constant. It deliberately stops before HIR generation, borrow validation, backend lowering, artifact writing, and output cleanup.
 
 ### Generics contract
 

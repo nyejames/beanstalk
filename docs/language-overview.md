@@ -413,6 +413,55 @@ Const rules:
 
 Runtime slot applications are valid inside template control flow after normal slot routing. Escaped unresolved `[$slot]` or `$insert(...)` artifacts inside runtime control-flow bodies are invalid template structure. Runtime slot applications appended inside template loops follow the same nearest-loop `[break]` / `[continue]` rules as direct loop body content.
 
+### Beandown `.bd` Content Files
+
+Beandown files are HTML-builder content helpers. A `.bd` file is authored as the body of an implicit compile-time markdown template:
+
+```beanstalk
+content #String = [$markdown:
+    ...entire .bd file body...
+]
+```
+
+The compiler builds that structure directly; it does not prepend wrapper source text.
+
+Import `.bd` files with normal extensionless source import syntax:
+
+```beanstalk
+import @docs/intro
+import @docs/intro {
+    content as intro_content,
+}
+
+[:[intro.content] [intro_content]]
+```
+
+Rules:
+- A `.bd` file exposes exactly one generated constant, `content #String`.
+- Direct extension imports such as `import @docs/intro.bd` are invalid; use `import @docs/intro`.
+- `.bd` files are never page entries, module roots, config files, or standalone project types.
+- `.bd` files have no imports, declarations, frontmatter, metadata, or raw-source preservation.
+- A `.bd` body must fully fold at compile time. Runtime functions, runtime bindings, and types are not visible.
+- The implicit markdown template means `--` is body text, not a Beanstalk comment.
+- A literal outer `]` must be escaped as `\]`; nested authored templates still use normal `[...]` syntax.
+
+Inside compiler-integrated HTML project builds, a `.bd` body sees a restricted flat compile-time scope:
+- exported compile-time constants and const records from `@html`, such as `[p: body]`;
+- exported compile-time constants and const records from the same-directory `#mod.bst`, when one exists.
+
+Same-directory facade constants override `@html` constants on name collision. Functions, structs, choices, type aliases, traits, methods, external/runtime APIs, and the generated self `content` constant are not visible in the `.bd` body.
+
+Facades can re-export Beandown content explicitly:
+
+```beanstalk
+-- docs/#mod.bst
+export @./intro {
+    content as intro,
+}
+```
+
+Use `.bst` files for pages, composition, imports, functions, and richer compile-time setup. Use `.bd` for small markdown-first content fragments consumed by `.bst`.
+
 ### If Statements and Pattern Matching
 
 Statement `if` is non-exhaustive. It has no statement-level `else if`; use nested `if` or full match.
