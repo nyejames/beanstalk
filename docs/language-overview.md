@@ -81,6 +81,14 @@ Status ::
 increment |value Int| -> Int:
     return value + 1
 ;
+ 
+value = 10
+reference = value
+copied = copy value
+
+left = "Hello "
+right = "world"
+joined = [left, right]
 ```
 
 ### Function Calls, Named Arguments, and Mutable Access
@@ -169,6 +177,18 @@ display_name = if maybe_name is |name| then name else "guest"
 get_display_name |id String| -> String?:
     user = find_user(id)?
     return user.name
+;
+
+name = if maybe_name is |name|:
+    then name
+else
+    then "guest"
+;
+
+label = if maybe_name is:
+    "Ada" => then "Hi Ada"
+    |name| => then name
+    none => then "guest"
 ;
 ```
 
@@ -339,6 +359,19 @@ Core rules:
 
 `$children(...)` applies only to direct children. `$fresh` is per-child and only affects wrapper application from the immediate parent. Formatting directives do not flow into nested child templates; redeclare them where needed. For `$children(...)` template arguments, the child template must close with `]` before the directive closes with `)`.
 
+```beanstalk
+list #= [$children([:<li>[$slot]</li>]):
+    <ul>
+        [$slot]
+    </ul>
+]
+
+[list:
+    [: one]
+    [$fresh: [: two]]
+]
+```
+
 ### Template Slots
 
 Slots let one template receive content from another.
@@ -369,6 +402,23 @@ card = [:
     [$insert("title"): Hello]
     Body
 ]
+
+img = [:
+    <img src="[$slot(1)]" alt="[$slot]">
+]
+
+[img, "logo.png": Site logo]
+
+title = [:
+    <h1 style="[$slot("style")]">
+        [$slot]
+    </h1>
+]
+
+blue = [$insert("style"): color: blue;]
+[title, blue:
+    Hello world
+]
 ```
 
 Nested `$children(...)` wrappers remain scoped to direct children, so row/cell-style helpers can be layered without wrapper leakage.
@@ -384,6 +434,26 @@ Templates support `if` and `loop` as final head suffixes before the body colon. 
 
 [card, if show:
     Visible inside card
+]
+
+[if maybe_name is |name|:
+    Hello [name]
+[else if use_fallback]
+    Hello fallback
+[else]
+    Hello guest
+]
+
+[loop items |item, index|:
+    [if item.skip:
+        [continue]
+    ]
+
+    [index]: [item]
+
+    [if item.done:
+        [break]
+    ]
 ]
 ```
 
@@ -454,9 +524,18 @@ Same-directory facade constants override `@html` constants on name collision. Fu
 Facades can re-export Beandown content explicitly:
 
 ```beanstalk
--- docs/#mod.bst
-export @./intro {
-    content as intro,
+-- src/#mod.bst
+import @core/text {length as private_length}
+
+export page_label #= "Documentation"
+
+export title_length |title String| -> Int:
+    return private_length(title)
+;
+
+export @components/card {
+    CardData as Card,
+    render_card,
 }
 ```
 
@@ -921,7 +1000,7 @@ Library categories:
 
 Core libraries require explicit imports unless they are part of the prelude. Unsupported builder packages are rejected with an unsupported-by-builder diagnostic. Source libraries are normal modules behind `#mod.bst` facades.
 
-The HTML builder's `@html` source library exposes authored HTML helpers, including `canvas`, `CANVAS_ID`, and `get_canvas_context`. Those are real facade declarations backed by local `@web/canvas` imports inside `libraries/html/#mod.bst`; the raw `@web/canvas` symbols themselves are not re-exported through `@html`. Import raw drawing APIs directly from `@web/canvas` when needed.
+The HTML builder's `@html` source library exposes authored HTML helpers, including `canvas`, `CANVAS_ID`, and `get_canvas_context`. Those are real facade declarations backed by local `@web/canvas` imports inside `libraries/html/#mod.bst`. The raw `@web/canvas` symbols themselves are not re-exported through `@html`. Import raw drawing APIs directly from `@web/canvas` when needed.
 
 ### External platform package imports
 
@@ -956,8 +1035,6 @@ Time package split:
 - `timestamp_from_iso_string` is fallible and must be handled with postfix `!` or `catch`.
 
 The HTML builder supports annotated single-file `.js` imports through `@bst.opaque` and `@bst.sig`. JavaScript export names are runtime implementation details; Beanstalk names come from annotations. Supported JS export forms are `export function name(...) { ... }` and block-bodied arrow exports. Runtime imports from builder-registered modules must be named static imports. Unsupported JS features include arbitrary dependency graphs, default exports, re-exports, CommonJS, classes, JS constants, property accessors, callbacks, async functions, collections/options in JS signatures, generic external types, and multi-success JS returns.
-
-`@web/canvas` is the first built-in JS-backed package and is not prelude-imported. It exposes opaque `Canvas`/`Canvas2d` types, fallible canvas/context helpers, and receiver-method drawing operations: `clear_rect`, `fill_rect`, `set_fill_style`, `begin_path`, `move_to`, `line_to`, and `stroke`.
 
 Deferred library-system features:
 - package manager, versions, remote fetching, lockfiles, and override/shadowing rules
