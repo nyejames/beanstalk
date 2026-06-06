@@ -129,6 +129,19 @@ impl ScopeContext {
         self
     }
 
+    /// Register resolved type alias annotations.
+    ///
+    /// WHAT: maps type alias declaration paths to their fully resolved
+    /// `ResolvedTypeAnnotation`. Used during type checking to expand aliases with
+    /// preserved fixed-collection capacity expressions before canonical `TypeId` resolution.
+    pub(crate) fn with_resolved_type_alias_annotations(
+        mut self,
+        annotations: Rc<FxHashMap<InternedPath, ResolvedTypeAnnotation>>,
+    ) -> ScopeContext {
+        Rc::make_mut(&mut self.shared).resolved_type_alias_annotations = Some(annotations);
+        self
+    }
+
     /// Register generic declaration metadata by path.
     ///
     /// WHAT: records generic parameter metadata for nominal declarations.
@@ -293,6 +306,8 @@ impl ScopeContext {
         shared.nominal_type_ids_by_path = Rc::clone(&lookups.nominal_type_ids_by_path);
         shared.choice_variant_shells_by_path =
             Some(Rc::clone(&lookups.choice_variant_shells_by_path));
+        shared.resolved_type_alias_annotations =
+            Some(Rc::clone(&lookups.resolved_type_alias_annotations_by_path));
         shared.lookups = lookups;
         self
     }

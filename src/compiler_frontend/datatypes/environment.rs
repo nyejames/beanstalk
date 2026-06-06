@@ -40,6 +40,13 @@ use super::{BuiltinScalarReceiver, DataType, ReceiverKey};
 //  Supporting Types
 // -----------------------------------------------------------
 
+/// The resolved shape of a collection type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct CollectionShape {
+    pub(crate) element_type: TypeId,
+    pub(crate) fixed_capacity: Option<usize>,
+}
+
 /// Compact handles for all builtin types seeded in a fresh `TypeEnvironment`.
 #[derive(Debug, Clone, Copy)]
 pub struct BuiltinTypes {
@@ -1063,26 +1070,34 @@ impl TypeEnvironment {
 
     /// Returns true if the type is a collection.
     pub fn is_collection(&self, id: TypeId) -> bool {
-        matches!(
-            self.get(id),
-            Some(TypeDefinition::Constructed(constructed)) if matches!(
-                constructed.constructor,
-                TypeConstructor::Builtin(super::ids::BuiltinTypeConstructor::Collection)
-            )
-        )
+        self.collection_shape(id).is_some()
     }
 
     /// Returns the element type of a collection, if any.
     pub fn collection_element_type(&self, id: TypeId) -> Option<TypeId> {
+        self.collection_shape(id).map(|shape| shape.element_type)
+    }
+
+    /// Returns the full shape of a collection type, if this type is a collection.
+    pub(crate) fn collection_shape(&self, id: TypeId) -> Option<CollectionShape> {
         match self.get(id) {
             Some(TypeDefinition::Constructed(constructed)) => match &constructed.constructor {
-                TypeConstructor::Builtin(super::ids::BuiltinTypeConstructor::Collection) => {
-                    constructed.arguments.first().copied()
-                }
+                TypeConstructor::Builtin(super::ids::BuiltinTypeConstructor::Collection {
+                    fixed_capacity,
+                }) => Some(CollectionShape {
+                    element_type: *constructed.arguments.first()?,
+                    fixed_capacity: *fixed_capacity,
+                }),
                 _ => None,
             },
             _ => None,
         }
+    }
+
+    /// Returns the fixed capacity of a collection, if this type is a fixed collection.
+    pub(crate) fn collection_fixed_capacity(&self, id: TypeId) -> Option<usize> {
+        self.collection_shape(id)
+            .and_then(|shape| shape.fixed_capacity)
     }
 
     /// Interns the canonical built-in collection type for an element semantic type.
@@ -1091,10 +1106,16 @@ impl TypeEnvironment {
     /// WHY: collection identity is semantic `TypeId` identity; parser-shaped
     ///      `DataType::collection` must remain a diagnostic spelling instead of the
     ///      canonical representation.
-    pub fn intern_collection(&mut self, inner: TypeId) -> TypeId {
+    pub fn intern_collection(
+        &mut self,
+        element_type: TypeId,
+        fixed_capacity: Option<usize>,
+    ) -> TypeId {
         self.intern_constructed(
-            TypeConstructor::Builtin(super::ids::BuiltinTypeConstructor::Collection),
-            Box::new([inner]),
+            TypeConstructor::Builtin(super::ids::BuiltinTypeConstructor::Collection {
+                fixed_capacity,
+            }),
+            Box::new([element_type]),
         )
     }
 
@@ -1476,11 +1497,14 @@ impl TypeEnvironment {
             TypeDefinition::Struct(def) => Some(TypeIdentityKey::Nominal(def.path.clone())),
             TypeDefinition::Choice(def) => Some(TypeIdentityKey::Nominal(def.path.clone())),
             TypeDefinition::Constructed(constructed) => match constructed.constructor {
-                TypeConstructor::Builtin(super::ids::BuiltinTypeConstructor::Collection) => {
+                TypeConstructor::Builtin(super::ids::BuiltinTypeConstructor::Collection {
+                    fixed_capacity,
+                }) => {
                     let element_id = constructed.arguments.first()?;
-                    Some(TypeIdentityKey::Collection(Box::new(
-                        self.type_id_to_type_identity_key(*element_id)?,
-                    )))
+                    Some(TypeIdentityKey::Collection {
+                        element: Box::new(self.type_id_to_type_identity_key(*element_id)?),
+                        fixed_capacity,
+                    })
                 }
                 TypeConstructor::Builtin(super::ids::BuiltinTypeConstructor::Option) => {
                     let inner_id = constructed.arguments.first()?;
@@ -1760,14 +1784,18 @@ impl TypeEnvironment {
             DataType::GenericInstance {
                 base:
                     super::generic_identity_bridge::GenericBaseType::Builtin(
-                        super::generic_identity_bridge::BuiltinGenericType::Collection,
+                        super::generic_identity_bridge::BuiltinGenericType::Collection {
+                            fixed_capacity,
+                        },
                     ),
                 arguments,
             } => {
                 let element_id = self.data_type_to_type_id(arguments.first()?)?;
                 let key = ConstructedTypeKey {
                     constructor: TypeConstructor::Builtin(
-                        super::ids::BuiltinTypeConstructor::Collection,
+                        super::ids::BuiltinTypeConstructor::Collection {
+                            fixed_capacity: *fixed_capacity,
+                        },
                     ),
                     arguments: Box::new([element_id]),
                 };

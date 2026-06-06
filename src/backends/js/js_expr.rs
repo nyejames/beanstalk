@@ -93,7 +93,23 @@ impl<'hir> JsEmitter<'hir> {
                     .map(|element| self.lower_expr(element))
                     .collect::<Result<Vec<_>, _>>()?;
 
-                Ok(format!("[{}]", lowered.join(", ")))
+                let items = format!("[{}]", lowered.join(", "));
+
+                let Some(collection_shape) = self.type_environment.collection_shape(expression.ty)
+                else {
+                    return Err(CompilerError::compiler_error(
+                        "JS backend lowered a collection expression whose type is not a collection",
+                    ));
+                };
+
+                if let Some(fixed_capacity) = collection_shape.fixed_capacity {
+                    Ok(format!(
+                        "__bs_fixed_collection({}, {})",
+                        items, fixed_capacity
+                    ))
+                } else {
+                    Ok(items)
+                }
             }
 
             HirExpressionKind::Range { start, end } => {

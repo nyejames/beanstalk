@@ -132,9 +132,12 @@ fn display_constructed(
     table: &StringTable,
 ) -> String {
     match &constructed.constructor {
-        TypeConstructor::Builtin(BuiltinTypeConstructor::Collection) => {
+        TypeConstructor::Builtin(BuiltinTypeConstructor::Collection { fixed_capacity }) => {
             if let Some(element) = constructed.arguments.first() {
-                format!("{{{}}}", display_type(*element, env, table))
+                match fixed_capacity {
+                    Some(cap) => format!("{{{cap} {}}}", display_type(*element, env, table)),
+                    None => format!("{{{}}}", display_type(*element, env, table)),
+                }
             } else {
                 "Collection".to_owned()
             }

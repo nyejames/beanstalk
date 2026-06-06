@@ -761,36 +761,69 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Collections</td>
      <td style="padding: 0.2em 0.5em;  "> Supported</td>
-     <td style="padding: 0.2em 0.5em;  "> Broad collection literal, mutation, builtin method, indexing, loop, result, and JS helper coverage. New capacity parsing coverage.</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad collection literal, mutation, builtin method, indexing, loop, result, and JS helper coverage. New capacity parsing, header dependency-ordering, AST capacity-folding, fixed literal declaration, HIR fixed <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">TypeId</span> validation, JS fixed wrapper lowering, fixed-capacity runtime enforcement, and fallible <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">push</span> coverage.</td>
      <td style="padding: 0.2em 0.5em;  "> JS / HTML</td>
-     <td style="padding: 0.2em 0.5em;  "> Collections internally use the generic type infrastructure. Public syntax remains <span style="
+     <td style="padding: 0.2em 0.5em;  "> Collections internally use the generic type infrastructure. Public growable syntax remains <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">{T}</span> and <span style="
+    ">{T}</span>. Fixed collection syntax <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">{T capacity}</span>. Capacity is allocation metadata, not part of type identity. Collection <span style="
+    ">{N T}</span> and declaration-target shorthand <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">{N}</span> are now parsed into collection type syntax, with old post-element capacity syntax such as <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">{T N}</span> rejected. Capacity expressions in top-level type surfaces participate in existing header dependency sorting, so referenced same-file constants can be ordered before declarations that use them. Parsed fixed-capacity annotations now fold during AST type resolution for declarations, multi-bind targets, function parameters and returns, type aliases, struct fields, and choice payloads, producing canonical collection <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">TypeId</span> identity with fixed capacity preserved through alias expansion where source visibility is available. Fixed collection literals now use the receiving collection shape, reject over-capacity initializers, preserve fixed shape through aliases, nested literals, and generic identity, and support declaration-target capacity shorthand only for immediate non-empty collection literals. Immutable empty fixed value bindings are rejected while mutable empty fixed bindings and fixed struct field defaults remain accepted. Collection <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">get</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">set</span>, and <span style="
+    ">set</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">push</span>, and <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">remove</span> are fallible; <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">push</span> and <span style="
+    ">length</span> is infallible. The JS backend lowers growable collections to arrays and fixed collections to branded wrappers that enforce maximum length in <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">length</span> are infallible. Collection helper runtime contracts should remain JS-owned for Alpha. HTML-Wasm collection behavior is experimental only.</td>
+    ">push</span>, preserve dense <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">get</span> / <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">set</span> / <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">remove</span> behavior, and report logical <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">length</span>. Deferred follow-ups include default-fill syntax, explicit fixed/growable conversion through <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">copy</span> after cast/copy hardening, and growable initial-capacity hints only if future backend work needs them. Collection helper runtime contracts remain JS-owned for Alpha. HTML-Wasm collection behavior is experimental only.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Collection generic substrate</td>
      <td style="padding: 0.2em 0.5em;  "> Supported</td>
-     <td style="padding: 0.2em 0.5em;  "> Broad existing collection tests plus new capacity parsing tests.</td>
+     <td style="padding: 0.2em 0.5em;  "> Broad existing collection tests plus new capacity parsing, dependency-ordering, canonical identity, AST folding, fixed literal, shorthand, HIR propagation/validation, display, JS lowering/runtime, and mismatch tests.</td>
      <td style="padding: 0.2em 0.5em;  "> JS / HTML</td>
      <td style="padding: 0.2em 0.5em;  "> Internally represented through canonical <span style="
         color: #c444aff9;
@@ -798,10 +831,25 @@ body {
     ">TypeEnvironment</span> constructed collection types. HIR carries frontend <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">TypeId</span> values and backends classify collection types through <span style="
+    ">TypeId</span> values, validates collection expressions against <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">TypeEnvironment</span> queries. Capacity parsed into declaration metadata but not wired to codegen yet.</td>
+    ">TypeEnvironment::collection_shape</span>, and renders fixed collection types through canonical type display. Backends classify collection types through <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">TypeEnvironment</span> queries. Fixed capacity expression tokens live on <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">ParsedTypeRef::Collection</span>, capacity-expression references create existing header dependency edges for top-level type surfaces, AST folds parsed capacity expressions into canonical collection <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">TypeId</span> identity through <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">CollectionShape</span>, and collection literal parsing now preserves explicit fixed collection shape. JS lowering consumes the canonical collection shape directly, using arrays for growable collections and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">__bs_fixed_collection</span> wrappers for fixed collections. Remaining active-plan work is final acceptance cleanup.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -1753,10 +1801,10 @@ body {
     ">set</span> / <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">remove</span>, infallible <span style="
+    ">push</span> / <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">push</span> / <span style="
+    ">remove</span>, infallible <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">length</span>, removed indexed-write, out-of-bounds, and explicit-mutable-receiver coverage.</td>
@@ -1782,7 +1830,16 @@ body {
     ">get</span> has been removed; use handled <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">~items.set(index, value)</span> calls instead.</td>
+    ">~items.set(index, value)</span> calls instead. Mutating <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">push</span> calls now use the same <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">!</span> / <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">catch</span> fallible handling requirement as other fallible collection methods.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -1830,28 +1887,22 @@ body {
     ">then</span> values through shared value-block result locals; nested ordinary branch paths may produce for the same catch block. Success-producing catch handlers without <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">then</span> must terminate explicitly; literal <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">assert(false)</span> / <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">assert(false, "message")</span> handlers satisfy that rule, while dynamic assertions still fall through for static completeness. Fallthrough is rejected before HIR. Collection <span style="
+    ">then</span> must terminate explicitly; literal false assertion handlers satisfy that rule, while dynamic assertions still fall through for static completeness. Fallthrough is rejected before HIR. Collection <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">get</span>, <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">set</span>, and <span style="
+    ">set</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">push</span>, and <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">remove</span> use the same explicit fallible branch path; <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">push</span> and <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">length</span> lower as plain calls. The old expression-level HIR propagation helper has been removed. A temporary internal fallible carrier remains in type/HIR lowering internals for backend handoff and is not public <span style="
+    ">length</span> lowers as a plain call. The old expression-level HIR propagation helper has been removed. A temporary internal fallible carrier remains in type/HIR lowering internals for backend handoff and is not public <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
     ">Result</span> syntax.</td>
@@ -1866,7 +1917,7 @@ body {
     ">message</span> and <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    ">code</span> field coverage. Old family names compile as user declarations.</td>
+    ">code</span> field coverage. Backend-generated collection, cast, time, and external-JS errors use the same lowered field shape. Old family names compile as user declarations.</td>
      <td style="padding: 0.2em 0.5em;  "> Frontend / JS</td>
      <td style="padding: 0.2em 0.5em;  "> Public fields are only <span style="
         color: #c444aff9;
@@ -3489,8 +3540,8 @@ body {
 
     function __bs_make_error(message, code, location, trace) {
     return {
-    message,
-    code,
+    b_fld0: message,
+    b_fld1: code,
     __bst_location: location ?? null,
     __bst_trace: trace ?? null
     };
@@ -3500,13 +3551,23 @@ body {
     return { tag: "err", value: __bs_make_error(message, code, null, null) };
     }
 
+    function __bs_error_message(error) {
+    const message = error && error["b_fld0"] !== undefined ? error["b_fld0"] : error && error.message;
+    return typeof message === "string" ? message : String(message ?? "Unknown error");
+    }
+
+    function __bs_error_code(error) {
+    const code = error && error["b_fld1"] !== undefined ? error["b_fld1"] : error && error.code;
+    return typeof code === "number" ? code : 0;
+    }
+
     function __bs_error_with_location(error, location) {
-    return __bs_make_error(error.message, error.code, location, error.__bst_trace);
+    return __bs_make_error(__bs_error_message(error), __bs_error_code(error), location, error.__bst_trace);
     }
 
     function __bs_error_push_trace(error, frame) {
     const nextTrace = error.__bst_trace ? error.__bst_trace.concat([frame]) : [frame];
-    return __bs_make_error(error.message, error.code, error.__bst_location, nextTrace);
+    return __bs_make_error(__bs_error_message(error), __bs_error_code(error), error.__bst_location, nextTrace);
     }
 
     function __bs_error_bubble(error, file, line, column, functionName) {
@@ -3543,48 +3604,104 @@ body {
     throw new Error("Expected internal Result carrier during fallback handling");
     }
 
+    function __bs_fixed_collection(items, fixedCapacity) {
+    return {
+    __bst_kind: "fixed_collection",
+    items: items,
+    fixedCapacity: fixedCapacity,
+    };
+    }
+
+    function __bs_collection_items(collection) {
+    if (Array.isArray(collection)) {
+    return collection;
+    }
+    return collection.items;
+    }
+
+    function __bs_collection_fixed_capacity(collection) {
+    if (Array.isArray(collection)) {
+    return null;
+    }
+    return collection.fixedCapacity;
+    }
+
+    function __bs_collection_is_valid(collection) {
+    if (Array.isArray(collection)) {
+    return true;
+    }
+    if (collection === null || typeof collection !== "object") {
+    return false;
+    }
+    if (collection.__bst_kind !== "fixed_collection") {
+    return false;
+    }
+    if (!Array.isArray(collection.items)) {
+    return false;
+    }
+    return (
+    Number.isInteger(collection.fixedCapacity)
+    && collection.fixedCapacity > 0
+    && collection.items.length <= collection.fixedCapacity
+    );
+    }
+
     function __bs_collection_index_is_valid(collection, index) {
-    return Number.isInteger(index) && index >= 0 && index < collection.length;
+    const items = __bs_collection_items(collection);
+    return Number.isInteger(index) && index >= 0 && index < items.length;
     }
 
     function __bs_collection_get(collection, index) {
-    if (!Array.isArray(collection)) {
+    if (!__bs_collection_is_valid(collection)) {
     return __bs_error_result("Collection operation expects an ordered collection", 100);
     }
     if (!__bs_collection_index_is_valid(collection, index)) {
     return __bs_error_result("Collection index out of bounds", 101);
     }
-    return { tag: "ok", value: collection[index] };
+    const items = __bs_collection_items(collection);
+    return { tag: "ok", value: items[index] };
     }
 
     function __bs_collection_set(collection, index, value) {
-    if (!Array.isArray(collection)) {
+    if (!__bs_collection_is_valid(collection)) {
     return __bs_error_result("Collection operation expects an ordered collection", 100);
     }
     if (!__bs_collection_index_is_valid(collection, index)) {
     return __bs_error_result("Collection index out of bounds", 101);
     }
-    collection[index] = value;
+    const items = __bs_collection_items(collection);
+    items[index] = value;
     return { tag: "ok", value: null };
     }
 
     function __bs_collection_push(collection, value) {
-    collection.push(value);
+    if (!__bs_collection_is_valid(collection)) {
+    return __bs_error_result("Collection operation expects an ordered collection", 100);
+    }
+    const items = __bs_collection_items(collection);
+    const fixedCapacity = __bs_collection_fixed_capacity(collection);
+    if (fixedCapacity !== null && items.length >= fixedCapacity) {
+    return __bs_error_result("Fixed collection capacity exceeded", 102);
+    }
+    items.push(value);
+    return { tag: "ok", value: null };
     }
 
     function __bs_collection_remove(collection, index) {
-    if (!Array.isArray(collection)) {
+    if (!__bs_collection_is_valid(collection)) {
     return __bs_error_result("Collection operation expects an ordered collection", 100);
     }
     if (!__bs_collection_index_is_valid(collection, index)) {
     return __bs_error_result("Collection index out of bounds", 101);
     }
-    const removed = collection.splice(index, 1)[0];
+    const items = __bs_collection_items(collection);
+    const removed = items.splice(index, 1)[0];
     return { tag: "ok", value: removed };
     }
 
     function __bs_collection_length(collection) {
-    return collection.length;
+    const items = __bs_collection_items(collection);
+    return items.length;
     }
 
     function __bs_value_to_string(value) {

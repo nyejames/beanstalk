@@ -65,7 +65,10 @@ fn fallible_collection_result(
 fn is_fallible_collection_builtin(builtin: CollectionBuiltinOp) -> bool {
     matches!(
         builtin,
-        CollectionBuiltinOp::Get | CollectionBuiltinOp::Set | CollectionBuiltinOp::Remove
+        CollectionBuiltinOp::Get
+            | CollectionBuiltinOp::Set
+            | CollectionBuiltinOp::Push
+            | CollectionBuiltinOp::Remove
     )
 }
 
@@ -178,7 +181,11 @@ pub(super) fn parse_collection_builtin_member_typed(
                 &member_location,
                 string_table,
             )?;
-            (args, Vec::new())
+            let error_type =
+                resolve_builtin_error_type_typed(scope_context, &member_location, string_table)?;
+            let result_type_ids =
+                fallible_collection_result(none_type_id, error_type, type_interner);
+            (args, result_type_ids)
         }
 
         CollectionBuiltinOp::Remove => {
@@ -225,7 +232,7 @@ pub(super) fn parse_collection_builtin_member_typed(
         .into());
     }
 
-    // Collection `get`, `set`, and `remove` produce fallible carriers, so the parser rejects raw
+    // Collection `get`, `set`, `push`, and `remove` produce fallible carriers, so the parser rejects raw
     // values before HIR can mistake them for ordinary runtime data.
     if is_fallible_collection_builtin(builtin)
         && !token_stream_starts_fallible_handling_suffix(token_stream)
@@ -244,6 +251,7 @@ pub(super) fn parse_collection_builtin_member_typed(
         kind: NodeKind::CollectionBuiltinCall {
             receiver: Box::new(receiver_node.to_owned()),
             op: builtin,
+            receiver_requires_mutable: mutating_receiver_required,
             args,
             result_type_ids,
             location: member_location.clone(),

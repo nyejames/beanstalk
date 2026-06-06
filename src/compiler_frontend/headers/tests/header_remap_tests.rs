@@ -274,16 +274,12 @@ fn header_kind_constant_remaps_declaration() {
             name: type_name,
             location: make_location("test.bst", &mut local),
         },
-        collection_capacity: None,
         initializer_tokens: vec![],
         initializer_references: vec![],
         location: make_location("test.bst", &mut local),
     };
 
-    let mut kind = HeaderKind::Constant {
-        declaration,
-        source_order: 0,
-    };
+    let mut kind = HeaderKind::Constant { declaration };
 
     let remap = global.merge_from(&local);
     kind.remap_string_ids(&remap);
@@ -399,7 +395,6 @@ fn header_kind_const_template_remaps_condition_references() {
             followed_by_call: false,
             followed_by_choice_namespace: false,
         }],
-        source_order: 0,
     };
 
     let remap = global.merge_from(&local);
@@ -451,6 +446,7 @@ fn header_remaps_kind_dependencies_locations_tokens_source_file_and_imports() {
         name_location: make_location("test.bst", &mut local),
         tokens: make_file_tokens("my_symbol", &mut local),
         source_file: InternedPath::from_single_str("test.bst", &mut local),
+        capacity_references: Vec::new(),
     };
 
     let remap = global.merge_from(&local);
@@ -512,6 +508,7 @@ fn header_remap_preserves_correct_ids_when_global_has_preexisting_strings() {
         name_location: make_location("test.bst", &mut local),
         tokens: make_file_tokens("my_symbol", &mut local),
         source_file: InternedPath::from_single_str("test.bst", &mut local),
+        capacity_references: Vec::new(),
     };
 
     let remap = global.merge_from(&local);
@@ -587,6 +584,7 @@ fn file_frontend_prepare_output_remaps_all_string_id_fields() {
         name_location: make_location("test.bst", &mut local),
         tokens: make_file_tokens("my_func", &mut local),
         source_file: InternedPath::from_single_str("test.bst", &mut local),
+        capacity_references: Vec::new(),
     };
 
     let fragment = TopLevelConstFragment {

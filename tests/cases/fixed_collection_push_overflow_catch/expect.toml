@@ -1,0 +1,4 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["fixed_collection_push_overflow_catch message=Fixed collection capacity exceeded length=1 first=1"]

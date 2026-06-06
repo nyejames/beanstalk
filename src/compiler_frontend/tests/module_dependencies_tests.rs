@@ -6,6 +6,7 @@
 //!      here breaks cross-file visibility and AST constant dependency ordering.
 
 use super::*;
+use crate::compiler_frontend::compiler_messages::CompileTimeEvaluationErrorReason;
 use crate::compiler_frontend::compiler_messages::DiagnosticPayload;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::parse_file_headers::{
@@ -250,5 +251,194 @@ fn function_error_return_dependency_orders_error_type_before_function() {
         non_start_names,
         vec!["AppError", "parse"],
         "error payload type must be sorted before the fallible function signature"
+    );
+}
+
+#[test]
+fn capacity_reference_in_collection_type_orders_constant_before_user() {
+    // WHY: capacity expressions in fixed collection types create value-namespace dependency
+    // edges to the referenced constant, even when the declaration is not a constant.
+    let (headers, mut string_table) = parse_module_headers(
+        &[
+            (
+                "src/a.bst",
+                "import @b { capacity }\nmake |items ~{capacity Int}| -> Int:\n    return 1\n;\n",
+            ),
+            ("src/b.bst", "capacity #Int = 64\n"),
+        ],
+        "src/a.bst",
+    );
+
+    let sorted = resolve_module_dependencies(headers, &mut string_table)
+        .expect("sort must succeed — capacity reference edges are resolved by headers");
+
+    let non_start_names: Vec<_> = sorted
+        .headers
+        .iter()
+        .filter(|h| !matches!(h.kind, HeaderKind::StartFunction))
+        .map(|h| header_name(h, &string_table))
+        .collect();
+
+    assert_eq!(
+        non_start_names,
+        vec!["capacity", "make"],
+        "capacity constant must be sorted before the declaration that uses it"
+    );
+}
+
+#[test]
+fn capacity_reference_same_file_forward_reference_is_rejected() {
+    // WHY: a capacity constant declared after a typed declaration in the same file is a
+    // same-file forward constant reference and must be rejected.
+    let mut string_table = StringTable::new();
+    let external_package_registry = ExternalPackageRegistry::new();
+    let options = HeaderParseOptions::default();
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let entry_path = PathBuf::from("src/a.bst");
+    let file_path = PathBuf::from("src/a.bst");
+    let interned_path = InternedPath::from_path_buf(&file_path, &mut string_table);
+    let file_tokens = tokenize(
+        "make |items ~{capacity Int}| -> Int:\n    return 1\n;\ncapacity #Int = 64\n",
+        &interned_path,
+        TokenizerEntryMode::SourceFile,
+        &style_directives,
+        &mut string_table,
+        None,
+    )
+    .expect("tokenization should succeed");
+
+    let output = prepare_file_from_tokens(
+        file_tokens,
+        &entry_path,
+        &options,
+        &external_package_registry,
+        &mut string_table,
+        0,
+        0,
+    )
+    .expect("preparation should succeed");
+
+    let result = parse_headers(
+        vec![output],
+        &external_package_registry,
+        &ExternalImportResolutionTable::default(),
+        options.project_path_resolver.as_ref(),
+        &mut string_table,
+    );
+
+    let bag = match result {
+        Err(bag) => bag,
+        Ok(_) => panic!("same-file forward capacity reference should fail during header parsing"),
+    };
+
+    let found = bag.diagnostics().iter().any(|diagnostic| {
+        matches!(
+            diagnostic.payload,
+            DiagnosticPayload::CompileTimeEvaluationError {
+                reason: CompileTimeEvaluationErrorReason::SameFileForwardConstantReference,
+                ..
+            }
+        )
+    });
+
+    assert!(
+        found,
+        "expected a same-file forward constant reference diagnostic"
+    );
+}
+
+#[test]
+fn capacity_reference_in_function_signature_creates_dependency_edge() {
+    let (headers, mut string_table) = parse_module_headers(
+        &[
+            (
+                "src/a.bst",
+                "import @b { size }\nmake |items ~{size Int}| -> Int:\n    return 1\n;\n",
+            ),
+            ("src/b.bst", "size #Int = 8\n"),
+        ],
+        "src/a.bst",
+    );
+
+    let sorted =
+        resolve_module_dependencies(headers, &mut string_table).expect("sort must succeed");
+
+    let non_start_names: Vec<_> = sorted
+        .headers
+        .iter()
+        .filter(|h| !matches!(h.kind, HeaderKind::StartFunction))
+        .map(|h| header_name(h, &string_table))
+        .collect();
+
+    assert_eq!(
+        non_start_names,
+        vec!["size", "make"],
+        "capacity reference in function parameter must order constant before function"
+    );
+}
+
+#[test]
+fn capacity_reference_in_type_alias_creates_dependency_edge() {
+    let (headers, mut string_table) = parse_module_headers(
+        &[
+            ("src/a.bst", "import @b { limit }\nItems as {limit Int}\n"),
+            ("src/b.bst", "limit #Int = 16\n"),
+        ],
+        "src/a.bst",
+    );
+
+    let sorted =
+        resolve_module_dependencies(headers, &mut string_table).expect("sort must succeed");
+
+    let non_start_names: Vec<_> = sorted
+        .headers
+        .iter()
+        .filter(|h| !matches!(h.kind, HeaderKind::StartFunction))
+        .map(|h| header_name(h, &string_table))
+        .collect();
+
+    assert_eq!(
+        non_start_names,
+        vec!["limit", "Items"],
+        "capacity reference in type alias must order constant before alias"
+    );
+}
+
+#[test]
+fn capacity_references_across_header_type_surfaces_create_dependency_edges() {
+    let (headers, mut string_table) = parse_module_headers(
+        &[
+            (
+                "src/a.bst",
+                "import @b { limit }\n\
+                 Buffer = |\n\
+                     items {limit Int},\n\
+                 |\n\
+                 Status :: Pending |\n\
+                     items {limit Int},\n\
+                 |;\n\
+                 make|| -> {limit Int}:\n\
+                     return {}\n\
+                 ;\n",
+            ),
+            ("src/b.bst", "limit #Int = 16\n"),
+        ],
+        "src/a.bst",
+    );
+
+    let sorted =
+        resolve_module_dependencies(headers, &mut string_table).expect("sort must succeed");
+
+    let non_start_names: Vec<_> = sorted
+        .headers
+        .iter()
+        .filter(|h| !matches!(h.kind, HeaderKind::StartFunction))
+        .map(|h| header_name(h, &string_table))
+        .collect();
+
+    assert_eq!(
+        non_start_names,
+        vec!["limit", "Buffer", "Status", "make"],
+        "capacity references in fields, payloads, and returns must order the constant first"
     );
 }

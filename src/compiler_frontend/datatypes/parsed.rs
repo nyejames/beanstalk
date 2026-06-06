@@ -6,7 +6,19 @@
 //!      be confused with resolved semantic type identity.
 
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap};
-use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
+use crate::compiler_frontend::tokenizer::tokens::{SourceLocation, Token};
+
+/// Parsed fixed-capacity expression syntax before semantic folding.
+///
+/// WHAT: stores the exact token slice and primary source location for a collection capacity
+///       expression such as `64` or `capacity + 16`.
+/// WHY: the parser owns syntax shape only. AST type resolution later folds these tokens into
+///      the canonical fixed collection capacity once constants and types are available.
+#[derive(Debug, Clone, PartialEq)]
+pub(crate) struct ParsedCollectionCapacity {
+    pub(crate) tokens: Vec<Token>,
+    pub(crate) location: SourceLocation,
+}
 
 /// Parsed type annotation before resolution.
 ///
@@ -81,6 +93,7 @@ pub enum ParsedTypeRef {
     Collection {
         element: Box<ParsedTypeRef>,
         location: SourceLocation,
+        fixed_capacity: Option<ParsedCollectionCapacity>,
     },
 
     Optional {
@@ -146,9 +159,19 @@ impl ParsedTypeRef {
                 location.remap_string_ids(remap);
             }
 
-            ParsedTypeRef::Collection { element, location } => {
+            ParsedTypeRef::Collection {
+                element,
+                location,
+                fixed_capacity,
+            } => {
                 element.remap_string_ids(remap);
                 location.remap_string_ids(remap);
+                if let Some(capacity) = fixed_capacity {
+                    capacity.location.remap_string_ids(remap);
+                    for token in &mut capacity.tokens {
+                        token.remap_string_ids(remap);
+                    }
+                }
             }
 
             ParsedTypeRef::Optional { inner, location } => {

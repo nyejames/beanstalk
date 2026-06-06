@@ -16,7 +16,8 @@ use crate::compiler_frontend::ast::module_ast::environment::{
 use crate::compiler_frontend::ast::module_ast::scope_context::ReceiverMethodCatalog;
 use crate::compiler_frontend::ast::type_resolution::ResolvedFunctionSignature;
 use crate::compiler_frontend::ast::type_resolution::{
-    TypeResolutionContext, TypeResolutionContextInputs, resolve_diagnostic_type_to_type_id_checked,
+    ResolvedTypeAnnotation, TypeResolutionContext, TypeResolutionContextInputs,
+    resolve_diagnostic_type_to_type_id_checked,
 };
 use crate::compiler_frontend::builtins::error_type::builtin_error_type_path;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
@@ -77,6 +78,8 @@ pub(crate) struct AstModuleEnvironmentBuilder<'context, 'services> {
         FxHashMap<InternedPath, ResolvedFunctionSignature>,
     pub(crate) generic_function_templates_by_path: FxHashMap<InternedPath, GenericFunctionTemplate>,
     pub(crate) resolved_type_aliases_by_path: FxHashMap<InternedPath, DataType>,
+    pub(crate) resolved_type_alias_annotations_by_path:
+        FxHashMap<InternedPath, ResolvedTypeAnnotation>,
     pub(crate) generic_parameter_lists_by_path:
         FxHashMap<InternedPath, RegisteredGenericParameterList>,
 
@@ -106,6 +109,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             resolved_function_signatures_by_path: FxHashMap::default(),
             generic_function_templates_by_path: FxHashMap::default(),
             resolved_type_aliases_by_path: FxHashMap::default(),
+            resolved_type_alias_annotations_by_path: FxHashMap::default(),
             generic_parameter_lists_by_path: FxHashMap::default(),
             type_environment: TypeEnvironment::new(),
             nominal_type_ids_by_path: FxHashMap::default(),
@@ -349,6 +353,9 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                     self.generic_function_templates_by_path,
                 ),
                 resolved_type_aliases_by_path: Rc::new(self.resolved_type_aliases_by_path),
+                resolved_type_alias_annotations_by_path: Rc::new(
+                    self.resolved_type_alias_annotations_by_path,
+                ),
                 choice_variant_shells_by_path: Rc::new(self.choice_variant_shells_by_path),
                 declaration_semantics: Rc::new(declaration_semantics),
 
@@ -477,6 +484,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             visible_source_bindings: Some(&visibility.visible_source_names),
             visible_type_aliases: Some(&visibility.visible_type_alias_names),
             resolved_type_aliases: Some(&self.resolved_type_aliases_by_path),
+            resolved_type_alias_annotations: Some(&self.resolved_type_alias_annotations_by_path),
             generic_declarations_by_path: Some(&self.module_symbols.generic_declarations_by_path),
             resolved_struct_fields_by_path: Some(&self.resolved_struct_fields_by_path),
             type_environment: &mut self.type_environment,

@@ -1,0 +1,4 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["fixed_collection_capacity_expression_success length=1 value=7"]

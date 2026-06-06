@@ -28,7 +28,7 @@ use crate::compiler_frontend::datatypes::ids::NominalTypeId;
 use crate::compiler_frontend::datatypes::parsed::ParsedTypeRef;
 use crate::compiler_frontend::datatypes::{DataType, TypeId, builtin_type_ids};
 use crate::compiler_frontend::declaration_syntax::type_syntax::{
-    TypeAnnotationContext, parse_type_annotation, parse_type_annotation_with_capacity,
+    TypeAnnotationContext, parse_type_annotation,
 };
 use crate::compiler_frontend::headers::module_symbols::{
     GenericDeclarationKind, GenericDeclarationMetadata,
@@ -97,6 +97,7 @@ fn resolve_type_annotation_error(
         &SourceLocation::default(),
         &mut resolution_context,
         string_table,
+        None,
     )
     .expect_err(expected_failure)
     .as_ref()
@@ -111,15 +112,19 @@ fn declaration_context_allows_inferred_annotations() {
         &mut string_table,
     );
 
-    let parsed = parse_type_annotation(&mut stream, TypeAnnotationContext::DeclarationTarget)
-        .expect("declaration type annotation should parse");
+    let parsed = parse_type_annotation(
+        &mut stream,
+        TypeAnnotationContext::DeclarationTarget,
+        &string_table,
+    )
+    .expect("declaration type annotation should parse");
 
     assert_eq!(parsed, ParsedTypeRef::Inferred);
 }
 
 #[test]
 fn resolved_type_annotation_carries_canonical_type_id() {
-    let string_table = StringTable::new();
+    let mut string_table = StringTable::new();
     let declaration_table = Rc::new(TopLevelDeclarationTable::new(Vec::new()));
     let mut type_environment = TypeEnvironment::new();
     let mut resolution_context =
@@ -132,7 +137,8 @@ fn resolved_type_annotation_carries_canonical_type_id() {
         },
         &location,
         &mut resolution_context,
-        &string_table,
+        &mut string_table,
+        None,
     )
     .expect("builtin annotation resolution should succeed");
 
@@ -142,7 +148,7 @@ fn resolved_type_annotation_carries_canonical_type_id() {
 
 #[test]
 fn resolved_inferred_annotation_has_no_type_id() {
-    let string_table = StringTable::new();
+    let mut string_table = StringTable::new();
     let declaration_table = Rc::new(TopLevelDeclarationTable::new(Vec::new()));
     let mut type_environment = TypeEnvironment::new();
     let mut resolution_context =
@@ -152,7 +158,8 @@ fn resolved_inferred_annotation_has_no_type_id() {
         ParsedTypeRef::Inferred,
         &SourceLocation::default(),
         &mut resolution_context,
-        &string_table,
+        &mut string_table,
+        None,
     )
     .expect("inferred annotation resolution should succeed");
 
@@ -174,8 +181,12 @@ fn declaration_context_parses_named_optional_type() {
         &mut string_table,
     );
 
-    let parsed = parse_type_annotation(&mut stream, TypeAnnotationContext::DeclarationTarget)
-        .expect("named optional declaration type annotation should parse");
+    let parsed = parse_type_annotation(
+        &mut stream,
+        TypeAnnotationContext::DeclarationTarget,
+        &string_table,
+    )
+    .expect("named optional declaration type annotation should parse");
 
     assert_eq!(
         parsed,
@@ -197,8 +208,12 @@ fn signature_parameter_rejects_none_type() {
         &mut string_table,
     );
 
-    let error = parse_type_annotation(&mut stream, TypeAnnotationContext::SignatureParameter)
-        .expect_err("none parameter type should fail");
+    let error = parse_type_annotation(
+        &mut stream,
+        TypeAnnotationContext::SignatureParameter,
+        &string_table,
+    )
+    .expect_err("none parameter type should fail");
 
     assert!(matches!(
         error.payload,
@@ -217,8 +232,12 @@ fn signature_parameter_rejects_reserved_trait_this_type() {
         &mut string_table,
     );
 
-    let error = parse_type_annotation(&mut stream, TypeAnnotationContext::SignatureParameter)
-        .expect_err("reserved trait keyword type should fail");
+    let error = parse_type_annotation(
+        &mut stream,
+        TypeAnnotationContext::SignatureParameter,
+        &string_table,
+    )
+    .expect_err("reserved trait keyword type should fail");
 
     assert!(matches!(
         error.payload,
@@ -237,8 +256,12 @@ fn declaration_target_rejects_type_keyword_inside_type_annotation() {
         &mut string_table,
     );
 
-    let error = parse_type_annotation(&mut stream, TypeAnnotationContext::DeclarationTarget)
-        .expect_err("type keyword should be reserved");
+    let error = parse_type_annotation(
+        &mut stream,
+        TypeAnnotationContext::DeclarationTarget,
+        &string_table,
+    )
+    .expect_err("type keyword should be reserved");
 
     assert!(matches!(
         error.payload,
@@ -259,8 +282,12 @@ fn signature_return_rejects_bare_of_keyword_with_structured_syntax_error() {
         &mut string_table,
     );
 
-    let error = parse_type_annotation(&mut stream, TypeAnnotationContext::SignatureReturn)
-        .expect_err("of keyword should fail in type position");
+    let error = parse_type_annotation(
+        &mut stream,
+        TypeAnnotationContext::SignatureReturn,
+        &string_table,
+    )
+    .expect_err("of keyword should fail in type position");
 
     assert!(matches!(
         error.payload,
@@ -285,8 +312,12 @@ fn parses_generic_type_application() {
         &mut string_table,
     );
 
-    let parsed = parse_type_annotation(&mut stream, TypeAnnotationContext::DeclarationTarget)
-        .expect("generic type application should parse");
+    let parsed = parse_type_annotation(
+        &mut stream,
+        TypeAnnotationContext::DeclarationTarget,
+        &string_table,
+    )
+    .expect("generic type application should parse");
 
     assert_eq!(
         parsed,
@@ -318,8 +349,12 @@ fn public_option_type_syntax_is_deferred() {
         &mut string_table,
     );
 
-    let parsed = parse_type_annotation(&mut stream, TypeAnnotationContext::DeclarationTarget)
-        .expect("public option syntax should parse before resolution rejects it");
+    let parsed = parse_type_annotation(
+        &mut stream,
+        TypeAnnotationContext::DeclarationTarget,
+        &string_table,
+    )
+    .expect("public option syntax should parse before resolution rejects it");
 
     let error = resolve_type_annotation_error(
         parsed,
@@ -358,8 +393,12 @@ fn public_result_type_syntax_is_deferred() {
         &mut string_table,
     );
 
-    let parsed = parse_type_annotation(&mut stream, TypeAnnotationContext::DeclarationTarget)
-        .expect("public result syntax should parse before resolution rejects it");
+    let parsed = parse_type_annotation(
+        &mut stream,
+        TypeAnnotationContext::DeclarationTarget,
+        &string_table,
+    )
+    .expect("public result syntax should parse before resolution rejects it");
 
     let error = resolve_type_annotation_error(
         parsed,
@@ -398,8 +437,12 @@ fn parses_collection_of_generic_type_application() {
         &mut string_table,
     );
 
-    let parsed = parse_type_annotation(&mut stream, TypeAnnotationContext::DeclarationTarget)
-        .expect("collection element generic type application should parse");
+    let parsed = parse_type_annotation(
+        &mut stream,
+        TypeAnnotationContext::DeclarationTarget,
+        &string_table,
+    )
+    .expect("collection element generic type application should parse");
 
     assert_eq!(
         parsed,
@@ -415,6 +458,7 @@ fn parses_collection_of_generic_type_application() {
                 location: SourceLocation::default(),
             }),
             location: SourceLocation::default(),
+            fixed_capacity: None,
         }
     );
 }
@@ -439,8 +483,12 @@ fn rejects_nested_generic_type_application() {
         &mut string_table,
     );
 
-    let error = parse_type_annotation(&mut stream, TypeAnnotationContext::DeclarationTarget)
-        .expect_err("nested generic type application should fail");
+    let error = parse_type_annotation(
+        &mut stream,
+        TypeAnnotationContext::DeclarationTarget,
+        &string_table,
+    )
+    .expect_err("nested generic type application should fail");
 
     assert_diagnostic_payload(
         error,
@@ -469,8 +517,12 @@ fn duplicate_optional_marker_is_rejected() {
         &mut string_table,
     );
 
-    let error = parse_type_annotation(&mut stream, TypeAnnotationContext::SignatureReturn)
-        .expect_err("duplicate optional marker should fail");
+    let error = parse_type_annotation(
+        &mut stream,
+        TypeAnnotationContext::SignatureReturn,
+        &string_table,
+    )
+    .expect_err("duplicate optional marker should fail");
 
     assert_diagnostic_payload(
         error,
@@ -512,6 +564,7 @@ fn alias_expanded_nested_optional_type_is_rejected() {
         visible_source_bindings: None,
         visible_type_aliases: Some(&visible_type_aliases),
         resolved_type_aliases: Some(&resolved_type_aliases),
+        resolved_type_alias_annotations: None,
         generic_declarations_by_path: None,
         generic_parameters: None,
         generic_substitutions: None,
@@ -616,6 +669,7 @@ fn resolves_generic_instance_base_to_canonical_nominal_path() {
         visible_source_bindings: None,
         visible_type_aliases: None,
         resolved_type_aliases: None,
+        resolved_type_alias_annotations: None,
         generic_declarations_by_path: Some(&generic_declarations),
         generic_parameters: None,
         generic_substitutions: None,
@@ -677,6 +731,7 @@ fn generic_instance_resolution_rejects_wrong_arity() {
         visible_source_bindings: None,
         visible_type_aliases: None,
         resolved_type_aliases: None,
+        resolved_type_alias_annotations: None,
         generic_declarations_by_path: Some(&generic_declarations),
         generic_parameters: None,
         generic_substitutions: None,
@@ -744,6 +799,7 @@ fn bare_generic_type_name_requires_type_arguments() {
         visible_source_bindings: None,
         visible_type_aliases: None,
         resolved_type_aliases: None,
+        resolved_type_alias_annotations: None,
         generic_declarations_by_path: Some(&generic_declarations),
         generic_parameters: None,
         generic_substitutions: None,
@@ -903,33 +959,34 @@ fn checked_type_id_conversion_rejects_unresolved_named_type() {
 
 #[test]
 fn parses_collection_with_capacity() {
+    // New pre-element syntax: {64 Int}
     let mut string_table = StringTable::new();
     let mut stream = stream_from_tokens(
         vec![
             token(TokenKind::OpenCurly),
-            token(TokenKind::DatatypeInt),
             token(TokenKind::IntLiteral(64)),
+            token(TokenKind::DatatypeInt),
             token(TokenKind::CloseCurly),
             token(TokenKind::Eof),
         ],
         &mut string_table,
     );
 
-    let parsed =
-        parse_type_annotation_with_capacity(&mut stream, TypeAnnotationContext::DeclarationTarget)
-            .expect("collection with capacity should parse");
+    let parsed = parse_type_annotation(
+        &mut stream,
+        TypeAnnotationContext::DeclarationTarget,
+        &string_table,
+    )
+    .expect("collection with capacity should parse");
 
-    assert_eq!(
-        parsed.parsed_type,
-        ParsedTypeRef::Collection {
-            element: Box::new(ParsedTypeRef::BuiltinInt {
-                location: SourceLocation::default()
-            }),
-            location: SourceLocation::default(),
-        }
+    assert!(
+        matches!(&parsed, ParsedTypeRef::Collection { fixed_capacity: Some(capacity), .. }
+            if capacity.tokens.len() == 1 && capacity.tokens[0].kind == TokenKind::IntLiteral(64)
+        )
     );
-    assert!(parsed.collection_capacity.is_some());
-    assert_eq!(parsed.collection_capacity.unwrap().value, 64);
+    assert!(matches!(&parsed, ParsedTypeRef::Collection { element, .. }
+        if **element == ParsedTypeRef::BuiltinInt { location: SourceLocation::default() }
+    ));
 }
 
 #[test]
@@ -945,79 +1002,242 @@ fn parses_collection_without_capacity() {
         &mut string_table,
     );
 
-    let parsed =
-        parse_type_annotation_with_capacity(&mut stream, TypeAnnotationContext::DeclarationTarget)
-            .expect("collection without capacity should parse");
+    let parsed = parse_type_annotation(
+        &mut stream,
+        TypeAnnotationContext::DeclarationTarget,
+        &string_table,
+    )
+    .expect("collection without capacity should parse");
 
     assert_eq!(
-        parsed.parsed_type,
+        parsed,
         ParsedTypeRef::Collection {
             element: Box::new(ParsedTypeRef::BuiltinInt {
                 location: SourceLocation::default()
             }),
             location: SourceLocation::default(),
+            fixed_capacity: None,
         }
     );
-    assert!(parsed.collection_capacity.is_none());
 }
 
 #[test]
-fn parses_collection_with_generic_element_and_capacity() {
-    let mut string_table = StringTable::new();
-    let box_name = string_table.intern("Box");
-    let mut stream = stream_from_tokens(
-        vec![
-            token(TokenKind::OpenCurly),
-            token(TokenKind::Symbol(box_name)),
-            token(TokenKind::Of),
-            token(TokenKind::DatatypeString),
-            token(TokenKind::IntLiteral(16)),
-            token(TokenKind::CloseCurly),
-            token(TokenKind::Eof),
-        ],
-        &mut string_table,
-    );
-
-    let parsed =
-        parse_type_annotation_with_capacity(&mut stream, TypeAnnotationContext::DeclarationTarget)
-            .expect("collection with generic element and capacity should parse");
-
-    assert_eq!(
-        parsed.parsed_type,
-        ParsedTypeRef::Collection {
-            element: Box::new(ParsedTypeRef::Applied {
-                base: Box::new(ParsedTypeRef::Named {
-                    name: box_name,
-                    location: SourceLocation::default()
-                }),
-                arguments: vec![ParsedTypeRef::BuiltinString {
-                    location: SourceLocation::default()
-                }],
-                location: SourceLocation::default(),
-            }),
-            location: SourceLocation::default(),
-        }
-    );
-    assert_eq!(parsed.collection_capacity.unwrap().value, 16);
-}
-
-#[test]
-fn rejects_negative_collection_capacity() {
+fn rejects_old_post_element_collection_capacity_syntax() {
     let mut string_table = StringTable::new();
     let mut stream = stream_from_tokens(
         vec![
             token(TokenKind::OpenCurly),
             token(TokenKind::DatatypeInt),
-            token(TokenKind::IntLiteral(-1)),
+            token(TokenKind::IntLiteral(64)),
             token(TokenKind::CloseCurly),
             token(TokenKind::Eof),
         ],
         &mut string_table,
     );
 
-    let error =
-        parse_type_annotation_with_capacity(&mut stream, TypeAnnotationContext::DeclarationTarget)
-            .expect_err("negative capacity should fail");
+    let error = parse_type_annotation(
+        &mut stream,
+        TypeAnnotationContext::DeclarationTarget,
+        &string_table,
+    )
+    .expect_err("old post-element capacity syntax should not parse");
+
+    assert_diagnostic_payload(
+        error,
+        |payload| {
+            matches!(
+                payload,
+                DiagnosticPayload::ExpectedToken {
+                    expected: TokenKind::CloseCurly,
+                    found: Some(TokenKind::IntLiteral(64)),
+                }
+            )
+        },
+        "ExpectedToken(CloseCurly, IntLiteral(64))",
+    );
+}
+
+#[test]
+fn parses_collection_with_generic_element_and_capacity() {
+    // New pre-element syntax: {16 Box of String}
+    let mut string_table = StringTable::new();
+    let box_name = string_table.intern("Box");
+    let mut stream = stream_from_tokens(
+        vec![
+            token(TokenKind::OpenCurly),
+            token(TokenKind::IntLiteral(16)),
+            token(TokenKind::Symbol(box_name)),
+            token(TokenKind::Of),
+            token(TokenKind::DatatypeString),
+            token(TokenKind::CloseCurly),
+            token(TokenKind::Eof),
+        ],
+        &mut string_table,
+    );
+
+    let parsed = parse_type_annotation(
+        &mut stream,
+        TypeAnnotationContext::DeclarationTarget,
+        &string_table,
+    )
+    .expect("collection with generic element and capacity should parse");
+
+    assert!(
+        matches!(&parsed, ParsedTypeRef::Collection { fixed_capacity: Some(capacity), .. }
+            if capacity.tokens.len() == 1 && capacity.tokens[0].kind == TokenKind::IntLiteral(16)
+        )
+    );
+    assert!(matches!(&parsed, ParsedTypeRef::Collection { element, .. }
+        if matches!(**element, ParsedTypeRef::Applied { .. })
+    ));
+}
+
+#[test]
+fn parses_collection_capacity_expression_before_optional_element() {
+    let mut string_table = StringTable::new();
+    let capacity_name = string_table.intern("capacity");
+    let mut stream = stream_from_tokens(
+        vec![
+            token(TokenKind::OpenCurly),
+            token(TokenKind::Symbol(capacity_name)),
+            token(TokenKind::Add),
+            token(TokenKind::IntLiteral(16)),
+            token(TokenKind::DatatypeInt),
+            token(TokenKind::QuestionMark),
+            token(TokenKind::CloseCurly),
+            token(TokenKind::Eof),
+        ],
+        &mut string_table,
+    );
+
+    let parsed = parse_type_annotation(
+        &mut stream,
+        TypeAnnotationContext::DeclarationTarget,
+        &string_table,
+    )
+    .expect("collection with capacity expression and optional element should parse");
+
+    assert!(
+        matches!(&parsed, ParsedTypeRef::Collection { fixed_capacity: Some(capacity), .. }
+            if capacity.tokens.len() == 3
+                && capacity.tokens[0].kind == TokenKind::Symbol(capacity_name)
+                && capacity.tokens[1].kind == TokenKind::Add
+                && capacity.tokens[2].kind == TokenKind::IntLiteral(16)
+        )
+    );
+    assert!(matches!(&parsed, ParsedTypeRef::Collection { element, .. }
+        if matches!(**element, ParsedTypeRef::Optional { .. })
+    ));
+}
+
+#[test]
+fn parses_nested_fixed_collection_capacity_expressions() {
+    let mut string_table = StringTable::new();
+    let rows_name = string_table.intern("rows");
+    let cols_name = string_table.intern("cols");
+    let mut stream = stream_from_tokens(
+        vec![
+            token(TokenKind::OpenCurly),
+            token(TokenKind::Symbol(rows_name)),
+            token(TokenKind::OpenCurly),
+            token(TokenKind::Symbol(cols_name)),
+            token(TokenKind::DatatypeInt),
+            token(TokenKind::CloseCurly),
+            token(TokenKind::CloseCurly),
+            token(TokenKind::Eof),
+        ],
+        &mut string_table,
+    );
+
+    let parsed = parse_type_annotation(
+        &mut stream,
+        TypeAnnotationContext::DeclarationTarget,
+        &string_table,
+    )
+    .expect("nested fixed collection should parse");
+
+    let ParsedTypeRef::Collection {
+        fixed_capacity: Some(rows_capacity),
+        element,
+        ..
+    } = parsed
+    else {
+        panic!("expected outer fixed collection");
+    };
+    assert_eq!(rows_capacity.tokens.len(), 1);
+    assert_eq!(rows_capacity.tokens[0].kind, TokenKind::Symbol(rows_name));
+
+    let ParsedTypeRef::Collection {
+        fixed_capacity: Some(cols_capacity),
+        element: inner_element,
+        ..
+    } = *element
+    else {
+        panic!("expected inner fixed collection element");
+    };
+    assert_eq!(cols_capacity.tokens.len(), 1);
+    assert_eq!(cols_capacity.tokens[0].kind, TokenKind::Symbol(cols_name));
+    assert_eq!(
+        *inner_element,
+        ParsedTypeRef::BuiltinInt {
+            location: SourceLocation::default()
+        }
+    );
+}
+
+#[test]
+fn parses_namespaced_type_using_member_name_case() {
+    let mut string_table = StringTable::new();
+    let namespace_name = string_table.intern("canvas");
+    let type_name = string_table.intern("Canvas2d");
+    let mut stream = stream_from_tokens(
+        vec![
+            token(TokenKind::OpenCurly),
+            token(TokenKind::Symbol(namespace_name)),
+            token(TokenKind::Dot),
+            token(TokenKind::Symbol(type_name)),
+            token(TokenKind::CloseCurly),
+            token(TokenKind::Eof),
+        ],
+        &mut string_table,
+    );
+
+    let parsed = parse_type_annotation(
+        &mut stream,
+        TypeAnnotationContext::DeclarationTarget,
+        &string_table,
+    )
+    .expect("namespaced collection element should parse");
+
+    assert!(matches!(parsed, ParsedTypeRef::Collection {
+        fixed_capacity: None,
+        element,
+        ..
+    } if matches!(*element, ParsedTypeRef::Namespaced { namespace, name, .. }
+        if namespace == namespace_name && name == type_name
+    )));
+}
+
+#[test]
+fn rejects_capacity_only_shorthand_in_signature_context() {
+    // Capacity-only shorthand {64} is not allowed in signature/alias/field/return contexts.
+    let mut string_table = StringTable::new();
+    let mut stream = stream_from_tokens(
+        vec![
+            token(TokenKind::OpenCurly),
+            token(TokenKind::IntLiteral(64)),
+            token(TokenKind::CloseCurly),
+            token(TokenKind::Eof),
+        ],
+        &mut string_table,
+    );
+
+    let error = parse_type_annotation(
+        &mut stream,
+        TypeAnnotationContext::SignatureParameter,
+        &string_table,
+    )
+    .expect_err("capacity-only shorthand should be rejected in signature context");
 
     assert_diagnostic_payload(
         error,
@@ -1025,12 +1245,78 @@ fn rejects_negative_collection_capacity() {
             matches!(
                 payload,
                 DiagnosticPayload::InvalidCollectionType {
-                    reason: InvalidCollectionTypeReason::NegativeCapacity,
+                    reason: InvalidCollectionTypeReason::ShorthandCapacityNotAllowed,
                 }
             )
         },
-        "InvalidCollectionType(NegativeCapacity)",
+        "InvalidCollectionType(ShorthandCapacityNotAllowed)",
     );
+}
+
+#[test]
+fn rejects_lower_snake_capacity_only_shorthand_in_signature_context() {
+    let mut string_table = StringTable::new();
+    let capacity_name = string_table.intern("capacity");
+    let mut stream = stream_from_tokens(
+        vec![
+            token(TokenKind::OpenCurly),
+            token(TokenKind::Symbol(capacity_name)),
+            token(TokenKind::CloseCurly),
+            token(TokenKind::Eof),
+        ],
+        &mut string_table,
+    );
+
+    let error = parse_type_annotation(
+        &mut stream,
+        TypeAnnotationContext::SignatureParameter,
+        &string_table,
+    )
+    .expect_err("lower-snake capacity-only shorthand should be rejected in signatures");
+
+    assert_diagnostic_payload(
+        error,
+        |payload| {
+            matches!(
+                payload,
+                DiagnosticPayload::InvalidCollectionType {
+                    reason: InvalidCollectionTypeReason::ShorthandCapacityNotAllowed,
+                }
+            )
+        },
+        "InvalidCollectionType(ShorthandCapacityNotAllowed)",
+    );
+}
+
+#[test]
+fn parses_capacity_only_shorthand_in_declaration_target() {
+    // Capacity-only shorthand {64} in declaration target — element type is inferred.
+    let mut string_table = StringTable::new();
+    let mut stream = stream_from_tokens(
+        vec![
+            token(TokenKind::OpenCurly),
+            token(TokenKind::IntLiteral(64)),
+            token(TokenKind::CloseCurly),
+            token(TokenKind::Eof),
+        ],
+        &mut string_table,
+    );
+
+    let parsed = parse_type_annotation(
+        &mut stream,
+        TypeAnnotationContext::DeclarationTarget,
+        &string_table,
+    )
+    .expect("capacity-only shorthand should parse in declaration target");
+
+    assert!(
+        matches!(&parsed, ParsedTypeRef::Collection { fixed_capacity: Some(capacity), .. }
+            if capacity.tokens.len() == 1 && capacity.tokens[0].kind == TokenKind::IntLiteral(64)
+        )
+    );
+    assert!(matches!(&parsed, ParsedTypeRef::Collection { element, .. }
+        if **element == ParsedTypeRef::Inferred
+    ));
 }
 
 #[test]
@@ -1045,9 +1331,12 @@ fn rejects_collection_type_missing_close_curly_with_expected_token() {
         &mut string_table,
     );
 
-    let error =
-        parse_type_annotation_with_capacity(&mut stream, TypeAnnotationContext::DeclarationTarget)
-            .expect_err("missing collection close delimiter should fail");
+    let error = parse_type_annotation(
+        &mut stream,
+        TypeAnnotationContext::DeclarationTarget,
+        &string_table,
+    )
+    .expect_err("missing collection close delimiter should fail");
 
     assert_diagnostic_payload(
         error,
@@ -1062,11 +1351,4 @@ fn rejects_collection_type_missing_close_curly_with_expected_token() {
         },
         "ExpectedToken(CloseCurly)",
     );
-}
-
-#[test]
-fn collection_type_identity_ignores_capacity() {
-    let with_capacity = DataType::collection(DataType::Int);
-    let without_capacity = DataType::collection(DataType::Int);
-    assert_eq!(with_capacity, without_capacity);
 }

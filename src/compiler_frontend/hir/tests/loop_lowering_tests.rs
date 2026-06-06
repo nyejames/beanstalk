@@ -633,7 +633,7 @@ fn lowers_collection_loop_with_reference_typed_iterable_expression() {
     let items_symbol = super::symbol("items", &mut string_table);
 
     let mut temp_env = TypeEnvironment::new();
-    let collection_type_id = temp_env.intern_collection(builtin_type_ids::INT);
+    let collection_type_id = temp_env.intern_collection(builtin_type_ids::INT, None);
 
     let items_decl = node(
         NodeKind::VariableDeclaration(Declaration {

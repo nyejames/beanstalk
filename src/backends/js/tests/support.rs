@@ -39,6 +39,7 @@ pub(super) struct TypeIds {
     pub(super) string: TypeId,
     pub(super) option_int: TypeId,
     pub(super) choice_unit: TypeId,
+    pub(super) collection_int: TypeId,
 }
 
 pub(super) fn loc(start: i32) -> SourceLocation {
@@ -77,6 +78,8 @@ pub(super) fn build_type_environment() -> (TypeEnvironment, TypeIds) {
     };
     let (_, choice_unit) = env.register_nominal_choice(choice_def);
 
+    let collection_int = env.intern_collection(int, None);
+
     (
         env,
         TypeIds {
@@ -86,6 +89,7 @@ pub(super) fn build_type_environment() -> (TypeEnvironment, TypeIds) {
             string,
             option_int,
             choice_unit,
+            collection_int,
         },
     )
 }

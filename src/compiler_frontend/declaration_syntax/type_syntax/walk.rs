@@ -5,6 +5,7 @@
 //! type-resolution policy.
 
 use super::*;
+use crate::compiler_frontend::token_scan::{InitializerReference, collect_symbol_references};
 
 /// Visit every named type reference inside a `ParsedTypeRef`.
 pub(crate) fn for_each_named_type_in_parsed_ref(
@@ -28,6 +29,46 @@ pub(crate) fn for_each_named_type_in_parsed_ref(
         ParsedTypeRef::Result { ok, err, .. } => {
             for_each_named_type_in_parsed_ref(ok, visitor);
             for_each_named_type_in_parsed_ref(err, visitor);
+        }
+        _ => {}
+    }
+}
+
+/// Collect every capacity-expression symbol reference inside a `ParsedTypeRef`.
+///
+/// WHAT: walks the parsed type recursively and extracts `InitializerReference` hints from
+/// every `ParsedCollectionCapacity` token slice.
+/// WHY: header dependency sorting needs value-namespace ordering edges for constants used in
+/// fixed-collection capacity expressions.
+pub(crate) fn collect_capacity_references_in_parsed_ref(
+    parsed: &ParsedTypeRef,
+    references: &mut Vec<InitializerReference>,
+) {
+    match parsed {
+        ParsedTypeRef::Applied {
+            base, arguments, ..
+        } => {
+            collect_capacity_references_in_parsed_ref(base, references);
+            for argument in arguments {
+                collect_capacity_references_in_parsed_ref(argument, references);
+            }
+        }
+        ParsedTypeRef::Collection {
+            element,
+            fixed_capacity,
+            ..
+        } => {
+            if let Some(capacity) = fixed_capacity {
+                references.extend(collect_symbol_references(&capacity.tokens));
+            }
+            collect_capacity_references_in_parsed_ref(element, references);
+        }
+        ParsedTypeRef::Optional { inner, .. } => {
+            collect_capacity_references_in_parsed_ref(inner, references);
+        }
+        ParsedTypeRef::Result { ok, err, .. } => {
+            collect_capacity_references_in_parsed_ref(ok, references);
+            collect_capacity_references_in_parsed_ref(err, references);
         }
         _ => {}
     }

@@ -130,7 +130,9 @@ fn diagnostic_render_context_renders_constructed_type_names() {
     let builtins = *type_environment.builtins();
 
     let collection = type_environment.intern_constructed(
-        TypeConstructor::Builtin(BuiltinTypeConstructor::Collection),
+        TypeConstructor::Builtin(BuiltinTypeConstructor::Collection {
+            fixed_capacity: None,
+        }),
         Box::new([builtins.int]),
     );
     let option = type_environment.intern_constructed(

@@ -6,12 +6,15 @@
 
 use crate::compiler_frontend::builtins::error_type::is_reserved_builtin_symbol;
 use crate::compiler_frontend::declaration_syntax::declaration_shell::DeclarationSyntax;
-use crate::compiler_frontend::declaration_syntax::type_syntax::for_each_named_type_in_parsed_ref;
+use crate::compiler_frontend::declaration_syntax::type_syntax::{
+    collect_capacity_references_in_parsed_ref, for_each_named_type_in_parsed_ref,
+};
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::parse_file_headers::FileImport;
 use crate::compiler_frontend::headers::types::HeaderBuildContext;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::token_scan::InitializerReference;
 use std::collections::HashSet;
 
 /// Collect header-provided dependency edges from a constant's declared type annotation.
@@ -23,6 +26,7 @@ pub(super) fn collect_constant_type_dependencies(
     declaration_syntax: &DeclarationSyntax,
     context: &HeaderBuildContext<'_>,
     dependencies: &mut HashSet<InternedPath>,
+    capacity_references: &mut Vec<InitializerReference>,
 ) {
     for_each_named_type_in_parsed_ref(&declaration_syntax.type_annotation, &mut |type_name| {
         collect_named_type_dependency_edge(
@@ -34,6 +38,10 @@ pub(super) fn collect_constant_type_dependencies(
             dependencies,
         );
     });
+    collect_capacity_references_in_parsed_ref(
+        &declaration_syntax.type_annotation,
+        capacity_references,
+    );
 }
 
 pub(super) fn collect_named_type_dependency_edge(

@@ -319,12 +319,14 @@ impl<'a> HirBuilder<'a> {
             NodeKind::CollectionBuiltinCall {
                 receiver,
                 op,
+                receiver_requires_mutable,
                 args,
                 result_type_ids,
                 location,
             } => self.lower_collection_builtin_call_expression(
                 *op,
                 receiver,
+                *receiver_requires_mutable,
                 args,
                 result_type_ids,
                 location,

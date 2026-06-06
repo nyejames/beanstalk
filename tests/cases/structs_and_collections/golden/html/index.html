@@ -295,8 +295,8 @@ body {
 
     function __bs_make_error(message, code, location, trace) {
         return {
-            message,
-            code,
+            bst_message_fld0: message,
+            bst_code_fld1: code,
             __bst_location: location ?? null,
             __bst_trace: trace ?? null
         };
@@ -306,13 +306,23 @@ body {
         return { tag: "err", value: __bs_make_error(message, code, null, null) };
     }
 
+    function __bs_error_message(error) {
+        const message = error && error["bst_message_fld0"] !== undefined ? error["bst_message_fld0"] : error && error.message;
+        return typeof message === "string" ? message : String(message ?? "Unknown error");
+    }
+
+    function __bs_error_code(error) {
+        const code = error && error["bst_code_fld1"] !== undefined ? error["bst_code_fld1"] : error && error.code;
+        return typeof code === "number" ? code : 0;
+    }
+
     function __bs_error_with_location(error, location) {
-        return __bs_make_error(error.message, error.code, location, error.__bst_trace);
+        return __bs_make_error(__bs_error_message(error), __bs_error_code(error), location, error.__bst_trace);
     }
 
     function __bs_error_push_trace(error, frame) {
         const nextTrace = error.__bst_trace ? error.__bst_trace.concat([frame]) : [frame];
-        return __bs_make_error(error.message, error.code, error.__bst_location, nextTrace);
+        return __bs_make_error(__bs_error_message(error), __bs_error_code(error), error.__bst_location, nextTrace);
     }
 
     function __bs_error_bubble(error, file, line, column, functionName) {
@@ -349,48 +359,104 @@ body {
         throw new Error("Expected internal Result carrier during fallback handling");
     }
 
+    function __bs_fixed_collection(items, fixedCapacity) {
+        return {
+            __bst_kind: "fixed_collection",
+            items: items,
+            fixedCapacity: fixedCapacity,
+        };
+    }
+
+    function __bs_collection_items(collection) {
+        if (Array.isArray(collection)) {
+            return collection;
+        }
+        return collection.items;
+    }
+
+    function __bs_collection_fixed_capacity(collection) {
+        if (Array.isArray(collection)) {
+            return null;
+        }
+        return collection.fixedCapacity;
+    }
+
+    function __bs_collection_is_valid(collection) {
+        if (Array.isArray(collection)) {
+            return true;
+        }
+        if (collection === null || typeof collection !== "object") {
+            return false;
+        }
+        if (collection.__bst_kind !== "fixed_collection") {
+            return false;
+        }
+        if (!Array.isArray(collection.items)) {
+            return false;
+        }
+        return (
+            Number.isInteger(collection.fixedCapacity)
+            && collection.fixedCapacity > 0
+            && collection.items.length <= collection.fixedCapacity
+        );
+    }
+
     function __bs_collection_index_is_valid(collection, index) {
-        return Number.isInteger(index) && index >= 0 && index < collection.length;
+        const items = __bs_collection_items(collection);
+        return Number.isInteger(index) && index >= 0 && index < items.length;
     }
 
     function __bs_collection_get(collection, index) {
-        if (!Array.isArray(collection)) {
+        if (!__bs_collection_is_valid(collection)) {
             return __bs_error_result("Collection operation expects an ordered collection", 100);
         }
         if (!__bs_collection_index_is_valid(collection, index)) {
             return __bs_error_result("Collection index out of bounds", 101);
         }
-        return { tag: "ok", value: collection[index] };
+        const items = __bs_collection_items(collection);
+        return { tag: "ok", value: items[index] };
     }
 
     function __bs_collection_set(collection, index, value) {
-        if (!Array.isArray(collection)) {
+        if (!__bs_collection_is_valid(collection)) {
             return __bs_error_result("Collection operation expects an ordered collection", 100);
         }
         if (!__bs_collection_index_is_valid(collection, index)) {
             return __bs_error_result("Collection index out of bounds", 101);
         }
-        collection[index] = value;
+        const items = __bs_collection_items(collection);
+        items[index] = value;
         return { tag: "ok", value: null };
     }
 
     function __bs_collection_push(collection, value) {
-        collection.push(value);
+        if (!__bs_collection_is_valid(collection)) {
+            return __bs_error_result("Collection operation expects an ordered collection", 100);
+        }
+        const items = __bs_collection_items(collection);
+        const fixedCapacity = __bs_collection_fixed_capacity(collection);
+        if (fixedCapacity !== null && items.length >= fixedCapacity) {
+            return __bs_error_result("Fixed collection capacity exceeded", 102);
+        }
+        items.push(value);
+        return { tag: "ok", value: null };
     }
 
     function __bs_collection_remove(collection, index) {
-        if (!Array.isArray(collection)) {
+        if (!__bs_collection_is_valid(collection)) {
             return __bs_error_result("Collection operation expects an ordered collection", 100);
         }
         if (!__bs_collection_index_is_valid(collection, index)) {
             return __bs_error_result("Collection index out of bounds", 101);
         }
-        const removed = collection.splice(index, 1)[0];
+        const items = __bs_collection_items(collection);
+        const removed = items.splice(index, 1)[0];
         return { tag: "ok", value: removed };
     }
 
     function __bs_collection_length(collection) {
-        return collection.length;
+        const items = __bs_collection_items(collection);
+        return items.length;
     }
 
     function __bs_value_to_string(value) {
@@ -459,123 +525,123 @@ body {
         return { tag: "err", value: __bs_make_error("Float(...) only accepts Int, Float, or string values", 210, null, null) };
     }
 
-    function bst_render_structs_and_collections_fn0() {
-        let bst_p1_l0 = __bs_binding(undefined);
-        let bst_person_l1 = __bs_binding(undefined);
-        let bst_p2_l2 = __bs_binding(undefined);
-        let bst_empty_l3 = __bs_binding(undefined);
-        let bst_numbers_l4 = __bs_binding(undefined);
-        let bst_names_l5 = __bs_binding(undefined);
-        let bst_matrix_l6 = __bs_binding(undefined);
-        let bst_empty_len_l7 = __bs_binding(undefined);
-        let bst___hir_tmp_0_l8 = __bs_binding(undefined);
-        let bst_numbers_len_l9 = __bs_binding(undefined);
-        let bst___hir_tmp_1_l10 = __bs_binding(undefined);
-        let bst_first_name_l11 = __bs_binding(undefined);
-        let bst___hir_tmp_2_l12 = __bs_binding(undefined);
+    function bst_render_structs_and_collections_fn1() {
+        let bst_p1_l3 = __bs_binding(undefined);
+        let bst_person_l4 = __bs_binding(undefined);
+        let bst_p2_l5 = __bs_binding(undefined);
+        let bst_empty_l6 = __bs_binding(undefined);
+        let bst_numbers_l7 = __bs_binding(undefined);
+        let bst_names_l8 = __bs_binding(undefined);
+        let bst_matrix_l9 = __bs_binding(undefined);
+        let bst_empty_len_l10 = __bs_binding(undefined);
+        let bst___hir_tmp_2_l11 = __bs_binding(undefined);
+        let bst_numbers_len_l12 = __bs_binding(undefined);
         let bst___hir_tmp_3_l13 = __bs_binding(undefined);
-        let bst___hir_tmp_4_l14 = __bs_binding(undefined);
-        let bst_matrix_rows_l15 = __bs_binding(undefined);
+        let bst_first_name_l14 = __bs_binding(undefined);
+        let bst___hir_tmp_4_l15 = __bs_binding(undefined);
         let bst___hir_tmp_5_l16 = __bs_binding(undefined);
         let bst___hir_tmp_6_l17 = __bs_binding(undefined);
-        let bst___hir_tmp_7_l18 = __bs_binding(undefined);
-        let bst___hir_tmp_8_l19 = __bs_binding(undefined);
-        let bst___hir_tmp_9_l20 = __bs_binding(undefined);
-        let bst___hir_tmp_10_l21 = __bs_binding(undefined);
-        let bst___hir_tmp_11_l22 = __bs_binding(undefined);
-        let bst___hir_tmp_12_l23 = __bs_binding(undefined);
-        let bst___hir_tmp_13_l24 = __bs_binding(undefined);
-        let bst___hir_tmp_14_l25 = __bs_binding(undefined);
-        let bst___hir_tmp_15_l26 = __bs_binding(undefined);
-        let bst___hir_tmp_16_l27 = __bs_binding(undefined);
+        let bst_matrix_rows_l18 = __bs_binding(undefined);
+        let bst___hir_tmp_7_l19 = __bs_binding(undefined);
+        let bst___hir_tmp_8_l20 = __bs_binding(undefined);
+        let bst___hir_tmp_9_l21 = __bs_binding(undefined);
+        let bst___hir_tmp_10_l22 = __bs_binding(undefined);
+        let bst___hir_tmp_11_l23 = __bs_binding(undefined);
+        let bst___hir_tmp_12_l24 = __bs_binding(undefined);
+        let bst___hir_tmp_13_l25 = __bs_binding(undefined);
+        let bst___hir_tmp_14_l26 = __bs_binding(undefined);
+        let bst___hir_tmp_15_l27 = __bs_binding(undefined);
+        let bst___hir_tmp_16_l28 = __bs_binding(undefined);
+        let bst___hir_tmp_17_l29 = __bs_binding(undefined);
+        let bst___hir_tmp_18_l30 = __bs_binding(undefined);
         
-        __bs_assign_value(bst_p1_l0, { bst_x_fld2: 10, bst_y_fld3: 20 });
-        __bs_assign_value(bst_person_l1, { bst_name_fld4: "Alice", bst_age_fld5: 30 });
-        __bs_assign_value(bst_p2_l2, { bst_x_fld2: 0, bst_y_fld3: 0 });
-        __bs_write(__bs_field(bst_p2_l2, "bst_x_fld2"), 5);
-        __bs_write(__bs_field(bst_p2_l2, "bst_y_fld3"), 10);
-        __bs_assign_value(bst_empty_l3, []);
-        __bs_assign_value(bst_numbers_l4, [1, 2, 3, 4, 5]);
-        __bs_assign_value(bst_names_l5, ["Alice", "Bob", "Charlie"]);
-        __bs_assign_value(bst_matrix_l6, [[1, 2], [3, 4]]);
-        __bs_assign_value(bst___hir_tmp_0_l8, __bs_collection_length(__bs_read(bst_empty_l3)));
-        __bs_assign_borrow(bst_empty_len_l7, bst___hir_tmp_0_l8);
-        __bs_assign_value(bst___hir_tmp_1_l10, __bs_collection_length(__bs_read(bst_numbers_l4)));
-        __bs_assign_borrow(bst_numbers_len_l9, bst___hir_tmp_1_l10);
-        __bs_assign_value(bst___hir_tmp_2_l12, __bs_collection_get(__bs_read(bst_names_l5), 0));
-        __bs_assign_borrow(bst___hir_tmp_3_l13, bst___hir_tmp_2_l12);
-        if (((__bs_read(bst___hir_tmp_3_l13)).tag === "ok")) {
-            __bs_assign_value(bst___hir_tmp_4_l14, ((__bs_read(bst___hir_tmp_3_l13)).value));
+        __bs_assign_value(bst_p1_l3, { bst_x_fld2: 10, bst_y_fld3: 20 });
+        __bs_assign_value(bst_person_l4, { bst_name_fld4: "Alice", bst_age_fld5: 30 });
+        __bs_assign_value(bst_p2_l5, { bst_x_fld2: 0, bst_y_fld3: 0 });
+        __bs_write(__bs_field(bst_p2_l5, "bst_x_fld2"), 5);
+        __bs_write(__bs_field(bst_p2_l5, "bst_y_fld3"), 10);
+        __bs_assign_value(bst_empty_l6, []);
+        __bs_assign_value(bst_numbers_l7, [1, 2, 3, 4, 5]);
+        __bs_assign_value(bst_names_l8, ["Alice", "Bob", "Charlie"]);
+        __bs_assign_value(bst_matrix_l9, [[1, 2], [3, 4]]);
+        __bs_assign_value(bst___hir_tmp_2_l11, __bs_collection_length(__bs_read(bst_empty_l6)));
+        __bs_assign_borrow(bst_empty_len_l10, bst___hir_tmp_2_l11);
+        __bs_assign_value(bst___hir_tmp_3_l13, __bs_collection_length(__bs_read(bst_numbers_l7)));
+        __bs_assign_borrow(bst_numbers_len_l12, bst___hir_tmp_3_l13);
+        __bs_assign_value(bst___hir_tmp_4_l15, __bs_collection_get(__bs_read(bst_names_l8), 0));
+        __bs_assign_borrow(bst___hir_tmp_5_l16, bst___hir_tmp_4_l15);
+        if (((__bs_read(bst___hir_tmp_5_l16)).tag === "ok")) {
+            __bs_assign_value(bst___hir_tmp_6_l17, ((__bs_read(bst___hir_tmp_5_l16)).value));
         } else {
-            __bs_assign_value(bst___hir_tmp_4_l14, "none");
+            __bs_assign_value(bst___hir_tmp_6_l17, "none");
         }
-        __bs_assign_borrow(bst_first_name_l11, bst___hir_tmp_4_l14);
-        __bs_assign_value(bst___hir_tmp_5_l16, __bs_collection_length(__bs_read(bst_matrix_l6)));
-        __bs_assign_borrow(bst_matrix_rows_l15, bst___hir_tmp_5_l16);
-        __bs_assign_value(bst___hir_tmp_6_l17, "");
-        __bs_assign_value(bst___hir_tmp_6_l17, (__bs_read(bst___hir_tmp_6_l17) + "structs_and_collections p1="));
-        __bs_assign_value(bst___hir_tmp_7_l18, "");
-        __bs_assign_value(bst___hir_tmp_7_l18, (__bs_read(bst___hir_tmp_7_l18) + ("" + __bs_read(__bs_field(bst_p1_l0, "bst_x_fld2")))));
-        __bs_assign_value(bst___hir_tmp_6_l17, (__bs_read(bst___hir_tmp_6_l17) + __bs_clone_value(__bs_read(bst___hir_tmp_7_l18))));
-        __bs_assign_value(bst___hir_tmp_6_l17, (__bs_read(bst___hir_tmp_6_l17) + "-"));
-        __bs_assign_value(bst___hir_tmp_8_l19, "");
-        __bs_assign_value(bst___hir_tmp_8_l19, (__bs_read(bst___hir_tmp_8_l19) + ("" + __bs_read(__bs_field(bst_p1_l0, "bst_y_fld3")))));
-        __bs_assign_value(bst___hir_tmp_6_l17, (__bs_read(bst___hir_tmp_6_l17) + __bs_clone_value(__bs_read(bst___hir_tmp_8_l19))));
-        __bs_assign_value(bst___hir_tmp_6_l17, (__bs_read(bst___hir_tmp_6_l17) + " person="));
-        __bs_assign_value(bst___hir_tmp_9_l20, "");
-        __bs_assign_value(bst___hir_tmp_9_l20, (__bs_read(bst___hir_tmp_9_l20) + __bs_read(__bs_field(bst_person_l1, "bst_name_fld4"))));
-        __bs_assign_value(bst___hir_tmp_6_l17, (__bs_read(bst___hir_tmp_6_l17) + __bs_clone_value(__bs_read(bst___hir_tmp_9_l20))));
-        __bs_assign_value(bst___hir_tmp_6_l17, (__bs_read(bst___hir_tmp_6_l17) + "-"));
-        __bs_assign_value(bst___hir_tmp_10_l21, "");
-        __bs_assign_value(bst___hir_tmp_10_l21, (__bs_read(bst___hir_tmp_10_l21) + ("" + __bs_read(__bs_field(bst_person_l1, "bst_age_fld5")))));
-        __bs_assign_value(bst___hir_tmp_6_l17, (__bs_read(bst___hir_tmp_6_l17) + __bs_clone_value(__bs_read(bst___hir_tmp_10_l21))));
-        __bs_assign_value(bst___hir_tmp_6_l17, (__bs_read(bst___hir_tmp_6_l17) + " p2="));
-        __bs_assign_value(bst___hir_tmp_11_l22, "");
-        __bs_assign_value(bst___hir_tmp_11_l22, (__bs_read(bst___hir_tmp_11_l22) + ("" + __bs_read(__bs_field(bst_p2_l2, "bst_x_fld2")))));
-        __bs_assign_value(bst___hir_tmp_6_l17, (__bs_read(bst___hir_tmp_6_l17) + __bs_clone_value(__bs_read(bst___hir_tmp_11_l22))));
-        __bs_assign_value(bst___hir_tmp_6_l17, (__bs_read(bst___hir_tmp_6_l17) + "-"));
-        __bs_assign_value(bst___hir_tmp_12_l23, "");
-        __bs_assign_value(bst___hir_tmp_12_l23, (__bs_read(bst___hir_tmp_12_l23) + ("" + __bs_read(__bs_field(bst_p2_l2, "bst_y_fld3")))));
-        __bs_assign_value(bst___hir_tmp_6_l17, (__bs_read(bst___hir_tmp_6_l17) + __bs_clone_value(__bs_read(bst___hir_tmp_12_l23))));
-        __bs_assign_value(bst___hir_tmp_6_l17, (__bs_read(bst___hir_tmp_6_l17) + " lens="));
-        __bs_assign_value(bst___hir_tmp_13_l24, "");
-        __bs_assign_value(bst___hir_tmp_13_l24, (__bs_read(bst___hir_tmp_13_l24) + ("" + __bs_read(bst_empty_len_l7))));
-        __bs_assign_value(bst___hir_tmp_6_l17, (__bs_read(bst___hir_tmp_6_l17) + __bs_clone_value(__bs_read(bst___hir_tmp_13_l24))));
-        __bs_assign_value(bst___hir_tmp_6_l17, (__bs_read(bst___hir_tmp_6_l17) + "-"));
-        __bs_assign_value(bst___hir_tmp_14_l25, "");
-        __bs_assign_value(bst___hir_tmp_14_l25, (__bs_read(bst___hir_tmp_14_l25) + ("" + __bs_read(bst_numbers_len_l9))));
-        __bs_assign_value(bst___hir_tmp_6_l17, (__bs_read(bst___hir_tmp_6_l17) + __bs_clone_value(__bs_read(bst___hir_tmp_14_l25))));
-        __bs_assign_value(bst___hir_tmp_6_l17, (__bs_read(bst___hir_tmp_6_l17) + "-"));
-        __bs_assign_value(bst___hir_tmp_15_l26, "");
-        __bs_assign_value(bst___hir_tmp_15_l26, (__bs_read(bst___hir_tmp_15_l26) + ("" + __bs_read(bst_matrix_rows_l15))));
-        __bs_assign_value(bst___hir_tmp_6_l17, (__bs_read(bst___hir_tmp_6_l17) + __bs_clone_value(__bs_read(bst___hir_tmp_15_l26))));
-        __bs_assign_value(bst___hir_tmp_6_l17, (__bs_read(bst___hir_tmp_6_l17) + " first_name="));
-        __bs_assign_value(bst___hir_tmp_16_l27, "");
-        __bs_assign_value(bst___hir_tmp_16_l27, (__bs_read(bst___hir_tmp_16_l27) + __bs_read(bst_first_name_l11)));
-        __bs_assign_value(bst___hir_tmp_6_l17, (__bs_read(bst___hir_tmp_6_l17) + __bs_clone_value(__bs_read(bst___hir_tmp_16_l27))));
-        return __bs_clone_value(__bs_read(bst___hir_tmp_6_l17));
+        __bs_assign_borrow(bst_first_name_l14, bst___hir_tmp_6_l17);
+        __bs_assign_value(bst___hir_tmp_7_l19, __bs_collection_length(__bs_read(bst_matrix_l9)));
+        __bs_assign_borrow(bst_matrix_rows_l18, bst___hir_tmp_7_l19);
+        __bs_assign_value(bst___hir_tmp_8_l20, "");
+        __bs_assign_value(bst___hir_tmp_8_l20, (__bs_read(bst___hir_tmp_8_l20) + "structs_and_collections p1="));
+        __bs_assign_value(bst___hir_tmp_9_l21, "");
+        __bs_assign_value(bst___hir_tmp_9_l21, (__bs_read(bst___hir_tmp_9_l21) + ("" + __bs_read(__bs_field(bst_p1_l3, "bst_x_fld2")))));
+        __bs_assign_value(bst___hir_tmp_8_l20, (__bs_read(bst___hir_tmp_8_l20) + __bs_clone_value(__bs_read(bst___hir_tmp_9_l21))));
+        __bs_assign_value(bst___hir_tmp_8_l20, (__bs_read(bst___hir_tmp_8_l20) + "-"));
+        __bs_assign_value(bst___hir_tmp_10_l22, "");
+        __bs_assign_value(bst___hir_tmp_10_l22, (__bs_read(bst___hir_tmp_10_l22) + ("" + __bs_read(__bs_field(bst_p1_l3, "bst_y_fld3")))));
+        __bs_assign_value(bst___hir_tmp_8_l20, (__bs_read(bst___hir_tmp_8_l20) + __bs_clone_value(__bs_read(bst___hir_tmp_10_l22))));
+        __bs_assign_value(bst___hir_tmp_8_l20, (__bs_read(bst___hir_tmp_8_l20) + " person="));
+        __bs_assign_value(bst___hir_tmp_11_l23, "");
+        __bs_assign_value(bst___hir_tmp_11_l23, (__bs_read(bst___hir_tmp_11_l23) + __bs_read(__bs_field(bst_person_l4, "bst_name_fld4"))));
+        __bs_assign_value(bst___hir_tmp_8_l20, (__bs_read(bst___hir_tmp_8_l20) + __bs_clone_value(__bs_read(bst___hir_tmp_11_l23))));
+        __bs_assign_value(bst___hir_tmp_8_l20, (__bs_read(bst___hir_tmp_8_l20) + "-"));
+        __bs_assign_value(bst___hir_tmp_12_l24, "");
+        __bs_assign_value(bst___hir_tmp_12_l24, (__bs_read(bst___hir_tmp_12_l24) + ("" + __bs_read(__bs_field(bst_person_l4, "bst_age_fld5")))));
+        __bs_assign_value(bst___hir_tmp_8_l20, (__bs_read(bst___hir_tmp_8_l20) + __bs_clone_value(__bs_read(bst___hir_tmp_12_l24))));
+        __bs_assign_value(bst___hir_tmp_8_l20, (__bs_read(bst___hir_tmp_8_l20) + " p2="));
+        __bs_assign_value(bst___hir_tmp_13_l25, "");
+        __bs_assign_value(bst___hir_tmp_13_l25, (__bs_read(bst___hir_tmp_13_l25) + ("" + __bs_read(__bs_field(bst_p2_l5, "bst_x_fld2")))));
+        __bs_assign_value(bst___hir_tmp_8_l20, (__bs_read(bst___hir_tmp_8_l20) + __bs_clone_value(__bs_read(bst___hir_tmp_13_l25))));
+        __bs_assign_value(bst___hir_tmp_8_l20, (__bs_read(bst___hir_tmp_8_l20) + "-"));
+        __bs_assign_value(bst___hir_tmp_14_l26, "");
+        __bs_assign_value(bst___hir_tmp_14_l26, (__bs_read(bst___hir_tmp_14_l26) + ("" + __bs_read(__bs_field(bst_p2_l5, "bst_y_fld3")))));
+        __bs_assign_value(bst___hir_tmp_8_l20, (__bs_read(bst___hir_tmp_8_l20) + __bs_clone_value(__bs_read(bst___hir_tmp_14_l26))));
+        __bs_assign_value(bst___hir_tmp_8_l20, (__bs_read(bst___hir_tmp_8_l20) + " lens="));
+        __bs_assign_value(bst___hir_tmp_15_l27, "");
+        __bs_assign_value(bst___hir_tmp_15_l27, (__bs_read(bst___hir_tmp_15_l27) + ("" + __bs_read(bst_empty_len_l10))));
+        __bs_assign_value(bst___hir_tmp_8_l20, (__bs_read(bst___hir_tmp_8_l20) + __bs_clone_value(__bs_read(bst___hir_tmp_15_l27))));
+        __bs_assign_value(bst___hir_tmp_8_l20, (__bs_read(bst___hir_tmp_8_l20) + "-"));
+        __bs_assign_value(bst___hir_tmp_16_l28, "");
+        __bs_assign_value(bst___hir_tmp_16_l28, (__bs_read(bst___hir_tmp_16_l28) + ("" + __bs_read(bst_numbers_len_l12))));
+        __bs_assign_value(bst___hir_tmp_8_l20, (__bs_read(bst___hir_tmp_8_l20) + __bs_clone_value(__bs_read(bst___hir_tmp_16_l28))));
+        __bs_assign_value(bst___hir_tmp_8_l20, (__bs_read(bst___hir_tmp_8_l20) + "-"));
+        __bs_assign_value(bst___hir_tmp_17_l29, "");
+        __bs_assign_value(bst___hir_tmp_17_l29, (__bs_read(bst___hir_tmp_17_l29) + ("" + __bs_read(bst_matrix_rows_l18))));
+        __bs_assign_value(bst___hir_tmp_8_l20, (__bs_read(bst___hir_tmp_8_l20) + __bs_clone_value(__bs_read(bst___hir_tmp_17_l29))));
+        __bs_assign_value(bst___hir_tmp_8_l20, (__bs_read(bst___hir_tmp_8_l20) + " first_name="));
+        __bs_assign_value(bst___hir_tmp_18_l30, "");
+        __bs_assign_value(bst___hir_tmp_18_l30, (__bs_read(bst___hir_tmp_18_l30) + __bs_read(bst_first_name_l14)));
+        __bs_assign_value(bst___hir_tmp_8_l20, (__bs_read(bst___hir_tmp_8_l20) + __bs_clone_value(__bs_read(bst___hir_tmp_18_l30))));
+        return __bs_clone_value(__bs_read(bst___hir_tmp_8_l20));
     }
 
-    function bst_start_fn1() {
-        let bst___hir_tmp_17_l28 = __bs_binding(undefined);
-        let bst___hir_tmp_18_l29 = __bs_binding(undefined);
-        let bst___hir_tmp_19_l30 = __bs_binding(undefined);
-        let bst___hir_tmp_20_l31 = __bs_binding(undefined);
+    function bst_start_fn2() {
+        let bst___hir_tmp_19_l31 = __bs_binding(undefined);
+        let bst___hir_tmp_20_l32 = __bs_binding(undefined);
+        let bst___hir_tmp_21_l33 = __bs_binding(undefined);
+        let bst___hir_tmp_22_l34 = __bs_binding(undefined);
         
-        __bs_assign_value(bst___hir_tmp_17_l28, []);
-        __bs_assign_value(bst___hir_tmp_18_l29, "");
-        __bs_assign_value(bst___hir_tmp_19_l30, "");
-        __bs_assign_value(bst___hir_tmp_20_l31, bst_render_structs_and_collections_fn0());
-        __bs_assign_value(bst___hir_tmp_19_l30, (__bs_read(bst___hir_tmp_19_l30) + __bs_read(bst___hir_tmp_20_l31)));
-        __bs_assign_value(bst___hir_tmp_18_l29, (__bs_read(bst___hir_tmp_18_l29) + __bs_clone_value(__bs_read(bst___hir_tmp_19_l30))));
-        __bs_read(bst___hir_tmp_17_l28).push(__bs_clone_value(__bs_read(bst___hir_tmp_18_l29)));
-        return __bs_read(bst___hir_tmp_17_l28);
+        __bs_assign_value(bst___hir_tmp_19_l31, []);
+        __bs_assign_value(bst___hir_tmp_20_l32, "");
+        __bs_assign_value(bst___hir_tmp_21_l33, "");
+        __bs_assign_value(bst___hir_tmp_22_l34, bst_render_structs_and_collections_fn1());
+        __bs_assign_value(bst___hir_tmp_21_l33, (__bs_read(bst___hir_tmp_21_l33) + __bs_read(bst___hir_tmp_22_l34)));
+        __bs_assign_value(bst___hir_tmp_20_l32, (__bs_read(bst___hir_tmp_20_l32) + __bs_clone_value(__bs_read(bst___hir_tmp_21_l33))));
+        __bs_read(bst___hir_tmp_19_l31).push(__bs_clone_value(__bs_read(bst___hir_tmp_20_l32)));
+        return __bs_read(bst___hir_tmp_19_l31);
     }
 
     </script>
     <script>
     (function () {
-      var bst_frags = bst_start_fn1();
+      var bst_frags = bst_start_fn2();
       var bst_slots = [
         "bst-slot-0",
       ];

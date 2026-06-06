@@ -294,23 +294,26 @@ body {
         return file;
     }
 
-    function __bs_make_error(kind, code, message, location, trace) {
+    function __bs_make_error(message, code, location, trace) {
         return {
-            kind,
-            code,
             message,
-            location: location ?? null,
-            trace: trace ?? null
+            code,
+            __bst_location: location ?? null,
+            __bst_trace: trace ?? null
         };
     }
 
+    function __bs_error_result(message, code) {
+        return { tag: "err", value: __bs_make_error(message, code, null, null) };
+    }
+
     function __bs_error_with_location(error, location) {
-        return __bs_make_error(error.kind, error.code, error.message, location, error.trace);
+        return __bs_make_error(error.message, error.code, location, error.__bst_trace);
     }
 
     function __bs_error_push_trace(error, frame) {
-        const nextTrace = error.trace ? error.trace.concat([frame]) : [frame];
-        return __bs_make_error(error.kind, error.code, error.message, error.location, nextTrace);
+        const nextTrace = error.__bst_trace ? error.__bst_trace.concat([frame]) : [frame];
+        return __bs_make_error(error.message, error.code, error.__bst_location, nextTrace);
     }
 
     function __bs_error_bubble(error, file, line, column, functionName) {
@@ -322,7 +325,7 @@ body {
             function: safeFunction === "<unknown>" ? null : safeFunction
         };
         const frame = { function: safeFunction, location };
-        const nextLocation = error.location ?? location;
+        const nextLocation = error.__bst_location ?? location;
         const located = __bs_error_with_location(error, nextLocation);
         return __bs_error_push_trace(located, frame);
     }
@@ -347,46 +350,49 @@ body {
         throw new Error("Expected internal Result carrier during fallback handling");
     }
 
+    function __bs_collection_index_is_valid(collection, index) {
+        return Number.isInteger(index) && index >= 0 && index < collection.length;
+    }
+
     function __bs_collection_get(collection, index) {
         if (!Array.isArray(collection)) {
-            const err = __bs_make_error("InvalidArgument", "collection.expected_ordered_collection", "Collection get(...) expects an ordered collection", null, null);
-            return { tag: "err", value: err };
+            return __bs_error_result("Collection operation expects an ordered collection", 100);
         }
-        if (!Number.isInteger(index) || index < 0 || index >= collection.length) {
-            const err = __bs_make_error("OutOfBounds", "collection.index_out_of_bounds", "Collection index out of bounds", null, null);
-            return { tag: "err", value: err };
+        if (!__bs_collection_index_is_valid(collection, index)) {
+            return __bs_error_result("Collection index out of bounds", 101);
         }
         return { tag: "ok", value: collection[index] };
     }
 
-    function __bs_collection_push(collection, value) {
+    function __bs_collection_set(collection, index, value) {
         if (!Array.isArray(collection)) {
-            const err = __bs_make_error("InvalidArgument", "collection.expected_ordered_collection", "Collection push(...) expects an ordered collection", null, null);
-            return { tag: "err", value: err };
+            return __bs_error_result("Collection operation expects an ordered collection", 100);
         }
+        if (!__bs_collection_index_is_valid(collection, index)) {
+            return __bs_error_result("Collection index out of bounds", 101);
+        }
+        collection[index] = value;
+        return { tag: "ok", value: null };
+    }
+
+    function __bs_collection_push(collection, value) {
         collection.push(value);
         return { tag: "ok", value: null };
     }
 
     function __bs_collection_remove(collection, index) {
         if (!Array.isArray(collection)) {
-            const err = __bs_make_error("InvalidArgument", "collection.expected_ordered_collection", "Collection remove(...) expects an ordered collection", null, null);
-            return { tag: "err", value: err };
+            return __bs_error_result("Collection operation expects an ordered collection", 100);
         }
-        if (!Number.isInteger(index) || index < 0 || index >= collection.length) {
-            const err = __bs_make_error("OutOfBounds", "collection.index_out_of_bounds", "Collection index out of bounds", null, null);
-            return { tag: "err", value: err };
+        if (!__bs_collection_index_is_valid(collection, index)) {
+            return __bs_error_result("Collection index out of bounds", 101);
         }
-        collection.splice(index, 1);
-        return { tag: "ok", value: null };
+        const removed = collection.splice(index, 1)[0];
+        return { tag: "ok", value: removed };
     }
 
     function __bs_collection_length(collection) {
-        if (!Array.isArray(collection)) {
-            const err = __bs_make_error("InvalidArgument", "collection.expected_ordered_collection", "Collection length() expects an ordered collection", null, null);
-            return { tag: "err", value: err };
-        }
-        return { tag: "ok", value: collection.length };
+        return collection.length;
     }
 
     function __bs_value_to_string(value) {
@@ -407,19 +413,19 @@ body {
     function __bs_cast_int(value) {
         if (typeof value === "number") {
             if (!Number.isFinite(value) || !Number.isSafeInteger(value)) {
-                return { tag: "err", value: __bs_make_error("Parse", "int.parse_out_of_range", "Int value is out of supported range", null, null) };
+                return { tag: "err", value: __bs_make_error("Int value is out of supported range", 201, null, null) };
             }
             if (Number.isInteger(value)) {
                 return { tag: "ok", value };
             }
-            return { tag: "err", value: __bs_make_error("Parse", "int.parse_invalid_format", "Float value is not an exact integer", null, null) };
+            return { tag: "err", value: __bs_make_error("Float value is not an exact integer", 200, null, null) };
         }
         if (typeof value === "string") {
             const normalized = __bs_normalize_numeric_text(value);
             if (/^[+-]?[0-9]+$/.test(normalized)) {
                 const parsed = Number.parseInt(normalized, 10);
                 if (!Number.isSafeInteger(parsed)) {
-                    return { tag: "err", value: __bs_make_error("Parse", "int.parse_out_of_range", "Int value is out of supported range", null, null) };
+                    return { tag: "err", value: __bs_make_error("Int value is out of supported range", 201, null, null) };
                 }
                 return { tag: "ok", value: parsed };
             }
@@ -429,15 +435,15 @@ body {
                     return { tag: "ok", value: parsed };
                 }
             }
-            return { tag: "err", value: __bs_make_error("Parse", "int.parse_invalid_format", "Cannot parse Int from text", null, null) };
+            return { tag: "err", value: __bs_make_error("Cannot parse Int from text", 200, null, null) };
         }
-        return { tag: "err", value: __bs_make_error("Parse", "int.parse_invalid_format", "Int(...) only accepts Int, Float, or string values", null, null) };
+        return { tag: "err", value: __bs_make_error("Int(...) only accepts Int, Float, or string values", 200, null, null) };
     }
 
     function __bs_cast_float(value) {
         if (typeof value === "number") {
             if (!Number.isFinite(value)) {
-                return { tag: "err", value: __bs_make_error("Parse", "float.parse_out_of_range", "Float value is out of supported range", null, null) };
+                return { tag: "err", value: __bs_make_error("Float value is out of supported range", 211, null, null) };
             }
             return { tag: "ok", value };
         }
@@ -446,27 +452,27 @@ body {
             if (/^[+-]?[0-9]+$/.test(normalized) || /^[+-]?[0-9]+\.[0-9]+$/.test(normalized)) {
                 const parsed = Number.parseFloat(normalized);
                 if (!Number.isFinite(parsed)) {
-                    return { tag: "err", value: __bs_make_error("Parse", "float.parse_out_of_range", "Float value is out of supported range", null, null) };
+                    return { tag: "err", value: __bs_make_error("Float value is out of supported range", 211, null, null) };
                 }
                 return { tag: "ok", value: parsed };
             }
-            return { tag: "err", value: __bs_make_error("Parse", "float.parse_invalid_format", "Cannot parse Float from text", null, null) };
+            return { tag: "err", value: __bs_make_error("Cannot parse Float from text", 210, null, null) };
         }
-        return { tag: "err", value: __bs_make_error("Parse", "float.parse_invalid_format", "Float(...) only accepts Int, Float, or string values", null, null) };
+        return { tag: "err", value: __bs_make_error("Float(...) only accepts Int, Float, or string values", 210, null, null) };
     }
 
-    function bst_start_fn0() {
-        let bst___hir_tmp_0_l0 = __bs_binding(undefined);
+    function bst_start_fn1() {
+        let bst___hir_tmp_2_l3 = __bs_binding(undefined);
         
-        __bs_assign_value(bst___hir_tmp_0_l0, []);
-        __bs_read(bst___hir_tmp_0_l0).push("<h1>Docs<\/h1><p>Hello from markdown. Soft line break continues here.<\/p>");
-        return __bs_read(bst___hir_tmp_0_l0);
+        __bs_assign_value(bst___hir_tmp_2_l3, []);
+        __bs_read(bst___hir_tmp_2_l3).push("<h1>Docs<\/h1><p>Hello from markdown. Soft line break continues here.<\/p>");
+        return __bs_read(bst___hir_tmp_2_l3);
     }
 
     </script>
     <script>
     (function () {
-      var bst_frags = bst_start_fn0();
+      var bst_frags = bst_start_fn1();
       var bst_slots = [
         "bst-slot-0",
       ];

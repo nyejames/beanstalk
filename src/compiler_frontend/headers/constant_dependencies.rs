@@ -8,7 +8,6 @@
 use crate::compiler_frontend::compiler_messages::{
     CompileTimeEvaluationErrorReason, CompilerDiagnostic, DiagnosticBag,
 };
-use crate::compiler_frontend::declaration_syntax::declaration_shell::InitializerReference;
 use crate::compiler_frontend::external_packages::ExternalSymbolId;
 use crate::compiler_frontend::headers::import_environment::{
     FileVisibility, HeaderImportEnvironment, NamespaceTypeMember, NamespaceValueMember,
@@ -17,6 +16,7 @@ use crate::compiler_frontend::headers::module_symbols::{GenericDeclarationKind, 
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::token_scan::InitializerReference;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 pub(crate) struct ConstantDependencyInput<'a> {
@@ -77,15 +77,15 @@ pub(crate) fn add_constant_initializer_dependencies(
     // Build indexes for fast constant and struct/choice lookups.
     let mut constant_paths: FxHashSet<InternedPath> = FxHashSet::default();
     let mut constants_by_name: FxHashMap<StringId, Vec<InternedPath>> = FxHashMap::default();
-    let mut constant_source_orders: FxHashMap<InternedPath, usize> = FxHashMap::default();
+    let mut constant_header_indices: FxHashMap<InternedPath, usize> = FxHashMap::default();
     let mut struct_or_choice_paths: FxHashSet<InternedPath> = FxHashSet::default();
 
-    for header in headers.iter() {
+    for (header_index, header) in headers.iter().enumerate() {
         match &header.kind {
-            HeaderKind::Constant { source_order, .. } => {
+            HeaderKind::Constant { .. } => {
                 let path = header.tokens.src_path.clone();
                 constant_paths.insert(path.clone());
-                constant_source_orders.insert(path.clone(), *source_order);
+                constant_header_indices.insert(path.clone(), header_index);
                 if let Some(name) = path.name() {
                     constants_by_name.entry(name).or_default().push(path);
                 }
@@ -104,21 +104,23 @@ pub(crate) fn add_constant_initializer_dependencies(
     let mut edges_to_add: Vec<(usize, InternedPath)> = Vec::new();
 
     for (header_index, header) in headers.iter().enumerate() {
-        let (references, source_order) = match &header.kind {
-            HeaderKind::Constant {
-                declaration,
-                source_order,
-            } => (&declaration.initializer_references, *source_order),
+        let (initializer_refs, reference_header_index) = match &header.kind {
+            HeaderKind::Constant { declaration, .. } => {
+                (&declaration.initializer_references[..], header_index)
+            }
 
             HeaderKind::ConstTemplate {
                 condition_references,
-                source_order,
-            } => (condition_references, *source_order),
+                ..
+            } => (&condition_references[..], header_index),
 
-            _ => {
-                continue;
-            }
+            _ => (&[][..], header_index),
         };
+        let has_initializer_refs = !initializer_refs.is_empty();
+        let has_capacity_refs = !header.capacity_references.is_empty();
+        if !has_initializer_refs && !has_capacity_refs {
+            continue;
+        }
 
         let visibility = match import_environment.visibility_for(&header.source_file) {
             Ok(v) => v,
@@ -132,7 +134,8 @@ pub(crate) fn add_constant_initializer_dependencies(
 
         let current_path = header.tokens.src_path.clone();
 
-        for reference in references {
+        let all_refs = initializer_refs.iter().chain(&header.capacity_references);
+        for reference in all_refs {
             let resolution = classify_reference(
                 reference,
                 visibility,
@@ -153,8 +156,9 @@ pub(crate) fn add_constant_initializer_dependencies(
                     // while header.source_file may be a logical/relative path.
                     let current_canonical_source = header.canonical_source_file(string_table);
                     if source_file == current_canonical_source {
-                        let target_order = constant_source_orders.get(&path).copied().unwrap_or(0);
-                        if target_order > source_order {
+                        let target_header_index =
+                            constant_header_indices.get(&path).copied().unwrap_or(0);
+                        if target_header_index > reference_header_index {
                             diagnostic_bag.push(same_file_forward_reference_error(
                                 &current_path,
                                 &path,

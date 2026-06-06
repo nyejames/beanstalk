@@ -1552,7 +1552,8 @@ fn const_required_template_loop_reports_non_const_collection_source() {
     );
     let mut context = new_constant_context(token_stream.src_path.clone());
     let mut type_environment = TypeEnvironment::new();
-    let collection_type_id = type_environment.intern_collection(type_environment.builtins().string);
+    let collection_type_id =
+        type_environment.intern_collection(type_environment.builtins().string, None);
     let mut compatibility_cache = TypeCompatibilityCache::new();
     let mut type_interner = AstTypeInterner::new(&mut type_environment, &mut compatibility_cache);
     let items = string_table.intern("items");

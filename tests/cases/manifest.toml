@@ -1570,6 +1570,165 @@ path = "collection_mutable_access_js_regression"
 tags = ["integration", "collections", "js-backend", "regression"]
 
 [[case]]
+id = "fixed_collection_js_runtime_capacity"
+path = "fixed_collection_js_runtime_capacity"
+tags = ["integration", "collections", "js-backend", "fixed-collections"]
+
+[[case]]
+id = "fixed_collection_literal_success"
+path = "fixed_collection_literal_success"
+tags = ["integration", "collections", "fixed-collections"]
+
+[[case]]
+id = "fixed_collection_mutable_empty_push_success"
+path = "fixed_collection_mutable_empty_push_success"
+tags = ["integration", "collections", "fixed-collections"]
+
+[[case]]
+id = "fixed_collection_push_overflow_catch"
+path = "fixed_collection_push_overflow_catch"
+tags = ["integration", "collections", "fixed-collections"]
+
+[[case]]
+id = "fixed_collection_remove_preserves_capacity"
+path = "fixed_collection_remove_preserves_capacity"
+tags = ["integration", "collections", "fixed-collections"]
+
+[[case]]
+id = "fixed_collection_const_capacity_success"
+path = "fixed_collection_const_capacity_success"
+tags = ["integration", "collections", "fixed-collections"]
+
+[[case]]
+id = "fixed_collection_capacity_expression_success"
+path = "fixed_collection_capacity_expression_success"
+tags = ["integration", "collections", "fixed-collections"]
+
+[[case]]
+id = "fixed_collection_shorthand_success"
+path = "fixed_collection_shorthand_success"
+tags = ["integration", "collections", "fixed-collections"]
+
+[[case]]
+id = "fixed_collection_alias_success"
+path = "fixed_collection_alias_success"
+tags = ["integration", "collections", "fixed-collections"]
+
+[[case]]
+id = "fixed_collection_generic_identity_success"
+path = "fixed_collection_generic_identity_success"
+tags = ["integration", "collections", "fixed-collections", "generics"]
+
+[[case]]
+id = "nested_fixed_collection_success"
+path = "nested_fixed_collection_success"
+tags = ["integration", "collections", "fixed-collections"]
+
+[[case]]
+id = "fixed_collection_struct_field_default_success"
+path = "fixed_collection_struct_field_default_success"
+tags = ["integration", "collections", "fixed-collections", "structs"]
+
+[[case]]
+id = "fixed_collection_immutable_empty_binding_rejected"
+path = "fixed_collection_immutable_empty_binding_rejected"
+tags = ["integration", "collections", "fixed-collections", "diagnostics"]
+
+[[case]]
+id = "fixed_collection_initializer_exceeds_capacity_rejected"
+path = "fixed_collection_initializer_exceeds_capacity_rejected"
+tags = ["integration", "collections", "fixed-collections", "diagnostics"]
+
+[[case]]
+id = "fixed_collection_zero_capacity_declaration_rejected"
+path = "fixed_collection_zero_capacity_declaration_rejected"
+tags = ["integration", "collections", "fixed-collections", "diagnostics"]
+
+[[case]]
+id = "fixed_collection_zero_capacity_signature_rejected"
+path = "fixed_collection_zero_capacity_signature_rejected"
+tags = ["integration", "collections", "fixed-collections", "diagnostics"]
+
+[[case]]
+id = "fixed_collection_zero_capacity_alias_rejected"
+path = "fixed_collection_zero_capacity_alias_rejected"
+tags = ["integration", "collections", "fixed-collections", "diagnostics"]
+
+[[case]]
+id = "fixed_collection_negative_capacity_rejected"
+path = "fixed_collection_negative_capacity_rejected"
+tags = ["integration", "collections", "fixed-collections", "diagnostics"]
+
+[[case]]
+id = "fixed_collection_float_capacity_rejected"
+path = "fixed_collection_float_capacity_rejected"
+tags = ["integration", "collections", "fixed-collections", "diagnostics"]
+
+[[case]]
+id = "fixed_collection_non_foldable_capacity_rejected"
+path = "fixed_collection_non_foldable_capacity_rejected"
+tags = ["integration", "collections", "fixed-collections", "diagnostics"]
+
+[[case]]
+id = "fixed_collection_runtime_call_capacity_rejected"
+path = "fixed_collection_runtime_call_capacity_rejected"
+tags = ["integration", "collections", "fixed-collections", "diagnostics"]
+
+[[case]]
+id = "fixed_growable_assignment_mismatch_rejected"
+path = "fixed_growable_assignment_mismatch_rejected"
+tags = ["integration", "collections", "fixed-collections", "diagnostics"]
+
+[[case]]
+id = "fixed_collection_exact_capacity_mismatch_rejected"
+path = "fixed_collection_exact_capacity_mismatch_rejected"
+tags = ["integration", "collections", "fixed-collections", "diagnostics"]
+
+[[case]]
+id = "fixed_collection_shorthand_empty_literal_rejected"
+path = "fixed_collection_shorthand_empty_literal_rejected"
+tags = ["integration", "collections", "fixed-collections", "diagnostics"]
+
+[[case]]
+id = "fixed_collection_shorthand_non_literal_rhs_rejected"
+path = "fixed_collection_shorthand_non_literal_rhs_rejected"
+tags = ["integration", "collections", "fixed-collections", "diagnostics"]
+
+[[case]]
+id = "fixed_collection_shorthand_in_signature_rejected"
+path = "fixed_collection_shorthand_in_signature_rejected"
+tags = ["integration", "collections", "fixed-collections", "diagnostics"]
+
+[[case]]
+id = "fixed_collection_shorthand_in_alias_rejected"
+path = "fixed_collection_shorthand_in_alias_rejected"
+tags = ["integration", "collections", "fixed-collections", "diagnostics"]
+
+[[case]]
+id = "fixed_collection_shorthand_in_field_rejected"
+path = "fixed_collection_shorthand_in_field_rejected"
+tags = ["integration", "collections", "fixed-collections", "diagnostics"]
+
+[[case]]
+id = "fixed_collection_shorthand_in_return_rejected"
+path = "fixed_collection_shorthand_in_return_rejected"
+tags = ["integration", "collections", "fixed-collections", "diagnostics"]
+
+[[case]]
+id = "fixed_collection_push_without_fallible_handling_rejected"
+path = "fixed_collection_push_without_fallible_handling_rejected"
+tags = ["integration", "collections", "fixed-collections", "diagnostics"]
+
+[[case]]
+id = "fixed_collection_set_without_tilde_rejected"
+path = "fixed_collection_set_without_tilde_rejected"
+tags = ["integration", "collections", "fixed-collections", "diagnostics"]
+
+[[case]]
+id = "fixed_collection_return_type_mutable_rejected"
+path = "fixed_collection_return_type_mutable_rejected"
+tags = ["integration", "collections", "fixed-collections", "diagnostics"]
+[[case]]
 id = "cast_float_from_string_runtime_output"
 path = "cast_float_from_string_runtime_output"
 tags = ["integration","js-backend"]

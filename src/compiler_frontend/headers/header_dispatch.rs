@@ -19,7 +19,8 @@ use crate::compiler_frontend::declaration_syntax::signature_members::parse_funct
 
 use crate::compiler_frontend::declaration_syntax::r#struct::parse_struct_shell;
 use crate::compiler_frontend::declaration_syntax::type_syntax::{
-    TypeAnnotationContext, for_each_named_type_in_parsed_ref, parse_type_annotation,
+    TypeAnnotationContext, collect_capacity_references_in_parsed_ref,
+    for_each_named_type_in_parsed_ref, parse_type_annotation,
 };
 
 use super::trait_headers::{
@@ -38,6 +39,7 @@ use crate::compiler_frontend::symbols::identifier_policy::{
     IdentifierNamingKind, ensure_not_keyword_shadow_identifier, naming_warning_for_identifier,
 };
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::token_scan::InitializerReference;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
 use crate::compiler_frontend::traits::syntax::{ConformanceTargetKind, ConformanceTargetSyntax};
 use rustc_hash::FxHashSet;
@@ -78,6 +80,7 @@ pub(super) fn create_header(
     let mut dependencies: HashSet<InternedPath> = HashSet::new();
     let mut kind: HeaderKind = HeaderKind::StartFunction;
     let mut body = Vec::new();
+    let mut capacity_references: Vec<InitializerReference> = Vec::new();
     let generic_parameters = parse_optional_generic_parameters(token_stream, context)?;
 
     if token_stream.current_token_kind() == &TokenKind::Of {
@@ -113,6 +116,7 @@ pub(super) fn create_header(
             name_location,
             tokens: header_tokens,
             source_file: context.source_file.to_owned(),
+            capacity_references,
         });
     }
 
@@ -158,6 +162,7 @@ pub(super) fn create_header(
                         &full_name,
                         context,
                         &mut dependencies,
+                        &mut capacity_references,
                     );
                 }
                 for ret in &requirement.signature.returns {
@@ -172,6 +177,7 @@ pub(super) fn create_header(
                             &full_name,
                             context,
                             &mut dependencies,
+                            &mut capacity_references,
                         );
                     }
                 }
@@ -212,6 +218,7 @@ pub(super) fn create_header(
             name_location,
             tokens: header_tokens,
             source_file: context.source_file.to_owned(),
+            capacity_references,
         });
     }
 
@@ -248,6 +255,7 @@ pub(super) fn create_header(
                     &full_name,
                     context,
                     &mut dependencies,
+                    &mut capacity_references,
                 );
             }
 
@@ -263,6 +271,7 @@ pub(super) fn create_header(
                         &full_name,
                         context,
                         &mut dependencies,
+                        &mut capacity_references,
                     );
                 }
             }
@@ -320,6 +329,7 @@ pub(super) fn create_header(
                         &full_name,
                         context,
                         &mut dependencies,
+                        &mut capacity_references,
                     );
                 }
 
@@ -345,16 +355,16 @@ pub(super) fn create_header(
                 context.string_table,
             );
 
-            let (constant_header, source_order) = create_constant_header_payload(
+            let constant_header = create_constant_header_payload(
                 &full_name,
                 token_stream,
                 context,
                 &mut dependencies,
+                &mut capacity_references,
             )?;
 
             kind = HeaderKind::Constant {
                 declaration: constant_header,
-                source_order,
             };
         }
 
@@ -393,6 +403,7 @@ pub(super) fn create_header(
                             &full_name,
                             context,
                             &mut dependencies,
+                            &mut capacity_references,
                         );
                     }
                 }
@@ -428,8 +439,11 @@ pub(super) fn create_header(
             );
 
             token_stream.advance();
-            let target =
-                parse_type_annotation(token_stream, TypeAnnotationContext::TypeAliasTarget)?;
+            let target = parse_type_annotation(
+                token_stream,
+                TypeAnnotationContext::TypeAliasTarget,
+                context.string_table,
+            )?;
 
             for_each_named_type_in_parsed_ref(&target, &mut |type_name| {
                 collect_named_type_dependency_edge(
@@ -441,6 +455,7 @@ pub(super) fn create_header(
                     &mut dependencies,
                 );
             });
+            collect_capacity_references_in_parsed_ref(&target, &mut capacity_references);
 
             kind = HeaderKind::TypeAlias { target };
         }
@@ -459,6 +474,7 @@ pub(super) fn create_header(
         name_location,
         tokens: header_tokens,
         source_file: context.source_file.to_owned(),
+        capacity_references,
     })
 }
 
@@ -520,6 +536,7 @@ fn collect_type_dependency_edges(
     current_header_path: &InternedPath,
     context: &mut HeaderBuildContext<'_>,
     dependencies: &mut HashSet<InternedPath>,
+    capacity_references: &mut Vec<InitializerReference>,
 ) {
     for_each_named_type_in_parsed_ref(type_ref, &mut |type_name| {
         if generic_parameters.contains_name(type_name) {
@@ -539,6 +556,7 @@ fn collect_type_dependency_edges(
             dependencies,
         );
     });
+    collect_capacity_references_in_parsed_ref(type_ref, capacity_references);
 }
 
 // WHAT: collects all tokens that make up a function body (`:` … `;`) into `body`,
@@ -607,7 +625,8 @@ fn create_constant_header_payload(
     token_stream: &mut FileTokens,
     context: &mut HeaderBuildContext<'_>,
     dependencies: &mut HashSet<InternedPath>,
-) -> Result<(DeclarationSyntax, usize), CompilerDiagnostic> {
+    capacity_references: &mut Vec<InitializerReference>,
+) -> Result<DeclarationSyntax, CompilerDiagnostic> {
     let Some(declaration_name) = full_name.name() else {
         return Err(internal_header_dispatch_error(
             "Constant header path is missing its declaration name.",
@@ -620,12 +639,14 @@ fn create_constant_header_payload(
     // Header-provided dependency edges: declared type annotation only.
     // WHY: constant initializer references are now first-class dependency edges generated by
     // headers/constant_dependencies.rs; this function only collects type-surface edges.
-    collect_constant_type_dependencies(&declaration_syntax, context, dependencies);
+    collect_constant_type_dependencies(
+        &declaration_syntax,
+        context,
+        dependencies,
+        capacity_references,
+    );
 
-    let source_order = *context.file_constant_order;
-    *context.file_constant_order += 1;
-
-    Ok((declaration_syntax, source_order))
+    Ok(declaration_syntax)
 }
 
 fn internal_header_dispatch_error(

@@ -105,7 +105,7 @@ pub enum TypeConstructor {
 /// Builtin type constructors.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BuiltinTypeConstructor {
-    Collection,
+    Collection { fixed_capacity: Option<usize> },
     Option,
     FallibleCarrier,
     Tuple,

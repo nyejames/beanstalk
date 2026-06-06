@@ -100,11 +100,15 @@ fn constructed_type_interning_reuses_ids() {
     let int = env.builtins().int;
 
     let collection_a = env.intern_constructed(
-        TypeConstructor::Builtin(BuiltinTypeConstructor::Collection),
+        TypeConstructor::Builtin(BuiltinTypeConstructor::Collection {
+            fixed_capacity: None,
+        }),
         Box::new([int]),
     );
     let collection_b = env.intern_constructed(
-        TypeConstructor::Builtin(BuiltinTypeConstructor::Collection),
+        TypeConstructor::Builtin(BuiltinTypeConstructor::Collection {
+            fixed_capacity: None,
+        }),
         Box::new([int]),
     );
 
@@ -121,11 +125,15 @@ fn distinct_constructed_types_get_distinct_ids() {
     let string = env.builtins().string;
 
     let collection_int = env.intern_constructed(
-        TypeConstructor::Builtin(BuiltinTypeConstructor::Collection),
+        TypeConstructor::Builtin(BuiltinTypeConstructor::Collection {
+            fixed_capacity: None,
+        }),
         Box::new([int]),
     );
     let collection_string = env.intern_constructed(
-        TypeConstructor::Builtin(BuiltinTypeConstructor::Collection),
+        TypeConstructor::Builtin(BuiltinTypeConstructor::Collection {
+            fixed_capacity: None,
+        }),
         Box::new([string]),
     );
 
@@ -191,7 +199,9 @@ fn display_renders_collection_with_braces() {
     let int = env.builtins().int;
 
     let collection = env.intern_constructed(
-        TypeConstructor::Builtin(BuiltinTypeConstructor::Collection),
+        TypeConstructor::Builtin(BuiltinTypeConstructor::Collection {
+            fixed_capacity: None,
+        }),
         Box::new([int]),
     );
 
@@ -966,7 +976,9 @@ fn collection_element_type_query_works() {
     let int = env.builtins().int;
 
     let collection = env.intern_constructed(
-        TypeConstructor::Builtin(BuiltinTypeConstructor::Collection),
+        TypeConstructor::Builtin(BuiltinTypeConstructor::Collection {
+            fixed_capacity: None,
+        }),
         Box::new([int]),
     );
 
@@ -1032,7 +1044,9 @@ fn runtime_equality_query_rejects_unsupported_non_choice_types() {
         const_record: false,
     });
     let collection_type_id = env.intern_constructed(
-        TypeConstructor::Builtin(BuiltinTypeConstructor::Collection),
+        TypeConstructor::Builtin(BuiltinTypeConstructor::Collection {
+            fixed_capacity: None,
+        }),
         Box::new([int_type_id]),
     );
     let function_type_id = env.intern_function(FunctionTypeKey {
@@ -1286,4 +1300,124 @@ fn generic_instance_display_uses_of_syntax() {
     let box_of_int = env.intern_generic_instance(box_nominal, Box::new([int]));
 
     assert_eq!(display_type(box_of_int, &env, &table), "Box of Int");
+}
+
+// -----------------------------------------------------------
+//  Fixed-capacity collection tests
+// -----------------------------------------------------------
+
+#[test]
+fn fixed_capacity_collection_interns_to_distinct_type_id() {
+    let mut env = TypeEnvironment::new();
+    let int = env.builtins().int;
+
+    let growable = env.intern_collection(int, None);
+    let fixed_64 = env.intern_collection(int, Some(64));
+
+    assert_ne!(
+        growable, fixed_64,
+        "growable and fixed-capacity collections must be distinct types"
+    );
+}
+
+#[test]
+fn same_fixed_capacity_reuses_type_id() {
+    let mut env = TypeEnvironment::new();
+    let int = env.builtins().int;
+
+    let fixed_a = env.intern_collection(int, Some(64));
+    let fixed_b = env.intern_collection(int, Some(64));
+
+    assert_eq!(
+        fixed_a, fixed_b,
+        "same element + capacity must reuse TypeId"
+    );
+}
+
+#[test]
+fn different_fixed_capacities_are_distinct() {
+    let mut env = TypeEnvironment::new();
+    let int = env.builtins().int;
+
+    let fixed_32 = env.intern_collection(int, Some(32));
+    let fixed_64 = env.intern_collection(int, Some(64));
+
+    assert_ne!(
+        fixed_32, fixed_64,
+        "different capacities must be distinct types"
+    );
+}
+
+#[test]
+fn collection_shape_queries_work() {
+    let mut env = TypeEnvironment::new();
+    let int = env.builtins().int;
+
+    let growable = env.intern_collection(int, None);
+    let fixed_64 = env.intern_collection(int, Some(64));
+
+    // Growable shape
+    let shape = env
+        .collection_shape(growable)
+        .expect("growable should have a shape");
+    assert_eq!(shape.element_type, int);
+    assert_eq!(shape.fixed_capacity, None);
+
+    // Fixed shape
+    let shape = env
+        .collection_shape(fixed_64)
+        .expect("fixed should have a shape");
+    assert_eq!(shape.element_type, int);
+    assert_eq!(shape.fixed_capacity, Some(64));
+
+    // element_type query
+    assert_eq!(env.collection_element_type(growable), Some(int));
+    assert_eq!(env.collection_element_type(fixed_64), Some(int));
+
+    // fixed_capacity query
+    assert_eq!(env.collection_fixed_capacity(growable), None);
+    assert_eq!(env.collection_fixed_capacity(fixed_64), Some(64));
+
+    // Non-collection returns None
+    assert_eq!(env.collection_shape(int), None);
+    assert_eq!(env.collection_element_type(int), None);
+    assert_eq!(env.collection_fixed_capacity(int), None);
+}
+
+#[test]
+fn is_collection_works_for_fixed_and_growable() {
+    let mut env = TypeEnvironment::new();
+    let int = env.builtins().int;
+
+    let growable = env.intern_collection(int, None);
+    let fixed_64 = env.intern_collection(int, Some(64));
+
+    assert!(env.is_collection(growable));
+    assert!(env.is_collection(fixed_64));
+    assert!(!env.is_collection(int));
+}
+
+#[test]
+fn display_type_renders_growable_and_fixed_collections() {
+    let mut env = TypeEnvironment::new();
+    let table = StringTable::new();
+    let int = env.builtins().int;
+
+    let growable = env.intern_collection(int, None);
+    let fixed_64 = env.intern_collection(int, Some(64));
+
+    assert_eq!(display_type(growable, &env, &table), "{Int}");
+    assert_eq!(display_type(fixed_64, &env, &table), "{64 Int}");
+}
+
+#[test]
+fn display_type_renders_nested_fixed_collections() {
+    let mut env = TypeEnvironment::new();
+    let table = StringTable::new();
+    let int = env.builtins().int;
+
+    let inner_fixed = env.intern_collection(int, Some(8));
+    let outer_fixed = env.intern_collection(inner_fixed, Some(4));
+
+    assert_eq!(display_type(outer_fixed, &env, &table), "{4 {8 Int}}");
 }

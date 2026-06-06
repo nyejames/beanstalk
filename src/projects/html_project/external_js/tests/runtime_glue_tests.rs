@@ -295,8 +295,25 @@ fn fallible_wrapper_handles_invalid_shape_differently_for_debug_and_release() {
     let release_source = generate_fallible_wrapper("__bs_glue_fn1", "__bs_external_fn1", true);
     assert!(!release_source.contains("throw new Error("));
     assert!(
-        release_source
-            .contains("return { tag: \"err\", value: { message: \"Invalid result wrapper")
+        release_source.contains("return { tag: \"err\", value: { b_fld0: \"Invalid result wrapper")
+    );
+    assert!(release_source.contains("b_fld1: 0"));
+}
+
+#[test]
+fn fallible_wrapper_converts_external_errors_to_internal_error_fields() {
+    let debug_source = generate_fallible_wrapper("__bs_glue_fn1", "__bs_external_fn1", false);
+
+    assert!(
+        debug_source.contains("bst_message_fld0: String(e.message || e)")
+            && debug_source.contains("bst_code_fld1: 0"),
+        "caught JS exceptions must become canonical Beanstalk Error values"
+    );
+    assert!(
+        debug_source.contains("bst_message_fld0: error.message || \"Unknown error\"")
+            && debug_source
+                .contains("bst_code_fld1: typeof error.code === \"number\" ? error.code : 0"),
+        "external bstErr values must be translated into canonical Beanstalk Error values"
     );
 }
 

@@ -69,7 +69,30 @@ pub(crate) fn invalid_generic_application_message(
 pub(crate) fn invalid_collection_type_message(reason: InvalidCollectionTypeReason) -> &'static str {
     match reason {
         InvalidCollectionTypeReason::NegativeCapacity => {
-            "Collection capacity must be a non-negative integer."
+            "Fixed collection capacity must be greater than zero."
+        }
+        InvalidCollectionTypeReason::ShorthandCapacityNotAllowed => {
+            "Capacity-only shorthand is not allowed in type signatures, aliases, fields, or return types."
+        }
+        InvalidCollectionTypeReason::ZeroCapacity => {
+            "Fixed collection capacity must be greater than zero."
+        }
+        InvalidCollectionTypeReason::CapacityNotInt => "Collection capacity must be an integer.",
+        InvalidCollectionTypeReason::CapacityNotConstant => {
+            "Collection capacity must be a compile-time constant expression."
+        }
+        InvalidCollectionTypeReason::CapacityOverflow => "Collection capacity is too large.",
+        InvalidCollectionTypeReason::InitializerExceedsFixedCapacity { .. } => {
+            "Collection literal has more items than the fixed collection capacity allows."
+        }
+        InvalidCollectionTypeReason::EmptyImmutableFixedCollection => {
+            "Immutable binding initialized with an empty fixed collection literal is not allowed."
+        }
+        InvalidCollectionTypeReason::ShorthandEmptyLiteralAmbiguous => {
+            "Capacity-only shorthand requires a non-empty collection literal so the element type can be inferred."
+        }
+        InvalidCollectionTypeReason::ShorthandNonLiteralRhs => {
+            "Capacity-only shorthand requires a collection literal initializer."
         }
     }
 }

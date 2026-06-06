@@ -152,20 +152,36 @@ fn compatibility_cache_bypasses_exact_type_identity() {
 }
 
 #[test]
-fn collection_type_identity_is_element_type_only() {
+fn collection_type_identity_matches_exact_shape() {
     let mut env = TypeEnvironment::new();
     let int = env.builtins().int;
-    let collection_a = env.intern_constructed(
-        TypeConstructor::Builtin(BuiltinTypeConstructor::Collection),
-        Box::new([int]),
-    );
-    let collection_b = env.intern_constructed(
-        TypeConstructor::Builtin(BuiltinTypeConstructor::Collection),
-        Box::new([int]),
-    );
+    let collection_a = env.intern_collection(int, None);
+    let collection_b = env.intern_collection(int, None);
+
     // Same constructed type key resolves to the same canonical TypeId.
     assert_eq!(collection_a, collection_b);
     assert!(is_type_compatible(collection_a, collection_b, &env));
+}
+
+#[test]
+fn fixed_and_growable_collections_are_not_compatible() {
+    let mut env = TypeEnvironment::new();
+    let int = env.builtins().int;
+    let growable = env.intern_collection(int, None);
+    let fixed_64 = env.intern_collection(int, Some(64));
+    let fixed_128 = env.intern_collection(int, Some(128));
+
+    assert!(!is_type_compatible(fixed_64, growable, &env));
+    assert!(!is_type_compatible(growable, fixed_64, &env));
+    assert!(!is_type_compatible(fixed_64, fixed_128, &env));
+
+    let mut cache = TypeCompatibilityCache::new();
+    assert!(!cache.is_compatible(
+        fixed_64,
+        growable,
+        TypeCompatibilityMode::FreshMutableRvalue,
+        &env
+    ));
 }
 
 #[test]
@@ -307,14 +323,8 @@ fn compatibility_cache_keeps_mutable_rvalue_policy_separate() {
     let mut env = TypeEnvironment::new();
     let int = env.builtins().int;
     let option_int = env.intern_option(int);
-    let option_int_collection = env.intern_constructed(
-        TypeConstructor::Builtin(BuiltinTypeConstructor::Collection),
-        Box::new([option_int]),
-    );
-    let int_collection = env.intern_constructed(
-        TypeConstructor::Builtin(BuiltinTypeConstructor::Collection),
-        Box::new([int]),
-    );
+    let option_int_collection = env.intern_collection(option_int, None);
+    let int_collection = env.intern_collection(int, None);
 
     let mut cache = TypeCompatibilityCache::new();
 

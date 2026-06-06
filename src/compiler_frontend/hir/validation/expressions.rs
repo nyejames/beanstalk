@@ -326,8 +326,23 @@ impl<'a> HirValidator<'a> {
                 }
             }
 
-            HirExpressionKind::Collection(elements)
-            | HirExpressionKind::TupleConstruct { elements } => {
+            HirExpressionKind::Collection(elements) => {
+                if self
+                    .type_environment
+                    .collection_shape(expression.ty)
+                    .is_none()
+                {
+                    return Err(self.error_with_hir(
+                        "HirExpressionKind::Collection expression type is not a collection type",
+                        anchor,
+                    ));
+                }
+                for element in elements {
+                    self.validate_expression(element, anchor)?;
+                }
+            }
+
+            HirExpressionKind::TupleConstruct { elements } => {
                 for element in elements {
                     self.validate_expression(element, anchor)?;
                 }

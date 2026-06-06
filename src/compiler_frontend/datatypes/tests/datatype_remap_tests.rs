@@ -437,13 +437,16 @@ fn type_identity_key_collection_remaps_inner() {
     let mut global = StringTable::new();
 
     let path = InternedPath::from_single_str("Int", &mut local);
-    let mut key = TypeIdentityKey::Collection(Box::new(TypeIdentityKey::Nominal(path)));
+    let mut key = TypeIdentityKey::Collection {
+        element: Box::new(TypeIdentityKey::Nominal(path)),
+        fixed_capacity: None,
+    };
 
     let remap = global.merge_from(&local);
     key.remap_string_ids(&remap);
 
     match key {
-        TypeIdentityKey::Collection(inner) => match inner.as_ref() {
+        TypeIdentityKey::Collection { element: inner, .. } => match inner.as_ref() {
             TypeIdentityKey::Nominal(remapped) => {
                 assert_eq!(remapped.to_portable_string(&global), "Int");
             }

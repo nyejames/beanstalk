@@ -20,6 +20,8 @@ use crate::compiler_frontend::datatypes::definitions::{
     StructTypeDefinition, TypeDefinition,
 };
 #[cfg(any(test, feature = "show_hir"))]
+use crate::compiler_frontend::datatypes::display::display_type;
+#[cfg(any(test, feature = "show_hir"))]
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 #[cfg(any(test, feature = "show_hir"))]
 use crate::compiler_frontend::datatypes::ids::TypeId;
@@ -107,7 +109,7 @@ impl<'a> HirDisplayContext<'a> {
         self
     }
 
-    #[cfg(feature = "show_hir")]
+    #[cfg(any(test, feature = "show_hir"))]
     pub(crate) fn with_type_environment(mut self, type_environment: &'a TypeEnvironment) -> Self {
         self.type_environment = Some(type_environment);
         self
@@ -814,12 +816,8 @@ impl<'a> HirDisplayContext<'a> {
                         .join(", ");
                     format!("({joined})")
                 }
-                TypeConstructor::Builtin(BuiltinTypeConstructor::Collection) => {
-                    let element = arguments.first().map_or_else(
-                        || "?".to_owned(),
-                        |arg| self.render_type_with_environment(type_environment, *arg, depth + 1),
-                    );
-                    format!("[{element}]")
+                TypeConstructor::Builtin(BuiltinTypeConstructor::Collection { .. }) => {
+                    display_type(ty, type_environment, self.string_table)
                 }
                 TypeConstructor::Builtin(BuiltinTypeConstructor::Option) => {
                     let inner = arguments.first().map_or_else(

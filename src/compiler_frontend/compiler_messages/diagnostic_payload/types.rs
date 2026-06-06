@@ -437,12 +437,35 @@ pub enum InvalidTypeAnnotationReason {
     ExpectedTypeAnnotation { found: TokenKind },
     DuplicateOptional,
     NestedOptional,
-    NegativeCollectionCapacity,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum InvalidCollectionTypeReason {
     NegativeCapacity,
+    /// Capacity-only shorthand `{N}` is not allowed in type signatures, aliases,
+    /// struct fields, or return types. It is only valid for declaration targets
+    /// where the initializer provides the element type.
+    ShorthandCapacityNotAllowed,
+    /// Fixed collection capacity must be greater than zero.
+    ZeroCapacity,
+    /// Capacity expression did not fold to an `Int` value.
+    CapacityNotInt,
+    /// Capacity expression references a non-constant value or contains runtime-only syntax.
+    CapacityNotConstant,
+    /// Folded capacity value does not fit in `usize`.
+    CapacityOverflow,
+    /// Collection literal has more items than the fixed collection capacity allows.
+    InitializerExceedsFixedCapacity {
+        capacity: usize,
+        length: usize,
+    },
+    /// Immutable binding initialized with an empty fixed collection literal.
+    EmptyImmutableFixedCollection,
+    /// Capacity-only shorthand declaration requires a non-empty collection literal
+    /// so the element type can be inferred.
+    ShorthandEmptyLiteralAmbiguous,
+    /// Capacity-only shorthand declaration requires a collection literal initializer.
+    ShorthandNonLiteralRhs,
 }
 
 #[derive(Clone, Debug, PartialEq)]

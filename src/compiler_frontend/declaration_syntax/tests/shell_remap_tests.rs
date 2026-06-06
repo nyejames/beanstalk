@@ -1,18 +1,15 @@
 //! String-ID remapping tests for declaration shells and type-annotation helpers.
 //!
 //! WHAT: verifies that `DeclarationSyntax`, `BindingTargetSyntax`, `InitializerReference`,
-//!      `CollectionCapacity`, and `ParsedTypeAnnotation` can be remapped after a string-table merge.
+//!      and `ParsedTypeRef::Collection` can be remapped after a string-table merge.
 //! WHY: header parsing produces declaration shells using local string tables; remapping must
 //!      preserve all names, type annotations, initializer tokens, and source locations.
 
 use crate::compiler_frontend::compiler_messages::source_location::{CharPosition, SourceLocation};
-use crate::compiler_frontend::datatypes::parsed::ParsedTypeRef;
+use crate::compiler_frontend::datatypes::parsed::{ParsedCollectionCapacity, ParsedTypeRef};
 use crate::compiler_frontend::declaration_syntax::binding_mode::BindingMode;
 use crate::compiler_frontend::declaration_syntax::declaration_shell::{
     BindingTargetSyntax, DeclarationSyntax, InitializerReference,
-};
-use crate::compiler_frontend::declaration_syntax::type_syntax::{
-    CollectionCapacity, ParsedTypeAnnotation,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
@@ -39,57 +36,55 @@ fn make_symbol_token(name: StringId, string_table: &mut StringTable) -> Token {
 }
 
 #[test]
-fn collection_capacity_remaps_location() {
+fn collection_capacity_tokens_remap() {
     let mut local = StringTable::new();
     let mut global = StringTable::new();
 
-    let mut capacity = CollectionCapacity {
-        value: 64,
-        location: make_location(&mut local),
-    };
+    let cap_name = local.intern("capacity");
+    let cap_tokens = vec![
+        Token::new(TokenKind::Symbol(cap_name), make_location(&mut local)),
+        Token::new(TokenKind::Add, make_location(&mut local)),
+        Token::new(TokenKind::IntLiteral(16), make_location(&mut local)),
+    ];
 
-    let remap = global.merge_from(&local);
-    capacity.remap_string_ids(&remap);
-
-    assert_eq!(capacity.value, 64);
-    assert_test_location(&capacity.location, &global);
-}
-
-#[test]
-fn parsed_type_annotation_remaps_type_and_capacity() {
-    let mut local = StringTable::new();
-    let mut global = StringTable::new();
-
-    let elem_name = local.intern("Int");
-
-    let mut annotation = ParsedTypeAnnotation {
-        parsed_type: ParsedTypeRef::Collection {
-            element: Box::new(ParsedTypeRef::Named {
-                name: elem_name,
-                location: make_location(&mut local),
-            }),
+    let mut parsed = ParsedTypeRef::Collection {
+        element: Box::new(ParsedTypeRef::BuiltinInt {
             location: make_location(&mut local),
-        },
-        collection_capacity: Some(CollectionCapacity {
-            value: 32,
+        }),
+        location: make_location(&mut local),
+        fixed_capacity: Some(ParsedCollectionCapacity {
+            tokens: cap_tokens,
             location: make_location(&mut local),
         }),
     };
 
     let remap = global.merge_from(&local);
-    annotation.remap_string_ids(&remap);
+    parsed.remap_string_ids(&remap);
 
-    match annotation.parsed_type {
-        ParsedTypeRef::Collection { element, .. } => match *element {
-            ParsedTypeRef::Named { name, .. } => {
-                assert_eq!(global.resolve(name), "Int");
+    match parsed {
+        ParsedTypeRef::Collection {
+            element,
+            fixed_capacity,
+            ..
+        } => {
+            assert_eq!(
+                *element,
+                ParsedTypeRef::BuiltinInt {
+                    location: make_location(&mut global),
+                }
+            );
+            let capacity = fixed_capacity.expect("capacity tokens should be present");
+            assert_test_location(&capacity.location, &global);
+            assert_eq!(capacity.tokens.len(), 3);
+            match &capacity.tokens[0].kind {
+                TokenKind::Symbol(id) => assert_eq!(global.resolve(*id), "capacity"),
+                other => panic!("expected Symbol, got {:?}", other),
             }
-            _ => panic!("expected Named element"),
-        },
-        _ => panic!("expected Collection"),
+            assert_eq!(capacity.tokens[1].kind, TokenKind::Add);
+            assert_eq!(capacity.tokens[2].kind, TokenKind::IntLiteral(16));
+        }
+        other => panic!("expected Collection, got {:?}", other),
     }
-
-    assert_eq!(annotation.collection_capacity.unwrap().value, 32);
 }
 
 #[test]
@@ -134,10 +129,6 @@ fn declaration_syntax_remaps_all_fields() {
             name: type_name,
             location: make_location(&mut local),
         },
-        collection_capacity: Some(CollectionCapacity {
-            value: 16,
-            location: make_location(&mut local),
-        }),
         initializer_tokens: vec![make_symbol_token(init_name, &mut local)],
         initializer_references: vec![InitializerReference {
             name: ref_name,
@@ -158,8 +149,6 @@ fn declaration_syntax_remaps_all_fields() {
         }
         _ => panic!("expected Named type annotation"),
     }
-
-    assert_eq!(declaration.collection_capacity.unwrap().value, 16);
 
     assert_eq!(declaration.initializer_tokens.len(), 1);
     match &declaration.initializer_tokens[0].kind {
@@ -193,7 +182,6 @@ fn binding_target_syntax_remaps_all_fields() {
             name: type_name,
             location: make_location(&mut local),
         },
-        collection_capacity: None,
         location: make_location(&mut local),
     };
 

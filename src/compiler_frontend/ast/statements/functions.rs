@@ -11,10 +11,17 @@ use crate::compiler_frontend::ast::expressions::parse_expression::{
     ExpressionTrailingPolicy, create_expression_with_trailing_newline_policy,
 };
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
-use crate::compiler_frontend::ast::type_resolution::resolve_diagnostic_type_to_type_id;
-use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
+use crate::compiler_frontend::ast::type_resolution::{
+    ResolvedTypeAnnotation, TypeResolutionContext, TypeResolutionContextInputs,
+    resolve_diagnostic_type_to_type_id, resolve_parsed_type_annotation,
+};
+use crate::compiler_frontend::compiler_messages::{
+    CompilerDiagnostic, DiagnosticPayload, InvalidCollectionTypeReason, NameNamespace,
+};
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::ids::TypeId;
+use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
+use crate::compiler_frontend::datatypes::parsed::ParsedTypeRef;
 use crate::compiler_frontend::declaration_syntax::signature_members::{
     FunctionReturnSyntax, FunctionSignatureSyntax, ReturnChannelSyntax, ReturnSlotSyntax,
     SignatureMemberSyntax, alias_return_type_mismatch_diagnostic, parse_function_signature_syntax,
@@ -111,6 +118,12 @@ pub struct FunctionSignature {
     pub returns: Vec<ReturnSlot>,
 }
 
+#[derive(Clone, Copy)]
+pub(crate) enum SignatureTypeFallbackPolicy {
+    StrictCapacity,
+    AllowUnresolvedCapacity,
+}
+
 impl FunctionSignature {
     pub(crate) fn new(
         token_stream: &mut FileTokens,
@@ -131,6 +144,7 @@ impl FunctionSignature {
             &signature_context,
             type_interner,
             string_table,
+            SignatureTypeFallbackPolicy::StrictCapacity,
         )
     }
 
@@ -241,6 +255,7 @@ pub(crate) fn function_signature_from_syntax_with_unresolved_types(
     expression_context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
+    fallback_policy: SignatureTypeFallbackPolicy,
 ) -> Result<FunctionSignature, CompilerDiagnostic> {
     let mut parameters = Vec::with_capacity(syntax.parameters.len());
     for parameter in &syntax.parameters {
@@ -249,12 +264,20 @@ pub(crate) fn function_signature_from_syntax_with_unresolved_types(
             expression_context,
             type_interner,
             string_table,
+            fallback_policy,
         )?);
     }
 
     let mut returns = Vec::with_capacity(syntax.returns.len());
     for return_slot in &syntax.returns {
-        returns.push(return_slot_from_syntax(return_slot, &parameters)?);
+        returns.push(return_slot_from_syntax(
+            return_slot,
+            &parameters,
+            expression_context,
+            type_interner,
+            string_table,
+            fallback_policy,
+        )?);
     }
 
     Ok(FunctionSignature {
@@ -268,16 +291,36 @@ pub(crate) fn signature_member_to_declaration(
     expression_context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
+    fallback_policy: SignatureTypeFallbackPolicy,
 ) -> Result<Declaration, CompilerDiagnostic> {
-    let data_type = parsed_ref_to_data_type(&member.type_annotation);
-
-    // Signature parsing builds declaration shells before named type references are resolved by
-    // the AST environment. This hint is used only to seed parse-era placeholders; checked
-    // TypeId conversion happens after semantic type resolution.
-    let type_id = resolve_diagnostic_type_to_type_id(
-        &data_type,
-        type_interner.environment_mut_for_derived_types(),
+    let resolved = resolve_signature_type_annotation(
+        member.type_annotation.clone(),
+        &member.location,
+        expression_context,
+        type_interner,
+        string_table,
     );
+
+    let (type_id, data_type) = match resolved {
+        Ok(annotation) => (
+            annotation.type_id.unwrap_or(builtin_type_ids::NONE),
+            annotation.diagnostic_type,
+        ),
+        Err(diagnostic) if should_fallback_signature_type(&diagnostic, fallback_policy) => {
+            // Signature parsing may encounter generic parameters that are not yet
+            // resolvable in the current context. Early nominal-member shell parsing
+            // may also see capacity constants before constants have been folded.
+            // Keep that fallback narrow so literal invalid capacities are still
+            // reported instead of being erased to growable collection types.
+            let data_type = parsed_ref_to_data_type(&member.type_annotation);
+            let type_id = resolve_diagnostic_type_to_type_id(
+                &data_type,
+                type_interner.environment_mut_for_derived_types(),
+            );
+            (type_id, data_type)
+        }
+        Err(diagnostic) => return Err(*diagnostic),
+    };
 
     let value = if member.default_tokens.is_empty() {
         Expression::new(
@@ -301,6 +344,88 @@ pub(crate) fn signature_member_to_declaration(
         id: member.id.clone(),
         value,
     })
+}
+
+/// Resolve a parsed type annotation inside a function-style signature.
+///
+/// WHAT: builds the AST type-resolution context from the active `ScopeContext`.
+/// WHY: parameters, struct/choice member shells, and explicit return slots all share
+///      the same fixed-capacity folding rules and alias visibility model.
+fn resolve_signature_type_annotation(
+    type_annotation: ParsedTypeRef,
+    location: &SourceLocation,
+    expression_context: &ScopeContext,
+    type_interner: &mut AstTypeInterner<'_>,
+    string_table: &mut StringTable,
+) -> Result<ResolvedTypeAnnotation, Box<CompilerDiagnostic>> {
+    let mut type_resolution_context =
+        TypeResolutionContext::from_inputs(TypeResolutionContextInputs {
+            declaration_table: &expression_context.top_level_declarations,
+            visible_declaration_ids: expression_context.visible_declaration_ids.as_ref(),
+            visible_external_symbols: expression_context
+                .file_visibility
+                .as_ref()
+                .map(|fv| &fv.visible_external_symbols),
+            visible_source_bindings: expression_context
+                .file_visibility
+                .as_ref()
+                .map(|fv| &fv.visible_source_names),
+            visible_type_aliases: expression_context
+                .file_visibility
+                .as_ref()
+                .map(|fv| &fv.visible_type_alias_names),
+            resolved_type_aliases: expression_context.resolved_type_aliases.as_deref(),
+            resolved_type_alias_annotations: expression_context
+                .resolved_type_alias_annotations
+                .as_deref(),
+            generic_declarations_by_path: expression_context
+                .generic_declarations_by_path
+                .as_deref(),
+            resolved_struct_fields_by_path: expression_context
+                .resolved_struct_fields_by_path
+                .as_deref(),
+            type_environment: type_interner.environment_mut_for_derived_types(),
+            visible_namespace_records: expression_context
+                .file_visibility
+                .as_ref()
+                .map(|fv| &fv.visible_namespace_records),
+            trait_environment: expression_context.trait_environment_override.as_deref(),
+            trait_evidence_environment: None,
+            visible_trait_names: expression_context
+                .file_visibility
+                .as_ref()
+                .map(|fv| &fv.visible_trait_names),
+            source_file_scope: expression_context.source_file_scope.as_ref(),
+        })
+        .with_active_generic_type_context(expression_context.active_generic_type_context());
+
+    resolve_parsed_type_annotation(
+        type_annotation,
+        location,
+        &mut type_resolution_context,
+        string_table,
+        Some(expression_context),
+    )
+}
+
+fn should_fallback_signature_type(
+    diagnostic: &CompilerDiagnostic,
+    fallback_policy: SignatureTypeFallbackPolicy,
+) -> bool {
+    match &diagnostic.payload {
+        DiagnosticPayload::UnknownName {
+            namespace: NameNamespace::Type,
+            ..
+        } => true,
+        DiagnosticPayload::InvalidCollectionType {
+            reason: InvalidCollectionTypeReason::CapacityNotConstant,
+            ..
+        } => matches!(
+            fallback_policy,
+            SignatureTypeFallbackPolicy::AllowUnresolvedCapacity
+        ),
+        _ => false,
+    }
 }
 
 /// Parse the default-value expression for a single signature parameter.
@@ -359,6 +484,10 @@ fn token_stream_with_eof(tokens: &[Token]) -> Result<FileTokens, CompilerDiagnos
 fn return_slot_from_syntax(
     return_slot: &ReturnSlotSyntax,
     parameters: &[Declaration],
+    expression_context: &ScopeContext,
+    type_interner: &mut AstTypeInterner<'_>,
+    string_table: &mut StringTable,
+    fallback_policy: SignatureTypeFallbackPolicy,
 ) -> Result<ReturnSlot, CompilerDiagnostic> {
     let channel = match return_slot.channel {
         ReturnChannelSyntax::Success => ReturnChannel::Success,
@@ -367,8 +496,29 @@ fn return_slot_from_syntax(
 
     let value = match &return_slot.value {
         FunctionReturnSyntax::Value {
-            type_annotation, ..
-        } => FunctionReturn::Value(parsed_ref_to_data_type(type_annotation)),
+            type_annotation,
+            location,
+        } => {
+            let resolved = resolve_signature_type_annotation(
+                type_annotation.clone(),
+                location,
+                expression_context,
+                type_interner,
+                string_table,
+            );
+
+            let data_type = match resolved {
+                Ok(annotation) => annotation.diagnostic_type,
+                Err(diagnostic) if should_fallback_signature_type(&diagnostic, fallback_policy) => {
+                    // Generic return types may be resolved later once the function's
+                    // declaration-site generic parameter scope is active.
+                    parsed_ref_to_data_type(type_annotation)
+                }
+                Err(diagnostic) => return Err(*diagnostic),
+            };
+
+            FunctionReturn::Value(data_type)
+        }
 
         FunctionReturnSyntax::AliasCandidates {
             parameter_indices,

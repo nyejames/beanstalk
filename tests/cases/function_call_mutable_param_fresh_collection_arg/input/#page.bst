@@ -1,5 +1,6 @@
 mutate |values ~{Int}| -> Int:
-    ~values.push(4)
+    ~values.push(4) catch:
+    ;
     return values.length()
 ;
 

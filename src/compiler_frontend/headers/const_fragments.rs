@@ -7,14 +7,13 @@
 //! indices, so this logic must stay in the header stage.
 
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
-use crate::compiler_frontend::declaration_syntax::declaration_shell::{
-    InitializerReference, collect_initializer_references,
-};
 use crate::compiler_frontend::headers::types::{
     Header, HeaderBuildContext, HeaderExportMode, HeaderKind,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::token_scan::NestingDepth;
+use crate::compiler_frontend::token_scan::{
+    InitializerReference, NestingDepth, collect_symbol_references,
+};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
 use crate::projects::settings::TOP_LEVEL_CONST_TEMPLATE_NAME;
 use std::collections::HashSet;
@@ -76,7 +75,6 @@ pub(super) fn create_top_level_const_template(
     Ok(Header {
         kind: HeaderKind::ConstTemplate {
             condition_references,
-            source_order: next_const_fragment_source_order(context),
         },
         file_role: context.file_role,
         export_mode: HeaderExportMode::Private,
@@ -84,13 +82,8 @@ pub(super) fn create_top_level_const_template(
         name_location,
         tokens: template_tokens,
         source_file: context.source_file.to_owned(),
+        capacity_references: Vec::new(),
     })
-}
-
-fn next_const_fragment_source_order(context: &mut HeaderBuildContext<'_>) -> usize {
-    let source_order = *context.file_constant_order;
-    *context.file_constant_order += 1;
-    source_order
 }
 
 fn collect_template_if_condition_references(tokens: &[Token]) -> Vec<InitializerReference> {
@@ -101,7 +94,7 @@ fn collect_template_if_condition_references(tokens: &[Token]) -> Vec<Initializer
         if matches!(tokens[index].kind, TokenKind::If) {
             let condition_start = index + 1;
             let condition_end = find_template_if_condition_end(tokens, condition_start);
-            references.extend(collect_initializer_references(
+            references.extend(collect_symbol_references(
                 &tokens[condition_start..condition_end],
             ));
             index = condition_end;

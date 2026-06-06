@@ -22,7 +22,7 @@ use crate::compiler_frontend::ast::statements::value_production::try_parse_multi
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::type_resolution::{
     TypeResolutionContext, TypeResolutionContextInputs, resolve_diagnostic_type_to_type_id_checked,
-    resolve_type,
+    resolve_parsed_type_annotation,
 };
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidAssignmentTargetReason, InvalidMultiBindReason, TypeMismatchContext,
@@ -35,7 +35,6 @@ use crate::compiler_frontend::datatypes::parsed::ParsedTypeRef;
 use crate::compiler_frontend::declaration_syntax::declaration_shell::{
     BindingTargetSyntax, parse_binding_target_syntax,
 };
-use crate::compiler_frontend::declaration_syntax::type_syntax::parsed_ref_to_data_type;
 use crate::compiler_frontend::symbols::identifier_policy::{
     IdentifierNamingKind, ensure_not_keyword_shadow_identifier, naming_warning_for_identifier,
 };
@@ -144,7 +143,7 @@ pub(crate) fn parse_multi_bind_statement(
 fn validate_multi_bind_target_identifiers(
     parsed_targets: &[BindingTargetSyntax],
     context: &ScopeContext,
-    string_table: &StringTable,
+    string_table: &mut StringTable,
 ) -> Result<(), CompilerDiagnostic> {
     for target in parsed_targets {
         ensure_not_keyword_shadow_identifier(
@@ -204,7 +203,7 @@ fn parse_target_list(
         };
 
         token_stream.advance();
-        let target_syntax = parse_binding_target_syntax(name, token_stream)?;
+        let target_syntax = parse_binding_target_syntax(name, token_stream, string_table)?;
         validate_target_mutability(&target_syntax, string_table)?;
         parsed_targets.push(target_syntax);
 
@@ -336,7 +335,7 @@ fn resolve_known_slot_types(
     parsed_targets: &[BindingTargetSyntax],
     context: &mut ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
-    string_table: &StringTable,
+    string_table: &mut StringTable,
 ) -> Result<Vec<Option<TypeId>>, CompilerDiagnostic> {
     let mut known = Vec::with_capacity(parsed_targets.len());
 
@@ -425,7 +424,7 @@ fn resolve_multi_bind_targets(
     rhs_slots: &[TypeId],
     context: &mut ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
-    string_table: &StringTable,
+    string_table: &mut StringTable,
 ) -> Result<ResolvedMultiBindTargets, CompilerDiagnostic> {
     let mut resolved_bindings = Vec::with_capacity(parsed_targets.len());
     let mut new_declarations = Vec::new();
@@ -610,14 +609,13 @@ fn resolve_target_explicit_type(
     target_syntax: &BindingTargetSyntax,
     context: &mut ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
-    string_table: &StringTable,
+    string_table: &mut StringTable,
 ) -> Result<Option<(TypeId, DataType)>, CompilerDiagnostic> {
     if target_syntax.type_annotation.eq(&ParsedTypeRef::Inferred) {
         return Ok(None);
     }
 
-    let data_type = parsed_ref_to_data_type(&target_syntax.type_annotation);
-    let resolved_type = {
+    let resolved_annotation = {
         let mut type_resolution_context =
             TypeResolutionContext::from_inputs(TypeResolutionContextInputs {
                 declaration_table: &context.top_level_declarations,
@@ -635,6 +633,7 @@ fn resolve_target_explicit_type(
                     .as_ref()
                     .map(|fv| &fv.visible_type_alias_names),
                 resolved_type_aliases: context.resolved_type_aliases.as_deref(),
+                resolved_type_alias_annotations: context.resolved_type_alias_annotations.as_deref(),
                 generic_declarations_by_path: context.generic_declarations_by_path.as_deref(),
                 resolved_struct_fields_by_path: context.resolved_struct_fields_by_path.as_deref(),
                 type_environment: type_interner.environment_mut_for_derived_types(),
@@ -652,25 +651,26 @@ fn resolve_target_explicit_type(
             })
             .with_active_generic_type_context(context.active_generic_type_context());
 
-        resolve_type(
-            &data_type,
+        resolve_parsed_type_annotation(
+            target_syntax.type_annotation.clone(),
             &target_syntax.location,
             &mut type_resolution_context,
             string_table,
+            Some(context),
         )
         .map_err(|diagnostic| *diagnostic)?
     };
 
-    if matches!(resolved_type, DataType::Inferred) {
+    if matches!(resolved_annotation.diagnostic_type, DataType::Inferred) {
         return Ok(None);
     }
 
     let type_id = resolve_diagnostic_type_to_type_id_checked(
-        &resolved_type,
+        &resolved_annotation.diagnostic_type,
         type_interner.environment_mut_for_derived_types(),
         &target_syntax.location,
     )
     .map_err(|diagnostic| *diagnostic)?;
 
-    Ok(Some((type_id, resolved_type)))
+    Ok(Some((type_id, resolved_annotation.diagnostic_type)))
 }

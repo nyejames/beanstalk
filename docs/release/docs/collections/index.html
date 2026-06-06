@@ -312,7 +312,7 @@ body {
         </div>
     </nav>
      <h1 style="font-size: 2em;text-align: center;"> LANGUAGE BASICS</h1>
-    <section class="container"><h1>Collections</h1><p>When a new collection uses the mutable symbol, its internal values can be mutated by default.</p><p>Instead of accessing elements directly, all collections use compiler-owned built-in methods.</p><p>Collections are ordered groups of values that are zero-indexed (start from 0).</p><p>Collection literals are homogeneous. A non-empty collection literal infers its element type from its items. Empty collection literals require an explicit collection type annotation because their element type is not immediately inferable.</p><pre style="
+    <section class="container"><h1>Collections</h1><p>Collections are ordered groups of values that are zero-indexed (start from 0). Instead of accessing elements directly, all collections use compiler-owned built-in methods.</p><p>Collection literals are homogeneous. A non-empty collection literal infers its element type from its items. Empty collection literals require an explicit collection type annotation because their element type is not immediately inferable.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -320,16 +320,24 @@ body {
         white-space: pre;
         overflow-x: auto;
     "><code class='codeblock'>
-    values <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-number'>1</span>, <span class='bst-code-number'>2</span>, <span class='bst-code-number'>3</span><span class='bst-code-parenthesis'>}</span>      <span class='bst-code-comment'>-- inferred as {Int}</span>
-    empty_values <span class='bst-code-operator'>~</span><span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>Int</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-comment'>-- explicit empty Int collection</span>
+    values <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-number'>1</span>, <span class='bst-code-number'>2</span>, <span class='bst-code-number'>3</span><span class='bst-code-parenthesis'>}</span>       <span class='bst-code-comment'>-- inferred as growable {Int}</span>
+    empty_values <span class='bst-code-operator'>~</span><span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>Int</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>  <span class='bst-code-comment'>-- explicit empty Int collection</span>
 
-    values <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>             <span class='bst-code-comment'>-- Type error: element type is ambiguous</span>
-    mixed <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-number'>1</span>, <span class='bst-code-string'>&quot;bad&quot;</span><span class='bst-code-parenthesis'>}</span>      <span class='bst-code-comment'>-- Type error: inconsistent item types</span>
-    </code></pre><p>The compiler does not infer an empty collection&#39;s element type from later `push`, assignment, loop, function argument, HIR, or borrow-analysis use. A declaration&#39;s type must be explicit at the declaration site or immediately inferable from its initializer.</p><p>For unordered keyed collections (Hash Map semantics), keyed method behavior is deferred in this milestone.</p><p>Elements inside collections are accessed using <span style="
+    values <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>              <span class='bst-code-comment'>-- Type error: element type is ambiguous</span>
+    mixed <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-number'>1</span>, <span class='bst-code-string'>&quot;bad&quot;</span><span class='bst-code-parenthesis'>}</span>       <span class='bst-code-comment'>-- Type error: inconsistent item types</span>
+    </code></pre><p>The compiler does not infer an empty collection&#39;s element type from later `push`, assignment, loop, function argument, HIR, or borrow-analysis use. A declaration&#39;s type must be explicit at the declaration site or immediately inferable from its initializer.</p><p>Growable collections use <span style="
         color: #c444aff9;
         font-family: var(--bst-font-family-monospace);
-    "> .get(index)</span>.</p><p>`collection.get(0)` is the equivalent of `collection0` in most C-like languages. There is no square-bracket index notation in Beanstalk.</p><p>`get(index)` returns an `Elem, Error!` fallible value, so it must be handled in value position.</p><p>`get`, `set`, and `remove` are fallible collection operations. `push` and `length` are infallible. Invalid receivers or out-of-bounds indices for fallible operations produce structured errors rather than silent no-ops.</p><p>There may not be a runtime function call under the hood for these methods. The compiler lowers many collection built-ins directly.</p><p>Use `set(index, value)` for indexed writes. Indexed assignment through `get` has been removed.</p></section>
-    <section class="container"><h2>Immutable Collections</h2><pre style="
+    ">{T}</span>. Fixed collections use <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">{N T}</span>, where <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">N</span> is a compile-time positive <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">Int</span> expression and part of the collection type identity.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -337,18 +345,83 @@ body {
         white-space: pre;
         overflow-x: auto;
     "><code class='codeblock'>
-    <span class='bst-code-comment'>-- Collections assigned without the mutable symbol cannot be mutated</span>
-    immutable_collection <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-number'>1</span>, <span class='bst-code-number'>2</span>, <span class='bst-code-number'>3</span><span class='bst-code-parenthesis'>}</span>
+    fixed_values <span class='bst-code-parenthesis'>{</span><span class='bst-code-number'>3</span> <span class='bst-code-type'>Int</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-number'>10</span>, <span class='bst-code-number'>20</span><span class='bst-code-parenthesis'>}</span>
 
-    value <span class='bst-code-operator'>=</span> immutable_collection.get<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>0</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
+    capacity <span class='bst-code-operator'>#</span><span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>4</span>
+    scratch <span class='bst-code-operator'>~</span><span class='bst-code-parenthesis'>{</span>capacity <span class='bst-code-operator'>+</span> <span class='bst-code-number'>2</span> <span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>
+    labels <span class='bst-code-parenthesis'>{</span>capacity<span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;alpha&quot;</span>, <span class='bst-code-string'>&quot;beta&quot;</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-comment'>-- shorthand infers String from the literal</span>
+    </code></pre><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">{Int}</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">{3 Int}</span>, and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">{4 Int}</span> are distinct types.</p><p>Fixed capacity is not a growable allocation hint, and Beanstalk does not implicitly convert between growable and fixed collections or between different fixed capacities.</p><p>Capacity-only shorthand such as <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">{capacity}</span> is valid only for a binding declaration with an immediate non-empty collection literal initializer. It is invalid for empty literals, non-literal initializers, signatures, aliases, fields, and returns.</p><p>Immutable value bindings cannot start from an empty fixed collection literal because there is no later mutable owner path to fill them. Mutable empty fixed bindings and fixed struct field defaults are valid.</p><p>For unordered keyed collections (Hash Map semantics), keyed method behavior is deferred in this milestone.</p><p>Elements inside collections are accessed using <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    "> .get(index)</span>.</p><p>`collection.get(0)` is the equivalent of `collection0` in most C-like languages. There is no square-bracket index notation in Beanstalk.</p><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">get</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">set</span>, <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">push</span>, and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">remove</span> are</p><p>fallible collection operations. <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">length</span> is infallible. Invalid receivers, out-of-bounds indices, and fixed-capacity overflow produce structured errors rather than silent no-ops.</p><p>There may not be a runtime function call under the hood for these methods. The compiler lowers many collection built-ins directly.</p><p>Use <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">set(index, value)</span> for indexed writes. Indexed assignment through</p><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">get</span> has been removed. <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">set</span> replaces an existing index only,</p><p><span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">push</span> appends after the current last element, and <span style="
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    ">remove</span> shifts</p><p>later elements down so dense logical length is preserved.</p></section>
+    <section class="container"><h2>Immutable Bindings</h2><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-comment'>-- A collection assigned without the mutable symbol cannot be mutated through this binding.</span>
+    read_only_items <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-number'>1</span>, <span class='bst-code-number'>2</span>, <span class='bst-code-number'>3</span><span class='bst-code-parenthesis'>}</span>
+
+    value <span class='bst-code-operator'>=</span> read_only_items.get<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>0</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
         then <span class='bst-code-number'>0</span>
     ;
 
-    <span class='bst-code-operator'>~</span>immutable_collection.set<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>1</span>, <span class='bst-code-number'>69</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-comment'>-- Error, can&#39;t mutate values inside an immutable collection</span>
-    <span class='bst-code-operator'>~</span>immutable_collection.push<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>4</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-comment'>-- Error, push mutates the collection</span>
-    <span class='bst-code-operator'>~</span>immutable_collection.remove<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>0</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-comment'>-- Error, remove mutates the collection</span>
+    <span class='bst-code-operator'>~</span>read_only_items.set<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>1</span>, <span class='bst-code-number'>69</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
+    ; <span class='bst-code-comment'>-- Error, the binding is not mutable</span>
+
+    <span class='bst-code-operator'>~</span>read_only_items.push<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>4</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
+    ; <span class='bst-code-comment'>-- Error, push mutates the collection</span>
+
+    <span class='bst-code-operator'>~</span>read_only_items.remove<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>0</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
+        then <span class='bst-code-number'>0</span>
+    ; <span class='bst-code-comment'>-- Error, remove mutates the collection</span>
     </code></pre></section>
-    <section class="container"><h2>Mutable Collections</h2><p>Whenever a method mutates its receiver, the receiver must be marked with the mutable symbol.</p><p>This is also true of built-in collection methods that mutate the collection, such as `set`, `push`, and `remove`.</p><pre style="
+    <section class="container"><h2>Mutable Bindings</h2><p>Whenever a method mutates its receiver, the receiver must be marked with the mutable symbol.</p><p>This is also true of built-in collection methods that mutate the collection, such as `set`, `push`, and `remove`.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -374,9 +447,41 @@ body {
     ;
     count <span class='bst-code-operator'>=</span> fruit_array.length<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-comment'>-- returns an Int (strictly validated at runtime)</span>
 
-    <span class='bst-code-operator'>~</span>fruit_array.push<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;orange&quot;</span><span class='bst-code-parenthesis'>)</span>
+    <span class='bst-code-operator'>~</span>fruit_array.push<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;orange&quot;</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
+        assert<span class='bst-code-parenthesis'>(</span>false, <span class='bst-code-string'>&quot;This should never fail for this growable collection in this example&quot;</span><span class='bst-code-parenthesis'>)</span>
+    ;
     removed <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>~</span>fruit_array.remove<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>2</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
         then <span class='bst-code-string'>&quot;fallback-fruit&quot;</span>
+    ;
+    </code></pre></section>
+    <section class="container"><h2>Fixed Collections</h2><p>Fixed collections keep the same dense item behavior as growable collections, but they have an exact maximum length in their type.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    items <span class='bst-code-operator'>~</span><span class='bst-code-parenthesis'>{</span><span class='bst-code-number'>2</span> <span class='bst-code-type'>Int</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>
+
+    <span class='bst-code-operator'>~</span>items.push<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>1</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
+        assert<span class='bst-code-parenthesis'>(</span>false, <span class='bst-code-string'>&quot;First push should fit the fixed capacity&quot;</span><span class='bst-code-parenthesis'>)</span>
+    ;
+
+    <span class='bst-code-operator'>~</span>items.push<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>2</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
+        assert<span class='bst-code-parenthesis'>(</span>false, <span class='bst-code-string'>&quot;Second push should fit the fixed capacity&quot;</span><span class='bst-code-parenthesis'>)</span>
+    ;
+
+    <span class='bst-code-operator'>~</span>items.push<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>3</span><span class='bst-code-parenthesis'>)</span> catch <span class='bst-code-operator'>|</span>err<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
+        io<span class='bst-code-parenthesis'>(</span>err.message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-comment'>-- Fixed collection capacity exceeded</span>
+    ;
+
+    removed <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>~</span>items.remove<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>0</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
+        then <span class='bst-code-number'>0</span>
+    ;
+
+    <span class='bst-code-operator'>~</span>items.push<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>3</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
+        assert<span class='bst-code-parenthesis'>(</span>false, <span class='bst-code-string'>&quot;Remove freed one fixed-capacity slot&quot;</span><span class='bst-code-parenthesis'>)</span>
     ;
     </code></pre></section>
     <section class="container"><h2>Hash Maps</h2><p>Hash map keyed method behavior is deferred at this stage of development. Current built-in collection receiver methods are implemented for ordered collections only.</p><p>The eventual built-in hash map syntax will look something like this:</p><pre style="
@@ -524,8 +629,8 @@ body {
 
     function __bs_make_error(message, code, location, trace) {
     return {
-    message,
-    code,
+    b_fld0: message,
+    b_fld1: code,
     __bst_location: location ?? null,
     __bst_trace: trace ?? null
     };
@@ -535,13 +640,23 @@ body {
     return { tag: "err", value: __bs_make_error(message, code, null, null) };
     }
 
+    function __bs_error_message(error) {
+    const message = error && error["b_fld0"] !== undefined ? error["b_fld0"] : error && error.message;
+    return typeof message === "string" ? message : String(message ?? "Unknown error");
+    }
+
+    function __bs_error_code(error) {
+    const code = error && error["b_fld1"] !== undefined ? error["b_fld1"] : error && error.code;
+    return typeof code === "number" ? code : 0;
+    }
+
     function __bs_error_with_location(error, location) {
-    return __bs_make_error(error.message, error.code, location, error.__bst_trace);
+    return __bs_make_error(__bs_error_message(error), __bs_error_code(error), location, error.__bst_trace);
     }
 
     function __bs_error_push_trace(error, frame) {
     const nextTrace = error.__bst_trace ? error.__bst_trace.concat([frame]) : [frame];
-    return __bs_make_error(error.message, error.code, error.__bst_location, nextTrace);
+    return __bs_make_error(__bs_error_message(error), __bs_error_code(error), error.__bst_location, nextTrace);
     }
 
     function __bs_error_bubble(error, file, line, column, functionName) {
@@ -578,48 +693,104 @@ body {
     throw new Error("Expected internal Result carrier during fallback handling");
     }
 
+    function __bs_fixed_collection(items, fixedCapacity) {
+    return {
+    __bst_kind: "fixed_collection",
+    items: items,
+    fixedCapacity: fixedCapacity,
+    };
+    }
+
+    function __bs_collection_items(collection) {
+    if (Array.isArray(collection)) {
+    return collection;
+    }
+    return collection.items;
+    }
+
+    function __bs_collection_fixed_capacity(collection) {
+    if (Array.isArray(collection)) {
+    return null;
+    }
+    return collection.fixedCapacity;
+    }
+
+    function __bs_collection_is_valid(collection) {
+    if (Array.isArray(collection)) {
+    return true;
+    }
+    if (collection === null || typeof collection !== "object") {
+    return false;
+    }
+    if (collection.__bst_kind !== "fixed_collection") {
+    return false;
+    }
+    if (!Array.isArray(collection.items)) {
+    return false;
+    }
+    return (
+    Number.isInteger(collection.fixedCapacity)
+    && collection.fixedCapacity > 0
+    && collection.items.length <= collection.fixedCapacity
+    );
+    }
+
     function __bs_collection_index_is_valid(collection, index) {
-    return Number.isInteger(index) && index >= 0 && index < collection.length;
+    const items = __bs_collection_items(collection);
+    return Number.isInteger(index) && index >= 0 && index < items.length;
     }
 
     function __bs_collection_get(collection, index) {
-    if (!Array.isArray(collection)) {
+    if (!__bs_collection_is_valid(collection)) {
     return __bs_error_result("Collection operation expects an ordered collection", 100);
     }
     if (!__bs_collection_index_is_valid(collection, index)) {
     return __bs_error_result("Collection index out of bounds", 101);
     }
-    return { tag: "ok", value: collection[index] };
+    const items = __bs_collection_items(collection);
+    return { tag: "ok", value: items[index] };
     }
 
     function __bs_collection_set(collection, index, value) {
-    if (!Array.isArray(collection)) {
+    if (!__bs_collection_is_valid(collection)) {
     return __bs_error_result("Collection operation expects an ordered collection", 100);
     }
     if (!__bs_collection_index_is_valid(collection, index)) {
     return __bs_error_result("Collection index out of bounds", 101);
     }
-    collection[index] = value;
+    const items = __bs_collection_items(collection);
+    items[index] = value;
     return { tag: "ok", value: null };
     }
 
     function __bs_collection_push(collection, value) {
-    collection.push(value);
+    if (!__bs_collection_is_valid(collection)) {
+    return __bs_error_result("Collection operation expects an ordered collection", 100);
+    }
+    const items = __bs_collection_items(collection);
+    const fixedCapacity = __bs_collection_fixed_capacity(collection);
+    if (fixedCapacity !== null && items.length >= fixedCapacity) {
+    return __bs_error_result("Fixed collection capacity exceeded", 102);
+    }
+    items.push(value);
+    return { tag: "ok", value: null };
     }
 
     function __bs_collection_remove(collection, index) {
-    if (!Array.isArray(collection)) {
+    if (!__bs_collection_is_valid(collection)) {
     return __bs_error_result("Collection operation expects an ordered collection", 100);
     }
     if (!__bs_collection_index_is_valid(collection, index)) {
     return __bs_error_result("Collection index out of bounds", 101);
     }
-    const removed = collection.splice(index, 1)[0];
+    const items = __bs_collection_items(collection);
+    const removed = items.splice(index, 1)[0];
     return { tag: "ok", value: removed };
     }
 
     function __bs_collection_length(collection) {
-    return collection.length;
+    const items = __bs_collection_items(collection);
+    return items.length;
     }
 
     function __bs_value_to_string(value) {

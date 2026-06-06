@@ -237,3 +237,73 @@ fn balanced_template_region_errors_on_eof_before_close() {
 
     assert_eq!(error, "missing template close");
 }
+
+#[test]
+fn collect_symbol_references_matches_initializer_behavior_for_bare_symbol() {
+    let mut string_table = StringTable::new();
+    let name = string_table.intern("value");
+    let tokens = vec![
+        token(TokenKind::Symbol(name)),
+        token(TokenKind::Newline),
+        token(TokenKind::Eof),
+    ];
+    let refs = crate::compiler_frontend::token_scan::collect_symbol_references(&tokens);
+    assert_eq!(refs.len(), 1);
+    assert_eq!(string_table.resolve(refs[0].name), "value");
+    assert!(refs[0].dot_member.is_none());
+    assert!(!refs[0].followed_by_call);
+    assert!(!refs[0].followed_by_choice_namespace);
+}
+
+#[test]
+fn collect_symbol_references_matches_initializer_behavior_for_dot_member() {
+    let mut string_table = StringTable::new();
+    let name = string_table.intern("config");
+    let member = string_table.intern("setting");
+    let tokens = vec![
+        token(TokenKind::Symbol(name)),
+        token(TokenKind::Dot),
+        token(TokenKind::Symbol(member)),
+        token(TokenKind::Newline),
+    ];
+    let refs = crate::compiler_frontend::token_scan::collect_symbol_references(&tokens);
+    assert_eq!(refs.len(), 1);
+    assert_eq!(string_table.resolve(refs[0].name), "config");
+    assert_eq!(
+        refs[0].dot_member.map(|m| string_table.resolve(m)),
+        Some("setting")
+    );
+    assert!(!refs[0].followed_by_call);
+}
+
+#[test]
+fn collect_symbol_references_matches_initializer_behavior_for_call() {
+    let mut string_table = StringTable::new();
+    let name = string_table.intern("helper");
+    let tokens = vec![
+        token(TokenKind::Symbol(name)),
+        token(TokenKind::OpenParenthesis),
+        token(TokenKind::CloseParenthesis),
+    ];
+    let refs = crate::compiler_frontend::token_scan::collect_symbol_references(&tokens);
+    assert_eq!(refs.len(), 1);
+    assert_eq!(string_table.resolve(refs[0].name), "helper");
+    assert!(refs[0].followed_by_call);
+    assert!(!refs[0].followed_by_choice_namespace);
+}
+
+#[test]
+fn collect_symbol_references_matches_initializer_behavior_for_choice_namespace() {
+    let mut string_table = StringTable::new();
+    let name = string_table.intern("Status");
+    let tokens = vec![
+        token(TokenKind::Symbol(name)),
+        token(TokenKind::DoubleColon),
+        token(TokenKind::Symbol(string_table.intern("Ready"))),
+    ];
+    let refs = crate::compiler_frontend::token_scan::collect_symbol_references(&tokens);
+    assert_eq!(refs.len(), 1);
+    assert_eq!(string_table.resolve(refs[0].name), "Status");
+    assert!(!refs[0].followed_by_call);
+    assert!(refs[0].followed_by_choice_namespace);
+}

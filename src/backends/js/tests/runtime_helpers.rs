@@ -123,7 +123,45 @@ fn error_result_helper_wraps_make_error_in_err_carrier() {
     );
 }
 
-/// Verifies that `__bs_collection_index_is_valid` checks integer, bounds, and length. [collection]
+/// Verifies that backend-created errors use the same lowered fields as builtin `Error(...)`.
+/// [error]
+#[test]
+fn make_error_uses_builtin_error_field_symbols() {
+    let source = lower_minimal_module("main");
+    let helper = helper_source(&source, "__bs_make_error");
+
+    let message_field = expected_dev_field_name("message", 0);
+    let code_field = expected_dev_field_name("code", 1);
+
+    assert!(
+        helper.contains(&format!("{message_field}: message"))
+            && helper.contains(&format!("{code_field}: code")),
+        "__bs_make_error must construct the lowered builtin Error fields"
+    );
+    assert!(
+        !helper.contains("\n        message,") && !helper.contains("\n        code,"),
+        "__bs_make_error must not construct a parallel plain JS error shape"
+    );
+}
+
+/// Verifies that location/trace helpers preserve canonical error fields.
+/// [error]
+#[test]
+fn error_context_helpers_read_canonical_error_fields() {
+    let source = lower_minimal_module("main");
+    let with_location = helper_source(&source, "__bs_error_with_location");
+    let push_trace = helper_source(&source, "__bs_error_push_trace");
+
+    assert!(
+        with_location.contains("__bs_error_message(error)")
+            && with_location.contains("__bs_error_code(error)")
+            && push_trace.contains("__bs_error_message(error)")
+            && push_trace.contains("__bs_error_code(error)"),
+        "runtime error context helpers must preserve canonical Error.message/Error.code fields"
+    );
+}
+
+/// Verifies that `__bs_collection_index_is_valid` checks integer, bounds, and item length. [collection]
 #[test]
 fn collection_index_is_valid_checks_integer_bounds_and_length() {
     let source = lower_minimal_module("main");
@@ -132,8 +170,8 @@ fn collection_index_is_valid_checks_integer_bounds_and_length() {
     assert!(
         helper.contains("Number.isInteger(index)")
             && helper.contains("index >= 0")
-            && helper.contains("index < collection.length"),
-        "__bs_collection_index_is_valid must validate integer, non-negative, and in-bounds"
+            && helper.contains("items.length"),
+        "__bs_collection_index_is_valid must validate integer, non-negative, and in-bounds via items"
     );
 }
 
@@ -143,6 +181,7 @@ fn collection_helpers_use_expected_error_code_for_invalid_receiver() {
     let source = lower_minimal_module("main");
     let get = helper_source(&source, "__bs_collection_get");
     let set = helper_source(&source, "__bs_collection_set");
+    let push = helper_source(&source, "__bs_collection_push");
     let remove = helper_source(&source, "__bs_collection_remove");
 
     let expected_error = BuiltinErrorCode::CollectionExpectedOrderedCollection;
@@ -151,7 +190,10 @@ fn collection_helpers_use_expected_error_code_for_invalid_receiver() {
     let expected = format!(r#"__bs_error_result("{expected_message}", {expected_code})"#);
 
     assert!(
-        get.contains(&expected) && set.contains(&expected) && remove.contains(&expected),
+        get.contains(&expected)
+            && set.contains(&expected)
+            && push.contains(&expected)
+            && remove.contains(&expected),
         "collection helpers must use CollectionExpectedOrderedCollection for invalid receivers"
     );
 }
@@ -175,15 +217,15 @@ fn collection_helpers_use_expected_error_code_for_out_of_bounds() {
     );
 }
 
-/// Verifies that `__bs_collection_get` returns an err carrier for non-array inputs. [collection]
+/// Verifies that `__bs_collection_get` returns an err carrier for invalid collection inputs. [collection]
 #[test]
-fn collection_get_returns_err_for_non_array() {
+fn collection_get_returns_err_for_invalid_collection() {
     let source = lower_minimal_module("main");
     let get = helper_source(&source, "__bs_collection_get");
 
     assert!(
-        get.contains("!Array.isArray(collection)") && get.contains("__bs_error_result"),
-        "__bs_collection_get must return a Result-typed err for non-array inputs"
+        get.contains("__bs_collection_is_valid(collection)") && get.contains("__bs_error_result"),
+        "__bs_collection_get must return a Result-typed err for invalid collection inputs"
     );
 }
 
@@ -207,7 +249,7 @@ fn collection_get_returns_ok_for_valid_index() {
     let get = helper_source(&source, "__bs_collection_get");
 
     assert!(
-        get.contains("{ tag: \"ok\", value: collection[index] }"),
+        get.contains("{ tag: \"ok\", value: items[index] }"),
         "__bs_collection_get must return a Result-typed ok for valid indices"
     );
 }
@@ -232,32 +274,33 @@ fn collection_set_returns_ok_after_write() {
     let set = helper_source(&source, "__bs_collection_set");
 
     assert!(
-        set.contains("collection[index] = value;") && set.contains("{ tag: \"ok\", value: null }"),
+        set.contains("items[index] = value;") && set.contains("{ tag: \"ok\", value: null }"),
         "__bs_collection_set must return a fallible-carrier success after writing"
     );
 }
 
-/// Verifies that `__bs_collection_push` mutates without returning a fallible carrier. [collection]
+/// Verifies that `__bs_collection_push` returns a fallible carrier on success. [collection]
 #[test]
-fn collection_push_is_infallible_runtime_helper() {
+fn collection_push_returns_ok_after_mutation() {
     let source = lower_minimal_module("main");
     let push = helper_source(&source, "__bs_collection_push");
 
     assert!(
-        push.contains("collection.push(value)") && !push.contains("{ tag:"),
-        "__bs_collection_push must be a plain infallible helper"
+        push.contains("items.push(value)") && push.contains("{ tag: \"ok\", value: null }"),
+        "__bs_collection_push must return a fallible-carrier success after pushing"
     );
 }
 
-/// Verifies that `__bs_collection_remove` returns an err carrier for non-array inputs. [collection]
+/// Verifies that `__bs_collection_remove` returns an err carrier for invalid collection inputs. [collection]
 #[test]
-fn collection_remove_returns_err_for_non_array() {
+fn collection_remove_returns_err_for_invalid_collection() {
     let source = lower_minimal_module("main");
     let remove = helper_source(&source, "__bs_collection_remove");
 
     assert!(
-        remove.contains("!Array.isArray(collection)") && remove.contains("__bs_error_result"),
-        "__bs_collection_remove must return a Result-typed err for non-array inputs"
+        remove.contains("__bs_collection_is_valid(collection)")
+            && remove.contains("__bs_error_result"),
+        "__bs_collection_remove must return a Result-typed err for invalid collection inputs"
     );
 }
 
@@ -281,7 +324,7 @@ fn collection_remove_returns_ok_for_valid_index() {
     let remove = helper_source(&source, "__bs_collection_remove");
 
     assert!(
-        remove.contains("const removed = collection.splice(index, 1)[0];")
+        remove.contains("const removed = items.splice(index, 1)[0];")
             && remove.contains("{ tag: \"ok\", value: removed }"),
         "__bs_collection_remove must return the removed element in its ok carrier"
     );
@@ -294,7 +337,7 @@ fn collection_length_is_infallible_runtime_helper() {
     let length = helper_source(&source, "__bs_collection_length");
 
     assert!(
-        length.contains("return collection.length;") && !length.contains("{ tag:"),
+        length.contains("return items.length;") && !length.contains("{ tag:"),
         "__bs_collection_length must return a plain length value"
     );
 }
@@ -315,7 +358,7 @@ fn collection_push_call_is_not_wrapped_with_result_propagate() {
                 expression(
                     1,
                     HirExpressionKind::Collection(vec![]),
-                    types.int,
+                    types.collection_int,
                     RegionId(0),
                     ValueKind::RValue,
                 ),
@@ -379,7 +422,7 @@ fn collection_remove_call_is_not_wrapped_with_result_propagate() {
                 expression(
                     1,
                     HirExpressionKind::Collection(vec![]),
-                    types.int,
+                    types.collection_int,
                     RegionId(0),
                     ValueKind::RValue,
                 ),
@@ -456,7 +499,7 @@ fn collection_length_call_is_not_wrapped_with_result_propagate() {
             args: vec![expression(
                 1,
                 HirExpressionKind::Collection(vec![]),
-                types.int,
+                types.collection_int,
                 RegionId(0),
                 ValueKind::RValue,
             )],
@@ -558,3 +601,185 @@ fn error_bubble_normalizes_file_and_builds_trace() {
 }
 
 // ---------------------------------------------------------------------------
+// Fixed collection runtime helper tests [fixed-collection]
+// ---------------------------------------------------------------------------
+
+/// Verifies that `__bs_fixed_collection` creates a wrapper with items and capacity. [fixed-collection]
+#[test]
+fn fixed_collection_helper_creates_wrapper_with_items_and_capacity() {
+    let source = lower_minimal_module("main");
+    let helper = helper_source(&source, "__bs_fixed_collection");
+
+    assert!(
+        helper.contains("__bst_kind: \"fixed_collection\"")
+            && helper.contains("items: items")
+            && helper.contains("fixedCapacity: fixedCapacity"),
+        "__bs_fixed_collection must create a branded wrapper with items and fixed capacity"
+    );
+}
+
+/// Verifies that `__bs_collection_items` returns plain arrays as-is. [fixed-collection]
+#[test]
+fn collection_items_returns_array_as_is() {
+    let source = lower_minimal_module("main");
+    let helper = helper_source(&source, "__bs_collection_items");
+
+    assert!(
+        helper.contains("Array.isArray(collection)") && helper.contains("return collection;"),
+        "__bs_collection_items must return plain arrays directly"
+    );
+}
+
+/// Verifies that `__bs_collection_items` extracts items from fixed wrappers. [fixed-collection]
+#[test]
+fn collection_items_extracts_from_fixed_wrapper() {
+    let source = lower_minimal_module("main");
+    let helper = helper_source(&source, "__bs_collection_items");
+
+    assert!(
+        helper.contains("return collection.items;"),
+        "__bs_collection_items must extract items from fixed wrappers"
+    );
+}
+
+/// Verifies that `__bs_collection_fixed_capacity` returns null for arrays. [fixed-collection]
+#[test]
+fn collection_fixed_capacity_returns_null_for_arrays() {
+    let source = lower_minimal_module("main");
+    let helper = helper_source(&source, "__bs_collection_fixed_capacity");
+
+    assert!(
+        helper.contains("Array.isArray(collection)") && helper.contains("return null;"),
+        "__bs_collection_fixed_capacity must return null for growable arrays"
+    );
+}
+
+/// Verifies that `__bs_collection_fixed_capacity` returns capacity for fixed wrappers. [fixed-collection]
+#[test]
+fn collection_fixed_capacity_returns_capacity_for_fixed() {
+    let source = lower_minimal_module("main");
+    let helper = helper_source(&source, "__bs_collection_fixed_capacity");
+
+    assert!(
+        helper.contains("return collection.fixedCapacity;"),
+        "__bs_collection_fixed_capacity must return capacity for fixed wrappers"
+    );
+}
+
+/// Verifies that `__bs_collection_is_valid` accepts arrays. [fixed-collection]
+#[test]
+fn collection_is_valid_accepts_arrays() {
+    let source = lower_minimal_module("main");
+    let helper = helper_source(&source, "__bs_collection_is_valid");
+
+    assert!(
+        helper.contains("Array.isArray(collection)") && helper.contains("return true;"),
+        "__bs_collection_is_valid must accept plain arrays"
+    );
+}
+
+/// Verifies that `__bs_collection_is_valid` accepts fixed wrappers. [fixed-collection]
+#[test]
+fn collection_is_valid_accepts_fixed_wrappers() {
+    let source = lower_minimal_module("main");
+    let helper = helper_source(&source, "__bs_collection_is_valid");
+
+    assert!(
+        helper.contains("collection.__bst_kind !== \"fixed_collection\"")
+            && helper.contains("Array.isArray(collection.items)")
+            && helper.contains("Number.isInteger(collection.fixedCapacity)")
+            && helper.contains("collection.items.length <= collection.fixedCapacity"),
+        "__bs_collection_is_valid must validate the branded fixed wrapper shape"
+    );
+}
+
+/// Verifies that `__bs_collection_push` checks fixed capacity before pushing. [fixed-collection]
+#[test]
+fn collection_push_checks_fixed_capacity() {
+    let source = lower_minimal_module("main");
+    let push = helper_source(&source, "__bs_collection_push");
+
+    assert!(
+        push.contains("__bs_collection_fixed_capacity(collection)")
+            && push.contains("items.length >= fixedCapacity"),
+        "__bs_collection_push must check fixed capacity before pushing"
+    );
+}
+
+/// Verifies that `__bs_collection_push` returns capacity exceeded error for fixed collections. [fixed-collection]
+#[test]
+fn collection_push_returns_capacity_exceeded_error() {
+    let source = lower_minimal_module("main");
+    let push = helper_source(&source, "__bs_collection_push");
+
+    let expected_error = BuiltinErrorCode::CollectionFixedCapacityExceeded;
+    let expected_message = expected_error.default_message();
+    let expected_code = expected_error.as_i64();
+    let expected = format!(r#"__bs_error_result("{expected_message}", {expected_code})"#);
+
+    assert!(
+        push.contains(&expected),
+        "__bs_collection_push must return CollectionFixedCapacityExceeded when full"
+    );
+}
+
+/// Verifies that `__bs_collection_push` returns ok carrier on success. [fixed-collection]
+#[test]
+fn collection_push_returns_ok_carrier_on_success() {
+    let source = lower_minimal_module("main");
+    let push = helper_source(&source, "__bs_collection_push");
+
+    assert!(
+        push.contains("{ tag: \"ok\", value: null }"),
+        "__bs_collection_push must return ok carrier on success"
+    );
+}
+
+/// Verifies that `__bs_collection_length` returns logical item count via items.length. [fixed-collection]
+#[test]
+fn collection_length_returns_logical_item_count() {
+    let source = lower_minimal_module("main");
+    let length = helper_source(&source, "__bs_collection_length");
+
+    assert!(
+        length.contains("__bs_collection_items(collection)")
+            && length.contains("return items.length;"),
+        "__bs_collection_length must return logical item count, not capacity"
+    );
+}
+
+/// Verifies that `__bs_collection_get` uses items from `__bs_collection_items`. [fixed-collection]
+#[test]
+fn collection_get_uses_collection_items() {
+    let source = lower_minimal_module("main");
+    let get = helper_source(&source, "__bs_collection_get");
+
+    assert!(
+        get.contains("__bs_collection_items(collection)"),
+        "__bs_collection_get must operate on the dense items array"
+    );
+}
+
+/// Verifies that `__bs_collection_set` uses items from `__bs_collection_items`. [fixed-collection]
+#[test]
+fn collection_set_uses_collection_items() {
+    let source = lower_minimal_module("main");
+    let set = helper_source(&source, "__bs_collection_set");
+
+    assert!(
+        set.contains("__bs_collection_items(collection)"),
+        "__bs_collection_set must operate on the dense items array"
+    );
+}
+
+/// Verifies that `__bs_collection_remove` uses items from `__bs_collection_items`. [fixed-collection]
+#[test]
+fn collection_remove_uses_collection_items() {
+    let source = lower_minimal_module("main");
+    let remove = helper_source(&source, "__bs_collection_remove");
+
+    assert!(
+        remove.contains("__bs_collection_items(collection)"),
+        "__bs_collection_remove must operate on the dense items array"
+    );
+}

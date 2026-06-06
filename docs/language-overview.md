@@ -284,9 +284,15 @@ Collections are ordered, zero-indexed, homogeneous groups.
 ```beanstalk
 values ~= {'a', 'b', 'c'}  -- {Char}
 empty_values ~{Int} = {}   -- explicit type required
+fixed_values {3 Int} = {10, 20}
+
+capacity #Int = 4
+scratch ~{capacity + 2 String} = {}
+labels {capacity} = {"alpha", "beta"} -- declaration-target shorthand
 
 items ~= {10, 20, 30}
-~items.push(40)
+~items.push(40) catch:
+;
 ~items.set(0, 99) catch:
 ;
 removed = ~items.remove(1) catch:
@@ -295,12 +301,26 @@ removed = ~items.remove(1) catch:
 ```
 
 Rules:
+- `{T}` is a growable collection type.
+- `{N T}` is a fixed collection type with exact maximum length `N`.
+- Fixed capacity is semantic type identity, not an allocation hint: `{Int}`, `{4 Int}`, and `{8 Int}` are distinct incompatible types.
+- Capacity expressions in type position must fold to a positive `Int` that fits the compiler target. They may use visible compile-time constants and ordinary compile-time arithmetic.
+- `~` is binding/access mode. It is not part of the collection type shape: `~{4 Int}` is mutable access to a `{4 Int}`, not a separate type.
 - Non-empty literals infer their element type from items.
 - Empty literals require an explicit collection type at the declaration site.
+- In a fixed collection receiving context, a literal constructs that fixed collection directly and must not exceed the fixed capacity.
+- Capacity-only shorthand such as `{capacity}` is valid only on a binding declaration with an immediate non-empty collection literal initializer that can infer the element type.
+- Capacity-only shorthand is invalid for empty literals, non-literal initializers, signatures, aliases, fields, and returns.
+- Immutable value bindings cannot be initialized with an empty fixed collection literal. Mutable fixed empty bindings and fixed collection field defaults are valid.
 - Element type is not inferred from later `push`, assignment, loop, function-argument, HIR, or borrow-analysis use.
 - Mutating operations require explicit mutable/exclusive receiver access: `~items.push(...)`, `~items.set(...)`, `~items.remove(...)`.
-- `get`, `set`, and `remove` are fallible; `push` and `length` are infallible.
+- `get`, `set`, `push`, and `remove` are fallible; `length` is infallible.
 - `collection.get(index)` returns `Elem, Error!`.
+- `~collection.push(value)` returns no success value and must still be handled with `!` or `catch`.
+- `~collection.set(index, value)` replaces an existing element only; it does not fill unused fixed capacity.
+- `~collection.push(value)` appends after the current last element and fails when a fixed collection is already full.
+- `~collection.remove(index)` removes the element at that index, shifts later elements down, and frees one slot in a fixed collection.
+- `collection.length()` returns the current logical length, not fixed capacity.
 - Indexed writes use `~items.set(index, value)`; assignment through `get` is removed.
 - The compiler may lower collection methods directly without a runtime call.
 

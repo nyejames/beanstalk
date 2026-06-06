@@ -140,6 +140,34 @@ fn validation_error_for_injected_local_type(
         .expect_err("validator should reject unresolved generic parameter inside TypeId")
 }
 
+fn inject_collection_expression_statement(
+    module: &mut HirModule,
+    collection_type_id: TypeId,
+    location: SourceLocation,
+) {
+    let entry_block_index = start_entry_block_index(module);
+    let entry_block = &mut module.blocks[entry_block_index];
+    let value_id = HirValueId(9000);
+    let statement_id = HirNodeId(9000);
+    let expression = HirExpression {
+        id: value_id,
+        kind: HirExpressionKind::Collection(vec![]),
+        ty: collection_type_id,
+        value_kind: ValueKind::RValue,
+        region: entry_block.region,
+    };
+
+    let statement = HirStatement {
+        id: statement_id,
+        kind: HirStatementKind::Expr(expression),
+        location: location.clone(),
+    };
+
+    module.side_table.map_statement(&location, &statement);
+    module.side_table.map_value(&location, value_id, &location);
+    entry_block.statements.push(statement);
+}
+
 fn register_displayable_evidence_for_type(
     module: &mut HirModule,
     type_environment: &mut TypeEnvironment,
@@ -381,7 +409,9 @@ fn validator_rejects_collection_containing_generic_parameter() {
     let error = validation_error_for_injected_local_type(|string_table, type_environment| {
         let generic_type_id = generic_parameter_type_id(string_table, type_environment);
         type_environment.intern_constructed(
-            TypeConstructor::Builtin(BuiltinTypeConstructor::Collection),
+            TypeConstructor::Builtin(BuiltinTypeConstructor::Collection {
+                fixed_capacity: None,
+            }),
             Box::new([generic_type_id]),
         )
     });
@@ -470,7 +500,9 @@ fn validator_rejects_struct_field_type_containing_generic_parameter() {
         lower_ast(ast, &mut string_table).expect("lowering should succeed");
     let generic_type_id = generic_parameter_type_id(&mut string_table, &mut type_environment);
     let collection_type_id = type_environment.intern_constructed(
-        TypeConstructor::Builtin(BuiltinTypeConstructor::Collection),
+        TypeConstructor::Builtin(BuiltinTypeConstructor::Collection {
+            fixed_capacity: None,
+        }),
         Box::new([generic_type_id]),
     );
 
@@ -1313,4 +1345,42 @@ fn hir_variant_construct_choice_wrong_field_type_rejected() {
         "expected 'field type mismatch' in error, got: {}",
         error.msg
     );
+}
+
+#[test]
+fn validator_rejects_collection_expression_with_non_collection_type() {
+    let (string_table, mut module, type_environment) = minimal_lowered_hir_module();
+    let int_type = type_environment.builtins().int;
+    inject_collection_expression_statement(&mut module, int_type, test_location(20));
+
+    let error = validate_module_for_tests(&module, &string_table, &type_environment)
+        .expect_err("validator should reject Collection expression with non-collection type");
+    assert_eq!(error.error_type, ErrorType::HirTransformation);
+    assert!(
+        error.msg.contains("not a collection type"),
+        "expected 'not a collection type' in error, got: {}",
+        error.msg
+    );
+}
+
+#[test]
+fn validator_accepts_collection_expression_with_growable_collection_type() {
+    let (string_table, mut module, mut type_environment) = minimal_lowered_hir_module();
+    let int_type = type_environment.builtins().int;
+    let growable_collection = type_environment.intern_collection(int_type, None);
+    inject_collection_expression_statement(&mut module, growable_collection, test_location(20));
+
+    validate_module_for_tests(&module, &string_table, &type_environment)
+        .expect("validator should accept Collection expression with growable collection type");
+}
+
+#[test]
+fn validator_accepts_collection_expression_with_fixed_collection_type() {
+    let (string_table, mut module, mut type_environment) = minimal_lowered_hir_module();
+    let int_type = type_environment.builtins().int;
+    let fixed_collection = type_environment.intern_collection(int_type, Some(64));
+    inject_collection_expression_statement(&mut module, fixed_collection, test_location(20));
+
+    validate_module_for_tests(&module, &string_table, &type_environment)
+        .expect("validator should accept Collection expression with fixed collection type");
 }

@@ -1,6 +1,8 @@
 values ~{Int} = {}
-~values.push(1)
-~values.push(2)
+~values.push(1) catch:
+;
+~values.push(2) catch:
+;
 
 first = values.get(0) catch:
 

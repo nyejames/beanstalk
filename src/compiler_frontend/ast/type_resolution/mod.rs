@@ -47,11 +47,13 @@ pub(crate) use recursive_types::{
 // crate-visible result without making the implementation module public.
 #[allow(unused_imports)]
 pub(crate) use resolve_type::ResolvedTypeAnnotation;
+pub(crate) use resolve_type::fold_collection_capacity_expression;
+pub(crate) use resolve_type::resolve_diagnostic_type_to_type_id;
 #[cfg(test)]
 pub(crate) use resolve_type::resolve_diagnostic_type_to_type_id_opt;
 pub(crate) use resolve_type::{
-    TypeResolutionContext, TypeResolutionContextInputs, resolve_diagnostic_type_to_type_id,
-    resolve_diagnostic_type_to_type_id_checked, resolve_parsed_type_annotation, resolve_type,
+    TypeResolutionContext, TypeResolutionContextInputs, resolve_diagnostic_type_to_type_id_checked,
+    resolve_parsed_type_annotation, resolve_type,
 };
 pub(crate) use signatures::resolve_function_signature;
 pub(crate) use struct_fields::{

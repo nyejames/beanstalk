@@ -11,27 +11,48 @@ page_head #= theme_head
 #[section, $markdown:
     # Collections
 
-    When a new collection uses the mutable symbol, its internal values can be mutated by default.
-
-    Instead of accessing elements directly, all collections use compiler-owned built-in methods.
-
     Collections are ordered groups of values that are zero-indexed (start from 0).
+    Instead of accessing elements directly, all collections use compiler-owned built-in methods.
 
     Collection literals are homogeneous. A non-empty collection literal infers its element type
     from its items. Empty collection literals require an explicit collection type annotation
     because their element type is not immediately inferable.
 
     [codeblock, $code("bst"):
-        values ~= {1, 2, 3}      -- inferred as {Int}
-        empty_values ~{Int} = {} -- explicit empty Int collection
+        values ~= {1, 2, 3}       -- inferred as growable {Int}
+        empty_values ~{Int} = {}  -- explicit empty Int collection
 
-        values ~= {}             -- Type error: element type is ambiguous
-        mixed ~= {1, "bad"}      -- Type error: inconsistent item types
+        values ~= {}              -- Type error: element type is ambiguous
+        mixed ~= {1, "bad"}       -- Type error: inconsistent item types
     ]
 
     The compiler does not infer an empty collection's element type from later `push`, assignment,
     loop, function argument, HIR, or borrow-analysis use. A declaration's type must be explicit at
     the declaration site or immediately inferable from its initializer.
+
+    Growable collections use [codesnippet:{T}]. Fixed collections use [codesnippet:{N T}],
+    where [codesnippet:N] is a compile-time positive [codesnippet:Int] expression and part of the
+    collection type identity.
+
+    [codeblock, $code("bst"):
+        fixed_values {3 Int} = {10, 20}
+
+        capacity #Int = 4
+        scratch ~{capacity + 2 String} = {}
+        labels {capacity} = {"alpha", "beta"} -- shorthand infers String from the literal
+    ]
+
+    [codesnippet:{Int}], [codesnippet:{3 Int}], and [codesnippet:{4 Int}] are distinct types.
+    Fixed capacity is not a growable allocation hint, and Beanstalk does not implicitly convert
+    between growable and fixed collections or between different fixed capacities.
+
+    Capacity-only shorthand such as [codesnippet:{capacity}] is valid only for a binding
+    declaration with an immediate non-empty collection literal initializer. It is invalid for empty
+    literals, non-literal initializers, signatures, aliases, fields, and returns.
+
+    Immutable value bindings cannot start from an empty fixed collection literal because there is
+    no later mutable owner path to fill them. Mutable empty fixed bindings and fixed struct field
+    defaults are valid.
 
     For unordered keyed collections (Hash Map semantics), keyed method behavior is deferred in this milestone.
 
@@ -40,36 +61,44 @@ page_head #= theme_head
     `collection.get(0)` is the equivalent of `collection[0]` in most C-like languages.
     There is no square-bracket index notation in Beanstalk.
 
-    `get(index)` returns an `Elem, Error!` fallible value, so it must be handled in value position.
-
-    `get`, `set`, and `remove` are fallible collection operations. `push` and `length` are
-    infallible. Invalid receivers or out-of-bounds indices for fallible operations produce
-    structured errors rather than silent no-ops.
+    [codesnippet:get], [codesnippet:set], [codesnippet:push], and [codesnippet:remove] are
+    fallible collection operations. [codesnippet:length] is infallible. Invalid receivers,
+    out-of-bounds indices, and fixed-capacity overflow produce structured errors rather than
+    silent no-ops.
 
     There may not be a runtime function call under the hood for these methods.
     The compiler lowers many collection built-ins directly.
 
-    Use `set(index, value)` for indexed writes. Indexed assignment through `get` has been removed.
+    Use [codesnippet:set(index, value)] for indexed writes. Indexed assignment through
+    [codesnippet:get] has been removed. [codesnippet:set] replaces an existing index only,
+    [codesnippet:push] appends after the current last element, and [codesnippet:remove] shifts
+    later elements down so dense logical length is preserved.
 ]
 
 #[section, $markdown:
-    ## Immutable Collections
+    ## Immutable Bindings
     [codeblock, $code("bst"):
-        -- Collections assigned without the mutable symbol cannot be mutated
-        immutable_collection = {1, 2, 3}
+        -- A collection assigned without the mutable symbol cannot be mutated through this binding.
+        read_only_items = {1, 2, 3}
 
-        value = immutable_collection.get(0) catch:
+        value = read_only_items.get(0) catch:
             then 0
         ;
 
-        ~immutable_collection.set(1, 69) -- Error, can't mutate values inside an immutable collection
-        ~immutable_collection.push(4) -- Error, push mutates the collection
-        ~immutable_collection.remove(0) -- Error, remove mutates the collection
+        ~read_only_items.set(1, 69) catch:
+        ; -- Error, the binding is not mutable
+
+        ~read_only_items.push(4) catch:
+        ; -- Error, push mutates the collection
+
+        ~read_only_items.remove(0) catch:
+            then 0
+        ; -- Error, remove mutates the collection
     ]
 ]
 
 #[section, $markdown:
-    ## Mutable Collections
+    ## Mutable Bindings
     Whenever a method mutates its receiver, the receiver must be marked with the mutable symbol.
 
     This is also true of built-in collection methods that mutate the collection, such as `set`, `push`, and `remove`.
@@ -93,9 +122,41 @@ page_head #= theme_head
         ;
         count = fruit_array.length() -- returns an Int (strictly validated at runtime)
 
-        ~fruit_array.push("orange")
+        ~fruit_array.push("orange") catch:
+            assert(false, "This should never fail for this growable collection in this example")
+        ;
         removed = ~fruit_array.remove(2) catch:
             then "fallback-fruit"
+        ;
+    ]
+]
+
+#[section, $markdown:
+    ## Fixed Collections
+    Fixed collections keep the same dense item behavior as growable collections, but they have an
+    exact maximum length in their type.
+
+    [codeblock, $code("bst"):
+        items ~{2 Int} = {}
+
+        ~items.push(1) catch:
+            assert(false, "First push should fit the fixed capacity")
+        ;
+
+        ~items.push(2) catch:
+            assert(false, "Second push should fit the fixed capacity")
+        ;
+
+        ~items.push(3) catch |err|:
+            io(err.message) -- Fixed collection capacity exceeded
+        ;
+
+        removed = ~items.remove(0) catch:
+            then 0
+        ;
+
+        ~items.push(3) catch:
+            assert(false, "Remove freed one fixed-capacity slot")
         ;
     ]
 ]

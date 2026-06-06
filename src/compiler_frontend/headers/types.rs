@@ -9,9 +9,7 @@ use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::datatypes::generic_parameters::GenericParameterList;
 use crate::compiler_frontend::datatypes::parsed::ParsedTypeRef;
 use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariantSyntax;
-use crate::compiler_frontend::declaration_syntax::declaration_shell::{
-    DeclarationSyntax, InitializerReference,
-};
+use crate::compiler_frontend::declaration_syntax::declaration_shell::DeclarationSyntax;
 use crate::compiler_frontend::declaration_syntax::signature_members::{
     FunctionSignatureSyntax, SignatureMemberSyntax,
 };
@@ -22,6 +20,7 @@ use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::symbols::identity::FileId;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap, StringTable};
+use crate::compiler_frontend::token_scan::InitializerReference;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation};
 use crate::compiler_frontend::traits::syntax::{TraitConformanceSyntax, TraitDeclarationSyntax};
 use std::collections::HashSet;
@@ -88,7 +87,6 @@ pub enum HeaderKind {
     },
     Constant {
         declaration: DeclarationSyntax,
-        source_order: usize,
     },
     Struct {
         generic_parameters: GenericParameterList,
@@ -104,7 +102,6 @@ pub enum HeaderKind {
 
     ConstTemplate {
         condition_references: Vec<InitializerReference>,
-        source_order: usize,
     },
 
     /// The entry-file start function for non-header top-level statements.
@@ -177,6 +174,12 @@ pub struct Header {
     pub tokens: FileTokens,
 
     pub source_file: InternedPath,
+    /// Capacity-expression symbol references discovered in type annotations on this header.
+    ///
+    /// WHAT: value-namespace references from fixed-collection capacity expressions.
+    /// WHY: dependency sorting must order referenced constants before the declaration that
+    ///      uses them, even when the declaration itself is not a constant.
+    pub capacity_references: Vec<InitializerReference>,
 }
 
 impl Display for Header {
@@ -334,6 +337,9 @@ impl Header {
         self.name_location.remap_string_ids(remap);
         self.tokens.remap_string_ids(remap);
         self.source_file.remap_string_ids(remap);
+        for reference in &mut self.capacity_references {
+            reference.remap_string_ids(remap);
+        }
     }
 
     /// Returns the canonical (real OS) filesystem path for the source file that owns this header.
@@ -518,7 +524,6 @@ pub(super) struct HeaderBuildContext<'a> {
     pub source_file: &'a InternedPath,
     pub file_imports: &'a HashSet<InternedPath>,
     pub file_import_entries: &'a [FileImport],
-    pub file_constant_order: &'a mut usize,
     pub string_table: &'a mut StringTable,
     pub file_role: FileRole,
 }

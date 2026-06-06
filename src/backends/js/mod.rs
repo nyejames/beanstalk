@@ -25,6 +25,7 @@ mod tests;
 
 pub(crate) use emitter::JsEmitter;
 pub use emitter::lower_hir_to_js;
+pub(crate) use symbols::{builtin_error_code_js_field_name, builtin_error_message_js_field_name};
 
 use crate::compiler_frontend::external_packages::{ExternalFunctionId, ExternalPackageRegistry};
 use crate::compiler_frontend::hir::ids::FunctionId;

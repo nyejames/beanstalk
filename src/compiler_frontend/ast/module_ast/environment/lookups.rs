@@ -13,6 +13,7 @@ use crate::compiler_frontend::ast::module_ast::environment::{
 };
 use crate::compiler_frontend::ast::module_ast::scope_context::ReceiverMethodCatalog;
 use crate::compiler_frontend::ast::type_resolution::ResolvedFunctionSignature;
+use crate::compiler_frontend::ast::type_resolution::ResolvedTypeAnnotation;
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
@@ -61,6 +62,8 @@ pub(crate) struct AstModuleLookups {
     pub(crate) generic_function_templates_by_path:
         Rc<FxHashMap<InternedPath, GenericFunctionTemplate>>,
     pub(crate) resolved_type_aliases_by_path: Rc<FxHashMap<InternedPath, DataType>>,
+    pub(crate) resolved_type_alias_annotations_by_path:
+        Rc<FxHashMap<InternedPath, ResolvedTypeAnnotation>>,
     pub(crate) choice_variant_shells_by_path: Rc<FxHashMap<InternedPath, Vec<ChoiceVariant>>>,
 
     // Semantic declaration classification.

@@ -43,6 +43,7 @@ use crate::compiler_frontend::ast::module_ast::environment::{
 };
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::templates::template_folding::TemplateFoldContext;
+use crate::compiler_frontend::ast::type_resolution::ResolvedTypeAnnotation;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::datatypes::definitions::TypeDefinition;
@@ -151,6 +152,8 @@ pub struct ScopeShared {
     // File-local visibility and resolved declarations.
     pub(crate) file_visibility: Option<Rc<FileVisibility>>,
     pub(crate) resolved_type_aliases: Option<Rc<FxHashMap<InternedPath, DataType>>>,
+    pub(crate) resolved_type_alias_annotations:
+        Option<Rc<FxHashMap<InternedPath, ResolvedTypeAnnotation>>>,
     pub(crate) generic_declarations_by_path:
         Option<Rc<FxHashMap<InternedPath, GenericDeclarationMetadata>>>,
     pub(crate) resolved_struct_fields_by_path:
@@ -361,6 +364,7 @@ impl ScopeContext {
             resolved_function_signatures_by_path: Rc::new(FxHashMap::default()),
             generic_function_templates_by_path: Rc::new(FxHashMap::default()),
             resolved_type_aliases_by_path: Rc::new(FxHashMap::default()),
+            resolved_type_alias_annotations_by_path: Rc::new(FxHashMap::default()),
             choice_variant_shells_by_path: Rc::new(FxHashMap::default()),
             declaration_semantics: Rc::new(DeclarationSemanticTable::empty()),
             receiver_methods: Rc::new(ReceiverMethodCatalog::default()),
@@ -383,6 +387,7 @@ impl ScopeContext {
             build_profile: lookups.build_profile,
             file_visibility: None,
             resolved_type_aliases: None,
+            resolved_type_alias_annotations: None,
             generic_declarations_by_path: None,
             resolved_struct_fields_by_path: None,
             choice_variant_shells_by_path: None,

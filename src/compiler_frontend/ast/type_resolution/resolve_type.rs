@@ -19,15 +19,24 @@
 
 use crate::compiler_frontend::ast::TopLevelDeclarationTable;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
+use crate::compiler_frontend::ast::const_values::resolver::ConstResolutionError;
+use crate::compiler_frontend::ast::const_values::resolver::{
+    ConstValueEnvironment, ConstValueResolver,
+};
+use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
+use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
+use crate::compiler_frontend::ast::expressions::parse_expression::create_expression_until;
 use crate::compiler_frontend::ast::generic_bounds::{
     GenericBoundEvidenceContext, validate_nominal_generic_bound_evidence,
 };
+use crate::compiler_frontend::ast::module_ast::scope_context::ScopeContext;
 use crate::compiler_frontend::ast::statements::functions::FunctionReturn;
+use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::type_resolution::TypeResolutionResult;
 use crate::compiler_frontend::compiler_messages::{
     BoundOnlyTraitDiagnosticReason, CompilerDiagnostic, DeferredFeatureReason,
-    InvalidDynamicTraitTypeReason, InvalidGenericInstantiationReason, InvalidTypeAnnotationReason,
-    NameNamespace, NamespaceTypeValueMisuseKind,
+    InvalidCollectionTypeReason, InvalidDynamicTraitTypeReason, InvalidGenericInstantiationReason,
+    InvalidTypeAnnotationReason, NameNamespace, NamespaceTypeValueMisuseKind,
 };
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::generic_identity_bridge::{
@@ -38,9 +47,9 @@ use crate::compiler_frontend::datatypes::generic_parameters::{
     ActiveGenericTypeContext, GenericParameterScope,
 };
 use crate::compiler_frontend::datatypes::ids::{
-    BuiltinTypeConstructor, FunctionTypeKey, GenericParameterId, TypeConstructor, TypeId,
-    builtin_type_ids,
+    FunctionTypeKey, GenericParameterId, TypeId, builtin_type_ids,
 };
+use crate::compiler_frontend::datatypes::parsed::ParsedCollectionCapacity;
 use crate::compiler_frontend::datatypes::parsed::ParsedTypeRef;
 use crate::compiler_frontend::datatypes::{DataType, diagnostic_type_spelling};
 use crate::compiler_frontend::declaration_syntax::type_syntax::{
@@ -53,10 +62,14 @@ use crate::compiler_frontend::headers::module_symbols::{
 };
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, Token};
 use crate::compiler_frontend::tokenizer::tokens::{SourceLocation, TokenKind};
 use crate::compiler_frontend::traits::definitions::{BoundOnlyTraitReason, TraitDynamicSafety};
 use crate::compiler_frontend::traits::environment::TraitEnvironment;
 use crate::compiler_frontend::traits::evidence::TraitEvidenceEnvironment;
+use crate::compiler_frontend::type_coercion::compatibility::TypeCompatibilityCache;
+use crate::compiler_frontend::type_coercion::parse_context::ExpectedType;
+use crate::compiler_frontend::value_mode::ValueMode;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::rc::Rc;
 
@@ -67,6 +80,11 @@ pub(crate) struct TypeResolutionContext<'a> {
     pub visible_source_bindings: Option<&'a FxHashMap<StringId, InternedPath>>,
     pub visible_type_aliases: Option<&'a FxHashMap<StringId, InternedPath>>,
     pub resolved_type_aliases: Option<&'a FxHashMap<InternedPath, DataType>>,
+    /// Parsed-ref-aware alias annotations that preserve original `ParsedTypeRef` for
+    /// re-resolution. Used when an alias target is a fixed collection whose capacity
+    /// must be folded through the alias declaration's source visibility when possible.
+    pub resolved_type_alias_annotations:
+        Option<&'a FxHashMap<InternedPath, ResolvedTypeAnnotation>>,
     pub generic_declarations_by_path:
         Option<&'a FxHashMap<InternedPath, GenericDeclarationMetadata>>,
     pub generic_parameters: Option<&'a GenericParameterScope>,
@@ -93,6 +111,8 @@ pub(crate) struct TypeResolutionContextInputs<'a> {
     pub visible_source_bindings: Option<&'a FxHashMap<StringId, InternedPath>>,
     pub visible_type_aliases: Option<&'a FxHashMap<StringId, InternedPath>>,
     pub resolved_type_aliases: Option<&'a FxHashMap<InternedPath, DataType>>,
+    pub resolved_type_alias_annotations:
+        Option<&'a FxHashMap<InternedPath, ResolvedTypeAnnotation>>,
     pub generic_declarations_by_path:
         Option<&'a FxHashMap<InternedPath, GenericDeclarationMetadata>>,
     pub resolved_struct_fields_by_path: Option<&'a FxHashMap<InternedPath, Vec<Declaration>>>,
@@ -118,6 +138,7 @@ impl<'a> TypeResolutionContext<'a> {
             visible_source_bindings: None,
             visible_type_aliases: None,
             resolved_type_aliases: None,
+            resolved_type_alias_annotations: None,
             generic_declarations_by_path: None,
             generic_parameters: None,
             generic_substitutions: None,
@@ -139,6 +160,7 @@ impl<'a> TypeResolutionContext<'a> {
             visible_source_bindings: inputs.visible_source_bindings,
             visible_type_aliases: inputs.visible_type_aliases,
             resolved_type_aliases: inputs.resolved_type_aliases,
+            resolved_type_alias_annotations: inputs.resolved_type_alias_annotations,
             generic_declarations_by_path: inputs.generic_declarations_by_path,
             generic_parameters: None,
             generic_substitutions: None,
@@ -193,7 +215,437 @@ pub(crate) struct ResolvedTypeAnnotation {
     pub(crate) type_id: Option<TypeId>,
 }
 
+/// Fold a parsed collection capacity expression into a canonical `usize`.
+///
+/// WHAT: parses capacity tokens as an `Int` expression, substitutes visible compile-time
+///       constants, and folds to a single integer value.
+/// WHY: collection type identity requires a compile-time-known capacity; this helper
+///      reuses the existing expression parser and constant folder instead of inventing
+///      a parallel evaluator.
+pub(crate) fn fold_collection_capacity_expression(
+    capacity: &ParsedCollectionCapacity,
+    scope_context: Option<&ScopeContext>,
+    type_environment: &mut TypeEnvironment,
+    string_table: &mut StringTable,
+) -> Result<usize, CompilerDiagnostic> {
+    // Fast path: a single integer literal needs no expression parsing.
+    if let [
+        Token {
+            kind: TokenKind::IntLiteral(value),
+            ..
+        },
+    ] = capacity.tokens.as_slice()
+    {
+        if *value < 0 {
+            return Err(CompilerDiagnostic::invalid_collection_type(
+                InvalidCollectionTypeReason::NegativeCapacity,
+                capacity.location.clone(),
+            ));
+        }
+        if *value == 0 {
+            return Err(CompilerDiagnostic::invalid_collection_type(
+                InvalidCollectionTypeReason::ZeroCapacity,
+                capacity.location.clone(),
+            ));
+        }
+        let Ok(capacity_value) = usize::try_from(*value) else {
+            return Err(CompilerDiagnostic::invalid_collection_type(
+                InvalidCollectionTypeReason::CapacityOverflow,
+                capacity.location.clone(),
+            ));
+        };
+        return Ok(capacity_value);
+    }
+
+    let Some(scope_context) = scope_context else {
+        return Err(CompilerDiagnostic::invalid_collection_type(
+            InvalidCollectionTypeReason::CapacityNotConstant,
+            capacity.location.clone(),
+        ));
+    };
+
+    // Parse the capacity token slice as an `Int` expression.
+    let mut capacity_tokens = capacity.tokens.clone();
+    capacity_tokens.push(Token::new(TokenKind::Eof, capacity.location.clone()));
+    let mut token_stream = FileTokens::new(capacity.location.scope.clone(), capacity_tokens);
+
+    let mut expected_type = ExpectedType::Known(type_environment.builtins().int);
+    let capacity_context =
+        scope_context.new_child_expression(vec![type_environment.builtins().int]);
+    let mut compatibility_cache = TypeCompatibilityCache::new();
+    let mut type_interner = AstTypeInterner::new(type_environment, &mut compatibility_cache);
+
+    let expression = create_expression_until(
+        &mut token_stream,
+        &capacity_context,
+        &mut type_interner,
+        &mut expected_type,
+        &ValueMode::ImmutableOwned,
+        &[TokenKind::Eof],
+        string_table,
+    )
+    .map_err(|error| capacity_expression_parse_error(capacity, error))?;
+
+    // Build a const-value environment from visible constant declarations.
+    let mut const_env = ConstValueEnvironment::default();
+    for declaration in scope_context.top_level_declarations.iter() {
+        if declaration.value.is_compile_time_constant() {
+            const_env.insert(declaration.id.clone(), declaration.value.clone());
+        }
+    }
+    for declaration in &scope_context.local_declarations {
+        if declaration.value.is_compile_time_constant() {
+            const_env.insert(declaration.id.clone(), declaration.value.clone());
+        }
+    }
+
+    let mut resolver = ConstValueResolver::new(string_table);
+    let resolved = resolver
+        .resolve_expression(&expression, &const_env)
+        .map_err(|err| {
+            let reason = match err {
+                ConstResolutionError::CallInConstContext => {
+                    InvalidCollectionTypeReason::CapacityNotConstant
+                }
+                _ => InvalidCollectionTypeReason::CapacityNotConstant,
+            };
+            CompilerDiagnostic::invalid_collection_type(reason, capacity.location.clone())
+        })?;
+
+    match resolved.kind {
+        ExpressionKind::Int(value) => {
+            if value < 0 {
+                return Err(CompilerDiagnostic::invalid_collection_type(
+                    InvalidCollectionTypeReason::NegativeCapacity,
+                    capacity.location.clone(),
+                ));
+            }
+            if value == 0 {
+                return Err(CompilerDiagnostic::invalid_collection_type(
+                    InvalidCollectionTypeReason::ZeroCapacity,
+                    capacity.location.clone(),
+                ));
+            }
+            let Ok(capacity_value) = usize::try_from(value) else {
+                return Err(CompilerDiagnostic::invalid_collection_type(
+                    InvalidCollectionTypeReason::CapacityOverflow,
+                    capacity.location.clone(),
+                ));
+            };
+            Ok(capacity_value)
+        }
+        ExpressionKind::Float(_) => Err(CompilerDiagnostic::invalid_collection_type(
+            InvalidCollectionTypeReason::CapacityNotInt,
+            capacity.location.clone(),
+        )),
+        _ => Err(CompilerDiagnostic::invalid_collection_type(
+            InvalidCollectionTypeReason::CapacityNotConstant,
+            capacity.location.clone(),
+        )),
+    }
+}
+
+fn capacity_expression_parse_error(
+    capacity: &ParsedCollectionCapacity,
+    error: ExpressionParseError,
+) -> CompilerDiagnostic {
+    let diagnostic = CompilerDiagnostic::from(error);
+    match diagnostic.payload {
+        crate::compiler_frontend::compiler_messages::DiagnosticPayload::TypeMismatch { .. } => {
+            CompilerDiagnostic::invalid_collection_type(
+                InvalidCollectionTypeReason::CapacityNotInt,
+                capacity.location.clone(),
+            )
+        }
+        _ => diagnostic,
+    }
+}
+
+/// Resolve a parsed type annotation through the parsed-ref-aware path.
+///
+/// WHAT: folds fixed-collection capacity expressions, re-resolves type aliases from their
+///       stored `ParsedTypeRef`, and produces canonical `TypeId` identity.
+/// WHY: this is the semantic entry point for all type annotations that start as
+///      `ParsedTypeRef`; it must not hide capacity folding inside `parsed_ref_to_data_type`.
 pub(crate) fn resolve_parsed_type_annotation(
+    source_ref: ParsedTypeRef,
+    location: &SourceLocation,
+    context: &mut TypeResolutionContext<'_>,
+    string_table: &mut StringTable,
+    scope_context: Option<&ScopeContext>,
+) -> TypeResolutionResult<ResolvedTypeAnnotation> {
+    match &source_ref {
+        ParsedTypeRef::Collection {
+            element,
+            fixed_capacity,
+            location: collection_location,
+        } => {
+            let element_annotation = resolve_parsed_type_annotation(
+                *element.clone(),
+                collection_location,
+                context,
+                string_table,
+                scope_context,
+            )?;
+            let element_id = element_annotation.type_id.unwrap_or(builtin_type_ids::NONE);
+
+            let folded_capacity = match fixed_capacity {
+                Some(capacity) => {
+                    match fold_collection_capacity_expression(
+                        capacity,
+                        scope_context,
+                        context.type_environment,
+                        string_table,
+                    ) {
+                        Ok(value) => Some(value),
+                        Err(diagnostic) => {
+                            // Only fallback to the diagnostic path when the expression is
+                            // genuinely non-constant because no scope context is available.
+                            // Literal invalid values (zero, overflow) must still be rejected.
+                            let is_non_constant_because_no_scope = scope_context.is_none()
+                                && matches!(
+                                    &diagnostic.payload,
+                                    crate::compiler_frontend::compiler_messages::DiagnosticPayload::InvalidCollectionType {
+                                        reason: InvalidCollectionTypeReason::CapacityNotConstant,
+                                        ..
+                                    }
+                                );
+                            if is_non_constant_because_no_scope {
+                                return fallback_parsed_ref_to_data_type(
+                                    source_ref,
+                                    location,
+                                    context,
+                                    string_table,
+                                );
+                            }
+                            return Err(Box::new(diagnostic));
+                        }
+                    }
+                }
+                None => None,
+            };
+
+            let type_id = context
+                .type_environment
+                .intern_collection(element_id, folded_capacity);
+            let diagnostic_type = DataType::GenericInstance {
+                base: GenericBaseType::Builtin(BuiltinGenericType::Collection {
+                    fixed_capacity: folded_capacity,
+                }),
+                arguments: vec![element_annotation.diagnostic_type],
+            };
+            return Ok(ResolvedTypeAnnotation {
+                source_ref,
+                diagnostic_type,
+                type_id: Some(type_id),
+            });
+        }
+
+        ParsedTypeRef::Named { name, .. } => {
+            if let Some((alias_path, annotation)) = visible_type_alias_annotation(*name, context) {
+                return resolve_alias_annotation(
+                    alias_path,
+                    annotation,
+                    location,
+                    context,
+                    string_table,
+                    scope_context,
+                );
+            }
+        }
+
+        ParsedTypeRef::Namespaced {
+            namespace, name, ..
+        } => {
+            if let Some((alias_path, annotation)) =
+                visible_namespaced_type_alias_annotation(*namespace, *name, context)
+            {
+                return resolve_alias_annotation(
+                    alias_path,
+                    annotation,
+                    location,
+                    context,
+                    string_table,
+                    scope_context,
+                );
+            }
+        }
+
+        _ => {}
+    }
+
+    fallback_parsed_ref_to_data_type(source_ref, location, context, string_table)
+}
+
+fn visible_type_alias_annotation(
+    name: StringId,
+    context: &TypeResolutionContext<'_>,
+) -> Option<(InternedPath, ResolvedTypeAnnotation)> {
+    let alias_path = context.visible_type_aliases?.get(&name)?;
+    let annotation = context
+        .resolved_type_alias_annotations?
+        .get(alias_path)?
+        .clone();
+
+    Some((alias_path.clone(), annotation))
+}
+
+fn visible_namespaced_type_alias_annotation(
+    namespace: StringId,
+    name: StringId,
+    context: &TypeResolutionContext<'_>,
+) -> Option<(InternedPath, ResolvedTypeAnnotation)> {
+    let alias_path = context
+        .visible_namespace_records?
+        .get(&namespace)
+        .and_then(|record| match record.type_members.get(&name) {
+            Some(NamespaceTypeMember::SourceDeclaration(path)) => Some(path),
+            _ => None,
+        })?;
+    let annotation = context
+        .resolved_type_alias_annotations?
+        .get(alias_path)?
+        .clone();
+
+    Some((alias_path.clone(), annotation))
+}
+
+fn resolve_alias_annotation(
+    alias_path: InternedPath,
+    annotation: ResolvedTypeAnnotation,
+    location: &SourceLocation,
+    context: &mut TypeResolutionContext<'_>,
+    string_table: &mut StringTable,
+    scope_context: Option<&ScopeContext>,
+) -> TypeResolutionResult<ResolvedTypeAnnotation> {
+    if !parsed_ref_contains_fixed_capacity(&annotation.source_ref) {
+        let diagnostic_type =
+            resolve_type(&annotation.diagnostic_type, location, context, string_table)?;
+        let type_id = if matches!(diagnostic_type, DataType::Inferred) {
+            None
+        } else {
+            Some(resolve_diagnostic_type_to_type_id_checked(
+                &diagnostic_type,
+                context.type_environment,
+                location,
+            )?)
+        };
+
+        return Ok(ResolvedTypeAnnotation {
+            source_ref: annotation.source_ref,
+            diagnostic_type,
+            type_id,
+        });
+    }
+
+    let Some(alias_scope_context) = alias_scope_context(&alias_path, scope_context) else {
+        return resolve_parsed_type_annotation(
+            annotation.source_ref,
+            location,
+            context,
+            string_table,
+            scope_context,
+        );
+    };
+
+    let mut alias_context = TypeResolutionContext::from_inputs(TypeResolutionContextInputs {
+        declaration_table: context.declaration_table,
+        visible_declaration_ids: alias_scope_context.visible_declaration_ids.as_ref(),
+        visible_external_symbols: alias_scope_context
+            .file_visibility
+            .as_ref()
+            .map(|visibility| &visibility.visible_external_symbols),
+        visible_source_bindings: alias_scope_context
+            .file_visibility
+            .as_ref()
+            .map(|visibility| &visibility.visible_source_names),
+        visible_type_aliases: alias_scope_context
+            .file_visibility
+            .as_ref()
+            .map(|visibility| &visibility.visible_type_alias_names),
+        resolved_type_aliases: context.resolved_type_aliases,
+        resolved_type_alias_annotations: context.resolved_type_alias_annotations,
+        generic_declarations_by_path: context.generic_declarations_by_path,
+        resolved_struct_fields_by_path: context.resolved_struct_fields_by_path,
+        type_environment: context.type_environment,
+        visible_namespace_records: alias_scope_context
+            .file_visibility
+            .as_ref()
+            .map(|visibility| &visibility.visible_namespace_records),
+        trait_environment: context.trait_environment,
+        trait_evidence_environment: context.trait_evidence_environment,
+        visible_trait_names: alias_scope_context
+            .file_visibility
+            .as_ref()
+            .map(|visibility| &visibility.visible_trait_names),
+        source_file_scope: alias_scope_context.source_file_scope.as_ref(),
+    });
+
+    resolve_parsed_type_annotation(
+        annotation.source_ref,
+        location,
+        &mut alias_context,
+        string_table,
+        Some(&alias_scope_context),
+    )
+}
+
+fn parsed_ref_contains_fixed_capacity(source_ref: &ParsedTypeRef) -> bool {
+    match source_ref {
+        ParsedTypeRef::Collection {
+            element,
+            fixed_capacity,
+            ..
+        } => fixed_capacity.is_some() || parsed_ref_contains_fixed_capacity(element),
+        ParsedTypeRef::Applied {
+            base, arguments, ..
+        } => {
+            parsed_ref_contains_fixed_capacity(base)
+                || arguments.iter().any(parsed_ref_contains_fixed_capacity)
+        }
+        ParsedTypeRef::Optional { inner, .. } => parsed_ref_contains_fixed_capacity(inner),
+        ParsedTypeRef::Result { ok, err, .. } => {
+            parsed_ref_contains_fixed_capacity(ok) || parsed_ref_contains_fixed_capacity(err)
+        }
+        _ => false,
+    }
+}
+
+fn alias_scope_context(
+    alias_path: &InternedPath,
+    scope_context: Option<&ScopeContext>,
+) -> Option<ScopeContext> {
+    let scope_context = scope_context?;
+    let source_file = scope_context
+        .shared
+        .lookups
+        .module_symbols
+        .canonical_source_by_symbol_path
+        .get(alias_path)?;
+    let visibility = scope_context
+        .shared
+        .lookups
+        .import_environment
+        .visibility_for(source_file)
+        .ok()?
+        .clone();
+    let mut alias_scope = scope_context
+        .clone()
+        .with_file_visibility(Rc::new(visibility))
+        .with_source_file_scope(source_file.clone());
+
+    // Type aliases are top-level metadata. Re-resolving an alias target must not see
+    // body-local declarations from the use site.
+    alias_scope.set_local_declarations(Vec::new());
+
+    Some(alias_scope)
+}
+
+/// Fallback path for parsed type annotations that do not need custom handling.
+///
+/// WHAT: converts `ParsedTypeRef` to diagnostic `DataType` and resolves it through
+///       `resolve_type`, preserving the existing behavior for non-collection types.
+fn fallback_parsed_ref_to_data_type(
     source_ref: ParsedTypeRef,
     location: &SourceLocation,
     context: &mut TypeResolutionContext<'_>,
@@ -314,13 +766,10 @@ pub(crate) fn resolve_diagnostic_type_to_type_id(
             canonical_id: None, ..
         } => type_environment.builtins().none,
         DataType::GenericInstance { base, arguments } => match base {
-            GenericBaseType::Builtin(BuiltinGenericType::Collection) => {
+            GenericBaseType::Builtin(BuiltinGenericType::Collection { fixed_capacity }) => {
                 let element_id =
                     resolve_diagnostic_type_to_type_id(&arguments[0], type_environment);
-                type_environment.intern_constructed(
-                    TypeConstructor::Builtin(BuiltinTypeConstructor::Collection),
-                    Box::new([element_id]),
-                )
+                type_environment.intern_collection(element_id, *fixed_capacity)
             }
             GenericBaseType::ResolvedNominal(path) => {
                 if let Some(nominal_id) = type_environment.nominal_id_for_path(path) {
@@ -482,13 +931,10 @@ pub(crate) fn resolve_diagnostic_type_to_type_id_opt(
             canonical_id: None, ..
         } => None,
         DataType::GenericInstance { base, arguments } => match base {
-            GenericBaseType::Builtin(BuiltinGenericType::Collection) => {
+            GenericBaseType::Builtin(BuiltinGenericType::Collection { fixed_capacity }) => {
                 let element_id =
                     resolve_diagnostic_type_to_type_id_opt(&arguments[0], type_environment)?;
-                Some(type_environment.intern_constructed(
-                    TypeConstructor::Builtin(BuiltinTypeConstructor::Collection),
-                    Box::new([element_id]),
-                ))
+                Some(type_environment.intern_collection(element_id, *fixed_capacity))
             }
             GenericBaseType::ResolvedNominal(path) => {
                 let nominal_id = type_environment.nominal_id_for_path(path)?;
@@ -1199,10 +1645,12 @@ fn resolve_generic_base_type(
                 location.to_owned(),
             )))
         }
-        GenericBaseType::Builtin(BuiltinGenericType::Collection) => {
+        GenericBaseType::Builtin(BuiltinGenericType::Collection { fixed_capacity }) => {
             // Collection is the only builtin generic type allowed in source.
             // Its arguments are resolved separately by resolve_type.
-            Ok(GenericBaseType::Builtin(BuiltinGenericType::Collection))
+            Ok(GenericBaseType::Builtin(BuiltinGenericType::Collection {
+                fixed_capacity: *fixed_capacity,
+            }))
         }
     }
 }

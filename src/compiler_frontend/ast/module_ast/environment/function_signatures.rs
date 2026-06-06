@@ -15,8 +15,10 @@ use crate::compiler_frontend::ast::receiver_methods::{
     BuildReceiverMethodCatalogInput, ReceiverMethodCatalogError, ReceiverMethodKind,
     build_receiver_method_catalog, receiver_type_is_visible_in_file,
 };
-use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::statements::functions::function_signature_from_syntax_with_unresolved_types;
+use crate::compiler_frontend::ast::statements::functions::{
+    FunctionSignature, SignatureTypeFallbackPolicy,
+};
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::type_resolution::{
     GenericParameterScopeBuildInput, build_generic_parameter_scope,
@@ -153,6 +155,9 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 .with_visible_source_bindings(visibility.visible_source_names.clone())
                 .with_visible_type_aliases(visibility.visible_type_alias_names.clone())
                 .with_resolved_type_aliases(Rc::new(self.resolved_type_aliases_by_path.clone()))
+                .with_resolved_type_alias_annotations(Rc::new(
+                    self.resolved_type_alias_annotations_by_path.clone(),
+                ))
                 .with_generic_declarations(Rc::new(
                     self.module_symbols.generic_declarations_by_path.clone(),
                 ))
@@ -169,6 +174,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                     &signature_context,
                     &mut type_interner,
                     string_table,
+                    SignatureTypeFallbackPolicy::StrictCapacity,
                 )
                 .map_err(|diagnostic| self.diagnostic_messages(diagnostic, string_table))?;
                 self.warnings

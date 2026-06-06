@@ -9,7 +9,7 @@
 use super::DataType;
 use super::display::format_fallible_signature_parts;
 use super::environment::TypeEnvironment;
-use super::ids::{BuiltinTypeConstructor, TypeConstructor, TypeId};
+use super::ids::TypeId;
 use crate::compiler_frontend::external_packages::ExternalTypeId;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap, StringTable};
@@ -29,7 +29,7 @@ pub enum GenericBaseType {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BuiltinGenericType {
-    Collection,
+    Collection { fixed_capacity: Option<usize> },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -54,7 +54,10 @@ pub enum TypeIdentityKey {
     Builtin(BuiltinTypeKey),
     Nominal(InternedPath),
     External(ExternalTypeId),
-    Collection(Box<TypeIdentityKey>),
+    Collection {
+        element: Box<TypeIdentityKey>,
+        fixed_capacity: Option<usize>,
+    },
     Option(Box<TypeIdentityKey>),
     FallibleCarrier {
         success: Box<TypeIdentityKey>,
@@ -106,7 +109,7 @@ impl TypeIdentityKey {
                 path.remap_string_ids(remap);
             }
 
-            TypeIdentityKey::Collection(inner) => {
+            TypeIdentityKey::Collection { element: inner, .. } => {
                 inner.remap_string_ids(remap);
             }
 
@@ -160,9 +163,16 @@ fn display_type_identity_key(key: &TypeIdentityKey, string_table: &StringTable) 
             .unwrap_or("<nominal>")
             .to_owned(),
         TypeIdentityKey::External(type_id) => format!("External({})", type_id.0),
-        TypeIdentityKey::Collection(inner) => {
-            format!("{{{}}}", display_type_identity_key(inner, string_table))
-        }
+        TypeIdentityKey::Collection {
+            element: inner,
+            fixed_capacity,
+        } => match fixed_capacity {
+            Some(cap) => format!(
+                "{{{cap} {}}}",
+                display_type_identity_key(inner, string_table)
+            ),
+            None => format!("{{{}}}", display_type_identity_key(inner, string_table)),
+        },
         TypeIdentityKey::Option(inner) => {
             format!("{}?", display_type_identity_key(inner, string_table))
         }
@@ -231,11 +241,15 @@ pub fn data_type_to_type_identity_key(data_type: &DataType) -> Option<TypeIdenti
             ..
         } => Some(TypeIdentityKey::GenericInstance(key.to_owned())),
         DataType::GenericInstance {
-            base: GenericBaseType::Builtin(BuiltinGenericType::Collection),
+            base: GenericBaseType::Builtin(BuiltinGenericType::Collection { fixed_capacity }),
             arguments,
         } => match arguments.as_slice() {
-            [element] => data_type_to_type_identity_key(element)
-                .map(|key| TypeIdentityKey::Collection(Box::new(key))),
+            [element] => {
+                data_type_to_type_identity_key(element).map(|key| TypeIdentityKey::Collection {
+                    element: Box::new(key),
+                    fixed_capacity: *fixed_capacity,
+                })
+            }
             _ => None,
         },
         DataType::Option(inner) => {
@@ -281,12 +295,12 @@ pub(crate) fn type_identity_key_to_type_id(
             .nominal_id_for_path(path)
             .and_then(|nominal_id| type_environment.type_id_for_nominal_id(nominal_id)),
         TypeIdentityKey::External(type_id) => Some(type_environment.intern_external(*type_id)),
-        TypeIdentityKey::Collection(inner) => {
+        TypeIdentityKey::Collection {
+            element: inner,
+            fixed_capacity,
+        } => {
             let element_id = type_identity_key_to_type_id(inner, type_environment)?;
-            Some(type_environment.intern_constructed(
-                TypeConstructor::Builtin(BuiltinTypeConstructor::Collection),
-                Box::new([element_id]),
-            ))
+            Some(type_environment.intern_collection(element_id, *fixed_capacity))
         }
         TypeIdentityKey::Option(inner) => {
             let inner_id = type_identity_key_to_type_id(inner, type_environment)?;

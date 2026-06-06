@@ -700,7 +700,7 @@ fn remap_type_identity_key(key: &mut TypeIdentityKey, remap: &StringIdRemap) {
     match key {
         TypeIdentityKey::Nominal(path) => path.remap_string_ids(remap),
 
-        TypeIdentityKey::Collection(inner) | TypeIdentityKey::Option(inner) => {
+        TypeIdentityKey::Collection { element: inner, .. } | TypeIdentityKey::Option(inner) => {
             remap_type_identity_key(inner, remap)
         }
 

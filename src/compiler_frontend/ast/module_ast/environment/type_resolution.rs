@@ -14,7 +14,9 @@ use crate::compiler_frontend::ast::module_ast::environment::constant_resolution:
     ConstantHeaderParseContext, parse_constant_header_declaration,
 };
 use crate::compiler_frontend::ast::module_ast::scope_context::{ContextKind, ScopeContext};
-use crate::compiler_frontend::ast::statements::functions::signature_member_to_declaration;
+use crate::compiler_frontend::ast::statements::functions::{
+    SignatureTypeFallbackPolicy, signature_member_to_declaration,
+};
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::type_resolution::{
     GenericParameterScopeBuildInput, StructFieldResolutionError, build_generic_parameter_scope,
@@ -117,6 +119,8 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                         fields,
                         MemberShellSemanticContext::StructField,
                         string_table,
+                        SignatureTypeFallbackPolicy::AllowUnresolvedCapacity,
+                        true,
                     )?;
 
                     let generic_param_list_id = if generic_parameters.is_empty() {
@@ -179,8 +183,13 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                         Some(list_id)
                     };
 
-                    let unresolved_variants =
-                        self.unresolved_choice_variants_for_header(header, variants, string_table)?;
+                    let unresolved_variants = self.unresolved_choice_variants_for_header(
+                        header,
+                        variants,
+                        string_table,
+                        SignatureTypeFallbackPolicy::AllowUnresolvedCapacity,
+                        true,
+                    )?;
                     self.choice_variant_shells_by_path
                         .insert(header.tokens.src_path.to_owned(), unresolved_variants);
 
@@ -268,7 +277,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         for header in sorted_headers {
             let HeaderKind::Struct {
                 generic_parameters,
-                fields: _,
+                fields,
             } = &header.kind
             else {
                 continue;
@@ -296,18 +305,17 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                     string_table,
                 })
                 .map_err(|diagnostic| self.diagnostic_messages(*diagnostic, string_table))?;
-            let unresolved_fields = self
-                .resolved_struct_fields_by_path
-                .get(&header.tokens.src_path)
-                .cloned()
-                .ok_or_else(|| {
-                    self.error_messages(
-                        CompilerError::compiler_error(
-                            "Struct fields were not registered before type resolution.",
-                        ),
-                        string_table,
-                    )
-                })?;
+            // Rebuild member shells after constants are available so fixed-capacity
+            // expressions in field types fold into final canonical TypeIds. The
+            // earlier shell table is intentionally only a constructor-parsing scaffold.
+            let unresolved_fields = self.unresolved_member_syntax_to_declarations(
+                header,
+                fields,
+                MemberShellSemanticContext::StructField,
+                string_table,
+                SignatureTypeFallbackPolicy::StrictCapacity,
+                false,
+            )?;
             let mut type_resolution_context = self.type_resolution_context_for_with_traits(
                 &visibility,
                 generic_parameter_scope.as_ref(),
@@ -391,7 +399,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         for header in sorted_headers {
             let HeaderKind::Choice {
                 generic_parameters,
-                variants: _,
+                variants,
             } = &header.kind
             else {
                 continue;
@@ -419,18 +427,15 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                     string_table,
                 })
                 .map_err(|diagnostic| self.diagnostic_messages(*diagnostic, string_table))?;
-            let unresolved_variants = self
-                .choice_variant_shells_by_path
-                .get(&header.tokens.src_path)
-                .cloned()
-                .ok_or_else(|| {
-                    self.error_messages(
-                        CompilerError::compiler_error(
-                            "Choice variant shells were not registered before type resolution.",
-                        ),
-                        string_table,
-                    )
-                })?;
+            // Rebuild payload shells after constants for the same reason as struct
+            // fields: final semantic member types must preserve folded fixed capacities.
+            let unresolved_variants = self.unresolved_choice_variants_for_header(
+                header,
+                variants,
+                string_table,
+                SignatureTypeFallbackPolicy::StrictCapacity,
+                false,
+            )?;
             let mut type_resolution_context = self.type_resolution_context_for_with_traits(
                 &visibility,
                 generic_parameter_scope.as_ref(),
@@ -987,6 +992,9 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                     top_level_declarations: Rc::clone(&self.declaration_table),
                     file_visibility: visibility,
                     resolved_type_aliases: Rc::clone(&resolved_type_aliases),
+                    resolved_type_alias_annotations: Rc::new(
+                        self.resolved_type_alias_annotations_by_path.clone(),
+                    ),
                     generic_declarations_by_path: Rc::clone(&generic_declarations),
                     resolved_struct_fields_by_path: Rc::clone(&resolved_struct_fields_by_path),
                     choice_variant_shells_by_path: Rc::clone(&choice_variant_shells_by_path),
@@ -1034,6 +1042,8 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         fields: &[SignatureMemberSyntax],
         member_context: MemberShellSemanticContext,
         string_table: &mut StringTable,
+        fallback_policy: SignatureTypeFallbackPolicy,
+        emit_warnings: bool,
     ) -> Result<Vec<Declaration>, CompilerMessages> {
         let visibility = self
             .import_environment
@@ -1057,6 +1067,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                     &field_context,
                     &mut type_interner,
                     string_table,
+                    fallback_policy,
                 )
                 .map_err(|diagnostic| {
                     member_shell_diagnostic_for_context(diagnostic, member_context)
@@ -1070,7 +1081,9 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         let declarations = conversion_result
             .map_err(|diagnostic| self.diagnostic_messages(diagnostic, string_table))?;
 
-        self.warnings.extend(field_context.take_emitted_warnings());
+        if emit_warnings {
+            self.warnings.extend(field_context.take_emitted_warnings());
+        }
 
         Ok(declarations)
     }
@@ -1086,6 +1099,8 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         header: &Header,
         variants: &[ChoiceVariantSyntax],
         string_table: &mut StringTable,
+        fallback_policy: SignatureTypeFallbackPolicy,
+        emit_warnings: bool,
     ) -> Result<Vec<ChoiceVariant>, CompilerMessages> {
         let mut resolved_variants = Vec::with_capacity(variants.len());
 
@@ -1099,6 +1114,8 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                         fields,
                         MemberShellSemanticContext::ChoicePayloadField,
                         string_table,
+                        fallback_policy,
+                        emit_warnings,
                     )?;
                     ChoiceVariantPayload::Record {
                         fields: declarations,
@@ -1145,6 +1162,9 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         .with_rendered_path_usage_sink(Rc::clone(&self.rendered_path_usages))
         .with_file_visibility(Rc::new(visibility.clone()))
         .with_resolved_type_aliases(Rc::new(self.resolved_type_aliases_by_path.clone()))
+        .with_resolved_type_alias_annotations(Rc::new(
+            self.resolved_type_alias_annotations_by_path.clone(),
+        ))
         .with_generic_declarations(Rc::new(
             self.module_symbols.generic_declarations_by_path.clone(),
         ))

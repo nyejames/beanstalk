@@ -148,12 +148,17 @@ impl<'a> HirBuilder<'a> {
         &mut self,
         op: CollectionBuiltinOp,
         receiver: &AstNode,
+        receiver_requires_mutable: bool,
         args: &[CallArgument],
         result_type_ids: &[FrontendTypeId],
         location: &SourceLocation,
     ) -> Result<LoweredExpression, CompilerError> {
         let mut full_args = Vec::with_capacity(args.len() + 1);
-        full_args.push(Self::shared_call_argument(receiver.get_expr()?, location));
+        if receiver_requires_mutable {
+            full_args.push(Self::mutable_call_argument(receiver.get_expr()?, location));
+        } else {
+            full_args.push(Self::shared_call_argument(receiver.get_expr()?, location));
+        }
         full_args.extend(args.iter().cloned());
 
         let id = match op {
@@ -303,6 +308,15 @@ impl<'a> HirBuilder<'a> {
             value.location.clone()
         };
         CallArgument::positional(value, CallAccessMode::Shared, arg_location)
+    }
+
+    fn mutable_call_argument(value: Expression, location: &SourceLocation) -> CallArgument {
+        let arg_location = if value.location == SourceLocation::default() {
+            location.to_owned()
+        } else {
+            value.location.clone()
+        };
+        CallArgument::positional(value, CallAccessMode::Mutable, arg_location)
     }
 
     pub(super) fn lower_call_argument_value(

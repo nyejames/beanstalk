@@ -245,11 +245,17 @@ fn fresh_mutable_rvalue_type_compatible(
     // Fresh collection literals are produced as immutable-owned values by default, but
     // mutable call slots own and materialize their own hidden local before the call.
     // Inner element type compatibility still has to hold.
-    if let (Some(expected_inner), Some(actual_inner)) = (
-        type_environment.collection_element_type(expected_id),
-        type_environment.collection_element_type(actual_id),
+    if let (Some(expected_shape), Some(actual_shape)) = (
+        type_environment.collection_shape(expected_id),
+        type_environment.collection_shape(actual_id),
     ) {
-        return is_type_compatible(expected_inner, actual_inner, type_environment);
+        return expected_shape.fixed_capacity
+            == type_environment.collection_fixed_capacity(actual_id)
+            && is_type_compatible(
+                expected_shape.element_type,
+                actual_shape.element_type,
+                type_environment,
+            );
     }
 
     false

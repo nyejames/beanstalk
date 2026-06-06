@@ -20,7 +20,9 @@ use crate::compiler_frontend::compiler_messages::{
 };
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
-use crate::compiler_frontend::type_coercion::parse_context::ExpectedType;
+use crate::compiler_frontend::type_coercion::parse_context::{
+    ExpectedCollectionContext, ExpectedType,
+};
 use crate::compiler_frontend::value_mode::ValueMode;
 
 /// Parses compiler-owned numeric cast forms (`Int(...)`, `Float(...)`).
@@ -138,10 +140,10 @@ pub(crate) fn parse_collection_expression(
     expression: &mut Vec<AstNode>,
     string_table: &mut StringTable,
 ) -> Result<(), ExpressionParseError> {
-    let element_type_id = match expected_type {
+    let collection_context = match expected_type {
         ExpectedType::Known(type_id) => {
             let type_environment = type_interner.environment();
-            let Some(inner_type_id) = type_environment.collection_element_type(*type_id) else {
+            let Some(shape) = type_environment.collection_shape(*type_id) else {
                 return Err(CompilerDiagnostic::type_mismatch(
                     *type_id,
                     type_environment.builtins().string,
@@ -150,16 +152,20 @@ pub(crate) fn parse_collection_expression(
                 )
                 .into());
             };
-            Some(inner_type_id)
+            ExpectedCollectionContext::Explicit {
+                collection_type_id: *type_id,
+                element_type_id: shape.element_type,
+                fixed_capacity: shape.fixed_capacity,
+            }
         }
 
-        ExpectedType::Infer => None,
+        ExpectedType::Infer => ExpectedCollectionContext::InferGrowable,
     };
 
     expression.push(AstNode {
         kind: NodeKind::Rvalue(new_collection(
             token_stream,
-            element_type_id,
+            collection_context,
             context,
             type_interner,
             value_mode,

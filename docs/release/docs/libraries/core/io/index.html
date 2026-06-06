@@ -451,8 +451,8 @@ body {
 
     function __bs_make_error(message, code, location, trace) {
     return {
-    message,
-    code,
+    b_fld0: message,
+    b_fld1: code,
     __bst_location: location ?? null,
     __bst_trace: trace ?? null
     };
@@ -462,13 +462,23 @@ body {
     return { tag: "err", value: __bs_make_error(message, code, null, null) };
     }
 
+    function __bs_error_message(error) {
+    const message = error && error["b_fld0"] !== undefined ? error["b_fld0"] : error && error.message;
+    return typeof message === "string" ? message : String(message ?? "Unknown error");
+    }
+
+    function __bs_error_code(error) {
+    const code = error && error["b_fld1"] !== undefined ? error["b_fld1"] : error && error.code;
+    return typeof code === "number" ? code : 0;
+    }
+
     function __bs_error_with_location(error, location) {
-    return __bs_make_error(error.message, error.code, location, error.__bst_trace);
+    return __bs_make_error(__bs_error_message(error), __bs_error_code(error), location, error.__bst_trace);
     }
 
     function __bs_error_push_trace(error, frame) {
     const nextTrace = error.__bst_trace ? error.__bst_trace.concat([frame]) : [frame];
-    return __bs_make_error(error.message, error.code, error.__bst_location, nextTrace);
+    return __bs_make_error(__bs_error_message(error), __bs_error_code(error), error.__bst_location, nextTrace);
     }
 
     function __bs_error_bubble(error, file, line, column, functionName) {
@@ -505,48 +515,104 @@ body {
     throw new Error("Expected internal Result carrier during fallback handling");
     }
 
+    function __bs_fixed_collection(items, fixedCapacity) {
+    return {
+    __bst_kind: "fixed_collection",
+    items: items,
+    fixedCapacity: fixedCapacity,
+    };
+    }
+
+    function __bs_collection_items(collection) {
+    if (Array.isArray(collection)) {
+    return collection;
+    }
+    return collection.items;
+    }
+
+    function __bs_collection_fixed_capacity(collection) {
+    if (Array.isArray(collection)) {
+    return null;
+    }
+    return collection.fixedCapacity;
+    }
+
+    function __bs_collection_is_valid(collection) {
+    if (Array.isArray(collection)) {
+    return true;
+    }
+    if (collection === null || typeof collection !== "object") {
+    return false;
+    }
+    if (collection.__bst_kind !== "fixed_collection") {
+    return false;
+    }
+    if (!Array.isArray(collection.items)) {
+    return false;
+    }
+    return (
+    Number.isInteger(collection.fixedCapacity)
+    && collection.fixedCapacity > 0
+    && collection.items.length <= collection.fixedCapacity
+    );
+    }
+
     function __bs_collection_index_is_valid(collection, index) {
-    return Number.isInteger(index) && index >= 0 && index < collection.length;
+    const items = __bs_collection_items(collection);
+    return Number.isInteger(index) && index >= 0 && index < items.length;
     }
 
     function __bs_collection_get(collection, index) {
-    if (!Array.isArray(collection)) {
+    if (!__bs_collection_is_valid(collection)) {
     return __bs_error_result("Collection operation expects an ordered collection", 100);
     }
     if (!__bs_collection_index_is_valid(collection, index)) {
     return __bs_error_result("Collection index out of bounds", 101);
     }
-    return { tag: "ok", value: collection[index] };
+    const items = __bs_collection_items(collection);
+    return { tag: "ok", value: items[index] };
     }
 
     function __bs_collection_set(collection, index, value) {
-    if (!Array.isArray(collection)) {
+    if (!__bs_collection_is_valid(collection)) {
     return __bs_error_result("Collection operation expects an ordered collection", 100);
     }
     if (!__bs_collection_index_is_valid(collection, index)) {
     return __bs_error_result("Collection index out of bounds", 101);
     }
-    collection[index] = value;
+    const items = __bs_collection_items(collection);
+    items[index] = value;
     return { tag: "ok", value: null };
     }
 
     function __bs_collection_push(collection, value) {
-    collection.push(value);
+    if (!__bs_collection_is_valid(collection)) {
+    return __bs_error_result("Collection operation expects an ordered collection", 100);
+    }
+    const items = __bs_collection_items(collection);
+    const fixedCapacity = __bs_collection_fixed_capacity(collection);
+    if (fixedCapacity !== null && items.length >= fixedCapacity) {
+    return __bs_error_result("Fixed collection capacity exceeded", 102);
+    }
+    items.push(value);
+    return { tag: "ok", value: null };
     }
 
     function __bs_collection_remove(collection, index) {
-    if (!Array.isArray(collection)) {
+    if (!__bs_collection_is_valid(collection)) {
     return __bs_error_result("Collection operation expects an ordered collection", 100);
     }
     if (!__bs_collection_index_is_valid(collection, index)) {
     return __bs_error_result("Collection index out of bounds", 101);
     }
-    const removed = collection.splice(index, 1)[0];
+    const items = __bs_collection_items(collection);
+    const removed = items.splice(index, 1)[0];
     return { tag: "ok", value: removed };
     }
 
     function __bs_collection_length(collection) {
-    return collection.length;
+    const items = __bs_collection_items(collection);
+    return items.length;
     }
 
     function __bs_value_to_string(value) {

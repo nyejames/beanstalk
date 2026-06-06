@@ -440,7 +440,7 @@ fn register_collection_types_from_expression(
 ) {
     if let ExpressionKind::Collection(items) = &mut expr.kind {
         if let Some(first) = items.first() {
-            let collection_type_id = type_environment.intern_collection(first.type_id);
+            let collection_type_id = type_environment.intern_collection(first.type_id, None);
             expr.type_id = collection_type_id;
         }
         for item in items {

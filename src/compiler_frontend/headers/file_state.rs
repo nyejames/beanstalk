@@ -32,7 +32,6 @@ pub(super) struct HeaderFileParseState {
     pub(super) seen_imports: HashSet<(InternedPath, Option<StringId>)>,
     pub(super) file_import_paths: HashSet<InternedPath>,
     pub(super) file_imports: Vec<FileImport>,
-    pub(super) file_constant_order: usize,
     pub(super) top_level_const_fragments: Vec<TopLevelConstFragment>,
     pub(super) runtime_fragment_count: usize,
     pub(super) const_template_count: usize,
@@ -52,7 +51,6 @@ impl HeaderFileParseState {
             seen_imports: HashSet::new(),
             file_import_paths: HashSet::new(),
             file_imports: Vec::new(),
-            file_constant_order: 0,
             top_level_const_fragments: Vec::new(),
             runtime_fragment_count: 0,
             const_template_count: 0,
@@ -141,6 +139,7 @@ impl HeaderFileParseState {
             name_location: SourceLocation::default(),
             tokens: start_tokens,
             source_file: token_stream.src_path.to_owned(),
+            capacity_references: Vec::new(),
         });
 
         FileFrontendPrepareOutput {

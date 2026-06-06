@@ -120,7 +120,7 @@ fn type_identity_key_references_nominal_path(
 ) -> bool {
     match key {
         TypeIdentityKey::Nominal(path) => path == declaration_path,
-        TypeIdentityKey::Collection(inner) | TypeIdentityKey::Option(inner) => {
+        TypeIdentityKey::Collection { element: inner, .. } | TypeIdentityKey::Option(inner) => {
             type_identity_key_references_nominal_path(inner, declaration_path)
         }
         TypeIdentityKey::FallibleCarrier { success, error } => {

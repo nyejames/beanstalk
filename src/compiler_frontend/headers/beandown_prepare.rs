@@ -9,15 +9,14 @@
 use crate::compiler_frontend::compiler_messages::source_location::CharPosition;
 use crate::compiler_frontend::datatypes::parsed::ParsedTypeRef;
 use crate::compiler_frontend::declaration_syntax::binding_mode::BindingMode;
-use crate::compiler_frontend::declaration_syntax::declaration_shell::{
-    DeclarationSyntax, collect_initializer_references,
-};
+use crate::compiler_frontend::declaration_syntax::declaration_shell::DeclarationSyntax;
 use crate::compiler_frontend::headers::types::{
     FileFrontendPrepareOutput, FileRole, Header, HeaderExportMode, HeaderKind,
 };
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::identity::FileId;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
+use crate::compiler_frontend::token_scan::collect_symbol_references;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -101,29 +100,26 @@ impl BeandownPrepareContext {
         header_tokens.canonical_os_path = self.canonical_os_path.clone();
 
         Header {
-            kind: HeaderKind::Constant {
-                declaration,
-                source_order: 0,
-            },
+            kind: HeaderKind::Constant { declaration },
             file_role: FileRole::Normal,
             export_mode: HeaderExportMode::Private,
             dependencies: HashSet::new(),
             name_location: self.synthetic_location.clone(),
             tokens: header_tokens,
             source_file: self.source_file.clone(),
+            capacity_references: Vec::new(),
         }
     }
 
     fn content_declaration(&self) -> DeclarationSyntax {
         let initializer_tokens = self.template_initializer_tokens();
-        let initializer_references = collect_initializer_references(&initializer_tokens);
+        let initializer_references = collect_symbol_references(&initializer_tokens);
 
         DeclarationSyntax {
             binding_mode: BindingMode::CompileTimeConstant,
             type_annotation: ParsedTypeRef::BuiltinString {
                 location: self.synthetic_location.clone(),
             },
-            collection_capacity: None,
             initializer_tokens,
             initializer_references,
             location: self.synthetic_location.clone(),

@@ -300,7 +300,8 @@ fn accepts_fresh_collection_for_mutable_parameter() {
     let _ = parse_single_file_ast(
         r#"
 mutate |values ~{Int}|:
-    ~values.push(4)
+    ~values.push(4) catch:
+    ;
 ;
 
 mutate({1, 2, 3})

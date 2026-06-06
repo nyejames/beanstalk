@@ -766,8 +766,75 @@ fn syntax_renderers_keep_typed_prose_without_error_conversion() {
                 InvalidCollectionTypeReason::NegativeCapacity,
                 location(source_path.clone()),
             ),
-            "Collection capacity must be a non-negative integer.",
+            "Fixed collection capacity must be greater than zero.",
             "NegativeCapacity",
+        ),
+        (
+            CompilerDiagnostic::invalid_collection_type(
+                InvalidCollectionTypeReason::ZeroCapacity,
+                location(source_path.clone()),
+            ),
+            "Fixed collection capacity must be greater than zero.",
+            "ZeroCapacity",
+        ),
+        (
+            CompilerDiagnostic::invalid_collection_type(
+                InvalidCollectionTypeReason::CapacityNotInt,
+                location(source_path.clone()),
+            ),
+            "Collection capacity must be an integer.",
+            "CapacityNotInt",
+        ),
+        (
+            CompilerDiagnostic::invalid_collection_type(
+                InvalidCollectionTypeReason::CapacityNotConstant,
+                location(source_path.clone()),
+            ),
+            "Collection capacity must be a compile-time constant expression.",
+            "CapacityNotConstant",
+        ),
+        (
+            CompilerDiagnostic::invalid_collection_type(
+                InvalidCollectionTypeReason::CapacityOverflow,
+                location(source_path.clone()),
+            ),
+            "Collection capacity is too large.",
+            "CapacityOverflow",
+        ),
+        (
+            CompilerDiagnostic::invalid_collection_type(
+                InvalidCollectionTypeReason::InitializerExceedsFixedCapacity {
+                    capacity: 2,
+                    length: 3,
+                },
+                location(source_path.clone()),
+            ),
+            "Collection literal has more items than the fixed collection capacity allows.",
+            "InitializerExceedsFixedCapacity",
+        ),
+        (
+            CompilerDiagnostic::invalid_collection_type(
+                InvalidCollectionTypeReason::EmptyImmutableFixedCollection,
+                location(source_path.clone()),
+            ),
+            "Immutable binding initialized with an empty fixed collection literal is not allowed.",
+            "EmptyImmutableFixedCollection",
+        ),
+        (
+            CompilerDiagnostic::invalid_collection_type(
+                InvalidCollectionTypeReason::ShorthandEmptyLiteralAmbiguous,
+                location(source_path.clone()),
+            ),
+            "Capacity-only shorthand requires a non-empty collection literal so the element type can be inferred.",
+            "ShorthandEmptyLiteralAmbiguous",
+        ),
+        (
+            CompilerDiagnostic::invalid_collection_type(
+                InvalidCollectionTypeReason::ShorthandNonLiteralRhs,
+                location(source_path.clone()),
+            ),
+            "Capacity-only shorthand requires a collection literal initializer.",
+            "ShorthandNonLiteralRhs",
         ),
         (
             CompilerDiagnostic::invalid_generic_parameter(

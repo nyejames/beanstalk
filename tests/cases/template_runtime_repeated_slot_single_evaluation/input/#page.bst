@@ -7,7 +7,8 @@ repeater = [:
 ]
 
 mark_once |values ~{Int}| -> String:
-    ~values.push(1)
+    ~values.push(1) catch:
+    ;
     count = values.length()
     return [:count=[count]]
 ;

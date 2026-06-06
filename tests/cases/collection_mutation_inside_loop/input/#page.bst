@@ -2,7 +2,8 @@ render_loop_mutation || -> String:
     values ~= {0}
     i ~= 0
     loop i < 3:
-        ~values.push(i)
+        ~values.push(i) catch:
+        ;
         i = i + 1
     ;
     len = values.length()

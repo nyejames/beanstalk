@@ -11,6 +11,7 @@ pub(crate) enum BuiltinErrorCode {
     Unsupported = 1,
     CollectionExpectedOrderedCollection = 100,
     CollectionIndexOutOfBounds = 101,
+    CollectionFixedCapacityExceeded = 102,
     IntParseInvalidFormat = 200,
     IntParseOutOfRange = 201,
     FloatParseInvalidFormat = 210,
@@ -32,6 +33,9 @@ impl BuiltinErrorCode {
                 "Collection operation expects an ordered collection"
             }
             BuiltinErrorCode::CollectionIndexOutOfBounds => "Collection index out of bounds",
+            BuiltinErrorCode::CollectionFixedCapacityExceeded => {
+                "Fixed collection capacity exceeded"
+            }
             BuiltinErrorCode::IntParseInvalidFormat => "Cannot parse Int from text",
             BuiltinErrorCode::IntParseOutOfRange => "Int value is out of supported range",
             BuiltinErrorCode::FloatParseInvalidFormat => "Cannot parse Float from text",

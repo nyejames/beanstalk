@@ -113,6 +113,7 @@ fn parsed_type_ref_collection_remaps_element_and_location() {
             location: make_location(&mut local),
         }),
         location: make_location(&mut local),
+        fixed_capacity: None,
     };
 
     let remap = global.merge_from(&local);

@@ -82,7 +82,7 @@ impl TemplateBodyMode {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Token {
     pub kind: TokenKind,
     pub location: SourceLocation,

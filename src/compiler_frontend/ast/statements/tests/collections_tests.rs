@@ -11,8 +11,8 @@ use crate::compiler_frontend::ast::statements::value_production::types::ValueBlo
 use crate::compiler_frontend::builtins::CollectionBuiltinOp;
 use crate::compiler_frontend::compiler_messages::{
     DiagnosticPayload, InvalidAssignmentTargetReason, InvalidBuiltinCallReason,
-    InvalidFieldAccessReason, InvalidReceiverCallReason, InvalidResultHandlingReason,
-    TypeMismatchContext,
+    InvalidCollectionTypeReason, InvalidFieldAccessReason, InvalidReceiverCallReason,
+    InvalidResultHandlingReason, TypeMismatchContext,
 };
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
 use crate::compiler_frontend::tests::ast_fixture_support::{
@@ -152,7 +152,10 @@ fn rejects_item_that_does_not_match_explicit_collection_type() {
 
 #[test]
 fn parses_push_after_explicit_empty_collection() {
-    let (ast, string_table) = parse_single_file_ast("values ~{Int} = {}\n~values.push(1)\n");
+    let (ast, string_table) = parse_single_file_ast(
+        "values ~{Int} = {}\n~values.push(1) catch:
+;\n",
+    );
     let body = start_function_body(&ast, &string_table);
 
     let NodeKind::Rvalue(push_expr) = &body[1].kind else {
@@ -160,7 +163,7 @@ fn parses_push_after_explicit_empty_collection() {
     };
 
     assert_eq!(
-        runtime_collection_builtin_op(push_expr),
+        handled_collection_builtin_op(push_expr),
         CollectionBuiltinOp::Push
     );
 }
@@ -224,7 +227,8 @@ fn parses_collection_get_with_fallback_handler_and_propagation() {
 #[test]
 fn parses_collection_mutators_and_length_calls() {
     let (ast, string_table) = parse_single_file_ast(
-        "values ~= {1, 2, 3}\n~values.set(1, 9) catch:\n;\n~values.push(4)\nremoved = ~values.remove(2) catch:\n    then 0\n;\nsize = values.length()\n",
+        "values ~= {1, 2, 3}\n~values.set(1, 9) catch:\n;\n~values.push(4) catch:
+;\nremoved = ~values.remove(2) catch:\n    then 0\n;\nsize = values.length()\n",
     );
     let body = start_function_body(&ast, &string_table);
 
@@ -240,7 +244,7 @@ fn parses_collection_mutators_and_length_calls() {
         panic!("expected push(...) statement");
     };
     assert_eq!(
-        runtime_collection_builtin_op(push_expr),
+        handled_collection_builtin_op(push_expr),
         CollectionBuiltinOp::Push
     );
 
@@ -265,7 +269,8 @@ fn parses_collection_mutators_and_length_calls() {
 #[test]
 fn parses_collection_mutators_with_explicit_receiver_tilde_prefix() {
     let (ast, string_table) = parse_single_file_ast(
-        "values ~= {1, 2, 3}\n~values.push(4)\n~values.set(1, 9) catch:\n;\nremoved = ~values.remove(2) catch:\n    then 0\n;\nsize = values.length()\n",
+        "values ~= {1, 2, 3}\n~values.push(4) catch:
+;\n~values.set(1, 9) catch:\n;\nremoved = ~values.remove(2) catch:\n    then 0\n;\nsize = values.length()\n",
     );
     let body = start_function_body(&ast, &string_table);
 
@@ -273,7 +278,7 @@ fn parses_collection_mutators_with_explicit_receiver_tilde_prefix() {
         panic!("expected push(...) statement");
     };
     assert_eq!(
-        runtime_collection_builtin_op(push_expr),
+        handled_collection_builtin_op(push_expr),
         CollectionBuiltinOp::Push
     );
 
@@ -292,6 +297,49 @@ fn parses_collection_mutators_with_explicit_receiver_tilde_prefix() {
         handled_collection_builtin_op(&removed_decl.value),
         CollectionBuiltinOp::Remove
     );
+}
+
+#[test]
+fn rejects_unhandled_collection_push_result() {
+    let diagnostic = parse_single_file_ast_diagnostic("values ~= {1, 2, 3}\n~values.push(4)\n");
+
+    assert!(matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidBuiltinCall {
+            reason: InvalidBuiltinCallReason::MustHandleFallibleResult,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn accepts_collection_push_postfix_propagation() {
+    parse_single_file_ast(
+        "append || -> Error!:
+    values ~= {1, 2, 3}
+    ~values.push(4)!
+;
+",
+    );
+}
+
+#[test]
+fn rejects_collection_push_fallback_value() {
+    let diagnostic = parse_single_file_ast_diagnostic(
+        "values ~= {1, 2, 3}
+~values.push(4) catch:
+    then 0
+;
+",
+    );
+
+    assert!(matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidResultHandling {
+            reason: InvalidResultHandlingReason::FallbackValuesForErrorOnlyResult,
+            ..
+        }
+    ));
 }
 
 #[test]
@@ -440,6 +488,38 @@ fn rejects_removed_builtin_error_helper_methods() {
         diagnostic.payload,
         DiagnosticPayload::InvalidFieldAccess {
             reason: InvalidFieldAccessReason::UnknownMember,
+            ..
+        }
+    ));
+}
+
+// --------------------------
+//  Fixed collection literals
+// --------------------------
+
+#[test]
+fn fixed_collection_literal_within_capacity_is_accepted() {
+    let (ast, string_table) = parse_single_file_ast("items {2 Int} = {1, 2}\n");
+    let body = start_function_body(&ast, &string_table);
+
+    let NodeKind::VariableDeclaration(decl) = &body[0].kind else {
+        panic!("expected declaration");
+    };
+
+    assert_eq!(
+        decl.value.diagnostic_type.display_with_table(&string_table),
+        "{2 Int}"
+    );
+}
+
+#[test]
+fn fixed_collection_literal_exceeding_capacity_is_rejected() {
+    let diagnostic = parse_single_file_ast_diagnostic("items {2 Int} = {1, 2, 3}\n");
+
+    assert!(matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidCollectionType {
+            reason: InvalidCollectionTypeReason::InitializerExceedsFixedCapacity { .. },
             ..
         }
     ));

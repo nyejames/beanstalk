@@ -562,8 +562,8 @@ body {
 
     function __bs_make_error(message, code, location, trace) {
     return {
-    message,
-    code,
+    b_fld0: message,
+    b_fld1: code,
     __bst_location: location ?? null,
     __bst_trace: trace ?? null
     };
@@ -573,13 +573,23 @@ body {
     return { tag: "err", value: __bs_make_error(message, code, null, null) };
     }
 
+    function __bs_error_message(error) {
+    const message = error && error["b_fld0"] !== undefined ? error["b_fld0"] : error && error.message;
+    return typeof message === "string" ? message : String(message ?? "Unknown error");
+    }
+
+    function __bs_error_code(error) {
+    const code = error && error["b_fld1"] !== undefined ? error["b_fld1"] : error && error.code;
+    return typeof code === "number" ? code : 0;
+    }
+
     function __bs_error_with_location(error, location) {
-    return __bs_make_error(error.message, error.code, location, error.__bst_trace);
+    return __bs_make_error(__bs_error_message(error), __bs_error_code(error), location, error.__bst_trace);
     }
 
     function __bs_error_push_trace(error, frame) {
     const nextTrace = error.__bst_trace ? error.__bst_trace.concat([frame]) : [frame];
-    return __bs_make_error(error.message, error.code, error.__bst_location, nextTrace);
+    return __bs_make_error(__bs_error_message(error), __bs_error_code(error), error.__bst_location, nextTrace);
     }
 
     function __bs_error_bubble(error, file, line, column, functionName) {
@@ -616,48 +626,104 @@ body {
     throw new Error("Expected internal Result carrier during fallback handling");
     }
 
+    function __bs_fixed_collection(items, fixedCapacity) {
+    return {
+    __bst_kind: "fixed_collection",
+    items: items,
+    fixedCapacity: fixedCapacity,
+    };
+    }
+
+    function __bs_collection_items(collection) {
+    if (Array.isArray(collection)) {
+    return collection;
+    }
+    return collection.items;
+    }
+
+    function __bs_collection_fixed_capacity(collection) {
+    if (Array.isArray(collection)) {
+    return null;
+    }
+    return collection.fixedCapacity;
+    }
+
+    function __bs_collection_is_valid(collection) {
+    if (Array.isArray(collection)) {
+    return true;
+    }
+    if (collection === null || typeof collection !== "object") {
+    return false;
+    }
+    if (collection.__bst_kind !== "fixed_collection") {
+    return false;
+    }
+    if (!Array.isArray(collection.items)) {
+    return false;
+    }
+    return (
+    Number.isInteger(collection.fixedCapacity)
+    && collection.fixedCapacity > 0
+    && collection.items.length <= collection.fixedCapacity
+    );
+    }
+
     function __bs_collection_index_is_valid(collection, index) {
-    return Number.isInteger(index) && index >= 0 && index < collection.length;
+    const items = __bs_collection_items(collection);
+    return Number.isInteger(index) && index >= 0 && index < items.length;
     }
 
     function __bs_collection_get(collection, index) {
-    if (!Array.isArray(collection)) {
+    if (!__bs_collection_is_valid(collection)) {
     return __bs_error_result("Collection operation expects an ordered collection", 100);
     }
     if (!__bs_collection_index_is_valid(collection, index)) {
     return __bs_error_result("Collection index out of bounds", 101);
     }
-    return { tag: "ok", value: collection[index] };
+    const items = __bs_collection_items(collection);
+    return { tag: "ok", value: items[index] };
     }
 
     function __bs_collection_set(collection, index, value) {
-    if (!Array.isArray(collection)) {
+    if (!__bs_collection_is_valid(collection)) {
     return __bs_error_result("Collection operation expects an ordered collection", 100);
     }
     if (!__bs_collection_index_is_valid(collection, index)) {
     return __bs_error_result("Collection index out of bounds", 101);
     }
-    collection[index] = value;
+    const items = __bs_collection_items(collection);
+    items[index] = value;
     return { tag: "ok", value: null };
     }
 
     function __bs_collection_push(collection, value) {
-    collection.push(value);
+    if (!__bs_collection_is_valid(collection)) {
+    return __bs_error_result("Collection operation expects an ordered collection", 100);
+    }
+    const items = __bs_collection_items(collection);
+    const fixedCapacity = __bs_collection_fixed_capacity(collection);
+    if (fixedCapacity !== null && items.length >= fixedCapacity) {
+    return __bs_error_result("Fixed collection capacity exceeded", 102);
+    }
+    items.push(value);
+    return { tag: "ok", value: null };
     }
 
     function __bs_collection_remove(collection, index) {
-    if (!Array.isArray(collection)) {
+    if (!__bs_collection_is_valid(collection)) {
     return __bs_error_result("Collection operation expects an ordered collection", 100);
     }
     if (!__bs_collection_index_is_valid(collection, index)) {
     return __bs_error_result("Collection index out of bounds", 101);
     }
-    const removed = collection.splice(index, 1)[0];
+    const items = __bs_collection_items(collection);
+    const removed = items.splice(index, 1)[0];
     return { tag: "ok", value: removed };
     }
 
     function __bs_collection_length(collection) {
-    return collection.length;
+    const items = __bs_collection_items(collection);
+    return items.length;
     }
 
     function __bs_value_to_string(value) {
@@ -730,7 +796,7 @@ body {
     let b_l3 = __bs_binding(undefined);
 
     __bs_assign_value(b_l3, []);
-    __bs_read(b_l3).push("<section class=\"container\"><h1>Variables<\/h1><p>Equals means assign. Tilde <span style=\"\n    color: #c444aff9;\n    font-family: var(--bst-font-family-monospace);\n\"> ~<\/span> means this is a mutable and can change.<\/p><p>All variables must be assigned a value when they are declared.<\/p><pre style=\"\n    background-color: hsla(0, 0%, 42%, 0.12);\n    padding-left: 1em;\n    border-radius: 5px;\n    max-width: 100%;\n    white-space: pre;\n    overflow-x: auto;\n\"><code class='codeblock'>\nint <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> <span class='bst-code-number'>0<\/span>\nfloat <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> <span class='bst-code-number'>0.0<\/span>\n\nstring_slice <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> <span class='bst-code-string'>&quot;wow!&quot;<\/span>\nchar <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> <span class='bst-code-string'>&#39;😊&#39;<\/span>\nraw_string_slice <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> <span class='bst-code-operator'>`<\/span>hi<span class='bst-code-operator'>`<\/span>\n\nstring_template <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> <span class='bst-code-parenthesis'>[<\/span><span class='bst-code-operator'>:<\/span>\n    <span class='bst-code-struct'>This<\/span> is the <span class='bst-code-struct'>Beanstalk<\/span> programming language\n<span class='bst-code-parenthesis'>]<\/span>\n\nbool <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> true\n\nmutable_collection <span class='bst-code-operator'>~<\/span><span class='bst-code-parenthesis'>{<\/span><span class='bst-code-type'>Int<\/span><span class='bst-code-parenthesis'>}<\/span> <span class='bst-code-operator'>=<\/span> <span class='bst-code-parenthesis'>{<\/span><span class='bst-code-parenthesis'>}<\/span>\nimmutable_collection <span class='bst-code-parenthesis'>{<\/span><span class='bst-code-type'>Int<\/span><span class='bst-code-parenthesis'>}<\/span> <span class='bst-code-operator'>=<\/span> <span class='bst-code-parenthesis'>{<\/span><span class='bst-code-parenthesis'>}<\/span>\n\n<span class='bst-code-struct'>NewStruct<\/span> <span class='bst-code-operator'>=<\/span> <span class='bst-code-operator'>|<\/span>\n    value <span class='bst-code-struct'>Float,<\/span>\n    another_value <span class='bst-code-struct'>String,<\/span>\n<span class='bst-code-operator'>|<\/span>\n\ninstance <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> <span class='bst-code-struct'>NewStruct<\/span><span class='bst-code-parenthesis'>(<\/span>\n    value <span class='bst-code-operator'>=<\/span> <span class='bst-code-number'>1.2<\/span>, \n    another_value <span class='bst-code-operator'>=<\/span> <span class='bst-code-string'>&quot;hey&quot;<\/span>\n<span class='bst-code-parenthesis'>)<\/span>\n<\/code><\/pre><p>By default, Beanstalk code will create immutable references to values.<\/p><p><strong>This is true for all types.<\/strong><\/p><p>The compiler might decide to make an immutable copy of a primative value, but the assignment will <strong>always<\/strong> behave the same way no matter what the type is.<\/p><pre style=\"\n    background-color: hsla(0, 0%, 42%, 0.12);\n    padding-left: 1em;\n    border-radius: 5px;\n    max-width: 100%;\n    white-space: pre;\n    overflow-x: auto;\n\"><code class='codeblock'>\n<span class='bst-code-comment'>-- 64 bit immutable float<\/span>\nnumber <span class='bst-code-operator'>=<\/span> <span class='bst-code-number'>420.69<\/span>\n\n<span class='bst-code-comment'>-- Becomes an immutable reference to the value<\/span>\nanother_number <span class='bst-code-operator'>=<\/span> number\n\n<span class='bst-code-comment'>-- Becomes a mutable reference to the number<\/span>\n<span class='bst-code-comment'>-- or moves the value if it isn&#39;t used again later in the scope<\/span>\nanother_mutable_number <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> number\n\n<span class='bst-code-comment'>-- Even with primative stack types,<\/span>\n<span class='bst-code-comment'>-- Copying is still explicit<\/span>\na_copy_of_a_number <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> <span class='bst-code-keyword'>copy<\/span> another_mutable_number\n\n<span class='bst-code-comment'>-- Type error (number is not mutable)<\/span>\nnumber <span class='bst-code-operator'>=<\/span> <span class='bst-code-number'>1<\/span>\n\n<span class='bst-code-comment'>-- Type error (another_mutable_number is a float type)<\/span>\nanother_mutable_number <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> <span class='bst-code-string'>&quot;A string instead. Whoops.&quot;<\/span>\n\n<span class='bst-code-comment'>-- Explicit type declarations<\/span>\na_float <span class='bst-code-operator'>~<\/span><span class='bst-code-type'>Float<\/span> <span class='bst-code-operator'>=<\/span> <span class='bst-code-number'>84<\/span>\nstring_slice <span class='bst-code-operator'>=<\/span> <span class='bst-code-string'>&quot;Hello &quot;<\/span>\na_mutable_string <span class='bst-code-operator'>~<\/span><span class='bst-code-type'>String<\/span> <span class='bst-code-operator'>=<\/span> <span class='bst-code-parenthesis'>[<\/span><span class='bst-code-operator'>:<\/span><span class='bst-code-struct'>World<\/span><span class='bst-code-operator'>!<\/span><span class='bst-code-parenthesis'>]<\/span>\n\n<span class='bst-code-comment'>-- You can&#39;t use the &#39;+&#39; operator on strings,<\/span>\n<span class='bst-code-comment'>-- They can be concatenated using templates<\/span>\nconcatenated_strings <span class='bst-code-operator'>=<\/span> <span class='bst-code-parenthesis'>[<\/span>string_slice, a_mutable_string<span class='bst-code-parenthesis'>]<\/span>\n<\/code><\/pre><p>All copies are explicit and must use the <span style=\"\n    color: #c444aff9;\n    font-family: var(--bst-font-family-monospace);\n\">copy<\/span> keyword in front of the value being copied.<\/p><pre style=\"\n    background-color: hsla(0, 0%, 42%, 0.12);\n    padding-left: 1em;\n    border-radius: 5px;\n    max-width: 100%;\n    white-space: pre;\n    overflow-x: auto;\n\"><code class='codeblock'>\n<span class='bst-code-comment'>-- Create a new collection of integers<\/span>\na_collection <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> <span class='bst-code-parenthesis'>{<\/span><span class='bst-code-number'>1<\/span>, <span class='bst-code-number'>2<\/span>, <span class='bst-code-number'>3<\/span>, <span class='bst-code-number'>4<\/span>, <span class='bst-code-number'>5<\/span><span class='bst-code-parenthesis'>}<\/span>\n\n<span class='bst-code-comment'>-- Deep mutable copy of a collection<\/span>\na_copy <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> <span class='bst-code-keyword'>copy<\/span> a_collection\n\n<span class='bst-code-comment'>-- Immutable reference to a_collection<\/span>\na_reference <span class='bst-code-operator'>=<\/span> a_collection\n\n<span class='bst-code-comment'>-- Ownership passed or mutable reference depending on context<\/span>\na_reference <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> a_collection\n\n<span class='bst-code-comment'>-- a_reference is still a reference to the original collection<\/span>\n<span class='bst-code-operator'>~<\/span>a_reference.push<span class='bst-code-parenthesis'>(<\/span><span class='bst-code-number'>5<\/span><span class='bst-code-parenthesis'>)<\/span>\nio<span class='bst-code-parenthesis'>(<\/span>a_collection<span class='bst-code-parenthesis'>)<\/span> <span class='bst-code-comment'>-- {1, 2, 3, 4, 5, 5}<\/span>\n\n<span class='bst-code-operator'>~<\/span>a_collection.remove<span class='bst-code-parenthesis'>(<\/span>a_collection.length<span class='bst-code-parenthesis'>(<\/span><span class='bst-code-parenthesis'>)<\/span> <span class='bst-code-operator'>-<\/span> <span class='bst-code-number'>1<\/span><span class='bst-code-parenthesis'>)<\/span>\nio<span class='bst-code-parenthesis'>(<\/span>a_collection<span class='bst-code-parenthesis'>)<\/span> <span class='bst-code-comment'>-- {1, 2, 3, 4, 5}<\/span>\n<\/code><\/pre><p>Expressions can span over multiple lines.<\/p><p>But new statements must start after a newline.<\/p><pre style=\"\n    background-color: hsla(0, 0%, 42%, 0.12);\n    padding-left: 1em;\n    border-radius: 5px;\n    max-width: 100%;\n    white-space: pre;\n    overflow-x: auto;\n\"><code class='codeblock'>\n<span class='bst-code-comment'>-- Valid<\/span>\nsome_int <span class='bst-code-operator'>=<\/span>\n    <span class='bst-code-number'>4<\/span> <span class='bst-code-operator'>+<\/span> <span class='bst-code-number'>5<\/span> <span class='bst-code-operator'>+<\/span> <span class='bst-code-number'>6<\/span> <span class='bst-code-operator'>+<\/span> <span class='bst-code-number'>7<\/span> <span class='bst-code-operator'>+<\/span> \n    <span class='bst-code-number'>8<\/span> <span class='bst-code-operator'>+<\/span> <span class='bst-code-number'>9<\/span> <span class='bst-code-operator'>+<\/span> <span class='bst-code-number'>10<\/span>\n\n<span class='bst-code-comment'>-- Also valid<\/span>\nsome_int <span class='bst-code-operator'>=<\/span>\n    <span class='bst-code-number'>4<\/span> <span class='bst-code-operator'>+<\/span> <span class='bst-code-parenthesis'>(<\/span><span class='bst-code-number'>5<\/span> <span class='bst-code-operator'>+<\/span> <span class='bst-code-number'>6<\/span><span class='bst-code-parenthesis'>)<\/span> <span class='bst-code-operator'>*<\/span> <span class='bst-code-number'>7<\/span>\n    <span class='bst-code-operator'>+<\/span> <span class='bst-code-number'>8<\/span> <span class='bst-code-operator'>/<\/span> <span class='bst-code-number'>9<\/span> <span class='bst-code-operator'>+<\/span> <span class='bst-code-number'>10<\/span>\n<\/code><\/pre><\/section>");
+    __bs_read(b_l3).push("<section class=\"container\"><h1>Variables<\/h1><p>Equals means assign. Tilde <span style=\"\n    color: #c444aff9;\n    font-family: var(--bst-font-family-monospace);\n\"> ~<\/span> means this is a mutable and can change.<\/p><p>All variables must be assigned a value when they are declared.<\/p><pre style=\"\n    background-color: hsla(0, 0%, 42%, 0.12);\n    padding-left: 1em;\n    border-radius: 5px;\n    max-width: 100%;\n    white-space: pre;\n    overflow-x: auto;\n\"><code class='codeblock'>\nint <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> <span class='bst-code-number'>0<\/span>\nfloat <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> <span class='bst-code-number'>0.0<\/span>\n\nstring_slice <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> <span class='bst-code-string'>&quot;wow!&quot;<\/span>\nchar <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> <span class='bst-code-string'>&#39;😊&#39;<\/span>\nraw_string_slice <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> <span class='bst-code-operator'>`<\/span>hi<span class='bst-code-operator'>`<\/span>\n\nstring_template <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> <span class='bst-code-parenthesis'>[<\/span><span class='bst-code-operator'>:<\/span>\n    <span class='bst-code-struct'>This<\/span> is the <span class='bst-code-struct'>Beanstalk<\/span> programming language\n<span class='bst-code-parenthesis'>]<\/span>\n\nbool <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> true\n\nmutable_collection <span class='bst-code-operator'>~<\/span><span class='bst-code-parenthesis'>{<\/span><span class='bst-code-type'>Int<\/span><span class='bst-code-parenthesis'>}<\/span> <span class='bst-code-operator'>=<\/span> <span class='bst-code-parenthesis'>{<\/span><span class='bst-code-parenthesis'>}<\/span>\nread_only_collection <span class='bst-code-parenthesis'>{<\/span><span class='bst-code-type'>Int<\/span><span class='bst-code-parenthesis'>}<\/span> <span class='bst-code-operator'>=<\/span> <span class='bst-code-parenthesis'>{<\/span><span class='bst-code-parenthesis'>}<\/span>\nfixed_collection <span class='bst-code-operator'>~<\/span><span class='bst-code-parenthesis'>{<\/span><span class='bst-code-number'>4<\/span> <span class='bst-code-type'>Int<\/span><span class='bst-code-parenthesis'>}<\/span> <span class='bst-code-operator'>=<\/span> <span class='bst-code-parenthesis'>{<\/span><span class='bst-code-parenthesis'>}<\/span>\n\n<span class='bst-code-struct'>NewStruct<\/span> <span class='bst-code-operator'>=<\/span> <span class='bst-code-operator'>|<\/span>\n    value <span class='bst-code-struct'>Float,<\/span>\n    another_value <span class='bst-code-struct'>String,<\/span>\n<span class='bst-code-operator'>|<\/span>\n\ninstance <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> <span class='bst-code-struct'>NewStruct<\/span><span class='bst-code-parenthesis'>(<\/span>\n    value <span class='bst-code-operator'>=<\/span> <span class='bst-code-number'>1.2<\/span>, \n    another_value <span class='bst-code-operator'>=<\/span> <span class='bst-code-string'>&quot;hey&quot;<\/span>\n<span class='bst-code-parenthesis'>)<\/span>\n<\/code><\/pre><p>By default, Beanstalk code will create immutable references to values.<\/p><p><strong>This is true for all types.<\/strong><\/p><p>The compiler might decide to make an immutable copy of a primative value, but the assignment will <strong>always<\/strong> behave the same way no matter what the type is.<\/p><pre style=\"\n    background-color: hsla(0, 0%, 42%, 0.12);\n    padding-left: 1em;\n    border-radius: 5px;\n    max-width: 100%;\n    white-space: pre;\n    overflow-x: auto;\n\"><code class='codeblock'>\n<span class='bst-code-comment'>-- 64 bit immutable float<\/span>\nnumber <span class='bst-code-operator'>=<\/span> <span class='bst-code-number'>420.69<\/span>\n\n<span class='bst-code-comment'>-- Becomes an immutable reference to the value<\/span>\nanother_number <span class='bst-code-operator'>=<\/span> number\n\n<span class='bst-code-comment'>-- Becomes a mutable reference to the number<\/span>\n<span class='bst-code-comment'>-- or moves the value if it isn&#39;t used again later in the scope<\/span>\nanother_mutable_number <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> number\n\n<span class='bst-code-comment'>-- Even with primative stack types,<\/span>\n<span class='bst-code-comment'>-- Copying is still explicit<\/span>\na_copy_of_a_number <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> <span class='bst-code-keyword'>copy<\/span> another_mutable_number\n\n<span class='bst-code-comment'>-- Type error (number is not mutable)<\/span>\nnumber <span class='bst-code-operator'>=<\/span> <span class='bst-code-number'>1<\/span>\n\n<span class='bst-code-comment'>-- Type error (another_mutable_number is a float type)<\/span>\nanother_mutable_number <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> <span class='bst-code-string'>&quot;A string instead. Whoops.&quot;<\/span>\n\n<span class='bst-code-comment'>-- Explicit type declarations<\/span>\na_float <span class='bst-code-operator'>~<\/span><span class='bst-code-type'>Float<\/span> <span class='bst-code-operator'>=<\/span> <span class='bst-code-number'>84<\/span>\nstring_slice <span class='bst-code-operator'>=<\/span> <span class='bst-code-string'>&quot;Hello &quot;<\/span>\na_mutable_string <span class='bst-code-operator'>~<\/span><span class='bst-code-type'>String<\/span> <span class='bst-code-operator'>=<\/span> <span class='bst-code-parenthesis'>[<\/span><span class='bst-code-operator'>:<\/span><span class='bst-code-struct'>World<\/span><span class='bst-code-operator'>!<\/span><span class='bst-code-parenthesis'>]<\/span>\n\n<span class='bst-code-comment'>-- You can&#39;t use the &#39;+&#39; operator on strings,<\/span>\n<span class='bst-code-comment'>-- They can be concatenated using templates<\/span>\nconcatenated_strings <span class='bst-code-operator'>=<\/span> <span class='bst-code-parenthesis'>[<\/span>string_slice, a_mutable_string<span class='bst-code-parenthesis'>]<\/span>\n<\/code><\/pre><p>All copies are explicit and must use the <span style=\"\n    color: #c444aff9;\n    font-family: var(--bst-font-family-monospace);\n\">copy<\/span> keyword in front of the value being copied.<\/p><pre style=\"\n    background-color: hsla(0, 0%, 42%, 0.12);\n    padding-left: 1em;\n    border-radius: 5px;\n    max-width: 100%;\n    white-space: pre;\n    overflow-x: auto;\n\"><code class='codeblock'>\n<span class='bst-code-comment'>-- Create a new collection of integers<\/span>\na_collection <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> <span class='bst-code-parenthesis'>{<\/span><span class='bst-code-number'>1<\/span>, <span class='bst-code-number'>2<\/span>, <span class='bst-code-number'>3<\/span>, <span class='bst-code-number'>4<\/span>, <span class='bst-code-number'>5<\/span><span class='bst-code-parenthesis'>}<\/span>\n\n<span class='bst-code-comment'>-- Deep mutable copy of a collection<\/span>\na_copy <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> <span class='bst-code-keyword'>copy<\/span> a_collection\n\n<span class='bst-code-comment'>-- Immutable reference to a_collection<\/span>\na_reference <span class='bst-code-operator'>=<\/span> a_collection\n\n<span class='bst-code-comment'>-- Ownership passed or mutable reference depending on context<\/span>\na_reference <span class='bst-code-operator'>~<\/span><span class='bst-code-operator'>=<\/span> a_collection\n\n<span class='bst-code-comment'>-- a_reference is still a reference to the original collection<\/span>\n<span class='bst-code-operator'>~<\/span>a_reference.push<span class='bst-code-parenthesis'>(<\/span><span class='bst-code-number'>5<\/span><span class='bst-code-parenthesis'>)<\/span> catch<span class='bst-code-operator'>:<\/span>\n    assert<span class='bst-code-parenthesis'>(<\/span>false, <span class='bst-code-string'>&quot;This should never fail for this growable collection in this example&quot;<\/span><span class='bst-code-parenthesis'>)<\/span>\n;\nio<span class='bst-code-parenthesis'>(<\/span>a_collection<span class='bst-code-parenthesis'>)<\/span> <span class='bst-code-comment'>-- {1, 2, 3, 4, 5, 5}<\/span>\n\n<span class='bst-code-operator'>~<\/span>a_collection.remove<span class='bst-code-parenthesis'>(<\/span>a_collection.length<span class='bst-code-parenthesis'>(<\/span><span class='bst-code-parenthesis'>)<\/span> <span class='bst-code-operator'>-<\/span> <span class='bst-code-number'>1<\/span><span class='bst-code-parenthesis'>)<\/span> catch<span class='bst-code-operator'>:<\/span>\n    then <span class='bst-code-number'>0<\/span>\n;\nio<span class='bst-code-parenthesis'>(<\/span>a_collection<span class='bst-code-parenthesis'>)<\/span> <span class='bst-code-comment'>-- {1, 2, 3, 4, 5}<\/span>\n<\/code><\/pre><p>Expressions can span over multiple lines.<\/p><p>But new statements must start after a newline.<\/p><pre style=\"\n    background-color: hsla(0, 0%, 42%, 0.12);\n    padding-left: 1em;\n    border-radius: 5px;\n    max-width: 100%;\n    white-space: pre;\n    overflow-x: auto;\n\"><code class='codeblock'>\n<span class='bst-code-comment'>-- Valid<\/span>\nsome_int <span class='bst-code-operator'>=<\/span>\n    <span class='bst-code-number'>4<\/span> <span class='bst-code-operator'>+<\/span> <span class='bst-code-number'>5<\/span> <span class='bst-code-operator'>+<\/span> <span class='bst-code-number'>6<\/span> <span class='bst-code-operator'>+<\/span> <span class='bst-code-number'>7<\/span> <span class='bst-code-operator'>+<\/span> \n    <span class='bst-code-number'>8<\/span> <span class='bst-code-operator'>+<\/span> <span class='bst-code-number'>9<\/span> <span class='bst-code-operator'>+<\/span> <span class='bst-code-number'>10<\/span>\n\n<span class='bst-code-comment'>-- Also valid<\/span>\nsome_int <span class='bst-code-operator'>=<\/span>\n    <span class='bst-code-number'>4<\/span> <span class='bst-code-operator'>+<\/span> <span class='bst-code-parenthesis'>(<\/span><span class='bst-code-number'>5<\/span> <span class='bst-code-operator'>+<\/span> <span class='bst-code-number'>6<\/span><span class='bst-code-parenthesis'>)<\/span> <span class='bst-code-operator'>*<\/span> <span class='bst-code-number'>7<\/span>\n    <span class='bst-code-operator'>+<\/span> <span class='bst-code-number'>8<\/span> <span class='bst-code-operator'>/<\/span> <span class='bst-code-number'>9<\/span> <span class='bst-code-operator'>+<\/span> <span class='bst-code-number'>10<\/span>\n<\/code><\/pre><\/section>");
     return __bs_read(b_l3);
     }
 

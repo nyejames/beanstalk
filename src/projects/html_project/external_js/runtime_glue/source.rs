@@ -5,7 +5,10 @@
 //! WHY: the JS backend calls wrappers by stable names; wrappers adapt raw JS return shapes
 //!      to Beanstalk's internal conventions.
 
-use crate::backends::js::external_module_export_glue_function_name;
+use crate::backends::js::{
+    builtin_error_code_js_field_name, builtin_error_message_js_field_name,
+    external_module_export_glue_function_name,
+};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::external_packages::ExternalPackageId;
 use crate::projects::html_project::external_js::runtime_glue::exports::ReferencedExport;
@@ -88,17 +91,27 @@ pub(super) fn generate_infallible_wrapper(wrapper_name: &str, export_name: &str)
 /// Beanstalk's internal fallible carrier.
 ///
 /// WHAT: calls the raw JS export, expects `{ ok: boolean, value? }` or `{ ok: false, error }`,
-///       and returns `{ tag: "ok", value: ... }` or `{ tag: "err", value: { message, code } }`.
+///       and returns `{ tag: "ok", value: ... }` or an internal Beanstalk `Error` struct value.
 /// WHY: the JS backend HIR lowering assumes all fallible calls return this carrier shape.
 pub(super) fn generate_fallible_wrapper(
     wrapper_name: &str,
     export_name: &str,
     release_build: bool,
 ) -> String {
+    let invalid_error = internal_error_object_source(
+        "\"Invalid result wrapper from external JavaScript function\"",
+        "0",
+        release_build,
+    );
+    let catch_error = internal_error_object_source("String(e.message || e)", "0", release_build);
+    let returned_error = internal_error_object_source(
+        "error.message || \"Unknown error\"",
+        "typeof error.code === \"number\" ? error.code : 0",
+        release_build,
+    );
+
     let invalid_wrapper_handling = if release_build {
-        String::from(
-            "        return { tag: \"err\", value: { message: \"Invalid result wrapper from external JavaScript function\", code: 0 } };",
-        )
+        format!("        return {{ tag: \"err\", value: {invalid_error} }};")
     } else {
         format!(
             "        throw new Error(
@@ -114,7 +127,7 @@ pub(super) fn generate_fallible_wrapper(
     try {{
         result = {export_name}(...args);
     }} catch (e) {{
-        return {{ tag: \"err\", value: {{ message: String(e.message || e), code: 0 }} }};
+        return {{ tag: \"err\", value: {catch_error} }};
     }}
 
     if (result && typeof result.ok === \"boolean\") {{
@@ -123,7 +136,7 @@ pub(super) fn generate_fallible_wrapper(
         }}
         if (result.ok === false) {{
             const error = result.error || {{ message: \"Unknown error\", code: 0 }};
-            return {{ tag: \"err\", value: {{ message: error.message || \"Unknown error\", code: typeof error.code === \"number\" ? error.code : 0 }} }};
+            return {{ tag: \"err\", value: {returned_error} }};
         }}
     }}
 
@@ -131,4 +144,15 @@ pub(super) fn generate_fallible_wrapper(
 }}
 "
     )
+}
+
+fn internal_error_object_source(
+    message_expression: &str,
+    code_expression: &str,
+    release_build: bool,
+) -> String {
+    let message_field = builtin_error_message_js_field_name(release_build);
+    let code_field = builtin_error_code_js_field_name(release_build);
+
+    format!("{{ {message_field}: {message_expression}, {code_field}: {code_expression} }}")
 }

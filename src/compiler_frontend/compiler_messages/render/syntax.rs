@@ -95,9 +95,6 @@ pub(crate) fn invalid_type_annotation_message(
             "Nested optional types are not supported. Aliases that already expand to an optional type cannot be marked with '?' again."
                 .to_string()
         }
-        InvalidTypeAnnotationReason::NegativeCollectionCapacity => {
-            "Collection capacity must be a non-negative integer.".to_string()
-        }
     }
 }
 

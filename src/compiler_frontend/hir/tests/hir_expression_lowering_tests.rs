@@ -2409,7 +2409,7 @@ fn runtime_template_control_flow_loop_collection_materializes_iterable_and_lengt
     let mut builder = setup_builder(&mut string_table);
     let collection_type = builder
         .type_environment
-        .intern_collection(builtin_type_ids::INT);
+        .intern_collection(builtin_type_ids::INT, None);
     register_local(
         &mut builder,
         items_path.clone(),
@@ -3093,7 +3093,7 @@ fn lowers_collection_builtin_host_calls_from_explicit_ast_nodes() {
 
     let receiver_type_id = builder
         .type_environment
-        .intern_collection(builtin_type_ids::INT);
+        .intern_collection(builtin_type_ids::INT, None);
     register_local(
         &mut builder,
         receiver_name.clone(),
@@ -3159,7 +3159,7 @@ fn lowers_collection_builtin_host_calls_from_explicit_ast_nodes() {
                 CallAccessMode::Shared,
                 location.clone(),
             )],
-            vec![],
+            vec![fallible_none_result],
             push_id,
         ),
         (
@@ -3181,11 +3181,17 @@ fn lowers_collection_builtin_host_calls_from_explicit_ast_nodes() {
     ];
 
     for (op, args, result_type_ids, expected_id) in cases {
+        let expects_result = !result_type_ids.is_empty();
+        let receiver_requires_mutable = matches!(
+            op,
+            CollectionBuiltinOp::Set | CollectionBuiltinOp::Push | CollectionBuiltinOp::Remove
+        );
         let lowered = builder
             .lower_ast_node_as_expression(&AstNode {
                 kind: NodeKind::CollectionBuiltinCall {
                     receiver: Box::new(receiver.clone()),
                     op,
+                    receiver_requires_mutable,
                     args,
                     result_type_ids,
                     location: location.clone(),
@@ -3197,8 +3203,17 @@ fn lowers_collection_builtin_host_calls_from_explicit_ast_nodes() {
 
         assert_eq!(lowered.prelude.len(), 1);
         match &lowered.prelude[0].kind {
-            HirStatementKind::Call { target, args, .. } => {
+            HirStatementKind::Call {
+                target,
+                args,
+                result,
+            } => {
                 assert_eq!(target, &CallTarget::ExternalFunction(expected_id));
+                assert_eq!(
+                    result.is_some(),
+                    expects_result,
+                    "{op:?} HIR call result should match its AST result type list"
+                );
                 assert!(
                     !args.is_empty(),
                     "collection host calls should include receiver as first argument"
@@ -3295,6 +3310,56 @@ fn lowers_choice_variant_expression_to_hir_variant_construct() {
 }
 
 #[test]
+fn collection_expression_lowering_preserves_fixed_type_identity() {
+    let mut string_table = StringTable::new();
+    let location = location(1);
+    let mut builder = setup_builder(&mut string_table);
+    let int_type = builder.type_environment.builtins().int;
+    let fixed_collection = builder
+        .type_environment
+        .intern_collection(int_type, Some(4));
+
+    let expression = Expression::new(
+        ExpressionKind::Collection(vec![Expression::int(
+            1,
+            location.clone(),
+            ValueMode::ImmutableOwned,
+        )]),
+        location,
+        fixed_collection,
+        crate::compiler_frontend::datatypes::DataType::Inferred,
+        ValueMode::ImmutableOwned,
+    );
+
+    let lowered = builder
+        .lower_expression(&expression)
+        .expect("fixed collection expression should lower");
+
+    assert!(
+        lowered.prelude.is_empty(),
+        "literal collection elements should lower inline"
+    );
+    assert_eq!(
+        lowered.value.ty, fixed_collection,
+        "HIR collection expression should preserve the exact AST collection TypeId"
+    );
+
+    let shape = builder
+        .type_environment
+        .collection_shape(lowered.value.ty)
+        .expect("lowered expression type should remain a collection");
+    assert_eq!(shape.fixed_capacity, Some(4));
+
+    match &lowered.value.kind {
+        HirExpressionKind::Collection(elements) => {
+            assert_eq!(elements.len(), 1);
+            assert_eq!(elements[0].ty, int_type);
+        }
+        other => panic!("expected HIR collection expression, got {other:?}"),
+    }
+}
+
+#[test]
 fn collection_lowering_uses_pure_type_identity() {
     let mut string_table = StringTable::new();
     let mut builder = setup_builder(&mut string_table);
@@ -3302,14 +3367,16 @@ fn collection_lowering_uses_pure_type_identity() {
 
     let type_id = builder
         .type_environment
-        .intern_collection(builtin_type_ids::INT);
+        .intern_collection(builtin_type_ids::INT, None);
     let hir_type = builder.type_environment.get(type_id);
 
     assert!(
         matches!(
             hir_type,
             Some(TypeDefinition::Constructed(ConstructedTypeDefinition {
-                constructor: TypeConstructor::Builtin(BuiltinTypeConstructor::Collection),
+                constructor: TypeConstructor::Builtin(BuiltinTypeConstructor::Collection {
+                    fixed_capacity: None
+                }),
                 ..
             }))
         ),

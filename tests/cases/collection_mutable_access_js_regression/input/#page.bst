@@ -1,6 +1,7 @@
 render_js_regression || -> String:
     values ~= {1}
-    ~values.push(2)
+    ~values.push(2) catch:
+    ;
     ~values.set(0, 9) catch:
     ;
     ~values.set(1, 99) catch:

@@ -1,0 +1,4 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["fixed_collection_generic_identity_success value=1 length=1"]

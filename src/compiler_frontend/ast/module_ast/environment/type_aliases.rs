@@ -11,7 +11,7 @@
 //! fields and constant type annotations. Self-reference (`A as A`) also creates a self-loop edge.
 
 use crate::compiler_frontend::ast::module_ast::environment::builder::AstModuleEnvironmentBuilder;
-use crate::compiler_frontend::ast::type_resolution::resolve_type;
+use crate::compiler_frontend::ast::type_resolution::{ResolvedTypeAnnotation, resolve_type};
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, InvalidDeclarationReason};
 use crate::compiler_frontend::datatypes::DataType;
@@ -46,10 +46,9 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 let mut type_resolution_context =
                     self.type_resolution_context_for(&visibility, None);
 
-                // Type aliases store resolved diagnostic spellings because aliases are
-                // source-facing metadata that must preserve the written nominal/generic shape.
-                // Executable declarations still consume canonical `TypeId`s through
-                // `ResolvedTypeAnnotation`.
+                // Alias declarations are resolved before nominal members and constants.
+                // Store the parsed target for later use-site re-resolution, but keep
+                // early declaration validation on the existing diagnostic spelling path.
                 let data_type_target = parsed_ref_to_data_type(target);
 
                 resolve_type(
@@ -85,6 +84,14 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 ));
             }
 
+            self.resolved_type_alias_annotations_by_path.insert(
+                header.tokens.src_path.to_owned(),
+                ResolvedTypeAnnotation {
+                    source_ref: target.clone(),
+                    diagnostic_type: resolved_target.clone(),
+                    type_id: None,
+                },
+            );
             self.resolved_type_aliases_by_path
                 .insert(header.tokens.src_path.to_owned(), resolved_target);
         }

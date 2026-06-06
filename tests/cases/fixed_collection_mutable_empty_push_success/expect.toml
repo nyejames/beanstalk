@@ -1,0 +1,4 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["fixed_collection_mutable_empty_push_success length=2 first=1 second=2"]

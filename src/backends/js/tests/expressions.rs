@@ -265,3 +265,170 @@ fn lowers_option_construct_expression() {
 }
 
 // ---------------------------------------------------------------------------
+// Fixed collection expression lowering tests [fixed-collection]
+// ---------------------------------------------------------------------------
+
+/// Verifies that a growable collection expression lowers to a plain JS array. [fixed-collection]
+#[test]
+fn growable_collection_expression_lowers_to_array() {
+    let mut string_table = StringTable::new();
+    let (mut type_environment, types) = build_type_environment();
+
+    let growable_type = type_environment.intern_collection(types.int, None);
+
+    let collection_expr = expression(
+        1,
+        HirExpressionKind::Collection(vec![
+            int_expression(2, 1, types.int, RegionId(0)),
+            int_expression(3, 2, types.int, RegionId(0)),
+        ]),
+        growable_type,
+        RegionId(0),
+        ValueKind::RValue,
+    );
+
+    let collection_statement = statement(1, HirStatementKind::Expr(collection_expr), 1);
+
+    let block = HirBlock {
+        id: BlockId(0),
+        region: RegionId(0),
+        locals: vec![],
+        statements: vec![collection_statement],
+        terminator: HirTerminator::Return(unit_expression(4, types.unit, RegionId(0))),
+    };
+
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.unit,
+        return_aliases: vec![],
+    };
+
+    let module = build_module(&mut string_table, "main", vec![block], function, &[]);
+
+    let output = lower_hir_to_js(
+        &module,
+        &BorrowCheckReport::default(),
+        &string_table,
+        default_config(),
+        &type_environment,
+    )
+    .expect("JS lowering should succeed");
+
+    assert!(
+        output.source.contains("[1, 2]"),
+        "growable collection must lower to a plain JS array literal"
+    );
+    // The runtime prelude includes the helper definition, so this checks only
+    // for the expression-level wrapper call shape.
+    assert!(
+        !output.source.contains("__bs_fixed_collection([1, 2]"),
+        "growable collection expression must not be wrapped in __bs_fixed_collection"
+    );
+}
+
+/// Verifies that a fixed collection expression lowers to a __bs_fixed_collection call. [fixed-collection]
+#[test]
+fn fixed_collection_expression_lowers_to_wrapper() {
+    let mut string_table = StringTable::new();
+    let (mut type_environment, types) = build_type_environment();
+
+    let fixed_type = type_environment.intern_collection(types.int, Some(4));
+
+    let collection_expr = expression(
+        1,
+        HirExpressionKind::Collection(vec![
+            int_expression(2, 10, types.int, RegionId(0)),
+            int_expression(3, 20, types.int, RegionId(0)),
+        ]),
+        fixed_type,
+        RegionId(0),
+        ValueKind::RValue,
+    );
+
+    let collection_statement = statement(1, HirStatementKind::Expr(collection_expr), 1);
+
+    let block = HirBlock {
+        id: BlockId(0),
+        region: RegionId(0),
+        locals: vec![],
+        statements: vec![collection_statement],
+        terminator: HirTerminator::Return(unit_expression(4, types.unit, RegionId(0))),
+    };
+
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.unit,
+        return_aliases: vec![],
+    };
+
+    let module = build_module(&mut string_table, "main", vec![block], function, &[]);
+
+    let output = lower_hir_to_js(
+        &module,
+        &BorrowCheckReport::default(),
+        &string_table,
+        default_config(),
+        &type_environment,
+    )
+    .expect("JS lowering should succeed");
+
+    assert!(
+        output.source.contains("__bs_fixed_collection([10, 20], 4)"),
+        "fixed collection must lower to __bs_fixed_collection(items, capacity)"
+    );
+}
+
+/// Verifies that a fixed collection expression with zero elements emits the wrapper. [fixed-collection]
+#[test]
+fn fixed_collection_empty_expression_lowers_to_wrapper() {
+    let mut string_table = StringTable::new();
+    let (mut type_environment, types) = build_type_environment();
+
+    let fixed_type = type_environment.intern_collection(types.int, Some(2));
+
+    let collection_expr = expression(
+        1,
+        HirExpressionKind::Collection(vec![]),
+        fixed_type,
+        RegionId(0),
+        ValueKind::RValue,
+    );
+
+    let collection_statement = statement(1, HirStatementKind::Expr(collection_expr), 1);
+
+    let block = HirBlock {
+        id: BlockId(0),
+        region: RegionId(0),
+        locals: vec![],
+        statements: vec![collection_statement],
+        terminator: HirTerminator::Return(unit_expression(2, types.unit, RegionId(0))),
+    };
+
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.unit,
+        return_aliases: vec![],
+    };
+
+    let module = build_module(&mut string_table, "main", vec![block], function, &[]);
+
+    let output = lower_hir_to_js(
+        &module,
+        &BorrowCheckReport::default(),
+        &string_table,
+        default_config(),
+        &type_environment,
+    )
+    .expect("JS lowering should succeed");
+
+    assert!(
+        output.source.contains("__bs_fixed_collection([], 2)"),
+        "empty fixed collection must lower to __bs_fixed_collection([], capacity)"
+    );
+}

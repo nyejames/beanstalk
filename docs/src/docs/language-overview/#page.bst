@@ -99,7 +99,8 @@ page_head #= theme_head
         bool ~= true
 
         mutable_collection ~{Int} = {}
-        immutable_collection {Int} = {}
+        read_only_collection {Int} = {}
+        fixed_collection ~{4 Int} = {}
 
         NewStruct = |
             value Float,
@@ -166,10 +167,14 @@ page_head #= theme_head
         a_reference ~= a_collection
 
         -- a_reference is still a reference to the original collection
-        ~a_reference.push(5)
+        ~a_reference.push(5) catch:
+            assert(false, "This should never fail for this growable collection in this example")
+        ;
         io(a_collection) -- {1, 2, 3, 4, 5, 5}
 
-        ~a_collection.remove(a_collection.length() - 1)
+        ~a_collection.remove(a_collection.length() - 1) catch:
+            then 0
+        ;
         io(a_collection) -- {1, 2, 3, 4, 5}
     ]
 

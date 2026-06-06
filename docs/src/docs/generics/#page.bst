@@ -165,11 +165,14 @@ page_head #= theme_head
     # Collections and constructed types
 
     Collections use the public [codesnippet:{T}] syntax and are compiler-owned constructed
-    types. Capacity is allocation metadata and is not part of type identity.
+    types. Fixed collections use [codesnippet:{N T}], and the fixed capacity is part of type
+    identity rather than allocation metadata.
 
     [codeblock, $code("bst"):
         names {String} = {"Ana", "Nye"}
-        cached {Box of String 64} = {}
+
+        cache_capacity #Int = 64
+        cached ~{cache_capacity Box of String} = {}
     ]
 
     Optional types [codesnippet:T?] and fallible return slots such as [codesnippet:Error!]

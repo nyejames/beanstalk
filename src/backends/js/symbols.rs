@@ -5,6 +5,34 @@
 
 use crate::backends::js::JsEmitter;
 use crate::backends::js::identifiers::{is_js_reserved, sanitize_identifier};
+use crate::compiler_frontend::builtins::error_type::{ERROR_FIELD_CODE, ERROR_FIELD_MESSAGE};
+
+const BUILTIN_ERROR_MESSAGE_FIELD_ID: u32 = 0;
+const BUILTIN_ERROR_CODE_FIELD_ID: u32 = 1;
+
+/// Deterministic JS field name for the builtin `Error.message` field.
+///
+/// WHAT: mirrors the symbol shape generated for the canonical builtin `Error` struct field.
+/// WHY: backend-created `Error` values must use the same lowered field names as source-authored
+/// `Error(...)` structs, including compact release symbols.
+pub(crate) fn builtin_error_message_js_field_name(release_build: bool) -> String {
+    build_symbol_raw(
+        "fld",
+        BUILTIN_ERROR_MESSAGE_FIELD_ID,
+        ERROR_FIELD_MESSAGE,
+        release_build,
+    )
+}
+
+/// Deterministic JS field name for the builtin `Error.code` field.
+pub(crate) fn builtin_error_code_js_field_name(release_build: bool) -> String {
+    build_symbol_raw(
+        "fld",
+        BUILTIN_ERROR_CODE_FIELD_ID,
+        ERROR_FIELD_CODE,
+        release_build,
+    )
+}
 
 impl<'hir> JsEmitter<'hir> {
     pub(crate) fn build_symbol_maps(&mut self) {
@@ -110,14 +138,28 @@ impl<'hir> JsEmitter<'hir> {
     }
 
     fn build_symbol_raw(&self, kind_tag: &str, id: u32, leaf_name_hint: &str) -> String {
-        if self.use_release_symbol_names() {
-            format!("b_{kind_tag}{id}")
-        } else {
-            format!("bst_{leaf_name_hint}_{kind_tag}{id}")
-        }
+        build_symbol_raw(
+            kind_tag,
+            id,
+            leaf_name_hint,
+            self.use_release_symbol_names(),
+        )
     }
 
     fn use_release_symbol_names(&self) -> bool {
         !self.config.pretty
+    }
+}
+
+fn build_symbol_raw(
+    kind_tag: &str,
+    id: u32,
+    leaf_name_hint: &str,
+    release_symbol_names: bool,
+) -> String {
+    if release_symbol_names {
+        format!("b_{kind_tag}{id}")
+    } else {
+        format!("bst_{leaf_name_hint}_{kind_tag}{id}")
     }
 }

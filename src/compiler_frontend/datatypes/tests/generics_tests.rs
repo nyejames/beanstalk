@@ -438,11 +438,15 @@ fn type_id_bindings_unify_collection_arguments() {
         register_environment_parameter(&mut type_environment, &mut string_table, parameter_id, "T");
     let int_type_id = type_environment.builtins().int;
     let template_collection = type_environment.intern_constructed(
-        TypeConstructor::Builtin(BuiltinTypeConstructor::Collection),
+        TypeConstructor::Builtin(BuiltinTypeConstructor::Collection {
+            fixed_capacity: None,
+        }),
         Box::new([parameter_type_id]),
     );
     let concrete_collection = type_environment.intern_constructed(
-        TypeConstructor::Builtin(BuiltinTypeConstructor::Collection),
+        TypeConstructor::Builtin(BuiltinTypeConstructor::Collection {
+            fixed_capacity: None,
+        }),
         Box::new([int_type_id]),
     );
     let mut bindings = GenericTypeBindings::new();
@@ -549,7 +553,9 @@ fn substitute_type_id_rewrites_constructed_function_and_nominal_instances() {
     let box_of_parameter =
         type_environment.intern_generic_instance(box_nominal, Box::new([parameter_type_id]));
     let collection_of_parameter = type_environment.intern_constructed(
-        TypeConstructor::Builtin(BuiltinTypeConstructor::Collection),
+        TypeConstructor::Builtin(BuiltinTypeConstructor::Collection {
+            fixed_capacity: None,
+        }),
         Box::new([parameter_type_id]),
     );
     let option_of_parameter = type_environment.intern_constructed(
@@ -646,6 +652,13 @@ fn generic_display_uses_beanstalk_surface_style() {
         base: GenericBaseType::Named(box_name),
         arguments: vec![DataType::StringSlice],
     });
+    let fixed_collection_of_box_string = DataType::fixed_collection(
+        DataType::GenericInstance {
+            base: GenericBaseType::Named(box_name),
+            arguments: vec![DataType::StringSlice],
+        },
+        64,
+    );
     let optional_box_int = DataType::Option(Box::new(box_of_int.to_owned()));
     let fallible_box_int_and_error =
         DataType::fallible_carrier(box_of_int.to_owned(), DataType::NamedType(error_name));
@@ -675,6 +688,10 @@ fn generic_display_uses_beanstalk_surface_style() {
     assert_eq!(
         collection_of_box_string.display_with_table(&string_table),
         "{Box of String}"
+    );
+    assert_eq!(
+        fixed_collection_of_box_string.display_with_table(&string_table),
+        "{64 Box of String}"
     );
     assert_eq!(
         optional_box_int.display_with_table(&string_table),
@@ -786,5 +803,159 @@ fn trait_bounds_lookup_returns_none_for_unknown_parameter_id() {
     assert_eq!(
         type_environment.trait_bounds_for_generic_parameter(GenericParameterId(999)),
         None,
+    );
+}
+
+// -----------------------------------------------------------
+//  Fixed-capacity collection generic tests
+// -----------------------------------------------------------
+
+#[test]
+fn type_id_to_type_identity_key_preserves_fixed_capacity() {
+    use crate::compiler_frontend::datatypes::generic_identity_bridge::{
+        TypeIdentityKey, type_identity_key_to_type_id,
+    };
+
+    let mut type_environment = TypeEnvironment::new();
+    let int = type_environment.builtins().int;
+
+    // Round-trip a fixed-capacity collection
+    let fixed_64 = type_environment.intern_collection(int, Some(64));
+    let key = type_environment
+        .type_id_to_type_identity_key(fixed_64)
+        .expect("should produce key");
+
+    // Verify the key carries fixed_capacity
+    match &key {
+        TypeIdentityKey::Collection {
+            element: _,
+            fixed_capacity,
+        } => assert_eq!(*fixed_capacity, Some(64)),
+        _ => panic!("expected Collection key, got {key:?}"),
+    }
+
+    // Round-trip back
+    let round_tripped =
+        type_identity_key_to_type_id(&key, &mut type_environment).expect("should round-trip");
+    assert_eq!(round_tripped, fixed_64);
+}
+
+#[test]
+fn type_id_to_type_identity_key_preserves_growable_collection() {
+    use crate::compiler_frontend::datatypes::generic_identity_bridge::{
+        TypeIdentityKey, type_identity_key_to_type_id,
+    };
+
+    let mut type_environment = TypeEnvironment::new();
+    let int = type_environment.builtins().int;
+
+    let growable = type_environment.intern_collection(int, None);
+    let key = type_environment
+        .type_id_to_type_identity_key(growable)
+        .expect("should produce key");
+
+    match &key {
+        TypeIdentityKey::Collection {
+            element: _,
+            fixed_capacity,
+        } => assert_eq!(*fixed_capacity, None),
+        _ => panic!("expected Collection key"),
+    }
+
+    let round_tripped =
+        type_identity_key_to_type_id(&key, &mut type_environment).expect("should round-trip");
+    assert_eq!(round_tripped, growable);
+}
+
+#[test]
+fn data_type_fixed_collection_bridge_preserves_capacity() {
+    use crate::compiler_frontend::datatypes::generic_identity_bridge::{
+        data_type_to_type_identity_key, type_identity_key_to_type_id,
+    };
+
+    let data_type = DataType::fixed_collection(DataType::Int, 64);
+    let key = data_type_to_type_identity_key(&data_type).expect("fixed collection should bridge");
+
+    match &key {
+        TypeIdentityKey::Collection {
+            fixed_capacity,
+            element,
+        } => {
+            assert_eq!(*fixed_capacity, Some(64));
+            assert_eq!(
+                element.as_ref(),
+                &TypeIdentityKey::Builtin(BuiltinTypeKey::Int)
+            );
+        }
+        _ => panic!("expected Collection key"),
+    }
+
+    let mut type_environment = TypeEnvironment::new();
+    let type_id =
+        type_identity_key_to_type_id(&key, &mut type_environment).expect("key should resolve");
+    let shape = type_environment
+        .collection_shape(type_id)
+        .expect("resolved type should be a collection");
+
+    assert_eq!(shape.element_type, type_environment.builtins().int);
+    assert_eq!(shape.fixed_capacity, Some(64));
+}
+
+#[test]
+fn substitute_preserves_fixed_capacity() {
+    use rustc_hash::FxHashMap;
+
+    let mut type_environment = TypeEnvironment::new();
+    let mut string_table = StringTable::new();
+    let parameter_id = GenericParameterId(0);
+    let parameter_type_id =
+        register_environment_parameter(&mut type_environment, &mut string_table, parameter_id, "T");
+    let int_type_id = type_environment.builtins().int;
+
+    // Build a fixed-capacity collection parameterized by T
+    let template_fixed = type_environment.intern_collection(parameter_type_id, Some(64));
+
+    // Substitute T -> Int
+    let mut mapping = FxHashMap::default();
+    mapping.insert(parameter_id, int_type_id);
+
+    let substituted = type_environment.substitute_type_id(template_fixed, &mapping);
+
+    // Verify substitution produced the correct fixed-collection type
+    let expected = type_environment.intern_collection(int_type_id, Some(64));
+    assert_eq!(substituted, expected);
+
+    // Verify the fixed capacity survived
+    let shape = type_environment
+        .collection_shape(substituted)
+        .expect("should be a collection");
+    assert_eq!(shape.element_type, int_type_id);
+    assert_eq!(shape.fixed_capacity, Some(64));
+}
+
+#[test]
+fn substitute_preserves_fixed_capacity_element_only_substitution() {
+    use rustc_hash::FxHashMap;
+
+    let mut type_environment = TypeEnvironment::new();
+    let mut string_table = StringTable::new();
+    let parameter_id = GenericParameterId(0);
+    let parameter_type_id =
+        register_environment_parameter(&mut type_environment, &mut string_table, parameter_id, "T");
+    let string_type_id = type_environment.builtins().string;
+
+    // Build a growable collection parameterized by T
+    let template = type_environment.intern_collection(parameter_type_id, None);
+
+    let mut mapping = FxHashMap::default();
+    mapping.insert(parameter_id, string_type_id);
+
+    let substituted = type_environment.substitute_type_id(template, &mapping);
+
+    let expected = type_environment.intern_collection(string_type_id, None);
+    assert_eq!(substituted, expected);
+    assert_eq!(
+        type_environment.collection_fixed_capacity(substituted),
+        None
     );
 }

@@ -129,6 +129,7 @@ The frontend owns a single `TypeEnvironment` per module. It is the canonical sou
 
 - `TypeId` equality in the active `TypeEnvironment` is the only valid way to compare types for semantic decisions
 - `DataType` is parse-only / diagnostic-only. It must not be used for semantic decisions in executable AST or HIR
+- Collection type identity is a canonical `TypeEnvironment` shape: growable `{T}` and fixed `{N T}` collections are distinct `TypeId`s, and backends recover element type plus optional fixed capacity through collection-shape queries rather than parse syntax or backend side tables.
 - Type diagnostics should carry canonical `TypeId`s plus context enums. They should not store rendered type names or cloned `DataType` payloads for display.
 - Diagnostic renderers resolve type names at the render boundary through `DiagnosticRenderContext`, which borrows the `StringTable` and optionally the module `TypeEnvironment`.
 - `TypeEnvironment` is built during AST environment construction and populated with builtins, nominal structs, choices, and generic instances before AST body emission begins. Early nominal registration records identity and generic parameter metadata only; canonical field and variant members are written after AST-owned constructor shells are resolved to semantic `TypeId`s.

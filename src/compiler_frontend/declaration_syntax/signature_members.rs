@@ -479,6 +479,7 @@ fn parse_signature_member_syntax(
     let type_annotation = parse_type_annotation(
         token_stream,
         type_annotation_context_for_member(member_context),
+        string_table,
     )?;
     let default_tokens = match token_stream.current_token_kind() {
         TokenKind::Assign => {
@@ -831,7 +832,7 @@ fn parse_value_return_type_syntax(
     type_context: TypeAnnotationContext,
 ) -> Result<ReturnSlotSyntax, CompilerDiagnostic> {
     let location = token_stream.current_location();
-    let type_annotation = parse_type_annotation(token_stream, type_context)?;
+    let type_annotation = parse_type_annotation(token_stream, type_context, string_table)?;
 
     if parsed_type_ref_is_void(&type_annotation, string_table) {
         return Err(CompilerDiagnostic::invalid_function_signature(

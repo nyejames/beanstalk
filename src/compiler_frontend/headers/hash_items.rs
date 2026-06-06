@@ -80,7 +80,6 @@ fn handle_top_level_const_template(
         source_file: &source_file,
         file_imports: &state.file_import_paths,
         file_import_entries: &state.file_imports,
-        file_constant_order: &mut state.file_constant_order,
         string_table: context.string_table,
         file_role: context.file_role,
     };

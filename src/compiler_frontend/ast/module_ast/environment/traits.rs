@@ -8,7 +8,8 @@
 use super::builder::AstModuleEnvironmentBuilder;
 use crate::compiler_frontend::ast::module_ast::scope_context::{ContextKind, ScopeContext};
 use crate::compiler_frontend::ast::statements::functions::{
-    FunctionSignature, function_signature_from_syntax_with_unresolved_types,
+    FunctionSignature, SignatureTypeFallbackPolicy,
+    function_signature_from_syntax_with_unresolved_types,
 };
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::type_resolution::{
@@ -350,6 +351,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             &signature_context,
             &mut type_interner,
             string_table,
+            SignatureTypeFallbackPolicy::StrictCapacity,
         )
         .map_err(|diagnostic| self.diagnostic_messages(diagnostic, string_table))?;
         self.warnings
@@ -598,9 +600,14 @@ fn parsed_type_with_trait_this(parsed_type: &ParsedTypeRef, this_name: StringId)
             location: location.clone(),
         },
 
-        ParsedTypeRef::Collection { element, location } => ParsedTypeRef::Collection {
+        ParsedTypeRef::Collection {
+            element,
+            location,
+            fixed_capacity,
+        } => ParsedTypeRef::Collection {
             element: Box::new(parsed_type_with_trait_this(element, this_name)),
             location: location.clone(),
+            fixed_capacity: fixed_capacity.clone(),
         },
 
         ParsedTypeRef::Optional { inner, location } => ParsedTypeRef::Optional {

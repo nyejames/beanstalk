@@ -10,8 +10,89 @@
 
 #![allow(clippy::result_large_err)]
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
-use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
+
+/// A lightweight value-reference hint extracted from a token slice.
+///
+/// WHAT: records symbol-shaped references in an expression token slice without resolving or
+/// parsing the full expression.
+/// WHY: dependency sorting and capacity-expression reference discovery both need shallow
+/// reference facts without duplicating the scan logic.
+#[derive(Clone, Debug)]
+pub struct InitializerReference {
+    pub name: StringId,
+    pub dot_member: Option<StringId>,
+    pub location: SourceLocation,
+    pub followed_by_call: bool,
+    pub followed_by_choice_namespace: bool,
+}
+
+impl InitializerReference {
+    /// Remap the reference name and source location into a merged string table.
+    ///
+    // Called by per-file frontend output remapping before module-wide dependency sorting.
+    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
+        self.name = remap.get(self.name);
+        if let Some(dot_member) = &mut self.dot_member {
+            *dot_member = remap.get(*dot_member);
+        }
+        self.location.remap_string_ids(remap);
+    }
+}
+
+/// Scan a token slice for symbol-shaped references.
+///
+/// WHAT: produces `InitializerReference` hints for every bare symbol that is not a
+/// dot/namespace accessor, an assignment target, or preceded by a dot/double-colon.
+/// WHY: dependency sorting and capacity-expression reference discovery both need
+/// shallow reference facts without duplicating the scan logic.
+pub(crate) fn collect_symbol_references(tokens: &[Token]) -> Vec<InitializerReference> {
+    let mut references = Vec::new();
+
+    for (index, token) in tokens.iter().enumerate() {
+        let TokenKind::Symbol(name) = &token.kind else {
+            continue;
+        };
+
+        let previous = index
+            .checked_sub(1)
+            .and_then(|previous_index| tokens.get(previous_index))
+            .map(|previous_token| &previous_token.kind);
+        if matches!(previous, Some(TokenKind::Dot | TokenKind::DoubleColon)) {
+            continue;
+        }
+
+        let next = tokens.get(index + 1).map(|next_token| &next_token.kind);
+        if matches!(next, Some(TokenKind::Assign)) {
+            continue;
+        }
+
+        // Header dependency sorting only needs a shallow member hint. AST still owns the full
+        // expression parse, but `namespace.member` constants need this member name so imports
+        // like `intro.content` can create an ordering edge to the imported constant.
+        let dot_member = if matches!(next, Some(TokenKind::Dot)) {
+            tokens
+                .get(index + 2)
+                .and_then(|member_token| match &member_token.kind {
+                    TokenKind::Symbol(member_name) => Some(*member_name),
+                    _ => None,
+                })
+        } else {
+            None
+        };
+
+        references.push(InitializerReference {
+            name: *name,
+            dot_member,
+            location: token.location.clone(),
+            followed_by_call: matches!(next, Some(TokenKind::OpenParenthesis)),
+            followed_by_choice_namespace: matches!(next, Some(TokenKind::DoubleColon)),
+        });
+    }
+
+    references
+}
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub(crate) struct NestingDepth {

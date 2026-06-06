@@ -418,13 +418,30 @@ impl DataType {
         matches!(self, DataType::Float | DataType::Int | DataType::Decimal)
     }
 
-    /// Constructs a collection type using the canonical generic instance representation.
+    /// Constructs a growable collection type using the canonical generic instance representation.
     ///
     /// WHAT: `DataType::Collection` is being removed; this is the one canonical constructor.
     /// WHY: keeps collection construction readable while unifying on generic infrastructure.
     pub fn collection(element_type: DataType) -> Self {
         Self::GenericInstance {
-            base: GenericBaseType::Builtin(BuiltinGenericType::Collection),
+            base: GenericBaseType::Builtin(BuiltinGenericType::Collection {
+                fixed_capacity: None,
+            }),
+            arguments: vec![element_type],
+        }
+    }
+
+    /// Constructs a fixed-collection diagnostic spelling.
+    ///
+    /// WHAT: narrow display helper for sites that need a non-authoritative
+    ///      `DataType` for a fixed collection.
+    /// WHY: makes fixed-collection diagnostic spelling explicit without changing
+    ///      the growable constructor.
+    pub fn fixed_collection(element_type: DataType, capacity: usize) -> Self {
+        Self::GenericInstance {
+            base: GenericBaseType::Builtin(BuiltinGenericType::Collection {
+                fixed_capacity: Some(capacity),
+            }),
             arguments: vec![element_type],
         }
     }
@@ -438,7 +455,7 @@ impl DataType {
         matches!(
             self,
             DataType::GenericInstance {
-                base: GenericBaseType::Builtin(BuiltinGenericType::Collection),
+                base: GenericBaseType::Builtin(BuiltinGenericType::Collection { .. }),
                 arguments,
             } if arguments.len() == 1
         )
@@ -448,7 +465,7 @@ impl DataType {
     pub fn collection_element_type(&self) -> Option<&DataType> {
         match self {
             DataType::GenericInstance {
-                base: GenericBaseType::Builtin(BuiltinGenericType::Collection),
+                base: GenericBaseType::Builtin(BuiltinGenericType::Collection { .. }),
                 arguments,
             } => arguments.first(),
             _ => None,
@@ -719,12 +736,14 @@ fn display_generic_instance(
     arguments: &[DataType],
     string_table: &StringTable,
 ) -> String {
-    if matches!(
-        base,
-        GenericBaseType::Builtin(BuiltinGenericType::Collection)
-    ) && let [single_argument] = arguments
+    if let GenericBaseType::Builtin(BuiltinGenericType::Collection { fixed_capacity }) = base
+        && let [single_argument] = arguments
     {
-        return format!("{{{}}}", single_argument.display_with_table(string_table));
+        let element_display = single_argument.display_with_table(string_table);
+        return match fixed_capacity {
+            Some(capacity) => format!("{{{capacity} {element_display}}}"),
+            None => format!("{{{element_display}}}"),
+        };
     }
 
     let base_display = display_generic_base(base, string_table);
@@ -749,7 +768,9 @@ fn display_generic_base(base: &GenericBaseType, string_table: &StringTable) -> S
             .unwrap_or("<generic>")
             .to_owned(),
         GenericBaseType::External(type_id) => format!("External({})", type_id.0),
-        GenericBaseType::Builtin(BuiltinGenericType::Collection) => String::from("Collection"),
+        GenericBaseType::Builtin(BuiltinGenericType::Collection { .. }) => {
+            String::from("Collection")
+        }
     }
 }
 
@@ -973,9 +994,20 @@ fn type_id_to_data_type(type_id: ids::TypeId, type_environment: &TypeEnvironment
             generic_instance_key: None,
         },
         Some(TypeDefinition::Constructed(con)) => match con.constructor {
-            ids::TypeConstructor::Builtin(ids::BuiltinTypeConstructor::Collection) => {
+            ids::TypeConstructor::Builtin(ids::BuiltinTypeConstructor::Collection {
+                fixed_capacity,
+            }) => {
                 if let [element_id] = con.arguments.as_ref() {
-                    DataType::collection(type_id_to_data_type(*element_id, type_environment))
+                    match fixed_capacity {
+                        Some(cap) => DataType::fixed_collection(
+                            type_id_to_data_type(*element_id, type_environment),
+                            cap,
+                        ),
+                        None => DataType::collection(type_id_to_data_type(
+                            *element_id,
+                            type_environment,
+                        )),
+                    }
                 } else {
                     DataType::None
                 }

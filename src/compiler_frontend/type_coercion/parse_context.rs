@@ -55,11 +55,37 @@ pub(crate) fn parse_expectation_for_type_id(
     }
 
     if type_environment.is_collection(target_id) {
-        let element_type = type_environment.collection_element_type(target_id);
-        if element_type != Some(type_environment.builtins().none) {
+        let collection_shape = type_environment.collection_shape(target_id);
+        if collection_shape.map(|shape| shape.element_type)
+            != Some(type_environment.builtins().none)
+        {
             return ExpectedType::Known(target_id);
         }
     }
 
     ExpectedType::Infer
+}
+
+/// Collection-specific parse-time context passed into collection literal parsing.
+///
+/// WHAT: replaces `Option<TypeId>` element hints with the full collection shape
+///       so fixed capacity, element type, and exact semantic identity are available
+///       when the literal is parsed against an explicit or inferred target.
+/// WHY: collection literal behavior differs between growable, fixed, and shorthand
+///      declaration contexts; the parser needs the full shape to validate length
+///      and produce the correct canonical `TypeId`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ExpectedCollectionContext {
+    /// No annotation: infer element from first item and intern a growable collection.
+    InferGrowable,
+
+    /// Explicit collection annotation (growable or fixed) with known element type.
+    Explicit {
+        collection_type_id: TypeId,
+        element_type_id: TypeId,
+        fixed_capacity: Option<usize>,
+    },
+
+    /// Capacity-only shorthand `{N}`: element must be inferred from the literal.
+    CapacityOnlyShorthand { fixed_capacity: usize },
 }

@@ -2,7 +2,8 @@ render_branch_mutation || -> String:
     values ~= {1, 2, 3}
     condition = true
     if condition:
-        ~values.push(4)
+        ~values.push(4) catch:
+        ;
     else
         removed = ~values.remove(0) catch:
             then 0

@@ -75,6 +75,19 @@ pub struct Expression {
     pub contains_regular_division: bool,
 }
 
+/// Canonical and diagnostic type data for a collection expression.
+///
+/// WHAT: groups the element type, optional fixed capacity, and optional exact
+/// collection `TypeId` supplied by an explicit receiving context.
+/// WHY: collection literal parsing needs all of these facts together, and keeping
+/// them in one small input avoids long constructor argument lists.
+pub(crate) struct CollectionExpressionType {
+    pub(crate) element_type_id: TypeId,
+    pub(crate) element_diagnostic_type: DataType,
+    pub(crate) fixed_capacity: Option<usize>,
+    pub(crate) collection_type_id: Option<TypeId>,
+}
+
 /// Canonical type data for call expressions built after semantic resolution.
 ///
 /// WHAT: computes the canonical `TypeId` and a display-only `DataType` from the
@@ -682,20 +695,30 @@ impl Expression {
     /// Constructs a collection expression with a resolved element type.
     pub(crate) fn collection_with_type_id(
         items: Vec<Expression>,
-        inner_type_id: TypeId,
-        inner_diagnostic_type: DataType,
+        collection_type: CollectionExpressionType,
         type_environment: &mut TypeEnvironment,
         location: SourceLocation,
         value_mode: ValueMode,
     ) -> Self {
-        let collection_type_id = type_environment.intern_collection(inner_type_id);
+        let collection_type_id = collection_type.collection_type_id.unwrap_or_else(|| {
+            type_environment.intern_collection(
+                collection_type.element_type_id,
+                collection_type.fixed_capacity,
+            )
+        });
         let contains_regular_division = items.iter().any(|item| item.contains_regular_division);
         // `diagnostic_type` is display-only; semantic identity comes from `collection_type_id`.
+        let diagnostic_type = match collection_type.fixed_capacity {
+            Some(capacity) => {
+                DataType::fixed_collection(collection_type.element_diagnostic_type, capacity)
+            }
+            None => DataType::collection(collection_type.element_diagnostic_type),
+        };
         Self::new(
             ExpressionKind::Collection(items),
             location,
             collection_type_id,
-            DataType::collection(inner_diagnostic_type),
+            diagnostic_type,
             value_mode,
         )
         .with_regular_division_provenance(contains_regular_division)

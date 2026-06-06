@@ -1,0 +1,4 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["fixed_collection_remove_preserves_capacity removed=1 first=2 second=3 length=2"]

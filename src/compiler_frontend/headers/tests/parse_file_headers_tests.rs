@@ -2418,3 +2418,49 @@ fn export_import_and_private_import_normalize_to_one_public_record() {
     assert_eq!(output.file_imports.len(), 1);
     assert_eq!(output.file_imports[0].export_mode, HeaderExportMode::Public);
 }
+
+#[test]
+fn capacity_references_extract_value_refs_without_treating_element_type_as_value_ref() {
+    let mut string_table = StringTable::new();
+    let file_path = PathBuf::from("src/test.bst");
+    let source = "make |items ~{capacity MyType}| -> Int:
+    return 1
+;
+";
+    let output = prepare_single_file(source, &file_path, &file_path, &mut string_table);
+
+    let headers = parse_headers(
+        vec![output],
+        &ExternalPackageRegistry::new(),
+        &ExternalImportResolutionTable::default(),
+        None,
+        &mut string_table,
+    )
+    .expect("headers should parse");
+
+    let make_header = headers
+        .headers
+        .iter()
+        .find(|h| {
+            h.tokens
+                .src_path
+                .name_str(&string_table)
+                .is_some_and(|n| n == "make")
+        })
+        .expect("make header should exist");
+
+    let capacity_names: Vec<_> = make_header
+        .capacity_references
+        .iter()
+        .map(|r| string_table.resolve(r.name))
+        .collect();
+
+    assert!(
+        capacity_names.contains(&"capacity"),
+        "capacity expression should reference the capacity constant"
+    );
+    assert!(
+        !capacity_names.contains(&"MyType"),
+        "element type name must not be treated as a capacity value reference"
+    );
+}

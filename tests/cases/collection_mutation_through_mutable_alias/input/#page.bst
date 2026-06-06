@@ -1,5 +1,6 @@
 mutate |items ~{Int}| -> Int:
-    ~items.push(3)
+    ~items.push(3) catch:
+    ;
     return items.length()
 ;
 

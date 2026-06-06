@@ -295,8 +295,8 @@ body {
 
     function __bs_make_error(message, code, location, trace) {
         return {
-            message,
-            code,
+            bst_message_fld0: message,
+            bst_code_fld1: code,
             __bst_location: location ?? null,
             __bst_trace: trace ?? null
         };
@@ -306,13 +306,23 @@ body {
         return { tag: "err", value: __bs_make_error(message, code, null, null) };
     }
 
+    function __bs_error_message(error) {
+        const message = error && error["bst_message_fld0"] !== undefined ? error["bst_message_fld0"] : error && error.message;
+        return typeof message === "string" ? message : String(message ?? "Unknown error");
+    }
+
+    function __bs_error_code(error) {
+        const code = error && error["bst_code_fld1"] !== undefined ? error["bst_code_fld1"] : error && error.code;
+        return typeof code === "number" ? code : 0;
+    }
+
     function __bs_error_with_location(error, location) {
-        return __bs_make_error(error.message, error.code, location, error.__bst_trace);
+        return __bs_make_error(__bs_error_message(error), __bs_error_code(error), location, error.__bst_trace);
     }
 
     function __bs_error_push_trace(error, frame) {
         const nextTrace = error.__bst_trace ? error.__bst_trace.concat([frame]) : [frame];
-        return __bs_make_error(error.message, error.code, error.__bst_location, nextTrace);
+        return __bs_make_error(__bs_error_message(error), __bs_error_code(error), error.__bst_location, nextTrace);
     }
 
     function __bs_error_bubble(error, file, line, column, functionName) {
@@ -349,48 +359,104 @@ body {
         throw new Error("Expected internal Result carrier during fallback handling");
     }
 
+    function __bs_fixed_collection(items, fixedCapacity) {
+        return {
+            __bst_kind: "fixed_collection",
+            items: items,
+            fixedCapacity: fixedCapacity,
+        };
+    }
+
+    function __bs_collection_items(collection) {
+        if (Array.isArray(collection)) {
+            return collection;
+        }
+        return collection.items;
+    }
+
+    function __bs_collection_fixed_capacity(collection) {
+        if (Array.isArray(collection)) {
+            return null;
+        }
+        return collection.fixedCapacity;
+    }
+
+    function __bs_collection_is_valid(collection) {
+        if (Array.isArray(collection)) {
+            return true;
+        }
+        if (collection === null || typeof collection !== "object") {
+            return false;
+        }
+        if (collection.__bst_kind !== "fixed_collection") {
+            return false;
+        }
+        if (!Array.isArray(collection.items)) {
+            return false;
+        }
+        return (
+            Number.isInteger(collection.fixedCapacity)
+            && collection.fixedCapacity > 0
+            && collection.items.length <= collection.fixedCapacity
+        );
+    }
+
     function __bs_collection_index_is_valid(collection, index) {
-        return Number.isInteger(index) && index >= 0 && index < collection.length;
+        const items = __bs_collection_items(collection);
+        return Number.isInteger(index) && index >= 0 && index < items.length;
     }
 
     function __bs_collection_get(collection, index) {
-        if (!Array.isArray(collection)) {
+        if (!__bs_collection_is_valid(collection)) {
             return __bs_error_result("Collection operation expects an ordered collection", 100);
         }
         if (!__bs_collection_index_is_valid(collection, index)) {
             return __bs_error_result("Collection index out of bounds", 101);
         }
-        return { tag: "ok", value: collection[index] };
+        const items = __bs_collection_items(collection);
+        return { tag: "ok", value: items[index] };
     }
 
     function __bs_collection_set(collection, index, value) {
-        if (!Array.isArray(collection)) {
+        if (!__bs_collection_is_valid(collection)) {
             return __bs_error_result("Collection operation expects an ordered collection", 100);
         }
         if (!__bs_collection_index_is_valid(collection, index)) {
             return __bs_error_result("Collection index out of bounds", 101);
         }
-        collection[index] = value;
+        const items = __bs_collection_items(collection);
+        items[index] = value;
         return { tag: "ok", value: null };
     }
 
     function __bs_collection_push(collection, value) {
-        collection.push(value);
+        if (!__bs_collection_is_valid(collection)) {
+            return __bs_error_result("Collection operation expects an ordered collection", 100);
+        }
+        const items = __bs_collection_items(collection);
+        const fixedCapacity = __bs_collection_fixed_capacity(collection);
+        if (fixedCapacity !== null && items.length >= fixedCapacity) {
+            return __bs_error_result("Fixed collection capacity exceeded", 102);
+        }
+        items.push(value);
+        return { tag: "ok", value: null };
     }
 
     function __bs_collection_remove(collection, index) {
-        if (!Array.isArray(collection)) {
+        if (!__bs_collection_is_valid(collection)) {
             return __bs_error_result("Collection operation expects an ordered collection", 100);
         }
         if (!__bs_collection_index_is_valid(collection, index)) {
             return __bs_error_result("Collection index out of bounds", 101);
         }
-        const removed = collection.splice(index, 1)[0];
+        const items = __bs_collection_items(collection);
+        const removed = items.splice(index, 1)[0];
         return { tag: "ok", value: removed };
     }
 
     function __bs_collection_length(collection) {
-        return collection.length;
+        const items = __bs_collection_items(collection);
+        return items.length;
     }
 
     function __bs_value_to_string(value) {
@@ -459,40 +525,40 @@ body {
         return { tag: "err", value: __bs_make_error("Float(...) only accepts Int, Float, or string values", 210, null, null) };
     }
 
-    function bst_start_fn0() {
-        let bst___hir_tmp_0_l0 = __bs_binding(undefined);
-        let bst_a_l1 = __bs_binding(undefined);
-        let bst_b_l2 = __bs_binding(undefined);
-        let bst_c_l3 = __bs_binding(undefined);
-        let bst_same_l4 = __bs_binding(undefined);
-        let bst_different_l5 = __bs_binding(undefined);
-        let bst___hir_tmp_1_l6 = __bs_binding(undefined);
-        let bst___hir_tmp_2_l7 = __bs_binding(undefined);
-        let bst___hir_tmp_3_l8 = __bs_binding(undefined);
+    function bst_start_fn1() {
+        let bst___hir_tmp_2_l3 = __bs_binding(undefined);
+        let bst_a_l4 = __bs_binding(undefined);
+        let bst_b_l5 = __bs_binding(undefined);
+        let bst_c_l6 = __bs_binding(undefined);
+        let bst_same_l7 = __bs_binding(undefined);
+        let bst_different_l8 = __bs_binding(undefined);
+        let bst___hir_tmp_3_l9 = __bs_binding(undefined);
+        let bst___hir_tmp_4_l10 = __bs_binding(undefined);
+        let bst___hir_tmp_5_l11 = __bs_binding(undefined);
         
-        __bs_assign_value(bst___hir_tmp_0_l0, []);
-        __bs_assign_value(bst_a_l1, "x");
-        __bs_assign_value(bst_b_l2, "x");
-        __bs_assign_value(bst_c_l3, "y");
-        __bs_assign_value(bst_same_l4, (__bs_read(bst_a_l1) === __bs_read(bst_b_l2)));
-        __bs_assign_value(bst_different_l5, (__bs_read(bst_a_l1) !== __bs_read(bst_c_l3)));
-        __bs_assign_value(bst___hir_tmp_1_l6, "");
-        __bs_assign_value(bst___hir_tmp_1_l6, (__bs_read(bst___hir_tmp_1_l6) + "char_equality same="));
-        __bs_assign_value(bst___hir_tmp_2_l7, "");
-        __bs_assign_value(bst___hir_tmp_2_l7, (__bs_read(bst___hir_tmp_2_l7) + ("" + __bs_read(bst_same_l4))));
-        __bs_assign_value(bst___hir_tmp_1_l6, (__bs_read(bst___hir_tmp_1_l6) + __bs_clone_value(__bs_read(bst___hir_tmp_2_l7))));
-        __bs_assign_value(bst___hir_tmp_1_l6, (__bs_read(bst___hir_tmp_1_l6) + " different="));
-        __bs_assign_value(bst___hir_tmp_3_l8, "");
-        __bs_assign_value(bst___hir_tmp_3_l8, (__bs_read(bst___hir_tmp_3_l8) + ("" + __bs_read(bst_different_l5))));
-        __bs_assign_value(bst___hir_tmp_1_l6, (__bs_read(bst___hir_tmp_1_l6) + __bs_clone_value(__bs_read(bst___hir_tmp_3_l8))));
-        __bs_read(bst___hir_tmp_0_l0).push(__bs_clone_value(__bs_read(bst___hir_tmp_1_l6)));
-        return __bs_read(bst___hir_tmp_0_l0);
+        __bs_assign_value(bst___hir_tmp_2_l3, []);
+        __bs_assign_value(bst_a_l4, "x");
+        __bs_assign_value(bst_b_l5, "x");
+        __bs_assign_value(bst_c_l6, "y");
+        __bs_assign_value(bst_same_l7, (__bs_read(bst_a_l4) === __bs_read(bst_b_l5)));
+        __bs_assign_value(bst_different_l8, (__bs_read(bst_a_l4) !== __bs_read(bst_c_l6)));
+        __bs_assign_value(bst___hir_tmp_3_l9, "");
+        __bs_assign_value(bst___hir_tmp_3_l9, (__bs_read(bst___hir_tmp_3_l9) + "char_equality same="));
+        __bs_assign_value(bst___hir_tmp_4_l10, "");
+        __bs_assign_value(bst___hir_tmp_4_l10, (__bs_read(bst___hir_tmp_4_l10) + ("" + __bs_read(bst_same_l7))));
+        __bs_assign_value(bst___hir_tmp_3_l9, (__bs_read(bst___hir_tmp_3_l9) + __bs_clone_value(__bs_read(bst___hir_tmp_4_l10))));
+        __bs_assign_value(bst___hir_tmp_3_l9, (__bs_read(bst___hir_tmp_3_l9) + " different="));
+        __bs_assign_value(bst___hir_tmp_5_l11, "");
+        __bs_assign_value(bst___hir_tmp_5_l11, (__bs_read(bst___hir_tmp_5_l11) + ("" + __bs_read(bst_different_l8))));
+        __bs_assign_value(bst___hir_tmp_3_l9, (__bs_read(bst___hir_tmp_3_l9) + __bs_clone_value(__bs_read(bst___hir_tmp_5_l11))));
+        __bs_read(bst___hir_tmp_2_l3).push(__bs_clone_value(__bs_read(bst___hir_tmp_3_l9)));
+        return __bs_read(bst___hir_tmp_2_l3);
     }
 
     </script>
     <script>
     (function () {
-      var bst_frags = bst_start_fn0();
+      var bst_frags = bst_start_fn1();
       var bst_slots = [
         "bst-slot-0",
       ];

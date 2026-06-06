@@ -7,9 +7,7 @@
 
 use crate::compiler_frontend::ast::ast_nodes::SourceLocation;
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::datatypes::ids::{
-    BuiltinTypeConstructor, TypeConstructor, builtin_type_ids,
-};
+use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
 use crate::compiler_frontend::hir::expressions::{HirExpressionKind, ValueKind};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::ids::{BlockId, FunctionId};
@@ -32,10 +30,7 @@ impl<'a> HirBuilder<'a> {
         }
 
         let string_ty = builtin_type_ids::STRING;
-        let vec_ty = self.type_environment.intern_constructed(
-            TypeConstructor::Builtin(BuiltinTypeConstructor::Collection),
-            Box::new([string_ty]),
-        );
+        let vec_ty = self.type_environment.intern_collection(string_ty, None);
         let vec_local = self.allocate_temp_local(vec_ty, Some(location.clone()))?;
 
         let region = self.current_region_or_error(location)?;
