@@ -6,9 +6,6 @@
 //!      dependency edges break everything downstream.
 
 use super::*;
-use crate::compiler_frontend::compiler_messages::render::{
-    DiagnosticRenderContext, terminal::format_payload_guidance,
-};
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, DeferredFeatureDiagnosticKind, DeferredFeatureReason, DiagnosticBag,
     DiagnosticKind, DiagnosticPayload, InvalidChoiceVariantReason, InvalidDeclarationReason,
@@ -36,7 +33,6 @@ use std::path::{Path, PathBuf};
 #[derive(Debug)]
 struct HeaderTestDiagnostics {
     diagnostics: Vec<CompilerDiagnostic>,
-    string_table: StringTable,
 }
 
 struct HeaderTestPrepareContext<'a> {
@@ -207,7 +203,6 @@ fn parse_single_file_headers_with_entry(
         Err(error) => {
             return Err(HeaderTestDiagnostics {
                 diagnostics: vec![*error.diagnostic],
-                string_table,
             });
         }
     };
@@ -221,17 +216,6 @@ fn parse_single_file_headers_with_entry(
     )
     .map_err(|bag| HeaderTestDiagnostics {
         diagnostics: bag.into_diagnostics(),
-        string_table,
-    })
-}
-
-fn diagnostics_contain_guidance(error: &HeaderTestDiagnostics, expected_fragment: &str) -> bool {
-    let context = DiagnosticRenderContext::new(&error.string_table);
-
-    error.diagnostics.iter().any(|diagnostic| {
-        format_payload_guidance(&diagnostic.payload, context)
-            .iter()
-            .any(|line| line.contains(expected_fragment))
     })
 }
 
@@ -1434,10 +1418,12 @@ fn choice_headers_reject_invalid_payload_forms() {
     let default_errors = defaults_result
         .err()
         .expect("expected default parse errors");
-    assert!(diagnostics_contain_guidance(
-        &default_errors,
-        "Deferred feature: choice variant default"
-    ));
+    assert!(default_errors.diagnostics.iter().any(|diagnostic| matches!(
+        diagnostic.payload,
+        DiagnosticPayload::DeferredFeature {
+            reason: DeferredFeatureReason::ChoiceVariantDefaultValue
+        }
+    )));
 }
 
 #[test]
@@ -2001,14 +1987,13 @@ fn per_file_fork_merge_produces_correct_headers_and_warnings_for_multiple_files(
 
 #[test]
 fn per_file_fork_merge_remaps_non_identity_strings_across_multiple_files() {
-    // The first file interns one generated deferred-feature string into its local suffix.
-    // The second file interns a different generated string at the same local suffix ID.
+    // Both files intern generated deferred-feature strings into their local suffixes.
     // Because the fork source is shared and frozen before the loop, the second merge must remap
     // that local ID past the first file's generated string in the module table.
     let sources = [
         (
-            "Foo #= \"a\"\nChoiceA :: Variant = 1;\n".to_owned(),
-            "src/#page.bst".to_owned(),
+            "Foo #= \"a\"\n#[facade_fragment]\n".to_owned(),
+            "src/#mod.bst".to_owned(),
         ),
         (
             "Bar #= \"b\"\n#[const_fragment]\n".to_owned(),
@@ -2048,7 +2033,7 @@ fn per_file_fork_merge_remaps_non_identity_strings_across_multiple_files() {
     }
 
     assert!(
-        feature_names.contains(&"choice variant default values".to_owned()),
+        feature_names.contains(&"top-level const templates in module facades".to_owned()),
         "first file's generated feature name must resolve correctly"
     );
     assert!(

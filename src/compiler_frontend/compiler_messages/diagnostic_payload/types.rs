@@ -1176,6 +1176,7 @@ pub enum DeferredFeatureReason {
     NegatedMatchPattern,
     NamedPayloadPatternAssignment,
     NestedPayloadPattern,
+    ChoiceVariantDefaultValue,
     GenericReceiverMethod,
     PublicOptionTypeSyntax,
     PublicResultTypeSyntax,

@@ -11,7 +11,7 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 ---
 
 # Plans / TODOS
-- Fixed vs Growable collections `{64 Int}`
+- Fixed vs Growable collections `{64 Int}`: `docs/roadmap/plans/collection-fixed-capacity-implementation-plan.md`
 - Change backticks inside template bodies to be generally usable by formatters, no longer raw strings / sections. Then the $markdown formatter will treat them as <code>. This will not include commonmark triple backticks, escaping backticks or anything like that. Refactor the docs to use single backticks instead of `[codesnippet: ...]` and add the codesnippet styling to regular <code> blocks, then `$code(...)` will overwrite this styling for its <code> tags.
 -  `copy` keyword becomes the way to do type casting also. Performs type conversions where the declaration or parameter is explicitly typed and implements a CAST trait, for example for float to int casting could look like this: `a Int = copy existing_float_value` and all type conversions would go through using `copy` rather than needing a builtin specific function to do it or a new special syntax. So all numerical casting should be moved over to having `CAST_TO_*` trait implementations and then can use copy keyword to do this in a explicitly typed declaration or function call argument.
 - Hash Maps (core library)

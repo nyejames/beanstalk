@@ -435,6 +435,9 @@ fn deferred_feature_static_message(reason: &DeferredFeatureReason) -> &'static s
         DeferredFeatureReason::NestedPayloadPattern => {
             "Nested payload patterns are deferred. Use flat capture bindings with declared field names only."
         }
+        DeferredFeatureReason::ChoiceVariantDefaultValue => {
+            "Choice variant default values are deferred for Alpha. Declare explicit unit or payload variants and pass values when constructing payload variants."
+        }
         DeferredFeatureReason::GenericReceiverMethod => {
             "Receiver methods on generic types are not supported. Use a free function instead."
         }

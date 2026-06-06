@@ -14,6 +14,7 @@
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::compiler_errors::compiler_error_to_diagnostic;
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
+use crate::compiler_frontend::compiler_messages::DeferredFeatureReason;
 use crate::compiler_frontend::compiler_messages::DiagnosticBag;
 use crate::compiler_frontend::compiler_messages::InvalidChoiceVariantReason;
 use crate::compiler_frontend::datatypes::parsed::ParsedTypeRef;
@@ -119,8 +120,8 @@ pub(crate) fn parse_choice_shell(
     string_table: &mut StringTable,
     warnings: &mut Vec<CompilerDiagnostic>,
 ) -> Result<Vec<ChoiceVariantSyntax>, DiagnosticBag> {
-    // Mutation: deferred-feature and EOF diagnostic payloads intern descriptive names
-    // and delimiter symbols that are not present in the source text.
+    // Mutation: EOF diagnostic payloads intern delimiter symbols that are not present
+    // in the source text.
     let mut variants = Vec::new();
     let mut seen_variants: FxHashMap<StringId, SourceLocation> = FxHashMap::default();
     let mut bag = DiagnosticBag::new();
@@ -260,9 +261,7 @@ pub(crate) fn parse_choice_shell(
                     }
 
                     TokenKind::Assign => {
-                        let feature = string_table.intern("choice variant default values");
-                        return Err(CompilerDiagnostic::deferred_feature(
-                            feature,
+                        return Err(choice_variant_default_value_diagnostic(
                             token_stream.current_location(),
                         )
                         .into());
@@ -300,9 +299,7 @@ pub(crate) fn parse_choice_shell(
                         break;
                     }
                     TokenKind::Assign => {
-                        let feature = string_table.intern("choice variant default values");
-                        return Err(CompilerDiagnostic::deferred_feature(
-                            feature,
+                        return Err(choice_variant_default_value_diagnostic(
                             token_stream.current_location(),
                         )
                         .into());
@@ -347,9 +344,7 @@ pub(crate) fn parse_choice_shell(
                                 .into());
                             }
                             TokenKind::Assign => {
-                                let feature = string_table.intern("choice variant default values");
-                                return Err(CompilerDiagnostic::deferred_feature(
-                                    feature,
+                                return Err(choice_variant_default_value_diagnostic(
                                     token_stream.current_location(),
                                 )
                                 .into());
@@ -442,6 +437,13 @@ pub(crate) fn parse_choice_shell(
     }
 
     Ok(variants)
+}
+
+fn choice_variant_default_value_diagnostic(location: SourceLocation) -> CompilerDiagnostic {
+    CompilerDiagnostic::deferred_feature_reason(
+        DeferredFeatureReason::ChoiceVariantDefaultValue,
+        location,
+    )
 }
 
 fn contains_non_generic_choice_self_reference(
