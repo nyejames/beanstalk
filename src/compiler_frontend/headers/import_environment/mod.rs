@@ -347,6 +347,12 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                 file_visibility
                     .visible_external_symbols
                     .insert(prelude_name_id, *symbol_id);
+
+                // Prelude symbols have no authored source location, so we record
+                // a default location as a documented fallback.
+                file_visibility
+                    .visible_external_symbol_locations
+                    .insert(prelude_name_id, SourceLocation::default());
             }
         }
 

@@ -26,7 +26,7 @@ use crate::compiler_frontend::compiler_messages::{
 };
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::syntax_errors::statement_position::check_mistaken_keyword_symbol;
-use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 
 // --------------------------
 //  Accessed-symbol statement helper
@@ -308,11 +308,12 @@ pub(crate) fn parse_symbol_statement(
         context.lookup_visible_external_function(symbol_id)
     {
         if token_stream.peek_next_token() == Some(&TokenKind::TypeParameterBracket) {
-            // TODO: preserve the external function's source location for the secondary label
-            // once the external symbol registry stores it.
+            let previous_location = context
+                .lookup_visible_external_function_location(symbol_id)
+                .unwrap_or_default();
             return Err(CompilerDiagnostic::duplicate_declaration(
                 symbol_id,
-                SourceLocation::default(),
+                previous_location,
                 token_stream.current_location(),
             ));
         }

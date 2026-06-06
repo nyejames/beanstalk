@@ -90,6 +90,12 @@ pub(crate) struct FileVisibility {
     /// Populated by explicit virtual-package imports and prelude symbols.
     pub(crate) visible_external_symbols: FxHashMap<StringId, ExternalSymbolId>,
 
+    /// Source locations that made each external symbol visible in this file.
+    ///
+    /// WHY: AST needs the original import location for duplicate-declaration
+    /// diagnostics so the secondary label can point to the import site.
+    pub(crate) visible_external_symbol_locations: FxHashMap<StringId, SourceLocation>,
+
     /// External receiver methods visible in this file.
     ///
     /// WHY: receiver methods are callable only through receiver syntax. Keeping them outside

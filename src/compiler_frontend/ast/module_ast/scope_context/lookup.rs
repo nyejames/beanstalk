@@ -12,6 +12,7 @@
 use super::*;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::ast::generic_functions::GenericFunctionTemplate;
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::value_mode::ValueMode;
 
 /// Resolved struct constructor metadata for identifier-led expression dispatch.
@@ -252,6 +253,26 @@ impl ScopeContext {
         }
 
         Some((function_id, definition))
+    }
+
+    /// Look up the source location that made an external symbol visible in this file.
+    ///
+    /// WHAT: returns the import-site location for an explicit external import, or
+    /// `SourceLocation::default()` for prelude-injected symbols that have no authored source.
+    /// WHY: AST duplicate-declaration diagnostics need a meaningful secondary label
+    /// pointing to the import that made the symbol visible.
+    pub(crate) fn lookup_visible_external_function_location(
+        &self,
+        name: StringId,
+    ) -> Option<SourceLocation> {
+        let file_visibility = self.file_visibility.as_ref()?;
+        Some(
+            file_visibility
+                .visible_external_symbol_locations
+                .get(&name)
+                .cloned()
+                .unwrap_or_default(),
+        )
     }
 
     /// Look up a visible external type by its source-level name.

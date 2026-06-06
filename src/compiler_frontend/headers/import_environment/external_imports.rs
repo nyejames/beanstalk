@@ -74,6 +74,10 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             .visible_external_symbols
             .insert(local_name, symbol_id);
 
+        file_visibility
+            .visible_external_symbol_locations
+            .insert(local_name, import.location.clone());
+
         if let ExternalSymbolId::Type(type_id) = symbol_id {
             self.auto_import_external_receiver_methods_for_type(file_visibility, type_id);
         }
