@@ -240,7 +240,7 @@ fn render_payload_message(
             reason,
         } => invalid_template_directive_message(*directive_name, *reason, string_table),
         DiagnosticPayload::InvalidTemplateStructure { reason } => {
-            invalid_template_structure_message(*reason)
+            invalid_template_structure_message(*reason, context)
         }
         DiagnosticPayload::InvalidSignatureMember { reason } => {
             invalid_signature_member_message(*reason)

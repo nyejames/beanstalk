@@ -212,15 +212,9 @@ impl DiagnosticPayload {
             | DiagnosticPayload::InvalidGenericParameter { .. }
             | DiagnosticPayload::InvalidStructDefaultValue => {}
 
-            DiagnosticPayload::InvalidTemplateStructure { reason } => {
-                if let InvalidTemplateStructureReason::UnsupportedTypeInTemplateHead {
-                    type_name,
-                    ..
-                } = reason
-                {
-                    *type_name = remap.get(*type_name);
-                }
-            }
+
+            DiagnosticPayload::InvalidTemplateStructure { .. } => {}
+
 
             DiagnosticPayload::InvalidChoiceVariant {
                 choice_name,

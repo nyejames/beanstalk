@@ -109,7 +109,9 @@ pub fn parse_template_head(
     let meaningful_item_compatibility = TemplateHeadCompatibility::fully_compatible_meaningful();
     token_stream.advance();
 
+    let mut last_known_location = token_stream.current_location();
     while token_stream.index < token_stream.length {
+        last_known_location = token_stream.current_location();
         let token = token_stream.current_token_kind().to_owned();
 
         ast_log!("Parsing template head: ", #token);
@@ -119,11 +121,18 @@ pub fn parse_template_head(
         // expressions are allowed and should be folded where possible.
         // Loops and if statements can end the template head.
 
-        // Returning without a template body
-        // EOF is in here for template repl atm and for the convenience
-        // of not having to explicitly close the template head from a repl session.
-        // This can lead to overly forgiving behavior (not warning about an unclosed template head)
-        if token == TokenKind::TemplateClose || token == TokenKind::Eof {
+        // EOF inside a template head means the source was truncated before a
+        // closing ] delimiter. This is a malformed template, not a valid stream
+        // boundary; the user needs a structured diagnostic.
+        if token == TokenKind::Eof {
+            return Err(CompilerDiagnostic::missing_closing_delimiter(
+                string_table.intern("]"),
+                token_stream.current_location(),
+            ));
+        }
+
+        // A closing ] without a body is a valid empty template.
+        if token == TokenKind::TemplateClose {
             return Ok(ParsedTemplateHead {
                 body_mode: TemplateBodyParseMode::Normal,
             });
@@ -496,12 +505,11 @@ pub fn parse_template_head(
         }
 
         // Guard against malformed or truncated synthetic token streams.
-        // Valid streams should include a close/eof boundary, but avoid panicking
-        // if expression parsing advanced exactly to the stream end.
         if token_stream.index >= token_stream.length {
-            return Ok(ParsedTemplateHead {
-                body_mode: TemplateBodyParseMode::Normal,
-            });
+            return Err(CompilerDiagnostic::missing_closing_delimiter(
+                string_table.intern("]"),
+                last_known_location,
+            ));
         }
 
         if token_stream.current_token_kind() == &TokenKind::StartTemplateBody {
@@ -511,10 +519,14 @@ pub fn parse_template_head(
             });
         }
 
-        if matches!(
-            token_stream.current_token_kind(),
-            TokenKind::TemplateClose | TokenKind::Eof
-        ) {
+        if token_stream.current_token_kind() == &TokenKind::Eof {
+            return Err(CompilerDiagnostic::missing_closing_delimiter(
+                string_table.intern("]"),
+                token_stream.current_location(),
+            ));
+        }
+
+        if token_stream.current_token_kind() == &TokenKind::TemplateClose {
             return Ok(ParsedTemplateHead {
                 body_mode: TemplateBodyParseMode::Normal,
             });
@@ -526,9 +538,10 @@ pub fn parse_template_head(
         }
     }
 
-    Ok(ParsedTemplateHead {
-        body_mode: TemplateBodyParseMode::Normal,
-    })
+    Err(CompilerDiagnostic::missing_closing_delimiter(
+        string_table.intern("]"),
+        last_known_location,
+    ))
 }
 
 /// Dispatches a `$directive` token using the already-resolved registry spec.

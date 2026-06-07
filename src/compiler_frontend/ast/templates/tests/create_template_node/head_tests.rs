@@ -30,7 +30,7 @@ use crate::compiler_frontend::type_coercion::compatibility::TypeCompatibilityCac
 use rustc_hash::{FxHashMap, FxHashSet};
 
 #[test]
-fn parse_template_head_handles_truncated_stream_without_panicking() {
+fn truncated_template_head_stream_returns_missing_closing_delimiter() {
     let mut string_table = StringTable::new();
     let scope = InternedPath::from_single_str("main.bst/#const_template0", &mut string_table);
     let context = new_constant_context(scope.to_owned());
@@ -45,8 +45,8 @@ fn parse_template_head_handles_truncated_stream_without_panicking() {
 
     let result = Template::new(&mut token_stream, &context, vec![], &mut string_table);
     assert!(
-        result.is_ok(),
-        "truncated template-head streams should not panic the parser"
+        result.is_err(),
+        "truncated template-head stream without closing delimiter should produce an error"
     );
 }
 

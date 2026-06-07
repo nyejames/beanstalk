@@ -4045,6 +4045,11 @@ path = "template_style_unknown_directive_failure"
 tags = ["integration","templates", "diagnostics"]
 
 [[case]]
+id = "template_unclosed_head_rejected"
+path = "template_unclosed_head_rejected"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
 id = "top_level_const_template"
 path = "top_level_const_template"
 tags = ["integration","templates"]

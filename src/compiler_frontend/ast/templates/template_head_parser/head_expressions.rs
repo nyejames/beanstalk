@@ -46,7 +46,6 @@ fn validate_template_head_value_type(
     expression: &Expression,
     location: &SourceLocation,
     type_environment: &TypeEnvironment,
-    string_table: &mut StringTable,
 ) -> Result<(), CompilerDiagnostic> {
     if type_environment.is_fallible_carrier(expression.type_id) {
         return Err(CompilerDiagnostic::invalid_template_structure(
@@ -55,28 +54,27 @@ fn validate_template_head_value_type(
         ));
     }
 
-    if matches!(
-        expression.diagnostic_type,
-        DataType::StringSlice
-            | DataType::Template
-            | DataType::TemplateWrapper
-            | DataType::Int
-            | DataType::Float
-            | DataType::Bool
-            | DataType::Char
-            | DataType::Path(_)
-    ) {
+    // Template head values must be simple scalar types that can render as
+    // text. Templates and paths are handled by separate code paths, so this
+    // function only sees non-template, non-path expression values.
+    //
+    // Use TypeId equality against the built-in scalar types rather than
+    // matching on DataType, which is a parse/diagnostic-only representation.
+    let builtins = type_environment.builtins();
+    let type_id = expression.type_id;
+    if type_id == builtins.string
+        || type_id == builtins.int
+        || type_id == builtins.float
+        || type_id == builtins.bool
+        || type_id == builtins.char
+    {
         return Ok(());
     }
 
-    return Err(CompilerDiagnostic::invalid_template_structure(
-        InvalidTemplateStructureReason::UnsupportedTypeInTemplateHead {
-            type_id: expression.type_id,
-            type_name: string_table
-                .get_or_intern(expression.diagnostic_type.display_with_table(string_table)),
-        },
+    Err(CompilerDiagnostic::invalid_template_structure(
+        InvalidTemplateStructureReason::UnsupportedTypeInTemplateHead { type_id },
         location.to_owned(),
-    ));
+    ))
 }
 
 /// Handles a template-typed value found in the template head.
@@ -146,7 +144,7 @@ pub(super) fn push_template_head_expression(
             .has_unresolved_constant_placeholder();
 
     if !defer_inferred_type_validation {
-        validate_template_head_value_type(&expression, location, type_environment, string_table)?;
+        validate_template_head_value_type(&expression, location, type_environment)?;
     }
 
     if context.kind.is_constant_context()

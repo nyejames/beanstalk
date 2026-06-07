@@ -497,8 +497,6 @@ pub enum InvalidTemplateStructureReason {
     ResultInTemplateHead,
     UnsupportedTypeInTemplateHead {
         type_id: TypeId,
-        /// Display-only type name for render paths that do not have a `TypeEnvironment`.
-        type_name: StringId,
     },
     RuntimeTemplateInConst,
     RuntimeValueInConstTemplateHead,

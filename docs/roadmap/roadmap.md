@@ -11,6 +11,7 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 ---
 
 # Plans / TODOS
+- Some cleanup: `docs/roadmap/plans/template_parsing_folding_implementation_plan.md`
 - Hash Maps 
 -  `copy` keyword becomes the way to do type casting also. Performs type conversions where the declaration or parameter is explicitly typed and implements a CAST trait, for example for float to int casting could look like this: `a Int = copy existing_float_value` and all type conversions would go through using `copy` rather than needing a builtin specific function to do it or a new special syntax. So all numerical casting should be moved over to having `CAST_TO_*` trait implementations and then can use copy keyword to do this in a explicitly typed declaration or function call argument.
 - Build out core math library
