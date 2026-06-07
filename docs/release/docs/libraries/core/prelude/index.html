@@ -189,6 +189,11 @@ body {
         padding-left: var(--bst-spacing-small);
     }
 
+    .container code:not(.codeblock) {
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    }
+
     @media (min-width: 576px) {
         .container {
             max-width: 510px;
@@ -312,19 +317,7 @@ body {
         </div>
     </nav>
      <h1 style="font-size: 2em;text-align: center;"> CORE PRELUDE</h1>
-    <section class="container"><p>The prelude is the tiny set of names available without an explicit import. It keeps common output and builtin error handling convenient without making every core library global.</p><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">io(...)</span> is available in normal source files and writes text to standard output.</p><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">IO</span> is the compiler-owned output surface behind that convenience call.</p><p>Compiler-owned <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Error</span> is also available for <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Error!</span> flows.</p><pre style="
+    <section class="container"><p>The prelude is the tiny set of names available without an explicit import. It keeps common output and builtin error handling convenient without making every core library global.</p><p><code>io(...)</code> is available in normal source files and writes text to standard output. <code>IO</code> is the compiler-owned output surface behind that convenience call. Compiler-owned <code>Error</code> is also available for <code>Error!</code> flows.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;

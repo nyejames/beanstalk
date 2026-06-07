@@ -83,11 +83,6 @@ pub(super) fn tokenize_template_body(
 
     while let Some(ch) = stream.peek() {
         match ch {
-            '\\' => {
-                stream.next();
-                append_template_body_escape(&mut token_value, stream);
-            }
-
             '[' | ']' => {
                 let interned_string = string_table.intern(&token_value);
                 return_token!(TokenKind::StringSliceLiteral(interned_string), stream);
@@ -118,17 +113,8 @@ fn append_template_body_char(
     stream: &mut TokenStream<'_>,
 ) {
     match current_char {
-        '\\' => append_template_body_escape(token_value, stream),
         '\r' => token_value.push_str(normalize_consumed_carriage_return_newline(stream)),
         _ => token_value.push(current_char),
-    }
-}
-
-fn append_template_body_escape(token_value: &mut String, stream: &mut TokenStream<'_>) {
-    match stream.next() {
-        Some('\r') => token_value.push_str(normalize_consumed_carriage_return_newline(stream)),
-        Some(escaped_char) => token_value.push(escaped_char),
-        None => token_value.push('\\'),
     }
 }
 

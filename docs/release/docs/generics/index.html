@@ -189,6 +189,11 @@ body {
         padding-left: var(--bst-spacing-small);
     }
 
+    .container code:not(.codeblock) {
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    }
+
     @media (min-width: 576px) {
         .container {
             max-width: 510px;
@@ -312,19 +317,7 @@ body {
         </div>
     </nav>
      <h1 style="font-size: 2em;text-align: center;"> GENERICS IN BEANSTALK</h1>
-    <section class="container"><p>Generics are partially implemented for the current Alpha compiler.</p><p>The supported surface is intentionally small:</p><ul><li>declaration-site generic parameters with <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">type</span> on top-level structs, choices, and free functions</li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">of</span> type application in type positions</li><li>concrete generic aliases to fully applied generic types</li><li>constructor inference for concrete generic structs and choices</li><li>collections as compiler-owned generic constructed types using <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">{T}</span></li><li>generic free-function calls across same-file use, visible same-module imports, and authored facades</li><li>declaration-site trait bounds with <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">type T is TRAIT</span></li></ul><p>Generic function headers are parsed and tracked by the frontend, and their bodies are validated against unconstrained generic parameters before any concrete call is accepted. Same-file calls, grouped cross-file imports, namespace cross-file imports, and authored facade wrapper calls infer type arguments from immediate arguments and immediate expected result context. Facade wrappers resolve their bodies through the facade file&#39;s own imports, so private implementation helpers stay hidden behind real public wrapper declarations.</p></section>
+    <section class="container"><p>Generics are partially implemented for the current Alpha compiler.</p><p>The supported surface is intentionally small:</p><ul><li>declaration-site generic parameters with <code>type</code> on top-level structs, choices, and free functions</li><li><code>of</code> type application in type positions</li><li>concrete generic aliases to fully applied generic types</li><li>constructor inference for concrete generic structs and choices</li><li>collections as compiler-owned generic constructed types using <code>{T}</code></li><li>generic free-function calls across same-file use, visible same-module imports, and authored facades</li><li>declaration-site trait bounds with <code>type T is TRAIT</code></li></ul><p>Generic function headers are parsed and tracked by the frontend, and their bodies are validated against unconstrained generic parameters before any concrete call is accepted. Same-file calls, grouped cross-file imports, namespace cross-file imports, and authored facade wrapper calls infer type arguments from immediate arguments and immediate expected result context. Facade wrappers resolve their bodies through the facade file&#39;s own imports, so private implementation helpers stay hidden behind real public wrapper declarations.</p></section>
     <section class="container"><h1>Current status</h1><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
         
     <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
@@ -336,10 +329,7 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Generic structs</td>
      <td style="padding: 0.2em 0.5em;  "> Supported</td>
-     <td style="padding: 0.2em 0.5em;  "> Concrete instances such as <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Box of Int</span> have canonical frontend type identity and substituted field views.</td>
+     <td style="padding: 0.2em 0.5em;  "> Concrete instances such as <code>Box of Int</code> have canonical frontend type identity and substituted field views.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -393,23 +383,11 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Trait bounds</td>
      <td style="padding: 0.2em 0.5em;  "> Partial</td>
-     <td style="padding: 0.2em 0.5em;  "> Declaration-site <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">type T is TRAIT</span> and <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">type T is A and B, U is C</span> bounds are supported for generic functions, structs, and choices. <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">where</span> clauses and file-local evidence-backed generic bound dispatch remain deferred.</td>
+     <td style="padding: 0.2em 0.5em;  "> Declaration-site <code>type T is TRAIT</code> and <code>type T is A and B, U is C</code> bounds are supported for generic functions, structs, and choices. <code>where</code> clauses and file-local evidence-backed generic bound dispatch remain deferred.</td>
         </tr>
         
     </table></section>
-    <section class="container"><h1>Generic type syntax</h1><p>Generic parameters are introduced with <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">type</span>.</p><pre style="
+    <section class="container"><h1>Generic type syntax</h1><p>Generic parameters are introduced with <code>type</code>.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -420,10 +398,7 @@ body {
     <span class='bst-code-struct'>Box</span> type <span class='bst-code-struct'>T</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
         value <span class='bst-code-struct'>T,</span>
     <span class='bst-code-operator'>|</span>
-    </code></pre><p>Concrete type arguments are applied with <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">of</span> in type positions.</p><pre style="
+    </code></pre><p>Concrete type arguments are applied with <code>of</code> in type positions.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -433,14 +408,8 @@ body {
     "><code class='codeblock'>
     number_box <span class='bst-code-struct'>Box</span> of <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Box</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>42</span><span class='bst-code-parenthesis'>)</span>
     text_box <span class='bst-code-struct'>Box</span> of <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Box</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;hello&quot;</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">of</span> is type-position-only. It is not current Alpha syntax for explicit</p><p>generic function calls, runtime generic values, type values, or type-level computation.</p></section>
-    <section class="container"><h1>Generic choices</h1><p>Generic choices use the same <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">type</span> parameter list.</p><p>Payload variants use record payload syntax.</p><pre style="
+    </code></pre><p><code>of</code> is type-position-only. It is not current Alpha syntax for explicit generic function calls, runtime generic values, type values, or type-level computation.</p></section>
+    <section class="container"><h1>Generic choices</h1><p>Generic choices use the same <code>type</code> parameter list.</p><p>Payload variants use record payload syntax.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -455,13 +424,7 @@ body {
 
     name <span class='bst-code-struct'>Maybe</span> of <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Maybe</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Some</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Ana&quot;</span><span class='bst-code-parenthesis'>)</span>
     missing <span class='bst-code-struct'>Maybe</span> of <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Maybe</span><span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span><span class='bst-code-struct'>Empty</span>
-    </code></pre><p>Choice payload shorthand such as <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Some T</span> is not current Alpha syntax. Use record payload variants such as <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Some | value T |</span>.</p></section>
+    </code></pre><p>Choice payload shorthand such as <code>Some T</code> is not current Alpha syntax. Use record payload variants such as <code>Some | value T |</code>.</p></section>
     <section class="container"><h1>Concrete aliases</h1><p>Type aliases can name a fully applied generic instance.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
@@ -479,13 +442,7 @@ body {
     item <span class='bst-code-struct'>StringBox</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Box</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;docs&quot;</span><span class='bst-code-parenthesis'>)</span>
     raw <span class='bst-code-struct'>Box</span> of <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> item
     </code></pre><p>Generic aliases with their own parameters, partial application, and type-constructor composition are deferred. Name an intermediate concrete alias when a type would otherwise need deeper composition.</p></section>
-    <section class="container"><h1>Collections and constructed types</h1><p>Collections use the public <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">{T}</span> syntax and are compiler-owned constructed types. Fixed collections use <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">{N T}</span>, and the fixed capacity is part of type identity rather than allocation metadata.</p><pre style="
+    <section class="container"><h1>Collections and constructed types</h1><p>Collections use the public <code>{T}</code> syntax and are compiler-owned constructed types. Fixed collections use <code>{N T}</code>, and the fixed capacity is part of type identity rather than allocation metadata.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -497,35 +454,8 @@ body {
 
     cache_capacity <span class='bst-code-operator'>#</span><span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>64</span>
     cached <span class='bst-code-operator'>~</span><span class='bst-code-parenthesis'>{</span>cache_capacity <span class='bst-code-struct'>Box</span> of <span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>
-    </code></pre><p>Optional types <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">T?</span> and fallible return slots such as <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Error!</span> are also compiler-owned constructed forms. Public <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Option of T</span>, public <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Result of T, E</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Option.Some</span>, and</p><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Result.Ok</span> are not current Alpha syntax.</p><p>Generic functions can use final generic error slots, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">return!</span>, postfix propagation, and <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">catch</span> when ordinary local inference can solve the generic parameters. The compiler still rejects body-side specialization of an abstract generic error slot.</p></section>
-    <section class="container"><h1>Nesting rule</h1><p>Alpha allows one inline <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">of</span> application per annotation.</p><p>Collection element annotations may contain that one application:</p><pre style="
+    </code></pre><p>Optional types <code>T?</code> and fallible return slots such as <code>Error!</code> are also compiler-owned constructed forms. Public <code>Option of T</code>, public <code>Result of T, E</code>, <code>Option.Some</code>, and <code>Result.Ok</code> are not current Alpha syntax.</p><p>Generic functions can use final generic error slots, <code>return!</code>, postfix propagation, and <code>catch</code> when ordinary local inference can solve the generic parameters. The compiler still rejects body-side specialization of an abstract generic error slot.</p></section>
+    <section class="container"><h1>Nesting rule</h1><p>Alpha allows one inline <code>of</code> application per annotation.</p><p>Collection element annotations may contain that one application:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -599,19 +529,7 @@ body {
     import <span class='bst-code-operator'>@</span>.<span class='bst-code-operator'>/</span>helpers <span class='bst-code-parenthesis'>{</span>empty_values<span class='bst-code-parenthesis'>}</span>
 
     numbers <span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>Int</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> empty_values<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>Body validation currently allows pass-through behavior such as returning a value of the same generic parameter type, forwarding it to another generic function, or storing it in a generic wrapper. Local annotations inside the generic body may use the active generic parameters, including <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">T</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">{T}</span>, and <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Box of T</span>. Behavior-dependent operations on unconstrained <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">T</span> are rejected. A declaration-site trait bound can allow receiver calls supplied by a unique visible trait requirement. Arithmetic, equality, field access, template interpolation, and external/IO behavior still require concrete support or a future dedicated trait integration.</p><p>Inference is deliberately immediate. Beanstalk does not infer a generic function&#39;s type arguments from later uses of the resulting value, whole-program analysis, HIR, borrow validation, or expected parameter context from an outer function call into a nested generic call:</p><pre style="
+    </code></pre><p>Body validation currently allows pass-through behavior such as returning a value of the same generic parameter type, forwarding it to another generic function, or storing it in a generic wrapper. Local annotations inside the generic body may use the active generic parameters, including <code>T</code>, <code>{T}</code>, and <code>Box of T</code>. Behavior-dependent operations on unconstrained <code>T</code> are rejected. A declaration-site trait bound can allow receiver calls supplied by a unique visible trait requirement. Arithmetic, equality, field access, template interpolation, and external/IO behavior still require concrete support or a future dedicated trait integration.</p><p>Inference is deliberately immediate. Beanstalk does not infer a generic function&#39;s type arguments from later uses of the resulting value, whole-program analysis, HIR, borrow validation, or expected parameter context from an outer function call into a nested generic call:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -660,16 +578,7 @@ body {
     value <span class='bst-code-operator'>=</span> read_or_raise<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>7</span>, <span class='bst-code-struct'>Error</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;bad&quot;</span><span class='bst-code-parenthesis'>)</span>, false<span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
         then <span class='bst-code-number'>0</span>
     ;
-    </code></pre><p>Generic optional and fallible support still depends on immediate evidence. A bare</p><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">none</span> cannot infer <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">T</span> by itself, and a concrete callee error type</p><p>cannot specialize an abstract surrounding <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">E!</span> from inside the generic body.</p><p>Same-module grouped imports can call generic free functions by their imported local name:</p><pre style="
+    </code></pre><p>Generic optional and fallible support still depends on immediate evidence. A bare <code>none</code> cannot infer <code>T</code> by itself, and a concrete callee error type cannot specialize an abstract surrounding <code>E!</code> from inside the generic body.</p><p>Same-module grouped imports can call generic free functions by their imported local name:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -698,13 +607,7 @@ body {
     import <span class='bst-code-operator'>@</span>.<span class='bst-code-operator'>/</span>helpers <span class='bst-code-keyword'>as</span> helpers
 
     value <span class='bst-code-operator'>=</span> helpers.identity<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>42</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>Public facade wrappers are ordinary authored generic functions marked with <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">export</span> in <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#mod.bst</span>. Normal imports inside the facade remain private and are only usable by the wrapper body:</p><pre style="
+    </code></pre><p>Public facade wrappers are ordinary authored generic functions marked with <code>export</code> in <code>#mod.bst</code>. Normal imports inside the facade remain private and are only usable by the wrapper body:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -740,17 +643,8 @@ body {
     import <span class='bst-code-operator'>@</span>utils <span class='bst-code-keyword'>as</span> utils
 
     value <span class='bst-code-operator'>=</span> utils.identity<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;hello&quot;</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>Generic functions are still callable declarations only. They cannot be passed around as first-class values, including through namespace members such as <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">helpers.identity</span>. Direct facade re-export syntax is also deferred; expose imported behavior with real authored wrapper declarations.</p></section>
-    <section class="container"><h1>Trait bounds</h1><p>Generic bounds use <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">is</span>, not <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">must</span>.</p><pre style="
+    </code></pre><p>Generic functions are still callable declarations only. They cannot be passed around as first-class values, including through namespace members such as <code>helpers.identity</code>. Direct facade re-export syntax is also deferred; expose imported behavior with real authored wrapper declarations.</p></section>
+    <section class="container"><h1>Trait bounds</h1><p>Generic bounds use <code>is</code>, not <code>must</code>.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -761,10 +655,7 @@ body {
     render type <span class='bst-code-struct'>Item</span> is <span class='bst-code-struct'>DISPLAY_TEXT</span> <span class='bst-code-operator'>|</span>item <span class='bst-code-struct'>Item</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-keyword'>return</span> item.display<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
     ;
-    </code></pre><p>Multiple bounds on one parameter use <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">and</span>. Commas still separate generic parameters:</p><pre style="
+    </code></pre><p>Multiple bounds on one parameter use <code>and</code>. Commas still separate generic parameters:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -798,53 +689,8 @@ body {
     <span class='bst-code-struct'>Label</span> must <span class='bst-code-struct'>DISPLAY_TEXT</span>
 
     value <span class='bst-code-operator'>=</span> render<span class='bst-code-parenthesis'>(</span><span class='bst-code-struct'>Label</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;ok&quot;</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>A trait name in a normal type annotation means a dynamic trait value. A trait name in a generic bound constrains a concrete generic parameter. These are different features.</p><p>Dynamic trait values do not satisfy static generic bounds. Bound-provided receiver methods use the selected static evidence; dynamic wrappers use runtime dispatch and are a separate value representation.</p><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">where</span> clauses remain rejected; write bounds directly on the generic parameter list.</p></section>
-    <section class="container"><h1>Deferred features</h1><p>The following are not current Alpha generics:</p><ul><li>explicit generic call syntax such as <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">identity of Int(42)</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">identity<Int>(42)</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">identity[Int](42)</span>, or <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">identity(42 Int)</span></li><li>inline generic sugar such as <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">|value type A|</span></li><li>generic function values and higher-order generic functions</li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">where</span> clauses and file-local evidence-backed generic bound dispatch</li><li>type values, type-returning functions, type-level <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#if</span>, and compile-time type inspection</li><li>recursive generic structs or choices</li><li>receiver methods on instantiated generic types</li><li>namespace or wildcard facade exports and function alias exports through <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#mod.bst</span></li><li>generic JS or external package functions</li><li>generic aliases with parameters</li><li>partial type application</li><li>nested generic type application beyond the collection element exception</li><li>public <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Option of T</span> or <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Result of T, E</span></li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Option.Some</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Result.Ok</span>, public <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Ok</span> or <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Err</span> constructors</li><li>higher-kinded types, const generics, lifetime parameters, specialization, associated types, and dynamic generic reification</li></ul></section>
+    </code></pre><p>A trait name in a normal type annotation means a dynamic trait value. A trait name in a generic bound constrains a concrete generic parameter. These are different features.</p><p>Dynamic trait values do not satisfy static generic bounds. Bound-provided receiver methods use the selected static evidence; dynamic wrappers use runtime dispatch and are a separate value representation. <code>where</code> clauses remain rejected; write bounds directly on the generic parameter list.</p></section>
+    <section class="container"><h1>Deferred features</h1><p>The following are not current Alpha generics:</p><ul><li>explicit generic call syntax such as <code>identity of Int(42)</code>, <code>identity&lt;Int&gt;(42)</code>, <code>identity[Int](42)</code>, or <code>identity(42 Int)</code></li><li>inline generic sugar such as <code>|value type A|</code></li><li>generic function values and higher-order generic functions</li><li><code>where</code> clauses and file-local evidence-backed generic bound dispatch</li><li>type values, type-returning functions, type-level <code>#if</code>, and compile-time type inspection</li><li>recursive generic structs or choices</li><li>receiver methods on instantiated generic types</li><li>namespace or wildcard facade exports and function alias exports through <code>#mod.bst</code></li><li>generic JS or external package functions</li><li>generic aliases with parameters</li><li>partial type application</li><li>nested generic type application beyond the collection element exception</li><li>public <code>Option of T</code> or <code>Result of T, E</code></li><li><code>Option.Some</code>, <code>Result.Ok</code>, public <code>Ok</code> or <code>Err</code> constructors</li><li>higher-kinded types, const generics, lifetime parameters, specialization, associated types, and dynamic generic reification</li></ul></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

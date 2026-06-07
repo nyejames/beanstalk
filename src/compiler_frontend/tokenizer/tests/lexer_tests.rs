@@ -166,47 +166,41 @@ fn normalizes_template_body_newlines_from_crlf_and_bare_cr() {
 }
 
 #[test]
-fn normal_template_body_escapes_closing_square_bracket_as_literal_text() {
-    let (file_tokens, string_table) = tokenize_source("[:\\]]");
+fn normal_template_body_preserves_backslash_as_literal_text() {
+    let (file_tokens, string_table) = tokenize_source(r#"[: \ ]"#);
     let texts = collect_literal_texts(&file_tokens, &string_table);
 
-    assert_eq!(texts, vec!["]"]);
+    assert_eq!(texts, vec![" \\ "]);
 }
 
 #[test]
-fn normal_template_body_escapes_opening_square_bracket_as_literal_text() {
+fn normal_template_body_preserves_backslash_followed_by_n_as_literal_text() {
+    let (file_tokens, string_table) = tokenize_source("[:\\n]");
+    let texts = collect_literal_texts(&file_tokens, &string_table);
+    assert_eq!(texts, vec!["\\n"]);
+}
+
+#[test]
+fn normal_template_body_does_not_escape_opening_square_bracket() {
     let (file_tokens, string_table) = tokenize_source("[:\\[]");
-    let texts = collect_literal_texts(&file_tokens, &string_table);
-
-    assert_eq!(texts, vec!["["]);
-}
-
-#[test]
-fn normal_template_body_escapes_backslash_as_literal_text() {
-    let (file_tokens, string_table) = tokenize_source("[:\\\\]");
     let texts = collect_literal_texts(&file_tokens, &string_table);
 
     assert_eq!(texts, vec!["\\"]);
 }
 
 #[test]
-fn beandown_entry_body_escapes_square_brackets_and_backslash_as_literal_text() {
-    let (closing_tokens, closing_table) = tokenize_beandown_source("\\]");
-    let (opening_tokens, opening_table) = tokenize_beandown_source("\\[");
-    let (backslash_tokens, backslash_table) = tokenize_beandown_source("\\\\");
+fn normal_template_body_preserves_backtick_as_literal_text() {
+    let (file_tokens, string_table) = tokenize_source("[:` ]");
+    let texts = collect_literal_texts(&file_tokens, &string_table);
 
-    assert_eq!(
-        collect_literal_texts(&closing_tokens, &closing_table),
-        vec!["]"]
-    );
-    assert_eq!(
-        collect_literal_texts(&opening_tokens, &opening_table),
-        vec!["["]
-    );
-    assert_eq!(
-        collect_literal_texts(&backslash_tokens, &backslash_table),
-        vec!["\\"]
-    );
+    assert_eq!(texts, vec!["` "]);
+}
+
+#[test]
+fn quoted_string_literal_escaping_still_works() {
+    let (file_tokens, string_table) = tokenize_source(r#"value = "say \"hello\"""#);
+    let texts = collect_literal_texts(&file_tokens, &string_table);
+    assert_eq!(texts, vec!["say \"hello\""]);
 }
 
 #[test]
@@ -237,8 +231,15 @@ fn beandown_entry_body_rejects_unescaped_outer_template_close() {
     )
     .join("\n");
     assert!(guidance.contains("Beandown `.bd` source"));
-    assert!(guidance.contains("\\]"));
-    assert!(guidance.contains("[']']"));
+    assert!(guidance.contains(r#"["]"]"#));
+}
+
+#[test]
+fn beandown_entry_body_preserves_backslash_as_literal_text() {
+    let (file_tokens, string_table) = tokenize_beandown_source("\\n");
+    let texts = collect_literal_texts(&file_tokens, &string_table);
+
+    assert_eq!(texts, vec!["\\n"]);
 }
 
 #[test]

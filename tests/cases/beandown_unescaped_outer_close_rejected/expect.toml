@@ -4,10 +4,10 @@ entry = "."
 mode = "failure"
 warnings = "forbid"
 diagnostic_codes = ["BST-SYNTAX-0032"]
-message_contains = ["Escape a literal closing bracket as `\\]`"]
+message_contains = ["Insert a literal closing bracket"]
 
 [backends.html_wasm]
 mode = "failure"
 warnings = "forbid"
 diagnostic_codes = ["BST-SYNTAX-0032"]
-message_contains = ["Escape a literal closing bracket as `\\]`"]
+message_contains = ["Insert a literal closing bracket"]

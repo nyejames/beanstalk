@@ -189,6 +189,11 @@ body {
         padding-left: var(--bst-spacing-small);
     }
 
+    .container code:not(.codeblock) {
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    }
+
     @media (min-width: 576px) {
         .container {
             max-width: 510px;
@@ -312,10 +317,7 @@ body {
         </div>
     </nav>
      <h1 style="font-size: 2em;text-align: center;"> ALIASES</h1>
-    <section class="container"><p>Aliases give a local name to something that already exists.</p><p>Beanstalk uses <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">as</span> for three narrow, deliberate renaming surfaces:</p><ul><li>Type alias declarations.</li><li>Import aliases.</li><li>Choice payload capture aliases in match arms.</li></ul><pre style="
+    <section class="container"><p>Aliases give a local name to something that already exists.</p><p>Beanstalk uses <code>as</code> for three narrow, deliberate renaming surfaces:</p><ul><li>Type alias declarations.</li><li>Import aliases.</li><li>Choice payload capture aliases in match arms.</li></ul><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -375,16 +377,7 @@ body {
     <span class='bst-code-struct'>User</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
         id <span class='bst-code-struct'>Int,</span>
     <span class='bst-code-operator'>|</span>
-    </code></pre><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">UserId</span> is just another name for <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Int</span>.</p><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">User</span> is a distinct nominal struct type.</p><p>Use a struct when you need a real domain type with its own fields, constructor, and methods. Use a type alias when you only want a clearer type name.</p></section>
+    </code></pre><p><code>UserId</code> is just another name for <code>Int</code>. <code>User</code> is a distinct nominal struct type.</p><p>Use a struct when you need a real domain type with its own fields, constructor, and methods. Use a type alias when you only want a clearer type name.</p></section>
     <section class="container"><h2>Type Aliases Are Not Values</h2><p>A type alias can only be used where the compiler expects a type annotation.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
@@ -485,13 +478,7 @@ body {
 
     label <span class='bst-code-operator'>=</span> format_user<span class='bst-code-parenthesis'>(</span>id, name<span class='bst-code-parenthesis'>)</span>
     io<span class='bst-code-parenthesis'>(</span>label<span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>Because aliases are transparent, passing an <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Int</span> where <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">UserId</span> is expected is valid.</p><pre style="
+    </code></pre><p>Because aliases are transparent, passing an <code>Int</code> where <code>UserId</code> is expected is valid.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -507,10 +494,7 @@ body {
 
     raw_id <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>
     print_id<span class='bst-code-parenthesis'>(</span>raw_id<span class='bst-code-parenthesis'>)</span> <span class='bst-code-comment'>-- valid</span>
-    </code></pre><p>If you need the compiler to reject raw <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Int</span> values in a user-id position, use a struct instead of an alias.</p></section>
+    </code></pre><p>If you need the compiler to reject raw <code>Int</code> values in a user-id position, use a struct instead of an alias.</p></section>
     <section class="container"><h2>Import Aliases</h2><p>Import aliases rename an imported symbol for the current file.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
@@ -549,10 +533,7 @@ body {
 
     blog_html <span class='bst-code-operator'>=</span> render_blog<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
     docs_html <span class='bst-code-operator'>=</span> render_docs<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>Without aliases, both imports would try to introduce <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">render</span> into the same file. That is a name collision.</p><pre style="
+    </code></pre><p>Without aliases, both imports would try to introduce <code>render</code> into the same file. That is a name collision.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -715,13 +696,7 @@ body {
 
     import <span class='bst-code-operator'>@</span>formatters <span class='bst-code-parenthesis'>{</span> render <span class='bst-code-keyword'>as</span> render_page <span class='bst-code-parenthesis'>}</span> <span class='bst-code-comment'>-- good</span>
     import <span class='bst-code-operator'>@</span>formatters <span class='bst-code-parenthesis'>{</span> render <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>RenderPage</span> <span class='bst-code-parenthesis'>}</span>  <span class='bst-code-comment'>-- warning</span>
-    </code></pre><p>This warning is intentionally simple. It does not try to fully distinguish <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">camelCase</span>,</p><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">snake_case</span>, or other naming styles.</p><p>The goal is only to catch obvious type/value naming drift.</p></section>
+    </code></pre><p>This warning is intentionally simple. It does not try to fully distinguish <code>camelCase</code>, <code>snake_case</code>, or other naming styles.</p><p>The goal is only to catch obvious type/value naming drift.</p></section>
     <section class="container"><h2>Choice Payload Capture Aliases</h2><p>Choice payload capture aliases rename a matched payload field inside one match arm.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
@@ -741,13 +716,7 @@ body {
         <span class='bst-code-struct'>Err</span><span class='bst-code-parenthesis'>(</span>message <span class='bst-code-keyword'>as</span> error_message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span>error_message<span class='bst-code-parenthesis'>)</span>
         <span class='bst-code-struct'>Success</span><span class='bst-code-parenthesis'>(</span>value <span class='bst-code-keyword'>as</span> body<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span>body<span class='bst-code-parenthesis'>)</span>
     ;
-    </code></pre><p>The name before <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">as</span> is the declared payload field name. The name after <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">as</span> is the local capture name visible inside that arm.</p><pre style="
+    </code></pre><p>The name before <code>as</code> is the declared payload field name. The name after <code>as</code> is the local capture name visible inside that arm.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -756,10 +725,7 @@ body {
         overflow-x: auto;
     "><code class='codeblock'>
     <span class='bst-code-struct'>Err</span><span class='bst-code-parenthesis'>(</span>message <span class='bst-code-keyword'>as</span> error_message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span>error_message<span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>This keeps the pattern tied to the declared payload shape while still letting the arm choose a clearer local name.</p><p>Without <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">as</span>, the capture name is the field name.</p><pre style="
+    </code></pre><p>This keeps the pattern tied to the declared payload shape while still letting the arm choose a clearer local name.</p><p>Without <code>as</code>, the capture name is the field name.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -783,10 +749,7 @@ body {
         <span class='bst-code-keyword'>else</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span>message<span class='bst-code-parenthesis'>)</span>
     ;
     </code></pre><p>Choice payload capture aliases are arm-local. They do not rename the variant field itself and they do not leak into other arms.</p></section>
-    <section class="container"><h2>What as Does Not Do</h2><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">as</span> is not a cast operator and it is not a general renaming expression.</p><p>These forms are invalid:</p><pre style="
+    <section class="container"><h2>What as Does Not Do</h2><p><code>as</code> is not a cast operator and it is not a general renaming expression.</p><p>These forms are invalid:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -797,10 +760,7 @@ body {
     value <span class='bst-code-operator'>=</span> input <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>Int</span>        <span class='bst-code-comment'>-- Error: use explicit casts such as Int(input)</span>
     renamed <span class='bst-code-keyword'>as</span> existing_value   <span class='bst-code-comment'>-- Error: this is not a value alias</span>
     function_call<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-keyword'>as</span> result   <span class='bst-code-comment'>-- Error: expression aliases are not supported</span>
-    </code></pre><p>Use <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">as</span> only for supported alias declarations, import aliases, and Choice payload capture aliases.</p><p>This keeps renaming predictable and avoids adding multiple ways to express the same idea.</p></section>
+    </code></pre><p>Use <code>as</code> only for supported alias declarations, import aliases, and Choice payload capture aliases.</p><p>This keeps renaming predictable and avoids adding multiple ways to express the same idea.</p></section>
     <section class="container"><h2>When To Use Aliases</h2><p>Use a type alias for clearer annotations:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;

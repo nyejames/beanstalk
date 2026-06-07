@@ -189,6 +189,11 @@ body {
         padding-left: var(--bst-spacing-small);
     }
 
+    .container code:not(.codeblock) {
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    }
+
     @media (min-width: 576px) {
         .container {
             max-width: 510px;
@@ -325,19 +330,7 @@ body {
 
     values <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>              <span class='bst-code-comment'>-- Type error: element type is ambiguous</span>
     mixed <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-number'>1</span>, <span class='bst-code-string'>&quot;bad&quot;</span><span class='bst-code-parenthesis'>}</span>       <span class='bst-code-comment'>-- Type error: inconsistent item types</span>
-    </code></pre><p>The compiler does not infer an empty collection&#39;s element type from later `push`, assignment, loop, function argument, HIR, or borrow-analysis use. A declaration&#39;s type must be explicit at the declaration site or immediately inferable from its initializer.</p><p>Growable collections use <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">{T}</span>. Fixed collections use <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">{N T}</span>, where <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">N</span> is a compile-time positive <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Int</span> expression and part of the collection type identity.</p><pre style="
+    </code></pre><p>The compiler does not infer an empty collection&#39;s element type from later <code>push</code>, assignment, loop, function argument, HIR, or borrow-analysis use. A declaration&#39;s type must be explicit at the declaration site or immediately inferable from its initializer.</p><p>Growable collections use <code>{T}</code>. Fixed collections use <code>{N T}</code>, where <code>N</code> is a compile-time positive <code>Int</code> expression and part of the collection type identity.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -350,52 +343,7 @@ body {
     capacity <span class='bst-code-operator'>#</span><span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>4</span>
     scratch <span class='bst-code-operator'>~</span><span class='bst-code-parenthesis'>{</span>capacity <span class='bst-code-operator'>+</span> <span class='bst-code-number'>2</span> <span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>
     labels <span class='bst-code-parenthesis'>{</span>capacity<span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;alpha&quot;</span>, <span class='bst-code-string'>&quot;beta&quot;</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-comment'>-- shorthand infers String from the literal</span>
-    </code></pre><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">{Int}</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">{3 Int}</span>, and <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">{4 Int}</span> are distinct types.</p><p>Fixed capacity is not a growable allocation hint, and Beanstalk does not implicitly convert between growable and fixed collections or between different fixed capacities.</p><p>Capacity-only shorthand such as <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">{capacity}</span> is valid only for a binding declaration with an immediate non-empty collection literal initializer. It is invalid for empty literals, non-literal initializers, signatures, aliases, fields, and returns.</p><p>Immutable value bindings cannot start from an empty fixed collection literal because there is no later mutable owner path to fill them. Mutable empty fixed bindings and fixed struct field defaults are valid.</p><p>For unordered keyed collections (Hash Map semantics), keyed method behavior is deferred in this milestone.</p><p>Elements inside collections are accessed using <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    "> .get(index)</span>.</p><p>`collection.get(0)` is the equivalent of `collection0` in most C-like languages. There is no square-bracket index notation in Beanstalk.</p><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">get</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">set</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">push</span>, and <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">remove</span> are</p><p>fallible collection operations. <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">length</span> is infallible. Invalid receivers, out-of-bounds indices, and fixed-capacity overflow produce structured errors rather than silent no-ops.</p><p>There may not be a runtime function call under the hood for these methods. The compiler lowers many collection built-ins directly.</p><p>Use <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">set(index, value)</span> for indexed writes. Indexed assignment through</p><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">get</span> has been removed. <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">set</span> replaces an existing index only,</p><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">push</span> appends after the current last element, and <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">remove</span> shifts</p><p>later elements down so dense logical length is preserved.</p></section>
+    </code></pre><p><code>{Int}</code>, <code>{3 Int}</code>, and <code>{4 Int}</code> are distinct types. Fixed capacity is not a growable allocation hint, and Beanstalk does not implicitly convert between growable and fixed collections or between different fixed capacities.</p><p>Capacity-only shorthand such as <code>{capacity}</code> is valid only for a binding declaration with an immediate non-empty collection literal initializer. It is invalid for empty literals, non-literal initializers, signatures, aliases, fields, and returns.</p><p>Immutable value bindings cannot start from an empty fixed collection literal because there is no later mutable owner path to fill them. Mutable empty fixed bindings and fixed struct field defaults are valid.</p><p>For unordered keyed collections (Hash Map semantics), keyed method behavior is deferred in this milestone.</p><p>Elements inside collections are accessed using <code> .get(index)</code>.</p><p><code>collection.get(0)</code> is the equivalent of <code>collection0</code> in most C-like languages. There is no square-bracket index notation in Beanstalk.</p><p><code>get</code>, <code>set</code>, <code>push</code>, and <code>remove</code> are fallible collection operations. <code>length</code> is infallible. Invalid receivers, out-of-bounds indices, and fixed-capacity overflow produce structured errors rather than silent no-ops.</p><p>There may not be a runtime function call under the hood for these methods. The compiler lowers many collection built-ins directly.</p><p>Use <code>set(index, value)</code> for indexed writes. Indexed assignment through <code>get</code> has been removed. <code>set</code> replaces an existing index only, <code>push</code> appends after the current last element, and <code>remove</code> shifts later elements down so dense logical length is preserved.</p></section>
     <section class="container"><h2>Immutable Bindings</h2><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
@@ -421,7 +369,7 @@ body {
         then <span class='bst-code-number'>0</span>
     ; <span class='bst-code-comment'>-- Error, remove mutates the collection</span>
     </code></pre></section>
-    <section class="container"><h2>Mutable Bindings</h2><p>Whenever a method mutates its receiver, the receiver must be marked with the mutable symbol.</p><p>This is also true of built-in collection methods that mutate the collection, such as `set`, `push`, and `remove`.</p><pre style="
+    <section class="container"><h2>Mutable Bindings</h2><p>Whenever a method mutates its receiver, the receiver must be marked with the mutable symbol.</p><p>This is also true of built-in collection methods that mutate the collection, such as <code>set</code>, <code>push</code>, and <code>remove</code>.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;

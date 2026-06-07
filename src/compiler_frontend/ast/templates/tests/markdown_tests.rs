@@ -447,3 +447,124 @@ fn list_items_support_italic_bold_and_bold_italic_at_block_start() {
         "<ul><li><em><strong>bold italic</strong></em></li></ul>"
     );
 }
+
+#[test]
+fn basic_inline_code_in_paragraph() {
+    let rendered = to_markdown("use `Thing` here", "p");
+    assert_eq!(rendered, "<p>use <code>Thing</code> here</p>");
+}
+
+#[test]
+fn multiple_inline_code_spans_on_one_line() {
+    let rendered = to_markdown("`first` and `second`", "p");
+    assert_eq!(
+        rendered,
+        "<p><code>first</code> and <code>second</code></p>"
+    );
+}
+
+#[test]
+fn unmatched_single_backtick_renders_literally() {
+    let rendered = to_markdown("foo ` bar", "p");
+    assert_eq!(rendered, "<p>foo ` bar</p>");
+}
+
+#[test]
+fn consecutive_backtick_runs_render_literally() {
+    let rendered = to_markdown("``not code`` and ```also not```", "p");
+    assert_eq!(rendered, "<p>``not code`` and ```also not```</p>");
+}
+
+#[test]
+fn trailing_backtick_run_does_not_close_code_span() {
+    let rendered = to_markdown("`not code``", "p");
+    assert_eq!(rendered, "<p>`not code``</p>");
+}
+
+#[test]
+fn html_escaping_inside_code_spans() {
+    let rendered = to_markdown("`<tag> & \"thing\"`", "p");
+    assert_eq!(
+        rendered,
+        "<p><code>&lt;tag&gt; &amp; &quot;thing&quot;</code></p>"
+    );
+}
+
+#[test]
+fn emphasis_and_links_do_not_parse_inside_code_spans() {
+    let rendered = to_markdown("`*bold* @/docs (Docs)`", "p");
+    assert_eq!(rendered, "<p><code>*bold* @/docs (Docs)</code></p>");
+}
+
+#[test]
+fn code_spans_inside_active_emphasis() {
+    let rendered = to_markdown("*Use `Thing` here*", "p");
+    assert_eq!(rendered, "<p><em>Use <code>Thing</code> here</em></p>");
+}
+
+#[test]
+fn inline_code_in_headings() {
+    let rendered = to_markdown("# `Title`", "p");
+    assert_eq!(rendered, "<h1><code>Title</code></h1>");
+}
+
+#[test]
+fn inline_code_in_list_items() {
+    let rendered = to_markdown("- `item`", "p");
+    assert_eq!(rendered, "<ul><li><code>item</code></li></ul>");
+}
+
+#[test]
+fn dynamic_expression_anchor_inside_code_span() {
+    let rendered = markdown_formatter_output_from_text_and_anchors(&[
+        (Some("`foo "), None),
+        (None, Some(dynamic_anchor(1))),
+        (Some(" bar`"), None),
+    ]);
+    assert_eq!(rendered, "<p><code>foo {dynamic:1} bar</code></p>");
+}
+
+#[test]
+fn backticks_emitted_by_dynamic_expression_anchors_do_not_participate_in_parsing() {
+    // Dynamic anchors are opaque; the formatter never sees their runtime output,
+    // so any backticks they might emit cannot be parsed as inline code delimiters.
+    let missing_closing_delimiter = markdown_formatter_output_from_text_and_anchors(&[
+        (Some("`foo "), None),
+        (None, Some(dynamic_anchor(1))),
+        (Some(" bar"), None),
+    ]);
+    assert_eq!(missing_closing_delimiter, "<p>`foo {dynamic:1} bar</p>");
+
+    let missing_opening_delimiter = markdown_formatter_output_from_text_and_anchors(&[
+        (Some("foo "), None),
+        (None, Some(dynamic_anchor(1))),
+        (Some(" bar`"), None),
+    ]);
+    assert_eq!(missing_opening_delimiter, "<p>foo {dynamic:1} bar`</p>");
+
+    let parent_authored_delimiters = markdown_formatter_output_from_text_and_anchors(&[
+        (Some("`"), None),
+        (None, Some(dynamic_anchor(1))),
+        (Some("`"), None),
+    ]);
+    assert_eq!(
+        parent_authored_delimiters,
+        "<p><code>{dynamic:1}</code></p>"
+    );
+}
+
+#[test]
+fn child_template_anchor_blocks_code_span_pairing() {
+    let rendered = markdown_formatter_output_from_text_and_anchors(&[
+        (Some("`foo "), None),
+        (None, Some(child_anchor(1))),
+        (Some(" bar`"), None),
+    ]);
+    assert_eq!(rendered, "<p>`foo {child:1} bar`</p>");
+}
+
+#[test]
+fn code_spans_do_not_cross_soft_line_boundaries() {
+    let rendered = to_markdown("`foo\nbar`", "p");
+    assert_eq!(rendered, "<p>`foo bar`</p>");
+}

@@ -1,5 +1,5 @@
 import @html {center}
-import @styles/docs {navbar, title, section, codeblock, codesnippet, theme_head}
+import @styles/docs {navbar, title, section, codeblock, theme_head}
 
 page_title #= "Aliases"
 page_description #= "Type aliases, import aliases, and local renaming with as in Beanstalk."
@@ -11,7 +11,7 @@ page_head #= theme_head
 #[section, $markdown:
     Aliases give a local name to something that already exists.
 
-    Beanstalk uses [codesnippet:as] for three narrow, deliberate renaming surfaces:
+    Beanstalk uses `as` for three narrow, deliberate renaming surfaces:
 
     - Type alias declarations.
     - Import aliases.
@@ -78,8 +78,8 @@ page_head #= theme_head
         |
     ]
 
-    [codesnippet:UserId] is just another name for [codesnippet:Int].
-    [codesnippet:User] is a distinct nominal struct type.
+    `UserId` is just another name for `Int`.
+    `User` is a distinct nominal struct type.
 
     Use a struct when you need a real domain type with its own fields, constructor, and methods.
     Use a type alias when you only want a clearer type name.
@@ -173,7 +173,7 @@ page_head #= theme_head
         io(label)
     ]
 
-    Because aliases are transparent, passing an [codesnippet:Int] where [codesnippet:UserId] is expected is valid.
+    Because aliases are transparent, passing an `Int` where `UserId` is expected is valid.
 
     [codeblock, $code("bst"):
         UserId as Int
@@ -186,7 +186,7 @@ page_head #= theme_head
         print_id(raw_id) -- valid
     ]
 
-    If you need the compiler to reject raw [codesnippet:Int] values in a user-id position,
+    If you need the compiler to reject raw `Int` values in a user-id position,
     use a struct instead of an alias.
 ]
 
@@ -237,7 +237,7 @@ page_head #= theme_head
         docs_html = render_docs()
     ]
 
-    Without aliases, both imports would try to introduce [codesnippet:render] into the same file.
+    Without aliases, both imports would try to introduce `render` into the same file.
     That is a name collision.
 
     [codeblock, $code("bst"):
@@ -392,8 +392,8 @@ page_head #= theme_head
         import @formatters { render as RenderPage }  -- warning
     ]
 
-    This warning is intentionally simple. It does not try to fully distinguish [codesnippet:camelCase],
-    [codesnippet:snake_case], or other naming styles.
+    This warning is intentionally simple. It does not try to fully distinguish `camelCase`,
+    `snake_case`, or other naming styles.
 
     The goal is only to catch obvious type/value naming drift.
 ]
@@ -417,8 +417,8 @@ page_head #= theme_head
         ;
     ]
 
-    The name before [codesnippet:as] is the declared payload field name.
-    The name after [codesnippet:as] is the local capture name visible inside that arm.
+    The name before `as` is the declared payload field name.
+    The name after `as` is the local capture name visible inside that arm.
 
     [codeblock, $code("bst"):
         Err(message as error_message) => io(error_message)
@@ -426,7 +426,7 @@ page_head #= theme_head
 
     This keeps the pattern tied to the declared payload shape while still letting the arm choose a clearer local name.
 
-    Without [codesnippet:as], the capture name is the field name.
+    Without `as`, the capture name is the field name.
 
     [codeblock, $code("bst"):
         Err(message) => io(message)
@@ -450,7 +450,7 @@ page_head #= theme_head
 #[section, $markdown:
     ## What as Does Not Do
 
-    [codesnippet:as] is not a cast operator and it is not a general renaming expression.
+    `as` is not a cast operator and it is not a general renaming expression.
 
     These forms are invalid:
 
@@ -460,7 +460,7 @@ page_head #= theme_head
         function_call() as result   -- Error: expression aliases are not supported
     ]
 
-    Use [codesnippet:as] only for supported alias declarations, import aliases, and Choice payload capture aliases.
+    Use `as` only for supported alias declarations, import aliases, and Choice payload capture aliases.
 
     This keeps renaming predictable and avoids adding multiple ways to express the same idea.
 ]

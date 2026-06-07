@@ -189,6 +189,11 @@ body {
         padding-left: var(--bst-spacing-small);
     }
 
+    .container code:not(.codeblock) {
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    }
+
     @media (min-width: 576px) {
         .container {
             max-width: 510px;
@@ -312,19 +317,7 @@ body {
         </div>
     </nav>
      <h1 style="font-size: 2em;text-align: center;"> CORE TIME</h1>
-    <section class="container"><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@core/time</span> separates elapsed time from wall-clock time.</p><ul><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Duration</span> is for elapsed amounts.</li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">TimeMark</span> is for measuring elapsed time and frame deltas.</li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Timestamp</span> is for real-world UTC instants.</li></ul><pre style="
+    <section class="container"><p><code>@core/time</code> separates elapsed time from wall-clock time.</p><ul><li><code>Duration</code> is for elapsed amounts.</li><li><code>TimeMark</code> is for measuring elapsed time and frame deltas.</li><li><code>Timestamp</code> is for real-world UTC instants.</li></ul><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -339,13 +332,7 @@ body {
         duration_between,
     <span class='bst-code-parenthesis'>}</span>
     </code></pre></section>
-    <section class="container"><h2>Measuring elapsed time</h2><p>Use <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">TimeMark</span> when you need a monotonic measurement point. Use <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Duration</span> for the elapsed amount.</p><pre style="
+    <section class="container"><h2>Measuring elapsed time</h2><p>Use <code>TimeMark</code> when you need a monotonic measurement point. Use <code>Duration</code> for the elapsed amount.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -361,10 +348,7 @@ body {
 
     seconds <span class='bst-code-operator'>=</span> delta.as_seconds<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
     </code></pre><p>This shape works for frame-delta style code without requiring a scheduler or animation package.</p></section>
-    <section class="container"><h2>UTC timestamps</h2><p>Use <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Timestamp</span> for real-world UTC instants that may be logged, stored, or exchanged with external systems.</p><pre style="
+    <section class="container"><h2>UTC timestamps</h2><p>Use <code>Timestamp</code> for real-world UTC instants that may be logged, stored, or exchanged with external systems.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -410,164 +394,92 @@ body {
             
 
     <tr style="border-bottom: 1px dotted grey;">
-              <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">mark_now()</span> </td>  <td style="padding: 0.2em 0.5em;  "> Current monotonic <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">TimeMark</span>.</td> 
+             <td style="padding: 0.2em 0.5em;  "> <code>mark_now()</code></td>
+     <td style="padding: 0.2em 0.5em;  "> Current monotonic <code>TimeMark</code>.</td>
         </tr>
+
     <tr style="border-bottom: 1px dotted grey;">
-              <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">elapsed_since(start)</span> </td>  <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Duration</span> from a mark to now.</td> 
+             <td style="padding: 0.2em 0.5em;  "> <code>elapsed_since(start)</code></td>
+     <td style="padding: 0.2em 0.5em;  "> <code>Duration</code> from a mark to now.</td>
         </tr>
+
     <tr style="border-bottom: 1px dotted grey;">
-              <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">duration_between(start, end)</span> </td>  <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Duration</span> between two marks.</td> 
+             <td style="padding: 0.2em 0.5em;  "> <code>duration_between(start, end)</code></td>
+     <td style="padding: 0.2em 0.5em;  "> <code>Duration</code> between two marks.</td>
         </tr>
+
     <tr style="border-bottom: 1px dotted grey;">
-              <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">timestamp_now()</span> </td>  <td style="padding: 0.2em 0.5em;  "> Current UTC wall-clock <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Timestamp</span>.</td> 
+             <td style="padding: 0.2em 0.5em;  "> <code>timestamp_now()</code></td>
+     <td style="padding: 0.2em 0.5em;  "> Current UTC wall-clock <code>Timestamp</code>.</td>
         </tr>
+
     <tr style="border-bottom: 1px dotted grey;">
-              <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">duration_from_seconds(seconds)</span> </td>  <td style="padding: 0.2em 0.5em;  "> Build a <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Duration</span>.</td> 
+             <td style="padding: 0.2em 0.5em;  "> <code>duration_from_seconds(seconds)</code></td>
+     <td style="padding: 0.2em 0.5em;  "> Build a <code>Duration</code>.</td>
         </tr>
+
     <tr style="border-bottom: 1px dotted grey;">
-              <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">duration_from_milliseconds(milliseconds)</span> </td>  <td style="padding: 0.2em 0.5em;  "> Build a <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Duration</span>.</td> 
+             <td style="padding: 0.2em 0.5em;  "> <code>duration_from_milliseconds(milliseconds)</code></td>
+     <td style="padding: 0.2em 0.5em;  "> Build a <code>Duration</code>.</td>
         </tr>
+
     <tr style="border-bottom: 1px dotted grey;">
-              <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">timestamp_from_unix_seconds(seconds)</span> </td>  <td style="padding: 0.2em 0.5em;  "> Build a <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Timestamp</span>.</td> 
+             <td style="padding: 0.2em 0.5em;  "> <code>timestamp_from_unix_seconds(seconds)</code></td>
+     <td style="padding: 0.2em 0.5em;  "> Build a <code>Timestamp</code>.</td>
         </tr>
+
     <tr style="border-bottom: 1px dotted grey;">
-              <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">timestamp_from_unix_milliseconds(milliseconds)</span> </td>  <td style="padding: 0.2em 0.5em;  "> Build a <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Timestamp</span>.</td> 
+             <td style="padding: 0.2em 0.5em;  "> <code>timestamp_from_unix_milliseconds(milliseconds)</code></td>
+     <td style="padding: 0.2em 0.5em;  "> Build a <code>Timestamp</code>.</td>
         </tr>
+
     <tr style="border-bottom: 1px dotted grey;">
-              <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">timestamp_from_iso_string(text)</span> </td>  <td style="padding: 0.2em 0.5em;  "> Parse an ISO timestamp as <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Timestamp, Error!</span>.</td> 
+             <td style="padding: 0.2em 0.5em;  "> <code>timestamp_from_iso_string(text)</code></td>
+     <td style="padding: 0.2em 0.5em;  "> Parse an ISO timestamp as <code>Timestamp, Error!</code>.</td>
         </tr>
+
     <tr style="border-bottom: 1px dotted grey;">
-              <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">duration.as_seconds()</span> </td>  <td style="padding: 0.2em 0.5em;  "> Convert a <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Duration</span> to seconds.</td> 
+             <td style="padding: 0.2em 0.5em;  "> <code>duration.as_seconds()</code></td>
+     <td style="padding: 0.2em 0.5em;  "> Convert a <code>Duration</code> to seconds.</td>
         </tr>
+
     <tr style="border-bottom: 1px dotted grey;">
-              <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">duration.as_milliseconds()</span> </td>  <td style="padding: 0.2em 0.5em;  "> Convert a <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Duration</span> to milliseconds.</td> 
+             <td style="padding: 0.2em 0.5em;  "> <code>duration.as_milliseconds()</code></td>
+     <td style="padding: 0.2em 0.5em;  "> Convert a <code>Duration</code> to milliseconds.</td>
         </tr>
+
     <tr style="border-bottom: 1px dotted grey;">
-              <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">duration.is_negative()</span> </td>  <td style="padding: 0.2em 0.5em;  "> Check whether a <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Duration</span> is below zero.</td> 
+             <td style="padding: 0.2em 0.5em;  "> <code>duration.is_negative()</code></td>
+     <td style="padding: 0.2em 0.5em;  "> Check whether a <code>Duration</code> is below zero.</td>
         </tr>
+
     <tr style="border-bottom: 1px dotted grey;">
-              <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">duration.abs()</span> </td>  <td style="padding: 0.2em 0.5em;  "> Absolute <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Duration</span>.</td> 
+             <td style="padding: 0.2em 0.5em;  "> <code>duration.abs()</code></td>
+     <td style="padding: 0.2em 0.5em;  "> Absolute <code>Duration</code>.</td>
         </tr>
+
     <tr style="border-bottom: 1px dotted grey;">
-              <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">duration.clamp(min, max)</span> </td>  <td style="padding: 0.2em 0.5em;  "> Bound a <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Duration</span> to a range.</td> 
+             <td style="padding: 0.2em 0.5em;  "> <code>duration.clamp(min, max)</code></td>
+     <td style="padding: 0.2em 0.5em;  "> Bound a <code>Duration</code> to a range.</td>
         </tr>
+
     <tr style="border-bottom: 1px dotted grey;">
-              <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">timestamp.unix_seconds()</span> </td>  <td style="padding: 0.2em 0.5em;  "> Convert a <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Timestamp</span> to Unix seconds.</td> 
+             <td style="padding: 0.2em 0.5em;  "> <code>timestamp.unix_seconds()</code></td>
+     <td style="padding: 0.2em 0.5em;  "> Convert a <code>Timestamp</code> to Unix seconds.</td>
         </tr>
+
     <tr style="border-bottom: 1px dotted grey;">
-              <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">timestamp.unix_milliseconds()</span> </td>  <td style="padding: 0.2em 0.5em;  "> Convert a <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Timestamp</span> to Unix milliseconds.</td> 
+             <td style="padding: 0.2em 0.5em;  "> <code>timestamp.unix_milliseconds()</code></td>
+     <td style="padding: 0.2em 0.5em;  "> Convert a <code>Timestamp</code> to Unix milliseconds.</td>
         </tr>
+
     <tr style="border-bottom: 1px dotted grey;">
-              <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">timestamp.to_iso_string()</span> </td>  <td style="padding: 0.2em 0.5em;  "> Format a <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Timestamp</span> as UTC ISO text.</td> 
+             <td style="padding: 0.2em 0.5em;  "> <code>timestamp.to_iso_string()</code></td>
+     <td style="padding: 0.2em 0.5em;  "> Format a <code>Timestamp</code> as UTC ISO text.</td>
         </tr>
         
     </table></section>
-    <section class="container"><h2>What is deferred?</h2><p>The first implementation intentionally does not include:</p><ul><li>calendar date types</li><li>time zones or local-time conversion</li><li>locale-aware formatting</li><li>timers, sleep, intervals, or animation callbacks</li><li>Wasm or non-JS time lowerings</li></ul><p>Browser animation-frame integration belongs in a future web-specific package rather than <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@core/time</span>.</p></section>
+    <section class="container"><h2>What is deferred?</h2><p>The first implementation intentionally does not include:</p><ul><li>calendar date types</li><li>time zones or local-time conversion</li><li>locale-aware formatting</li><li>timers, sleep, intervals, or animation callbacks</li><li>Wasm or non-JS time lowerings</li></ul><p>Browser animation-frame integration belongs in a future web-specific package rather than <code>@core/time</code>.</p></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

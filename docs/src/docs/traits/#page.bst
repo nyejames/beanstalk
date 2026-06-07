@@ -1,5 +1,5 @@
 import @html {center}
-import @styles/docs {navbar, title, section, styled_table, header, data, codeblock, codesnippet, theme_head}
+import @styles/docs {navbar, title, section, styled_table, header, data, codeblock, theme_head}
 
 page_title #= "Traits in Beanstalk"
 page_description #= "Current Alpha trait declarations, explicit conformance, static bounds, and dynamic trait values."
@@ -11,7 +11,7 @@ page_head #= theme_head
 #[section, $markdown:
     Traits define named behavioural contracts for types.
 
-    Beanstalk traits are explicit and nominal: a type satisfies a trait only when source declares [codesnippet:Type must TRAIT]. Matching method shapes alone are not conformance.
+    Beanstalk traits are explicit and nominal: a type satisfies a trait only when source declares `Type must TRAIT`. Matching method shapes alone are not conformance.
 
     A trait name in a normal type annotation means a dynamic trait value.
     A trait name in a generic bound constrains a concrete generic parameter.
@@ -21,7 +21,7 @@ page_head #= theme_head
 #[section, $markdown:
     # Trait declarations
 
-    Trait declarations use [codesnippet:must:] and contain method requirements.
+    Trait declarations use `must:` and contain method requirements.
 
     [codeblock, $code("bst"):
         DISPLAY_TEXT must:
@@ -41,7 +41,7 @@ page_head #= theme_head
 #[section, $markdown:
     # This and mutable receivers
 
-    [codesnippet:This] is valid only inside trait declarations. It means the concrete implementing type.
+    `This` is valid only inside trait declarations. It means the concrete implementing type.
 
     [codeblock, $code("bst"):
         RESETTABLE must:
@@ -51,16 +51,16 @@ page_head #= theme_head
 
     Rules:
 
-    - the first requirement parameter must be [codesnippet:This] or [codesnippet:~This]
-    - [codesnippet:This] means an immutable receiver requirement
-    - [codesnippet:~This] means a mutable receiver requirement
-    - [codesnippet:~This] is valid only as the first parameter
-    - direct non-receiver [codesnippet:This] parameters must be named, such as [codesnippet:other This]
-    - bare non-receiver [codesnippet:This] is rejected because only the receiver may omit a name
-    - direct [codesnippet:This] returns are supported
-    - composed forms such as [codesnippet:This?], [codesnippet:{This}], and [codesnippet:Box of This] are rejected in the Alpha surface
-    - lowercase [codesnippet:this] is not valid in trait requirements
-    - [codesnippet:This] outside trait declarations is rejected
+    - the first requirement parameter must be `This` or `~This`
+    - `This` means an immutable receiver requirement
+    - `~This` means a mutable receiver requirement
+    - `~This` is valid only as the first parameter
+    - direct non-receiver `This` parameters must be named, such as `other This`
+    - bare non-receiver `This` is rejected because only the receiver may omit a name
+    - direct `This` returns are supported
+    - composed forms such as `This?`, `{This}`, and `Box of This` are rejected in the Alpha surface
+    - lowercase `this` is not valid in trait requirements
+    - `This` outside trait declarations is rejected
 ]
 
 #[section, $markdown:
@@ -114,13 +114,13 @@ page_head #= theme_head
 
     File-local extension evidence is useful for local adapter code, but it is never exportable as a reusable conformance fact. It also cannot override visible canonical evidence.
 
-    User-authored conformances for builtin scalar types such as [codesnippet:Int must DISPLAY_TEXT] are file-local extensions. Compiler-owned builtin evidence is a separate metadata path, but it is not registered in the current Alpha scaffold.
+    User-authored conformances for builtin scalar types such as `Int must DISPLAY_TEXT` are file-local extensions. Compiler-owned builtin evidence is a separate metadata path, but it is not registered in the current Alpha scaffold.
 ]
 
 #[section, $markdown:
     # Static generic bounds
 
-    Generic bounds use [codesnippet:is], not [codesnippet:must].
+    Generic bounds use `is`, not `must`.
 
     [codeblock, $code("bst"):
         render type Item is DISPLAY_TEXT |item Item| -> String:
@@ -128,7 +128,7 @@ page_head #= theme_head
         ;
     ]
 
-    Multiple bounds on one parameter use [codesnippet:and]:
+    Multiple bounds on one parameter use `and`:
 
     [codeblock, $code("bst"):
         render type Item is DISPLAY_TEXT and NAMED |item Item| -> String:
@@ -171,9 +171,9 @@ page_head #= theme_head
 
     All traits can be used as generic bounds. Only dynamic-safe traits can be used as dynamic value types.
 
-    A trait is dynamic-safe when its requirements do not need the erased concrete type again after wrapping. Requirements that return [codesnippet:This], take [codesnippet:This] as a non-receiver parameter, or otherwise require concrete identity are bound-only and cannot be used as dynamic value annotations.
+    A trait is dynamic-safe when its requirements do not need the erased concrete type again after wrapping. Requirements that return `This`, take `This` as a non-receiver parameter, or otherwise require concrete identity are bound-only and cannot be used as dynamic value annotations.
 
-    When static dispatch is intended, write a generic bound with [codesnippet:type T is TRAIT] instead of annotating a value directly with [codesnippet:TRAIT].
+    When static dispatch is intended, write a generic bound with `type T is TRAIT` instead of annotating a value directly with `TRAIT`.
 ]
 
 #[section, $markdown:
@@ -187,9 +187,9 @@ page_head #= theme_head
 #[section, $markdown:
     # DISPLAYABLE scaffold
 
-    [codesnippet:DISPLAYABLE] exists as compiler-owned trait metadata for conformance and generic-bound tests.
+    `DISPLAYABLE` exists as compiler-owned trait metadata for conformance and generic-bound tests.
 
-    It does not change [codesnippet:io(...)], template interpolation, string coercion, equality, or operators. Implement [codesnippet:display |This| -> String] yourself and call it explicitly.
+    It does not change `io(...)`, template interpolation, string coercion, equality, or operators. Implement `display |This| -> String` yourself and call it explicitly.
 ]
 
 #[section, $markdown:
@@ -201,16 +201,16 @@ page_head #= theme_head
     - associated types and associated constants
     - trait inheritance and composition
     - generic traits and generic trait methods
-    - specialized generic instance conformance such as [codesnippet:Box of Int must DISPLAY_TEXT]
+    - specialized generic instance conformance such as `Box of Int must DISPLAY_TEXT`
     - static requirements that are not receiver methods
     - conditional conformances
     - dynamic trait composition
     - dynamic trait aliases
     - downcasting, reflection, and pattern matching on erased concrete types
-    - composed [codesnippet:This] forms
+    - composed `This` forms
     - file-local evidence-backed generic bound dispatch
     - automatic primitive conformances
-    - output coercion through [codesnippet:DISPLAYABLE]
+    - output coercion through `DISPLAYABLE`
     - operator-to-trait integration
     - Wasm dynamic trait runtime lowering
     - deriving, hashing, ordering, formatting, iteration, and serialization traits

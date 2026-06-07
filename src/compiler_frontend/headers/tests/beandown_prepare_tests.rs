@@ -636,13 +636,13 @@ fn nested_templates_remain_structural_inside_markdown_initializer() {
 }
 
 #[test]
-fn escaped_outer_close_remains_body_text() {
-    let (output, string_table) = prepare_directly(r"before \] after");
+fn backslash_remains_body_text_inside_markdown_initializer() {
+    let (output, string_table) = prepare_directly(r"before \n after");
     let declaration = content_constant(&output);
 
     assert!(declaration.initializer_tokens.iter().any(|token| matches!(
         &token.kind,
-        TokenKind::StringSliceLiteral(id) if string_table.resolve(*id) == "before ] after"
+        TokenKind::StringSliceLiteral(id) if string_table.resolve(*id) == r"before \n after"
     )));
 }
 

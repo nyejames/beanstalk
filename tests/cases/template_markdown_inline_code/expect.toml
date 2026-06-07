@@ -1,0 +1,15 @@
+entry = "."
+
+[backends.html]
+mode = "success"
+warnings = "forbid"
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = [
+    "<p>Inline <code>alpha</code> and <code>beta</code></p>",
+    "<p>Escaped <code>&lt;tag&gt; &amp; &quot;quote&quot;</code></p>",
+    "<p>Literal syntax <code>[slot]</code></p>",
+    "<p>Backslash \\n and bracket [rendered]</p>",
+]

@@ -189,6 +189,11 @@ body {
         padding-left: var(--bst-spacing-small);
     }
 
+    .container code:not(.codeblock) {
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    }
+
     @media (min-width: 576px) {
         .container {
             max-width: 510px;
@@ -330,13 +335,7 @@ body {
 
     io<span class='bst-code-parenthesis'>(</span>msg<span class='bst-code-parenthesis'>)</span> <span class='bst-code-comment'>-- prints &quot;nope&quot;</span>
     </code></pre><p>    If statements are non-exhaustive and there is no &quot;if else&quot; or &quot;elif&quot; in Beanstalk.</p><p>    Instead, use pattern matching for more than two branches.</p><p>    The whole if statement and optional &quot;else&quot; branch is a single block,      so there is only one semicolon at the end to close the statement.</p></section>
-    <section class="container"><h1>Pattern  Matching</h1><p>    Pattern matching is a control-flow tool for checking one value against multiple patterns.</p><p>    Non-choice matches must include <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    "> else =></span>.     Choice matches can omit <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    "> else =></span> only when every variant is covered and no arm has a guard.</p><pre style="
+    <section class="container"><h1>Pattern  Matching</h1><p>    Pattern matching is a control-flow tool for checking one value against multiple patterns.</p><p>    Non-choice matches must include <code> else =&gt;</code>.     Choice matches can omit <code> else =&gt;</code> only when every variant is covered and no arm has a guard.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -409,40 +408,7 @@ body {
         <span class='bst-code-struct'>Err</span><span class='bst-code-parenthesis'>(</span>message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span>message<span class='bst-code-parenthesis'>)</span>
         <span class='bst-code-struct'>Pending</span><span class='bst-code-parenthesis'>(</span>retry_count, message <span class='bst-code-keyword'>as</span> pending_message<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> io<span class='bst-code-parenthesis'>(</span>pending_message<span class='bst-code-parenthesis'>)</span>
     ;
-    </code></pre><p>    The names before <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    "> as</span> must match the declared payload fields. The optional name after <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    "> as</span> is the arm-local binding.</p><p>    Capture originals must exactly match the declared payload field names.     For example, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    "> Err(message as error_text) =></span> binds the payload field <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    "> message</span> to the local name <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    "> error_text</span>.</p><p>    Exhaustiveness is tag-level: <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    "> Err(message) =></span> covers all <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    "> Err</span> values regardless of payload content.</p><p>    Fallback match arms use <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    "> else =></span>.     The fallback body may be empty; an empty <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    "> else =></span> catches all remaining cases and does nothing.</p><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    "> _ =></span> and <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    "> else => _</span> are not valid match syntax.</p></section>
+    </code></pre><p>    The names before <code> as</code> must match the declared payload fields. The optional name after <code> as</code> is the arm-local binding.</p><p>    Capture originals must exactly match the declared payload field names.     For example, <code> Err(message as error_text) =&gt;</code> binds the payload field <code> message</code> to the local name <code> error_text</code>.</p><p>    Exhaustiveness is tag-level: <code> Err(message) =&gt;</code> covers all <code> Err</code> values regardless of payload content.</p><p>    Fallback match arms use <code> else =&gt;</code>.     The fallback body may be empty; an empty <code> else =&gt;</code> catches all remaining cases and does nothing.     <code> _ =&gt;</code> and <code> else =&gt; _</code> are not valid match syntax.</p></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

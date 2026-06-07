@@ -1,5 +1,5 @@
 import @html {center}
-import @styles/docs {navbar, title, section, codeblock, codesnippet, theme_head}
+import @styles/docs {navbar, title, section, codeblock, theme_head}
 
 page_title #= "COLLECTIONS"
 page_description #= "Introduction to collections in Beanstalk"
@@ -30,8 +30,8 @@ page_head #= theme_head
     loop, function argument, HIR, or borrow-analysis use. A declaration's type must be explicit at
     the declaration site or immediately inferable from its initializer.
 
-    Growable collections use [codesnippet:{T}]. Fixed collections use [codesnippet:{N T}],
-    where [codesnippet:N] is a compile-time positive [codesnippet:Int] expression and part of the
+    Growable collections use `{T}`. Fixed collections use `{N T}`,
+    where `N` is a compile-time positive `Int` expression and part of the
     collection type identity.
 
     [codeblock, $code("bst"):
@@ -42,11 +42,11 @@ page_head #= theme_head
         labels {capacity} = {"alpha", "beta"} -- shorthand infers String from the literal
     ]
 
-    [codesnippet:{Int}], [codesnippet:{3 Int}], and [codesnippet:{4 Int}] are distinct types.
+    `{Int}`, `{3 Int}`, and `{4 Int}` are distinct types.
     Fixed capacity is not a growable allocation hint, and Beanstalk does not implicitly convert
     between growable and fixed collections or between different fixed capacities.
 
-    Capacity-only shorthand such as [codesnippet:{capacity}] is valid only for a binding
+    Capacity-only shorthand such as `{capacity}` is valid only for a binding
     declaration with an immediate non-empty collection literal initializer. It is invalid for empty
     literals, non-literal initializers, signatures, aliases, fields, and returns.
 
@@ -56,22 +56,22 @@ page_head #= theme_head
 
     For unordered keyed collections (Hash Map semantics), keyed method behavior is deferred in this milestone.
 
-    Elements inside collections are accessed using [codesnippet: .get(index)].
+    Elements inside collections are accessed using ` .get(index)`.
 
     `collection.get(0)` is the equivalent of `collection[0]` in most C-like languages.
     There is no square-bracket index notation in Beanstalk.
 
-    [codesnippet:get], [codesnippet:set], [codesnippet:push], and [codesnippet:remove] are
-    fallible collection operations. [codesnippet:length] is infallible. Invalid receivers,
+    `get`, `set`, `push`, and `remove` are
+    fallible collection operations. `length` is infallible. Invalid receivers,
     out-of-bounds indices, and fixed-capacity overflow produce structured errors rather than
     silent no-ops.
 
     There may not be a runtime function call under the hood for these methods.
     The compiler lowers many collection built-ins directly.
 
-    Use [codesnippet:set(index, value)] for indexed writes. Indexed assignment through
-    [codesnippet:get] has been removed. [codesnippet:set] replaces an existing index only,
-    [codesnippet:push] appends after the current last element, and [codesnippet:remove] shifts
+    Use `set(index, value)` for indexed writes. Indexed assignment through
+    `get` has been removed. `set` replaces an existing index only,
+    `push` appends after the current last element, and `remove` shifts
     later elements down so dense logical length is preserved.
 ]
 

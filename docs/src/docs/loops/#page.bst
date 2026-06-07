@@ -1,5 +1,5 @@
 import @html {center}
-import @styles/docs {navbar, title, section, palette, styled_table, data, codeblock, codesnippet, theme_head}
+import @styles/docs {navbar, title, section, palette, styled_table, data, codeblock, theme_head}
 
 page_title #= "Loops"
 page_description #= "Loops in Beanstalk"
@@ -11,7 +11,7 @@ page_head #= theme_head
 #[section, $markdown:
     ## Loops Syntax
 
-    Beanstalk uses a **single** loop keyword: [codesnippet: loop].
+    Beanstalk uses a **single** loop keyword: ` loop`.
 
     - **[$code("bst"):to] / [$code("bst"):to &]** select range semantics (exclusive vs inclusive)
     - Range loops can bind the current counter

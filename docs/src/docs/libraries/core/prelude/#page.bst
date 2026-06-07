@@ -1,5 +1,5 @@
 import @html {center}
-import @styles/docs {navbar, title, section, codeblock, codesnippet, theme_head}
+import @styles/docs {navbar, title, section, codeblock, theme_head}
 
 page_title #= "Core Prelude"
 page_description #= "The small core surface available without explicit imports."
@@ -12,9 +12,9 @@ page_head #= theme_head
     The prelude is the tiny set of names available without an explicit import.
     It keeps common output and builtin error handling convenient without making every core library global.
 
-    [codesnippet:io(...)] is available in normal source files and writes text to standard output.
-    [codesnippet:IO] is the compiler-owned output surface behind that convenience call.
-    Compiler-owned [codesnippet:Error] is also available for [codesnippet:Error!] flows.
+    `io(...)` is available in normal source files and writes text to standard output.
+    `IO` is the compiler-owned output surface behind that convenience call.
+    Compiler-owned `Error` is also available for `Error!` flows.
 
     [codeblock, $code("bst"):
         io("Hello from the prelude")

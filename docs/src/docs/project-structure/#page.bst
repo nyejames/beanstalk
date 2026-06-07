@@ -1,5 +1,5 @@
 import @html {center}
-import @styles/docs {navbar, title, section, palette, styled_table, header, data, codeblock, codesnippet, theme_head}
+import @styles/docs {navbar, title, section, palette, styled_table, header, data, codeblock, theme_head}
 
 page_title #= "Projects, Modules and HTML Builder"
 page_description #= "How Beanstalk projects are structured, how modules are discovered, and how the HTML project builder emits pages."
@@ -11,16 +11,16 @@ page_head #= theme_head
 #[section, $markdown:
     Beanstalk projects are built around a small set of conventions:
 
-    - a project root with a [codesnippet:#config.bst] file
-    - an entry root, usually [codesnippet:src]
-    - module entry files named like [codesnippet:#page.bst]
-    - module API boundaries defined by [codesnippet:#mod.bst]
-    - normal [codesnippet:.bst] files that provide declarations for module entries
-    - builder-owned output folders such as [codesnippet:dev] and [codesnippet:release]
+    - a project root with a `#config.bst` file
+    - an entry root, usually `src`
+    - module entry files named like `#page.bst`
+    - module API boundaries defined by `#mod.bst`
+    - normal `.bst` files that provide declarations for module entries
+    - builder-owned output folders such as `dev` and `release`
 
-    [codesnippet:#mod.bst]  = module API / visibility boundary
-    [codesnippet:#page.bst] = HTML builder entry/configuration convention
-    [codesnippet:#config.bst]   = build/project configuration convention
+    `#mod.bst`  = module API / visibility boundary
+    `#page.bst` = HTML builder entry/configuration convention
+    `#config.bst`   = build/project configuration convention
 
     At this stage of development, this is the only supported project structure to rely on.
     The rules are deliberately narrow so the compiler, dev server, and HTML builder can stay predictable while the language is still evolving.
@@ -62,7 +62,7 @@ page_head #= theme_head
 #[section, $markdown:
     # Project root and #config.bst
 
-    A normal HTML project has a [codesnippet:#config.bst] file at the project root.
+    A normal HTML project has a `#config.bst` file at the project root.
     Config files use ordinary Beanstalk top-level binding syntax.
 
     [codeblock, $code("bst"):
@@ -85,9 +85,9 @@ page_head #= theme_head
         }
     ]
 
-    Config keys are strict about value shape. String settings accept string literals and folded templates, [codesnippet:project] currently accepts only [codesnippet:"html"], [codesnippet:library_folders] accepts one string or a collection of strings, [codesnippet:template_const_loop_iteration_limit] requires a positive folded [codesnippet:Int] no greater than [codesnippet:1_000_000], and boolean HTML settings such as [codesnippet:redirect_index_html] require real [codesnippet:true] / [codesnippet:false] values rather than strings.
+    Config keys are strict about value shape. String settings accept string literals and folded templates, `project` currently accepts only `"html"`, `library_folders` accepts one string or a collection of strings, `template_const_loop_iteration_limit` requires a positive folded `Int` no greater than `1_000_000`, and boolean HTML settings such as `redirect_index_html` require real `true` / `false` values rather than strings.
 
-    Config values must resolve to compile-time constants. Plain immutable key declarations and explicit [codesnippet:#=] key constants are accepted, and they may reference earlier compile-time config keys or constants imported from core/builder source libraries. [codesnippet:#config.bst] may contain imports, type aliases, structs, and choices as support declarations, but every authored value-producing declaration must still be a known config key. Config-local helper constants, functions, calls, runtime statements, project-local imports, relative config imports, and [codesnippet, "#[...]"] page fragments are rejected. Const-record field projection is supported for explicit [codesnippet:#=] config keys and deferred for plain [codesnippet:=] keys.
+    Config values must resolve to compile-time constants. Plain immutable key declarations and explicit `#=` key constants are accepted, and they may reference earlier compile-time config keys or constants imported from core/builder source libraries. `#config.bst` may contain imports, type aliases, structs, and choices as support declarations, but every authored value-producing declaration must still be a known config key. Config-local helper constants, functions, calls, runtime statements, project-local imports, relative config imports, and `["#[...]"]` page fragments are rejected. Const-record field projection is supported for explicit `#=` config keys and deferred for plain `=` keys.
 
     Important settings:
 
@@ -95,49 +95,49 @@ page_head #= theme_head
         [header: [: Setting] [: Meaning] ]
 
         [data:
-            [: [codesnippet:project]]
-            [: Selects the project type. For the documentation site and current web projects, use [codesnippet:"html"].]
+            [: [$html:<code>project</code>]]
+            [: Selects the project type. For the documentation site and current web projects, use [$html:<code>"html"</code>].]
         ]
 
         [data:
-            [: [codesnippet:entry_root]]
-            [: The source folder that is searched for module entry files. Usually [codesnippet:"src"].]
+            [: [$html:<code>entry_root</code>]]
+            [: The source folder that is searched for module entry files. Usually [$html:<code>"src"</code>].]
         ]
 
         [data:
-            [: [codesnippet:dev_folder]]
+            [: [$html:<code>dev_folder</code>]]
             [: Where development builds are written. The dev server serves from here.]
         ]
 
         [data:
-            [: [codesnippet:output_folder]]
-            [: Where release builds are written when [codesnippet:--release] is used.]
+            [: [$html:<code>output_folder</code>]]
+            [: Where release builds are written when [$html:<code>--release</code>] is used.]
         ]
 
         [data:
-            [: [codesnippet:library_folders]]
+            [: [$html:<code>library_folders</code>]]
             [: Configures source-library scan roots. Each direct child directory of a scan root becomes an import prefix. `/lib` is the default when omitted.]
         ]
 
         [data:
-            [: [codesnippet:template_const_loop_iteration_limit]]
-            [: Sets the per-loop compile-time template expansion guard. The default is [codesnippet:10_000].]
+            [: [$html:<code>template_const_loop_iteration_limit</code>]]
+            [: Sets the per-loop compile-time template expansion guard. The default is [$html:<code>10_000</code>].]
         ]
 
         [data:
             [: HTML-specific settings]
-            [: Settings such as [codesnippet:origin], [codesnippet:html_lang], [codesnippet:html_title_postfix], [codesnippet:page_url_style], and [codesnippet:redirect_index_html] are interpreted by the HTML builder.]
+            [: Settings such as [$html:<code>origin</code>], [$html:<code>html_lang</code>], [$html:<code>html_title_postfix</code>], [$html:<code>page_url_style</code>], and [$html:<code>redirect_index_html</code>] are interpreted by the HTML builder.]
         ]
     ]
 
     Config is loaded before module discovery.
-    That means [codesnippet:entry_root] and [codesnippet:library_folders] shape how the project is searched and how imports resolve.
+    That means [$html:<code>entry_root</code>] and [$html:<code>library_folders</code>] shape how the project is searched and how imports resolve.
 ]
 
 #[section, $markdown:
     # Default project scaffold
 
-    The [codesnippet:bean new html] command generates a complete default project:
+    The `bean new html` command generates a complete default project:
 
     [codeblock, $code("text"):
         project-root/
@@ -154,18 +154,18 @@ page_head #= theme_head
 
     Clarifications:
 
-    - [codesnippet:lib/] is created empty by default. It is the conventional place for project-local source libraries.
-    - [codesnippet:dev/] and [codesnippet:release/] are output folders, not source folders.
+    - `lib/` is created empty by default. It is the conventional place for project-local source libraries.
+    - `dev/` and `release/` are output folders, not source folders.
     - .beanstalk_manifest files are build-system metadata used for safe stale-output cleanup.
-    - [codesnippet:src/#page.bst] is the default HTML page entry and includes a starter page.
+    - `src/#page.bst` is the default HTML page entry and includes a starter page.
 ]
 
 #[section, $markdown:
     # Module entry files
 
-    A module entry file is a Beanstalk file whose file name starts with [codesnippet:#].
-    In directory projects, the compiler searches the configured entry root for [codesnippet:#*.bst] files.
-    [codesnippet:#config.bst] is not a module entry.
+    A module entry file is a Beanstalk file whose file name starts with `#`.
+    In directory projects, the compiler searches the configured entry root for `#*.bst` files.
+    `#config.bst` is not a module entry.
 
     Examples:
 
@@ -178,7 +178,7 @@ page_head #= theme_head
     ]
 
     Only module entry files have top-level runtime execution.
-    The compiler treats the entry file's top-level runtime code as an implicit [codesnippet:start] function for that module.
+    The compiler treats the entry file's top-level runtime code as an implicit `start` function for that module.
 
     Normal source files can contain imports, functions, structs, choices, type aliases, and constants.
     They should not rely on top-level runtime statements being executed by themselves.
@@ -187,7 +187,7 @@ page_head #= theme_head
 #[section, $markdown:
     # Builder-owned meaning of # file names
 
-    The compiler discovers [codesnippet:#*.bst] files as module entries.
+    The compiler discovers `#*.bst` files as module entries.
     The project builder decides what those entries mean.
 
     The HTML project builder currently treats them as page entries.
@@ -197,29 +197,29 @@ page_head #= theme_head
         [header: [: Entry file] [: HTML output path] ]
 
         [data:
-            [: [codesnippet:src/#page.bst]]
-            [: [codesnippet:index.html]]
+            [: [$html:<code>src/#page.bst</code>]]
+            [: [$html:<code>index.html</code>]]
         ]
 
         [data:
-            [: [codesnippet:src/docs/#page.bst]]
-            [: [codesnippet:docs/index.html]]
+            [: [$html:<code>src/docs/#page.bst</code>]]
+            [: [$html:<code>docs/index.html</code>]]
         ]
 
         [data:
-            [: [codesnippet:src/docs/basics/#page.bst]]
-            [: [codesnippet:docs/basics/index.html]]
+            [: [$html:<code>src/docs/basics/#page.bst</code>]]
+            [: [$html:<code>docs/basics/index.html</code>]]
         ]
 
         [data:
-            [: [codesnippet:src/#about.bst]]
-            [: [codesnippet:about/index.html]]
+            [: [$html:<code>src/#about.bst</code>]]
+            [: [$html:<code>about/index.html</code>]]
         ]
     ]
 
     This gives pages stable folder-backed routes.
-    A [codesnippet:#page.bst] file means "the index page for this folder".
-    Other [codesnippet:#name.bst] files become named routes under the same folder.
+    A `#page.bst` file means "the index page for this folder".
+    Other `#name.bst` files become named routes under the same folder.
 ]
 
 #[section, $markdown:
@@ -234,12 +234,12 @@ page_head #= theme_head
         [header: [: Form] [: Meaning] ]
 
         [data:
-            [: [codesnippet, "#[...]"]]
+            [: [$html:<code>["#[...]"]</code>]]
             [: A top-level const template. It must fold at compile time and is emitted as static HTML.]
         ]
 
         [data:
-            [: [codesnippet, "[...]"]]
+            [: [$html:<code>["[...]"]</code>]]
             [: A top-level runtime template. It is evaluated by the module's implicit start function and inserted into the page at runtime.]
         ]
     ]
@@ -290,7 +290,7 @@ page_head #= theme_head
 
         [data:
             [: Compile-time constant]
-            [: Written as [codesnippet:name #= value] or [codesnippet:name #Type = value]. It is importable as a declaration.]
+            [: Written as [$html:<code>name #= value</code>] or [$html:<code>name #Type = value</code>]. It is importable as a declaration.]
         ]
 
         [data:
@@ -305,11 +305,11 @@ page_head #= theme_head
 
         [data:
             [: Top-level template]
-            [: [codesnippet, "#[...]"] is not a normal exported value. It is an entry-file-only const page fragment.]
+            [: [$html:<code>["#[...]"]</code>] is not a normal exported value. It is an entry-file-only const page fragment.]
         ]
     ]
 
-    [codesnippet:#] no longer means public visibility. It marks compile-time constant bindings. Cross-module public visibility is controlled by [codesnippet:#mod.bst] facades.
+    `#` no longer means public visibility. It marks compile-time constant bindings. Cross-module public visibility is controlled by `#mod.bst` facades.
 
     Example helper file:
 
@@ -362,10 +362,10 @@ page_head #= theme_head
     Project-shape rules to remember:
 
     - files in the same module can import ordinary sibling source files directly
-    - imports that cross into another module root must go through that module's [codesnippet:#mod.bst] facade
-    - source-library prefixes come from [codesnippet:library_folders] or from the builder
-    - direct imports of [codesnippet:#mod.bst], [codesnippet:#page.bst], and [codesnippet:#config.bst] are rejected
-    - sibling [codesnippet:name.bst] / [codesnippet:name/] import-name collisions are rejected during project discovery
+    - imports that cross into another module root must go through that module's `#mod.bst` facade
+    - source-library prefixes come from `library_folders` or from the builder
+    - direct imports of `#mod.bst`, `#page.bst`, and `#config.bst` are rejected
+    - sibling `name.bst` / `name/` import-name collisions are rejected during project discovery
 
     In this shape:
 
@@ -379,8 +379,8 @@ page_head #= theme_head
             └── #page.bst
     ]
 
-    [codesnippet:src/#page.bst] can import [codesnippet:@components/card] directly because they are in the same module.
-    [codesnippet:src/docs/#page.bst] is a different module entry, so it imports the root module's public surface through [codesnippet:src/#mod.bst] instead of bypassing into [codesnippet:src/components/card.bst].
+    `src/#page.bst` can import `@components/card` directly because they are in the same module.
+    `src/docs/#page.bst` is a different module entry, so it imports the root module's public surface through `src/#mod.bst` instead of bypassing into `src/components/card.bst`.
 ]
 
 #[section, $markdown:
@@ -421,13 +421,13 @@ page_head #= theme_head
 
     The important part is the split:
 
-    - [codesnippet:src/] contains the root page, the root [codesnippet:#mod.bst] facade, and ordinary source files.
-    - [codesnippet:#page.bst] files define HTML pages and make their folders module boundaries.
-    - [codesnippet:styles/docs.bst] is a normal source file imported by the root facade and then selectively exposed to nested page modules with [codesnippet:export] declarations in [codesnippet:src/#mod.bst].
-    - [codesnippet:@html] is provided by the HTML builder.
-    - [codesnippet:lib/local_helpers/#mod.bst] would expose a project-local [codesnippet:@local_helpers] source library.
-    - [codesnippet:assets/] is a normal project folder for static files such as images.
-    - [codesnippet:dev/] and [codesnippet:release/] are output folders, not source folders.
+    - `src/` contains the root page, the root `#mod.bst` facade, and ordinary source files.
+    - `#page.bst` files define HTML pages and make their folders module boundaries.
+    - `styles/docs.bst` is a normal source file imported by the root facade and then selectively exposed to nested page modules with `export` declarations in `src/#mod.bst`.
+    - `@html` is provided by the HTML builder.
+    - `lib/local_helpers/#mod.bst` would expose a project-local `@local_helpers` source library.
+    - `assets/` is a normal project folder for static files such as images.
+    - `dev/` and `release/` are output folders, not source folders.
 ]
 
 #[section, $markdown:
@@ -440,23 +440,23 @@ page_head #= theme_head
 
         [data:
             [: Default / dev]
-            [: [codesnippet:#dev_folder], usually [codesnippet:dev].]
+            [: [$html:<code>#dev_folder</code>], usually [$html:<code>dev</code>].]
         ]
 
         [data:
-            [: [codesnippet:--release]]
-            [: [codesnippet:#output_folder], usually [codesnippet:release].]
+            [: [$html:<code>--release</code>]]
+            [: [$html:<code>#output_folder</code>], usually [$html:<code>release</code>].]
         ]
     ]
 
     In the default JS-backed HTML mode, each page module produces an HTML file.
     The generated JavaScript is embedded into that HTML file.
 
-    In the experimental [codesnippet:--html-wasm] mode, the builder can instead emit a route folder containing:
+    In the experimental `--html-wasm` mode, the builder can instead emit a route folder containing:
 
-    - [codesnippet:index.html]
-    - [codesnippet:page.js]
-    - [codesnippet:page.wasm]
+    - `index.html`
+    - `page.js`
+    - `page.wasm`
 
     The HTML builder owns stale-output cleanup for generated HTML artifacts.
     Generated output folders should be treated as build artifacts, not source.
@@ -465,17 +465,17 @@ page_head #= theme_head
 #[section, $markdown:
     # Module facades at a glance
 
-    [codesnippet:#mod.bst] is the public surface for a module root.
+    `#mod.bst` is the public surface for a module root.
     It is not a shared implementation file, and sibling files do not see its declarations automatically.
 
     Keep facades small and intentional:
 
-    - mark public wrapper functions, type aliases, structs, choices, traits, and constants with [codesnippet:export]
-    - re-export grouped symbols with [codesnippet:export import @path { Symbol }] or [codesnippet:export @path { Symbol }]
+    - mark public wrapper functions, type aliases, structs, choices, traits, and constants with `export`
+    - re-export grouped symbols with `export import @path { Symbol }` or `export @path { Symbol }`
     - keep unmarked declarations and normal imports private to the facade file
     - import private implementation details inside the facade when a wrapper needs them
     - do not put runtime top-level statements or runtime top-level templates in a facade
-    - do not expect a normal import inside [codesnippet:#mod.bst] to become public by itself
+    - do not expect a normal import inside `#mod.bst` to become public by itself
 
     [codeblock, $code("bst"):
         -- src/#mod.bst
@@ -496,22 +496,22 @@ page_head #= theme_head
         }
     ]
 
-    The same facade idea is used by project-local source libraries under [codesnippet:lib/<name>/#mod.bst].
+    The same facade idea is used by project-local source libraries under `lib/<name>/#mod.bst`.
     The detailed library, facade, core package, and JavaScript import guide is @../libraries (Libraries and modules).
 
     # Future extension points
 
     ## #test.bst test modules
 
-    A future [codesnippet:#test.bst] file can hold project tests.
+    A future `#test.bst` file can hold project tests.
     Normal builds would ignore it.
-    A planned test command could discover and run those files, similar to how [codesnippet:cargo test] discovers Rust tests.
+    A planned test command could discover and run those files, similar to how `cargo test` discovers Rust tests.
 
     This is separate from the current compiler-internal integration test runner.
 
     ## $doc documentation templates
 
-    The [codesnippet:$doc] style directive can eventually make documentation part of Beanstalk source.
+    The `$doc` style directive can eventually make documentation part of Beanstalk source.
     Top-level or nested doc templates could be stripped from normal output code, then collected by a documentation command.
 
     This would make documentation generation feel closer to Rust doc comments, but with Beanstalk's template system instead of comment syntax.

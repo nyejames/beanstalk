@@ -189,6 +189,11 @@ body {
         padding-left: var(--bst-spacing-small);
     }
 
+    .container code:not(.codeblock) {
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    }
+
     @media (min-width: 576px) {
         .container {
             max-width: 510px;
@@ -312,10 +317,7 @@ body {
         </div>
     </nav>
      <h1 style="font-size: 2em;text-align: center;"> TEMPLATES</h1>
-    <section class="container"><p>Beanstalk has unique, superpowered templating strings. Templates use <code class='codeblock'><span class='bst-code-parenthesis'>[</span><span class='bst-code-parenthesis'>]</span></code> exclusively - never confuse with collections <code class='codeblock'><span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span></code>.</p><p>These are the only way to create mutable strings, as double quotes are only used for string slices.</p><p>The main purpose of a template is to generate either complex text content, markdown, HTML or just regular formatted strings.</p><p>Templates have two sections separated by a colon:</p><ul><li>Head</li><li>Body</li></ul><p>This example creates the string <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    "> "head body"</span></p><pre style="
+    <section class="container"><p>Beanstalk has unique, superpowered templating strings. Templates use <code class='codeblock'><span class='bst-code-parenthesis'>[</span><span class='bst-code-parenthesis'>]</span></code> exclusively - never confuse with collections <code class='codeblock'><span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span></code>.</p><p>These are the only way to create mutable strings, as double quotes are only used for string slices.</p><p>The main purpose of a template is to generate either complex text content, markdown, HTML or just regular formatted strings.</p><p>Templates have two sections separated by a colon:</p><ul><li>Head</li><li>Body</li></ul><p>This example creates the string <code> &quot;head body&quot;</code></p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -324,40 +326,7 @@ body {
         overflow-x: auto;
     "><code class='codeblock'>
     <span class='bst-code-parenthesis'>[</span><span class='bst-code-string'>&quot;head&quot;</span><span class='bst-code-operator'>:</span> body<span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>Templates are scoped using square brackets and can be passed special types called Styles to change their behavior, content and styling.</p><p>Templates are either folded to strings at compile time, or become functions that return strings at runtime. </p><h2>Structure</h2><ul><li>Head and body separated by <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">:</span></li><li>Variable capture from the surrounding scope</li></ul><p>Templates unlock the full power of Beanstalk&#39;s HTML / CSS generation capabilities.</p><h2>Styles</h2><p>Templates can be used to build complex UI components. They can use slots to insert content from other templates and have <strong>style metadata</strong> attached to them.</p><p>A template&#39;s style is defined in the <strong>template head</strong> using <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    "> $</span> directives. </p><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">$</span> introduces <strong>compiler-handled directives</strong> (so they don&#39;t collide with normal variables and can be extended in the future), such as formatter-like built-ins, precedence controls, and default child templates that are automatically applied to direct child templates.</p><p>Directive availability is frontend-registry based:</p><ul><li>Frontend built-ins are available by default (<span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">$markdown</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">$code</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">$raw</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">$slot</span>, etc.).</li><li>Project builders can register additional project-specific directives using the same <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">$name</span> syntax. In the HTML project, that includes <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">$html</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">$css</span>, and <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">$escape_html</span>.</li><li>Unknown directives fail as syntax/rule errors unless they are registered.</li></ul><pre style="
+    </code></pre><p>Templates are scoped using square brackets and can be passed special types called Styles to change their behavior, content and styling.</p><p>Templates are either folded to strings at compile time, or become functions that return strings at runtime. </p><h2>Structure</h2><ul><li>Head and body separated by <code>:</code></li><li>Variable capture from the surrounding scope</li></ul><p>Templates unlock the full power of Beanstalk&#39;s HTML / CSS generation capabilities.</p><h2>Styles</h2><p>Templates can be used to build complex UI components. They can use slots to insert content from other templates and have <strong>style metadata</strong> attached to them.</p><p>A template&#39;s style is defined in the <strong>template head</strong> using <code> $</code> directives. <code>$</code> introduces <strong>compiler-handled directives</strong> (so they don&#39;t collide with normal variables and can be extended in the future), such as formatter-like built-ins, precedence controls, and default child templates that are automatically applied to direct child templates.</p><p>Directive availability is frontend-registry based:</p><ul><li>Frontend built-ins are available by default (<code>$markdown</code>, <code>$code</code>, <code>$raw</code>, <code>$slot</code>, etc.).</li><li>Project builders can register additional project-specific directives using the same <code>$name</code> syntax. In the HTML project, that includes <code>$html</code>, <code>$css</code>, and <code>$escape_html</code>.</li><li>Unknown directives fail as syntax/rule errors unless they are registered.</li></ul><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -376,55 +345,7 @@ body {
 
         <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>This</span> child is prefixed<span class='bst-code-operator'>!</span><span class='bst-code-parenthesis'>]</span>
     <span class='bst-code-parenthesis'>]</span>
-    </code></pre><p><strong>Frontend Built-in Style Directives</strong></p><ul><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">$slot</span> / <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">$insert(..)</span> - See slots below!</li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">$fresh</span>              - Opts this child template out of wrappers applied by the immediate parent&#39;s <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">$children(..)</span> directive</li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">$markdown</span>           - Parses the template bodies with a custom flavour of Markdown</li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">$code</span>               - Highlights code blocks using the compiler&#39;s built-in formatter</li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">$raw</span>                - Parses the template body as a raw string (no escaping, no formatting)</li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">$note / $todo</span>       - Comments (ignored by final output)</li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">$doc</span>                - Turns the template into a documentation comment</li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">$children(..)</span>       - Accepts a template (or string slice) that will be applied only to this template&#39;s direct child templates</li></ul><p><strong>HTML Project Directives</strong></p><ul><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">$html</span>               - Parses the template body as raw HTML (no escaping)</li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">$css</span>                - Provides some basic warnings for malformed CSS</li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">$escape_html</span>        - Escapes HTML-sensitive characters in the template body</li></ul><p>Formatting directives do not automatically flow into nested child templates. If a child template should keep using a formatter such as <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">$markdown</span>, redeclare it in that child template&#39;s head.</p><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">$fresh</span> is per-child and only affects wrapper application from the immediate parent. Siblings without <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">$fresh</span> still receive the parent wrappers:</p><pre style="
+    </code></pre><p><strong>Frontend Built-in Style Directives</strong></p><ul><li><code>$slot</code> / <code>$insert(..)</code> - See slots below!</li><li><code>$fresh</code>              - Opts this child template out of wrappers applied by the immediate parent&#39;s <code>$children(..)</code> directive</li><li><code>$markdown</code>           - Parses the template bodies with a custom flavour of Markdown</li><li><code>$code</code>               - Highlights code blocks using the compiler&#39;s built-in formatter</li><li><code>$raw</code>                - Parses the template body as a raw string (no escaping, no formatting)</li><li><code>$note / $todo</code>       - Comments (ignored by final output)</li><li><code>$doc</code>                - Turns the template into a documentation comment</li><li><code>$children(..)</code>       - Accepts a template (or string slice) that will be applied only to this template&#39;s direct child templates</li></ul><p><strong>HTML Project Directives</strong></p><ul><li><code>$html</code>               - Parses the template body as raw HTML (no escaping)</li><li><code>$css</code>                - Provides some basic warnings for malformed CSS</li><li><code>$escape_html</code>        - Escapes HTML-sensitive characters in the template body</li></ul><p>Formatting directives do not automatically flow into nested child templates. If a child template should keep using a formatter such as <code>$markdown</code>, redeclare it in that child template&#39;s head.</p><p><code>$fresh</code> is per-child and only affects wrapper application from the immediate parent. Siblings without <code>$fresh</code> still receive the parent wrappers:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -442,25 +363,19 @@ body {
         <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> one <span class='bst-code-parenthesis'>]</span>
         <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>fresh<span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> two <span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span>
     <span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>In this example, `one` is wrapped with `&lt;li&gt;...&lt;/li&gt;`, while `two` opts out and is rendered without the parent <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">$children(..)</span> wrapper.</p><h2>Slots</h2><p>Template slots let one template receive content from another template. The default slot is written as <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    "></span> and marks where the main body content should be inserted.</p><p>Named slots can also be declared with <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    "></span>. These allow helper templates to insert content into a specific part of another template using <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">$insert("name")</span>.</p><p>Positional slots can be declared using positive integers, such as <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    "></span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    "></span>, etc. Loose contributions (those not explicitly targetting a named slot) are assigned to positional slots first, in ascending numeric order. Any remaining loose contributions go to the default slot if it exists.</p><pre style="
+    </code></pre><p>In this example, <code>one</code> is wrapped with <code>&lt;li&gt;...&lt;/li&gt;</code>, while <code>two</code> opts out and is rendered without the parent <code>$children(..)</code> wrapper.</p><h2>Markdown inline code</h2><p><code>$markdown</code> supports small inline code spans with paired isolated single backticks on one line. Inline code renders as a normal HTML <code>code</code> element, preserves whitespace, escapes authored HTML-sensitive characters, and does not parse emphasis or links inside the span.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>markdown<span class='bst-code-operator'>:</span>
+        <span class='bst-code-struct'>Use</span> <span class='bst-code-operator'>`</span><span class='bst-code-keyword'>copy</span><span class='bst-code-operator'>`</span> when you need an explicit copy.
+        <span class='bst-code-struct'>Write</span> literal template syntax <span class='bst-code-keyword'>as</span> <span class='bst-code-operator'>`</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-string'>&quot;[$slot]&quot;</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-operator'>`</span>.
+    <span class='bst-code-parenthesis'>]</span>
+    </code></pre><p>Unmatched backticks and repeated backtick runs render literally. Triple-backtick fences, variable-length code-span delimiters, multiline code spans, and markdown-level backtick escaping are not part of Beanstalk markdown. Use <code>$code(...)</code> for larger code examples.</p><h2>Slots</h2><p>Template slots let one template receive content from another template. The default slot is written as <code>[$slot]</code> and marks where the main body content should be inserted.</p><p>Named slots can also be declared with <code>[$slot("name")]</code>. These allow helper templates to insert content into a specific part of another template using <code>$insert(&quot;name&quot;)</code>.</p><p>Positional slots can be declared using positive integers, such as <code>[$slot(1)]</code>, <code>[$slot(2)]</code>, etc. Loose contributions (those not explicitly targetting a named slot) are assigned to positional slots first, in ascending numeric order. Any remaining loose contributions go to the default slot if it exists.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -473,19 +388,7 @@ body {
     <span class='bst-code-parenthesis'>]</span>
 
     <span class='bst-code-parenthesis'>[</span>img, <span class='bst-code-string'>&quot;logo.png&quot;</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Site</span> logo<span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>In this example, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">"logo.png"</span> fills the first positional slot <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    "></span>, and <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">"Site logo"</span> fills the default <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">$slot</span>.</p><p>Named inserts:</p><pre style="
+    </code></pre><p>In this example, <code>&quot;logo.png&quot;</code> fills the first positional slot <code>[$slot(1)]</code>, and <code>&quot;Site logo&quot;</code> fills the default <code>$slot</code>.</p><p>Named inserts:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -504,25 +407,7 @@ body {
     <span class='bst-code-parenthesis'>[</span>title, blue<span class='bst-code-operator'>:</span>
         <span class='bst-code-struct'>Hello</span> world
     <span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>In this example, `blue` inserts <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">color: blue;</span> into the <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">$slot("style")</span> slot of `title`, while `Hello world` is inserted into the default <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">$slot</span>.</p><p>If a template has named or positional slots but no default slot, any loose body content that cannot be assigned to a positional slot is an error.  If a slot receives no content, it expands to an empty string. Repeated slots, such as two occurrences of <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    "></span>, will replay the same content in both places.</p><p>Slot applications may contain runtime-producing content. Runtime-capable templates support default, named, positional, and loose contributions from template <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">if</span> branches and template <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">loop</span> bodies. Valid runtime slot applications are routed during AST preparation, then lowered through ordinary runtime string accumulators. Missing slots still render as empty strings, and repeated slots replay the same accumulated contribution.</p><pre style="
+    </code></pre><p>In this example, <code>blue</code> inserts <code>color: blue;</code> into the <code>$slot(&quot;style&quot;)</code> slot of <code>title</code>, while <code>Hello world</code> is inserted into the default <code>$slot</code>.</p><p>If a template has named or positional slots but no default slot, any loose body content that cannot be assigned to a positional slot is an error.  If a slot receives no content, it expands to an empty string. Repeated slots, such as two occurrences of <code>[$slot(1)]</code>, will replay the same content in both places.</p><p>Slot applications may contain runtime-producing content. Runtime-capable templates support default, named, positional, and loose contributions from template <code>if</code> branches and template <code>loop</code> bodies. Valid runtime slot applications are routed during AST preparation, then lowered through ordinary runtime string accumulators. Missing slots still render as empty strings, and repeated slots replay the same accumulated contribution.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -548,16 +433,7 @@ body {
             <span class='bst-code-parenthesis'>[</span>item<span class='bst-code-parenthesis'>]</span>
         <span class='bst-code-parenthesis'>]</span>
     <span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>Because <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">$children(..)</span> only applies to direct child templates, nested helpers can scope row and cell wrappers independently.</p><p>A child template is treated as an opaque contribution after it has been selected as a direct child. The parent <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">$children(..)</span> wrapper must not descend into that child and wrap its nested templates. If nested templates need their own wrappers, the child template should declare its own <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">$children(..)</span> directive.</p><pre style="
+    </code></pre><p>Because <code>$children(..)</code> only applies to direct child templates, nested helpers can scope row and cell wrappers independently.</p><p>A child template is treated as an opaque contribution after it has been selected as a direct child. The parent <code>$children(..)</code> wrapper must not descend into that child and wrap its nested templates. If nested templates need their own wrappers, the child template should declare its own <code>$children(..)</code> directive.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -578,7 +454,7 @@ body {
     <span class='bst-code-parenthesis'>[</span>styled_table<span class='bst-code-operator'>:</span>
         <span class='bst-code-parenthesis'>[</span>row<span class='bst-code-operator'>:</span>
             <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Type</span><span class='bst-code-parenthesis'>]</span>
-            <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Description</span> with <span class='bst-code-parenthesis'>[</span>codesnippet<span class='bst-code-operator'>:</span>inline helper<span class='bst-code-parenthesis'>]</span> content<span class='bst-code-parenthesis'>]</span>
+            <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-struct'>Description</span> with <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>html<span class='bst-code-operator'>:</span><span class='bst-code-operator'>&lt;</span>code<span class='bst-code-operator'>&gt;</span>inline helper<span class='bst-code-operator'>&lt;</span><span class='bst-code-operator'>/</span>code<span class='bst-code-operator'>&gt;</span><span class='bst-code-parenthesis'>]</span> content<span class='bst-code-parenthesis'>]</span>
         <span class='bst-code-parenthesis'>]</span>
 
         <span class='bst-code-parenthesis'>[</span>row<span class='bst-code-operator'>:</span>
@@ -586,31 +462,7 @@ body {
             <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-number'>64</span><span class='bst-code-operator'>-</span>bit floating point number<span class='bst-code-parenthesis'>]</span>
         <span class='bst-code-parenthesis'>]</span>
     <span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>In that example, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">table</span> wraps each direct <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">row</span> child in <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    "><tr></span>. Then <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">row</span> wraps each direct cell child in <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    "><td></span>. The nested <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">codesnippet</span> helper inside a cell remains inline content inside that cell; it does not become another table cell.</p><h2>Template head suffix control flow</h2><p>Template control flow is written as the final suffix in the template head, immediately before the body colon. If the head already contains a value, helper, or directive, put a comma before <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">if</span> or <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">loop</span>.</p><pre style="
+    </code></pre><p>In that example, <code>table</code> wraps each direct <code>row</code> child in <code>&lt;tr&gt;</code>. Then <code>row</code> wraps each direct cell child in <code>&lt;td&gt;</code>. The nested inline <code>code</code> element inside a cell remains inline content inside that cell; it does not become another table cell.</p><h2>Template head suffix control flow</h2><p>Template control flow is written as the final suffix in the template head, immediately before the body colon. If the head already contains a value, helper, or directive, put a comma before <code>if</code> or <code>loop</code>.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -625,22 +477,7 @@ body {
     <span class='bst-code-parenthesis'>[</span>card, <span class='bst-code-keyword'>if</span> show<span class='bst-code-operator'>:</span>
         <span class='bst-code-struct'>Visible</span> inside card
     <span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>Boolean <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">if</span> conditions choose one branch lazily at runtime.</p><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">[else if ...]</span> adds more branches in source order and uses</p><p>the same Bool and option-present selectors as the initial <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">if</span>.</p><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">[else]</span> is optional, must be standalone, and binds to the nearest</p><p>active template <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">if</span>.</p><pre style="
+    </code></pre><p>Boolean <code>if</code> conditions choose one branch lazily at runtime. <code>[else if ...]</code> adds more branches in source order and uses the same Bool and option-present selectors as the initial <code>if</code>. <code>[else]</code> is optional, must be standalone, and binds to the nearest active template <code>if</code>.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -658,10 +495,7 @@ body {
     <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>else</span><span class='bst-code-parenthesis'>]</span>
         <span class='bst-code-struct'>Empty</span>
     <span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>Option-present captures use the normal <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">is |name|</span> form. The captured value is visible only inside the selected branch.</p><pre style="
+    </code></pre><p>Option-present captures use the normal <code>is |name|</code> form. The captured value is visible only inside the selected branch.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -679,25 +513,7 @@ body {
     <span class='bst-code-parenthesis'>[</span><span class='bst-code-keyword'>else</span><span class='bst-code-parenthesis'>]</span>
         <span class='bst-code-struct'>Hello</span> guest
     <span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>Full pattern-match branch chains belong to ordinary statement/value</p><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">if value is:</span> blocks, not template heads.</p><p>Template loops support conditional loops, collection loops, and numeric range loops using the same header syntax as statement loops. Conditional template loops do not take bindings. Collection and range loops can use a second binding for the zero-based index. Loops concatenate iterations directly; there is no implicit separator. Standalone <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">[break]</span> and</p><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">[continue]</span> sentinels are valid inside template loop bodies,</p><p>including nested template <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">if</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">[else if ...]</span>, and <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">[else]</span> bodies. They target the nearest active template loop and are structural control signals, not rendered output.</p><pre style="
+    </code></pre><p>Full pattern-match branch chains belong to ordinary statement/value <code>if value is:</code> blocks, not template heads.</p><p>Template loops support conditional loops, collection loops, and numeric range loops using the same header syntax as statement loops. Conditional template loops do not take bindings. Collection and range loops can use a second binding for the zero-based index. Loops concatenate iterations directly; there is no implicit separator. Standalone <code>[break]</code> and <code>[continue]</code> sentinels are valid inside template loop bodies, including nested template <code>if</code>, <code>[else if ...]</code>, and <code>[else]</code> bodies. They target the nearest active template loop and are structural control signals, not rendered output.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -741,73 +557,7 @@ body {
     <span class='bst-code-parenthesis'>[</span>list, <span class='bst-code-keyword'>loop</span> items <span class='bst-code-operator'>|</span>item<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-parenthesis'>[</span>row<span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>item<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span>
     <span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>A false <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">if</span> with no <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">[else]</span> produces structural no-output. A false conditional loop and zero-iteration collection or range loop also produce no-output. In those cases, shared head wrappers and parent</p><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">$children(..)</span> wrappers are skipped. A selected branch with an</p><p>empty body is still selected, so its head wrappers may render an empty wrapper. A loop iteration that reaches <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">[break]</span> or</p><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">[continue]</span> before any output also does not count as emitted.</p><p>Output before a loop-control sentinel is preserved.</p><p>Top-level <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#[if ...:]</span> and <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#[loop ...:]</span> fragments must fully fold at compile time. Const-required template <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">if</span> forms validate every branch body, even when one path is inactive. Const-required conditional template loops fold to no-output when their condition is compile-time <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">false</span>. Compile-time <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">true</span> and unknown/runtime conditional-loop conditions are rejected because the compiler does not perform template loop termination analysis. Const range and collection template loops can fold structural <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">[break]</span> and <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">[continue]</span>, and use the</p><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">template_const_loop_iteration_limit</span> project config guard. The</p><p>default is <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">10_000</span> iterations per const template loop, and the configured value must be a positive folded <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Int</span> no greater than</p><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">1_000_000</span>.</p><p>Runtime template control flow stays lazy. Only the selected <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">if</span> branch is evaluated. Range and collection loop sources are evaluated once before iteration; conditional loop conditions are evaluated before every iteration. Expression-level <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">!</span> inside selected branch or loop content propagates from the enclosing function.</p><p>Runtime slot applications are valid inside template control flow after normal slot routing. Escaped helper artifacts that still leave unresolved <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    "></span> or <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">$insert(...)</span> output inside runtime control-flow bodies are invalid template structure. Runtime slot applications appended inside template loops follow the same nearest-template-loop <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">[break]</span> / <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">[continue]</span> rules as direct loop body content.</p></section>
+    </code></pre><p>A false <code>if</code> with no <code>[else]</code> produces structural no-output. A false conditional loop and zero-iteration collection or range loop also produce no-output. In those cases, shared head wrappers and parent <code>$children(..)</code> wrappers are skipped. A selected branch with an empty body is still selected, so its head wrappers may render an empty wrapper. A loop iteration that reaches <code>[break]</code> or <code>[continue]</code> before any output also does not count as emitted. Output before a loop-control sentinel is preserved.</p><p>Top-level <code>#[if ...:]</code> and <code>#[loop ...:]</code> fragments must fully fold at compile time. Const-required template <code>if</code> forms validate every branch body, even when one path is inactive. Const-required conditional template loops fold to no-output when their condition is compile-time <code>false</code>. Compile-time <code>true</code> and unknown/runtime conditional-loop conditions are rejected because the compiler does not perform template loop termination analysis. Const range and collection template loops can fold structural <code>[break]</code> and <code>[continue]</code>, and use the <code>template_const_loop_iteration_limit</code> project config guard. The default is <code>10_000</code> iterations per const template loop, and the configured value must be a positive folded <code>Int</code> no greater than <code>1_000_000</code>.</p><p>Runtime template control flow stays lazy. Only the selected <code>if</code> branch is evaluated. Range and collection loop sources are evaluated once before iteration; conditional loop conditions are evaluated before every iteration. Expression-level <code>!</code> inside selected branch or loop content propagates from the enclosing function.</p><p>Runtime slot applications are valid inside template control flow after normal slot routing. Escaped helper artifacts that still leave unresolved <code>[$slot]</code> or <code>$insert(...)</code> output inside runtime control-flow bodies are invalid template structure. Runtime slot applications appended inside template loops follow the same nearest-template-loop <code>[break]</code> / <code>[continue]</code> rules as direct loop body content.</p></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

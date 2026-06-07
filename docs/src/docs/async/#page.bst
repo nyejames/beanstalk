@@ -1,5 +1,5 @@
 import @html {center}
-import @styles/docs {navbar, title, section, styled_table, header, data, codeblock, codesnippet, theme_head}
+import @styles/docs {navbar, title, section, styled_table, header, data, codeblock, theme_head}
 
 page_title #= "Coroutines and Async in Beanstalk"
 page_description #= "Design draft for structured async, coroutines, channels, and explicit suspension in Beanstalk."
@@ -14,7 +14,7 @@ page_head #= theme_head
 
     Beanstalk approaches async and concurrency by making **control flow explicit** and **communication safe by default**.
 
-    Instead of hiding async behind keywords like [codesnippet:async] / [codesnippet:await] or complex runtime abstractions,
+    Instead of hiding async behind keywords like `async` / `await` or complex runtime abstractions,
     Beanstalk uses a small set of primitives that make data flow, suspension, and concurrency visible in the syntax.
 
     At a high level:
@@ -38,37 +38,37 @@ page_head #= theme_head
 
         [data:
             [: Channels ]
-            [: [codesnippet:Channel(Int)] ]
+            [: [$html:<code>Channel(Int)</code>] ]
             [: Create typed communication endpoints ]
         ]
 
         [data:
             [: Send ]
-            [: [codesnippet:>>] ]
+            [: [$html:<code>&gt;&gt;</code>] ]
             [: Move or pass a value into a channel ]
         ]
 
         [data:
             [: Receive ]
-            [: [codesnippet:<<] ]
+            [: [$html:<code>&lt;&lt;</code>] ]
             [: Wait for a value from a channel ]
         ]
 
         [data:
             [: Coroutine ]
-            [: [codesnippet:spawn] ]
+            [: [$html:<code>spawn</code>] ]
             [: Start cooperative work inside an async scope ]
         ]
 
         [data:
             [: Suspension ]
-            [: [codesnippet:yield] ]
+            [: [$html:<code>yield</code>] ]
             [: Explicitly give control back to the scheduler ]
         ]
 
         [data:
             [: Scope ]
-            [: [codesnippet:async:] ]
+            [: [$html:<code>async:</code>] ]
             [: Bound the lifetime of spawned coroutines ]
         ]
     ]
@@ -85,7 +85,7 @@ page_head #= theme_head
 
     Instead, they communicate by sending values through typed channels.
 
-    A channel is created with [codesnippet:Channel], which takes a carried value type and returns two endpoints:
+    A channel is created with `Channel`, which takes a carried value type and returns two endpoints:
 
     [codeblock, $code("bst"):
         reader, writer = Channel(Int)
@@ -93,9 +93,9 @@ page_head #= theme_head
 
     In this example:
 
-    - [codesnippet:writer] is the sending endpoint
-    - [codesnippet:reader] is the receiving endpoint
-    - the channel carries values of type [codesnippet:Int]
+    - `writer` is the sending endpoint
+    - `reader` is the receiving endpoint
+    - the channel carries values of type `Int`
 
     You can think of this as a one-way pipe for values of a specific type.
 ]
@@ -103,7 +103,7 @@ page_head #= theme_head
 #[section, $markdown:
     # Sending values
 
-    Values are sent into a channel with [codesnippet:>>].
+    Values are sent into a channel with `>>`.
 
     [codeblock, $code("bst"):
         value >> writer
@@ -119,13 +119,13 @@ page_head #= theme_head
 #[section, $markdown:
     # Receiving values
 
-    Values are received from a channel with [codesnippet:<<].
+    Values are received from a channel with `<<`.
 
     [codeblock, $code("bst"):
         value << reader
     ]
 
-    The value flows left out of the channel and is assigned to [codesnippet:value].
+    The value flows left out of the channel and is assigned to `value`.
 
     Receiving may suspend the current coroutine until a value is available.
 
@@ -137,7 +137,7 @@ page_head #= theme_head
 
     A coroutine is a function that can suspend and resume execution.
 
-    Coroutines are started with [codesnippet:spawn] and must run inside an [codesnippet:async] scope.
+    Coroutines are started with `spawn` and must run inside an `async` scope.
 
     Example coroutine functions:
 
@@ -159,8 +159,8 @@ page_head #= theme_head
 
     In this example:
 
-    - [codesnippet:producer] sends integers into the channel
-    - [codesnippet:consumer] receives and prints them
+    - `producer` sends integers into the channel
+    - `consumer` receives and prints them
     - neither coroutine shares mutable memory directly
     - all interaction happens through the channel
 ]
@@ -168,7 +168,7 @@ page_head #= theme_head
 #[section, $markdown:
     # Yield
 
-    [codesnippet:yield] explicitly suspends the current coroutine and allows other coroutines to run.
+    `yield` explicitly suspends the current coroutine and allows other coroutines to run.
 
     [codeblock, $code("bst"):
         yield
@@ -190,7 +190,7 @@ page_head #= theme_head
         ;
     ]
 
-    Here, [codesnippet:yield] prevents one long-running coroutine from starving others.
+    Here, `yield` prevents one long-running coroutine from starving others.
 
     Suspension is always visible in the code.
 
@@ -200,7 +200,7 @@ page_head #= theme_head
 #[section, $markdown:
     # Structured async scopes
 
-    Coroutines run inside an [codesnippet:async] scope.
+    Coroutines run inside an `async` scope.
 
     [codeblock, $code("bst"):
         async:
@@ -208,7 +208,7 @@ page_head #= theme_head
         ;
     ]
 
-    An [codesnippet:async] scope means:
+    An `async` scope means:
 
     - coroutines may be spawned inside the scope
     - suspension is allowed inside the scope
@@ -241,7 +241,7 @@ page_head #= theme_head
 
     Beanstalk should avoid making async infect every function type by default.
 
-    The draft model does not rely on a special [codesnippet, "Future[T]"] return type everywhere, and it does not require every caller to become async just because one operation may suspend.
+    The draft model does not rely on a special `["Future[T]"]` return type everywhere, and it does not require every caller to become async just because one operation may suspend.
 
     Instead:
 
@@ -306,9 +306,9 @@ page_head #= theme_head
 
     This example has three visible forms of async behavior:
 
-    - [codesnippet:spawn] starts concurrent work
-    - [codesnippet:>>] and [codesnippet:<<] communicate through the channel
-    - [codesnippet:yield] explicitly gives the scheduler a chance to run other work
+    - `spawn` starts concurrent work
+    - `>>` and `<<` communicate through the channel
+    - `yield` explicitly gives the scheduler a chance to run other work
 ]
 
 #[section, $markdown:
@@ -366,7 +366,7 @@ page_head #= theme_head
     - select-style waiting on multiple channels
     - async host function imports
     - interaction with closures and captured mutable access
-    - whether [codesnippet, "Channel[Int]"] remains the final channel type syntax
+    - whether `["Channel[Int]"]` remains the final channel type syntax
 
     These should be designed as extensions, not packed into the first implementation.
 ]
@@ -402,12 +402,12 @@ page_head #= theme_head
 
     The core primitives are:
 
-    - [codesnippet:Channel(T)] creates typed channel endpoints
-    - [codesnippet:>>] sends values
-    - [codesnippet:<<] receives values
-    - [codesnippet:yield] suspends the current coroutine
-    - [codesnippet:spawn] starts a coroutine inside an async scope
-    - [codesnippet:async:] defines the structured concurrency boundary
+    - `Channel(T)` creates typed channel endpoints
+    - `>>` sends values
+    - `<<` receives values
+    - `yield` suspends the current coroutine
+    - `spawn` starts a coroutine inside an async scope
+    - `async:` defines the structured concurrency boundary
 
     The core rule is:
 

@@ -1,5 +1,5 @@
 import @html {center}
-import @styles/docs {navbar, title, section, codeblock, codesnippet, theme_head}
+import @styles/docs {navbar, title, section, codeblock, theme_head}
 
 page_title #= "Core Math"
 page_description #= "Math constants and Float helper functions."
@@ -9,10 +9,10 @@ page_head #= theme_head
 #[title, center: CORE MATH]
 
 #[section, $markdown:
-    [codesnippet:@core/math] provides common [codesnippet:Float] constants and helper functions.
+    `@core/math` provides common `Float` constants and helper functions.
 
-    Constants include [codesnippet:PI], [codesnippet:TAU], and [codesnippet:E].
-    Functions include [codesnippet:sin], [codesnippet:cos], [codesnippet:tan], [codesnippet:atan2], [codesnippet:log], [codesnippet:pow], [codesnippet:sqrt], [codesnippet:abs], [codesnippet:min], [codesnippet:max], and [codesnippet:clamp].
+    Constants include `PI`, `TAU`, and `E`.
+    Functions include `sin`, `cos`, `tan`, `atan2`, `log`, `pow`, `sqrt`, `abs`, `min`, `max`, and `clamp`.
 
     [codeblock, $code("bst"):
         import @core/math {PI, sin, clamp}
@@ -23,5 +23,5 @@ page_head #= theme_head
         io([:bounded=[bounded]])
     ]
 
-    On the HTML JavaScript path these helpers lower to JavaScript [codesnippet:Math] expressions.
+    On the HTML JavaScript path these helpers lower to JavaScript `Math` expressions.
 ]

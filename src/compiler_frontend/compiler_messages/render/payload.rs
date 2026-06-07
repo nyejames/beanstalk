@@ -30,7 +30,7 @@ pub(crate) fn render_payload(
             )]
         }
         DiagnosticPayload::UnescapedImplicitTemplateClose { .. } => vec![
-            "Escape a literal closing bracket as `\\]`, or insert one through a nested expression such as `[']']`.".to_owned(),
+            "Insert a literal closing bracket through a nested string expression such as `[\"]\"]`.".to_owned(),
         ],
         DiagnosticPayload::TypeMismatch {
             expected, found, ..

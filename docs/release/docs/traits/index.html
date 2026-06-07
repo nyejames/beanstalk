@@ -189,6 +189,11 @@ body {
         padding-left: var(--bst-spacing-small);
     }
 
+    .container code:not(.codeblock) {
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    }
+
     @media (min-width: 576px) {
         .container {
             max-width: 510px;
@@ -312,14 +317,8 @@ body {
         </div>
     </nav>
      <h1 style="font-size: 2em;text-align: center;"> TRAITS IN BEANSTALK</h1>
-    <section class="container"><p>Traits define named behavioural contracts for types.</p><p>Beanstalk traits are explicit and nominal: a type satisfies a trait only when source declares <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Type must TRAIT</span>. Matching method shapes alone are not conformance.</p><p>A trait name in a normal type annotation means a dynamic trait value. A trait name in a generic bound constrains a concrete generic parameter. These are different features.</p></section>
-    <section class="container"><h1>Trait declarations</h1><p>Trait declarations use <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">must:</span> and contain method requirements.</p><pre style="
+    <section class="container"><p>Traits define named behavioural contracts for types.</p><p>Beanstalk traits are explicit and nominal: a type satisfies a trait only when source declares <code>Type must TRAIT</code>. Matching method shapes alone are not conformance.</p><p>A trait name in a normal type annotation means a dynamic trait value. A trait name in a generic bound constrains a concrete generic parameter. These are different features.</p></section>
+    <section class="container"><h1>Trait declarations</h1><p>Trait declarations use <code>must:</code> and contain method requirements.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -331,10 +330,7 @@ body {
         display <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span>
     ;
     </code></pre><p>Rules:</p><ul><li>trait names are all caps</li><li>trait declarations are top-level declarations</li><li>requirements are method signatures only</li><li>empty marker traits are valid</li><li>default methods, associated types, associated constants, trait inheritance, generic traits, and generic trait methods are deferred</li></ul></section>
-    <section class="container"><h1>This and mutable receivers</h1><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">This</span> is valid only inside trait declarations. It means the concrete implementing type.</p><pre style="
+    <section class="container"><h1>This and mutable receivers</h1><p><code>This</code> is valid only inside trait declarations. It means the concrete implementing type.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -345,49 +341,7 @@ body {
     <span class='bst-code-struct'>RESETTABLE</span> must<span class='bst-code-operator'>:</span>
         reset <span class='bst-code-operator'>|</span><span class='bst-code-operator'>~</span><span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span>
     ;
-    </code></pre><p>Rules:</p><ul><li>the first requirement parameter must be <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">This</span> or <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">~This</span></li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">This</span> means an immutable receiver requirement</li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">~This</span> means a mutable receiver requirement</li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">~This</span> is valid only as the first parameter</li><li>direct non-receiver <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">This</span> parameters must be named, such as <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">other This</span></li><li>bare non-receiver <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">This</span> is rejected because only the receiver may omit a name</li><li>direct <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">This</span> returns are supported</li><li>composed forms such as <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">This?</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">{This}</span>, and <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Box of This</span> are rejected in the Alpha surface</li><li>lowercase <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">this</span> is not valid in trait requirements</li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">This</span> outside trait declarations is rejected</li></ul></section>
+    </code></pre><p>Rules:</p><ul><li>the first requirement parameter must be <code>This</code> or <code>~This</code></li><li><code>This</code> means an immutable receiver requirement</li><li><code>~This</code> means a mutable receiver requirement</li><li><code>~This</code> is valid only as the first parameter</li><li>direct non-receiver <code>This</code> parameters must be named, such as <code>other This</code></li><li>bare non-receiver <code>This</code> is rejected because only the receiver may omit a name</li><li>direct <code>This</code> returns are supported</li><li>composed forms such as <code>This?</code>, <code>{This}</code>, and <code>Box of This</code> are rejected in the Alpha surface</li><li>lowercase <code>this</code> is not valid in trait requirements</li><li><code>This</code> outside trait declarations is rejected</li></ul></section>
     <section class="container"><h1>Explicit conformance</h1><p>A conformance declaration states that a type implements one or more traits.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
@@ -435,17 +389,8 @@ body {
      <td style="padding: 0.2em 0.5em;  "> Usable only in the declaring file.</td>
         </tr>
         
-    </table><p>File-local extension evidence is useful for local adapter code, but it is never exportable as a reusable conformance fact. It also cannot override visible canonical evidence.</p><p>User-authored conformances for builtin scalar types such as <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Int must DISPLAY_TEXT</span> are file-local extensions. Compiler-owned builtin evidence is a separate metadata path, but it is not registered in the current Alpha scaffold.</p></section>
-    <section class="container"><h1>Static generic bounds</h1><p>Generic bounds use <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">is</span>, not <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">must</span>.</p><pre style="
+    </table><p>File-local extension evidence is useful for local adapter code, but it is never exportable as a reusable conformance fact. It also cannot override visible canonical evidence.</p><p>User-authored conformances for builtin scalar types such as <code>Int must DISPLAY_TEXT</code> are file-local extensions. Compiler-owned builtin evidence is a separate metadata path, but it is not registered in the current Alpha scaffold.</p></section>
+    <section class="container"><h1>Static generic bounds</h1><p>Generic bounds use <code>is</code>, not <code>must</code>.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -456,10 +401,7 @@ body {
     render type <span class='bst-code-struct'>Item</span> is <span class='bst-code-struct'>DISPLAY_TEXT</span> <span class='bst-code-operator'>|</span>item <span class='bst-code-struct'>Item</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-keyword'>return</span> item.display<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
     ;
-    </code></pre><p>Multiple bounds on one parameter use <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">and</span>:</p><pre style="
+    </code></pre><p>Multiple bounds on one parameter use <code>and</code>:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -485,40 +427,10 @@ body {
 
     text <span class='bst-code-operator'>=</span> render_dynamic<span class='bst-code-parenthesis'>(</span><span class='bst-code-struct'>Label</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;hello&quot;</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>)</span>
     </code></pre><p>Dynamic trait values erase the concrete type and expose only the trait surface. They are runtime-only opaque owning wrappers in the current Alpha surface, not static evidence for generic bounds.</p><p>Dynamic coercion from a concrete value happens only at explicit typed boundaries:</p><ul><li>annotated declarations</li><li>function arguments</li><li>function returns</li><li>struct fields</li><li>choice payloads</li><li>explicitly typed collection elements</li></ul><p>Unannotated locals and collection literals do not infer trait values.</p></section>
-    <section class="container"><h1>Dynamic-safe traits</h1><p>All traits can be used as generic bounds. Only dynamic-safe traits can be used as dynamic value types.</p><p>A trait is dynamic-safe when its requirements do not need the erased concrete type again after wrapping. Requirements that return <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">This</span>, take <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">This</span> as a non-receiver parameter, or otherwise require concrete identity are bound-only and cannot be used as dynamic value annotations.</p><p>When static dispatch is intended, write a generic bound with <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">type T is TRAIT</span> instead of annotating a value directly with <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">TRAIT</span>.</p></section>
+    <section class="container"><h1>Dynamic-safe traits</h1><p>All traits can be used as generic bounds. Only dynamic-safe traits can be used as dynamic value types.</p><p>A trait is dynamic-safe when its requirements do not need the erased concrete type again after wrapping. Requirements that return <code>This</code>, take <code>This</code> as a non-receiver parameter, or otherwise require concrete identity are bound-only and cannot be used as dynamic value annotations.</p><p>When static dispatch is intended, write a generic bound with <code>type T is TRAIT</code> instead of annotating a value directly with <code>TRAIT</code>.</p></section>
     <section class="container"><h1>Dispatch and backends</h1><p>Ordinary concrete receiver methods resolve before trait evidence. If no ordinary method is visible, visible trait evidence can make a trait-surface method callable.</p><p>Dynamic trait method calls dispatch through the wrapper&#39;s method table in the JavaScript backend. HTML-Wasm rejects reachable dynamic trait construction and dynamic dispatch with a structured unsupported-backend diagnostic before Wasm lowering. Dynamic-only helper functions that are not reachable from the page entry do not block an HTML-Wasm build.</p></section>
-    <section class="container"><h1>DISPLAYABLE scaffold</h1><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">DISPLAYABLE</span> exists as compiler-owned trait metadata for conformance and generic-bound tests.</p><p>It does not change <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">io(...)</span>, template interpolation, string coercion, equality, or operators. Implement <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">display |This| -> String</span> yourself and call it explicitly.</p></section>
-    <section class="container"><h1>Deferred trait ecosystem</h1><p>Deferred surfaces include:</p><ul><li>default methods</li><li>associated types and associated constants</li><li>trait inheritance and composition</li><li>generic traits and generic trait methods</li><li>specialized generic instance conformance such as <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Box of Int must DISPLAY_TEXT</span></li><li>static requirements that are not receiver methods</li><li>conditional conformances</li><li>dynamic trait composition</li><li>dynamic trait aliases</li><li>downcasting, reflection, and pattern matching on erased concrete types</li><li>composed <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">This</span> forms</li><li>file-local evidence-backed generic bound dispatch</li><li>automatic primitive conformances</li><li>output coercion through <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">DISPLAYABLE</span></li><li>operator-to-trait integration</li><li>Wasm dynamic trait runtime lowering</li><li>deriving, hashing, ordering, formatting, iteration, and serialization traits</li></ul></section>
+    <section class="container"><h1>DISPLAYABLE scaffold</h1><p><code>DISPLAYABLE</code> exists as compiler-owned trait metadata for conformance and generic-bound tests.</p><p>It does not change <code>io(...)</code>, template interpolation, string coercion, equality, or operators. Implement <code>display |This| -&gt; String</code> yourself and call it explicitly.</p></section>
+    <section class="container"><h1>Deferred trait ecosystem</h1><p>Deferred surfaces include:</p><ul><li>default methods</li><li>associated types and associated constants</li><li>trait inheritance and composition</li><li>generic traits and generic trait methods</li><li>specialized generic instance conformance such as <code>Box of Int must DISPLAY_TEXT</code></li><li>static requirements that are not receiver methods</li><li>conditional conformances</li><li>dynamic trait composition</li><li>dynamic trait aliases</li><li>downcasting, reflection, and pattern matching on erased concrete types</li><li>composed <code>This</code> forms</li><li>file-local evidence-backed generic bound dispatch</li><li>automatic primitive conformances</li><li>output coercion through <code>DISPLAYABLE</code></li><li>operator-to-trait integration</li><li>Wasm dynamic trait runtime lowering</li><li>deriving, hashing, ordering, formatting, iteration, and serialization traits</li></ul></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

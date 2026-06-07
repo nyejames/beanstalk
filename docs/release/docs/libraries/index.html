@@ -189,6 +189,11 @@ body {
         padding-left: var(--bst-spacing-small);
     }
 
+    .container code:not(.codeblock) {
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    }
+
     @media (min-width: 576px) {
         .container {
             max-width: 510px;
@@ -322,71 +327,35 @@ body {
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Source library</td>
-     <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">import @helper {double}</span> </td>
-     <td style="padding: 0.2em 0.5em;  "> Normal <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">.bst</span> source behind a <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#mod.bst</span> facade.</td>
+     <td style="padding: 0.2em 0.5em;  "> <code>import @helper {double}</code> </td>
+     <td style="padding: 0.2em 0.5em;  "> Normal <code>.bst</code> source behind a <code>#mod.bst</code> facade.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Builder source library</td>
-     <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">import @html {center}</span> </td>
-     <td style="padding: 0.2em 0.5em;  "> Builder-provided <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">.bst</span> source. The HTML builder provides <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@html</span>.</td>
+     <td style="padding: 0.2em 0.5em;  "> <code>import @html {center}</code> </td>
+     <td style="padding: 0.2em 0.5em;  "> Builder-provided <code>.bst</code> source. The HTML builder provides <code>@html</code>.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Core external package</td>
-     <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">import @core/math {sin, PI}</span> </td>
-     <td style="padding: 0.2em 0.5em;  "> Typed functions and constants registered by the builder. These do not have to come from <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">.bst</span> files.</td>
+     <td style="padding: 0.2em 0.5em;  "> <code>import @core/math {sin, PI}</code> </td>
+     <td style="padding: 0.2em 0.5em;  "> Typed functions and constants registered by the builder. These do not have to come from <code>.bst</code> files.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> JavaScript library</td>
-     <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">import @./drawing.js {draw}</span> </td>
-     <td style="padding: 0.2em 0.5em;  "> An annotated <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">.js</span> file parsed into Beanstalk-visible types and functions.</td>
+     <td style="padding: 0.2em 0.5em;  "> <code>import @./drawing.js {draw}</code> </td>
+     <td style="padding: 0.2em 0.5em;  "> An annotated <code>.js</code> file parsed into Beanstalk-visible types and functions.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Builder runtime library</td>
-     <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">import @web/canvas {get_canvas}</span> </td>
+     <td style="padding: 0.2em 0.5em;  "> <code>import @web/canvas {get_canvas}</code> </td>
      <td style="padding: 0.2em 0.5em;  "> A builder-owned JavaScript library bundled with the project builder.</td>
         </tr>
         
-    </table><p>The current canvas library is exposed as <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@web/canvas</span>. This page calls it the canvas library, but examples use the current full import path.</p></section>
+    </table><p>The current canvas library is exposed as <code>@web/canvas</code>. This page calls it the canvas library, but examples use the current full import path.</p></section>
     <section class="container"><h1>Core library pages</h1><p>Core libraries are builder-provided packages for common language-adjacent work. Most core packages require explicit imports, while the prelude keeps only the smallest always-available surface bare.</p><ul><li><a href="./core">Core library overview</a></li><li><a href="./core/prelude">Prelude</a></li><li><a href="./core/io">IO</a></li><li><a href="./core/collections">Collections</a></li><li><a href="./core/math">Math</a></li><li><a href="./core/text">Text</a></li><li><a href="./core/random">Random</a></li><li><a href="./core/time">Time</a></li></ul></section>
     <section class="container"><h1>Import forms</h1><p>Imports target a declaration surface, not a raw folder dump.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
@@ -410,62 +379,8 @@ body {
 
     <span class='bst-code-comment'>-- Import a project-local source library.</span>
     import <span class='bst-code-operator'>@</span>helper <span class='bst-code-parenthesis'>{</span>double<span class='bst-code-parenthesis'>}</span>
-    </code></pre><p>General rules:</p><ul><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@./</span> resolves relative to the importing file.</li><li>parent-directory imports with <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">..</span> are not supported.</li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">.bst</span> imports are extensionless.</li><li>direct <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">.js</span> imports keep the <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">.js</span> extension.</li><li>source-library imports use their library prefix directly, such as <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@helper</span> or <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@html</span>.</li><li>non-relative imports whose first path segment matches a source-library prefix resolve from that library root.</li><li>other non-relative source imports resolve from the project&#39;s configured <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">entry_root</span>.</li><li>core and builder runtime packages use their registered package path, such as <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@core/math</span> or <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@web/canvas</span>.</li><li>specific symbol imports use grouped syntax. Direct symbol-path imports such as <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">import @core/math/sin</span> are rejected.</li><li>direct imports of special files such as <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#mod.bst</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#page.bst</span>, and <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#config.bst</span> are rejected.</li><li>folder imports across module boundaries require a <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#mod.bst</span> facade. Import concrete same-module files directly when no facade is intended.</li></ul><p>Namespace imports create a shallow namespace for ordinary fields. Use <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">math.sin(1.0)</span> for values and <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">canvas.Canvas2d</span> in type position, but do not pass the namespace record itself as a value. Receiver methods are called through receiver-call syntax rather than as namespace fields.</p></section>
-    <section class="container"><h1>Source libraries</h1><p>Source libraries are normal Beanstalk source roots. A project-local source library usually lives under a configured <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">library_folders</span> folder. Each direct child directory of that folder becomes an import prefix.</p><pre style="
+    </code></pre><p>General rules:</p><ul><li><code>@./</code> resolves relative to the importing file.</li><li>parent-directory imports with <code>..</code> are not supported.</li><li><code>.bst</code> imports are extensionless.</li><li>direct <code>.js</code> imports keep the <code>.js</code> extension.</li><li>source-library imports use their library prefix directly, such as <code>@helper</code> or <code>@html</code>.</li><li>non-relative imports whose first path segment matches a source-library prefix resolve from that library root.</li><li>other non-relative source imports resolve from the project&#39;s configured <code>entry_root</code>.</li><li>core and builder runtime packages use their registered package path, such as <code>@core/math</code> or <code>@web/canvas</code>.</li><li>specific symbol imports use grouped syntax. Direct symbol-path imports such as <code>import @core/math/sin</code> are rejected.</li><li>direct imports of special files such as <code>#mod.bst</code>, <code>#page.bst</code>, and <code>#config.bst</code> are rejected.</li><li>folder imports across module boundaries require a <code>#mod.bst</code> facade. Import concrete same-module files directly when no facade is intended.</li></ul><p>Namespace imports create a shallow namespace for ordinary fields. Use <code>math.sin(1.0)</code> for values and <code>canvas.Canvas2d</code> in type position, but do not pass the namespace record itself as a value. Receiver methods are called through receiver-call syntax rather than as namespace fields.</p></section>
+    <section class="container"><h1>Source libraries</h1><p>Source libraries are normal Beanstalk source roots. A project-local source library usually lives under a configured <code>library_folders</code> folder. Each direct child directory of that folder becomes an import prefix.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -493,22 +408,7 @@ body {
     library_folders <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span>
         <span class='bst-code-string'>&quot;lib&quot;</span>,
     <span class='bst-code-parenthesis'>}</span>
-    </code></pre><p>The direct child folder <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">lib/helper</span> becomes the <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@helper</span> library prefix. The library&#39;s public surface is controlled by <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">lib/helper/#mod.bst</span>. Ordinary project source under <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">entry_root</span> is not automatically a source-library prefix. If a nested page module needs declarations from another module, expose them through that module&#39;s <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#mod.bst</span> facade instead of bypassing into private files.</p><p>A minimal library facade can define declarations directly:</p><pre style="
+    </code></pre><p>The direct child folder <code>lib/helper</code> becomes the <code>@helper</code> library prefix. The library&#39;s public surface is controlled by <code>lib/helper/#mod.bst</code>. Ordinary project source under <code>entry_root</code> is not automatically a source-library prefix. If a nested page module needs declarations from another module, expose them through that module&#39;s <code>#mod.bst</code> facade instead of bypassing into private files.</p><p>A minimal library facade can define declarations directly:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -564,29 +464,8 @@ body {
         double,
         label <span class='bst-code-keyword'>as</span> helper_label,
     <span class='bst-code-parenthesis'>}</span>
-    </code></pre><p>Facade rules:</p><ul><li>outside importers can only see declarations and grouped imports marked with <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">export</span> in <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#mod.bst</span></li><li>internal implementation files are not public unless the facade wraps or re-exports them intentionally</li><li>normal imports inside <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#mod.bst</span> are local implementation details</li><li>exported signatures cannot expose private facade-only types</li><li>receiver methods do not become public through facade type aliases; export the receiver method or a wrapper explicitly</li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#mod.bst</span> is not shared implementation code for sibling files</li><li>runtime top-level statements and runtime top-level templates are invalid in <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#mod.bst</span></li><li>bare namespace exports such as <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">export @./utils</span> and wildcard exports remain deferred</li></ul></section>
-    <section class="container"><h1>Builder source libraries</h1><p>Builders can provide source libraries without requiring those files to exist in the user&#39;s project. The HTML builder provides the <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@html</span> source library used throughout these docs.</p><pre style="
+    </code></pre><p>Facade rules:</p><ul><li>outside importers can only see declarations and grouped imports marked with <code>export</code> in <code>#mod.bst</code></li><li>internal implementation files are not public unless the facade wraps or re-exports them intentionally</li><li>normal imports inside <code>#mod.bst</code> are local implementation details</li><li>exported signatures cannot expose private facade-only types</li><li>receiver methods do not become public through facade type aliases; export the receiver method or a wrapper explicitly</li><li><code>#mod.bst</code> is not shared implementation code for sibling files</li><li>runtime top-level statements and runtime top-level templates are invalid in <code>#mod.bst</code></li><li>bare namespace exports such as <code>export @./utils</code> and wildcard exports remain deferred</li></ul></section>
+    <section class="container"><h1>Builder source libraries</h1><p>Builders can provide source libraries without requiring those files to exist in the user&#39;s project. The HTML builder provides the <code>@html</code> source library used throughout these docs.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -599,10 +478,7 @@ body {
 
     <span class='bst-code-operator'>#</span><span class='bst-code-parenthesis'>[</span>title, center<span class='bst-code-operator'>:</span> <span class='bst-code-struct'>HOME</span><span class='bst-code-parenthesis'>]</span>
     </code></pre><p>Builder source libraries follow the same source-library idea as project-local libraries:</p><ul><li>the builder registers a library prefix.</li><li>imports use that prefix directly.</li><li>the source files are still Beanstalk source.</li><li>the project does not own the library&#39;s filesystem location.</li></ul><p>This is useful for builder-specific components, templates, styles, or helper declarations that should feel like normal Beanstalk code.</p></section>
-    <section class="container"><h1>Core external packages</h1><p>Some libraries are not source files.</p><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@core/math</span> is registered as an external package by the builder.</p><p>It exposes typed functions and constants that the frontend can type-check and the backend can lower directly.</p><pre style="
+    <section class="container"><h1>Core external packages</h1><p>Some libraries are not source files. <code>@core/math</code> is registered as an external package by the builder. It exposes typed functions and constants that the frontend can type-check and the backend can lower directly.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -617,59 +493,8 @@ body {
     bounded <span class='bst-code-operator'>=</span> clamp<span class='bst-code-parenthesis'>(</span>wave, <span class='bst-code-number'>0.0</span>, <span class='bst-code-number'>1.0</span><span class='bst-code-parenthesis'>)</span>
 
     io<span class='bst-code-parenthesis'>(</span>bounded<span class='bst-code-parenthesis'>)</span>
-    </code></pre><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@core/math</span> currently exposes functions such as <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">sin</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">cos</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">tan</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">atan2</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">log</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">pow</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">sqrt</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">min</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">max</span>, and <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">clamp</span>.</p><p>It also exposes constants such as <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">PI</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">TAU</span>, and <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">E</span>.</p><p>In the JavaScript backend, these math functions currently lower to JavaScript <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Math</span> expressions rather than emitted helper files. Other external packages may lower through generated glue or runtime assets instead.</p><p>The HTML builder currently opts into optional core packages such as:</p><ul><li><a href="./core/math">Math</a></li><li><a href="./core/text">Text</a></li><li><a href="./core/random">Random</a></li><li><a href="./core/time">Time</a></li></ul><p>Other builders may expose a different core surface.</p></section>
-    <section class="container"><h1>JavaScript libraries</h1><p>The HTML builder can import annotated JavaScript files. A JavaScript file becomes a Beanstalk import target when the JS external import provider can parse its <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@bst.*</span> comments and supported exports.</p><p>Beanstalk source imports the <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">.js</span> file directly:</p><pre style="
+    </code></pre><p><code>@core/math</code> currently exposes functions such as <code>sin</code>, <code>cos</code>, <code>tan</code>, <code>atan2</code>, <code>log</code>, <code>pow</code>, <code>sqrt</code>, <code>min</code>, <code>max</code>, and <code>clamp</code>. It also exposes constants such as <code>PI</code>, <code>TAU</code>, and <code>E</code>.</p><p>In the JavaScript backend, these math functions currently lower to JavaScript <code>Math</code> expressions rather than emitted helper files. Other external packages may lower through generated glue or runtime assets instead.</p><p>The HTML builder currently opts into optional core packages such as:</p><ul><li><a href="./core/math">Math</a></li><li><a href="./core/text">Text</a></li><li><a href="./core/random">Random</a></li><li><a href="./core/time">Time</a></li></ul><p>Other builders may expose a different core surface.</p></section>
+    <section class="container"><h1>JavaScript libraries</h1><p>The HTML builder can import annotated JavaScript files. A JavaScript file becomes a Beanstalk import target when the JS external import provider can parse its <code>@bst.*</code> comments and supported exports.</p><p>Beanstalk source imports the <code>.js</code> file directly:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -697,19 +522,7 @@ body {
     export <span class='bst-code-keyword'>function</span> drawNumber<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-parenthesis'>{</span>
         <span class='bst-code-keyword'>return</span> <span class='bst-code-number'>7</span>;
     <span class='bst-code-parenthesis'>}</span>
-    </code></pre><p>The Beanstalk-facing name is <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">draw_number</span>. The JavaScript export name is <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">drawNumber</span>. They do not need to match. The <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@bst.sig</span> annotation binds to the next supported JavaScript export after the annotation.</p><p>Every JavaScript export in a Beanstalk JS library must be annotated with <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@bst.sig</span>. Keep private helpers unexported.</p></section>
+    </code></pre><p>The Beanstalk-facing name is <code>draw_number</code>. The JavaScript export name is <code>drawNumber</code>. They do not need to match. The <code>@bst.sig</code> annotation binds to the next supported JavaScript export after the annotation.</p><p>Every JavaScript export in a Beanstalk JS library must be annotated with <code>@bst.sig</code>. Keep private helpers unexported.</p></section>
     <section class="container"><h1>Writing JavaScript Beanstalk can import</h1><p>A Beanstalk-compatible JavaScript library should be small, explicit, and typed from Beanstalk&#39;s point of view.</p><p>Supported public export forms:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
@@ -731,19 +544,7 @@ body {
     export <span class='bst-code-keyword'>const</span> arrowFunction <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>(</span>x<span class='bst-code-parenthesis'>)</span> <span class='bst-code-operator'>=</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-parenthesis'>{</span>
         <span class='bst-code-keyword'>return</span> x <span class='bst-code-operator'>+</span> <span class='bst-code-number'>1</span>;
     <span class='bst-code-parenthesis'>}</span>;
-    </code></pre><p>Unsupported public export forms include:</p><ul><li>default exports</li><li>re-exports such as <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">export { name }</span></li><li>class exports</li><li>CommonJS exports such as <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">module.exports</span> or <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">exports.name</span></li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">export const</span> values that are not arrow functions</li><li>expression-bodied arrow exports</li></ul><p>JavaScript parameters must be plain parameters. Rest parameters, destructuring parameters, optional parameters, and default parameter values are rejected.</p><p>The signature subset currently supports:</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+    </code></pre><p>Unsupported public export forms include:</p><ul><li>default exports</li><li>re-exports such as <code>export { name }</code></li><li>class exports</li><li>CommonJS exports such as <code>module.exports</code> or <code>exports.name</code></li><li><code>export const</code> values that are not arrow functions</li><li>expression-bodied arrow exports</li></ul><p>JavaScript parameters must be plain parameters. Rest parameters, destructuring parameters, optional parameters, and default parameter values are rejected.</p><p>The signature subset currently supports:</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
         
     <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
          <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Syntax</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Meaning</th> 
@@ -752,95 +553,32 @@ body {
             
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@bst.opaque Canvas2d</span> </td>
+             <td style="padding: 0.2em 0.5em;  "> <code>@bst.opaque Canvas2d</code> </td>
      <td style="padding: 0.2em 0.5em;  "> Declares an opaque external type. Beanstalk can name it, pass it, and call receiver methods on it, but does not know its internal fields.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@bst.sig name |x Float| -> Float</span> </td>
-     <td style="padding: 0.2em 0.5em;  "> Declares a Beanstalk-facing function named <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">name</span> with one parameter and one success return.</td>
+             <td style="padding: 0.2em 0.5em;  "> <code>@bst.sig name |x Float| -&gt; Float</code> </td>
+     <td style="padding: 0.2em 0.5em;  "> Declares a Beanstalk-facing function named <code>name</code> with one parameter and one success return.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@bst.sig name || -> Int</span> </td>
+             <td style="padding: 0.2em 0.5em;  "> <code>@bst.sig name || -&gt; Int</code> </td>
      <td style="padding: 0.2em 0.5em;  "> Declares a function with no parameters and one success return.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@bst.sig name |id String| -> Canvas, Error!</span> </td>
-     <td style="padding: 0.2em 0.5em;  "> Declares a fallible function. <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Error!</span> must be the final return slot.</td>
+             <td style="padding: 0.2em 0.5em;  "> <code>@bst.sig name |id String| -&gt; Canvas, Error!</code> </td>
+     <td style="padding: 0.2em 0.5em;  "> Declares a fallible function. <code>Error!</code> must be the final return slot.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@bst.sig fill |this ~Canvas2d, x Float|</span> </td>
-     <td style="padding: 0.2em 0.5em;  "> Declares a receiver method on a mutable <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Canvas2d</span> receiver.</td>
+             <td style="padding: 0.2em 0.5em;  "> <code>@bst.sig fill |this ~Canvas2d, x Float|</code> </td>
+     <td style="padding: 0.2em 0.5em;  "> Declares a receiver method on a mutable <code>Canvas2d</code> receiver.</td>
         </tr>
         
-    </table><p>Built-in signature types are <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Int</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Float</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Bool</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">String</span>, and <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Char</span>. Other type names must be declared with <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@bst.opaque</span> before they are used in a signature.</p><p>Current JS signature limitations:</p><ul><li>no collection types</li><li>no option types</li><li>no generic parameters</li><li>no callback/function parameter types</li><li>no multi-success returns</li><li>no <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Void</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">None</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Unit</span>, or <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">()</span> return spelling; omit <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">-></span> for no success return</li></ul></section>
-    <section class="container"><h1>Fallible JavaScript functions</h1><p>A JavaScript signature that returns <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Error!</span> must return Beanstalk&#39;s result wrapper shape. The easiest way is to import the registered runtime helpers from <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@beanstalk/runtime</span>.</p><pre style="
+    </table><p>Built-in signature types are <code>Int</code>, <code>Float</code>, <code>Bool</code>, <code>String</code>, and <code>Char</code>. Other type names must be declared with <code>@bst.opaque</code> before they are used in a signature.</p><p>Current JS signature limitations:</p><ul><li>no collection types</li><li>no option types</li><li>no generic parameters</li><li>no callback/function parameter types</li><li>no multi-success returns</li><li>no <code>Void</code>, <code>None</code>, <code>Unit</code>, or <code>()</code> return spelling; omit <code>-&gt;</code> for no success return</li></ul></section>
+    <section class="container"><h1>Fallible JavaScript functions</h1><p>A JavaScript signature that returns <code>Error!</code> must return Beanstalk&#39;s result wrapper shape. The easiest way is to import the registered runtime helpers from <code>@beanstalk/runtime</code>.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -882,16 +620,7 @@ body {
 
     io<span class='bst-code-parenthesis'>(</span>result<span class='bst-code-parenthesis'>)</span>
     </code></pre><p>JavaScript library files may currently import registered Beanstalk runtime modules with named static imports only. Arbitrary JavaScript imports, dynamic imports, default imports, namespace imports, and npm-style dependency graphs are not supported by the JS provider yet.</p><p>If you are adapting an existing JS library, bundle or flatten its dependencies first, then expose a narrow annotated wrapper file to Beanstalk.</p></section>
-    <section class="container"><h1>Receiver methods from JavaScript</h1><p>Use the <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">this</span> parameter to declare a JavaScript export as a receiver method.</p><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">this</span> must be the first parameter and may appear at most once.</p><p>Add <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">~</span> when the method mutates the receiver.</p><pre style="
+    <section class="container"><h1>Receiver methods from JavaScript</h1><p>Use the <code>this</code> parameter to declare a JavaScript export as a receiver method. <code>this</code> must be the first parameter and may appear at most once. Add <code>~</code> when the method mutates the receiver.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -934,10 +663,7 @@ body {
         <span class='bst-code-keyword'>return</span> <span class='bst-code-string'>&quot;canvas_ok&quot;</span>
     ;
     </code></pre><p>Receiver-method dispatch includes the receiver type, so the same method name can exist for different receiver types. The receiver type must still be visible in the importing file.</p></section>
-    <section class="container"><h1>The canvas library</h1><p>The HTML builder&#39;s canvas library is a built-in JS-backed package exposed as <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@web/canvas</span>. It is useful because it shows the whole path from authored JavaScript to Beanstalk imports.</p><p>A page can import and use it like this:</p><pre style="
+    <section class="container"><h1>The canvas library</h1><p>The HTML builder&#39;s canvas library is a built-in JS-backed package exposed as <code>@web/canvas</code>. It is useful because it shows the whole path from authored JavaScript to Beanstalk imports.</p><p>A page can import and use it like this:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -971,96 +697,9 @@ body {
     src<span class='bst-code-operator'>/</span>projects<span class='bst-code-operator'>/</span>html_project<span class='bst-code-operator'>/</span>external_libraries<span class='bst-code-operator'>/</span>web<span class='bst-code-operator'>/</span>canvas<span class='bst-code-operator'>/</span>
     ├── canvas.js
     └── mod.rs
-    </code></pre><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">canvas.js</span> is ordinary JavaScript plus Beanstalk annotations.</p><p>It declares opaque types such as <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Canvas</span> and <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Canvas2d</span>, free functions such as <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">get_canvas</span> and <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">context_2d</span>, and receiver methods such as <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">fill_rect</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">set_fill_style</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">begin_path</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">move_to</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">line_to</span>, and <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">stroke</span>.</p><p>The Rust registration code does the builder-owned part:</p><ul><li>embeds the <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">canvas.js</span> source with <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">include_str!</span></li><li>parses it with the same JS parser used for project-local <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">.js</span> imports</li><li>registers the package path <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@web/canvas</span></li><li>registers its opaque types, free functions, and receiver methods in the external package registry</li><li>records the canvas JS file as a runtime asset that the HTML builder must emit</li><li>records runtime imports such as <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@beanstalk/runtime</span> so the build can emit the runtime module and import map</li></ul><p>This means <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@web/canvas</span> behaves like a normal import to Beanstalk code, but the project author does not need to keep <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">canvas.js</span> in their own project.</p></section>
-    <section class="container"><h1>What the HTML builder emits</h1><p>JavaScript imports do more than type-check. The build output also needs callable runtime JavaScript.</p><p>For a project-local <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@./drawing.js</span> import, the HTML builder emits:</p><ul><li>the original JavaScript asset under Beanstalk&#39;s generated JS output area</li><li>generated glue that adapts Beanstalk calls to JS exports</li><li>runtime modules such as <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">beanstalk-runtime.js</span> when the JS file imports registered runtime helpers</li><li>an import map when generated modules need stable runtime specifiers such as <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@beanstalk/runtime</span></li></ul><p>Builder runtime libraries such as <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@web/canvas</span> use the same emission path. The difference is that the source asset is bundled with the builder instead of being read from the user&#39;s project.</p><p>The HTML-Wasm mode currently has a stricter backend support surface. JS-backed packages need a Wasm lowering before they can be used by that backend path.</p></section>
-    <section class="container"><h1>Converting an existing JavaScript file</h1><p>To make an existing JavaScript file importable from Beanstalk:</p><ol><li>Create a small wrapper file rather than exposing the whole library.</li><li>Use named ESM exports only.</li><li>Keep private helpers unexported.</li><li>Add <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@bst.opaque</span> declarations for objects Beanstalk should treat as external handles.</li><li>Add one <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@bst.sig</span> comment immediately before every exported function.</li><li>Use Beanstalk-facing snake_case names in <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@bst.sig</span>.</li><li>Use one plain JavaScript parameter for each Beanstalk ABI parameter.</li><li>Return the expected raw value for non-fallible functions.</li><li>Return <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">bstOk(value)</span> or <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">bstErr(code, message)</span> for <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Error!</span> functions.</li><li>Import the wrapper from Beanstalk with its <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">.js</span> extension.</li></ol><p>Example wrapper shape:</p><pre style="
+    </code></pre><p><code>canvas.js</code> is ordinary JavaScript plus Beanstalk annotations. It declares opaque types such as <code>Canvas</code> and <code>Canvas2d</code>, free functions such as <code>get_canvas</code> and <code>context_2d</code>, and receiver methods such as <code>fill_rect</code>, <code>set_fill_style</code>, <code>begin_path</code>, <code>move_to</code>, <code>line_to</code>, and <code>stroke</code>.</p><p>The Rust registration code does the builder-owned part:</p><ul><li>embeds the <code>canvas.js</code> source with <code>include_str!</code></li><li>parses it with the same JS parser used for project-local <code>.js</code> imports</li><li>registers the package path <code>@web/canvas</code></li><li>registers its opaque types, free functions, and receiver methods in the external package registry</li><li>records the canvas JS file as a runtime asset that the HTML builder must emit</li><li>records runtime imports such as <code>@beanstalk/runtime</code> so the build can emit the runtime module and import map</li></ul><p>This means <code>@web/canvas</code> behaves like a normal import to Beanstalk code, but the project author does not need to keep <code>canvas.js</code> in their own project.</p></section>
+    <section class="container"><h1>What the HTML builder emits</h1><p>JavaScript imports do more than type-check. The build output also needs callable runtime JavaScript.</p><p>For a project-local <code>@./drawing.js</code> import, the HTML builder emits:</p><ul><li>the original JavaScript asset under Beanstalk&#39;s generated JS output area</li><li>generated glue that adapts Beanstalk calls to JS exports</li><li>runtime modules such as <code>beanstalk-runtime.js</code> when the JS file imports registered runtime helpers</li><li>an import map when generated modules need stable runtime specifiers such as <code>@beanstalk/runtime</code></li></ul><p>Builder runtime libraries such as <code>@web/canvas</code> use the same emission path. The difference is that the source asset is bundled with the builder instead of being read from the user&#39;s project.</p><p>The HTML-Wasm mode currently has a stricter backend support surface. JS-backed packages need a Wasm lowering before they can be used by that backend path.</p></section>
+    <section class="container"><h1>Converting an existing JavaScript file</h1><p>To make an existing JavaScript file importable from Beanstalk:</p><ol><li>Create a small wrapper file rather than exposing the whole library.</li><li>Use named ESM exports only.</li><li>Keep private helpers unexported.</li><li>Add <code>@bst.opaque</code> declarations for objects Beanstalk should treat as external handles.</li><li>Add one <code>@bst.sig</code> comment immediately before every exported function.</li><li>Use Beanstalk-facing snake_case names in <code>@bst.sig</code>.</li><li>Use one plain JavaScript parameter for each Beanstalk ABI parameter.</li><li>Return the expected raw value for non-fallible functions.</li><li>Return <code>bstOk(value)</code> or <code>bstErr(code, message)</code> for <code>Error!</code> functions.</li><li>Import the wrapper from Beanstalk with its <code>.js</code> extension.</li></ol><p>Example wrapper shape:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -1122,77 +761,35 @@ body {
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Optional core package</td>
      <td style="padding: 0.2em 0.5em;  "> Register typed external functions, constants, and backend lowerings.</td>
-     <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@core/math</span> registers math functions and constants.</td>
+     <td style="padding: 0.2em 0.5em;  "> <code>@core/math</code> registers math functions and constants.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Source library root</td>
      <td style="padding: 0.2em 0.5em;  "> Register a source-library prefix to a filesystem root.</td>
-     <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@html</span> resolves to builder-provided Beanstalk source.</td>
+     <td style="padding: 0.2em 0.5em;  "> <code>@html</code> resolves to builder-provided Beanstalk source.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> External import provider</td>
-     <td style="padding: 0.2em 0.5em;  "> Register a provider for file extensions such as <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">.js</span>.</td>
+     <td style="padding: 0.2em 0.5em;  "> Register a provider for file extensions such as <code>.js</code>.</td>
      <td style="padding: 0.2em 0.5em;  "> The HTML builder registers the JS provider for project-local JavaScript imports.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Builder runtime package</td>
      <td style="padding: 0.2em 0.5em;  "> Register a virtual package plus runtime asset metadata.</td>
-     <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@web/canvas</span> is bundled JS parsed and emitted by the HTML builder.</td>
+     <td style="padding: 0.2em 0.5em;  "> <code>@web/canvas</code> is bundled JS parsed and emitted by the HTML builder.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Config key registry</td>
      <td style="padding: 0.2em 0.5em;  "> Register backend-specific config keys before Stage 0 config validation.</td>
-     <td style="padding: 0.2em 0.5em;  "> The HTML builder registers keys such as <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">html_lang</span> and <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">redirect_index_html</span>.</td>
+     <td style="padding: 0.2em 0.5em;  "> The HTML builder registers keys such as <code>html_lang</code> and <code>redirect_index_html</code>.</td>
         </tr>
         
     </table><p>This separation keeps the compiler frontend generic. The frontend needs typed import surfaces, source roots, and provider results. The builder decides which surfaces exist and how their compiled output is emitted.</p></section>
-    <section class="container"><h1>Current limits</h1><p>Library support is intentionally narrow while the language is still in alpha.</p><p>Current limits to expect:</p><ul><li>no package manager yet</li><li>no remote fetching or lockfiles yet</li><li>no source-library version resolution yet</li><li>no wildcard imports yet</li><li>no arbitrary JavaScript dependency graphs through the JS provider yet</li><li>no direct <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">.js</span> imports from <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#config.bst</span></li><li>no direct cross-module bypass into another module&#39;s private JavaScript file</li><li>no automatic documentation extraction from <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#mod.bst</span> yet</li><li>no HIR cache for source libraries yet</li></ul><p>The practical model for now is:</p><ul><li>use <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">lib/<name>/#mod.bst</span> for project-local Beanstalk libraries.</li><li>use <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@core/...</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@html</span>, and <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@web/canvas</span> for builder-provided libraries.</li><li>use small annotated <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">.js</span> wrapper files when a project needs browser JavaScript directly.</li></ul></section>
+    <section class="container"><h1>Current limits</h1><p>Library support is intentionally narrow while the language is still in alpha.</p><p>Current limits to expect:</p><ul><li>no package manager yet</li><li>no remote fetching or lockfiles yet</li><li>no source-library version resolution yet</li><li>no wildcard imports yet</li><li>no arbitrary JavaScript dependency graphs through the JS provider yet</li><li>no direct <code>.js</code> imports from <code>#config.bst</code></li><li>no direct cross-module bypass into another module&#39;s private JavaScript file</li><li>no automatic documentation extraction from <code>#mod.bst</code> yet</li><li>no HIR cache for source libraries yet</li></ul><p>The practical model for now is:</p><ul><li>use <code>lib/&lt;name&gt;/#mod.bst</code> for project-local Beanstalk libraries.</li><li>use <code>@core/...</code>, <code>@html</code>, and <code>@web/canvas</code> for builder-provided libraries.</li><li>use small annotated <code>.js</code> wrapper files when a project needs browser JavaScript directly.</li></ul></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

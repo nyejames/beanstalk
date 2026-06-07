@@ -18,6 +18,11 @@ theme_css #= [$css:
         padding-left: var(--bst-spacing-small);
     }
 
+    .container code:not(.codeblock) {
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    }
+
     @media (min-width: 576px) {
         .container {
             max-width: 510px;
@@ -192,13 +197,6 @@ codeblock #= [$html:
         white-space: pre;
         overflow-x: auto;
     ">[$slot]</pre>
-]
-
-codesnippet #= [$html:
-    <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">[$slot]</span>
 ]
 
 title #= [$html: <h1 style="font-size: 2em;[$slot("style")]">[$slot]</h1>]

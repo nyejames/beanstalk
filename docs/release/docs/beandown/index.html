@@ -189,6 +189,11 @@ body {
         padding-left: var(--bst-spacing-small);
     }
 
+    .container code:not(.codeblock) {
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    }
+
     @media (min-width: 576px) {
         .container {
             max-width: 510px;
@@ -312,16 +317,7 @@ body {
         </div>
     </nav>
      <h1 style="font-size: 2em;text-align: center;"> BEANDOWN</h1>
-    <section class="container"><p>Beandown files use the <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">.bd</span> extension for markdown-first content fragments in HTML projects. They are helpers for <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">.bst</span> pages and modules, not pages themselves.</p><p>A <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">.bd</span> file is compiled as if its whole body were the body of an implicit compile-time markdown template:</p><pre style="
+    <section class="container"><p>Beandown files use the <code>.bd</code> extension for markdown-first content fragments in HTML projects. They are helpers for <code>.bst</code> pages and modules, not pages themselves.</p><p>A <code>.bd</code> file is compiled as if its whole body were the body of an implicit compile-time markdown template:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -332,14 +328,8 @@ body {
     content <span class='bst-code-operator'>#</span><span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>$</span>markdown<span class='bst-code-operator'>:</span>
         ...entire .bd file body...
     <span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>The generated <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">content</span> constant is the only public surface of a Beandown file.</p></section>
-    <section class="container"><h2>Authoring a Beandown file</h2><p>Write markdown and nested Beanstalk templates directly in the <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">.bd</span> file:</p><pre style="
+    </code></pre><p>The generated <code>content</code> constant is the only public surface of a Beandown file.</p></section>
+    <section class="container"><h2>Authoring a Beandown file</h2><p>Write markdown and nested Beanstalk templates directly in the <code>.bd</code> file:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -354,13 +344,18 @@ body {
     <span class='bst-code-parenthesis'>[</span>p<span class='bst-code-operator'>:</span>
         <span class='bst-code-struct'>This</span> paragraph is styled <span class='bst-code-keyword'>by</span> the <span class='bst-code-struct'>HTML</span> builder<span class='bst-code-string'>&#39;s @html constants.
     ]
-    </span></code></pre><p>Beandown starts inside a template body, so <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">--</span> is normal text. Escape a literal closing bracket as <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">\]</span>.</p></section>
+    </span></code></pre><p>Beandown starts inside a template body, so <code>--</code>, backticks, and backslashes are normal text. It also uses the same <code>$markdown</code> inline-code rules as <code>.bst</code> markdown templates.</p><p>Literal template delimiters use normal string insertion:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-string'>&quot;[&quot;</span><span class='bst-code-parenthesis'>]</span>
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-string'>&quot;]&quot;</span><span class='bst-code-parenthesis'>]</span>
+    <span class='bst-code-parenthesis'>[</span><span class='bst-code-string'>&quot;[literal]&quot;</span><span class='bst-code-parenthesis'>]</span>
+    </code></pre></section>
     <section class="container"><h2>Importing from .bst</h2><p>Import Beandown content with normal extensionless source imports:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
@@ -385,32 +380,8 @@ body {
     <span class='bst-code-parenthesis'>}</span>
 
     <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>intro_content<span class='bst-code-parenthesis'>]</span> <span class='bst-code-parenthesis'>]</span>
-    </code></pre><p>Do not include the <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">.bd</span> extension in the import path.</p><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">import @docs/intro.bd</span> is rejected; use <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">import @docs/intro</span>.</p></section>
-    <section class="container"><h2>Scope inside .bd</h2><p>Beandown bodies have a deliberately small compile-time scope:</p><ul><li>exported compile-time constants and const records from <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@html</span>, visible flat;</li><li>exported compile-time constants and const records from the same-directory <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#mod.bst</span>, when present.</li></ul><p>Same-directory facade constants override <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@html</span> constants with the same name. Functions, types, traits, methods, runtime bindings, runtime HTML APIs, and the generated self <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">content</span> constant are not visible.</p><p>Keep richer composition in <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">.bst</span>.</p></section>
+    </code></pre><p>Do not include the <code>.bd</code> extension in the import path. <code>import @docs/intro.bd</code> is rejected; use <code>import @docs/intro</code>.</p></section>
+    <section class="container"><h2>Scope inside .bd</h2><p>Beandown bodies have a deliberately small compile-time scope:</p><ul><li>exported compile-time constants and const records from <code>@html</code>, visible flat;</li><li>exported compile-time constants and const records from the same-directory <code>#mod.bst</code>, when present.</li></ul><p>Same-directory facade constants override <code>@html</code> constants with the same name. Functions, types, traits, methods, runtime bindings, runtime HTML APIs, and the generated self <code>content</code> constant are not visible.</p><p>Keep richer composition in <code>.bst</code>.</p></section>
     <section class="container"><h2>Facade re-exports</h2><p>A module facade can explicitly re-export Beandown content:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
@@ -435,13 +406,7 @@ body {
 
     <span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span> <span class='bst-code-parenthesis'>[</span>intro<span class='bst-code-parenthesis'>]</span> <span class='bst-code-parenthesis'>]</span>
     </code></pre></section>
-    <section class="container"><h2>Boundaries</h2><p>Beandown is intentionally small.</p><ul><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">.bd</span> files are never entries, module roots, project types, or config files.</li><li>They do not support imports, declarations, frontmatter, metadata blocks, summaries, table-of-contents extraction, or raw-source retention.</li><li>They do not produce standalone HTML files or output folders.</li><li>A body must fully fold at compile time.</li></ul><p>Use <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">.bst</span> for pages, imports, functions, types, and content composition.</p></section>
+    <section class="container"><h2>Boundaries</h2><p>Beandown is intentionally small.</p><ul><li><code>.bd</code> files are never entries, module roots, project types, or config files.</li><li>They do not support imports, declarations, frontmatter, metadata blocks, summaries, table-of-contents extraction, or raw-source retention.</li><li>They do not produce standalone HTML files or output folders.</li><li>A body must fully fold at compile time.</li></ul><p>Use <code>.bst</code> for pages, imports, functions, types, and content composition.</p></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

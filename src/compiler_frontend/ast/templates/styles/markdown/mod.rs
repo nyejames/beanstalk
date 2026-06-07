@@ -23,6 +23,7 @@ use crate::compiler_frontend::style_directives::StyleDirectiveArgumentValue;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use std::sync::Arc;
 
+mod inline_code;
 mod output;
 mod types;
 
@@ -574,6 +575,36 @@ fn render_inline_atoms(
                 atom_index += star_run;
             }
 
+            MarkdownInlineAtom::Char('`') => {
+                if let Some(span) =
+                    inline_code::try_parse_inline_code_span_at_atoms(atoms, atom_index)
+                {
+                    literalize_pending_stars(
+                        &mut output,
+                        wrapper_tag,
+                        &mut wrapper_open,
+                        &mut pending_open_strength,
+                    );
+                    open_wrapper(&mut output, wrapper_tag, &mut wrapper_open);
+                    render_inline_code_span(&mut output, &span);
+                    prev_whitespace = false;
+                    atom_index += span.consumed_atoms;
+                    continue;
+                }
+
+                open_pending_emphasis(
+                    &mut output,
+                    wrapper_tag,
+                    &mut wrapper_open,
+                    &mut emphasis_strength,
+                    &mut pending_open_strength,
+                );
+                open_wrapper(&mut output, wrapper_tag, &mut wrapper_open);
+                output.push_escaped_char('`');
+                prev_whitespace = false;
+                atom_index += 1;
+            }
+
             MarkdownInlineAtom::Char('@') if prev_whitespace => {
                 if let Some(link) = try_parse_link_at_atoms(atoms, atom_index) {
                     open_pending_emphasis(
@@ -639,6 +670,25 @@ fn render_inline_atoms(
     }
 
     output.finish()
+}
+
+fn render_inline_code_span(
+    output: &mut MarkdownOutputBuilder,
+    span: &inline_code::ParsedInlineCodeSpan,
+) {
+    output.push_raw("<code>");
+
+    for content_atom in &span.content {
+        match content_atom {
+            MarkdownInlineAtom::Char(ch) => output.push_escaped_char(*ch),
+            // The parser rejects child-template anchors before returning a span.
+            // Opaque anchors that reach rendering are dynamic-expression placeholders
+            // and must stay opaque to the parent formatter.
+            MarkdownInlineAtom::Opaque(anchor) => output.push_opaque(*anchor),
+        }
+    }
+
+    output.push_raw("</code>");
 }
 
 fn open_wrapper(
@@ -902,13 +952,6 @@ fn count_consecutive_star_chars(atoms: &[MarkdownInlineAtom], start_index: usize
     }
 
     count
-}
-
-fn atom_char(atoms: &[MarkdownInlineAtom], index: usize) -> Option<char> {
-    match atoms.get(index)? {
-        MarkdownInlineAtom::Char(ch) => Some(*ch),
-        MarkdownInlineAtom::Opaque(_) => None,
-    }
 }
 
 fn try_parse_link_at_atoms(

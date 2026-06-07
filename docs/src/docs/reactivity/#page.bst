@@ -1,5 +1,5 @@
 import @html {center}
-import @styles/docs {navbar, title, section, styled_table, header, data, codeblock, codesnippet, theme_head}
+import @styles/docs {navbar, title, section, styled_table, header, data, codeblock, theme_head}
 
 page_title #= "Reactivity in Beanstalk Templates"
 page_description #= "Design draft for explicit, place-based reactivity in Beanstalk templates using reactive type access."
@@ -23,7 +23,7 @@ page_head #= theme_head
         message $String = [:Hello]
     ]
 
-    Templates subscribe to reactive values with [codesnippet:~] inside template captures:
+    Templates subscribe to reactive values with `~` inside template captures:
 
     [codeblock, $code("bst"):
         [~count]
@@ -59,7 +59,7 @@ page_head #= theme_head
 #[section, $markdown:
     # Core idea
 
-    Reactive values are declared by prefixing the value type with [codesnippet:$].
+    Reactive values are declared by prefixing the value type with `$`.
 
     [codeblock, $code("bst"):
         count $Int = 0
@@ -67,11 +67,11 @@ page_head #= theme_head
 
     This means:
 
-    - [codesnippet:count] has value type [codesnippet:Int]
-    - [codesnippet:count] is stored as a reactive source
-    - [codesnippet:count] has stable identity
-    - templates can subscribe to [codesnippet:count] with [codesnippet, "[~count]"]
-    - assignment to [codesnippet:count] invalidates subscribers
+    - `count` has value type `Int`
+    - `count` is stored as a reactive source
+    - `count` has stable identity
+    - templates can subscribe to `count` with `["[~count]"]`
+    - assignment to `count` invalidates subscribers
 
     Regular code does not need special syntax to read it:
 
@@ -82,15 +82,15 @@ page_head #= theme_head
         label = [:Count: [count]]
     ]
 
-    In a template, [codesnippet, "[count]"] is a snapshot read.
+    In a template, `["[count]"]` is a snapshot read.
 
-    In a template, [codesnippet, "[~count]"] is a reactive subscription.
+    In a template, `["[~count]"]` is a reactive subscription.
 ]
 
 #[section, $markdown:
     # Reactive type access
 
-    Reactive type access uses [codesnippet:$Type].
+    Reactive type access uses `$Type`.
 
     [codeblock, $code("bst"):
         count $Int = 0
@@ -108,7 +108,7 @@ page_head #= theme_head
         data $ReactiveData = ReactiveData(1)
     ]
 
-    [codesnippet:$Type] does not create a new user-facing wrapper type.
+    `$Type` does not create a new user-facing wrapper type.
 
     This:
 
@@ -116,9 +116,9 @@ page_head #= theme_head
         count $Int = 0
     ]
 
-    does not mean [codesnippet:count] has type [codesnippet:State<Int>].
+    does not mean `count` has type `State<Int>`.
 
-    It means [codesnippet:count] is an [codesnippet:Int] stored in compiler-managed reactive storage.
+    It means `count` is an `Int` stored in compiler-managed reactive storage.
 ]
 
 #[section, $markdown:
@@ -137,7 +137,7 @@ page_head #= theme_head
         data $= ReactiveData(1)
     ]
 
-    [codesnippet:$=] is an inferred reactive declaration.
+    `$=` is an inferred reactive declaration.
 
     It is declaration syntax, not assignment syntax.
 
@@ -158,7 +158,7 @@ page_head #= theme_head
         count $= 1 -- invalid
     ]
 
-    [codesnippet:$=] is only used when declaring a new reactive value.
+    `$=` is only used when declaring a new reactive value.
 ]
 
 #[section, $markdown:
@@ -173,11 +173,11 @@ page_head #= theme_head
         reactive = [~count]
     ]
 
-    [codesnippet, "[count]"] reads the current value.
+    `["[count]"]` reads the current value.
 
-    [codesnippet, "[~count]"] subscribes to the reactive source.
+    `["[~count]"]` subscribes to the reactive source.
 
-    If [codesnippet:count] changes later, [codesnippet:snapshot] does not update, but [codesnippet:reactive] does.
+    If `count` changes later, `snapshot` does not update, but `reactive` does.
 
     This makes snapshot and reactive rendering explicit at the place where the template uses the value.
 ]
@@ -185,7 +185,7 @@ page_head #= theme_head
 #[section, $markdown:
     # Template subscription
 
-    Inside templates, [codesnippet:~reactive_value] subscribes to a reactive source.
+    Inside templates, `~reactive_value` subscribes to a reactive source.
 
     [codeblock, $code("bst"):
         count $Int = 0
@@ -203,7 +203,7 @@ page_head #= theme_head
         [~count]
     ]
 
-    [codesnippet:count] is mutable, but it is not reactive.
+    `count` is mutable, but it is not reactive.
 
     The compiler should produce a clear error:
 
@@ -216,7 +216,7 @@ page_head #= theme_head
 #[section, $markdown:
     # Meaning of ~
 
-    [codesnippet:~] keeps its normal meaning outside templates.
+    `~` keeps its normal meaning outside templates.
 
     [codeblock, $code("bst"):
         increment |count ~Int|:
@@ -227,9 +227,9 @@ page_head #= theme_head
         increment(~count)
     ]
 
-    Outside templates, [codesnippet:~count] requests mutable/exclusive access.
+    Outside templates, `~count` requests mutable/exclusive access.
 
-    Inside templates, [codesnippet, "[~count]"] subscribes to a reactive value.
+    Inside templates, `["[~count]"]` subscribes to a reactive value.
 
     Templates still cannot mutate values.
 
@@ -239,13 +239,13 @@ page_head #= theme_head
         [header: [: Syntax] [: Context] [: Meaning] ]
 
         [data:
-            [: [codesnippet:~count] ]
+            [: [$html:<code>~count</code>] ]
             [: Normal code / call argument ]
             [: Mutable/exclusive access ]
         ]
 
         [data:
-            [: [codesnippet, "[~count]"] ]
+            [: [$html:<code>["[~count]"]</code>] ]
             [: Template capture ]
             [: Reactive read subscription ]
         ]
@@ -306,7 +306,7 @@ page_head #= theme_head
 
     The function signature requests a reactive source.
 
-    The call site does not use [codesnippet:~], because [codesnippet:~] outside templates means mutable access.
+    The call site does not use `~`, because `~` outside templates means mutable access.
 
     This is invalid:
 
@@ -315,7 +315,7 @@ page_head #= theme_head
         view = counter_view(count)
     ]
 
-    [codesnippet:counter_view] requires [codesnippet:$Int], but [codesnippet:count] is a normal mutable [codesnippet:Int].
+    `counter_view` requires `$Int`, but `count` is a normal mutable `Int`.
 
     The compiler should produce a clear error:
 
@@ -346,10 +346,10 @@ page_head #= theme_head
 
     These are different capabilities:
 
-    - [codesnippet:count $Int] requires a reactive [codesnippet:Int] source
-    - [codesnippet:count ~Int] requires mutable/exclusive access to an [codesnippet:Int]
+    - `count $Int` requires a reactive `Int` source
+    - `count ~Int` requires mutable/exclusive access to an `Int`
 
-    A parameter cannot combine [codesnippet:$] and [codesnippet:~].
+    A parameter cannot combine `$` and `~`.
 
     Invalid:
 
@@ -396,11 +396,11 @@ page_head #= theme_head
 
     In this example:
 
-    - [codesnippet:count $Int = 0] declares a reactive source
-    - [codesnippet, "[~count]"] subscribes to that source
-    - [codesnippet, "[count]"] snapshots its current value
-    - [codesnippet:increment_count(~count)] mutates it
-    - mutation invalidates template bindings subscribed to [codesnippet, "[count]"]
+    - `count $Int = 0` declares a reactive source
+    - `["[~count]"]` subscribes to that source
+    - `["[count]"]` snapshots its current value
+    - `increment_count(~count)` mutates it
+    - mutation invalidates template bindings subscribed to `["[count]"]`
 
     The callback is not reactive by itself.
 
@@ -411,7 +411,7 @@ page_head #= theme_head
 #[section, $markdown:
     # Compiler directive namespace
 
-    [codesnippet:$] should be treated as a compiler-owned marker with different legal forms in different syntax positions.
+    `$` should be treated as a compiler-owned marker with different legal forms in different syntax positions.
 
     Lowercase names are template/style directives:
 
@@ -421,14 +421,14 @@ page_head #= theme_head
         ]
     ]
 
-    PascalCase names after [codesnippet:$] in type position are reactive type access:
+    PascalCase names after `$` in type position are reactive type access:
 
     [codeblock, $code("bst"):
         count $Int = 0
         data $ReactiveData = ReactiveData(1)
     ]
 
-    [codesnippet:$=] is inferred reactive declaration syntax:
+    `$=` is inferred reactive declaration syntax:
 
     [codeblock, $code("bst"):
         count $= 0
@@ -440,13 +440,13 @@ page_head #= theme_head
     - variables and functions use snake_case
     - template/style directives use lowercase names
 
-    Because these naming conventions are enforced, [codesnippet:$markdown] and [codesnippet:$Int] cannot collide.
+    Because these naming conventions are enforced, `$markdown` and `$Int` cannot collide.
 ]
 
 #[section, $markdown:
     # Invalid directive forms
 
-    The parser should reject invalid [codesnippet:$] usage clearly.
+    The parser should reject invalid `$` usage clearly.
 
     Invalid lowercase directive in type position:
 
@@ -570,8 +570,8 @@ page_head #= theme_head
 
     - The same reactive source still exists
     - The value stored in that source changes
-    - Subscribers to [codesnippet, "[message]"] are invalidated
-    - Render bindings subscribed with [codesnippet, "[~message]"] update
+    - Subscribers to `["[message]"]` are invalidated
+    - Render bindings subscribed with `["[~message]"]` update
 
     A reactive source has stable identity.
 
@@ -596,7 +596,7 @@ page_head #= theme_head
 
     A template snapshot captures the current rendered value.
 
-    Only [codesnippet, "[~count]"] subscribes.
+    Only `["[~count]"]` subscribes.
 ]
 
 #[section, $markdown:
@@ -615,9 +615,9 @@ page_head #= theme_head
 
     This is a normal read.
 
-    It does not subscribe [codesnippet:double] to [codesnippet:count].
+    It does not subscribe `double` to `count`.
 
-    A function must explicitly request reactive access with [codesnippet:$Int] if it needs to subscribe:
+    A function must explicitly request reactive access with `$Int` if it needs to subscribe:
 
     [codeblock, $code("bst"):
         counter_view |count $Int| -> String:
@@ -642,7 +642,7 @@ page_head #= theme_head
     - Closures capture values using normal language rules
     - Mutable access must be explicit
     - Callbacks do not create reactivity by themselves
-    - Reactivity occurs as a result of mutation to a reactive source observed with [codesnippet, "[~value]"]
+    - Reactivity occurs as a result of mutation to a reactive source observed with `["[~value]"]`
 
     This should remain true even when higher-level event helpers are added.
 ]
@@ -692,7 +692,7 @@ page_head #= theme_head
         ]
     ]
 
-    This can lower to a text-node binding whose contents are updated whenever [codesnippet:message] changes.
+    This can lower to a text-node binding whose contents are updated whenever `message` changes.
 ]
 
 #[section, $markdown:
@@ -718,7 +718,7 @@ page_head #= theme_head
 
     The user-facing rule remains:
 
-    > Mutating a reactive source updates all render bindings that explicitly subscribed to that source with [codesnippet:~] inside templates.
+    > Mutating a reactive source updates all render bindings that explicitly subscribed to that source with `~` inside templates.
 ]
 
 #[section, $markdown:
@@ -769,10 +769,10 @@ page_head #= theme_head
 
     Add parsing and validation for:
 
-    - explicit reactive declarations: [codesnippet:count $Int = 0]
-    - inferred reactive declarations: [codesnippet:count $= 0]
-    - reactive parameters: [codesnippet:count $Int]
-    - template subscriptions: [codesnippet, "[~count]"]
+    - explicit reactive declarations: `count $Int = 0`
+    - inferred reactive declarations: `count $= 0`
+    - reactive parameters: `count $Int`
+    - template subscriptions: `["[~count]"]`
 
     Reject invalid combinations clearly.
 
@@ -780,12 +780,12 @@ page_head #= theme_head
 
     Validate that:
 
-    - [codesnippet:$Type] uses a real value type
-    - [codesnippet:$=] has an initializer
-    - reactive declarations are not combined with [codesnippet:~=]
-    - reactive parameters are not combined with [codesnippet:~]
-    - [codesnippet, "[~value]"] only targets reactive sources
-    - [codesnippet, "[~value]"] is only used with stable places
+    - `$Type` uses a real value type
+    - `$=` has an initializer
+    - reactive declarations are not combined with `~=`
+    - reactive parameters are not combined with `~`
+    - `["[~value]"]` only targets reactive sources
+    - `["[~value]"]` is only used with stable places
     - templates can observe reactive values, but never mutate them
 
     ## Phase 3: Runtime reactive cells
@@ -802,8 +802,8 @@ page_head #= theme_head
 
     The template system should distinguish:
 
-    - [codesnippet, "[count]"] as snapshot capture
-    - [codesnippet, "[~count]"] as reactive subscription
+    - `["[count]"]` as snapshot capture
+    - `["[~count]"]` as reactive subscription
 
     ## Phase 5: HTML backend node updates
 
@@ -848,17 +848,17 @@ page_head #= theme_head
         increment_count(~count)
     ]
 
-    The template subscription does not block later mutable access to [codesnippet:count], because it is not a mutable borrow.
+    The template subscription does not block later mutable access to `count`, because it is not a mutable borrow.
 
     The mutation invalidates subscribers.
 
     This is the intended interaction:
 
-    - [codesnippet, "[~count]"] observes changes in templates
-    - [codesnippet, "~count"] mutates the place in normal code
+    - `["[~count]"]` observes changes in templates
+    - `~count` mutates the place in normal code
     - mutation triggers reactive updates
 
-    The borrow checker should not model [codesnippet, "[~count]"] as an active mutable borrow.
+    The borrow checker should not model `["[~count]"]` as an active mutable borrow.
 
     It should model it as a subscription to a stable reactive source.
 ]
@@ -885,7 +885,7 @@ page_head #= theme_head
 
     The first version can use coarse invalidation:
 
-    - any mutation to [codesnippet:user] invalidates subscriptions to [codesnippet:user]
+    - any mutation to `user` invalidates subscriptions to `user`
     - field-specific invalidation can be added later
 
     Fine-grained path tracking should not block the first implementation.
@@ -904,7 +904,7 @@ page_head #= theme_head
         view = [~items]
     ]
 
-    Any mutation to [codesnippet:items] invalidates the whole binding.
+    Any mutation to `items` invalidates the whole binding.
 
     Later versions may support:
 
@@ -940,12 +940,12 @@ page_head #= theme_head
 
     Reactivity in Beanstalk is:
 
-    - Explicit: reactive sources are declared with [codesnippet: $Type] or [codesnippet:$=]
-    - Template-specific: subscriptions are written as [codesnippet, "[~value]"] inside templates
+    - Explicit: reactive sources are declared with ` $Type` or `$=`
+    - Template-specific: subscriptions are written as `["[~value]"]` inside templates
     - Place-based: subscriptions target stable reactive sources
     - Mutation-driven: updates occur when subscribed reactive sources are mutated
     - Read-only from templates: templates can observe but never mutate
-    - Compiler-owned: [codesnippet:$] marks compiler-managed behavior
+    - Compiler-owned: `$` marks compiler-managed behavior
     - Backend-owned: render plans decide how updates are applied efficiently
 
     [codeblock, $code("bst"):
@@ -957,11 +957,11 @@ page_head #= theme_head
         count = 1
     ]
 
-    [codesnippet:snapshot] sees the original value.
+    `snapshot` sees the original value.
 
-    [codesnippet:reactive] observes the reactive source and updates.
+    `reactive` observes the reactive source and updates.
 
     The core rule is:
 
-    > Mutating a reactive source updates all render bindings that explicitly subscribed to that source with [codesnippet:~] inside templates.
+    > Mutating a reactive source updates all render bindings that explicitly subscribed to that source with `~` inside templates.
 ]

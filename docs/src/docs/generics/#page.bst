@@ -1,5 +1,5 @@
 import @html {center}
-import @styles/docs {navbar, title, section, styled_table, header, data, codeblock, codesnippet, theme_head}
+import @styles/docs {navbar, title, section, styled_table, header, data, codeblock, theme_head}
 
 page_title #= "Generics in Beanstalk"
 page_description #= "Current Alpha generic type and generic function behavior."
@@ -13,13 +13,13 @@ page_head #= theme_head
 
     The supported surface is intentionally small:
 
-    - declaration-site generic parameters with [codesnippet:type] on top-level structs, choices, and free functions
-    - [codesnippet:of] type application in type positions
+    - declaration-site generic parameters with `type` on top-level structs, choices, and free functions
+    - `of` type application in type positions
     - concrete generic aliases to fully applied generic types
     - constructor inference for concrete generic structs and choices
-    - collections as compiler-owned generic constructed types using [codesnippet:{T}]
+    - collections as compiler-owned generic constructed types using `{T}`
     - generic free-function calls across same-file use, visible same-module imports, and authored facades
-    - declaration-site trait bounds with [codesnippet:type T is TRAIT]
+    - declaration-site trait bounds with `type T is TRAIT`
 
     Generic function headers are parsed and tracked by the frontend, and their bodies are
     validated against unconstrained generic parameters before any concrete call is accepted.
@@ -38,7 +38,7 @@ page_head #= theme_head
         [data:
             [: Generic structs]
             [: Supported]
-            [: Concrete instances such as [codesnippet:Box of Int] have canonical frontend type identity and substituted field views.]
+            [: Concrete instances such as [$html:<code>Box of Int</code>] have canonical frontend type identity and substituted field views.]
         ]
 
         [data:
@@ -92,7 +92,7 @@ page_head #= theme_head
         [data:
             [: Trait bounds]
             [: Partial]
-            [: Declaration-site [codesnippet:type T is TRAIT] and [codesnippet:type T is A and B, U is C] bounds are supported for generic functions, structs, and choices. [codesnippet:where] clauses and file-local evidence-backed generic bound dispatch remain deferred.]
+            [: Declaration-site [$html:<code>type T is TRAIT</code>] and [$html:<code>type T is A and B, U is C</code>] bounds are supported for generic functions, structs, and choices. [$html:<code>where</code>] clauses and file-local evidence-backed generic bound dispatch remain deferred.]
         ]
     ]
 ]
@@ -100,7 +100,7 @@ page_head #= theme_head
 #[section, $markdown:
     # Generic type syntax
 
-    Generic parameters are introduced with [codesnippet:type].
+    Generic parameters are introduced with `type`.
 
     [codeblock, $code("bst"):
         Box type T = |
@@ -108,21 +108,21 @@ page_head #= theme_head
         |
     ]
 
-    Concrete type arguments are applied with [codesnippet:of] in type positions.
+    Concrete type arguments are applied with `of` in type positions.
 
     [codeblock, $code("bst"):
         number_box Box of Int = Box(42)
         text_box Box of String = Box("hello")
     ]
 
-    [codesnippet:of] is type-position-only. It is not current Alpha syntax for explicit
+    `of` is type-position-only. It is not current Alpha syntax for explicit
     generic function calls, runtime generic values, type values, or type-level computation.
 ]
 
 #[section, $markdown:
     # Generic choices
 
-    Generic choices use the same [codesnippet:type] parameter list.
+    Generic choices use the same `type` parameter list.
 
     Payload variants use record payload syntax.
 
@@ -136,8 +136,8 @@ page_head #= theme_head
         missing Maybe of String = Maybe::Empty
     ]
 
-    Choice payload shorthand such as [codesnippet:Some T] is not current Alpha syntax.
-    Use record payload variants such as [codesnippet:Some | value T |].
+    Choice payload shorthand such as `Some T` is not current Alpha syntax.
+    Use record payload variants such as `Some | value T |`.
 ]
 
 #[section, $markdown:
@@ -164,8 +164,8 @@ page_head #= theme_head
 #[section, $markdown:
     # Collections and constructed types
 
-    Collections use the public [codesnippet:{T}] syntax and are compiler-owned constructed
-    types. Fixed collections use [codesnippet:{N T}], and the fixed capacity is part of type
+    Collections use the public `{T}` syntax and are compiler-owned constructed
+    types. Fixed collections use `{N T}`, and the fixed capacity is part of type
     identity rather than allocation metadata.
 
     [codeblock, $code("bst"):
@@ -175,13 +175,13 @@ page_head #= theme_head
         cached ~{cache_capacity Box of String} = {}
     ]
 
-    Optional types [codesnippet:T?] and fallible return slots such as [codesnippet:Error!]
-    are also compiler-owned constructed forms. Public [codesnippet:Option of T],
-    public [codesnippet:Result of T, E], [codesnippet:Option.Some], and
-    [codesnippet:Result.Ok] are not current Alpha syntax.
+    Optional types `T?` and fallible return slots such as `Error!`
+    are also compiler-owned constructed forms. Public `Option of T`,
+    public `Result of T, E`, `Option.Some`, and
+    `Result.Ok` are not current Alpha syntax.
 
-    Generic functions can use final generic error slots, [codesnippet:return!],
-    postfix propagation, and [codesnippet:catch] when ordinary local inference can solve the
+    Generic functions can use final generic error slots, `return!`,
+    postfix propagation, and `catch` when ordinary local inference can solve the
     generic parameters. The compiler still rejects body-side specialization of an abstract
     generic error slot.
 ]
@@ -189,7 +189,7 @@ page_head #= theme_head
 #[section, $markdown:
     # Nesting rule
 
-    Alpha allows one inline [codesnippet:of] application per annotation.
+    Alpha allows one inline `of` application per annotation.
 
     Collection element annotations may contain that one application:
 
@@ -256,8 +256,8 @@ page_head #= theme_head
     Body validation currently allows pass-through behavior such as returning a value of the
     same generic parameter type, forwarding it to another generic function, or storing it in
     a generic wrapper. Local annotations inside the generic body may use the active generic
-    parameters, including [codesnippet:T], [codesnippet:{T}], and [codesnippet:Box of T].
-    Behavior-dependent operations on unconstrained [codesnippet:T] are rejected. A declaration-site
+    parameters, including `T`, `{T}`, and `Box of T`.
+    Behavior-dependent operations on unconstrained `T` are rejected. A declaration-site
     trait bound can allow receiver calls supplied by a unique visible trait requirement. Arithmetic,
     equality, field access, template interpolation, and external/IO behavior still require concrete
     support or a future dedicated trait integration.
@@ -307,8 +307,8 @@ page_head #= theme_head
     ]
 
     Generic optional and fallible support still depends on immediate evidence. A bare
-    [codesnippet:none] cannot infer [codesnippet:T] by itself, and a concrete callee error type
-    cannot specialize an abstract surrounding [codesnippet:E!] from inside the generic body.
+    `none` cannot infer `T` by itself, and a concrete callee error type
+    cannot specialize an abstract surrounding `E!` from inside the generic body.
 
     Same-module grouped imports can call generic free functions by their imported local name:
 
@@ -333,7 +333,7 @@ page_head #= theme_head
         value = helpers.identity(42)
     ]
 
-    Public facade wrappers are ordinary authored generic functions marked with [codesnippet:export] in [codesnippet:#mod.bst].
+    Public facade wrappers are ordinary authored generic functions marked with `export` in `#mod.bst`.
     Normal imports inside the facade remain private and are only usable by the wrapper body:
 
     [codeblock, $code("bst"):
@@ -365,7 +365,7 @@ page_head #= theme_head
     ]
 
     Generic functions are still callable declarations only. They cannot be passed around as
-    first-class values, including through namespace members such as [codesnippet:helpers.identity].
+    first-class values, including through namespace members such as `helpers.identity`.
     Direct facade re-export syntax is also deferred; expose imported behavior with real authored
     wrapper declarations.
 ]
@@ -373,7 +373,7 @@ page_head #= theme_head
 #[section, $markdown:
     # Trait bounds
 
-    Generic bounds use [codesnippet:is], not [codesnippet:must].
+    Generic bounds use `is`, not `must`.
 
     [codeblock, $code("bst"):
         render type Item is DISPLAY_TEXT |item Item| -> String:
@@ -381,7 +381,7 @@ page_head #= theme_head
         ;
     ]
 
-    Multiple bounds on one parameter use [codesnippet:and]. Commas still separate generic parameters:
+    Multiple bounds on one parameter use `and`. Commas still separate generic parameters:
 
     [codeblock, $code("bst"):
         combine type A is DISPLAY_TEXT, B is DISPLAY_TEXT |left A, right B| -> String:
@@ -419,7 +419,7 @@ page_head #= theme_head
     Dynamic trait values do not satisfy static generic bounds.
     Bound-provided receiver methods use the selected static evidence; dynamic wrappers use runtime
     dispatch and are a separate value representation.
-    [codesnippet:where] clauses remain rejected; write bounds directly on the generic parameter list.
+    `where` clauses remain rejected; write bounds directly on the generic parameter list.
 ]
 
 #[section, $markdown:
@@ -427,19 +427,19 @@ page_head #= theme_head
 
     The following are not current Alpha generics:
 
-    - explicit generic call syntax such as [codesnippet, "identity of Int(42)"], [codesnippet, "identity<Int>(42)"], [codesnippet, "identity[Int](42)"], or [codesnippet, "identity(42 Int)"]
-    - inline generic sugar such as [codesnippet, "|value type A|"]
+    - explicit generic call syntax such as `identity of Int(42)`, `identity<Int>(42)`, `["identity[Int](42)"]`, or `identity(42 Int)`
+    - inline generic sugar such as `|value type A|`
     - generic function values and higher-order generic functions
-    - [codesnippet:where] clauses and file-local evidence-backed generic bound dispatch
-    - type values, type-returning functions, type-level [codesnippet:#if], and compile-time type inspection
+    - `where` clauses and file-local evidence-backed generic bound dispatch
+    - type values, type-returning functions, type-level `#if`, and compile-time type inspection
     - recursive generic structs or choices
     - receiver methods on instantiated generic types
-    - namespace or wildcard facade exports and function alias exports through [codesnippet:#mod.bst]
+    - namespace or wildcard facade exports and function alias exports through `#mod.bst`
     - generic JS or external package functions
     - generic aliases with parameters
     - partial type application
     - nested generic type application beyond the collection element exception
-    - public [codesnippet:Option of T] or [codesnippet:Result of T, E]
-    - [codesnippet:Option.Some], [codesnippet:Result.Ok], public [codesnippet:Ok] or [codesnippet:Err] constructors
+    - public `Option of T` or `Result of T, E`
+    - `Option.Some`, `Result.Ok`, public `Ok` or `Err` constructors
     - higher-kinded types, const generics, lifetime parameters, specialization, associated types, and dynamic generic reification
 ]

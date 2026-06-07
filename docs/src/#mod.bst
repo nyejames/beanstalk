@@ -10,6 +10,5 @@ export @styles/docs {
     styled_table,
     data,
     codeblock,
-    codesnippet,
     title,
 }

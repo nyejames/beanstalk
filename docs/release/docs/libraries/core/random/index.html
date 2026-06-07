@@ -189,6 +189,11 @@ body {
         padding-left: var(--bst-spacing-small);
     }
 
+    .container code:not(.codeblock) {
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    }
+
     @media (min-width: 576px) {
         .container {
             max-width: 510px;
@@ -312,34 +317,7 @@ body {
         </div>
     </nav>
      <h1 style="font-size: 2em;text-align: center;"> CORE RANDOM</h1>
-    <section class="container"><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@core/random</span> provides basic random number helpers for the HTML JavaScript path.</p><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">random_float()</span> returns a <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Float</span>.</p><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">random_int(min, max)</span> returns an <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Int</span> in the inclusive range from <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">min</span> to <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">max</span>.</p><p>If <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">min</span> is greater than <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">max</span>, the bounds are swapped.</p><pre style="
+    <section class="container"><p><code>@core/random</code> provides basic random number helpers for the HTML JavaScript path.</p><p><code>random_float()</code> returns a <code>Float</code>. <code>random_int(min, max)</code> returns an <code>Int</code> in the inclusive range from <code>min</code> to <code>max</code>. If <code>min</code> is greater than <code>max</code>, the bounds are swapped.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;

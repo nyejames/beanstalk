@@ -1,5 +1,5 @@
 import @html {center}
-import @styles/docs {navbar, title, section, codeblock, codesnippet, theme_head}
+import @styles/docs {navbar, title, section, codeblock, theme_head}
 
 page_title #= "Core Collections"
 page_description #= "Ordered collection literals and common collection methods."
@@ -12,7 +12,7 @@ page_head #= theme_head
     Collections are ordered, zero-indexed groups of one element type.
     Non-empty literals infer their element type from their items.
     Empty literals need an explicit collection type.
-    Growable collections use [codesnippet:{T}], while fixed collections use [codesnippet:{N T}]
+    Growable collections use `{T}`, while fixed collections use `{N T}`
     with a compile-time maximum length.
 
     [codeblock, $code("bst"):
@@ -35,8 +35,8 @@ page_head #= theme_head
         ;
     ]
 
-    [codesnippet:get], [codesnippet:set], [codesnippet:push], and [codesnippet:remove] are fallible.
-    [codesnippet:length] is infallible.
+    `get`, `set`, `push`, and `remove` are fallible.
+    `length` is infallible.
     See @../../../collections (Collections) for the language rules around mutability, fixed capacity,
     and empty literal typing.
 ]

@@ -1,5 +1,5 @@
 import @html {center}
-import @styles/docs {navbar, title, section, palette, styled_table, header, data, codeblock, codesnippet,theme_head}
+import @styles/docs {navbar, title, section, palette, styled_table, header, data, codeblock,theme_head}
 
 page_title #= "Language Basics"
 page_description #= "Core language syntax and semantics in Beanstalk."
@@ -9,7 +9,7 @@ page_head #= theme_head
 #[title, center: LANGUAGE BASICS]
 
 #[section, $markdown:
-    Every project has a [codesnippet:#config.bst] file that defines the entry points and dependencies of the project.
+    Every project has a `#config.bst` file that defines the entry points and dependencies of the project.
 
     If instead, you build or run a specific Beanstalk file,
     it will create a single module from that entry point and pull in all the file's dependencies.
@@ -36,10 +36,10 @@ page_head #= theme_head
     - Equality and other logical operators use keywords like "is" and "not"; symbolic equality
     and logical-not forms are not part of Beanstalk syntax.
 
-    - tilde symbol [codesnippet: ~] to indicate mutability (mutability must be explicit). 
+    - tilde symbol ` ~` to indicate mutability (mutability must be explicit).
     This comes before the type if there is an explicit type declaration.
 
-    - hash symbol [codesnippet: #] for constants (mutually exclusive with mutability).
+    - hash symbol ` #` for constants (mutually exclusive with mutability).
 
     - Immutable Reference semantics are the default for all stack and heap allocated types. 
 
@@ -53,13 +53,13 @@ page_head #= theme_head
     A grouped receiver method import also requires its receiver type to be visible in the importing file, either through the same grouped import, an existing type import, a namespace import from the same surface, or an exact transparent type alias.
 
     ## External JavaScript Signatures
-    Annotated [codesnippet:.js] imports use [codesnippet:@bst.opaque] and [codesnippet:@bst.sig] comments.
-    Supported JavaScript export forms are [codesnippet:export function name(...) { ... }] and block-bodied [codesnippet:export const name = (...) => { ... }].
+    Annotated `.js` imports use `@bst.opaque` and `@bst.sig` comments.
+    Supported JavaScript export forms are `export function name(...) { ... }` and block-bodied `export const name = (...) => { ... }`.
     Expression-bodied arrow exports are rejected.
-    In [codesnippet:@bst.sig], [codesnippet:this] may appear only once and only as the first parameter to declare a receiver method.
-    JS libraries may import registered runtime modules such as [codesnippet:@beanstalk/runtime] with named static imports only.
+    In `@bst.sig`, `this` may appear only once and only as the first parameter to declare a receiver method.
+    JS libraries may import registered runtime modules such as `@beanstalk/runtime` with named static imports only.
     The named runtime import list may span multiple lines.
-    Runtime modules and import maps are emitted from the actual accepted JS imports, so fallible JS functions may either use [codesnippet:bstOk] / [codesnippet:bstErr] helpers or return the wrapper shape manually.
+    Runtime modules and import maps are emitted from the actual accepted JS imports, so fallible JS functions may either use `bstOk` / `bstErr` helpers or return the wrapper shape manually.
 
     ## Formatting
     - 4 spaces are recommended for indentation.
@@ -67,7 +67,7 @@ page_head #= theme_head
     - Everything else uses regular_snake_case.
 
     # Comments
-    Comments use a double minus sign. [codesnippet: --]
+    Comments use a double minus sign. `--`
     
     Documentation comments will eventually be created via special templates.
 
@@ -80,7 +80,7 @@ page_head #= theme_head
 [section, $markdown:
     # Variables
 
-    Equals means assign. Tilde [codesnippet: ~] means this is a mutable and can change.
+    Equals means assign. Tilde ` ~` means this is a mutable and can change.
 
     All variables must be assigned a value when they are declared.
 
@@ -151,7 +151,7 @@ page_head #= theme_head
         concatenated_strings = [string_slice, a_mutable_string]
     ]
 
-    All copies are explicit and must use the [codesnippet:copy] keyword in front of the value being copied.
+    All copies are explicit and must use the `copy` keyword in front of the value being copied.
 
     [codeblock, $code("bst"):
         -- Create a new collection of integers
@@ -212,7 +212,7 @@ page_head #= theme_head
 
     ## Numerical Types
     These will be extended to smaller sized and unsigned variants in the future.
-    By default, [codesnippet:"Float"] and [codesnippet:"Int"] will become 64 bit signed types.
+    By default, `"Float"` and `"Int"` will become 64 bit signed types.
 
     The language currently supports a small set of core types but may be extended in the future.
 
@@ -220,9 +220,9 @@ page_head #= theme_head
     String is the keyword for string types in Beanstalk. 
     Double quotes are automatically string slices. 
     
-    [codesnippet: "Double quotes for a UTF-8 string slice"`]
+    `"Double quotes for a UTF-8 string slice"`
 
-    Backticks are used for RAW strings. To escape a backtick it must be preceded with a backslash [codesnippet: \\].
+    Backticks create raw string slices in expression position. Inside template bodies, backticks are ordinary text available to formatters such as `$markdown`.
 
     Scenes are used instead of format strings.
 

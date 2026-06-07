@@ -1,5 +1,5 @@
 import @html {center}
-import @styles/docs {navbar, title, section, codeblock, codesnippet, theme_head}
+import @styles/docs {navbar, title, section, codeblock, theme_head}
 
 page_title #= "Core Text"
 page_description #= "Text helper functions for String values."
@@ -9,14 +9,14 @@ page_head #= theme_head
 #[title, center: CORE TEXT]
 
 #[section, $markdown:
-    [codesnippet:@core/text] provides helper functions for [codesnippet:String] values.
+    `@core/text` provides helper functions for `String` values.
 
     Current helpers:
-    - [codesnippet:length]
-    - [codesnippet:is_empty]
-    - [codesnippet:contains]
-    - [codesnippet:starts_with]
-    - [codesnippet:ends_with]
+    - `length`
+    - `is_empty`
+    - `contains`
+    - `starts_with`
+    - `ends_with`
 
     [codeblock, $code("bst"):
         import @core/text {length, contains}

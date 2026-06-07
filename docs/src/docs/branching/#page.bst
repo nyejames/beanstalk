@@ -1,5 +1,5 @@
 import @html {center}
-import @styles/docs {navbar, title, section, palette, styled_table, codeblock, theme_head, codesnippet}
+import @styles/docs {navbar, title, section, palette, styled_table, codeblock, theme_head}
 
 page_title #= "Branching"
 page_description #= "If statements and pattern matching in Beanstalk."
@@ -36,8 +36,8 @@ page_head #= theme_head
     # Pattern  Matching
     Pattern matching is a control-flow tool for checking one value against multiple patterns.
 
-    Non-choice matches must include [codesnippet: else =>].
-    Choice matches can omit [codesnippet: else =>] only when every variant is covered and no arm has a guard.
+    Non-choice matches must include ` else =>`.
+    Choice matches can omit ` else =>` only when every variant is covered and no arm has a guard.
 
     [codeblock, $code("bst"):
         score = 84
@@ -102,14 +102,14 @@ page_head #= theme_head
         ;
     ]
 
-    The names before [codesnippet: as] must match the declared payload fields. The optional name after [codesnippet: as] is the arm-local binding.
+    The names before ` as` must match the declared payload fields. The optional name after ` as` is the arm-local binding.
 
     Capture originals must exactly match the declared payload field names.
-    For example, [codesnippet: Err(message as error_text) =>] binds the payload field [codesnippet: message] to the local name [codesnippet: error_text].
+    For example, ` Err(message as error_text) =>` binds the payload field ` message` to the local name ` error_text`.
 
-    Exhaustiveness is tag-level: [codesnippet: Err(message) =>] covers all [codesnippet: Err] values regardless of payload content.
+    Exhaustiveness is tag-level: ` Err(message) =>` covers all ` Err` values regardless of payload content.
     
-    Fallback match arms use [codesnippet: else =>].
-    The fallback body may be empty; an empty [codesnippet: else =>] catches all remaining cases and does nothing.
-    [codesnippet: _ =>] and [codesnippet: else => _] are not valid match syntax.
+    Fallback match arms use ` else =>`.
+    The fallback body may be empty; an empty ` else =>` catches all remaining cases and does nothing.
+    ` _ =>` and ` else => _` are not valid match syntax.
 ]

@@ -189,6 +189,11 @@ body {
         padding-left: var(--bst-spacing-small);
     }
 
+    .container code:not(.codeblock) {
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    }
+
     @media (min-width: 576px) {
         .container {
             max-width: 510px;
@@ -312,13 +317,7 @@ body {
         </div>
     </nav>
      <h1 style="font-size: 2em;text-align: center;"> CORE IO</h1>
-    <section class="container"><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">io(...)</span> writes to standard output.</p><p>It is part of the prelude, so normal source files can call it without importing <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@core/io</span>.</p><pre style="
+    <section class="container"><p><code>io(...)</code> writes to standard output. It is part of the prelude, so normal source files can call it without importing <code>@core/io</code>.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;

@@ -3664,6 +3664,16 @@ path = "template_escaped_insert_helper_standalone_failure"
 tags = ["integration","templates","diagnostics"]
 
 [[case]]
+id = "template_body_literal_text"
+path = "template_body_literal_text"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_markdown_inline_code"
+path = "template_markdown_inline_code"
+tags = ["integration","templates","markdown"]
+
+[[case]]
 id = "template_frontend_builtins_normal_flow_success"
 path = "template_frontend_builtins_normal_flow_success"
 tags = ["integration","templates"]

@@ -11,9 +11,8 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 ---
 
 # Plans / TODOS
-- Change backticks inside template bodies to be generally usable by formatters, no longer raw strings / sections: `docs/roadmap/plans/template-backticks-markdown-code-implementation-plan.md`
+- Hash Maps 
 -  `copy` keyword becomes the way to do type casting also. Performs type conversions where the declaration or parameter is explicitly typed and implements a CAST trait, for example for float to int casting could look like this: `a Int = copy existing_float_value` and all type conversions would go through using `copy` rather than needing a builtin specific function to do it or a new special syntax. So all numerical casting should be moved over to having `CAST_TO_*` trait implementations and then can use copy keyword to do this in a explicitly typed declaration or function call argument.
-- Hash Maps (core library)
 - Build out core math library
 - first class Reactivity syntax with message / action patterns in templates
 - Compile time arbitary precision aritmetic + Decimals Type support

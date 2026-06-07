@@ -189,6 +189,11 @@ body {
         padding-left: var(--bst-spacing-small);
     }
 
+    .container code:not(.codeblock) {
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    }
+
     @media (min-width: 576px) {
         .container {
             max-width: 510px;
@@ -312,55 +317,7 @@ body {
         </div>
     </nav>
      <h1 style="font-size: 2em;text-align: center;"> CORE MATH</h1>
-    <section class="container"><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@core/math</span> provides common <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Float</span> constants and helper functions.</p><p>Constants include <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">PI</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">TAU</span>, and <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">E</span>. Functions include <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">sin</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">cos</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">tan</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">atan2</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">log</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">pow</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">sqrt</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">abs</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">min</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">max</span>, and <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">clamp</span>.</p><pre style="
+    <section class="container"><p><code>@core/math</code> provides common <code>Float</code> constants and helper functions.</p><p>Constants include <code>PI</code>, <code>TAU</code>, and <code>E</code>. Functions include <code>sin</code>, <code>cos</code>, <code>tan</code>, <code>atan2</code>, <code>log</code>, <code>pow</code>, <code>sqrt</code>, <code>abs</code>, <code>min</code>, <code>max</code>, and <code>clamp</code>.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -374,10 +331,7 @@ body {
     bounded <span class='bst-code-operator'>=</span> clamp<span class='bst-code-parenthesis'>(</span>wave, <span class='bst-code-number'>0.0</span>, <span class='bst-code-number'>1.0</span><span class='bst-code-parenthesis'>)</span>
 
     io<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>[</span><span class='bst-code-operator'>:</span>bounded<span class='bst-code-operator'>=</span><span class='bst-code-parenthesis'>[</span>bounded<span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>]</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>On the HTML JavaScript path these helpers lower to JavaScript <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Math</span> expressions.</p></section>
+    </code></pre><p>On the HTML JavaScript path these helpers lower to JavaScript <code>Math</code> expressions.</p></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

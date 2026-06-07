@@ -1,5 +1,5 @@
 import @html {center}
-import @styles/docs {navbar, title, section, styled_table, header, data, codeblock, codesnippet, theme_head}
+import @styles/docs {navbar, title, section, styled_table, header, data, codeblock, theme_head}
 
 page_title #= "Core Time"
 page_description #= "Duration, TimeMark, and Timestamp helpers in @core/time."
@@ -9,11 +9,11 @@ page_head #= theme_head
 #[title, center: CORE TIME]
 
 #[section, $markdown:
-    [codesnippet:@core/time] separates elapsed time from wall-clock time.
+    `@core/time` separates elapsed time from wall-clock time.
 
-    - [codesnippet:Duration] is for elapsed amounts.
-    - [codesnippet:TimeMark] is for measuring elapsed time and frame deltas.
-    - [codesnippet:Timestamp] is for real-world UTC instants.
+    - `Duration` is for elapsed amounts.
+    - `TimeMark` is for measuring elapsed time and frame deltas.
+    - `Timestamp` is for real-world UTC instants.
 
     [codeblock, $code("bst"):
         import @core/time {
@@ -28,8 +28,8 @@ page_head #= theme_head
 #[section, $markdown:
     ## Measuring elapsed time
 
-    Use [codesnippet:TimeMark] when you need a monotonic measurement point.
-    Use [codesnippet:Duration] for the elapsed amount.
+    Use `TimeMark` when you need a monotonic measurement point.
+    Use `Duration` for the elapsed amount.
 
     [codeblock, $code("bst"):
         previous ~= mark_now()
@@ -47,7 +47,7 @@ page_head #= theme_head
 #[section, $markdown:
     ## UTC timestamps
 
-    Use [codesnippet:Timestamp] for real-world UTC instants that may be logged, stored, or exchanged with external systems.
+    Use `Timestamp` for real-world UTC instants that may be logged, stored, or exchanged with external systems.
 
     [codeblock, $code("bst"):
         import @core/time {
@@ -84,23 +84,90 @@ page_head #= theme_head
     [styled_table:
         [header: [: Name] [: Meaning] ]
 
-        [data: [: [codesnippet:mark_now()] ] [: Current monotonic [codesnippet:TimeMark].] ]
-        [data: [: [codesnippet:elapsed_since(start)] ] [: [codesnippet:Duration] from a mark to now.] ]
-        [data: [: [codesnippet:duration_between(start, end)] ] [: [codesnippet:Duration] between two marks.] ]
-        [data: [: [codesnippet:timestamp_now()] ] [: Current UTC wall-clock [codesnippet:Timestamp].] ]
-        [data: [: [codesnippet:duration_from_seconds(seconds)] ] [: Build a [codesnippet:Duration].] ]
-        [data: [: [codesnippet:duration_from_milliseconds(milliseconds)] ] [: Build a [codesnippet:Duration].] ]
-        [data: [: [codesnippet:timestamp_from_unix_seconds(seconds)] ] [: Build a [codesnippet:Timestamp].] ]
-        [data: [: [codesnippet:timestamp_from_unix_milliseconds(milliseconds)] ] [: Build a [codesnippet:Timestamp].] ]
-        [data: [: [codesnippet:timestamp_from_iso_string(text)] ] [: Parse an ISO timestamp as [codesnippet:Timestamp, Error!].] ]
-        [data: [: [codesnippet:duration.as_seconds()] ] [: Convert a [codesnippet:Duration] to seconds.] ]
-        [data: [: [codesnippet:duration.as_milliseconds()] ] [: Convert a [codesnippet:Duration] to milliseconds.] ]
-        [data: [: [codesnippet:duration.is_negative()] ] [: Check whether a [codesnippet:Duration] is below zero.] ]
-        [data: [: [codesnippet:duration.abs()] ] [: Absolute [codesnippet:Duration].] ]
-        [data: [: [codesnippet:duration.clamp(min, max)] ] [: Bound a [codesnippet:Duration] to a range.] ]
-        [data: [: [codesnippet:timestamp.unix_seconds()] ] [: Convert a [codesnippet:Timestamp] to Unix seconds.] ]
-        [data: [: [codesnippet:timestamp.unix_milliseconds()] ] [: Convert a [codesnippet:Timestamp] to Unix milliseconds.] ]
-        [data: [: [codesnippet:timestamp.to_iso_string()] ] [: Format a [codesnippet:Timestamp] as UTC ISO text.] ]
+        [data:
+            [: [$html:<code>mark_now()</code>]]
+            [: Current monotonic [$html:<code>TimeMark</code>].]
+        ]
+
+        [data:
+            [: [$html:<code>elapsed_since(start)</code>]]
+            [: [$html:<code>Duration</code>] from a mark to now.]
+        ]
+
+        [data:
+            [: [$html:<code>duration_between(start, end)</code>]]
+            [: [$html:<code>Duration</code>] between two marks.]
+        ]
+
+        [data:
+            [: [$html:<code>timestamp_now()</code>]]
+            [: Current UTC wall-clock [$html:<code>Timestamp</code>].]
+        ]
+
+        [data:
+            [: [$html:<code>duration_from_seconds(seconds)</code>]]
+            [: Build a [$html:<code>Duration</code>].]
+        ]
+
+        [data:
+            [: [$html:<code>duration_from_milliseconds(milliseconds)</code>]]
+            [: Build a [$html:<code>Duration</code>].]
+        ]
+
+        [data:
+            [: [$html:<code>timestamp_from_unix_seconds(seconds)</code>]]
+            [: Build a [$html:<code>Timestamp</code>].]
+        ]
+
+        [data:
+            [: [$html:<code>timestamp_from_unix_milliseconds(milliseconds)</code>]]
+            [: Build a [$html:<code>Timestamp</code>].]
+        ]
+
+        [data:
+            [: [$html:<code>timestamp_from_iso_string(text)</code>]]
+            [: Parse an ISO timestamp as [$html:<code>Timestamp, Error!</code>].]
+        ]
+
+        [data:
+            [: [$html:<code>duration.as_seconds()</code>]]
+            [: Convert a [$html:<code>Duration</code>] to seconds.]
+        ]
+
+        [data:
+            [: [$html:<code>duration.as_milliseconds()</code>]]
+            [: Convert a [$html:<code>Duration</code>] to milliseconds.]
+        ]
+
+        [data:
+            [: [$html:<code>duration.is_negative()</code>]]
+            [: Check whether a [$html:<code>Duration</code>] is below zero.]
+        ]
+
+        [data:
+            [: [$html:<code>duration.abs()</code>]]
+            [: Absolute [$html:<code>Duration</code>].]
+        ]
+
+        [data:
+            [: [$html:<code>duration.clamp(min, max)</code>]]
+            [: Bound a [$html:<code>Duration</code>] to a range.]
+        ]
+
+        [data:
+            [: [$html:<code>timestamp.unix_seconds()</code>]]
+            [: Convert a [$html:<code>Timestamp</code>] to Unix seconds.]
+        ]
+
+        [data:
+            [: [$html:<code>timestamp.unix_milliseconds()</code>]]
+            [: Convert a [$html:<code>Timestamp</code>] to Unix milliseconds.]
+        ]
+
+        [data:
+            [: [$html:<code>timestamp.to_iso_string()</code>]]
+            [: Format a [$html:<code>Timestamp</code>] as UTC ISO text.]
+        ]
     ]
 ]
 
@@ -115,5 +182,5 @@ page_head #= theme_head
     - timers, sleep, intervals, or animation callbacks
     - Wasm or non-JS time lowerings
 
-    Browser animation-frame integration belongs in a future web-specific package rather than [codesnippet:@core/time].
+    Browser animation-frame integration belongs in a future web-specific package rather than `@core/time`.
 ]

@@ -337,7 +337,7 @@ io([: Hello, [name]])
 
 ## String Template System
 
-Templates use `[]`; collections use `{}`. `""` and backticks create string slices. Templates create owned strings and may fold at compile time or lower to runtime string construction.
+Templates use `[]`; collections use `{}`. `""` creates escaped string slices, and expression-position backticks create raw string slices. Templates create owned strings and may fold at compile time or lower to runtime string construction.
 
 Template head/body shape:
 
@@ -351,6 +351,8 @@ Template head/body shape:
 Core rules:
 - The head and body are separated by `:`.
 - Template bodies capture variables from the surrounding scope.
+- Backticks and Backslashes inside template bodies are ordinary body text (preserved for formatters such as `$markdown`). Regular quoted string literals still support escapes.
+- Literal template delimiters in output use ordinary string insertion, such as `[: ["[literal]"]]` or `[: [`[This is text inside sqauare brackets as a string]`]]`.
 - Only direct top-level template expressions in an HTML entry file contribute page fragments.
 - Top-level runtime templates run in entry `start()` order.
 - Top-level const templates fold at compile time and are merged separately.
@@ -503,6 +505,15 @@ Const rules:
 
 Runtime slot applications are valid inside template control flow after normal slot routing. Escaped unresolved `[$slot]` or `$insert(...)` artifacts inside runtime control-flow bodies are invalid template structure. Runtime slot applications appended inside template loops follow the same nearest-loop `[break]` / `[continue]` rules as direct loop body content.
 
+### Markdown Formatting
+
+`$markdown` is Beanstalk's small markdown flavour, not a full CommonMark implementation.
+
+Inline code uses paired isolated single backticks on the same markdown line and renders as `<code>...</code>`.
+Markdown emphasis and link parsing do not run inside inline code. Empty spans, repeated backtick runs, unmatched backticks, multiline spans, variable-length delimiters, fenced code blocks, and markdown-level backtick escaping are not part of Beanstalk's markdown flavour.
+
+Dynamic expression anchors may appear inside a parent-authored code span, but `$markdown` does not inspect their rendered output. Child templates are opaque barriers to the parent formatter and cannot be inside a parent-authored code span or pair delimiters across that child boundary.
+
 ### Beandown `.bd` Content Files
 
 Beandown files are HTML-builder content helpers. A `.bd` file is authored as the body of an implicit compile-time markdown template:
@@ -533,7 +544,7 @@ Rules:
 - `.bd` files have no imports, declarations, frontmatter, metadata, or raw-source preservation.
 - A `.bd` body must fully fold at compile time. Runtime functions, runtime bindings, and types are not visible.
 - The implicit markdown template means `--` is body text, not a Beanstalk comment.
-- A literal outer `]` must be escaped as `\]`; nested authored templates still use normal `[...]` syntax.
+- `.bd` bodies follow normal template-body and `$markdown` semantics. Literal template delimiters use string insertion, such as `["[literal]"]`; nested authored templates still use normal `[...]` syntax.
 
 Inside compiler-integrated HTML project builds, a `.bd` body sees a restricted flat compile-time scope:
 - exported compile-time constants and const records from `@html`, such as `[p: body]`;

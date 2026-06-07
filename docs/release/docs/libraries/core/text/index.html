@@ -189,6 +189,11 @@ body {
         padding-left: var(--bst-spacing-small);
     }
 
+    .container code:not(.codeblock) {
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    }
+
     @media (min-width: 576px) {
         .container {
             max-width: 510px;
@@ -312,28 +317,7 @@ body {
         </div>
     </nav>
      <h1 style="font-size: 2em;text-align: center;"> CORE TEXT</h1>
-    <section class="container"><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@core/text</span> provides helper functions for <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">String</span> values.</p><p>Current helpers:</p><ul><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">length</span></li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">is_empty</span></li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">contains</span></li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">starts_with</span></li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">ends_with</span></li></ul><pre style="
+    <section class="container"><p><code>@core/text</code> provides helper functions for <code>String</code> values.</p><p>Current helpers:</p><ul><li><code>length</code></li><li><code>is_empty</code></li><li><code>contains</code></li><li><code>starts_with</code></li><li><code>ends_with</code></li></ul><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;

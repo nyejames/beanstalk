@@ -6,6 +6,14 @@
 
 use super::*;
 
+/// Returns the character at the given atom index if it is a plain text atom.
+pub(super) fn atom_char(atoms: &[MarkdownInlineAtom], index: usize) -> Option<char> {
+    match atoms.get(index)? {
+        MarkdownInlineAtom::Char(ch) => Some(*ch),
+        MarkdownInlineAtom::Opaque(_) => None,
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum MarkdownListKind {
     Unordered,

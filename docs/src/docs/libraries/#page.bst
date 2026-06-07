@@ -1,5 +1,5 @@
 import @html {center}
-import @styles/docs {navbar, title, section, styled_table, header, data, codeblock, codesnippet, theme_head}
+import @styles/docs {navbar, title, section, styled_table, header, data, codeblock, theme_head}
 
 page_title #= "Libraries"
 page_description #= "How Beanstalk libraries, source libraries, core packages, and JavaScript imports work."
@@ -19,36 +19,36 @@ page_head #= theme_head
 
         [data:
             [: Source library]
-            [: [codesnippet:import @helper {double}] ]
-            [: Normal [codesnippet:.bst] source behind a [codesnippet:#mod.bst] facade.]
+            [: [$html:<code>import @helper {double}</code>] ]
+            [: Normal [$html:<code>.bst</code>] source behind a [$html:<code>#mod.bst</code>] facade.]
         ]
 
         [data:
             [: Builder source library]
-            [: [codesnippet:import @html {center}] ]
-            [: Builder-provided [codesnippet:.bst] source. The HTML builder provides [codesnippet:@html].]
+            [: [$html:<code>import @html {center}</code>] ]
+            [: Builder-provided [$html:<code>.bst</code>] source. The HTML builder provides [$html:<code>@html</code>].]
         ]
 
         [data:
             [: Core external package]
-            [: [codesnippet:import @core/math {sin, PI}] ]
-            [: Typed functions and constants registered by the builder. These do not have to come from [codesnippet:.bst] files.]
+            [: [$html:<code>import @core/math {sin, PI}</code>] ]
+            [: Typed functions and constants registered by the builder. These do not have to come from [$html:<code>.bst</code>] files.]
         ]
 
         [data:
             [: JavaScript library]
-            [: [codesnippet:import @./drawing.js {draw}] ]
-            [: An annotated [codesnippet:.js] file parsed into Beanstalk-visible types and functions.]
+            [: [$html:<code>import @./drawing.js {draw}</code>] ]
+            [: An annotated [$html:<code>.js</code>] file parsed into Beanstalk-visible types and functions.]
         ]
 
         [data:
             [: Builder runtime library]
-            [: [codesnippet:import @web/canvas {get_canvas}] ]
+            [: [$html:<code>import @web/canvas {get_canvas}</code>] ]
             [: A builder-owned JavaScript library bundled with the project builder.]
         ]
     ]
 
-    The current canvas library is exposed as [codesnippet:@web/canvas].
+    The current canvas library is exposed as `@web/canvas`.
     This page calls it the canvas library, but examples use the current full import path.
 ]
 
@@ -92,20 +92,20 @@ page_head #= theme_head
 
     General rules:
 
-    - [codesnippet:@./] resolves relative to the importing file.
-    - parent-directory imports with [codesnippet:..] are not supported.
-    - [codesnippet:.bst] imports are extensionless.
-    - direct [codesnippet:.js] imports keep the [codesnippet:.js] extension.
-    - source-library imports use their library prefix directly, such as [codesnippet:@helper] or [codesnippet:@html].
+    - `@./` resolves relative to the importing file.
+    - parent-directory imports with `..` are not supported.
+    - `.bst` imports are extensionless.
+    - direct `.js` imports keep the `.js` extension.
+    - source-library imports use their library prefix directly, such as `@helper` or `@html`.
     - non-relative imports whose first path segment matches a source-library prefix resolve from that library root.
-    - other non-relative source imports resolve from the project's configured [codesnippet:entry_root].
-    - core and builder runtime packages use their registered package path, such as [codesnippet:@core/math] or [codesnippet:@web/canvas].
-    - specific symbol imports use grouped syntax. Direct symbol-path imports such as [codesnippet:import @core/math/sin] are rejected.
-    - direct imports of special files such as [codesnippet:#mod.bst], [codesnippet:#page.bst], and [codesnippet:#config.bst] are rejected.
-    - folder imports across module boundaries require a [codesnippet:#mod.bst] facade. Import concrete same-module files directly when no facade is intended.
+    - other non-relative source imports resolve from the project's configured `entry_root`.
+    - core and builder runtime packages use their registered package path, such as `@core/math` or `@web/canvas`.
+    - specific symbol imports use grouped syntax. Direct symbol-path imports such as `import @core/math/sin` are rejected.
+    - direct imports of special files such as `#mod.bst`, `#page.bst`, and `#config.bst` are rejected.
+    - folder imports across module boundaries require a `#mod.bst` facade. Import concrete same-module files directly when no facade is intended.
 
     Namespace imports create a shallow namespace for ordinary fields.
-    Use [codesnippet:math.sin(1.0)] for values and [codesnippet:canvas.Canvas2d] in type position, but do not pass the namespace record itself as a value.
+    Use `math.sin(1.0)` for values and `canvas.Canvas2d` in type position, but do not pass the namespace record itself as a value.
     Receiver methods are called through receiver-call syntax rather than as namespace fields.
 ]
 
@@ -113,7 +113,7 @@ page_head #= theme_head
     # Source libraries
 
     Source libraries are normal Beanstalk source roots.
-    A project-local source library usually lives under a configured [codesnippet:library_folders] folder.
+    A project-local source library usually lives under a configured `library_folders` folder.
     Each direct child directory of that folder becomes an import prefix.
 
     [codeblock, $code("text"):
@@ -136,10 +136,10 @@ page_head #= theme_head
         }
     ]
 
-    The direct child folder [codesnippet:lib/helper] becomes the [codesnippet:@helper] library prefix.
-    The library's public surface is controlled by [codesnippet:lib/helper/#mod.bst].
-    Ordinary project source under [codesnippet:entry_root] is not automatically a source-library prefix.
-    If a nested page module needs declarations from another module, expose them through that module's [codesnippet:#mod.bst] facade instead of bypassing into private files.
+    The direct child folder `lib/helper` becomes the `@helper` library prefix.
+    The library's public surface is controlled by `lib/helper/#mod.bst`.
+    Ordinary project source under `entry_root` is not automatically a source-library prefix.
+    If a nested page module needs declarations from another module, expose them through that module's `#mod.bst` facade instead of bypassing into private files.
 
     A minimal library facade can define declarations directly:
 
@@ -188,21 +188,21 @@ page_head #= theme_head
 
     Facade rules:
 
-    - outside importers can only see declarations and grouped imports marked with [codesnippet:export] in [codesnippet:#mod.bst]
+    - outside importers can only see declarations and grouped imports marked with `export` in `#mod.bst`
     - internal implementation files are not public unless the facade wraps or re-exports them intentionally
-    - normal imports inside [codesnippet:#mod.bst] are local implementation details
+    - normal imports inside `#mod.bst` are local implementation details
     - exported signatures cannot expose private facade-only types
     - receiver methods do not become public through facade type aliases; export the receiver method or a wrapper explicitly
-    - [codesnippet:#mod.bst] is not shared implementation code for sibling files
-    - runtime top-level statements and runtime top-level templates are invalid in [codesnippet:#mod.bst]
-    - bare namespace exports such as [codesnippet:export @./utils] and wildcard exports remain deferred
+    - `#mod.bst` is not shared implementation code for sibling files
+    - runtime top-level statements and runtime top-level templates are invalid in `#mod.bst`
+    - bare namespace exports such as `export @./utils` and wildcard exports remain deferred
 ]
 
 #[section, $markdown:
     # Builder source libraries
 
     Builders can provide source libraries without requiring those files to exist in the user's project.
-    The HTML builder provides the [codesnippet:@html] source library used throughout these docs.
+    The HTML builder provides the `@html` source library used throughout these docs.
 
     [codeblock, $code("bst"):
         import @html {center}
@@ -225,7 +225,7 @@ page_head #= theme_head
     # Core external packages
 
     Some libraries are not source files.
-    [codesnippet:@core/math] is registered as an external package by the builder.
+    `@core/math` is registered as an external package by the builder.
     It exposes typed functions and constants that the frontend can type-check and the backend can lower directly.
 
     [codeblock, $code("bst"):
@@ -238,10 +238,10 @@ page_head #= theme_head
         io(bounded)
     ]
 
-    [codesnippet:@core/math] currently exposes functions such as [codesnippet:sin], [codesnippet:cos], [codesnippet:tan], [codesnippet:atan2], [codesnippet:log], [codesnippet:pow], [codesnippet:sqrt], [codesnippet:min], [codesnippet:max], and [codesnippet:clamp].
-    It also exposes constants such as [codesnippet:PI], [codesnippet:TAU], and [codesnippet:E].
+    `@core/math` currently exposes functions such as `sin`, `cos`, `tan`, `atan2`, `log`, `pow`, `sqrt`, `min`, `max`, and `clamp`.
+    It also exposes constants such as `PI`, `TAU`, and `E`.
 
-    In the JavaScript backend, these math functions currently lower to JavaScript [codesnippet:Math] expressions rather than emitted helper files.
+    In the JavaScript backend, these math functions currently lower to JavaScript `Math` expressions rather than emitted helper files.
     Other external packages may lower through generated glue or runtime assets instead.
 
     The HTML builder currently opts into optional core packages such as:
@@ -258,9 +258,9 @@ page_head #= theme_head
     # JavaScript libraries
 
     The HTML builder can import annotated JavaScript files.
-    A JavaScript file becomes a Beanstalk import target when the JS external import provider can parse its [codesnippet:@bst.*] comments and supported exports.
+    A JavaScript file becomes a Beanstalk import target when the JS external import provider can parse its `@bst.*` comments and supported exports.
 
-    Beanstalk source imports the [codesnippet:.js] file directly:
+    Beanstalk source imports the `.js` file directly:
 
     [codeblock, $code("bst"):
         -- src/#page.bst
@@ -282,12 +282,12 @@ page_head #= theme_head
         }
     ]
 
-    The Beanstalk-facing name is [codesnippet:draw_number].
-    The JavaScript export name is [codesnippet:drawNumber].
+    The Beanstalk-facing name is `draw_number`.
+    The JavaScript export name is `drawNumber`.
     They do not need to match.
-    The [codesnippet:@bst.sig] annotation binds to the next supported JavaScript export after the annotation.
+    The `@bst.sig` annotation binds to the next supported JavaScript export after the annotation.
 
-    Every JavaScript export in a Beanstalk JS library must be annotated with [codesnippet:@bst.sig].
+    Every JavaScript export in a Beanstalk JS library must be annotated with `@bst.sig`.
     Keep private helpers unexported.
 ]
 
@@ -317,10 +317,10 @@ page_head #= theme_head
     Unsupported public export forms include:
 
     - default exports
-    - re-exports such as [codesnippet:export { name }]
+    - re-exports such as `export { name }`
     - class exports
-    - CommonJS exports such as [codesnippet:module.exports] or [codesnippet:exports.name]
-    - [codesnippet:export const] values that are not arrow functions
+    - CommonJS exports such as `module.exports` or `exports.name`
+    - `export const` values that are not arrow functions
     - expression-bodied arrow exports
 
     JavaScript parameters must be plain parameters.
@@ -332,33 +332,33 @@ page_head #= theme_head
         [header: [: Syntax] [: Meaning] ]
 
         [data:
-            [: [codesnippet:@bst.opaque Canvas2d] ]
+            [: [$html:<code>@bst.opaque Canvas2d</code>] ]
             [: Declares an opaque external type. Beanstalk can name it, pass it, and call receiver methods on it, but does not know its internal fields.]
         ]
 
         [data:
-            [: [codesnippet:@bst.sig name |x Float| -> Float] ]
-            [: Declares a Beanstalk-facing function named [codesnippet:name] with one parameter and one success return.]
+            [: [$html:<code>@bst.sig name |x Float| -&gt; Float</code>] ]
+            [: Declares a Beanstalk-facing function named [$html:<code>name</code>] with one parameter and one success return.]
         ]
 
         [data:
-            [: [codesnippet:@bst.sig name || -> Int] ]
+            [: [$html:<code>@bst.sig name || -&gt; Int</code>] ]
             [: Declares a function with no parameters and one success return.]
         ]
 
         [data:
-            [: [codesnippet:@bst.sig name |id String| -> Canvas, Error!] ]
-            [: Declares a fallible function. [codesnippet:Error!] must be the final return slot.]
+            [: [$html:<code>@bst.sig name |id String| -&gt; Canvas, Error!</code>] ]
+            [: Declares a fallible function. [$html:<code>Error!</code>] must be the final return slot.]
         ]
 
         [data:
-            [: [codesnippet:@bst.sig fill |this ~Canvas2d, x Float|] ]
-            [: Declares a receiver method on a mutable [codesnippet:Canvas2d] receiver.]
+            [: [$html:<code>@bst.sig fill |this ~Canvas2d, x Float|</code>] ]
+            [: Declares a receiver method on a mutable [$html:<code>Canvas2d</code>] receiver.]
         ]
     ]
 
-    Built-in signature types are [codesnippet:Int], [codesnippet:Float], [codesnippet:Bool], [codesnippet:String], and [codesnippet:Char].
-    Other type names must be declared with [codesnippet:@bst.opaque] before they are used in a signature.
+    Built-in signature types are `Int`, `Float`, `Bool`, `String`, and `Char`.
+    Other type names must be declared with `@bst.opaque` before they are used in a signature.
 
     Current JS signature limitations:
 
@@ -367,14 +367,14 @@ page_head #= theme_head
     - no generic parameters
     - no callback/function parameter types
     - no multi-success returns
-    - no [codesnippet:Void], [codesnippet:None], [codesnippet:Unit], or [codesnippet:()] return spelling; omit [codesnippet:->] for no success return
+    - no `Void`, `None`, `Unit`, or `()` return spelling; omit `->` for no success return
 ]
 
 #[section, $markdown:
     # Fallible JavaScript functions
 
-    A JavaScript signature that returns [codesnippet:Error!] must return Beanstalk's result wrapper shape.
-    The easiest way is to import the registered runtime helpers from [codesnippet:@beanstalk/runtime].
+    A JavaScript signature that returns `Error!` must return Beanstalk's result wrapper shape.
+    The easiest way is to import the registered runtime helpers from `@beanstalk/runtime`.
 
     [codeblock, $code("js"):
         import { bstOk, bstErr } from "@beanstalk/runtime";
@@ -418,9 +418,9 @@ page_head #= theme_head
 #[section, $markdown:
     # Receiver methods from JavaScript
 
-    Use the [codesnippet:this] parameter to declare a JavaScript export as a receiver method.
-    [codesnippet:this] must be the first parameter and may appear at most once.
-    Add [codesnippet:~] when the method mutates the receiver.
+    Use the `this` parameter to declare a JavaScript export as a receiver method.
+    `this` must be the first parameter and may appear at most once.
+    Add `~` when the method mutates the receiver.
 
     [codeblock, $code("js"):
         /**
@@ -464,7 +464,7 @@ page_head #= theme_head
 #[section, $markdown:
     # The canvas library
 
-    The HTML builder's canvas library is a built-in JS-backed package exposed as [codesnippet:@web/canvas].
+    The HTML builder's canvas library is a built-in JS-backed package exposed as `@web/canvas`.
     It is useful because it shows the whole path from authored JavaScript to Beanstalk imports.
 
     A page can import and use it like this:
@@ -495,19 +495,19 @@ page_head #= theme_head
         └── mod.rs
     ]
 
-    [codesnippet:canvas.js] is ordinary JavaScript plus Beanstalk annotations.
-    It declares opaque types such as [codesnippet:Canvas] and [codesnippet:Canvas2d], free functions such as [codesnippet:get_canvas] and [codesnippet:context_2d], and receiver methods such as [codesnippet:fill_rect], [codesnippet:set_fill_style], [codesnippet:begin_path], [codesnippet:move_to], [codesnippet:line_to], and [codesnippet:stroke].
+    `canvas.js` is ordinary JavaScript plus Beanstalk annotations.
+    It declares opaque types such as `Canvas` and `Canvas2d`, free functions such as `get_canvas` and `context_2d`, and receiver methods such as `fill_rect`, `set_fill_style`, `begin_path`, `move_to`, `line_to`, and `stroke`.
 
     The Rust registration code does the builder-owned part:
 
-    - embeds the [codesnippet:canvas.js] source with [codesnippet:include_str!]
-    - parses it with the same JS parser used for project-local [codesnippet:.js] imports
-    - registers the package path [codesnippet:@web/canvas]
+    - embeds the `canvas.js` source with `include_str!`
+    - parses it with the same JS parser used for project-local `.js` imports
+    - registers the package path `@web/canvas`
     - registers its opaque types, free functions, and receiver methods in the external package registry
     - records the canvas JS file as a runtime asset that the HTML builder must emit
-    - records runtime imports such as [codesnippet:@beanstalk/runtime] so the build can emit the runtime module and import map
+    - records runtime imports such as `@beanstalk/runtime` so the build can emit the runtime module and import map
 
-    This means [codesnippet:@web/canvas] behaves like a normal import to Beanstalk code, but the project author does not need to keep [codesnippet:canvas.js] in their own project.
+    This means `@web/canvas` behaves like a normal import to Beanstalk code, but the project author does not need to keep `canvas.js` in their own project.
 ]
 
 #[section, $markdown:
@@ -516,14 +516,14 @@ page_head #= theme_head
     JavaScript imports do more than type-check.
     The build output also needs callable runtime JavaScript.
 
-    For a project-local [codesnippet:@./drawing.js] import, the HTML builder emits:
+    For a project-local `@./drawing.js` import, the HTML builder emits:
 
     - the original JavaScript asset under Beanstalk's generated JS output area
     - generated glue that adapts Beanstalk calls to JS exports
-    - runtime modules such as [codesnippet:beanstalk-runtime.js] when the JS file imports registered runtime helpers
-    - an import map when generated modules need stable runtime specifiers such as [codesnippet:@beanstalk/runtime]
+    - runtime modules such as `beanstalk-runtime.js` when the JS file imports registered runtime helpers
+    - an import map when generated modules need stable runtime specifiers such as `@beanstalk/runtime`
 
-    Builder runtime libraries such as [codesnippet:@web/canvas] use the same emission path.
+    Builder runtime libraries such as `@web/canvas` use the same emission path.
     The difference is that the source asset is bundled with the builder instead of being read from the user's project.
 
     The HTML-Wasm mode currently has a stricter backend support surface.
@@ -538,13 +538,13 @@ page_head #= theme_head
     1. Create a small wrapper file rather than exposing the whole library.
     2. Use named ESM exports only.
     3. Keep private helpers unexported.
-    4. Add [codesnippet:@bst.opaque] declarations for objects Beanstalk should treat as external handles.
-    5. Add one [codesnippet:@bst.sig] comment immediately before every exported function.
-    6. Use Beanstalk-facing snake_case names in [codesnippet:@bst.sig].
+    4. Add `@bst.opaque` declarations for objects Beanstalk should treat as external handles.
+    5. Add one `@bst.sig` comment immediately before every exported function.
+    6. Use Beanstalk-facing snake_case names in `@bst.sig`.
     7. Use one plain JavaScript parameter for each Beanstalk ABI parameter.
     8. Return the expected raw value for non-fallible functions.
-    9. Return [codesnippet:bstOk(value)] or [codesnippet:bstErr(code, message)] for [codesnippet:Error!] functions.
-    10. Import the wrapper from Beanstalk with its [codesnippet:.js] extension.
+    9. Return `bstOk(value)` or `bstErr(code, message)` for `Error!` functions.
+    10. Import the wrapper from Beanstalk with its `.js` extension.
 
     Example wrapper shape:
 
@@ -603,31 +603,31 @@ page_head #= theme_head
         [data:
             [: Optional core package]
             [: Register typed external functions, constants, and backend lowerings.]
-            [: [codesnippet:@core/math] registers math functions and constants.]
+            [: [$html:<code>@core/math</code>] registers math functions and constants.]
         ]
 
         [data:
             [: Source library root]
             [: Register a source-library prefix to a filesystem root.]
-            [: [codesnippet:@html] resolves to builder-provided Beanstalk source.]
+            [: [$html:<code>@html</code>] resolves to builder-provided Beanstalk source.]
         ]
 
         [data:
             [: External import provider]
-            [: Register a provider for file extensions such as [codesnippet:.js].]
+            [: Register a provider for file extensions such as [$html:<code>.js</code>].]
             [: The HTML builder registers the JS provider for project-local JavaScript imports.]
         ]
 
         [data:
             [: Builder runtime package]
             [: Register a virtual package plus runtime asset metadata.]
-            [: [codesnippet:@web/canvas] is bundled JS parsed and emitted by the HTML builder.]
+            [: [$html:<code>@web/canvas</code>] is bundled JS parsed and emitted by the HTML builder.]
         ]
 
         [data:
             [: Config key registry]
             [: Register backend-specific config keys before Stage 0 config validation.]
-            [: The HTML builder registers keys such as [codesnippet:html_lang] and [codesnippet:redirect_index_html].]
+            [: The HTML builder registers keys such as [$html:<code>html_lang</code>] and [$html:<code>redirect_index_html</code>].]
         ]
     ]
 
@@ -648,14 +648,14 @@ page_head #= theme_head
     - no source-library version resolution yet
     - no wildcard imports yet
     - no arbitrary JavaScript dependency graphs through the JS provider yet
-    - no direct [codesnippet:.js] imports from [codesnippet:#config.bst]
+    - no direct `.js` imports from `#config.bst`
     - no direct cross-module bypass into another module's private JavaScript file
-    - no automatic documentation extraction from [codesnippet:#mod.bst] yet
+    - no automatic documentation extraction from `#mod.bst` yet
     - no HIR cache for source libraries yet
 
     The practical model for now is:
 
-    - use [codesnippet:lib/<name>/#mod.bst] for project-local Beanstalk libraries.
-    - use [codesnippet:@core/...], [codesnippet:@html], and [codesnippet:@web/canvas] for builder-provided libraries.
-    - use small annotated [codesnippet:.js] wrapper files when a project needs browser JavaScript directly.
+    - use `lib/<name>/#mod.bst` for project-local Beanstalk libraries.
+    - use `@core/...`, `@html`, and `@web/canvas` for builder-provided libraries.
+    - use small annotated `.js` wrapper files when a project needs browser JavaScript directly.
 ]

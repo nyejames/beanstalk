@@ -6,12 +6,13 @@
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::ast::templates::template::{
-    SlotPlaceholder, TemplateAtom, TemplateContent, TemplateSegmentOrigin,
+    SlotPlaceholder, TemplateAtom, TemplateContent, TemplateSegmentOrigin, TemplateType,
 };
 use crate::compiler_frontend::ast::templates::template_control_flow::{
     TemplateControlFlow, TemplateLoopControlSignal,
 };
 use crate::compiler_frontend::ast::templates::template_slots::RuntimeSlotSiteId;
+use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
@@ -26,8 +27,8 @@ pub struct TemplateRenderPlan {
     pub pieces: Vec<RenderPiece>,
 }
 
-/// Individual piece in a render plan. Child templates are kept as
-/// opaque anchors so parent formatters can never inspect their bytes.
+/// Individual piece in a render plan. Body-bearing child templates are kept as
+/// opaque child anchors so parent formatters can never inspect their bytes.
 #[derive(Debug, Clone)]
 pub enum RenderPiece {
     /// Body-origin text eligible for the current template's formatter.
@@ -36,7 +37,7 @@ pub enum RenderPiece {
     HeadContent(RenderTextPiece),
     /// Opaque child template output — position preserved, content sealed.
     ChildTemplate(RenderChildPiece),
-    /// Runtime expression that cannot be folded at compile time.
+    /// Opaque expression insertion that parent formatters must preserve without inspection.
     DynamicExpression(RenderExpressionPiece),
     /// Structural template-loop control marker consumed by the nearest active loop.
     LoopControl(TemplateLoopControlSignal),
@@ -224,8 +225,8 @@ impl TemplateRenderPlan {
     /// WHAT:
     /// - Maps body-origin text to `Text` pieces eligible for formatting.
     /// - Maps head-origin text to `HeadContent` pieces that bypass formatters.
-    /// - Maps child template outputs to `ChildTemplate` opaque anchors.
-    /// - Maps runtime expressions to `DynamicExpression` opaque anchors.
+    /// - Maps body-bearing child template outputs to `ChildTemplate` opaque anchors.
+    /// - Maps expression insertions to `DynamicExpression` opaque anchors.
     ///
     /// WHY:
     /// - Formatters should only see text they are allowed to rewrite and opaque
@@ -249,10 +250,21 @@ impl TemplateRenderPlan {
                         continue;
                     }
 
-                    if segment.is_child_template_output && segment.source_child_template.is_some() {
-                        pieces.push(RenderPiece::ChildTemplate(RenderChildPiece {
-                            expression: segment.expression.clone(),
-                        }));
+                    if segment.is_child_template_output
+                        && let Some(source_child_template) =
+                            segment.source_child_template.as_deref()
+                    {
+                        if child_template_is_head_expression_insert(source_child_template) {
+                            pieces.push(RenderPiece::DynamicExpression(RenderExpressionPiece {
+                                expression: segment.expression.clone(),
+                                origin: segment.origin,
+                            }));
+                        } else {
+                            pieces.push(RenderPiece::ChildTemplate(RenderChildPiece {
+                                expression: segment.expression.clone(),
+                            }));
+                        }
+
                         continue;
                     }
 
@@ -392,6 +404,45 @@ impl TemplateRenderPlan {
             })
             .collect()
     }
+}
+
+/// Returns true for nested `[value]` insertions that have no body of their own.
+///
+/// WHAT:
+/// - Head-only scalar/path insertions stay opaque to parent formatters, but they
+///   are expression anchors rather than child-template boundaries.
+/// - Template-valued head expressions remain child boundaries because they can
+///   carry wrapper/slot semantics that belong to the child template.
+///
+/// WHY:
+/// - `$markdown` can pair parent-authored inline-code delimiters across an
+///   inserted string literal without inspecting the inserted bytes, while
+///   body-bearing child templates stay sealed from the parent formatter.
+fn child_template_is_head_expression_insert(template: &Template) -> bool {
+    if template.control_flow.is_some() || template.runtime_slot_application.is_some() {
+        return false;
+    }
+
+    if matches!(
+        template.kind,
+        TemplateType::SlotDefinition(_) | TemplateType::SlotInsert(_) | TemplateType::Comment(_)
+    ) {
+        return false;
+    }
+
+    if template.content.atoms.is_empty() {
+        return false;
+    }
+
+    template.content.atoms.iter().all(|atom| {
+        let TemplateAtom::Content(segment) = atom else {
+            return false;
+        };
+
+        segment.origin == TemplateSegmentOrigin::Head
+            && !segment.is_child_template_output
+            && !matches!(segment.expression.kind, ExpressionKind::Template(_))
+    })
 }
 
 #[cfg(test)]

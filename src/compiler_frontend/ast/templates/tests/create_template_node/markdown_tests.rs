@@ -68,6 +68,13 @@ fn markdown_redeclaration_formats_child_template_bodies() {
 }
 
 #[test]
+fn markdown_allows_literal_head_insert_inside_inline_code_span() {
+    let rendered = folded_template_output("[$markdown:\nLiteral syntax `[\"[slot]\"]`\n]");
+
+    assert_eq!(rendered, "<p>Literal syntax <code>[slot]</code></p>");
+}
+
+#[test]
 fn markdown_keeps_inline_child_templates_inside_current_paragraph() {
     let rendered = folded_template_output("[$markdown:\nhello [:child] world\n]");
 

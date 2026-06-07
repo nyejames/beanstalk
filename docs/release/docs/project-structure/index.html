@@ -189,6 +189,11 @@ body {
         padding-left: var(--bst-spacing-small);
     }
 
+    .container code:not(.codeblock) {
+        color: #c444aff9;
+        font-family: var(--bst-font-family-monospace);
+    }
+
     @media (min-width: 576px) {
         .container {
             max-width: 510px;
@@ -312,37 +317,7 @@ body {
         </div>
     </nav>
      <h1 style="font-size: 2em;text-align: center;"> PROJECTS, MODULES AND HTML BUILDER</h1>
-    <section class="container"><p>Beanstalk projects are built around a small set of conventions:</p><ul><li>a project root with a <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#config.bst</span> file</li><li>an entry root, usually <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">src</span></li><li>module entry files named like <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#page.bst</span></li><li>module API boundaries defined by <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#mod.bst</span></li><li>normal <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">.bst</span> files that provide declarations for module entries</li><li>builder-owned output folders such as <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">dev</span> and <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">release</span></li></ul><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#mod.bst</span>  = module API / visibility boundary</p><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#page.bst</span> = HTML builder entry/configuration convention</p><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#config.bst</span>   = build/project configuration convention</p><p>At this stage of development, this is the only supported project structure to rely on. The rules are deliberately narrow so the compiler, dev server, and HTML builder can stay predictable while the language is still evolving.</p></section>
+    <section class="container"><p>Beanstalk projects are built around a small set of conventions:</p><ul><li>a project root with a <code>#config.bst</code> file</li><li>an entry root, usually <code>src</code></li><li>module entry files named like <code>#page.bst</code></li><li>module API boundaries defined by <code>#mod.bst</code></li><li>normal <code>.bst</code> files that provide declarations for module entries</li><li>builder-owned output folders such as <code>dev</code> and <code>release</code></li></ul><p><code>#mod.bst</code>  = module API / visibility boundary <code>#page.bst</code> = HTML builder entry/configuration convention <code>#config.bst</code>   = build/project configuration convention</p><p>At this stage of development, this is the only supported project structure to rely on. The rules are deliberately narrow so the compiler, dev server, and HTML builder can stay predictable while the language is still evolving.</p></section>
     <section class="container"><h1>The modular build system</h1><p>The Beanstalk compiler frontend is shared by every project builder. It discovers modules, parses files, type checks code, lowers to HIR, and runs borrow validation. A project builder then decides how those compiled modules become real output files.</p><p>The current user-facing project builder is the HTML project builder. It consumes each compiled module and emits one HTML page per module entry file.</p><p>This split matters because Beanstalk is not designed as a single hard-coded web compiler. The same frontend can later feed other builders, such as a Wasm module builder, a documentation builder, or project-specific tooling.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
         
     <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
@@ -367,10 +342,7 @@ body {
         </tr>
         
     </table></section>
-    <section class="container"><h1>Project root and #config.bst</h1><p>A normal HTML project has a <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#config.bst</span> file at the project root. Config files use ordinary Beanstalk top-level binding syntax.</p><pre style="
+    <section class="container"><h1>Project root and #config.bst</h1><p>A normal HTML project has a <code>#config.bst</code> file at the project root. Config files use ordinary Beanstalk top-level binding syntax.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -395,49 +367,7 @@ body {
     library_folders <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span>
         <span class='bst-code-string'>&quot;lib&quot;</span>,
     <span class='bst-code-parenthesis'>}</span>
-    </code></pre><p>Config keys are strict about value shape. String settings accept string literals and folded templates, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">project</span> currently accepts only <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">"html"</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">library_folders</span> accepts one string or a collection of strings, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">template_const_loop_iteration_limit</span> requires a positive folded <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">Int</span> no greater than <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">1_000_000</span>, and boolean HTML settings such as <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">redirect_index_html</span> require real <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">true</span> / <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">false</span> values rather than strings.</p><p>Config values must resolve to compile-time constants. Plain immutable key declarations and explicit <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#=</span> key constants are accepted, and they may reference earlier compile-time config keys or constants imported from core/builder source libraries. <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#config.bst</span> may contain imports, type aliases, structs, and choices as support declarations, but every authored value-producing declaration must still be a known config key. Config-local helper constants, functions, calls, runtime statements, project-local imports, relative config imports, and <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#[...]</span> page fragments are rejected. Const-record field projection is supported for explicit <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#=</span> config keys and deferred for plain <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">=</span> keys.</p><p>Important settings:</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+    </code></pre><p>Config keys are strict about value shape. String settings accept string literals and folded templates, <code>project</code> currently accepts only <code>&quot;html&quot;</code>, <code>library_folders</code> accepts one string or a collection of strings, <code>template_const_loop_iteration_limit</code> requires a positive folded <code>Int</code> no greater than <code>1_000_000</code>, and boolean HTML settings such as <code>redirect_index_html</code> require real <code>true</code> / <code>false</code> values rather than strings.</p><p>Config values must resolve to compile-time constants. Plain immutable key declarations and explicit <code>#=</code> key constants are accepted, and they may reference earlier compile-time config keys or constants imported from core/builder source libraries. <code>#config.bst</code> may contain imports, type aliases, structs, and choices as support declarations, but every authored value-producing declaration must still be a known config key. Config-local helper constants, functions, calls, runtime statements, project-local imports, relative config imports, and <code>#[...]</code> page fragments are rejected. Const-record field projection is supported for explicit <code>#=</code> config keys and deferred for plain <code>=</code> keys.</p><p>Important settings:</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
         
     <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
          <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Setting</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Meaning</th> 
@@ -446,96 +376,42 @@ body {
             
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">project</span></td>
-     <td style="padding: 0.2em 0.5em;  "> Selects the project type. For the documentation site and current web projects, use <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">"html"</span>.</td>
+             <td style="padding: 0.2em 0.5em;  "> <code>project</code></td>
+     <td style="padding: 0.2em 0.5em;  "> Selects the project type. For the documentation site and current web projects, use <code>"html"</code>.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">entry_root</span></td>
-     <td style="padding: 0.2em 0.5em;  "> The source folder that is searched for module entry files. Usually <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">"src"</span>.</td>
+             <td style="padding: 0.2em 0.5em;  "> <code>entry_root</code></td>
+     <td style="padding: 0.2em 0.5em;  "> The source folder that is searched for module entry files. Usually <code>"src"</code>.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">dev_folder</span></td>
+             <td style="padding: 0.2em 0.5em;  "> <code>dev_folder</code></td>
      <td style="padding: 0.2em 0.5em;  "> Where development builds are written. The dev server serves from here.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">output_folder</span></td>
-     <td style="padding: 0.2em 0.5em;  "> Where release builds are written when <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">--release</span> is used.</td>
+             <td style="padding: 0.2em 0.5em;  "> <code>output_folder</code></td>
+     <td style="padding: 0.2em 0.5em;  "> Where release builds are written when <code>--release</code> is used.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">library_folders</span></td>
+             <td style="padding: 0.2em 0.5em;  "> <code>library_folders</code></td>
      <td style="padding: 0.2em 0.5em;  "> Configures source-library scan roots. Each direct child directory of a scan root becomes an import prefix. `/lib` is the default when omitted.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">template_const_loop_iteration_limit</span></td>
-     <td style="padding: 0.2em 0.5em;  "> Sets the per-loop compile-time template expansion guard. The default is <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">10_000</span>.</td>
+             <td style="padding: 0.2em 0.5em;  "> <code>template_const_loop_iteration_limit</code></td>
+     <td style="padding: 0.2em 0.5em;  "> Sets the per-loop compile-time template expansion guard. The default is <code>10_000</code>.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> HTML-specific settings</td>
-     <td style="padding: 0.2em 0.5em;  "> Settings such as <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">origin</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">html_lang</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">html_title_postfix</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">page_url_style</span>, and <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">redirect_index_html</span> are interpreted by the HTML builder.</td>
+     <td style="padding: 0.2em 0.5em;  "> Settings such as <code>origin</code>, <code>html_lang</code>, <code>html_title_postfix</code>, <code>page_url_style</code>, and <code>redirect_index_html</code> are interpreted by the HTML builder.</td>
         </tr>
         
-    </table><p>Config is loaded before module discovery. That means <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">entry_root</span> and <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">library_folders</span> shape how the project is searched and how imports resolve.</p></section>
-    <section class="container"><h1>Default project scaffold</h1><p>The <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">bean new html</span> command generates a complete default project:</p><pre style="
+    </table><p>Config is loaded before module discovery. That means <code>entry_root</code> and <code>library_folders</code> shape how the project is searched and how imports resolve.</p></section>
+    <section class="container"><h1>Default project scaffold</h1><p>The <code>bean new html</code> command generates a complete default project:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -553,29 +429,8 @@ body {
     ├── release<span class='bst-code-operator'>/</span>
     │   └── .beanstalk_manifest
     └── .gitignore
-    </code></pre><p>Clarifications:</p><ul><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">lib/</span> is created empty by default. It is the conventional place for project-local source libraries.</li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">dev/</span> and <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">release/</span> are output folders, not source folders.</li><li>.beanstalk_manifest files are build-system metadata used for safe stale-output cleanup.</li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">src/#page.bst</span> is the default HTML page entry and includes a starter page.</li></ul></section>
-    <section class="container"><h1>Module entry files</h1><p>A module entry file is a Beanstalk file whose file name starts with <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#</span>. In directory projects, the compiler searches the configured entry root for <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#*.bst</span> files.</p><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#config.bst</span> is not a module entry.</p><p>Examples:</p><pre style="
+    </code></pre><p>Clarifications:</p><ul><li><code>lib/</code> is created empty by default. It is the conventional place for project-local source libraries.</li><li><code>dev/</code> and <code>release/</code> are output folders, not source folders.</li><li>.beanstalk_manifest files are build-system metadata used for safe stale-output cleanup.</li><li><code>src/#page.bst</code> is the default HTML page entry and includes a starter page.</li></ul></section>
+    <section class="container"><h1>Module entry files</h1><p>A module entry file is a Beanstalk file whose file name starts with <code>#</code>. In directory projects, the compiler searches the configured entry root for <code>#*.bst</code> files. <code>#config.bst</code> is not a module entry.</p><p>Examples:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -588,14 +443,8 @@ body {
     src<span class='bst-code-operator'>/</span>docs<span class='bst-code-operator'>/</span>basics<span class='bst-code-operator'>/</span><span class='bst-code-operator'>#</span>page.bst  <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> module entry
     src<span class='bst-code-operator'>/</span>styles<span class='bst-code-operator'>/</span>docs.bst        <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> normal source file
     <span class='bst-code-operator'>#</span>config.bst                <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> project config, not a module entry
-    </code></pre><p>Only module entry files have top-level runtime execution. The compiler treats the entry file&#39;s top-level runtime code as an implicit <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">start</span> function for that module.</p><p>Normal source files can contain imports, functions, structs, choices, type aliases, and constants. They should not rely on top-level runtime statements being executed by themselves.</p></section>
-    <section class="container"><h1>Builder-owned meaning of # file names</h1><p>The compiler discovers <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#*.bst</span> files as module entries. The project builder decides what those entries mean.</p><p>The HTML project builder currently treats them as page entries. The file name and folder decide the output route.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+    </code></pre><p>Only module entry files have top-level runtime execution. The compiler treats the entry file&#39;s top-level runtime code as an implicit <code>start</code> function for that module.</p><p>Normal source files can contain imports, functions, structs, choices, type aliases, and constants. They should not rely on top-level runtime statements being executed by themselves.</p></section>
+    <section class="container"><h1>Builder-owned meaning of # file names</h1><p>The compiler discovers <code>#*.bst</code> files as module entries. The project builder decides what those entries mean.</p><p>The HTML project builder currently treats them as page entries. The file name and folder decide the output route.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
         
     <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
          <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Entry file</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> HTML output path</th> 
@@ -604,56 +453,26 @@ body {
             
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">src/#page.bst</span></td>
-     <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">index.html</span></td>
+             <td style="padding: 0.2em 0.5em;  "> <code>src/#page.bst</code></td>
+     <td style="padding: 0.2em 0.5em;  "> <code>index.html</code></td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">src/docs/#page.bst</span></td>
-     <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">docs/index.html</span></td>
+             <td style="padding: 0.2em 0.5em;  "> <code>src/docs/#page.bst</code></td>
+     <td style="padding: 0.2em 0.5em;  "> <code>docs/index.html</code></td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">src/docs/basics/#page.bst</span></td>
-     <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">docs/basics/index.html</span></td>
+             <td style="padding: 0.2em 0.5em;  "> <code>src/docs/basics/#page.bst</code></td>
+     <td style="padding: 0.2em 0.5em;  "> <code>docs/basics/index.html</code></td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">src/#about.bst</span></td>
-     <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">about/index.html</span></td>
+             <td style="padding: 0.2em 0.5em;  "> <code>src/#about.bst</code></td>
+     <td style="padding: 0.2em 0.5em;  "> <code>about/index.html</code></td>
         </tr>
         
-    </table><p>This gives pages stable folder-backed routes. A <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#page.bst</span> file means &quot;the index page for this folder&quot;. Other <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#name.bst</span> files become named routes under the same folder.</p></section>
+    </table><p>This gives pages stable folder-backed routes. A <code>#page.bst</code> file means &quot;the index page for this folder&quot;. Other <code>#name.bst</code> files become named routes under the same folder.</p></section>
     <section class="container"><h1>Top-level templates in page entries</h1><p>Top-level templates are special. In the HTML project builder, direct top-level templates in a module entry file become page fragments.</p><p>There are two forms:</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
         
     <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
@@ -663,18 +482,12 @@ body {
             
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#[...]</span></td>
+             <td style="padding: 0.2em 0.5em;  "> <code>#[...]</code></td>
      <td style="padding: 0.2em 0.5em;  "> A top-level const template. It must fold at compile time and is emitted as static HTML.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">[...]</span></td>
+             <td style="padding: 0.2em 0.5em;  "> <code>[...]</code></td>
      <td style="padding: 0.2em 0.5em;  "> A top-level runtime template. It is evaluated by the module's implicit start function and inserted into the page at runtime.</td>
         </tr>
         
@@ -722,13 +535,7 @@ body {
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Compile-time constant</td>
-     <td style="padding: 0.2em 0.5em;  "> Written as <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">name #= value</span> or <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">name #Type = value</span>. It is importable as a declaration.</td>
+     <td style="padding: 0.2em 0.5em;  "> Written as <code>name #= value</code> or <code>name #Type = value</code>. It is importable as a declaration.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -743,19 +550,10 @@ body {
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Top-level template</td>
-     <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#[...]</span> is not a normal exported value. It is an entry-file-only const page fragment.</td>
+     <td style="padding: 0.2em 0.5em;  "> <code>#[...]</code> is not a normal exported value. It is an entry-file-only const page fragment.</td>
         </tr>
         
-    </table><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#</span> no longer means public visibility. It marks compile-time constant bindings. Cross-module public visibility is controlled by <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#mod.bst</span> facades.</p><p>Example helper file:</p><pre style="
+    </table><p><code>#</code> no longer means public visibility. It marks compile-time constant bindings. Cross-module public visibility is controlled by <code>#mod.bst</code> facades.</p><p>Example helper file:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -802,28 +600,7 @@ body {
         <span class='bst-code-parenthesis'>[</span>render_card<span class='bst-code-parenthesis'>(</span>card<span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>]</span>
     <span class='bst-code-parenthesis'>]</span>
     </code></pre></section>
-    <section class="container"><h1>Module boundaries and imports</h1><p>Imports are how a page entry reaches helper declarations, module facades, source libraries, core packages, and JavaScript packages. This page only covers the project-shape part of that model. For full import syntax, source libraries, core packages, JavaScript imports, and builder-provided libraries, see <a href="../libraries">Libraries and modules</a>.</p><p>Project-shape rules to remember:</p><ul><li>files in the same module can import ordinary sibling source files directly</li><li>imports that cross into another module root must go through that module&#39;s <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#mod.bst</span> facade</li><li>source-library prefixes come from <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">library_folders</span> or from the builder</li><li>direct imports of <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#mod.bst</span>, <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#page.bst</span>, and <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#config.bst</span> are rejected</li><li>sibling <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">name.bst</span> / <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">name/</span> import-name collisions are rejected during project discovery</li></ul><p>In this shape:</p><pre style="
+    <section class="container"><h1>Module boundaries and imports</h1><p>Imports are how a page entry reaches helper declarations, module facades, source libraries, core packages, and JavaScript packages. This page only covers the project-shape part of that model. For full import syntax, source libraries, core packages, JavaScript imports, and builder-provided libraries, see <a href="../libraries">Libraries and modules</a>.</p><p>Project-shape rules to remember:</p><ul><li>files in the same module can import ordinary sibling source files directly</li><li>imports that cross into another module root must go through that module&#39;s <code>#mod.bst</code> facade</li><li>source-library prefixes come from <code>library_folders</code> or from the builder</li><li>direct imports of <code>#mod.bst</code>, <code>#page.bst</code>, and <code>#config.bst</code> are rejected</li><li>sibling <code>name.bst</code> / <code>name/</code> import-name collisions are rejected during project discovery</li></ul><p>In this shape:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -838,22 +615,7 @@ body {
     │   └── card.bst
     └── docs<span class='bst-code-operator'>/</span>
         └── <span class='bst-code-operator'>#</span>page.bst
-    </code></pre><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">src/#page.bst</span> can import <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@components/card</span> directly because they are in the same module.</p><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">src/docs/#page.bst</span> is a different module entry, so it imports the root module&#39;s public surface through <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">src/#mod.bst</span> instead of bypassing into <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">src/components/card.bst</span>.</p></section>
+    </code></pre><p><code>src/#page.bst</code> can import <code>@components/card</code> directly because they are in the same module. <code>src/docs/#page.bst</code> is a different module entry, so it imports the root module&#39;s public surface through <code>src/#mod.bst</code> instead of bypassing into <code>src/components/card.bst</code>.</p></section>
     <section class="container"><h1>Example: the documentation site structure</h1><p>The Beanstalk documentation website is itself a Beanstalk HTML project. Ignoring markdown notes and generated files, its source shape is roughly:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
@@ -889,43 +651,7 @@ body {
     │   └── ...
     ├── dev<span class='bst-code-operator'>/</span>
     └── release<span class='bst-code-operator'>/</span>
-    </code></pre><p>The important part is the split:</p><ul><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">src/</span> contains the root page, the root <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#mod.bst</span> facade, and ordinary source files.</li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#page.bst</span> files define HTML pages and make their folders module boundaries.</li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">styles/docs.bst</span> is a normal source file imported by the root facade and then selectively exposed to nested page modules with <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">export</span> declarations in <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">src/#mod.bst</span>.</li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@html</span> is provided by the HTML builder.</li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">lib/local_helpers/#mod.bst</span> would expose a project-local <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">@local_helpers</span> source library.</li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">assets/</span> is a normal project folder for static files such as images.</li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">dev/</span> and <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">release/</span> are output folders, not source folders.</li></ul></section>
+    </code></pre><p>The important part is the split:</p><ul><li><code>src/</code> contains the root page, the root <code>#mod.bst</code> facade, and ordinary source files.</li><li><code>#page.bst</code> files define HTML pages and make their folders module boundaries.</li><li><code>styles/docs.bst</code> is a normal source file imported by the root facade and then selectively exposed to nested page modules with <code>export</code> declarations in <code>src/#mod.bst</code>.</li><li><code>@html</code> is provided by the HTML builder.</li><li><code>lib/local_helpers/#mod.bst</code> would expose a project-local <code>@local_helpers</code> source library.</li><li><code>assets/</code> is a normal project folder for static files such as images.</li><li><code>dev/</code> and <code>release/</code> are output folders, not source folders.</li></ul></section>
     <section class="container"><h1>Output files</h1><p>The build command compiles the project, then writes the builder&#39;s output files under the selected output root.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
         
     <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
@@ -936,58 +662,16 @@ body {
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Default / dev</td>
-     <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#dev_folder</span>, usually <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">dev</span>.</td>
+     <td style="padding: 0.2em 0.5em;  "> <code>#dev_folder</code>, usually <code>dev</code>.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">--release</span></td>
-     <td style="padding: 0.2em 0.5em;  "> <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#output_folder</span>, usually <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">release</span>.</td>
+             <td style="padding: 0.2em 0.5em;  "> <code>--release</code></td>
+     <td style="padding: 0.2em 0.5em;  "> <code>#output_folder</code>, usually <code>release</code>.</td>
         </tr>
         
-    </table><p>In the default JS-backed HTML mode, each page module produces an HTML file. The generated JavaScript is embedded into that HTML file.</p><p>In the experimental <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">--html-wasm</span> mode, the builder can instead emit a route folder containing:</p><ul><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">index.html</span></li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">page.js</span></li><li><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">page.wasm</span></li></ul><p>The HTML builder owns stale-output cleanup for generated HTML artifacts. Generated output folders should be treated as build artifacts, not source.</p></section>
-    <section class="container"><h1>Module facades at a glance</h1><p><span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#mod.bst</span> is the public surface for a module root.</p><p>It is not a shared implementation file, and sibling files do not see its declarations automatically.</p><p>Keep facades small and intentional:</p><ul><li>mark public wrapper functions, type aliases, structs, choices, traits, and constants with <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">export</span></li><li>re-export grouped symbols with <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">export import @path { Symbol }</span> or <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">export @path { Symbol }</span></li><li>keep unmarked declarations and normal imports private to the facade file</li><li>import private implementation details inside the facade when a wrapper needs them</li><li>do not put runtime top-level statements or runtime top-level templates in a facade</li><li>do not expect a normal import inside <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#mod.bst</span> to become public by itself</li></ul><pre style="
+    </table><p>In the default JS-backed HTML mode, each page module produces an HTML file. The generated JavaScript is embedded into that HTML file.</p><p>In the experimental <code>--html-wasm</code> mode, the builder can instead emit a route folder containing:</p><ul><li><code>index.html</code></li><li><code>page.js</code></li><li><code>page.wasm</code></li></ul><p>The HTML builder owns stale-output cleanup for generated HTML artifacts. Generated output folders should be treated as build artifacts, not source.</p></section>
+    <section class="container"><h1>Module facades at a glance</h1><p><code>#mod.bst</code> is the public surface for a module root. It is not a shared implementation file, and sibling files do not see its declarations automatically.</p><p>Keep facades small and intentional:</p><ul><li>mark public wrapper functions, type aliases, structs, choices, traits, and constants with <code>export</code></li><li>re-export grouped symbols with <code>export import @path { Symbol }</code> or <code>export @path { Symbol }</code></li><li>keep unmarked declarations and normal imports private to the facade file</li><li>import private implementation details inside the facade when a wrapper needs them</li><li>do not put runtime top-level statements or runtime top-level templates in a facade</li><li>do not expect a normal import inside <code>#mod.bst</code> to become public by itself</li></ul><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -1011,19 +695,7 @@ body {
         <span class='bst-code-struct'>CardData</span> <span class='bst-code-keyword'>as</span> <span class='bst-code-struct'>Card,</span>
         render_card,
     <span class='bst-code-parenthesis'>}</span>
-    </code></pre><p>The same facade idea is used by project-local source libraries under <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">lib/<name>/#mod.bst</span>. The detailed library, facade, core package, and JavaScript import guide is <a href="../libraries">Libraries and modules</a>.</p><h1>Future extension points</h1><h2>#test.bst test modules</h2><p>A future <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">#test.bst</span> file can hold project tests. Normal builds would ignore it. A planned test command could discover and run those files, similar to how <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">cargo test</span> discovers Rust tests.</p><p>This is separate from the current compiler-internal integration test runner.</p><h2>$doc documentation templates</h2><p>The <span style="
-        color: #c444aff9;
-        font-family: var(--bst-font-family-monospace);
-    ">$doc</span> style directive can eventually make documentation part of Beanstalk source. Top-level or nested doc templates could be stripped from normal output code, then collected by a documentation command.</p><p>This would make documentation generation feel closer to Rust doc comments, but with Beanstalk&#39;s template system instead of comment syntax.</p></section>
+    </code></pre><p>The same facade idea is used by project-local source libraries under <code>lib/&lt;name&gt;/#mod.bst</code>. The detailed library, facade, core package, and JavaScript import guide is <a href="../libraries">Libraries and modules</a>.</p><h1>Future extension points</h1><h2>#test.bst test modules</h2><p>A future <code>#test.bst</code> file can hold project tests. Normal builds would ignore it. A planned test command could discover and run those files, similar to how <code>cargo test</code> discovers Rust tests.</p><p>This is separate from the current compiler-internal integration test runner.</p><h2>$doc documentation templates</h2><p>The <code>$doc</code> style directive can eventually make documentation part of Beanstalk source. Top-level or nested doc templates could be stripped from normal output code, then collected by a documentation command.</p><p>This would make documentation generation feel closer to Rust doc comments, but with Beanstalk&#39;s template system instead of comment syntax.</p></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

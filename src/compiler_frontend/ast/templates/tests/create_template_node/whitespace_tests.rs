@@ -100,3 +100,20 @@ fn escape_html_preserves_runtime_head_references() {
 
     assert_eq!(escaped_body, "\n    &lt;b&gt;body&lt;/b&gt;\n");
 }
+
+#[test]
+fn literal_brackets_via_string_insertion() {
+    let rendered = folded_template_output("[:[\"[code]\"]]");
+    assert_eq!(rendered, "[code]");
+
+    let closing = folded_template_output("[:[\"]\"]]");
+    assert_eq!(closing, "]");
+}
+
+#[test]
+fn literal_backslash_and_backtick_preserved_in_folded_output() {
+    let rendered = folded_template_output("[:path\\file`name]");
+    assert!(rendered.contains("\\"));
+    assert!(rendered.contains("`"));
+    assert_eq!(rendered, "path\\file`name");
+}
