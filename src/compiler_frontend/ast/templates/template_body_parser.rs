@@ -46,11 +46,11 @@ use crate::compiler_frontend::value_mode::ValueMode;
 //  Body Parser Entry
 // -------------------------
 
-/// Parses the body section of a template, consuming tokens until the closing
-/// delimiter or EOF. Nested child templates are recursively parsed.
+/// Parses the body section of a template, consuming tokens until the explicit
+/// closing delimiter. Nested child templates are recursively parsed.
 ///
 /// `foldable` is set to `false` if a runtime (non-const) child template is
-/// encountered.
+/// encountered. Truncated source is reported as a user-facing EOF diagnostic.
 pub(crate) fn parse_template_body(
     token_stream: &mut FileTokens,
     template: &mut Template,
@@ -160,12 +160,17 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
         inherited_wrappers: InheritedChildWrapperPolicy,
     ) -> Result<TemplateBodyBoundary, CompilerDiagnostic> {
         // The tokenizer only allows for strings, templates or slots inside the template body.
+        let mut last_known_location = self.token_stream.current_location();
         while self.token_stream.index < self.token_stream.tokens.len() {
+            last_known_location = self.token_stream.current_location();
             let token_kind = self.token_stream.current_token_kind().clone();
 
             match token_kind {
                 TokenKind::Eof => {
-                    return Ok(TemplateBodyBoundary::Eof);
+                    return Err(CompilerDiagnostic::unexpected_end_of_file(
+                        Some(self.string_table.intern("]")),
+                        self.token_stream.current_location(),
+                    ));
                 }
 
                 TokenKind::TemplateClose => {
@@ -241,7 +246,10 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
             self.token_stream.advance();
         }
 
-        Ok(TemplateBodyBoundary::Eof)
+        Err(CompilerDiagnostic::unexpected_end_of_file(
+            Some(self.string_table.intern("]")),
+            last_known_location,
+        ))
     }
 
     fn parse_if_body(
@@ -306,7 +314,7 @@ impl<'a, 'types> TemplateBodyParser<'a, 'types> {
                     break;
                 }
 
-                TemplateBodyBoundary::TemplateClose | TemplateBodyBoundary::Eof => {
+                TemplateBodyBoundary::TemplateClose => {
                     fallback = None;
                     break;
                 }

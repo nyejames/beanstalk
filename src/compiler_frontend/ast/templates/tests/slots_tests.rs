@@ -461,7 +461,6 @@ fn route_slot_contributions_partitions_explicit_inserts_and_loose_atoms() {
         &wrapper,
         fill_content,
         &SourceLocation::default(),
-        &string_table,
     )
     .unwrap();
 
@@ -505,7 +504,6 @@ fn route_slot_contributions_routes_loose_to_positional_then_default() {
         &wrapper,
         fill_content,
         &SourceLocation::default(),
-        &string_table,
     )
     .unwrap();
 
@@ -553,7 +551,6 @@ fn route_slot_contributions_detects_runtime_contribution_content() {
         &wrapper,
         fill_content,
         &SourceLocation::default(),
-        &string_table,
     )
     .unwrap();
 

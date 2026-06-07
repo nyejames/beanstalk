@@ -33,6 +33,7 @@
 // -------------------------
 
 mod composition;
+mod contribution_shape;
 mod contributions;
 mod diagnostics;
 mod error;

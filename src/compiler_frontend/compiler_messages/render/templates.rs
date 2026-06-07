@@ -4,6 +4,7 @@
 //! WHY: template diagnostics are a broad payload family and keeping them out of `render::mod`
 //! makes the render boundary easier to scan.
 
+use super::context::DiagnosticRenderContext;
 use super::named_value_or_default;
 use crate::compiler_frontend::compiler_messages::{
     CompileTimeEvaluationErrorReason, InvalidTemplateSlotReason,
@@ -180,6 +181,7 @@ pub(crate) fn compile_time_evaluation_error_suggestion(
 
 pub(crate) fn invalid_template_structure_message(
     reason: crate::compiler_frontend::compiler_messages::InvalidTemplateStructureReason,
+    context: DiagnosticRenderContext<'_>,
 ) -> String {
     match reason {
         crate::compiler_frontend::compiler_messages::InvalidTemplateStructureReason::MissingClosingBracket => {
@@ -209,8 +211,12 @@ pub(crate) fn invalid_template_structure_message(
         crate::compiler_frontend::compiler_messages::InvalidTemplateStructureReason::ResultInTemplateHead => {
             "Template head expressions do not implicitly unwrap Result values.".to_string()
         }
-        crate::compiler_frontend::compiler_messages::InvalidTemplateStructureReason::UnsupportedTypeInTemplateHead { .. } => {
-            "Template head expressions only accept final scalar or textual values.".to_string()
+        crate::compiler_frontend::compiler_messages::InvalidTemplateStructureReason::UnsupportedTypeInTemplateHead { type_id } => {
+            let type_name = super::context::diagnostic_type_name(type_id, context);
+            format!(
+                "Template head expressions only accept final scalar or textual values. Found: {}",
+                type_name
+            )
         }
         crate::compiler_frontend::compiler_messages::InvalidTemplateStructureReason::RuntimeTemplateInConst => {
             "Const templates can only capture compile-time templates.".to_string()

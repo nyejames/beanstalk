@@ -32,7 +32,6 @@ pub(super) fn maybe_parse_slot_or_insert_helper_directive(
     directive_kind: &StyleDirectiveKind,
     token_stream: &mut FileTokens,
     template: &mut Template,
-    _string_table: &StringTable,
 ) -> Result<bool, CompilerDiagnostic> {
     if matches!(
         directive_kind,
@@ -86,19 +85,19 @@ pub(super) fn parse_core_style_directive(
         }
 
         CoreStyleDirectiveKind::Note => {
-            reject_unexpected_directive_arguments(token_stream, "note")?;
+            reject_unexpected_directive_arguments(token_stream)?;
             template.kind = TemplateType::Comment(CommentDirectiveKind::Note);
             template.apply_style(Style::default());
         }
 
         CoreStyleDirectiveKind::Todo => {
-            reject_unexpected_directive_arguments(token_stream, "todo")?;
+            reject_unexpected_directive_arguments(token_stream)?;
             template.kind = TemplateType::Comment(CommentDirectiveKind::Todo);
             template.apply_style(Style::default());
         }
 
         CoreStyleDirectiveKind::Doc => {
-            reject_unexpected_directive_arguments(token_stream, "doc")?;
+            reject_unexpected_directive_arguments(token_stream)?;
             apply_doc_comment_defaults(template);
         }
 

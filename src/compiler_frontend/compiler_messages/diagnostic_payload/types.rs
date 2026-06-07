@@ -495,11 +495,7 @@ pub enum InvalidTemplateStructureReason {
     NonFoldableConstTemplate,
     NonFoldableDocComment,
     ResultInTemplateHead,
-    UnsupportedTypeInTemplateHead {
-        type_id: TypeId,
-        /// Display-only type name for render paths that do not have a `TypeEnvironment`.
-        type_name: StringId,
-    },
+    UnsupportedTypeInTemplateHead { type_id: TypeId },
     RuntimeTemplateInConst,
     RuntimeValueInConstTemplateHead,
     EmptyPathInTemplateHead,
@@ -543,9 +539,7 @@ pub enum InvalidTemplateStructureReason {
     TemplateLoopConditionNotConst,
     TemplateConditionalLoopConstTrue,
     TemplateLoopBodyNotConst,
-    TemplateConstLoopExpansionLimitExceeded {
-        limit: usize,
-    },
+    TemplateConstLoopExpansionLimitExceeded { limit: usize },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

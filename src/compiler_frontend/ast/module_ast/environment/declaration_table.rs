@@ -141,21 +141,7 @@ impl TopLevelDeclarationTable {
         })
     }
 
-    // State queries
-
-    /// Returns `true` if any declaration is still an unresolved constant placeholder.
-    ///
-    /// This is used as a sanity check before template head evaluation so that compile-time
-    /// constant references are not evaluated against incomplete declaration metadata.
-    pub(in crate::compiler_frontend::ast) fn has_unresolved_constant_placeholder(&self) -> bool {
-        self.declarations
-            .iter()
-            .any(Declaration::is_unresolved_constant_placeholder)
-    }
-
     // Internal helpers
-
-    /// Simple index lookup. Returns `None` only if the ID originated from a different table.
     fn get_by_id(&self, declaration_id: DeclarationId) -> Option<&Declaration> {
         self.declarations.get(declaration_id.index())
     }

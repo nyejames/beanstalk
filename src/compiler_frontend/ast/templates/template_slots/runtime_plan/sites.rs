@@ -7,6 +7,7 @@
 //! WHY: Runtime applications must evaluate each source once while repeated slot
 //! placeholders can still carry different `$children(..)` and `$fresh` metadata.
 
+use super::super::contribution_shape::classify_contribution_atom;
 use super::types::{
     RuntimeSlotContributionSourceDraft, RuntimeSlotSiteId, RuntimeSlotSitePiece,
     RuntimeSlotSitePlan, RuntimeSlotSiteRenderPlan,
@@ -24,7 +25,6 @@ use crate::compiler_frontend::ast::templates::template_slots::composition::{
 use crate::compiler_frontend::ast::templates::template_slots::error::TemplateSlotError;
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_errors::SourceLocation;
-use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 pub(super) struct RuntimeWrapperSitePlan {
     pub(super) wrapper_plan: TemplateRenderPlan,
@@ -35,12 +35,10 @@ pub(super) fn build_runtime_wrapper_site_plan(
     wrapper_content: &TemplateContent,
     sources: &[RuntimeSlotContributionSourceDraft],
     fallback_location: &SourceLocation,
-    string_table: &StringTable,
 ) -> Result<RuntimeWrapperSitePlan, TemplateSlotError> {
     RuntimeWrapperSitePlanBuilder {
         sources,
         fallback_location,
-        string_table,
     }
     .build_wrapper_plan(wrapper_content)
 }
@@ -48,7 +46,6 @@ pub(super) fn build_runtime_wrapper_site_plan(
 struct RuntimeWrapperSitePlanBuilder<'a> {
     sources: &'a [RuntimeSlotContributionSourceDraft],
     fallback_location: &'a SourceLocation,
-    string_table: &'a StringTable,
 }
 
 impl RuntimeWrapperSitePlanBuilder<'_> {
@@ -140,24 +137,25 @@ impl RuntimeWrapperSitePlanBuilder<'_> {
         source: &RuntimeSlotContributionSourceDraft,
         source_plan: RuntimeSlotSiteRenderPlan,
     ) -> Result<RuntimeSlotSiteRenderPlan, TemplateSlotError> {
-        let source_is_child = is_child_slot_contribution(&source.atom);
-        let skips_child_wrappers = contribution_skips_parent_child_wrappers(&source.atom);
+        let shape = classify_contribution_atom(&source.atom);
 
         // Source plans are distinct from site plans so repeated placeholders can
         // apply their own `$children(..)` metadata without re-evaluating the source.
-        let (mut plan, wrapped_as_child) =
-            if placeholder.child_wrappers.is_empty() || skips_child_wrappers || !source_is_child {
-                (source_plan, source_is_child)
-            } else {
-                (
-                    self.wrap_site_plan_with_child_wrappers(
-                        source_plan,
-                        &source.atom,
-                        &placeholder.child_wrappers,
-                    )?,
-                    true,
-                )
-            };
+        let (mut plan, wrapped_as_child) = if placeholder.child_wrappers.is_empty()
+            || shape.skips_parent_child_wrappers
+            || !shape.is_child_template_contribution
+        {
+            (source_plan, shape.is_child_template_contribution)
+        } else {
+            (
+                self.wrap_site_plan_with_child_wrappers(
+                    source_plan,
+                    &source.atom,
+                    &placeholder.child_wrappers,
+                )?,
+                true,
+            )
+        };
 
         if !placeholder.skip_parent_child_wrappers
             && !placeholder.applied_child_wrappers.is_empty()
@@ -208,7 +206,6 @@ impl RuntimeWrapperSitePlanBuilder<'_> {
                 atoms: vec![routing_atom.clone()],
             },
             &wrapper.location,
-            self.string_table,
         )?;
         let pieces =
             self.build_child_wrapper_site_pieces(&wrapper.content.atoms, &routed, &inner_plan)?;
@@ -253,33 +250,4 @@ impl RuntimeWrapperSitePlanBuilder<'_> {
 
         Ok(pieces)
     }
-}
-
-fn is_child_slot_contribution(atom: &TemplateAtom) -> bool {
-    let TemplateAtom::Content(segment) = atom else {
-        return false;
-    };
-
-    segment.is_child_template_output
-        || matches!(segment.expression.kind, ExpressionKind::Template(_))
-}
-
-fn contribution_template_ref(atom: &TemplateAtom) -> Option<&Template> {
-    let TemplateAtom::Content(segment) = atom else {
-        return None;
-    };
-
-    if let Some(source_child_template) = &segment.source_child_template {
-        return Some(source_child_template.as_ref());
-    }
-
-    match &segment.expression.kind {
-        ExpressionKind::Template(template) => Some(template.as_ref()),
-        _ => None,
-    }
-}
-
-fn contribution_skips_parent_child_wrappers(atom: &TemplateAtom) -> bool {
-    contribution_template_ref(atom)
-        .is_some_and(|template| template.style.skip_parent_child_wrappers)
 }

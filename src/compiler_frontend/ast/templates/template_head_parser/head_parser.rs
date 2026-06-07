@@ -10,7 +10,6 @@
 //!   token kinds are valid in the head grammar.
 
 #![allow(clippy::result_large_err)]
-#![allow(clippy::needless_return)]
 
 use super::control_flow_suffix::{parse_if_suffix, parse_loop_suffix};
 use super::core_directives::{
@@ -60,18 +59,17 @@ fn enforce_head_compatibility(
     state: &TemplateHeadState,
     incoming: &TemplateHeadCompatibility,
     token_stream: &FileTokens,
-    _directive_name: Option<&str>,
 ) -> Result<(), CompilerDiagnostic> {
     if !state.blocked_future_tags.intersects(incoming.presence_tags)
         && !state.seen_tags.intersects(incoming.required_absent_tags)
     {
-        return Ok(());
+        Ok(())
+    } else {
+        Err(CompilerDiagnostic::invalid_template_structure(
+            InvalidTemplateStructureReason::IncompatibleHeadItem,
+            token_stream.current_location(),
+        ))
     }
-
-    return Err(CompilerDiagnostic::invalid_template_structure(
-        InvalidTemplateStructureReason::IncompatibleHeadItem,
-        token_stream.current_location(),
-    ));
 }
 
 fn apply_head_compatibility(
@@ -82,16 +80,17 @@ fn apply_head_compatibility(
     state.blocked_future_tags |= compatibility.blocks_future_tags;
 }
 
-// ---------------------
-// TEMPLATE HEAD PARSING
-// ---------------------
-// This can:
-// - Change the style of the template
-// - Append more content to the template
-// - Specify the control flow of the template (is it looped or conditional)
-// - Change the ID of the template
-// - Add to the list of inherited expressions
-// - Control foldability of the template
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum TemplateHeadSeparatorState {
+    ExpectItem,
+    ExpectSeparatorOrBody,
+}
+
+/// Parses meaningful head items until `:`, `]`, or a control-flow suffix body.
+///
+/// The explicit early returns make token-state exits visible in this parser
+/// state machine: each accepted boundary or diagnostic exits immediately.
+#[allow(clippy::needless_return)]
 pub fn parse_template_head(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
@@ -103,13 +102,17 @@ pub fn parse_template_head(
 ) -> Result<ParsedTemplateHead, CompilerDiagnostic> {
     template.id = format!("{BS_VAR_PREFIX}templateID_{}", token_stream.index);
 
-    // Each expression must be separated with a comma.
-    let mut expecting_comma = true;
+    // Each meaningful head item must be separated with a comma before another
+    // item can start. Naming the state keeps suffix and body-boundary handling
+    // readable in this parser state machine.
+    let mut separator_state = TemplateHeadSeparatorState::ExpectItem;
     let mut head_state = TemplateHeadState::default();
     let meaningful_item_compatibility = TemplateHeadCompatibility::fully_compatible_meaningful();
     token_stream.advance();
 
+    let mut last_known_location = token_stream.current_location();
     while token_stream.index < token_stream.length {
+        last_known_location = token_stream.current_location();
         let token = token_stream.current_token_kind().to_owned();
 
         ast_log!("Parsing template head: ", #token);
@@ -119,11 +122,18 @@ pub fn parse_template_head(
         // expressions are allowed and should be folded where possible.
         // Loops and if statements can end the template head.
 
-        // Returning without a template body
-        // EOF is in here for template repl atm and for the convenience
-        // of not having to explicitly close the template head from a repl session.
-        // This can lead to overly forgiving behavior (not warning about an unclosed template head)
-        if token == TokenKind::TemplateClose || token == TokenKind::Eof {
+        // EOF inside a template head means the source was truncated before a
+        // closing ] delimiter. This is a malformed template, not a valid stream
+        // boundary; the user needs a structured diagnostic.
+        if token == TokenKind::Eof {
+            return Err(CompilerDiagnostic::unexpected_end_of_file(
+                Some(string_table.intern("]")),
+                token_stream.current_location(),
+            ));
+        }
+
+        // A closing ] without a body is a valid empty template.
+        if token == TokenKind::TemplateClose {
             return Ok(ParsedTemplateHead {
                 body_mode: TemplateBodyParseMode::Normal,
             });
@@ -146,7 +156,7 @@ pub fn parse_template_head(
             });
         }
 
-        if expecting_comma
+        if separator_state == TemplateHeadSeparatorState::ExpectItem
             && !matches!(token, TokenKind::If | TokenKind::Loop)
             && let Some(control_flow_location) = find_unseparated_control_flow_suffix(token_stream)
         {
@@ -157,7 +167,7 @@ pub fn parse_template_head(
         }
 
         // Make sure there is a comma before the next token.
-        if !expecting_comma {
+        if separator_state == TemplateHeadSeparatorState::ExpectSeparatorOrBody {
             if matches!(token, TokenKind::If | TokenKind::Loop) {
                 return Err(CompilerDiagnostic::invalid_template_structure(
                     InvalidTemplateStructureReason::MissingCommaBeforeControlFlowSuffix,
@@ -173,7 +183,7 @@ pub fn parse_template_head(
                 ));
             }
 
-            expecting_comma = true;
+            separator_state = TemplateHeadSeparatorState::ExpectItem;
             token_stream.advance();
             continue;
         }
@@ -239,7 +249,6 @@ pub fn parse_template_head(
                         &head_state,
                         &meaningful_item_compatibility,
                         token_stream,
-                        None,
                     )?;
                     let value_location = token_stream.current_location();
                     match &reference.value.kind {
@@ -251,7 +260,6 @@ pub fn parse_template_head(
                                 template,
                                 foldable,
                                 &value_location,
-                                string_table,
                             )?;
                         }
 
@@ -276,7 +284,6 @@ pub fn parse_template_head(
                                 template,
                                 foldable,
                                 &value_location,
-                                string_table,
                             )?;
                             defer_comma_advance = true;
                         }
@@ -299,7 +306,6 @@ pub fn parse_template_head(
                         &head_state,
                         &meaningful_item_compatibility,
                         token_stream,
-                        None,
                     )?;
                     let value_location = token_stream.current_location();
                     let mut inferred = ExpectedType::Infer;
@@ -320,7 +326,6 @@ pub fn parse_template_head(
                         template,
                         foldable,
                         &value_location,
-                        string_table,
                     )?;
                     defer_comma_advance = true;
                     apply_head_compatibility(&mut head_state, &meaningful_item_compatibility);
@@ -343,7 +348,6 @@ pub fn parse_template_head(
                     &head_state,
                     &meaningful_item_compatibility,
                     token_stream,
-                    None,
                 )?;
                 let value_location = token_stream.current_location();
                 let mut inferred = ExpectedType::Infer;
@@ -364,7 +368,6 @@ pub fn parse_template_head(
                     template,
                     foldable,
                     &value_location,
-                    string_table,
                 )?;
                 defer_comma_advance = true;
                 apply_head_compatibility(&mut head_state, &meaningful_item_compatibility);
@@ -376,7 +379,6 @@ pub fn parse_template_head(
                     &head_state,
                     &meaningful_item_compatibility,
                     token_stream,
-                    None,
                 )?;
                 if items.iter().any(|item| item.alias.is_some()) {
                     return Err(CompilerDiagnostic::invalid_template_structure(
@@ -401,7 +403,6 @@ pub fn parse_template_head(
                     &head_state,
                     &meaningful_item_compatibility,
                     token_stream,
-                    None,
                 )?;
                 let value_location = token_stream.current_location();
                 let mut inferred = ExpectedType::Infer;
@@ -422,7 +423,6 @@ pub fn parse_template_head(
                     template,
                     foldable,
                     &value_location,
-                    string_table,
                 )?;
                 defer_comma_advance = true;
                 apply_head_compatibility(&mut head_state, &meaningful_item_compatibility);
@@ -441,18 +441,12 @@ pub fn parse_template_head(
                     ));
                 };
 
-                enforce_head_compatibility(
-                    &head_state,
-                    &spec.head_compatibility,
-                    token_stream,
-                    Some(&directive_name),
-                )?;
+                enforce_head_compatibility(&head_state, &spec.head_compatibility, token_stream)?;
 
                 let handled_slot_insert = maybe_parse_slot_or_insert_helper_directive(
                     &spec.kind,
                     token_stream,
                     template,
-                    string_table,
                 )?;
 
                 if handled_slot_insert {
@@ -496,12 +490,11 @@ pub fn parse_template_head(
         }
 
         // Guard against malformed or truncated synthetic token streams.
-        // Valid streams should include a close/eof boundary, but avoid panicking
-        // if expression parsing advanced exactly to the stream end.
         if token_stream.index >= token_stream.length {
-            return Ok(ParsedTemplateHead {
-                body_mode: TemplateBodyParseMode::Normal,
-            });
+            return Err(CompilerDiagnostic::unexpected_end_of_file(
+                Some(string_table.intern("]")),
+                last_known_location,
+            ));
         }
 
         if token_stream.current_token_kind() == &TokenKind::StartTemplateBody {
@@ -511,24 +504,29 @@ pub fn parse_template_head(
             });
         }
 
-        if matches!(
-            token_stream.current_token_kind(),
-            TokenKind::TemplateClose | TokenKind::Eof
-        ) {
+        if token_stream.current_token_kind() == &TokenKind::Eof {
+            return Err(CompilerDiagnostic::unexpected_end_of_file(
+                Some(string_table.intern("]")),
+                token_stream.current_location(),
+            ));
+        }
+
+        if token_stream.current_token_kind() == &TokenKind::TemplateClose {
             return Ok(ParsedTemplateHead {
                 body_mode: TemplateBodyParseMode::Normal,
             });
         }
 
-        expecting_comma = false;
+        separator_state = TemplateHeadSeparatorState::ExpectSeparatorOrBody;
         if !defer_comma_advance {
             token_stream.advance();
         }
     }
 
-    Ok(ParsedTemplateHead {
-        body_mode: TemplateBodyParseMode::Normal,
-    })
+    Err(CompilerDiagnostic::unexpected_end_of_file(
+        Some(string_table.intern("]")),
+        last_known_location,
+    ))
 }
 
 /// Dispatches a `$directive` token using the already-resolved registry spec.
@@ -574,6 +572,10 @@ fn parse_style_directive_from_spec(
     directive_result.map(|_| false)
 }
 
+/// Scans ahead for unseparated `if` / `loop` suffix tokens.
+///
+/// Early returns make the first top-level boundary or suffix location explicit.
+#[allow(clippy::needless_return)]
 fn find_unseparated_control_flow_suffix(
     token_stream: &FileTokens,
 ) -> Option<crate::compiler_frontend::tokenizer::tokens::SourceLocation> {

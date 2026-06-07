@@ -350,6 +350,7 @@ Template head/body shape:
 
 Core rules:
 - The head and body are separated by `:`.
+- Authored `.bst` templates must close with `]`; truncated heads, bodies, nested child templates, and directive-argument templates produce syntax diagnostics.
 - Template bodies capture variables from the surrounding scope.
 - Backticks and Backslashes inside template bodies are ordinary body text (preserved for formatters such as `$markdown`). Regular quoted string literals still support escapes.
 - Literal template delimiters in output use ordinary string insertion, such as `[: ["[literal]"]]` or `[: [`[This is text inside sqauare brackets as a string]`]]`.
@@ -544,7 +545,7 @@ Rules:
 - `.bd` files have no imports, declarations, frontmatter, metadata, or raw-source preservation.
 - A `.bd` body must fully fold at compile time. Runtime functions, runtime bindings, and types are not visible.
 - The implicit markdown template means `--` is body text, not a Beanstalk comment.
-- `.bd` bodies follow normal template-body and `$markdown` semantics. Literal template delimiters use string insertion, such as `["[literal]"]`; nested authored templates still use normal `[...]` syntax.
+- `.bd` bodies follow normal template-body and `$markdown` semantics. Literal template delimiters use string insertion, such as `["[literal]"]`; nested authored templates still use normal `[...]` syntax and must close explicitly.
 
 Inside compiler-integrated HTML project builds, a `.bd` body sees a restricted flat compile-time scope:
 - exported compile-time constants and const records from `@html`, such as `[p: body]`;

@@ -98,7 +98,7 @@ fn parse_required_parenthesized_expression_for_test(
 fn reject_arguments_succeeds_when_no_parens() {
     let mut string_table = StringTable::new();
     let tokens = directive_tokens("[$note]", &mut string_table);
-    let result = reject_unexpected_directive_arguments(&tokens, "note");
+    let result = reject_unexpected_directive_arguments(&tokens);
     assert!(result.is_ok());
 }
 
@@ -106,7 +106,7 @@ fn reject_arguments_succeeds_when_no_parens() {
 fn reject_arguments_fails_when_parens_present() {
     let mut string_table = StringTable::new();
     let tokens = directive_tokens("[$note()]", &mut string_table);
-    let result = reject_unexpected_directive_arguments(&tokens, "note");
+    let result = reject_unexpected_directive_arguments(&tokens);
     assert!(result.is_err());
     assert!(matches!(
         result.unwrap_err().payload,

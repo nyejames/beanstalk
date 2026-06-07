@@ -3569,6 +3569,36 @@ path = "template_const_loop_custom_higher_limit_accepts"
 tags = ["integration","templates","config"]
 
 [[case]]
+id = "template_const_float_range_missing_by_rejected"
+path = "template_const_float_range_missing_by_rejected"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "template_const_float_range_zero_by_rejected"
+path = "template_const_float_range_zero_by_rejected"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "template_const_float_range_non_progress_rejected"
+path = "template_const_float_range_non_progress_rejected"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "template_const_float_range_descending_success"
+path = "template_const_float_range_descending_success"
+tags = ["integration","templates"]
+
+[[case]]
+id = "template_const_loop_limit_exact_success"
+path = "template_const_loop_limit_exact_success"
+tags = ["integration","templates","config"]
+
+[[case]]
+id = "template_const_range_inclusive_exclusive_edges"
+path = "template_const_range_inclusive_exclusive_edges"
+tags = ["integration","templates"]
+
+[[case]]
 id = "template_const_loop_limit_string_rejected"
 path = "template_const_loop_limit_string_rejected"
 tags = ["integration","templates","diagnostics","config"]
@@ -4043,6 +4073,36 @@ tags = ["integration","templates"]
 id = "template_style_unknown_directive_failure"
 path = "template_style_unknown_directive_failure"
 tags = ["integration","templates", "diagnostics"]
+
+[[case]]
+id = "template_unclosed_head_rejected"
+path = "template_unclosed_head_rejected"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "template_unclosed_body_rejected"
+path = "template_unclosed_body_rejected"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "template_unclosed_if_suffix_rejected"
+path = "template_unclosed_if_suffix_rejected"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "template_unclosed_loop_suffix_rejected"
+path = "template_unclosed_loop_suffix_rejected"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "template_unclosed_nested_child_rejected"
+path = "template_unclosed_nested_child_rejected"
+tags = ["integration","templates","diagnostics"]
+
+[[case]]
+id = "template_children_unclosed_argument_rejected"
+path = "template_children_unclosed_argument_rejected"
+tags = ["integration","templates","diagnostics"]
 
 [[case]]
 id = "top_level_const_template"
@@ -4834,6 +4894,31 @@ tags = ["integration", "diagnostics", "string-coercion", "templates"]
 id = "template_head_rejects_multiple_return_value"
 path = "template_head_rejects_multiple_return_value"
 tags = ["integration", "diagnostics", "string-coercion", "templates"]
+
+[[case]]
+id = "template_head_alias_to_string_success"
+path = "template_head_alias_to_string_success"
+tags = ["integration", "diagnostics", "string-coercion", "templates", "aliases"]
+
+[[case]]
+id = "template_head_alias_to_struct_rejected"
+path = "template_head_alias_to_struct_rejected"
+tags = ["integration", "diagnostics", "string-coercion", "templates", "aliases"]
+
+[[case]]
+id = "template_head_generic_struct_instance_rejected"
+path = "template_head_generic_struct_instance_rejected"
+tags = ["integration", "diagnostics", "string-coercion", "templates", "generics"]
+
+[[case]]
+id = "template_head_unrelated_unresolved_const_does_not_defer_invalid_type"
+path = "template_head_unrelated_unresolved_const_does_not_defer_invalid_type"
+tags = ["integration", "diagnostics", "string-coercion", "templates", "constants"]
+
+[[case]]
+id = "template_head_external_opaque_rejected"
+path = "template_head_external_opaque_rejected"
+tags = ["integration", "diagnostics", "string-coercion", "templates", "external"]
 
 [[case]]
 id = "string_coercion_valid_paths_compile_invalid_fails_early"

@@ -304,7 +304,7 @@ impl Template {
         // left, any remaining `$insert(...)` is out of scope and must error.
         if !matches!(template.kind, TemplateType::SlotInsert(_)) && !template.has_unresolved_slots()
         {
-            ensure_no_slot_insertions_remain(&template, string_table)
+            ensure_no_slot_insertions_remain(&template)
                 .map_err(TemplateError::from)
                 .map_err(TemplateError::into_diagnostic)?;
         }

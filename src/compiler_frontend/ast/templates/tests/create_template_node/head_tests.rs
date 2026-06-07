@@ -30,7 +30,7 @@ use crate::compiler_frontend::type_coercion::compatibility::TypeCompatibilityCac
 use rustc_hash::{FxHashMap, FxHashSet};
 
 #[test]
-fn parse_template_head_handles_truncated_stream_without_panicking() {
+fn truncated_template_head_stream_returns_missing_closing_delimiter() {
     let mut string_table = StringTable::new();
     let scope = InternedPath::from_single_str("main.bst/#const_template0", &mut string_table);
     let context = new_constant_context(scope.to_owned());
@@ -45,8 +45,8 @@ fn parse_template_head_handles_truncated_stream_without_panicking() {
 
     let result = Template::new(&mut token_stream, &context, vec![], &mut string_table);
     assert!(
-        result.is_ok(),
-        "truncated template-head streams should not panic the parser"
+        result.is_err(),
+        "truncated template-head stream without closing delimiter should produce an error"
     );
 }
 
@@ -249,7 +249,7 @@ fn template_option_capture_binding_is_not_visible_in_else_branch() {
 
 #[test]
 fn source_authored_template_range_loop_suffix_reaches_ast() {
-    let (template, _string_table) = parse_runtime_template("[loop 0 to 3 |i|: [i]]");
+    let (template, _unused_table) = parse_runtime_template("[loop 0 to 3 |i|: [i]]");
 
     assert!(matches!(
         template.control_flow,
@@ -259,7 +259,7 @@ fn source_authored_template_range_loop_suffix_reaches_ast() {
 
 #[test]
 fn source_authored_template_conditional_loop_suffix_reaches_ast() {
-    let (template, _string_table) = parse_runtime_template("[loop true: Waiting]");
+    let (template, _unused_table) = parse_runtime_template("[loop true: Waiting]");
 
     let Some(TemplateControlFlow::Loop(template_loop)) = &template.control_flow else {
         panic!("expected template loop control flow");
@@ -772,7 +772,7 @@ fn inline_template_else_if_boundary_text_is_rejected() {
 
 #[test]
 fn template_if_allows_slot_on_previous_line_before_else_sentinel() {
-    let (template, _string_table) = parse_control_flow_template_after_body_parse(
+    let (template, _unused_table) = parse_control_flow_template_after_body_parse(
         "[if true:
             [$slot]
         [else]
@@ -812,7 +812,7 @@ fn direct_template_else_if_inside_loop_body_is_rejected() {
 
 #[test]
 fn template_loop_break_is_structural_body_signal() {
-    let (template, _string_table) = parse_control_flow_template_after_body_parse(
+    let (template, _unused_table) = parse_control_flow_template_after_body_parse(
         "[loop 0 to 2 |i|:
             [break]
         ]",
@@ -827,7 +827,7 @@ fn template_loop_break_is_structural_body_signal() {
 
 #[test]
 fn template_loop_continue_is_structural_body_signal() {
-    let (template, _string_table) = parse_control_flow_template_after_body_parse(
+    let (template, _unused_table) = parse_control_flow_template_after_body_parse(
         "[loop 0 to 2 |i|:
             [continue]
         ]",
@@ -842,7 +842,7 @@ fn template_loop_continue_is_structural_body_signal() {
 
 #[test]
 fn nested_template_if_break_inside_loop_is_structural_signal() {
-    let (template, _string_table) = parse_control_flow_template_after_body_parse(
+    let (template, _unused_table) = parse_control_flow_template_after_body_parse(
         "[loop 0 to 2 |i|:
             [if true:
                 [break]
@@ -865,7 +865,7 @@ fn nested_template_if_break_inside_loop_is_structural_signal() {
 
 #[test]
 fn nested_template_if_continue_inside_loop_is_structural_signal() {
-    let (template, _string_table) = parse_control_flow_template_after_body_parse(
+    let (template, _unused_table) = parse_control_flow_template_after_body_parse(
         "[loop 0 to 2 |i|:
             [if true:
                 [continue]
@@ -1006,7 +1006,7 @@ fn template_loop_composition_formats_body_without_repeating_shared_head_prefix()
 
 #[test]
 fn parent_children_wrappers_attach_conditionally_to_control_flow_child() {
-    let (template, _string_table) = parse_control_flow_template_after_composition(
+    let (template, _unused_table) = parse_control_flow_template_after_composition(
         "[$children([:<li>[$slot]</li>]):
             [if true:
                 item
@@ -1035,7 +1035,7 @@ fn parent_children_wrappers_attach_conditionally_to_control_flow_child() {
 
 #[test]
 fn fresh_control_flow_child_skips_parent_children_wrapper() {
-    let (template, _string_table) = parse_control_flow_template_after_composition(
+    let (template, _unused_table) = parse_control_flow_template_after_composition(
         "[$children([:<li>[$slot]</li>]):
             [$fresh, if true:
                 item
@@ -1110,7 +1110,7 @@ fn runtime_template_if_rejects_unresolved_insert() {
 
 #[test]
 fn const_required_template_if_allows_unresolved_slot_wrapper() {
-    let (template, _context, _string_table) = parse_const_required_template(
+    let (template, _context, _unused_table) = parse_const_required_template(
         "[if true:
             [$slot]
         ]",
