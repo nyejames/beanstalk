@@ -446,6 +446,44 @@ impl DataType {
         }
     }
 
+    /// Constructs an ordered map diagnostic spelling.
+    ///
+    /// WHAT: `DataType::Map` is represented through the canonical generic instance
+    ///      representation to stay consistent with collections.
+    /// WHY: map identity is semantic `TypeId` identity; this constructor keeps
+    ///      diagnostic spellings aligned with the canonical environment shape.
+    pub fn map(key_type: DataType, value_type: DataType) -> Self {
+        Self::GenericInstance {
+            base: GenericBaseType::Builtin(BuiltinGenericType::Map),
+            arguments: vec![key_type, value_type],
+        }
+    }
+
+    /// Returns true if this type is a map (builtin generic instance with two arguments).
+    pub fn is_map(&self) -> bool {
+        matches!(
+            self,
+            DataType::GenericInstance {
+                base: GenericBaseType::Builtin(BuiltinGenericType::Map),
+                arguments,
+            } if arguments.len() == 2
+        )
+    }
+
+    /// Returns the key and value types of a map, if this is a map type.
+    pub fn map_types(&self) -> Option<(&DataType, &DataType)> {
+        match self {
+            DataType::GenericInstance {
+                base: GenericBaseType::Builtin(BuiltinGenericType::Map),
+                arguments,
+            } => match arguments.as_slice() {
+                [key, value] => Some((key, value)),
+                _ => None,
+            },
+            _ => None,
+        }
+    }
+
     /// Returns true if this type is a collection (builtin generic instance with one argument).
     pub fn is_collection(&self) -> bool {
         self.is_builtin_generic_collection()
@@ -746,6 +784,14 @@ fn display_generic_instance(
         };
     }
 
+    if let GenericBaseType::Builtin(BuiltinGenericType::Map) = base
+        && let [key_argument, value_argument] = arguments
+    {
+        let key_display = key_argument.display_with_table(string_table);
+        let value_display = value_argument.display_with_table(string_table);
+        return format!("{{{key_display} = {value_display}}}");
+    }
+
     let base_display = display_generic_base(base, string_table);
     if arguments.is_empty() {
         return base_display;
@@ -771,6 +817,7 @@ fn display_generic_base(base: &GenericBaseType, string_table: &StringTable) -> S
         GenericBaseType::Builtin(BuiltinGenericType::Collection { .. }) => {
             String::from("Collection")
         }
+        GenericBaseType::Builtin(BuiltinGenericType::Map) => String::from("Map"),
     }
 }
 
@@ -1024,6 +1071,16 @@ fn type_id_to_data_type(type_id: ids::TypeId, type_environment: &TypeEnvironment
                     DataType::fallible_carrier(
                         type_id_to_data_type(*success_id, type_environment),
                         type_id_to_data_type(*error_id, type_environment),
+                    )
+                } else {
+                    DataType::None
+                }
+            }
+            ids::TypeConstructor::Builtin(ids::BuiltinTypeConstructor::OrderedMap) => {
+                if let [key_id, value_id] = con.arguments.as_ref() {
+                    DataType::map(
+                        type_id_to_data_type(*key_id, type_environment),
+                        type_id_to_data_type(*value_id, type_environment),
                     )
                 } else {
                     DataType::None

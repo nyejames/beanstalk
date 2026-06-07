@@ -9,10 +9,12 @@ use crate::compiler_frontend::ast::expressions::expression::{
 };
 use crate::compiler_frontend::ast::statements::value_production::types::ValueBlock;
 use crate::compiler_frontend::builtins::CollectionBuiltinOp;
+use crate::compiler_frontend::builtins::maps::MapBuiltinOp;
 use crate::compiler_frontend::compiler_messages::{
-    DiagnosticPayload, InvalidAssignmentTargetReason, InvalidBuiltinCallReason,
-    InvalidCollectionTypeReason, InvalidFieldAccessReason, InvalidReceiverCallReason,
-    InvalidResultHandlingReason, TypeMismatchContext,
+    CommonSyntaxMistakeReason, DiagnosticPayload, InvalidAssignmentTargetReason,
+    InvalidBuiltinCallReason, InvalidCollectionTypeReason, InvalidFieldAccessReason,
+    InvalidMapLiteralReason, InvalidReceiverCallReason, InvalidResultHandlingReason,
+    TypeMismatchContext,
 };
 use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
 use crate::compiler_frontend::tests::ast_fixture_support::{
@@ -523,4 +525,642 @@ fn fixed_collection_literal_exceeding_capacity_is_rejected() {
             ..
         }
     ));
+}
+
+// --------------------------
+//  Map literals
+// --------------------------
+
+#[test]
+fn parses_inferred_map_literal() {
+    let (ast, string_table) = parse_single_file_ast("scores ~= {\"Ada\" = 10, \"Grace\" = 12}\n");
+    let body = start_function_body(&ast, &string_table);
+
+    let NodeKind::VariableDeclaration(scores_decl) = &body[0].kind else {
+        panic!("expected scores declaration");
+    };
+
+    let ExpressionKind::MapLiteral(entries) = &scores_decl.value.kind else {
+        panic!("expected map literal expression");
+    };
+
+    assert_eq!(entries.len(), 2);
+    assert!(
+        ast.type_environment.is_map_type(scores_decl.value.type_id),
+        "expected map type id"
+    );
+    assert_eq!(
+        scores_decl
+            .value
+            .diagnostic_type
+            .display_with_table(&string_table),
+        "{String = Int}"
+    );
+}
+
+#[test]
+fn parses_explicit_empty_map_literal() {
+    let (ast, string_table) = parse_single_file_ast("scores {String = Int} = {}\n");
+    let body = start_function_body(&ast, &string_table);
+
+    let NodeKind::VariableDeclaration(scores_decl) = &body[0].kind else {
+        panic!("expected scores declaration");
+    };
+
+    let ExpressionKind::MapLiteral(entries) = &scores_decl.value.kind else {
+        panic!("expected map literal expression");
+    };
+
+    assert!(entries.is_empty());
+    assert_eq!(
+        scores_decl
+            .value
+            .diagnostic_type
+            .display_with_table(&string_table),
+        "{String = Int}"
+    );
+}
+
+#[test]
+fn parses_map_literal_with_runtime_key_expression() {
+    let (ast, string_table) = parse_single_file_ast(
+        "get_key || -> String:\n    return \"Ada\"\n;\n\nscores ~= {get_key() = 10}\n",
+    );
+    let body = start_function_body(&ast, &string_table);
+
+    let NodeKind::VariableDeclaration(scores_decl) = &body[0].kind else {
+        panic!("expected scores declaration");
+    };
+
+    let ExpressionKind::MapLiteral(entries) = &scores_decl.value.kind else {
+        panic!("expected map literal expression");
+    };
+
+    assert_eq!(entries.len(), 1);
+    assert!(
+        matches!(entries[0].key.kind, ExpressionKind::FunctionCall { .. }),
+        "expected runtime key expression"
+    );
+}
+
+#[test]
+fn parses_map_literal_with_bare_identifier_key_as_variable() {
+    let (ast, string_table) = parse_single_file_ast("key = \"Ada\"\nscores ~= {key = 10}\n");
+    let body = start_function_body(&ast, &string_table);
+
+    let NodeKind::VariableDeclaration(scores_decl) = &body[1].kind else {
+        panic!("expected scores declaration, got: {:?}", body[1].kind);
+    };
+
+    let ExpressionKind::MapLiteral(entries) = &scores_decl.value.kind else {
+        panic!(
+            "expected map literal expression, got: {:?}",
+            scores_decl.value.kind
+        );
+    };
+
+    assert_eq!(entries.len(), 1);
+    assert!(
+        matches!(entries[0].key.kind, ExpressionKind::Reference { .. }),
+        "expected bare identifier key to be parsed as variable reference"
+    );
+}
+
+#[test]
+fn parses_map_literal_with_contextual_none_value() {
+    let (ast, string_table) =
+        parse_single_file_ast("scores ~{String = Int?} = {\"Ada\" = none, \"Grace\" = 12}\n");
+    let body = start_function_body(&ast, &string_table);
+
+    let NodeKind::VariableDeclaration(scores_decl) = &body[0].kind else {
+        panic!("expected scores declaration");
+    };
+
+    let ExpressionKind::MapLiteral(entries) = &scores_decl.value.kind else {
+        panic!("expected map literal expression");
+    };
+
+    assert_eq!(entries.len(), 2);
+    assert!(
+        matches!(entries[0].value.kind, ExpressionKind::OptionNone),
+        "expected none in value position with option context"
+    );
+}
+
+#[test]
+fn parses_map_literal_with_string_key_coercion() {
+    let (ast, string_table) = parse_single_file_ast("scores ~{String = Int} = {\"Ada\" = 10}\n");
+    let body = start_function_body(&ast, &string_table);
+
+    let NodeKind::VariableDeclaration(scores_decl) = &body[0].kind else {
+        panic!("expected scores declaration");
+    };
+
+    let ExpressionKind::MapLiteral(entries) = &scores_decl.value.kind else {
+        panic!("expected map literal expression");
+    };
+
+    assert_eq!(entries.len(), 1);
+    assert!(
+        matches!(entries[0].key.kind, ExpressionKind::StringSlice(_)),
+        "expected string literal key"
+    );
+}
+
+#[test]
+fn parses_nested_map_literal_value() {
+    let (ast, string_table) =
+        parse_single_file_ast("scores ~{String = {String = Int}} = {\"group\" = {\"Ada\" = 10}}\n");
+    let body = start_function_body(&ast, &string_table);
+
+    let NodeKind::VariableDeclaration(scores_decl) = &body[0].kind else {
+        panic!("expected scores declaration");
+    };
+
+    let ExpressionKind::MapLiteral(entries) = &scores_decl.value.kind else {
+        panic!("expected map literal expression");
+    };
+
+    assert_eq!(entries.len(), 1);
+    assert!(
+        matches!(entries[0].value.kind, ExpressionKind::MapLiteral(_)),
+        "expected nested map literal value"
+    );
+}
+
+#[test]
+fn parses_map_type_alias_literal() {
+    let (ast, string_table) =
+        parse_single_file_ast("Scores as {String = Int}\nscores Scores = {\"Ada\" = 10}\n");
+    let body = start_function_body(&ast, &string_table);
+
+    let NodeKind::VariableDeclaration(scores_decl) = &body[0].kind else {
+        panic!("expected scores declaration");
+    };
+
+    let ExpressionKind::MapLiteral(entries) = &scores_decl.value.kind else {
+        panic!("expected map literal expression");
+    };
+
+    assert_eq!(entries.len(), 1);
+    assert_eq!(
+        scores_decl
+            .value
+            .diagnostic_type
+            .display_with_table(&string_table),
+        "{String = Int}"
+    );
+}
+
+#[test]
+fn rejects_empty_inferred_curly_literal() {
+    let diagnostic = parse_single_file_ast_diagnostic("scores ~= {}\n");
+
+    assert!(matches!(
+        diagnostic.payload,
+        DiagnosticPayload::EmptyCollectionTypeAmbiguity
+    ));
+}
+
+#[test]
+fn rejects_mixed_collection_map_entries() {
+    let diagnostic = parse_single_file_ast_diagnostic("scores ~= {\"a\" = 1, 2}\n");
+
+    assert!(matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidMapLiteral {
+            reason: InvalidMapLiteralReason::MixedCollectionMapEntries,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn rejects_collection_first_mixed_collection_map_entries() {
+    let diagnostic = parse_single_file_ast_diagnostic("scores ~= {\"a\", \"b\" = 2}\n");
+
+    assert!(matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidMapLiteral {
+            reason: InvalidMapLiteralReason::MixedCollectionMapEntries,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn rejects_map_entry_in_explicit_collection_context() {
+    let diagnostic = parse_single_file_ast_diagnostic("values {String} = {\"a\" = 1}\n");
+
+    assert!(matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidMapLiteral {
+            reason: InvalidMapLiteralReason::MixedCollectionMapEntries,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn rejects_double_equal_inside_collection_as_common_syntax_mistake() {
+    let diagnostic =
+        parse_single_file_ast_diagnostic("left = true\nright = false\nvalues ~= {left == right}\n");
+
+    assert!(matches!(
+        diagnostic.payload,
+        DiagnosticPayload::CommonSyntaxMistake {
+            reason: CommonSyntaxMistakeReason::EqualityOperator
+        }
+    ));
+}
+
+#[test]
+fn rejects_duplicate_known_map_key() {
+    let diagnostic =
+        parse_single_file_ast_diagnostic("scores ~{String = Int} = {\"a\" = 1, \"a\" = 2}\n");
+
+    assert!(matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidMapLiteral {
+            reason: InvalidMapLiteralReason::DuplicateKnownKey,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn rejects_unknown_bare_identifier_key() {
+    let diagnostic =
+        parse_single_file_ast_diagnostic("scores ~{String = Int} = {unknown_key = 10}\n");
+
+    assert!(matches!(
+        diagnostic.payload,
+        DiagnosticPayload::UnknownName { .. }
+    ));
+}
+
+#[test]
+fn rejects_unhashable_key_expression() {
+    let diagnostic = parse_single_file_ast_diagnostic("scores ~{Float = Int} = {1.5 = 10}\n");
+
+    assert!(matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidMapType {
+            reason: crate::compiler_frontend::compiler_messages::InvalidMapTypeReason::UnsupportedKeyType { .. },
+            ..
+        }
+    ));
+}
+
+#[test]
+fn rejects_const_map_literal() {
+    let diagnostic = parse_single_file_ast_diagnostic("scores #= {\"a\" = 1}\n");
+
+    assert!(matches!(
+        diagnostic.payload,
+        DiagnosticPayload::CompileTimeEvaluationError
+        {
+            reason:
+            crate::compiler_frontend::compiler_messages::CompileTimeEvaluationErrorReason::ConstantInitializerNotFoldable,
+            ..
+        }
+    ));
+}
+
+// --------------------------
+//  Map builtin helpers
+// --------------------------
+
+fn runtime_map_builtin_op(expression: &Expression) -> MapBuiltinOp {
+    let ExpressionKind::Runtime(nodes) = &expression.kind else {
+        panic!("expected runtime expression");
+    };
+    assert_eq!(nodes.len(), 1, "expected single-node runtime expression");
+    let NodeKind::MapBuiltinCall { op, .. } = &nodes[0].kind else {
+        panic!("expected map builtin call node, got {:?}", nodes[0].kind);
+    };
+
+    *op
+}
+
+fn handled_map_builtin_op(expression: &Expression) -> MapBuiltinOp {
+    let handled_expression = match &expression.kind {
+        ExpressionKind::HandledFallibleExpression { value, .. } => value.as_ref(),
+        ExpressionKind::ValueBlock { block } => {
+            let ValueBlock::Catch(value_catch) = block.as_ref() else {
+                panic!("expected catch value block");
+            };
+            let ExpressionKind::HandledFallibleExpression { value, .. } =
+                &value_catch.handled_value.kind
+            else {
+                panic!("expected handled fallible expression inside catch value block");
+            };
+            value.as_ref()
+        }
+        _ => panic!("expected handled fallible expression"),
+    };
+
+    runtime_map_builtin_op(handled_expression)
+}
+
+// --------------------------
+//  Map builtin parsing
+// --------------------------
+
+#[test]
+fn parses_map_get_with_catch_handler() {
+    let (ast, string_table) = parse_single_file_ast(
+        "scores ~{String = Int} = {\"Ada\" = 10}\nvalue = scores.get(\"Ada\") catch:\n    then 0\n;\n",
+    );
+    let body = start_function_body(&ast, &string_table);
+
+    let NodeKind::VariableDeclaration(value_decl) = &body[1].kind else {
+        panic!("expected value declaration");
+    };
+
+    assert_eq!(handled_map_builtin_op(&value_decl.value), MapBuiltinOp::Get);
+}
+
+#[test]
+fn parses_map_get_with_propagation() {
+    let (ast, string_table) = parse_single_file_ast(
+        "get_value |scores {String = Int}| -> Int, Error!:\n    return scores.get(\"Ada\")!\n;\n",
+    );
+    let body = function_body_by_name(&ast, &string_table, "get_value");
+
+    let NodeKind::Return(values) = &body[0].kind else {
+        panic!("expected return statement");
+    };
+
+    assert_eq!(handled_map_builtin_op(&values[0]), MapBuiltinOp::Get);
+}
+
+#[test]
+fn parses_map_contains() {
+    let (ast, string_table) = parse_single_file_ast(
+        "scores ~{String = Int} = {\"Ada\" = 10}\nfound = scores.contains(\"Ada\")\n",
+    );
+    let body = start_function_body(&ast, &string_table);
+
+    let NodeKind::VariableDeclaration(found_decl) = &body[1].kind else {
+        panic!("expected found declaration");
+    };
+
+    assert_eq!(
+        runtime_map_builtin_op(&found_decl.value),
+        MapBuiltinOp::Contains
+    );
+}
+
+#[test]
+fn parses_map_set_with_mutable_receiver() {
+    let (ast, string_table) = parse_single_file_ast(
+        "scores ~{String = Int} = {\"Ada\" = 10}\n~scores.set(\"Linus\", 7) catch:\n;\n",
+    );
+    let body = start_function_body(&ast, &string_table);
+
+    let NodeKind::Rvalue(expr) = &body[1].kind else {
+        panic!("expected rvalue statement");
+    };
+
+    assert_eq!(handled_map_builtin_op(expr), MapBuiltinOp::Set);
+}
+
+#[test]
+fn parses_map_remove_with_mutable_receiver() {
+    let (ast, string_table) = parse_single_file_ast(
+        "scores ~{String = Int} = {\"Ada\" = 10}\nremoved = ~scores.remove(\"Ada\") catch:\n    then 0\n;\n",
+    );
+    let body = start_function_body(&ast, &string_table);
+
+    let NodeKind::VariableDeclaration(removed_decl) = &body[1].kind else {
+        panic!("expected removed declaration");
+    };
+
+    assert_eq!(
+        handled_map_builtin_op(&removed_decl.value),
+        MapBuiltinOp::Remove
+    );
+}
+
+#[test]
+fn parses_map_clear_with_mutable_receiver() {
+    let (ast, string_table) =
+        parse_single_file_ast("scores ~{String = Int} = {\"Ada\" = 10}\n~scores.clear()\n");
+    let body = start_function_body(&ast, &string_table);
+
+    let NodeKind::Rvalue(expr) = &body[1].kind else {
+        panic!("expected rvalue statement");
+    };
+
+    assert_eq!(runtime_map_builtin_op(expr), MapBuiltinOp::Clear);
+}
+
+#[test]
+fn parses_map_length_as_property() {
+    let (ast, string_table) =
+        parse_single_file_ast("scores ~{String = Int} = {\"Ada\" = 10}\ncount = scores.length\n");
+    let body = start_function_body(&ast, &string_table);
+
+    let NodeKind::VariableDeclaration(count_decl) = &body[1].kind else {
+        panic!("expected count declaration");
+    };
+
+    assert_eq!(
+        runtime_map_builtin_op(&count_decl.value),
+        MapBuiltinOp::Length
+    );
+}
+
+#[test]
+fn rejects_map_length_with_parentheses() {
+    let diagnostic = parse_single_file_ast_diagnostic(
+        "scores ~{String = Int} = {\"Ada\" = 10}\ncount = scores.length()\n",
+    );
+
+    assert!(matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidBuiltinCall {
+            reason: InvalidBuiltinCallReason::MapLengthIsProperty,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn rejects_map_length_assignment() {
+    let diagnostic = parse_single_file_ast_diagnostic(
+        "scores ~{String = Int} = {\"Ada\" = 10}\nscores.length = 5\n",
+    );
+
+    assert!(matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidAssignmentTarget {
+            reason: InvalidAssignmentTargetReason::MapPropertyWriteRemoved,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn rejects_map_get_index_assignment() {
+    let diagnostic = parse_single_file_ast_diagnostic(
+        "scores ~{String = Int} = {\"Ada\" = 10}\nscores.get(\"Ada\") = 5\n",
+    );
+
+    assert!(matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidAssignmentTarget {
+            reason: InvalidAssignmentTargetReason::MapIndexedWriteRemoved,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn rejects_unhandled_map_get_result() {
+    let diagnostic = parse_single_file_ast_diagnostic(
+        "scores ~{String = Int} = {\"Ada\" = 10}\nvalue = scores.get(\"Ada\")\n",
+    );
+
+    assert!(matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidBuiltinCall {
+            reason: InvalidBuiltinCallReason::MustHandleFallibleResult,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn rejects_map_set_without_mutable_receiver_marker() {
+    let diagnostic = parse_single_file_ast_diagnostic(
+        "scores ~{String = Int} = {\"Ada\" = 10}\nscores.set(\"Linus\", 7)!\n",
+    );
+
+    assert!(matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidReceiverCall {
+            reason: InvalidReceiverCallReason::MissingMutableAccessMarker,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn rejects_map_remove_without_mutable_receiver_marker() {
+    let diagnostic = parse_single_file_ast_diagnostic(
+        "scores ~{String = Int} = {\"Ada\" = 10}\nscores.remove(\"Ada\")!\n",
+    );
+
+    assert!(matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidReceiverCall {
+            reason: InvalidReceiverCallReason::MissingMutableAccessMarker,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn rejects_map_clear_without_mutable_receiver_marker() {
+    let diagnostic = parse_single_file_ast_diagnostic(
+        "scores ~{String = Int} = {\"Ada\" = 10}\nscores.clear()\n",
+    );
+
+    assert!(matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidReceiverCall {
+            reason: InvalidReceiverCallReason::MissingMutableAccessMarker,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn rejects_map_mutation_on_immutable_binding() {
+    let diagnostic = parse_single_file_ast_diagnostic(
+        "scores {String = Int} = {\"Ada\" = 10}\n~scores.set(\"Linus\", 7)!\n",
+    );
+
+    assert!(matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidReceiverCall {
+            reason: InvalidReceiverCallReason::MutableMapRequired,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn rejects_map_contains_with_fallible_suffix() {
+    let diagnostic = parse_single_file_ast_diagnostic(
+        "scores ~{String = Int} = {\"Ada\" = 10}\nvalue = scores.contains(\"Ada\")!\n",
+    );
+
+    assert!(matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidResultHandling {
+            reason: InvalidResultHandlingReason::NotResultExpression,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn rejects_map_clear_with_fallible_suffix() {
+    let diagnostic = parse_single_file_ast_diagnostic(
+        "scores ~{String = Int} = {\"Ada\" = 10}\n~scores.clear()!\n",
+    );
+
+    assert!(matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidResultHandling {
+            reason: InvalidResultHandlingReason::NotResultExpression,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn rejects_map_length_with_fallible_suffix() {
+    let diagnostic = parse_single_file_ast_diagnostic(
+        "scores ~{String = Int} = {\"Ada\" = 10}\ncount = scores.length!\n",
+    );
+
+    assert!(matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidResultHandling {
+            reason: InvalidResultHandlingReason::NotResultExpression,
+            ..
+        }
+    ));
+}
+
+#[test]
+fn rejects_map_builtin_as_free_function() {
+    let diagnostic = parse_single_file_ast_diagnostic(
+        "scores ~{String = Int} = {\"Ada\" = 10}\nvalue = get(scores, \"Ada\")!\n",
+    );
+
+    assert!(matches!(
+        diagnostic.payload,
+        DiagnosticPayload::UnknownName { .. }
+    ));
+}
+
+#[test]
+fn map_builtin_wins_before_visible_value_name() {
+    // A visible free function named `get` must not capture `scores.get(...)`.
+    // Map member syntax is compiler-owned once the receiver has a map type.
+    let (ast, string_table) = parse_single_file_ast(
+        "get |key String| -> Int:\n    return 0\n;\n\nget_value |scores {String = Int}| -> Int, Error!:\n    return scores.get(\"Ada\")!\n;\n",
+    );
+    let body = function_body_by_name(&ast, &string_table, "get_value");
+
+    let NodeKind::Return(values) = &body[0].kind else {
+        panic!("expected return statement");
+    };
+
+    assert_eq!(handled_map_builtin_op(&values[0]), MapBuiltinOp::Get);
 }

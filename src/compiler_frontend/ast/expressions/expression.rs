@@ -6,7 +6,9 @@
 
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::call_argument::CallArgument;
-pub use crate::compiler_frontend::ast::expressions::expression_kind::{ExpressionKind, Operator};
+pub use crate::compiler_frontend::ast::expressions::expression_kind::{
+    ExpressionKind, MapLiteralEntry, Operator,
+};
 pub use crate::compiler_frontend::ast::expressions::expression_types::{
     BuiltinCastKind, ConstRecordState, ConstValueKind, FallibleCarrierVariant, FallibleHandling,
 };
@@ -86,6 +88,20 @@ pub(crate) struct CollectionExpressionType {
     pub(crate) element_diagnostic_type: DataType,
     pub(crate) fixed_capacity: Option<usize>,
     pub(crate) collection_type_id: Option<TypeId>,
+}
+
+/// Canonical and diagnostic type data for a map expression.
+///
+/// WHAT: groups the key type, value type, and optional exact semantic identity
+///       supplied by an explicit receiving context.
+/// WHY: map literal construction needs all of these facts together, and keeping
+///      them in one small input avoids long constructor argument lists.
+pub(crate) struct MapLiteralExpressionType {
+    pub(crate) key_type_id: TypeId,
+    pub(crate) value_type_id: TypeId,
+    pub(crate) key_diagnostic_type: DataType,
+    pub(crate) value_diagnostic_type: DataType,
+    pub(crate) map_type_id: Option<TypeId>,
 }
 
 /// Canonical type data for call expressions built after semantic resolution.
@@ -211,6 +227,11 @@ impl Expression {
                     result.push_str(&item.as_string(string_table));
                 }
                 result
+            }
+            ExpressionKind::MapLiteral(_) => {
+                // Map literals are not foldable to strings; return empty to
+                // avoid silently rendering them as folded constants.
+                String::new()
             }
             ExpressionKind::StructInstance(args) | ExpressionKind::StructDefinition(args) => {
                 let mut result = String::new();
@@ -724,6 +745,32 @@ impl Expression {
         .with_regular_division_provenance(contains_regular_division)
     }
 
+    /// Constructs a map literal expression with resolved key and value types.
+    pub(crate) fn map_literal_with_type_id(
+        entries: Vec<MapLiteralEntry>,
+        map_type: MapLiteralExpressionType,
+        type_environment: &mut TypeEnvironment,
+        location: SourceLocation,
+        value_mode: ValueMode,
+    ) -> Self {
+        let map_type_id = map_type.map_type_id.unwrap_or_else(|| {
+            type_environment.intern_map(map_type.key_type_id, map_type.value_type_id)
+        });
+        let contains_regular_division = entries.iter().any(|entry| {
+            entry.key.contains_regular_division || entry.value.contains_regular_division
+        });
+        let diagnostic_type =
+            DataType::map(map_type.key_diagnostic_type, map_type.value_diagnostic_type);
+        Self::new(
+            ExpressionKind::MapLiteral(entries),
+            location,
+            map_type_id,
+            diagnostic_type,
+            value_mode,
+        )
+        .with_regular_division_provenance(contains_regular_division)
+    }
+
     /// Constructs a struct instance expression.
     pub fn struct_instance(
         nominal_path: InternedPath,
@@ -921,6 +968,11 @@ impl Expression {
                 } else {
                     ConstValueKind::NonConst
                 }
+            }
+
+            ExpressionKind::MapLiteral(_) => {
+                // Map literals are intentionally not compile-time foldable in V1.
+                ConstValueKind::NonConst
             }
 
             ExpressionKind::StructInstance(fields) => {

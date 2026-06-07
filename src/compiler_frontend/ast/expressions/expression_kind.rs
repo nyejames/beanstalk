@@ -21,6 +21,18 @@ use crate::compiler_frontend::paths::compile_time_paths::CompileTimePaths;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap};
 use crate::compiler_frontend::type_coercion::dynamic_trait::DynamicTraitCoercion;
 
+/// One key/value pair inside a `{...}` map literal.
+///
+/// WHAT: AST shape for map entries after key and value expressions have been
+///       parsed and coerced.
+/// WHY: map literals need a dedicated variant so lowering stages can distinguish
+///      them from homogeneous collections.
+#[derive(Clone, Debug)]
+pub struct MapLiteralEntry {
+    pub(crate) key: Expression,
+    pub(crate) value: Expression,
+}
+
 #[derive(Clone, Debug)]
 pub enum ExpressionKind {
     /// Internal sentinel for "no source value was provided" (for example, a
@@ -136,6 +148,13 @@ pub enum ExpressionKind {
 
     /// Homogeneous collection literal.
     Collection(Vec<Expression>),
+
+    /// Ordered map literal with key = value entries.
+    ///
+    /// WHAT: carries typed key/value pairs after frontend parsing and coercion.
+    /// WHY: map literals are a distinct language construct from collections;
+    ///      they require separate HIR lowering and backend runtime support.
+    MapLiteral(Vec<MapLiteralEntry>),
 
     /// Struct type definition literal.
     StructDefinition(Vec<Declaration>),
@@ -318,6 +337,13 @@ impl ExpressionKind {
             ExpressionKind::Collection(items) => {
                 for item in items {
                     item.remap_string_ids(remap);
+                }
+            }
+
+            ExpressionKind::MapLiteral(entries) => {
+                for entry in entries {
+                    entry.key.remap_string_ids(remap);
+                    entry.value.remap_string_ids(remap);
                 }
             }
 

@@ -33,6 +33,56 @@ pub struct HirVariantField {
     pub value: HirExpression,
 }
 
+/// One key/value pair inside a `MapLiteral`.
+///
+/// WHAT: holds the lowered HIR key and value expressions for a single map entry.
+/// WHY: map literals need an explicit entry shape so lowering, validation, and backend
+///      emission can traverse children consistently.
+#[derive(Debug, Clone)]
+pub struct HirMapEntry {
+    pub key: HirExpression,
+    pub value: HirExpression,
+}
+
+/// Compiler-owned map operation kinds used in HIR.
+///
+/// WHAT: identifies the specific map builtin being requested at the HIR level.
+/// WHY: separates frontend `MapBuiltinOp` from the HIR statement representation.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HirMapOp {
+    /// Retrieve a value by key.
+    Get,
+    /// Check whether a key exists.
+    Contains,
+    /// Insert or update a key/value pair.
+    Set,
+    /// Remove a key and its value.
+    Remove,
+    /// Remove all entries.
+    Clear,
+    /// Count the number of entries.
+    Length,
+}
+
+impl HirMapOp {
+    #[cfg(any(test, feature = "show_hir"))]
+    pub(crate) fn source_name(self) -> &'static str {
+        match self {
+            HirMapOp::Get => "get",
+            HirMapOp::Contains => "contains",
+            HirMapOp::Set => "set",
+            HirMapOp::Remove => "remove",
+            HirMapOp::Clear => "clear",
+            HirMapOp::Length => "length",
+        }
+    }
+
+    /// Whether the operation mutates the receiver map.
+    pub(crate) fn requires_mutable_receiver(self) -> bool {
+        matches!(self, HirMapOp::Set | HirMapOp::Remove | HirMapOp::Clear)
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct HirExpression {
     pub id: HirValueId,
@@ -161,6 +211,16 @@ pub enum HirExpressionKind {
         variant_index: usize,
         field_index: usize,
     },
+
+    // -------------------------
+    //  Map Operations
+    // -------------------------
+    /// Construct an insertion-ordered hashmap value from explicit key/value entries.
+    ///
+    /// WHAT: each entry is lowered independently so prelude order and side effects are
+    ///       preserved before the literal value is produced.
+    /// WHY: map literals are first-class compiler-owned values, not external calls.
+    MapLiteral(Vec<HirMapEntry>),
 
     // -------------------------
     //  Dynamic Trait Operations

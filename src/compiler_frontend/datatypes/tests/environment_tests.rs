@@ -1421,3 +1421,82 @@ fn display_type_renders_nested_fixed_collections() {
 
     assert_eq!(display_type(outer_fixed, &env, &table), "{4 {8 Int}}");
 }
+
+#[test]
+fn map_interning_reuses_ids() {
+    let mut env = TypeEnvironment::new();
+    let string = env.builtins().string;
+    let int = env.builtins().int;
+
+    let map_a = env.intern_map(string, int);
+    let map_b = env.intern_map(string, int);
+
+    assert_eq!(map_a, map_b, "same map key/value should reuse TypeId");
+}
+
+#[test]
+fn distinct_map_types_get_distinct_ids() {
+    let mut env = TypeEnvironment::new();
+    let string = env.builtins().string;
+    let int = env.builtins().int;
+    let bool = env.builtins().bool;
+
+    let map_string_int = env.intern_map(string, int);
+    let map_string_bool = env.intern_map(string, bool);
+
+    assert_ne!(
+        map_string_int, map_string_bool,
+        "different value types should produce different TypeIds"
+    );
+}
+
+#[test]
+fn map_shape_queries_work() {
+    let mut env = TypeEnvironment::new();
+    let string = env.builtins().string;
+    let int = env.builtins().int;
+
+    let map_type = env.intern_map(string, int);
+
+    assert!(env.is_map_type(map_type));
+    assert_eq!(env.map_key_type(map_type), Some(string));
+    assert_eq!(env.map_value_type(map_type), Some(int));
+
+    let shape = env.map_shape(map_type).expect("should have a shape");
+    assert_eq!(shape.key_type, string);
+    assert_eq!(shape.value_type, int);
+
+    // Non-map returns None
+    assert!(!env.is_map_type(string));
+    assert_eq!(env.map_key_type(string), None);
+    assert_eq!(env.map_value_type(string), None);
+    assert_eq!(env.map_shape(string), None);
+}
+
+#[test]
+fn display_renders_map_type() {
+    let mut env = TypeEnvironment::new();
+    let table = StringTable::new();
+    let string = env.builtins().string;
+    let int = env.builtins().int;
+
+    let map_type = env.intern_map(string, int);
+
+    assert_eq!(display_type(map_type, &env, &table), "{String = Int}");
+}
+
+#[test]
+fn display_renders_nested_map_type() {
+    let mut env = TypeEnvironment::new();
+    let table = StringTable::new();
+    let string = env.builtins().string;
+    let int = env.builtins().int;
+
+    let inner_map = env.intern_map(string, int);
+    let outer_map = env.intern_map(string, inner_map);
+
+    assert_eq!(
+        display_type(outer_map, &env, &table),
+        "{String = {String = Int}}"
+    );
+}

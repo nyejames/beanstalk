@@ -19,3 +19,4 @@ pub enum CollectionBuiltinOp {
 pub(crate) mod error_codes;
 pub(crate) mod error_type;
 pub(crate) mod expression_parsing;
+pub mod maps;

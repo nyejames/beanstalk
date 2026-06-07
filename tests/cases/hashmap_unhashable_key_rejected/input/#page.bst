@@ -1,0 +1,2 @@
+bad ~{Float = Int} = {1.0 = 1}
+[:test]

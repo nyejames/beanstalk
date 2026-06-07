@@ -24,7 +24,7 @@ Design principles:
 | Feature | Rule |
 |---|---|
 | Blocks | `:` opens a scope; `;` closes it. Semicolons do not terminate statements. |
-| Collections/templates | `{}` are collections. `[]` are string templates only. |
+| Braced literals/templates | `{}` are collections or hashmaps depending on the type/literal shape. `[]` are string templates only. |
 | Comments | `--` starts a single-line comment. |
 | Operators | Logical/equality forms use words such as `is` and `not`; symbolic equality and logical-not forms are not operators. |
 | Mutability | `~` marks mutable bindings/access. In declarations it appears before the type: `name ~Type = value`. |
@@ -323,6 +323,55 @@ Rules:
 - `collection.length()` returns the current logical length, not fixed capacity.
 - Indexed writes use `~items.set(index, value)`; assignment through `get` is removed.
 - The compiler may lower collection methods directly without a runtime call.
+
+### Hash Maps
+
+Hash maps are insertion-ordered key/value groups. V1 targets the HTML JavaScript backend; HTML-Wasm rejects reachable map use before backend lowering.
+
+```beanstalk
+scores ~= {"Ada" = 10, "Grace" = 12} -- {String = Int}
+empty_scores ~{String = Int} = {}
+
+score = scores.get("Ada") catch:
+    then 0
+;
+
+~scores.set("Linus", 7) catch:
+;
+
+removed = ~scores.remove("Grace") catch:
+    then 0
+;
+
+if scores.contains("Ada"):
+    io("found")
+;
+
+count = scores.length
+~scores.clear()
+```
+
+Rules:
+- `{Key = Value}` is a hashmap type. The key and value sides are ordinary type annotations.
+- `{key = value}` is a hashmap literal. Any top-level `=` entry inside a non-empty `{...}` value literal makes the whole literal a hashmap literal.
+- Every hashmap literal entry must be a key/value pair. Mixing collection items and hashmap entries is invalid.
+- Empty map literals require an explicit or contextual hashmap type.
+- Bare identifiers in key position are variable references, not string-key shorthand.
+- Hashmaps are insertion ordered. First insertion determines entry position; replacing an existing key updates the value without moving the entry or replacing the stored key.
+- Removing a key removes that entry from the order. Re-inserting the key appends a new entry.
+- V1 key types are `String`, `Int`, `Bool`, and `Char`.
+- `Float`, structs, choices, collections, hashmaps, dynamic trait values, functions, external opaque types, templates as a distinct key type, and generic parameters without a future `HASHABLE` bound are invalid keys.
+- Values follow the same runtime-storable rules as collection elements.
+- Maps own stored keys and values.
+- `get`, `contains`, and `remove` borrow the lookup key.
+- `get` returns shared access to the stored value. Mutating the same map while that shared value is live is invalid.
+- `remove` returns the owned removed value.
+- `set` inserts or replaces a value and does not return the old value.
+- `get`, `set`, and `remove` are fallible and must be handled with postfix `!` or `catch:`.
+- `contains`, `length`, and `clear` are infallible.
+- `map.length` is a read-only property, not a method call.
+
+Deferred map surfaces include hashsets, user-defined hashers/comparers, `Float` keys, user-defined key types, generic key maps before `HASHABLE`, map equality, map iteration, mutable entry APIs, indexing syntax, const hashmaps, display/debug display, fixed/capacity maps, optimized map variants, and Wasm map lowering/runtime support.
 
 ### Standard Output
 

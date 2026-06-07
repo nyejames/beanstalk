@@ -26,6 +26,10 @@ pub(crate) fn for_each_named_type_in_parsed_ref(
         | ParsedTypeRef::Optional { inner: element, .. } => {
             for_each_named_type_in_parsed_ref(element, visitor);
         }
+        ParsedTypeRef::Map { key, value, .. } => {
+            for_each_named_type_in_parsed_ref(key, visitor);
+            for_each_named_type_in_parsed_ref(value, visitor);
+        }
         ParsedTypeRef::Result { ok, err, .. } => {
             for_each_named_type_in_parsed_ref(ok, visitor);
             for_each_named_type_in_parsed_ref(err, visitor);
@@ -62,6 +66,10 @@ pub(crate) fn collect_capacity_references_in_parsed_ref(
                 references.extend(collect_symbol_references(&capacity.tokens));
             }
             collect_capacity_references_in_parsed_ref(element, references);
+        }
+        ParsedTypeRef::Map { key, value, .. } => {
+            collect_capacity_references_in_parsed_ref(key, references);
+            collect_capacity_references_in_parsed_ref(value, references);
         }
         ParsedTypeRef::Optional { inner, .. } => {
             collect_capacity_references_in_parsed_ref(inner, references);

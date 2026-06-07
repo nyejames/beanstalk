@@ -9,12 +9,16 @@ use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::hir::blocks::HirBlock;
+use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind};
 use crate::compiler_frontend::hir::functions::HirFunction;
 use crate::compiler_frontend::hir::ids::{BlockId, FieldId, FunctionId, LocalId};
 use crate::compiler_frontend::hir::module::HirModule;
+use crate::compiler_frontend::hir::patterns::HirPattern;
 use crate::compiler_frontend::hir::reachability::{
     HirReachabilityInput, collect_hir_reachability, collect_reachability_from_start,
 };
+use crate::compiler_frontend::hir::statements::HirStatementKind;
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::traits::ids::TraitEvidenceId;
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -99,9 +103,10 @@ impl<'hir> JsEmitter<'hir> {
 
     fn lower_module(&mut self) -> Result<JsModule, CompilerError> {
         self.build_symbol_maps();
-        self.emit_runtime_prelude();
 
         let functions = self.functions_to_emit()?;
+        let emitted_code_uses_maps = self.emitted_functions_use_maps(&functions)?;
+        self.emit_runtime_prelude(emitted_code_uses_maps);
 
         for (index, function) in functions.into_iter().enumerate() {
             if index > 0 {
@@ -168,6 +173,171 @@ impl<'hir> JsEmitter<'hir> {
         functions.sort_by_key(|function| function.id.0);
 
         Ok(functions)
+    }
+
+    /// Returns true when any emitted reachable JS body can construct, store, copy, display, or
+    /// operate on a Beanstalk map.
+    ///
+    /// WHAT: scans the same function/block subset that JS lowering will emit.
+    /// WHY: map helpers are new runtime surface. Emitting them only for map-using programs avoids
+    /// changing existing golden artifacts while still making map copy/string fallback paths safe.
+    fn emitted_functions_use_maps(
+        &self,
+        functions: &[&'hir HirFunction],
+    ) -> Result<bool, CompilerError> {
+        for function in functions {
+            if self.type_environment.is_map_type(function.return_type) {
+                return Ok(true);
+            }
+
+            let reachable_blocks = self.collect_reachable_blocks(function.entry)?;
+            for block_id in reachable_blocks {
+                let block = self.block_by_id(block_id)?;
+                for local in &block.locals {
+                    if self.type_environment.is_map_type(local.ty) {
+                        return Ok(true);
+                    }
+                }
+
+                for statement in &block.statements {
+                    if self.statement_uses_maps(&statement.kind) {
+                        return Ok(true);
+                    }
+                }
+
+                if self.terminator_uses_maps(&block.terminator) {
+                    return Ok(true);
+                }
+            }
+        }
+
+        Ok(false)
+    }
+
+    fn statement_uses_maps(&self, statement: &HirStatementKind) -> bool {
+        match statement {
+            HirStatementKind::Assign { target: _, value }
+            | HirStatementKind::Expr(value)
+            | HirStatementKind::PushRuntimeFragment { value, .. } => {
+                self.expression_uses_maps(value)
+            }
+
+            HirStatementKind::Call { args, .. } => args
+                .iter()
+                .any(|argument| self.expression_uses_maps(argument)),
+
+            HirStatementKind::CallDynamicTraitMethod { receiver, args, .. } => {
+                self.expression_uses_maps(receiver)
+                    || args
+                        .iter()
+                        .any(|argument| self.expression_uses_maps(&argument.value))
+            }
+
+            HirStatementKind::MapOp { .. } => true,
+
+            HirStatementKind::Drop(_) => false,
+        }
+    }
+
+    fn terminator_uses_maps(&self, terminator: &HirTerminator) -> bool {
+        match terminator {
+            HirTerminator::If { condition, .. } => self.expression_uses_maps(condition),
+
+            HirTerminator::FallibleBranch { result, .. } => self.expression_uses_maps(result),
+
+            HirTerminator::Match { scrutinee, arms } => {
+                self.expression_uses_maps(scrutinee)
+                    || arms.iter().any(|arm| {
+                        arm.guard
+                            .as_ref()
+                            .is_some_and(|guard| self.expression_uses_maps(guard))
+                            || self.pattern_uses_maps(&arm.pattern)
+                    })
+            }
+
+            HirTerminator::Return(value)
+            | HirTerminator::ReturnSuccess(value)
+            | HirTerminator::ReturnError(value) => self.expression_uses_maps(value),
+
+            HirTerminator::Jump { .. }
+            | HirTerminator::Break { .. }
+            | HirTerminator::Continue { .. }
+            | HirTerminator::Uninitialized
+            | HirTerminator::RuntimeFailure { .. }
+            | HirTerminator::AssertFailure { .. } => false,
+        }
+    }
+
+    fn pattern_uses_maps(&self, pattern: &HirPattern) -> bool {
+        match pattern {
+            HirPattern::Literal(value)
+            | HirPattern::OptionValue { value }
+            | HirPattern::OptionRelational { value, .. }
+            | HirPattern::Relational { value, .. } => self.expression_uses_maps(value),
+
+            HirPattern::OptionNone
+            | HirPattern::OptionPresent
+            | HirPattern::Wildcard
+            | HirPattern::ChoiceVariant { .. }
+            | HirPattern::Capture => false,
+        }
+    }
+
+    fn expression_uses_maps(&self, expression: &HirExpression) -> bool {
+        if self.type_environment.is_map_type(expression.ty) {
+            return true;
+        }
+
+        match &expression.kind {
+            HirExpressionKind::Load(_) | HirExpressionKind::Copy(_) => false,
+
+            HirExpressionKind::BinOp { left, right, .. } => {
+                self.expression_uses_maps(left) || self.expression_uses_maps(right)
+            }
+
+            HirExpressionKind::UnaryOp { operand, .. } => self.expression_uses_maps(operand),
+
+            HirExpressionKind::StructConstruct { fields, .. } => fields
+                .iter()
+                .any(|(_, field_value)| self.expression_uses_maps(field_value)),
+
+            HirExpressionKind::Collection(elements)
+            | HirExpressionKind::TupleConstruct { elements } => elements
+                .iter()
+                .any(|element| self.expression_uses_maps(element)),
+
+            HirExpressionKind::MapLiteral(_) => true,
+
+            HirExpressionKind::Range { start, end } => {
+                self.expression_uses_maps(start) || self.expression_uses_maps(end)
+            }
+
+            HirExpressionKind::TupleGet { tuple, .. } => self.expression_uses_maps(tuple),
+
+            HirExpressionKind::FallibleUnwrapSuccess { result }
+            | HirExpressionKind::FallibleUnwrapError { result } => {
+                self.expression_uses_maps(result)
+            }
+
+            HirExpressionKind::BuiltinCast { value, .. }
+            | HirExpressionKind::ConstructDynamicTraitValue { value, .. } => {
+                self.expression_uses_maps(value)
+            }
+
+            HirExpressionKind::VariantConstruct { fields, .. } => fields
+                .iter()
+                .any(|field| self.expression_uses_maps(&field.value)),
+
+            HirExpressionKind::VariantPayloadGet { source, .. } => {
+                self.expression_uses_maps(source)
+            }
+
+            HirExpressionKind::Int(_)
+            | HirExpressionKind::Float(_)
+            | HirExpressionKind::Bool(_)
+            | HirExpressionKind::Char(_)
+            | HirExpressionKind::StringLiteral(_) => false,
+        }
     }
 
     fn collect_js_reachable_functions(

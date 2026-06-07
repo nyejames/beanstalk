@@ -8,7 +8,7 @@ use crate::backends::js::value_use::JsValueUse;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::hir::expressions::{
-    HirBuiltinCastKind, HirExpression, HirExpressionKind, HirVariantCarrier,
+    HirBuiltinCastKind, HirExpression, HirExpressionKind, HirMapEntry, HirVariantCarrier,
 };
 use crate::compiler_frontend::hir::operators::{HirBinOp, HirUnaryOp};
 use crate::compiler_frontend::hir::places::HirPlace;
@@ -110,6 +110,10 @@ impl<'hir> JsEmitter<'hir> {
                 } else {
                     Ok(items)
                 }
+            }
+
+            HirExpressionKind::MapLiteral(entries) => {
+                self.lower_map_literal(expression.ty, entries)
             }
 
             HirExpressionKind::Range { start, end } => {
@@ -459,6 +463,33 @@ impl<'hir> JsEmitter<'hir> {
         };
 
         Ok(format!("({js_operator}{operand})"))
+    }
+
+    /// Lower a map literal expression into a `__bs_map_new` call.
+    ///
+    /// WHAT: converts each `HirMapEntry` into a `[key, value]` pair and wraps the array in
+    /// `__bs_map_new` so the runtime constructs a branded ordered-map wrapper.
+    /// WHY: map literals are first-class compiler-owned values; the backend must not emit
+    ///      raw JS `Map` constructors because the runtime helper layer owns the branded shape.
+    fn lower_map_literal(
+        &mut self,
+        type_id: TypeId,
+        entries: &[HirMapEntry],
+    ) -> Result<String, CompilerError> {
+        let Some(_map_shape) = self.type_environment.map_shape(type_id) else {
+            return Err(CompilerError::compiler_error(
+                "JS backend lowered a map literal whose type is not a map",
+            ));
+        };
+
+        let mut lowered_entries = Vec::with_capacity(entries.len());
+        for entry in entries {
+            let key = self.lower_expr(&entry.key)?;
+            let value = self.lower_expr(&entry.value)?;
+            lowered_entries.push(format!("[{key}, {value}]"));
+        }
+
+        Ok(format!("__bs_map_new([{}])", lowered_entries.join(", ")))
     }
 }
 

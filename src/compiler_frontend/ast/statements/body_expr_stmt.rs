@@ -41,6 +41,7 @@ fn is_expression_statement(expression: &Expression) -> bool {
                 NodeKind::MethodCall { .. }
                     | NodeKind::DynamicTraitMethodCall { .. }
                     | NodeKind::CollectionBuiltinCall { .. }
+                    | NodeKind::MapBuiltinCall { .. }
                     | NodeKind::FunctionCall { .. }
                     | NodeKind::HostFunctionCall { .. }
             )

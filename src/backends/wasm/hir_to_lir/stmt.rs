@@ -71,6 +71,9 @@ pub(crate) fn lower_statement(
         HirStatementKind::CallDynamicTraitMethod { .. } => Err(lir_transformation_error(
             "Wasm dynamic trait method dispatch reached lowering after backend feature validation",
         )),
+        HirStatementKind::MapOp { .. } => Err(lir_transformation_error(
+            "Wasm hashmap operation reached lowering before backend feature validation",
+        )),
         HirStatementKind::Expr(expression) => {
             let _ = lower_expression(context, expression, statements)?;
             Ok(())

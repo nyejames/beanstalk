@@ -1,0 +1,7 @@
+entry = "."
+
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+diagnostic_codes = ["BST-TYPE-0003"]
+message_contains = ["Unsupported operand types"]

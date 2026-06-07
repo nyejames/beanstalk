@@ -5,7 +5,7 @@
 //! become explicit before borrow validation and backend lowering.
 
 use crate::compiler_frontend::external_packages::CallTarget;
-use crate::compiler_frontend::hir::expressions::HirExpression;
+use crate::compiler_frontend::hir::expressions::{HirExpression, HirMapOp};
 use crate::compiler_frontend::hir::ids::{HirNodeId, LocalId};
 use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
@@ -25,8 +25,12 @@ pub enum HirStatementKind {
         value: HirExpression,
     },
 
-    // HIR construction flattens nested calls.
-    // Single-call expressions don't need explicit assignment in the source
+    /// Call a function and optionally capture the result.
+    ///
+    /// WHAT: invokes `target` with evaluated `args` and binds the return value to `result`
+    ///       when present.
+    /// WHY: nested calls are flattened into statement preludes during expression lowering;
+    ///      a top-level call in statement position is represented directly as a `Call`.
     Call {
         target: CallTarget,
         args: Vec<HirExpression>,
@@ -67,6 +71,27 @@ pub enum HirStatementKind {
     /// Explicit deterministic drop.
     #[allow(dead_code)] // Planned: explicit drop statements after ownership lowering matures.
     Drop(LocalId),
+
+    // -------------------------
+    //  Map Builtins
+    // -------------------------
+    /// Perform a compiler-owned map builtin operation.
+    ///
+    /// WHAT: lowers `get`, `contains`, `set`, `remove`, `clear`, and `length` into an explicit
+    ///       HIR statement so backends do not need to rediscover map builtin semantics.
+    /// WHY: map operations are language builtins, not external package calls. Keeping them
+    ///      as dedicated statements preserves receiver mutability, argument order, and
+    ///      result local shape for borrow validation and backend lowering.
+    MapOp {
+        /// The specific builtin operation (get, contains, set, remove, clear, length).
+        op: HirMapOp,
+        /// The map value being operated on.
+        receiver: HirExpression,
+        /// Operation-specific arguments such as lookup keys or inserted values.
+        args: Vec<HirExpression>,
+        /// Local that receives the operation result, if any.
+        result: Option<LocalId>,
+    },
 }
 
 #[derive(Debug, Clone)]

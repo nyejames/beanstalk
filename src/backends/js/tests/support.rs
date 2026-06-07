@@ -20,7 +20,9 @@ use crate::compiler_frontend::datatypes::ids::{
 };
 pub(super) use crate::compiler_frontend::external_packages::CallTarget;
 use crate::compiler_frontend::hir::blocks::{HirBlock, HirLocal};
-use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, ValueKind};
+use crate::compiler_frontend::hir::expressions::{
+    HirExpression, HirExpressionKind, HirMapEntry, ValueKind,
+};
 use crate::compiler_frontend::hir::functions::HirFunction;
 use crate::compiler_frontend::hir::ids::{BlockId, ChoiceId, FunctionId, LocalId, RegionId};
 use crate::compiler_frontend::hir::module::{HirChoice, HirModule};
@@ -40,6 +42,7 @@ pub(super) struct TypeIds {
     pub(super) option_int: TypeId,
     pub(super) choice_unit: TypeId,
     pub(super) collection_int: TypeId,
+    pub(super) map_string_int: TypeId,
 }
 
 pub(super) fn loc(start: i32) -> SourceLocation {
@@ -79,6 +82,7 @@ pub(super) fn build_type_environment() -> (TypeEnvironment, TypeIds) {
     let (_, choice_unit) = env.register_nominal_choice(choice_def);
 
     let collection_int = env.intern_collection(int, None);
+    let map_string_int = env.intern_map(string, int);
 
     (
         env,
@@ -90,6 +94,7 @@ pub(super) fn build_type_environment() -> (TypeEnvironment, TypeIds) {
             option_int,
             choice_unit,
             collection_int,
+            map_string_int,
         },
     )
 }
@@ -219,6 +224,55 @@ pub(super) fn lower_minimal_module(function_name: &str) -> String {
         locals: vec![],
         statements: vec![],
         terminator: HirTerminator::Return(unit_expression(0, types.unit, RegionId(0))),
+    };
+
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.unit,
+        return_aliases: vec![],
+    };
+
+    let module = build_module(&mut string_table, function_name, vec![block], function, &[]);
+
+    lower_hir_to_js(
+        &module,
+        &BorrowCheckReport::default(),
+        &string_table,
+        JsLoweringConfig::direct_js(false),
+        &type_environment,
+    )
+    .expect("JS lowering should succeed")
+    .source
+}
+
+/// Builds and lowers a minimal module that constructs a map literal.
+///
+/// WHY: map runtime helpers are emitted only for map-using modules, so runtime-helper tests need
+/// a focused fixture that exercises the map prelude without duplicating HIR setup everywhere.
+pub(super) fn lower_minimal_map_module(function_name: &str) -> String {
+    let mut string_table = StringTable::new();
+    let (type_environment, types) = build_type_environment();
+    let region = RegionId(0);
+
+    let map_expression = expression(
+        1,
+        HirExpressionKind::MapLiteral(vec![HirMapEntry {
+            key: string_expression(2, "Ada", types.string, region),
+            value: int_expression(3, 10, types.int, region),
+        }]),
+        types.map_string_int,
+        region,
+        ValueKind::RValue,
+    );
+
+    let block = HirBlock {
+        id: BlockId(0),
+        region,
+        locals: vec![],
+        statements: vec![statement(1, HirStatementKind::Expr(map_expression), 1)],
+        terminator: HirTerminator::Return(unit_expression(4, types.unit, region)),
     };
 
     let function = HirFunction {

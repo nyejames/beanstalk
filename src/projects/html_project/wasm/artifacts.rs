@@ -281,6 +281,15 @@ fn first_generic_runtime_statement_location(
                 },
             )
         }
+        HirStatementKind::MapOp { receiver, args, .. } => {
+            first_generic_runtime_expression_location(receiver, module, type_environment).or_else(
+                || {
+                    args.iter().find_map(|arg| {
+                        first_generic_runtime_expression_location(arg, module, type_environment)
+                    })
+                },
+            )
+        }
         HirStatementKind::Drop(_) => None,
     }
 }
@@ -362,6 +371,17 @@ fn first_generic_runtime_expression_location(
         HirExpressionKind::Collection(items)
         | HirExpressionKind::TupleConstruct { elements: items } => items.iter().find_map(|item| {
             first_generic_runtime_expression_location(item, module, type_environment)
+        }),
+        HirExpressionKind::MapLiteral(entries) => entries.iter().find_map(|entry| {
+            first_generic_runtime_expression_location(&entry.key, module, type_environment).or_else(
+                || {
+                    first_generic_runtime_expression_location(
+                        &entry.value,
+                        module,
+                        type_environment,
+                    )
+                },
+            )
         }),
         HirExpressionKind::Range { start, end } => {
             first_generic_runtime_expression_location(start, module, type_environment).or_else(

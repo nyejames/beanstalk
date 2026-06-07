@@ -109,6 +109,12 @@ pub(crate) fn invalid_assignment_target_message(
         InvalidAssignmentTargetReason::CollectionIndexedWriteRemoved => {
             "Indexed assignment through collection `get(...)` has been removed. Use `~items.set(index, value)!` or handle `~items.set(index, value) catch:` instead.".to_string()
         }
+        InvalidAssignmentTargetReason::MapIndexedWriteRemoved => {
+            "Indexed assignment through map `get(...)` has been removed. Use `~map.set(key, value)!` or handle `~map.set(key, value) catch:` instead.".to_string()
+        }
+        InvalidAssignmentTargetReason::MapPropertyWriteRemoved => {
+            "Map `length` is a read-only property and cannot be assigned.".to_string()
+        }
         InvalidAssignmentTargetReason::ExpectedAssignmentOperator => {
             format!("Expected assignment operator after variable {target_text}.")
         }
@@ -218,6 +224,10 @@ pub(crate) fn invalid_builtin_call_message(
         InvalidBuiltinCallReason::ExpressionPositionNotAllowed => {
             format!("{builtin_text} is a statement and cannot be used in expression position.")
         }
+        InvalidBuiltinCallReason::MapLengthIsProperty => {
+            "Map `length` is a property, not a method. Use `map.length` without parentheses."
+                .to_string()
+        }
     }
 }
 
@@ -248,6 +258,11 @@ pub(crate) fn invalid_receiver_call_message(
         InvalidReceiverCallReason::MutableCollectionRequired => {
             format!(
                 "Collection mutating method {method_text} requires a mutable collection receiver."
+            )
+        }
+        InvalidReceiverCallReason::MutableMapRequired => {
+            format!(
+                "Map mutating method {method_text} requires a mutable map receiver."
             )
         }
         InvalidReceiverCallReason::MissingMutableAccessMarker => {

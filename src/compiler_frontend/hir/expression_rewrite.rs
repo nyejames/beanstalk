@@ -5,7 +5,7 @@
 //! duplicate a full `HirExpressionKind` walker.
 
 use crate::compiler_frontend::hir::expressions::{
-    HirExpression, HirExpressionKind, HirVariantField,
+    HirExpression, HirExpressionKind, HirMapEntry, HirVariantField,
 };
 use crate::compiler_frontend::hir::places::HirPlace;
 
@@ -55,6 +55,16 @@ pub(crate) fn rewrite_expression_bottom_up(
             elements
                 .iter()
                 .map(|element| rewrite_expression_bottom_up(element, rewrite))
+                .collect(),
+        ),
+
+        HirExpressionKind::MapLiteral(entries) => HirExpressionKind::MapLiteral(
+            entries
+                .iter()
+                .map(|entry| HirMapEntry {
+                    key: rewrite_expression_bottom_up(&entry.key, rewrite),
+                    value: rewrite_expression_bottom_up(&entry.value, rewrite),
+                })
                 .collect(),
         ),
 

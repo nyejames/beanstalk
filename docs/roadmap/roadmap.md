@@ -11,12 +11,18 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 ---
 
 # Plans / TODOS
-- Hash Maps: `docs/roadmap/plans/hashmaps-implementation-plan.md`
--  `copy` keyword becomes the way to do type casting also. Performs type conversions where the declaration or parameter is explicitly typed and implements a CAST trait, for example for float to int casting could look like this: `a Int = copy existing_float_value` and all type conversions would go through using `copy` rather than needing a builtin specific function to do it or a new special syntax. So all numerical casting should be moved over to having `CAST_TO_*` trait implementations and then can use copy keyword to do this in a explicitly typed declaration or function call argument.
-- Build out core math library
+-  `cast` keyword for builtin type casting sugar for builtin Beanstalk types: ``
+- Some tidy up:
+  - Move `keyword_tests` into a test folder somewhere away from main pipeline code
+  - `instrumentation.rs` should be separated into somewhere else since its optimisation info only (since isn't a part of the actual compiler pipeline)
+  - `deferred_feature_diagnostics.rs` should live in `compiler_messages/`
+  - `src/compiler_frontend/reserved_trait_syntax.rs` is now just a core part of the language so should be renamed or this file should be removed if no longer relevant
+  - `basic_utility_functions.rs` and shared utility files like `token_scan.rs` need to be organised into a new `utilies/` folder
+  - Move `interned_path.rs` into `src/compiler_frontend/symbols` and put all test files inside symbols/ into their own `symbols/tests` folder to keep them organised away from production code.
+  - Evaluate places in the compiler that are similarly making these subtle organisation mistakes: multiple test files inside a directory that need to be organised into their own folder, shared utilies or similar grouped files that should be organised into their own directory or outdated file naming / obsolete files / legacy code that needs to be removed.
 - first class Reactivity syntax with message / action patterns in templates
+- Build out core IO library
 - Compile time arbitary precision aritmetic + Decimals Type support
-- Move to more specific explicit type declarations for numbers (I32, I64, F32, F64).JS backend just makes all an F64 and accepts the precision loss, more for future Wasm backend
 
 - Write a Wasm backend design baseline covering the v1 target, explicit deferred features, ABI/layout rules, runtime helper contracts, and HTML-Wasm bootstrap contract.
 - Freeze Wasm v1 as core Wasm, linear-memory handles, single-result ABI, dispatcher-loop CFG, JS/host bootstrap, no Wasm GC, no reference types, no Component Model.
@@ -40,6 +46,13 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 
 
 # Notes
+- Hash Maps V1 is complete in `docs/roadmap/plans/hashmaps-implementation-plan.md`: first-class insertion-ordered hashmaps with `{Key = Value}` type syntax, `{key = value}` literals, frontend/HIR/borrow validation, HTML JavaScript support, and HTML-Wasm unsupported-feature diagnostics.
+
+- Hash map follow-ups after V1: `HASHABLE` trait and generic key maps, derived/user-defined
+  hashability, `Float` key policy, map iteration, map equality semantics, const hashmaps,
+  map display / `DISPLAYABLE` / `DEBUG_DISPLAY`, fixed/capacity-specialized maps,
+  optimized map variants, hashsets in core/std, and HTML-Wasm map runtime/lowering.
+
 - Collection follow-ups after fixed collection type constraints: default-fill syntax such as
   `{...none}` / `{...0}`, explicit fixed/growable conversion through `copy` after cast/copy
   hardening, and growable initial-capacity hints only if future backend work shows they are useful.

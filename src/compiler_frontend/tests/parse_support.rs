@@ -34,7 +34,7 @@ pub(crate) fn test_project_path_resolver() -> ProjectPathResolver {
     .expect("test path resolver should be valid")
 }
 
-fn parse_single_file_ast_result(
+pub(crate) fn parse_single_file_ast_result(
     source: &str,
 ) -> Result<(Ast, StringTable), Box<CompilerDiagnostic>> {
     let mut string_table = StringTable::new();

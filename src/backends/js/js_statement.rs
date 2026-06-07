@@ -8,7 +8,7 @@ use crate::backends::js::js_expr::escape_js_string;
 use crate::backends::js::value_use::JsValueUse;
 use crate::compiler_frontend::analysis::borrow_checker::LocalMode;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
-use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind};
+use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, HirMapOp};
 use crate::compiler_frontend::hir::functions::HirFunction;
 use crate::compiler_frontend::hir::ids::{BlockId, LocalId};
 use crate::compiler_frontend::hir::patterns::{HirMatchArm, HirPattern, HirRelationalPatternOp};
@@ -52,12 +52,14 @@ impl<'hir> JsEmitter<'hir> {
                 ..
             } => {
                 let receiver = self.lower_expr(receiver)?;
+
                 let args = args
                     .iter()
                     .map(|arg| {
                         self.lower_expression_for_use(&arg.value, JsValueUse::BeanstalkCallArgument)
                     })
                     .collect::<Result<Vec<_>, _>>()?;
+
                 let call = self.lower_dynamic_trait_dispatch(receiver, *requirement_id, args);
 
                 if let Some(result_local) = result {
@@ -66,6 +68,19 @@ impl<'hir> JsEmitter<'hir> {
                 } else {
                     self.emit_line(&format!("{call};"));
                 }
+            }
+
+            HirStatementKind::MapOp {
+                op,
+                receiver,
+                args,
+                result,
+            } => {
+                // WHAT: dispatch a map builtin to the JS runtime helper that handles branded-map
+                // values.
+                // WHY: map ops are not ordinary calls; helper selection and arity validation stay
+                // local to `emit_map_op_statement`.
+                self.emit_map_op_statement(*op, receiver, args, result)?;
             }
 
             HirStatementKind::Expr(expression) => {
@@ -85,6 +100,69 @@ impl<'hir> JsEmitter<'hir> {
                 let value_expr = self.lower_expr(value)?;
                 self.emit_line(&format!("__bs_read({vec_name}).push({value_expr});"));
             }
+        }
+
+        Ok(())
+    }
+
+    /// Lower a `HirStatementKind::MapOp` into the appropriate runtime helper call.
+    ///
+    /// WHAT: dispatches `get`, `contains`, `set`, `remove`, `clear`, and `length` to their
+    /// corresponding `__bs_map_*` helpers, validates arity against the HIR contract, and emits
+    /// a result assignment when the statement carries a destination local.
+    /// WHY: map operations are language builtins, not external calls; the backend must map them
+    ///      to the JS runtime helpers that enforce the branded-map representation.
+    fn emit_map_op_statement(
+        &mut self,
+        op: HirMapOp,
+        receiver: &HirExpression,
+        args: &[HirExpression],
+        result: &Option<LocalId>,
+    ) -> Result<(), CompilerError> {
+        // Lower the receiver map first so helper-call argument order mirrors HIR order.
+        let receiver_expr = self.lower_expr(receiver)?;
+
+        // Select the JS helper and its HIR arity contract.
+        let (helper_name, expected_arity) = match op {
+            HirMapOp::Get => ("__bs_map_get", 1),
+            HirMapOp::Contains => ("__bs_map_contains", 1),
+            HirMapOp::Set => ("__bs_map_set", 2),
+            HirMapOp::Remove => ("__bs_map_remove", 1),
+            HirMapOp::Clear => ("__bs_map_clear", 0),
+            HirMapOp::Length => ("__bs_map_length", 0),
+        };
+
+        // Guard against arity mismatch between HIR and the backend.
+        if args.len() != expected_arity {
+            return Err(CompilerError::compiler_error(format!(
+                "JS backend received MapOp::{op:?} with {actual} args instead of {expected}",
+                actual = args.len(),
+                expected = expected_arity,
+            )));
+        }
+
+        // Lower each HIR argument to a JS expression.
+        let mut lowered_args = Vec::with_capacity(args.len());
+        for arg in args {
+            lowered_args.push(self.lower_expr(arg)?);
+        }
+
+        // Assemble the helper call, with or without extra arguments.
+        let call = if lowered_args.is_empty() {
+            format!("{helper_name}({receiver_expr})")
+        } else {
+            format!(
+                "{helper_name}({receiver_expr}, {})",
+                lowered_args.join(", ")
+            )
+        };
+
+        // Emit either an assignment to a destination local or a standalone call.
+        if let Some(result_local) = result {
+            let result_name = self.local_name(*result_local)?;
+            self.emit_line(&format!("__bs_assign_value({result_name}, {call});"));
+        } else {
+            self.emit_line(&format!("{call};"));
         }
 
         Ok(())

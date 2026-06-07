@@ -1,0 +1,7 @@
+entry = "."
+
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+diagnostic_codes = ["BST-SYNTAX-0033"]
+message_contains = ["Mixed collection and map entries"]

@@ -36,7 +36,7 @@ use crate::compiler_frontend::ast::type_resolution::TypeResolutionResult;
 use crate::compiler_frontend::compiler_messages::{
     BoundOnlyTraitDiagnosticReason, CompilerDiagnostic, DeferredFeatureReason,
     InvalidCollectionTypeReason, InvalidDynamicTraitTypeReason, InvalidGenericInstantiationReason,
-    InvalidTypeAnnotationReason, NameNamespace, NamespaceTypeValueMisuseKind,
+    InvalidMapTypeReason, InvalidTypeAnnotationReason, NameNamespace, NamespaceTypeValueMisuseKind,
 };
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::generic_identity_bridge::{
@@ -441,6 +441,58 @@ pub(crate) fn resolve_parsed_type_annotation(
             });
         }
 
+        ParsedTypeRef::Map {
+            key,
+            value,
+            location: map_location,
+        } => {
+            // Validate inline nesting depth before resolution.
+            let nesting_depth = map_nesting_depth(&source_ref);
+            if nesting_depth > 2 {
+                return Err(Box::new(CompilerDiagnostic::invalid_map_type(
+                    InvalidMapTypeReason::ExcessiveInlineNesting {
+                        depth: nesting_depth,
+                    },
+                    map_location.clone(),
+                )));
+            }
+
+            let key_annotation = resolve_parsed_type_annotation(
+                *key.clone(),
+                map_location,
+                context,
+                string_table,
+                scope_context,
+            )?;
+            let value_annotation = resolve_parsed_type_annotation(
+                *value.clone(),
+                map_location,
+                context,
+                string_table,
+                scope_context,
+            )?;
+
+            let key_id = key_annotation.type_id.unwrap_or(builtin_type_ids::NONE);
+            let value_id = value_annotation.type_id.unwrap_or(builtin_type_ids::NONE);
+
+            // Validate key capability for first-class ordered maps.
+            validate_map_key_type(key_id, context.type_environment, map_location)?;
+
+            let type_id = context.type_environment.intern_map(key_id, value_id);
+            let diagnostic_type = DataType::GenericInstance {
+                base: GenericBaseType::Builtin(BuiltinGenericType::Map),
+                arguments: vec![
+                    key_annotation.diagnostic_type,
+                    value_annotation.diagnostic_type,
+                ],
+            };
+            return Ok(ResolvedTypeAnnotation {
+                source_ref,
+                diagnostic_type,
+                type_id: Some(type_id),
+            });
+        }
+
         ParsedTypeRef::Named { name, .. } => {
             if let Some((alias_path, annotation)) = visible_type_alias_annotation(*name, context) {
                 return resolve_alias_annotation(
@@ -611,6 +663,78 @@ fn parsed_ref_contains_fixed_capacity(source_ref: &ParsedTypeRef) -> bool {
     }
 }
 
+/// Computes the maximum inline map nesting depth for a parsed type reference.
+///
+/// WHAT: counts how many levels of map types are nested within the given parsed ref.
+/// WHY: readability validation limits inline map nesting to two levels; named aliases
+///      reset the depth because they provide a named abstraction.
+///
+/// Depth rules:
+/// - `{String = Int}` has depth 1.
+/// - `{String = {String = Int}}` has depth 2.
+/// - `{String = {String = {String = Int}}}` has depth 3 and is rejected.
+/// - Named types (`MyAlias`) reset depth to 0 because the alias name abstracts the shape.
+fn map_nesting_depth(parsed: &ParsedTypeRef) -> usize {
+    match parsed {
+        ParsedTypeRef::Map { key, value, .. } => {
+            let key_depth = map_nesting_depth(key);
+            let value_depth = map_nesting_depth(value);
+            1 + key_depth.max(value_depth)
+        }
+        ParsedTypeRef::Named { .. } | ParsedTypeRef::Namespaced { .. } => 0,
+        ParsedTypeRef::Collection { element, .. } => map_nesting_depth(element),
+        ParsedTypeRef::Optional { inner, .. } => map_nesting_depth(inner),
+        ParsedTypeRef::Applied { arguments, .. } => {
+            arguments.iter().map(map_nesting_depth).max().unwrap_or(0)
+        }
+        ParsedTypeRef::Result { ok, err, .. } => map_nesting_depth(ok).max(map_nesting_depth(err)),
+        _ => 0,
+    }
+}
+
+/// Validates that a map key type is supported for V1 ordered maps.
+///
+/// WHAT: accepts only `String`, `Int`, `Bool`, and `Char` keys.
+/// WHY: V1 hash maps do not support generic keys, user-defined keys, or composite keys.
+///      This helper is the canonical owner of the key capability check.
+///
+/// Future work: when `HASHABLE` trait evidence exists, this helper should consult
+/// `TraitEvidenceEnvironment` instead of a hard-coded allow-list.
+pub(crate) fn validate_map_key_type(
+    key_type_id: TypeId,
+    type_environment: &TypeEnvironment,
+    location: &SourceLocation,
+) -> TypeResolutionResult<()> {
+    let builtins = type_environment.builtins();
+    let is_supported_scalar = key_type_id == builtins.string
+        || key_type_id == builtins.int
+        || key_type_id == builtins.bool
+        || key_type_id == builtins.char;
+
+    if is_supported_scalar {
+        return Ok(());
+    }
+
+    if let Some(
+        crate::compiler_frontend::datatypes::definitions::TypeDefinition::GenericParameter(param),
+    ) = type_environment.get(key_type_id)
+    {
+        return Err(Box::new(CompilerDiagnostic::invalid_map_type(
+            InvalidMapTypeReason::GenericKeyRequiresHashableBound {
+                parameter_name: param.name,
+            },
+            location.clone(),
+        )));
+    }
+
+    Err(Box::new(CompilerDiagnostic::invalid_map_type(
+        InvalidMapTypeReason::UnsupportedKeyType {
+            key_type: key_type_id,
+        },
+        location.clone(),
+    )))
+}
+
 fn alias_scope_context(
     alias_path: &InternedPath,
     scope_context: Option<&ScopeContext>,
@@ -770,6 +894,11 @@ pub(crate) fn resolve_diagnostic_type_to_type_id(
                 let element_id =
                     resolve_diagnostic_type_to_type_id(&arguments[0], type_environment);
                 type_environment.intern_collection(element_id, *fixed_capacity)
+            }
+            GenericBaseType::Builtin(BuiltinGenericType::Map) => {
+                let key_id = resolve_diagnostic_type_to_type_id(&arguments[0], type_environment);
+                let value_id = resolve_diagnostic_type_to_type_id(&arguments[1], type_environment);
+                type_environment.intern_map(key_id, value_id)
             }
             GenericBaseType::ResolvedNominal(path) => {
                 if let Some(nominal_id) = type_environment.nominal_id_for_path(path) {
@@ -936,6 +1065,13 @@ pub(crate) fn resolve_diagnostic_type_to_type_id_opt(
                     resolve_diagnostic_type_to_type_id_opt(&arguments[0], type_environment)?;
                 Some(type_environment.intern_collection(element_id, *fixed_capacity))
             }
+            GenericBaseType::Builtin(BuiltinGenericType::Map) => {
+                let key_id =
+                    resolve_diagnostic_type_to_type_id_opt(&arguments[0], type_environment)?;
+                let value_id =
+                    resolve_diagnostic_type_to_type_id_opt(&arguments[1], type_environment)?;
+                Some(type_environment.intern_map(key_id, value_id))
+            }
             GenericBaseType::ResolvedNominal(path) => {
                 let nominal_id = type_environment.nominal_id_for_path(path)?;
                 let arg_ids = arguments
@@ -1042,6 +1178,19 @@ pub(crate) fn resolve_type(
             let mut resolved_arguments = Vec::with_capacity(arguments.len());
             for argument in arguments {
                 resolved_arguments.push(resolve_type(argument, location, context, string_table)?);
+            }
+
+            if matches!(
+                resolved_base,
+                GenericBaseType::Builtin(BuiltinGenericType::Map)
+            ) && let Some(key_type) = resolved_arguments.first()
+            {
+                let key_id = resolve_diagnostic_type_to_type_id_checked(
+                    key_type,
+                    context.type_environment,
+                    location,
+                )?;
+                validate_map_key_type(key_id, context.type_environment, location)?;
             }
 
             // Attempt lazy instantiation for user-declared generic structs/choices.
@@ -1651,6 +1800,11 @@ fn resolve_generic_base_type(
             Ok(GenericBaseType::Builtin(BuiltinGenericType::Collection {
                 fixed_capacity: *fixed_capacity,
             }))
+        }
+        GenericBaseType::Builtin(BuiltinGenericType::Map) => {
+            // Map is allowed as a builtin generic type in source.
+            // Its arguments are resolved separately by resolve_type.
+            Ok(GenericBaseType::Builtin(BuiltinGenericType::Map))
         }
     }
 }

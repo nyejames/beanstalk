@@ -13,12 +13,15 @@ use crate::compiler_frontend::hir::ids::{BlockId, FunctionId, HirNodeId, HirValu
 use crate::compiler_frontend::hir::module::HirModule;
 use crate::compiler_frontend::hir::patterns::{HirMatchArm, HirPattern};
 use crate::compiler_frontend::hir::reachability::{
-    HirReachability, HirReachabilityInput, collect_hir_reachability,
+    HirReachability, HirReachabilityInput, ReachableMapUseKind, collect_hir_reachability,
     collect_reachability_from_start,
 };
 use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
 use crate::compiler_frontend::hir::terminators::HirTerminator;
-use crate::compiler_frontend::hir::{expressions::HirExpression, expressions::HirExpressionKind};
+use crate::compiler_frontend::hir::{
+    expressions::HirExpression, expressions::HirExpressionKind, expressions::HirMapEntry,
+    expressions::HirMapOp,
+};
 use crate::compiler_frontend::hir::{expressions::ValueKind, ids::LocalId};
 use crate::compiler_frontend::tokenizer::tokens::{CharPosition, SourceLocation};
 
@@ -233,6 +236,59 @@ fn custom_roots_are_supported_without_using_module_start() {
 }
 
 #[test]
+fn reachability_records_reachable_map_uses_only() {
+    let literal_location = location_at(40, 2);
+    let operation_location = location_at(41, 4);
+    let unreachable_location = location_at(50, 6);
+    let module = hir_module(
+        FunctionId(0),
+        vec![
+            function(FunctionId(0), BlockId(0)),
+            function(FunctionId(1), BlockId(1)),
+        ],
+        vec![
+            block(
+                BlockId(0),
+                vec![
+                    HirStatement {
+                        id: HirNodeId(10),
+                        kind: HirStatementKind::Expr(map_literal_expression(10)),
+                        location: literal_location.clone(),
+                    },
+                    map_statement_at(11, HirMapOp::Contains, operation_location.clone()),
+                ],
+                HirTerminator::Return(unit_expression(0)),
+            ),
+            block(
+                BlockId(1),
+                vec![
+                    HirStatement {
+                        id: HirNodeId(12),
+                        kind: HirStatementKind::Expr(map_literal_expression(12)),
+                        location: unreachable_location.clone(),
+                    },
+                    map_statement_at(13, HirMapOp::Clear, unreachable_location),
+                ],
+                HirTerminator::Return(unit_expression(1)),
+            ),
+        ],
+    );
+
+    let reachability =
+        collect_reachability_from_start(&module).expect("reachability should collect map uses");
+
+    assert_reachability(&reachability, &[0], &[0], &[]);
+    assert_eq!(
+        reachable_map_use_summaries(&reachability),
+        vec![
+            ("literal".to_owned(), 40, 2),
+            ("contains".to_owned(), 41, 4)
+        ],
+        "only map uses in reachable blocks should be reported"
+    );
+}
+
+#[test]
 fn missing_function_references_are_internal_hir_errors() {
     let module = hir_module(FunctionId(0), vec![], vec![]);
 
@@ -331,6 +387,19 @@ fn call_statement_at(id: u32, target: CallTarget, location: SourceLocation) -> H
     }
 }
 
+fn map_statement_at(id: u32, op: HirMapOp, location: SourceLocation) -> HirStatement {
+    HirStatement {
+        id: HirNodeId(id),
+        kind: HirStatementKind::MapOp {
+            op,
+            receiver: int_expression(id + 100),
+            args: vec![int_expression(id + 200)],
+            result: None::<LocalId>,
+        },
+        location,
+    }
+}
+
 fn match_arm(body: BlockId) -> HirMatchArm {
     HirMatchArm {
         pattern: HirPattern::Wildcard,
@@ -365,6 +434,19 @@ fn int_expression(id: u32) -> HirExpression {
         kind: HirExpressionKind::Int(1),
         ty: builtin_type_ids::INT,
         value_kind: ValueKind::Const,
+        region: RegionId(0),
+    }
+}
+
+fn map_literal_expression(id: u32) -> HirExpression {
+    HirExpression {
+        id: HirValueId(id),
+        kind: HirExpressionKind::MapLiteral(vec![HirMapEntry {
+            key: int_expression(id + 1),
+            value: int_expression(id + 2),
+        }]),
+        ty: builtin_type_ids::INT,
+        value_kind: ValueKind::RValue,
         region: RegionId(0),
     }
 }
@@ -425,6 +507,23 @@ fn assert_reachable_external_calls(
         actual_calls, expected_calls,
         "reachable external call sites differ"
     );
+}
+
+fn reachable_map_use_summaries(reachability: &HirReachability) -> Vec<(String, i32, i32)> {
+    reachability
+        .reachable_map_uses
+        .iter()
+        .map(|map_use| {
+            (
+                match &map_use.kind {
+                    ReachableMapUseKind::Literal => "literal".to_owned(),
+                    ReachableMapUseKind::Operation(op) => op.source_name().to_owned(),
+                },
+                map_use.location.start_pos.line_number,
+                map_use.location.start_pos.char_column,
+            )
+        })
+        .collect()
 }
 
 fn location_at(line_number: i32, char_column: i32) -> SourceLocation {

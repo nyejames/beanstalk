@@ -13,6 +13,7 @@ use crate::compiler_frontend::ast::expressions::expression::{
     ConstRecordState, Expression, ExpressionKind,
     FallibleCarrierVariant as AstFallibleCarrierVariant, FallibleHandling, Operator,
 };
+use crate::compiler_frontend::ast::expressions::expression_kind::MapLiteralEntry;
 use crate::compiler_frontend::ast::statements::match_patterns::MatchPattern;
 use crate::compiler_frontend::ast::statements::value_production::ProducedValues;
 use crate::compiler_frontend::ast::templates::template::{
@@ -32,6 +33,7 @@ use crate::compiler_frontend::ast::templates::template_slots::{
 };
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::builtins::CollectionBuiltinOp;
+use crate::compiler_frontend::builtins::maps::MapBuiltinOp;
 use crate::compiler_frontend::compiler_errors::ErrorType;
 use crate::compiler_frontend::datatypes::definitions::{
     BuiltinTypeDefinition, ChoiceTypeDefinition, ConstructedTypeDefinition, TypeDefinition,
@@ -44,7 +46,7 @@ use crate::compiler_frontend::declaration_syntax::choice::{ChoiceVariant, Choice
 use crate::compiler_frontend::external_packages::{CallTarget, ExternalFunctionId};
 use crate::compiler_frontend::hir::blocks::{HirBlock, HirLocal};
 use crate::compiler_frontend::hir::expressions::{
-    HirExpressionKind, HirVariantCarrier, OPTION_SOME_VARIANT_INDEX, ValueKind,
+    HirExpressionKind, HirMapOp, HirVariantCarrier, OPTION_SOME_VARIANT_INDEX, ValueKind,
 };
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_side_table::HirLocalOriginKind;
@@ -3221,6 +3223,190 @@ fn lowers_collection_builtin_host_calls_from_explicit_ast_nodes() {
             }
             other => panic!("expected host call statement for collection builtin, got {other:?}"),
         }
+    }
+}
+
+#[test]
+fn map_literal_lowering_preserves_entry_order() {
+    let mut string_table = StringTable::new();
+    let location = location(37);
+    let ada = string_table.intern("Ada");
+    let grace = string_table.intern("Grace");
+    let mut builder = setup_builder(&mut string_table);
+    let map_type = builder
+        .type_environment
+        .intern_map(builtin_type_ids::STRING, builtin_type_ids::INT);
+
+    let expression = Expression::new(
+        ExpressionKind::MapLiteral(vec![
+            MapLiteralEntry {
+                key: Expression::string_slice(ada, location.clone(), ValueMode::ImmutableOwned),
+                value: Expression::int(10, location.clone(), ValueMode::ImmutableOwned),
+            },
+            MapLiteralEntry {
+                key: Expression::string_slice(grace, location.clone(), ValueMode::ImmutableOwned),
+                value: Expression::int(12, location.clone(), ValueMode::ImmutableOwned),
+            },
+        ]),
+        location,
+        map_type,
+        crate::compiler_frontend::datatypes::DataType::Inferred,
+        ValueMode::ImmutableOwned,
+    );
+
+    let lowered = builder
+        .lower_expression(&expression)
+        .expect("map literal should lower to first-class HIR");
+
+    assert!(lowered.prelude.is_empty());
+    assert_eq!(lowered.value.ty, map_type);
+
+    let HirExpressionKind::MapLiteral(entries) = &lowered.value.kind else {
+        panic!("expected HIR map literal, got {:?}", lowered.value.kind);
+    };
+    assert_eq!(entries.len(), 2);
+    assert!(matches!(
+        (&entries[0].key.kind, &entries[0].value.kind),
+        (HirExpressionKind::StringLiteral(key), HirExpressionKind::Int(10)) if key == "Ada"
+    ));
+    assert!(matches!(
+        (&entries[1].key.kind, &entries[1].value.kind),
+        (HirExpressionKind::StringLiteral(key), HirExpressionKind::Int(12)) if key == "Grace"
+    ));
+}
+
+#[test]
+fn map_builtin_calls_lower_to_first_class_hir_ops() {
+    let mut string_table = StringTable::new();
+    let location = location(41);
+    let scores_name = InternedPath::from_single_str("scores", &mut string_table);
+    let key_name = string_table.intern("Ada");
+    let mut builder = setup_builder(&mut string_table);
+    let map_type = builder
+        .type_environment
+        .intern_map(builtin_type_ids::STRING, builtin_type_ids::INT);
+    register_local(
+        &mut builder,
+        scores_name.clone(),
+        LocalId(80),
+        map_type,
+        location.clone(),
+    );
+
+    let receiver = AstNode {
+        kind: NodeKind::Rvalue(reference_expr(
+            scores_name,
+            map_type,
+            location.clone(),
+            ValueMode::MutableReference,
+        )),
+        location: location.clone(),
+        scope: InternedPath::new(),
+    };
+    let fallible_int_result = result_carrier_type_id(
+        &mut builder.type_environment,
+        builtin_type_ids::INT,
+        builtin_type_ids::INT,
+    );
+    let fallible_none_result = result_carrier_type_id(
+        &mut builder.type_environment,
+        builtin_type_ids::NONE,
+        builtin_type_ids::INT,
+    );
+    let key = CallArgument::positional(
+        Expression::string_slice(key_name, location.clone(), ValueMode::ImmutableOwned),
+        CallAccessMode::Shared,
+        location.clone(),
+    );
+
+    let cases = vec![
+        (
+            MapBuiltinOp::Get,
+            vec![key.clone()],
+            vec![fallible_int_result],
+            HirMapOp::Get,
+            1,
+        ),
+        (
+            MapBuiltinOp::Set,
+            vec![
+                key.clone(),
+                CallArgument::positional(
+                    Expression::int(99, location.clone(), ValueMode::ImmutableOwned),
+                    CallAccessMode::Shared,
+                    location.clone(),
+                ),
+            ],
+            vec![fallible_none_result],
+            HirMapOp::Set,
+            2,
+        ),
+        (
+            MapBuiltinOp::Length,
+            vec![],
+            vec![builtin_type_ids::INT],
+            HirMapOp::Length,
+            0,
+        ),
+    ];
+
+    for (op, args, result_type_ids, expected_op, expected_arg_count) in cases {
+        let lowered = builder
+            .lower_ast_node_as_expression(&AstNode {
+                kind: NodeKind::MapBuiltinCall {
+                    receiver: Box::new(receiver.clone()),
+                    op,
+                    receiver_requires_mutable: expected_op.requires_mutable_receiver(),
+                    args,
+                    result_type_ids: result_type_ids.clone(),
+                    location: location.clone(),
+                },
+                location: location.clone(),
+                scope: InternedPath::new(),
+            })
+            .expect("map builtin call should lower to first-class HIR");
+
+        assert_eq!(lowered.prelude.len(), 1);
+        let HirStatementKind::MapOp {
+            op,
+            receiver,
+            args,
+            result,
+        } = &lowered.prelude[0].kind
+        else {
+            panic!(
+                "expected map op statement, got {:?}",
+                lowered.prelude[0].kind
+            );
+        };
+        assert_eq!(*op, expected_op);
+        assert_eq!(args.len(), expected_arg_count);
+        assert!(result.is_some());
+        assert!(
+            matches!(
+                receiver.kind,
+                HirExpressionKind::Load(HirPlace::Local(LocalId(80)))
+            ),
+            "map receiver should lower as the original local place"
+        );
+
+        let result_local = result.expect("map op should produce a result local");
+        assert!(
+            matches!(lowered.value.kind, HirExpressionKind::Load(HirPlace::Local(local)) if local == result_local),
+            "result-bearing map ops should return a load of the result local"
+        );
+        let local_ty = builder
+            .module
+            .blocks
+            .iter()
+            .flat_map(|block| block.locals.iter())
+            .find(|local| local.id == result_local)
+            .map(|local| local.ty)
+            .expect("result local should be registered in the current block");
+        assert_eq!(
+            local_ty, result_type_ids[0],
+            "map op result local should keep the AST-selected result type"
+        );
     }
 }
 

@@ -355,6 +355,38 @@ impl<'a> HirDisplayContext<'a> {
                     self.render_expression(value)
                 )
             }
+
+            HirStatementKind::MapOp {
+                op,
+                receiver,
+                args,
+                result,
+            } => {
+                let mut out = String::new();
+
+                if let Some(local) = result {
+                    let _ = write!(out, "{} = ", self.local_label(*local));
+                }
+
+                let _ = write!(
+                    out,
+                    "map_{}({}{}",
+                    op.source_name(),
+                    if op.requires_mutable_receiver() {
+                        "~"
+                    } else {
+                        ""
+                    },
+                    self.render_expression(receiver)
+                );
+
+                for arg in args {
+                    let _ = write!(out, ", {}", self.render_expression(arg));
+                }
+
+                out.push(')');
+                out
+            }
         }
     }
 
@@ -498,6 +530,20 @@ impl<'a> HirDisplayContext<'a> {
 
                 out.push_str(" }");
                 out
+            }
+            HirExpressionKind::MapLiteral(entries) => {
+                let joined = entries
+                    .iter()
+                    .map(|entry| {
+                        format!(
+                            "{} = {}",
+                            self.render_expression(&entry.key),
+                            self.render_expression(&entry.value)
+                        )
+                    })
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                format!("{{{joined}}}")
             }
             HirExpressionKind::Collection(elements) => {
                 let joined = elements
@@ -817,6 +863,9 @@ impl<'a> HirDisplayContext<'a> {
                     format!("({joined})")
                 }
                 TypeConstructor::Builtin(BuiltinTypeConstructor::Collection { .. }) => {
+                    display_type(ty, type_environment, self.string_table)
+                }
+                TypeConstructor::Builtin(BuiltinTypeConstructor::OrderedMap) => {
                     display_type(ty, type_environment, self.string_table)
                 }
                 TypeConstructor::Builtin(BuiltinTypeConstructor::Option) => {

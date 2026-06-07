@@ -143,15 +143,9 @@ fn parse_type_atom(
 
             // Check for namespace-qualified type syntax: `Namespace.Type`.
             if token_stream.current_token_kind() == &TokenKind::Dot
-                && matches!(
-                    token_stream.peek_next_token().cloned(),
-                    Some(TokenKind::Symbol(_))
-                )
+                && let Some(TokenKind::Symbol(member_name)) =
+                    token_stream.peek_next_token().cloned()
             {
-                let member_name = match token_stream.peek_next_token().cloned() {
-                    Some(TokenKind::Symbol(name)) => name,
-                    _ => unreachable!(),
-                };
                 token_stream.advance(); // consume '.'
                 token_stream.advance();
                 return Ok(ParsedTypeRef::Namespaced {
@@ -249,6 +243,27 @@ fn parse_collection_type(
         });
     }
 
+    // Map type syntax `{K = V}` takes precedence over collection capacity splitting.
+    match scan_top_level_assigns(&inner_tokens) {
+        TopLevelAssignScan::None => {}
+        TopLevelAssignScan::One(assign_idx) => {
+            return parse_map_type_from_inner_tokens(
+                &inner_tokens,
+                assign_idx,
+                token_stream,
+                context,
+                string_table,
+                &location,
+            );
+        }
+        TopLevelAssignScan::Multiple => {
+            return Err(CompilerDiagnostic::invalid_map_type(
+                InvalidMapTypeReason::MultipleMapSeparators,
+                location,
+            ));
+        }
+    }
+
     // Phase 1 parser boundary rule:
     //   - If the entire inner content parses as a valid element type, this is `{T}` (growable).
     //   - Otherwise, find the first valid element type suffix; tokens before it are capacity.
@@ -313,6 +328,12 @@ fn parse_collection_type(
     ))
 }
 
+/// Collect all tokens inside a braced type body, tracking nested braces.
+///
+/// WHAT: gathers tokens between `{` and `}` while counting nested `{`/`}` pairs so inner
+///      collection or map types are captured as part of the body.
+/// WHY: the caller needs the full inner token slice to decide whether this is a collection,
+///      a map, or a capacity-only shorthand.
 fn collect_collection_inner_tokens(
     token_stream: &mut FileTokens,
 ) -> Result<Vec<Token>, CompilerDiagnostic> {
@@ -349,6 +370,11 @@ fn collect_collection_inner_tokens(
     Ok(inner_tokens)
 }
 
+/// Wrap raw tokens into a `ParsedCollectionCapacity` without semantic validation.
+///
+/// WHAT: stores the token span and the first token's location for later lowering.
+/// WHY: capacity expressions are parsed opaquely here and evaluated later when the
+///      type environment is available.
 fn parsed_capacity(tokens: &[Token]) -> Option<ParsedCollectionCapacity> {
     let first = tokens.first()?;
 
@@ -356,6 +382,190 @@ fn parsed_capacity(tokens: &[Token]) -> Option<ParsedCollectionCapacity> {
         tokens: tokens.to_vec(),
         location: first.location.clone(),
     })
+}
+
+// -------------------------
+//  Map type parsing helpers
+// -------------------------
+
+enum TopLevelAssignScan {
+    None,
+    One(usize),
+    Multiple,
+}
+
+/// Scan a token slice for top-level `=` tokens while tracking nested delimiters.
+///
+/// WHAT: classifies whether the slice has no outer separator, one outer separator, or several.
+/// WHY: map type syntax `{K = V}` splits only at the outermost `=`, and nested maps may contain
+///      their own separators that must not affect the enclosing type body.
+fn scan_top_level_assigns(tokens: &[Token]) -> TopLevelAssignScan {
+    let mut depth = 0usize;
+    let mut first_assign = None;
+    for (idx, token) in tokens.iter().enumerate() {
+        match &token.kind {
+            TokenKind::OpenCurly | TokenKind::OpenParenthesis => depth += 1,
+            TokenKind::CloseCurly | TokenKind::CloseParenthesis => {
+                depth = depth.saturating_sub(1);
+            }
+            TokenKind::Assign if depth == 0 => {
+                if first_assign.is_some() {
+                    return TopLevelAssignScan::Multiple;
+                }
+                first_assign = Some(idx);
+            }
+            _ => {}
+        }
+    }
+
+    first_assign.map_or(TopLevelAssignScan::None, TopLevelAssignScan::One)
+}
+
+/// Parse a map type from the inner tokens collected between `{` and `}`.
+///
+/// WHAT: splits tokens at the `=` separator, validates exactly one separator, rejects empty
+///      sides, and parses both key and value as type annotations.
+/// WHY: map syntax is detected before collection syntax so `{K = V}` is never mis-parsed as
+///      a fixed collection with capacity.
+fn parse_map_type_from_inner_tokens(
+    inner_tokens: &[Token],
+    assign_idx: usize,
+    token_stream: &FileTokens,
+    context: TypeAnnotationContext,
+    string_table: &StringTable,
+    location: &SourceLocation,
+) -> Result<ParsedTypeRef, CompilerDiagnostic> {
+    let key_tokens = &inner_tokens[..assign_idx];
+    let value_tokens = &inner_tokens[assign_idx + 1..];
+
+    if key_tokens.is_empty() {
+        return Err(CompilerDiagnostic::invalid_map_type(
+            InvalidMapTypeReason::EmptyMapKeyType,
+            location.clone(),
+        ));
+    }
+
+    if value_tokens.is_empty() {
+        return Err(CompilerDiagnostic::invalid_map_type(
+            InvalidMapTypeReason::EmptyMapValueType,
+            location.clone(),
+        ));
+    }
+
+    let key = try_parse_map_side(key_tokens, token_stream, context, string_table, location)?;
+    let value = try_parse_map_side(value_tokens, token_stream, context, string_table, location)?;
+
+    reject_trait_this_composition(&key, context, location.clone())?;
+    reject_trait_this_composition(&value, context, location.clone())?;
+
+    Ok(ParsedTypeRef::Map {
+        key: Box::new(key),
+        value: Box::new(value),
+        location: location.clone(),
+    })
+}
+
+/// Attempt to parse one side of a map type (`K` or `V`) from a token slice.
+///
+/// WHAT: tries `parse_type_slice_exact`; on failure, detects fixed-capacity syntax and
+///      postfix capacity-like syntax and emits a targeted map diagnostic instead of a generic
+///      parse error.
+/// WHY: `{4 String = Int}`, `{String = 4 Int}`, and `{String = Int:5}` are common mistakes that
+///      deserve the "fixed capacity not allowed on maps" diagnostic.
+fn try_parse_map_side(
+    tokens: &[Token],
+    token_stream: &FileTokens,
+    context: TypeAnnotationContext,
+    string_table: &StringTable,
+    location: &SourceLocation,
+) -> Result<ParsedTypeRef, CompilerDiagnostic> {
+    if let Some(parsed) = parse_type_slice_exact(tokens, token_stream, context, string_table) {
+        return Ok(parsed);
+    }
+
+    if map_side_looks_like_fixed_capacity(tokens, token_stream, context, string_table) {
+        return Err(CompilerDiagnostic::invalid_map_type(
+            InvalidMapTypeReason::FixedCapacityNotAllowed,
+            location.clone(),
+        ));
+    }
+
+    if map_side_looks_like_postfix_capacity(tokens, token_stream, context, string_table) {
+        return Err(CompilerDiagnostic::invalid_map_type(
+            InvalidMapTypeReason::FixedCapacityNotAllowed,
+            location.clone(),
+        ));
+    }
+
+    // Fall back to the normal type-slice parser so the user gets the best available error.
+    let parsed_slice = parse_type_slice(tokens, token_stream, context, string_table)?;
+    if let Some(extra_token) = parsed_slice.next_token {
+        return Err(CompilerDiagnostic::expected_token(
+            TokenKind::CloseCurly,
+            Some(extra_token.kind),
+            extra_token.location,
+        ));
+    }
+
+    Ok(parsed_slice.parsed_type)
+}
+
+/// Detect prefix capacity-like syntax on a map-type side.
+///
+/// WHAT: checks whether tokens begin with a valid capacity expression followed by a valid
+///      type, which would indicate the user tried to write fixed-capacity syntax inside a map.
+/// WHY: `{4 String = Int}` and similar forms should receive the targeted
+///      `FixedCapacityNotAllowed` diagnostic rather than a generic parse error.
+fn map_side_looks_like_fixed_capacity(
+    tokens: &[Token],
+    token_stream: &FileTokens,
+    context: TypeAnnotationContext,
+    string_table: &StringTable,
+) -> bool {
+    for split_idx in 1..tokens.len() {
+        let type_tokens = &tokens[split_idx..];
+        if collection_type_slice_can_start_type(type_tokens, context, string_table)
+            && parse_type_slice_exact(type_tokens, token_stream, context, string_table).is_some()
+            && parsed_capacity(&tokens[..split_idx]).is_some()
+        {
+            return true;
+        }
+    }
+
+    false
+}
+
+/// Detect postfix capacity-like syntax on a map-type side.
+///
+/// WHAT: checks whether a valid type prefix is followed by trailing tokens that cannot continue
+///      a type expression (e.g. `:5` or `5`).
+/// WHY: `{String = Int:5}` is an old postfix capacity-like map syntax that should receive the
+///      same targeted `FixedCapacityNotAllowed` diagnostic as prefix capacity forms.
+fn map_side_looks_like_postfix_capacity(
+    tokens: &[Token],
+    token_stream: &FileTokens,
+    context: TypeAnnotationContext,
+    string_table: &StringTable,
+) -> bool {
+    for split_idx in 1..=tokens.len() {
+        let type_tokens = &tokens[..split_idx];
+        if !collection_type_slice_can_start_type(type_tokens, context, string_table) {
+            continue;
+        }
+        if parse_type_slice_exact(type_tokens, token_stream, context, string_table).is_some() {
+            let remaining = &tokens[split_idx..];
+            if remaining.is_empty() {
+                continue;
+            }
+            return matches!(
+                remaining.first().map(|t| &t.kind),
+                Some(TokenKind::Colon)
+                    | Some(TokenKind::IntLiteral(_))
+                    | Some(TokenKind::FloatLiteral(_))
+            );
+        }
+    }
+    false
 }
 
 struct ParsedTypeSlice {
@@ -411,6 +621,12 @@ fn parse_type_slice_exact(
         .then_some(parsed_slice.parsed_type)
 }
 
+/// Heuristic check: can the leading tokens of a slice start a valid type annotation?
+///
+/// WHAT: examines the first token (and optionally a `Namespace.Type` prefix) to decide
+///      whether the remaining tokens in a braced body could be an element type.
+/// WHY: used during the left-to-right scan in `parse_collection_type` to find the boundary
+///      between capacity expression and element type.
 fn collection_type_slice_can_start_type(
     tokens: &[Token],
     context: TypeAnnotationContext,
@@ -557,6 +773,12 @@ fn parse_generic_type_argument(
     Ok(parsed_argument)
 }
 
+/// Decide whether a token terminates the generic argument list.
+///
+/// WHAT: lists the token kinds that cannot start a generic argument and therefore signal
+///      the end of the `of <...>` application.
+/// WHY: shared predicate so both the comma-after-argument check and the main loop use the
+///      same boundary definition.
 fn generic_argument_list_is_finished(token: &TokenKind) -> bool {
     matches!(
         token,
@@ -618,6 +840,11 @@ fn parse_optional_type_suffix(
     })
 }
 
+/// Recursively check whether a parsed type contains `This` anywhere in its structure.
+///
+/// WHAT: walks through applied generics, collections, optionals, and results to find
+///      a `ParsedTypeRef::This` node.
+/// WHY: `This` is only valid as a bare trait requirement; it must not appear nested.
 fn parsed_type_contains_trait_this(parsed_type: &ParsedTypeRef) -> bool {
     match parsed_type {
         ParsedTypeRef::This { .. } => true,
@@ -642,6 +869,12 @@ fn parsed_type_contains_trait_this(parsed_type: &ParsedTypeRef) -> bool {
     }
 }
 
+/// Fail if a parsed type contains nested `This`, emitting the appropriate diagnostic.
+///
+/// WHAT: delegates to `parsed_type_contains_trait_this` and turns a positive result into
+///      `InvalidTypeAnnotationReason::TraitThisMustBeDirect`.
+/// WHY: centralizes the composition check so callers in map, collection, optional, and
+///      generic paths share the same error message.
 fn reject_trait_this_composition(
     parsed_type: &ParsedTypeRef,
     context: TypeAnnotationContext,

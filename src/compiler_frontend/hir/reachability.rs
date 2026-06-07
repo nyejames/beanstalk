@@ -11,7 +11,7 @@
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorType, SourceLocation};
 use crate::compiler_frontend::external_packages::{CallTarget, ExternalFunctionId};
 use crate::compiler_frontend::hir::blocks::HirBlock;
-use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind};
+use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, HirMapOp};
 use crate::compiler_frontend::hir::functions::HirFunction;
 use crate::compiler_frontend::hir::hir_side_table::HirLocation;
 use crate::compiler_frontend::hir::ids::{BlockId, FunctionId, HirNodeId};
@@ -33,6 +33,23 @@ pub(crate) struct HirReachability {
     pub(crate) reachable_external_functions: FxHashSet<ExternalFunctionId>,
     pub(crate) reachable_external_calls: Vec<ReachableExternalCall>,
     pub(crate) reachable_dynamic_trait_operations: Vec<ReachableDynamicTraitOperation>,
+    pub(crate) reachable_map_uses: Vec<ReachableMapUse>,
+}
+
+/// A reachable map construction or use at the HIR statement or expression that produces it.
+///
+/// WHY: backend unsupported-feature validation needs to know which map literals and map
+///      operations are reachable from entry so it can emit structured diagnostics.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) struct ReachableMapUse {
+    pub(crate) kind: ReachableMapUseKind,
+    pub(crate) location: SourceLocation,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(crate) enum ReachableMapUseKind {
+    Literal,
+    Operation(HirMapOp),
 }
 
 /// A reachable external call at the HIR statement that invokes it.
@@ -159,7 +176,7 @@ impl<'a> HirReachabilityContext<'a> {
         };
 
         self.visit_block_statements(block);
-        self.collect_dynamic_trait_operations_from_terminator(block);
+        self.collect_runtime_feature_uses_from_terminator(block);
         self.enqueue_terminator_successors(&block.terminator)
     }
 
@@ -168,7 +185,7 @@ impl<'a> HirReachabilityContext<'a> {
         // carry call targets. Keep the reachability boundary here unless HIR gains a call
         // expression variant in a later design.
         for statement in &block.statements {
-            self.collect_dynamic_trait_operations_from_statement(statement);
+            self.collect_runtime_feature_uses_from_statement(statement);
 
             let HirStatementKind::Call { target, .. } = &statement.kind else {
                 continue;
@@ -192,18 +209,20 @@ impl<'a> HirReachabilityContext<'a> {
         }
     }
 
-    fn collect_dynamic_trait_operations_from_statement(&mut self, statement: &HirStatement) {
+    fn collect_runtime_feature_uses_from_statement(&mut self, statement: &HirStatement) {
         match &statement.kind {
+            // Expressions and calls: recurse into sub-expressions only.
             HirStatementKind::Assign { value, .. } | HirStatementKind::Expr(value) => {
-                self.collect_dynamic_trait_operations_from_expression(value, &statement.location);
+                self.collect_runtime_feature_uses_from_expression(value, &statement.location);
             }
 
             HirStatementKind::Call { args, .. } => {
                 for arg in args {
-                    self.collect_dynamic_trait_operations_from_expression(arg, &statement.location);
+                    self.collect_runtime_feature_uses_from_expression(arg, &statement.location);
                 }
             }
 
+            // Dynamic trait dispatch: record the operation, then recurse into receiver and args.
             HirStatementKind::CallDynamicTraitMethod {
                 receiver,
                 trait_id,
@@ -221,12 +240,9 @@ impl<'a> HirReachabilityContext<'a> {
                     },
                 );
 
-                self.collect_dynamic_trait_operations_from_expression(
-                    receiver,
-                    &statement.location,
-                );
+                self.collect_runtime_feature_uses_from_expression(receiver, &statement.location);
                 for arg in args {
-                    self.collect_dynamic_trait_operations_from_expression(
+                    self.collect_runtime_feature_uses_from_expression(
                         &arg.value,
                         &statement.location,
                     );
@@ -234,14 +250,28 @@ impl<'a> HirReachabilityContext<'a> {
             }
 
             HirStatementKind::PushRuntimeFragment { value, .. } => {
-                self.collect_dynamic_trait_operations_from_expression(value, &statement.location);
+                self.collect_runtime_feature_uses_from_expression(value, &statement.location);
+            }
+
+            // Map operations: record the use, then recurse into receiver and args.
+            HirStatementKind::MapOp {
+                op, receiver, args, ..
+            } => {
+                self.reachability.reachable_map_uses.push(ReachableMapUse {
+                    kind: ReachableMapUseKind::Operation(*op),
+                    location: statement.location.clone(),
+                });
+                self.collect_runtime_feature_uses_from_expression(receiver, &statement.location);
+                for arg in args {
+                    self.collect_runtime_feature_uses_from_expression(arg, &statement.location);
+                }
             }
 
             HirStatementKind::Drop(_) => {}
         }
     }
 
-    fn collect_dynamic_trait_operations_from_terminator(&mut self, block: &HirBlock) {
+    fn collect_runtime_feature_uses_from_terminator(&mut self, block: &HirBlock) {
         let fallback_location = self
             .hir
             .side_table
@@ -250,30 +280,27 @@ impl<'a> HirReachabilityContext<'a> {
             .unwrap_or_default();
 
         match &block.terminator {
+            // Terminators that carry a sub-expression to inspect.
             HirTerminator::If { condition, .. } => {
-                self.collect_dynamic_trait_operations_from_expression(
-                    condition,
-                    &fallback_location,
-                );
+                self.collect_runtime_feature_uses_from_expression(condition, &fallback_location);
             }
 
             HirTerminator::FallibleBranch { result, .. } => {
-                self.collect_dynamic_trait_operations_from_expression(result, &fallback_location);
+                self.collect_runtime_feature_uses_from_expression(result, &fallback_location);
             }
 
             HirTerminator::Match { scrutinee, .. } => {
-                self.collect_dynamic_trait_operations_from_expression(
-                    scrutinee,
-                    &fallback_location,
-                );
+                self.collect_runtime_feature_uses_from_expression(scrutinee, &fallback_location);
             }
 
+            // Terminators that return a value.
             HirTerminator::Return(value)
             | HirTerminator::ReturnSuccess(value)
             | HirTerminator::ReturnError(value) => {
-                self.collect_dynamic_trait_operations_from_expression(value, &fallback_location);
+                self.collect_runtime_feature_uses_from_expression(value, &fallback_location);
             }
 
+            // Terminators with no sub-expressions to inspect.
             HirTerminator::Jump { .. }
             | HirTerminator::Break { .. }
             | HirTerminator::Continue { .. }
@@ -283,7 +310,7 @@ impl<'a> HirReachabilityContext<'a> {
         }
     }
 
-    fn collect_dynamic_trait_operations_from_expression(
+    fn collect_runtime_feature_uses_from_expression(
         &mut self,
         expression: &HirExpression,
         fallback_location: &SourceLocation,
@@ -296,6 +323,7 @@ impl<'a> HirReachabilityContext<'a> {
             .clone();
 
         match &expression.kind {
+            // Dynamic trait construction.
             HirExpressionKind::ConstructDynamicTraitValue {
                 value,
                 trait_id,
@@ -310,12 +338,31 @@ impl<'a> HirReachabilityContext<'a> {
                         location: expression_location.clone(),
                     },
                 );
-                self.collect_dynamic_trait_operations_from_expression(value, &expression_location);
+                self.collect_runtime_feature_uses_from_expression(value, &expression_location);
             }
 
+            // Map literals.
+            HirExpressionKind::MapLiteral(entries) => {
+                self.reachability.reachable_map_uses.push(ReachableMapUse {
+                    kind: ReachableMapUseKind::Literal,
+                    location: expression_location.clone(),
+                });
+                for entry in entries {
+                    self.collect_runtime_feature_uses_from_expression(
+                        &entry.key,
+                        &expression_location,
+                    );
+                    self.collect_runtime_feature_uses_from_expression(
+                        &entry.value,
+                        &expression_location,
+                    );
+                }
+            }
+
+            // Composite expressions: recurse into sub-expressions.
             HirExpressionKind::BinOp { left, right, .. } => {
-                self.collect_dynamic_trait_operations_from_expression(left, &expression_location);
-                self.collect_dynamic_trait_operations_from_expression(right, &expression_location);
+                self.collect_runtime_feature_uses_from_expression(left, &expression_location);
+                self.collect_runtime_feature_uses_from_expression(right, &expression_location);
             }
 
             HirExpressionKind::UnaryOp { operand, .. }
@@ -325,25 +372,19 @@ impl<'a> HirReachabilityContext<'a> {
             | HirExpressionKind::VariantPayloadGet {
                 source: operand, ..
             } => {
-                self.collect_dynamic_trait_operations_from_expression(
-                    operand,
-                    &expression_location,
-                );
+                self.collect_runtime_feature_uses_from_expression(operand, &expression_location);
             }
 
             HirExpressionKind::StructConstruct { fields, .. } => {
                 for (_, value) in fields {
-                    self.collect_dynamic_trait_operations_from_expression(
-                        value,
-                        &expression_location,
-                    );
+                    self.collect_runtime_feature_uses_from_expression(value, &expression_location);
                 }
             }
 
             HirExpressionKind::Collection(elements)
             | HirExpressionKind::TupleConstruct { elements } => {
                 for element in elements {
-                    self.collect_dynamic_trait_operations_from_expression(
+                    self.collect_runtime_feature_uses_from_expression(
                         element,
                         &expression_location,
                     );
@@ -351,23 +392,24 @@ impl<'a> HirReachabilityContext<'a> {
             }
 
             HirExpressionKind::Range { start, end } => {
-                self.collect_dynamic_trait_operations_from_expression(start, &expression_location);
-                self.collect_dynamic_trait_operations_from_expression(end, &expression_location);
+                self.collect_runtime_feature_uses_from_expression(start, &expression_location);
+                self.collect_runtime_feature_uses_from_expression(end, &expression_location);
             }
 
             HirExpressionKind::TupleGet { tuple, .. } => {
-                self.collect_dynamic_trait_operations_from_expression(tuple, &expression_location);
+                self.collect_runtime_feature_uses_from_expression(tuple, &expression_location);
             }
 
             HirExpressionKind::VariantConstruct { fields, .. } => {
                 for field in fields {
-                    self.collect_dynamic_trait_operations_from_expression(
+                    self.collect_runtime_feature_uses_from_expression(
                         &field.value,
                         &expression_location,
                     );
                 }
             }
 
+            // Leaf values: nothing to record.
             HirExpressionKind::Int(_)
             | HirExpressionKind::Float(_)
             | HirExpressionKind::Bool(_)

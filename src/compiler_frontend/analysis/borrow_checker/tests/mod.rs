@@ -8,5 +8,6 @@
 mod borrow_checker_call_summary_tests;
 mod borrow_checker_drop_site_tests;
 mod borrow_checker_fact_tests;
+mod borrow_checker_map_tests;
 mod borrow_checker_pipeline_tests;
 mod borrow_checker_scope_tests;

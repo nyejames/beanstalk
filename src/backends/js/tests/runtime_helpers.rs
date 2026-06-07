@@ -161,6 +161,20 @@ fn error_context_helpers_read_canonical_error_fields() {
     );
 }
 
+/// Verifies that generic string conversion does not fall through to JS object formatting for maps.
+/// [string] [map]
+#[test]
+fn value_to_string_uses_deterministic_map_placeholder() {
+    let source = lower_minimal_map_module("main");
+    let helper = helper_source(&source, "__bs_value_to_string");
+
+    assert!(
+        helper.contains("__bs_map_is_valid(value)")
+            && helper.contains("return \"[map display unavailable]\";"),
+        "__bs_value_to_string must avoid JS fallback object output for maps"
+    );
+}
+
 /// Verifies that `__bs_collection_index_is_valid` checks integer, bounds, and item length. [collection]
 #[test]
 fn collection_index_is_valid_checks_integer_bounds_and_length() {
@@ -781,5 +795,172 @@ fn collection_remove_uses_collection_items() {
     assert!(
         remove.contains("__bs_collection_items(collection)"),
         "__bs_collection_remove must operate on the dense items array"
+    );
+}
+
+// Map helper contract tests
+// ---------------------------------------------------------------------------
+
+/// Verifies that `__bs_map_new` creates a branded wrapper with `new Map()`. [map]
+#[test]
+fn map_new_creates_branded_wrapper_with_map() {
+    let source = lower_minimal_map_module("main");
+    let helper = helper_source(&source, "__bs_map_new");
+
+    assert!(
+        helper.contains("__bst_kind: \"ordered_map\"") && helper.contains("new Map()"),
+        "__bs_map_new must emit a branded ordered_map wrapper using new Map()"
+    );
+}
+
+/// Verifies that `__bs_map_get` returns ok for present keys. [map]
+#[test]
+fn map_get_returns_ok_for_present_key() {
+    let source = lower_minimal_map_module("main");
+    let helper = helper_source(&source, "__bs_map_get");
+
+    assert!(
+        helper.contains("{ tag: \"ok\", value: map.map.get(key) }"),
+        "__bs_map_get must return an ok carrier for present keys"
+    );
+}
+
+/// Verifies that `__bs_map_get` returns MapKeyNotFound for missing keys. [map]
+#[test]
+fn map_get_returns_key_not_found_for_missing_key() {
+    let source = lower_minimal_map_module("main");
+    let helper = helper_source(&source, "__bs_map_get");
+
+    let expected_error = BuiltinErrorCode::MapKeyNotFound;
+    let expected_message = expected_error.default_message();
+    let expected_code = expected_error.as_i64();
+    let expected = format!(r#"__bs_error_result("{expected_message}", {expected_code})"#);
+
+    assert!(
+        helper.contains(&expected),
+        "__bs_map_get must return MapKeyNotFound when key is missing"
+    );
+}
+
+/// Verifies that `__bs_map_get` validates receiver type. [map]
+#[test]
+fn map_get_validates_receiver() {
+    let source = lower_minimal_map_module("main");
+    let helper = helper_source(&source, "__bs_map_get");
+
+    let expected_error = BuiltinErrorCode::MapExpectedOrderedMap;
+    let expected_message = expected_error.default_message();
+    let expected_code = expected_error.as_i64();
+    let expected = format!(r#"__bs_error_result("{expected_message}", {expected_code})"#);
+
+    assert!(
+        helper.contains(&expected),
+        "__bs_map_get must validate receiver and return MapExpectedOrderedMap for invalid receivers"
+    );
+}
+
+/// Verifies that `__bs_map_set` stores via `map.map.set` and returns ok. [map]
+#[test]
+fn map_set_stores_and_returns_ok() {
+    let source = lower_minimal_map_module("main");
+    let helper = helper_source(&source, "__bs_map_set");
+
+    assert!(
+        helper.contains("map.map.set(key, value)")
+            && helper.contains("{ tag: \"ok\", value: null }"),
+        "__bs_map_set must store via map.map.set and return ok unit carrier"
+    );
+}
+
+/// Verifies that `__bs_map_remove` returns the removed value and deletes the key. [map]
+#[test]
+fn map_remove_returns_removed_and_deletes_key() {
+    let source = lower_minimal_map_module("main");
+    let helper = helper_source(&source, "__bs_map_remove");
+
+    assert!(
+        helper.contains("const removed = map.map.get(key);")
+            && helper.contains("map.map.delete(key);")
+            && helper.contains("{ tag: \"ok\", value: removed }"),
+        "__bs_map_remove must return removed value and delete the key"
+    );
+}
+
+/// Verifies that `__bs_map_remove` returns MapKeyNotFound for missing keys. [map]
+#[test]
+fn map_remove_returns_key_not_found_for_missing_key() {
+    let source = lower_minimal_map_module("main");
+    let helper = helper_source(&source, "__bs_map_remove");
+
+    let expected_error = BuiltinErrorCode::MapKeyNotFound;
+    let expected_message = expected_error.default_message();
+    let expected_code = expected_error.as_i64();
+    let expected = format!(r#"__bs_error_result("{expected_message}", {expected_code})"#);
+
+    assert!(
+        helper.contains(&expected),
+        "__bs_map_remove must return MapKeyNotFound when key is missing"
+    );
+}
+
+/// Verifies that `__bs_map_contains` is an infallible plain helper. [map]
+#[test]
+fn map_contains_is_plain_infallible_helper() {
+    let source = lower_minimal_map_module("main");
+    let helper = helper_source(&source, "__bs_map_contains");
+
+    assert!(
+        helper.contains("return map.map.has(key);") && !helper.contains("__bs_error_result"),
+        "__bs_map_contains must be a plain infallible helper"
+    );
+}
+
+/// Verifies that `__bs_map_clear` is an infallible plain helper. [map]
+#[test]
+fn map_clear_is_plain_infallible_helper() {
+    let source = lower_minimal_map_module("main");
+    let helper = helper_source(&source, "__bs_map_clear");
+
+    assert!(
+        helper.contains("map.map.clear();") && !helper.contains("__bs_error_result"),
+        "__bs_map_clear must be a plain infallible helper"
+    );
+}
+
+/// Verifies that `__bs_map_length` is an infallible plain helper. [map]
+#[test]
+fn map_length_is_plain_infallible_helper() {
+    let source = lower_minimal_map_module("main");
+    let helper = helper_source(&source, "__bs_map_length");
+
+    assert!(
+        helper.contains("return map.map.size;") && !helper.contains("__bs_error_result"),
+        "__bs_map_length must be a plain infallible helper"
+    );
+}
+
+/// Verifies that `__bs_clone_value` has a map branch using `__bs_map_is_valid`. [map] [clone]
+#[test]
+fn clone_value_has_map_branch() {
+    let source = lower_minimal_map_module("main");
+    let clone = helper_source(&source, "__bs_clone_value");
+
+    assert!(
+        clone.contains("__bs_map_is_valid(value)"),
+        "__bs_clone_value must check for map validity"
+    );
+}
+
+/// Verifies that `__bs_clone_value` deep-copies map entries with recursive clone. [map] [clone]
+#[test]
+fn clone_value_deep_copies_map_entries() {
+    let source = lower_minimal_map_module("main");
+    let clone = helper_source(&source, "__bs_clone_value");
+
+    assert!(
+        clone.contains("Array.from(value.map.entries())")
+            && clone.contains("__bs_clone_value(key)")
+            && clone.contains("__bs_clone_value(item)"),
+        "__bs_clone_value must deep-copy map entries with recursive clone for keys and values"
     );
 }

@@ -407,6 +407,12 @@ fn collect_statement_values(kind: HirStatementKind, out: &mut FxHashSet<HirValue
                 collect_expression_values(&arg.value, out);
             }
         }
+        HirStatementKind::MapOp { receiver, args, .. } => {
+            collect_expression_values(&receiver, out);
+            for arg in args {
+                collect_expression_values(&arg, out);
+            }
+        }
         HirStatementKind::Expr(expr) => collect_expression_values(&expr, out),
         HirStatementKind::Drop(_) => {}
         HirStatementKind::PushRuntimeFragment { value, .. } => {
@@ -471,6 +477,12 @@ fn collect_expression_values(expression: &HirExpression, out: &mut FxHashSet<Hir
         | HirExpressionKind::TupleConstruct { elements } => {
             for element in elements {
                 collect_expression_values(element, out);
+            }
+        }
+        HirExpressionKind::MapLiteral(entries) => {
+            for entry in entries {
+                collect_expression_values(&entry.key, out);
+                collect_expression_values(&entry.value, out);
             }
         }
         HirExpressionKind::TupleGet { tuple, .. } => {

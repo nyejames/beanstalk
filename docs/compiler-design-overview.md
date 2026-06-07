@@ -130,6 +130,7 @@ The frontend owns a single `TypeEnvironment` per module. It is the canonical sou
 - `TypeId` equality in the active `TypeEnvironment` is the only valid way to compare types for semantic decisions
 - `DataType` is parse-only / diagnostic-only. It must not be used for semantic decisions in executable AST or HIR
 - Collection type identity is a canonical `TypeEnvironment` shape: growable `{T}` and fixed `{N T}` collections are distinct `TypeId`s, and backends recover element type plus optional fixed capacity through collection-shape queries rather than parse syntax or backend side tables.
+- Hashmap type identity is a separate canonical `TypeEnvironment` constructed shape: `{K = V}` maps store key and value `TypeId`s directly and are not represented as collection capacity variants or backend side tables.
 - Type diagnostics should carry canonical `TypeId`s plus context enums. They should not store rendered type names or cloned `DataType` payloads for display.
 - Diagnostic renderers resolve type names at the render boundary through `DiagnosticRenderContext`, which borrows the `StringTable` and optionally the module `TypeEnvironment`.
 - `TypeEnvironment` is built during AST environment construction and populated with builtins, nominal structs, choices, and generic instances before AST body emission begins. Early nominal registration records identity and generic parameter metadata only; canonical field and variant members are written after AST-owned constructor shells are resolved to semantic `TypeId`s.
@@ -384,6 +385,7 @@ AST owns:
 - contextual coercion at declaration, return, and template/string boundaries
 - match guard validation and exhaustiveness checks
 - body-local declarations in source order
+- hashmap literal classification, key capability validation, contextual key/value coercion, and compiler-owned map member validation
 - multi-bind validation for explicit multi-return calls
 - receiver-method cataloging
 - generic declaration/type validation at the frontend level
@@ -500,6 +502,7 @@ HIR owns:
 * lowered runtime template expressions
 * inline runtime template control flow as ordinary CFG
 * runtime slot source/site plans lowered as ordinary string accumulators and appends
+* hashmap literals and map member operations as first-class HIR operations for borrow validation and backend feature validation
 * module constants as compile-time metadata
 * advisory private const-fact metadata projected from AST for future optimization consumers
 * stable external function IDs selected during AST resolution
@@ -527,12 +530,12 @@ the target trait ID and selected evidence ID. Dynamic trait method calls lower t
 statements carrying the erased trait ID, requirement ID, receiver expression, argument expressions,
 and access effects.
 
-HIR reachability records reachable dynamic trait runtime operations alongside reachable functions
-and external calls. JS lowering uses those facts to emit only reachable dynamic method tables and
-the concrete method functions they reference. HTML-Wasm uses the same reachable facts to reject
-reachable dynamic construction or dispatch with structured unsupported-backend diagnostics before
-Wasm lowering. Unreachable dynamic-only helper functions remain valid typed HIR and do not block
-backend builds.
+HIR reachability records reachable dynamic trait runtime operations, hashmap construction/use,
+reachable functions, and external calls. JS lowering uses those facts to emit only reachable
+dynamic method tables and the concrete method functions they reference. HTML-Wasm uses the same
+reachable facts to reject reachable dynamic construction, dynamic dispatch, or hashmap use with
+structured unsupported-backend diagnostics before Wasm lowering. Unreachable helper functions
+remain valid typed HIR and do not block backend builds.
 
 ### External calls
 
@@ -562,6 +565,7 @@ Borrow validation is mandatory for backend semantic parity:
 
 * invalid overlapping mutable/shared access is rejected before backend lowering
 * use-after-move and invalid access patterns are rejected before backend lowering
+* hashmap `get` results alias the receiver conservatively, so later map mutation is rejected while the shared result is live
 * valid programs may expose additional facts for ownership-aware lowerings
 * GC-only backends can ignore ownership-specific optimization facts while preserving semantics
 
@@ -587,7 +591,7 @@ Backends consume compiled modules containing:
 Backends own target-specific output generation.
 They must preserve Beanstalk semantics even when backend representations differ.
 For the HTML JS path, backend lowering owns emitted JS assets, registered runtime modules, generated external-call glue, import-map HTML, and the final mapping from stable external function IDs to runtime wrapper names. Runtime module emission and import-map entries are driven by module external-import metadata recorded from accepted JS runtime imports, not by function fallibility.
-HTML JS page bundles emit the function set reachable from entry `start`; this keeps unused source-library wrappers from requesting glue or runtime assets. Reachable dynamic trait wrapper evidence can add concrete trait method implementations to that emitted JS function set without re-solving trait semantics in the backend. HTML-Wasm uses the same entry/export reachability for companion JS, Wasm function lowering, and backend feature validation, while reachable unsupported JS-backed external calls and reachable dynamic trait runtime operations fail with structured diagnostics before lowering.
+HTML JS page bundles emit the function set reachable from entry `start`; this keeps unused source-library wrappers from requesting glue or runtime assets. Reachable dynamic trait wrapper evidence can add concrete trait method implementations to that emitted JS function set without re-solving trait semantics in the backend. The JS backend lowers language-owned hashmaps through focused runtime helpers rather than source-library or external package calls. HTML-Wasm uses the same entry/export reachability for companion JS, Wasm function lowering, and backend feature validation, while reachable unsupported JS-backed external calls, reachable dynamic trait runtime operations, and reachable hashmap construction/use fail with structured diagnostics before lowering.
 
 Ownership-aware backends may use borrow facts and memory-model metadata for optimization.
 GC-only backends can lower through the semantic baseline without deterministic drop behavior.

@@ -194,6 +194,14 @@ impl DiagnosticPayload {
                 *supported_directives = remap.get(*supported_directives);
             }
 
+            DiagnosticPayload::InvalidMapType { reason } => {
+                reason.remap_string_ids(remap);
+            }
+
+            DiagnosticPayload::InvalidMapLiteral { reason } => {
+                reason.remap_string_ids(remap);
+            }
+
             DiagnosticPayload::MissingClosingDelimiter { expected_delimiter } => {
                 *expected_delimiter = remap.get(*expected_delimiter);
             }

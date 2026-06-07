@@ -399,7 +399,8 @@ fn register_collection_types_from_node(node: &mut AstNode, type_environment: &mu
                 register_collection_types_from_expression(&mut arg.value, type_environment);
             }
         }
-        NodeKind::CollectionBuiltinCall { receiver, args, .. } => {
+        NodeKind::CollectionBuiltinCall { receiver, args, .. }
+        | NodeKind::MapBuiltinCall { receiver, args, .. } => {
             register_collection_types_from_node(receiver, type_environment);
             for arg in args {
                 register_collection_types_from_expression(&mut arg.value, type_environment);

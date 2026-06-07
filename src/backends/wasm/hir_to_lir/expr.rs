@@ -149,6 +149,9 @@ pub(crate) fn lower_expression(
                 "Wasm lowering only supports empty Vec<String> collection literals in this pass",
             ))
         }
+        HirExpressionKind::MapLiteral(_) => Err(lir_transformation_error(
+            "Wasm hashmap literal reached lowering before backend feature validation",
+        )),
         HirExpressionKind::StructConstruct { .. }
         | HirExpressionKind::Range { .. }
         | HirExpressionKind::TupleConstruct { .. }

@@ -342,6 +342,19 @@ impl<'a> HirValidator<'a> {
                 }
             }
 
+            HirExpressionKind::MapLiteral(entries) => {
+                if self.type_environment.map_shape(expression.ty).is_none() {
+                    return Err(self.error_with_hir(
+                        "HirExpressionKind::MapLiteral expression type is not a map type",
+                        anchor,
+                    ));
+                }
+                for entry in entries {
+                    self.validate_expression(&entry.key, anchor)?;
+                    self.validate_expression(&entry.value, anchor)?;
+                }
+            }
+
             HirExpressionKind::TupleConstruct { elements } => {
                 for element in elements {
                     self.validate_expression(element, anchor)?;

@@ -193,6 +193,21 @@ impl<'a> HirValidator<'a> {
                 self.validate_expression(expression, anchor)?;
             }
 
+            HirStatementKind::MapOp {
+                receiver,
+                args,
+                result,
+                ..
+            } => {
+                self.validate_expression(receiver, anchor)?;
+                for arg in args {
+                    self.validate_expression(arg, anchor)?;
+                }
+                if let Some(local_id) = result {
+                    self.require_local_id(*local_id, anchor)?;
+                }
+            }
+
             HirStatementKind::Drop(local) => {
                 self.require_local_id(*local, anchor)?;
             }

@@ -35,9 +35,10 @@ use crate::compiler_frontend::compiler_messages::{
     IncompatibleChoiceComparisonReason, InvalidChoiceVariantReason, InvalidCollectionTypeReason,
     InvalidCompileTimePathReason, InvalidConfigReason, InvalidGenericParameterReason,
     InvalidImportClauseReason, InvalidImportPathReason, InvalidLibraryFolderReason,
-    InvalidMutableAccessReason, InvalidPageMetadataReason, InvalidResultOperandReason,
-    InvalidTemplateDirectiveReason, NameNamespace, NamespaceTypeValueMisuseKind, PathKind,
-    RangeOperandKind, UnsupportedOperatorCategory,
+    InvalidMapLiteralReason, InvalidMapTypeReason, InvalidMutableAccessReason,
+    InvalidPageMetadataReason, InvalidResultOperandReason, InvalidTemplateDirectiveReason,
+    NameNamespace, NamespaceTypeValueMisuseKind, PathKind, RangeOperandKind,
+    UnsupportedOperatorCategory,
 };
 use crate::compiler_frontend::datatypes::definitions::TypeDefinition;
 use crate::compiler_frontend::datatypes::display::display_type;
@@ -93,6 +94,60 @@ pub(crate) fn invalid_collection_type_message(reason: InvalidCollectionTypeReaso
         }
         InvalidCollectionTypeReason::ShorthandNonLiteralRhs => {
             "Capacity-only shorthand requires a collection literal initializer."
+        }
+    }
+}
+
+pub(crate) fn invalid_map_type_message(
+    reason: InvalidMapTypeReason,
+    context: DiagnosticRenderContext,
+) -> String {
+    match reason {
+        InvalidMapTypeReason::UnsupportedKeyType { key_type } => {
+            let type_name = diagnostic_type_name(key_type, context);
+            format!(
+                "Map key type '{type_name}' is not supported. Only String, Int, Bool, and Char keys are allowed in V1."
+            )
+        }
+        InvalidMapTypeReason::GenericKeyRequiresHashableBound { parameter_name } => {
+            let name = context.string_table.resolve(parameter_name);
+            format!(
+                "Generic map key parameter '{name}' requires a `HASHABLE` bound, which is not yet implemented."
+            )
+        }
+        InvalidMapTypeReason::ExcessiveInlineNesting { depth } => {
+            format!(
+                "Map types nested {depth} levels deep are not allowed inline. Use a type alias instead."
+            )
+        }
+        InvalidMapTypeReason::EmptyMapKeyType => {
+            "Map type is missing the key type before the '=' separator.".to_owned()
+        }
+        InvalidMapTypeReason::EmptyMapValueType => {
+            "Map type is missing the value type after the '=' separator.".to_owned()
+        }
+        InvalidMapTypeReason::MultipleMapSeparators => {
+            "Map type can only contain one top-level '=' separator.".to_owned()
+        }
+        InvalidMapTypeReason::FixedCapacityNotAllowed => {
+            "Fixed or capacity map syntax is not supported in V1.".to_owned()
+        }
+    }
+}
+
+pub(crate) fn invalid_map_literal_message(reason: InvalidMapLiteralReason) -> String {
+    match reason {
+        InvalidMapLiteralReason::MixedCollectionMapEntries => {
+            "Map literal entries must all use `key = value` syntax. Mixed collection and map entries are not allowed.".to_owned()
+        }
+        InvalidMapLiteralReason::DuplicateKnownKey => {
+            "Duplicate key in map literal. A foldable key with the same value appears more than once.".to_owned()
+        }
+        InvalidMapLiteralReason::MissingKeyExpression => {
+            "Map literal entry is missing a key expression before '='.".to_owned()
+        }
+        InvalidMapLiteralReason::MissingValueExpression => {
+            "Map literal entry is missing a value expression after '='.".to_owned()
         }
     }
 }

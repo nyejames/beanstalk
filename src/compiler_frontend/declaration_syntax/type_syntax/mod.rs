@@ -21,7 +21,7 @@
 use crate::compiler_frontend::compiler_errors::compiler_error_to_diagnostic;
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, GenericApplicationErrorReason, InvalidCollectionTypeReason,
-    InvalidTypeAnnotationReason,
+    InvalidMapTypeReason, InvalidTypeAnnotationReason,
 };
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::generic_identity_bridge::GenericBaseType;
@@ -78,6 +78,9 @@ pub(crate) fn parsed_ref_to_data_type(parsed: &ParsedTypeRef) -> DataType {
         }
         ParsedTypeRef::Collection { element, .. } => {
             DataType::collection(parsed_ref_to_data_type(element))
+        }
+        ParsedTypeRef::Map { key, value, .. } => {
+            DataType::map(parsed_ref_to_data_type(key), parsed_ref_to_data_type(value))
         }
         ParsedTypeRef::Optional { inner, .. } => {
             DataType::Option(Box::new(parsed_ref_to_data_type(inner)))

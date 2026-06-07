@@ -2589,6 +2589,132 @@ path = "js_function_param_passing"
 tags = ["integration","functions"]
 
 [[case]]
+id = "hashmap_js_runtime_contract"
+path = "hashmap_js_runtime_contract"
+tags = ["integration","js-backend","hashmaps"]
+
+[[case]]
+id = "hashmap_wasm_reachable_literal_rejected"
+path = "hashmap_wasm_reachable_literal_rejected"
+tags = ["integration","wasm-backend","hashmaps"]
+
+[[case]]
+id = "hashmap_wasm_reachable_operation_rejected"
+path = "hashmap_wasm_reachable_operation_rejected"
+tags = ["integration","wasm-backend","hashmaps"]
+
+[[case]]
+id = "hashmap_wasm_unreachable_ignored"
+path = "hashmap_wasm_unreachable_ignored"
+tags = ["integration","wasm-backend","hashmaps"]
+
+
+[[case]]
+id = "hashmap_alias_struct_field_param_return"
+path = "hashmap_alias_struct_field_param_return"
+tags = ["integration","js-backend","hashmaps"]
+
+[[case]]
+id = "hashmap_nested_values"
+path = "hashmap_nested_values"
+tags = ["integration","js-backend","hashmaps"]
+
+[[case]]
+id = "hashmap_empty_inferred_rejected"
+path = "hashmap_empty_inferred_rejected"
+tags = ["integration","diagnostics","hashmaps"]
+
+[[case]]
+id = "hashmap_duplicate_key_rejected"
+path = "hashmap_duplicate_key_rejected"
+tags = ["integration","diagnostics","hashmaps"]
+
+[[case]]
+id = "hashmap_unhashable_key_rejected"
+path = "hashmap_unhashable_key_rejected"
+tags = ["integration","diagnostics","hashmaps"]
+
+[[case]]
+id = "hashmap_mixed_entries_rejected"
+path = "hashmap_mixed_entries_rejected"
+tags = ["integration","diagnostics","hashmaps"]
+
+[[case]]
+id = "hashmap_missing_key_rejected"
+path = "hashmap_missing_key_rejected"
+tags = ["integration","diagnostics","hashmaps"]
+
+[[case]]
+id = "hashmap_missing_value_rejected"
+path = "hashmap_missing_value_rejected"
+tags = ["integration","diagnostics","hashmaps"]
+
+[[case]]
+id = "hashmap_excessive_nesting_rejected"
+path = "hashmap_excessive_nesting_rejected"
+tags = ["integration","diagnostics","hashmaps"]
+
+[[case]]
+id = "hashmap_fixed_capacity_rejected"
+path = "hashmap_fixed_capacity_rejected"
+tags = ["integration","diagnostics","hashmaps"]
+
+[[case]]
+id = "hashmap_const_literal_rejected"
+path = "hashmap_const_literal_rejected"
+tags = ["integration","diagnostics","hashmaps"]
+
+[[case]]
+id = "hashmap_equality_rejected"
+path = "hashmap_equality_rejected"
+tags = ["integration","diagnostics","hashmaps"]
+
+[[case]]
+id = "hashmap_generic_key_rejected"
+path = "hashmap_generic_key_rejected"
+tags = ["integration","diagnostics","hashmaps"]
+
+[[case]]
+id = "hashmap_template_display_rejected"
+path = "hashmap_template_display_rejected"
+tags = ["integration","diagnostics","hashmaps","templates"]
+
+[[case]]
+id = "hashmap_io_display_rejected"
+path = "hashmap_io_display_rejected"
+tags = ["integration","diagnostics","hashmaps"]
+
+[[case]]
+id = "hashmap_iteration_rejected"
+path = "hashmap_iteration_rejected"
+tags = ["integration","diagnostics","hashmaps","loops"]
+
+[[case]]
+id = "hashmap_missing_fallible_handling_rejected"
+path = "hashmap_missing_fallible_handling_rejected"
+tags = ["integration","diagnostics","hashmaps"]
+
+[[case]]
+id = "hashmap_infallible_catch_rejected"
+path = "hashmap_infallible_catch_rejected"
+tags = ["integration","diagnostics","hashmaps"]
+
+[[case]]
+id = "hashmap_mutation_without_tilde_rejected"
+path = "hashmap_mutation_without_tilde_rejected"
+tags = ["integration","diagnostics","hashmaps"]
+
+[[case]]
+id = "hashmap_length_assignment_rejected"
+path = "hashmap_length_assignment_rejected"
+tags = ["integration","diagnostics","hashmaps"]
+
+[[case]]
+id = "hashmap_length_method_rejected"
+path = "hashmap_length_method_rejected"
+tags = ["integration","diagnostics","hashmaps"]
+
+[[case]]
 id = "js_import_cross_module_bypass_rejected"
 path = "js_import_cross_module_bypass_rejected"
 tags = ["integration","imports","diagnostics","js-backend"]

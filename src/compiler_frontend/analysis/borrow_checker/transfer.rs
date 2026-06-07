@@ -20,8 +20,10 @@ use crate::compiler_frontend::analysis::borrow_checker::types::{
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::hir::blocks::HirBlock;
 use crate::compiler_frontend::hir::ids::{BlockId, FunctionId, HirNodeId, HirValueId};
+use crate::compiler_frontend::hir::terminators::HirTerminator;
 use rustc_hash::FxHashMap;
 
+use access::transfer_aggregate_expression_ownership;
 use access::{transfer_statement, transfer_terminator};
 use facts::ValueFactBuffer;
 
@@ -34,13 +36,19 @@ pub(super) struct BorrowTransferContext<'a> {
     pub diagnostics: BorrowDiagnostics<'a>,
 }
 
+/// Accumulated statistics and emitted facts for one block transfer.
 #[derive(Debug, Clone, Default)]
 pub(super) struct BlockTransferStats {
+    // Counters.
     pub statements_analyzed: usize,
     pub terminators_analyzed: usize,
     pub conflicts_checked: usize,
     pub mutable_call_sites: usize,
+
+    // Per-statement entry snapshots.
     pub statement_entry_states: Vec<(HirNodeId, BorrowStateSnapshot)>,
+
+    // Emitted borrow facts.
     pub statement_facts: Vec<(HirNodeId, StatementBorrowFact)>,
     pub terminator_fact: Option<(BlockId, TerminatorBorrowFact)>,
     pub value_facts: Vec<(HirValueId, ValueBorrowFact)>,
@@ -85,6 +93,43 @@ pub(super) fn transfer_block(
         &mut value_fact_buffer,
     )?;
     stats.terminators_analyzed += 1;
+
+    // Aggregate literal children in return terminators must be moved.
+    match &block.terminator {
+        HirTerminator::Return(value)
+        | HirTerminator::ReturnSuccess(value)
+        | HirTerminator::ReturnError(value) => {
+            let terminator_order = layout.terminator_order_or_unknown(block.id);
+            let location = context
+                .diagnostics
+                .terminator_error_location(block.id, &block.terminator);
+            transfer_aggregate_expression_ownership(
+                layout,
+                state,
+                value,
+                block.id,
+                terminator_order,
+                location,
+                &context.diagnostics,
+            )?;
+        }
+        HirTerminator::FallibleBranch { result, .. } => {
+            let terminator_order = layout.terminator_order_or_unknown(block.id);
+            let location = context
+                .diagnostics
+                .terminator_error_location(block.id, &block.terminator);
+            transfer_aggregate_expression_ownership(
+                layout,
+                state,
+                result,
+                block.id,
+                terminator_order,
+                location,
+                &context.diagnostics,
+            )?;
+        }
+        _ => {}
+    }
 
     stats.value_facts = value_fact_buffer.into_serialized(layout);
     Ok(stats)

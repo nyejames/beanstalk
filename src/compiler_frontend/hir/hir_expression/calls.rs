@@ -17,12 +17,13 @@ use crate::compiler_frontend::ast::expressions::call_argument::{
 };
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::builtins::CollectionBuiltinOp;
+use crate::compiler_frontend::builtins::maps::MapBuiltinOp;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::datatypes::ids::TypeId as FrontendTypeId;
 use crate::compiler_frontend::external_packages::CallTarget;
 use crate::compiler_frontend::external_packages::ExternalFunctionId;
-use crate::compiler_frontend::hir::expressions::{HirExpressionKind, ValueKind};
+use crate::compiler_frontend::hir::expressions::{HirExpressionKind, HirMapOp, ValueKind};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::statements::{
@@ -175,6 +176,88 @@ impl<'a> HirBuilder<'a> {
             result_type_ids,
             location,
         )
+    }
+
+    /// Lowers a compiler-owned map builtin call into a dedicated `MapOp` HIR statement.
+    ///
+    /// WHAT: converts `map.get`, `map.contains`, `~map.set`, `~map.remove`, `~map.clear`, and
+    ///       `map.length` into explicit HIR map operations.
+    /// WHY: map builtins are language constructs, not external calls. This keeps lowering,
+    ///      borrow validation, and reachability explicit and backend-neutral.
+    pub(crate) fn lower_map_builtin_call_expression(
+        &mut self,
+        op: MapBuiltinOp,
+        receiver: &AstNode,
+        receiver_requires_mutable: bool,
+        args: &[CallArgument],
+        result_type_ids: &[FrontendTypeId],
+        location: &SourceLocation,
+    ) -> Result<LoweredExpression, CompilerError> {
+        let mut prelude = Vec::new();
+        let hir_op = hir_map_op_from_builtin(op);
+        if receiver_requires_mutable != hir_op.requires_mutable_receiver() {
+            return_hir_transformation_error!(
+                format!(
+                    "Map builtin {:?} reached HIR lowering with inconsistent receiver mutability",
+                    op
+                ),
+                self.hir_error_location(location)
+            );
+        }
+
+        let receiver_expression = receiver.get_expr()?;
+        let lowered_receiver =
+            self.lower_child_expression_for_parent(&mut prelude, &receiver_expression)?;
+
+        let mut lowered_args = Vec::with_capacity(args.len());
+        for (arg_index, argument) in args.iter().enumerate() {
+            if self.expression_needs_current_block_lowering(&argument.value) {
+                self.flush_pending_call_prelude(&mut prelude, location)?;
+            }
+            let lowered = self.lower_call_argument_value(argument, location, arg_index)?;
+            prelude.extend(lowered.prelude);
+            lowered_args.push(lowered.value);
+        }
+
+        let statement_id = self.allocate_node_id();
+        let region = self.current_region_or_error(location)?;
+        let result_type = self.lower_call_result_type(result_type_ids, location)?;
+
+        let result = if result_type == self.type_environment.builtins().none {
+            None
+        } else {
+            Some(self.allocate_temp_local(result_type, Some(location.to_owned()))?)
+        };
+
+        let statement = HirStatement {
+            id: statement_id,
+            kind: HirStatementKind::MapOp {
+                op: hir_op,
+                receiver: lowered_receiver,
+                args: lowered_args,
+                result,
+            },
+            location: location.to_owned(),
+        };
+
+        self.side_table.map_statement(location, &statement);
+        prelude.push(statement);
+
+        let value = if let Some(result_local) = result {
+            self.make_expression(
+                location,
+                HirExpressionKind::Load(HirPlace::Local(result_local)),
+                result_type,
+                ValueKind::RValue,
+                region,
+            )
+        } else {
+            self.unit_expression(location, region)
+        };
+
+        self.log_call_result_binding(location, result, &value);
+
+        Ok(LoweredExpression { prelude, value })
     }
 
     // WHAT: lowers a resolved call target plus arguments into HIR call statements and values.
@@ -382,6 +465,17 @@ impl<'a> HirBuilder<'a> {
         }
 
         Ok(())
+    }
+}
+
+fn hir_map_op_from_builtin(op: MapBuiltinOp) -> HirMapOp {
+    match op {
+        MapBuiltinOp::Get => HirMapOp::Get,
+        MapBuiltinOp::Contains => HirMapOp::Contains,
+        MapBuiltinOp::Set => HirMapOp::Set,
+        MapBuiltinOp::Remove => HirMapOp::Remove,
+        MapBuiltinOp::Clear => HirMapOp::Clear,
+        MapBuiltinOp::Length => HirMapOp::Length,
     }
 }
 

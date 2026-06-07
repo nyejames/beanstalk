@@ -12,6 +12,8 @@ pub(crate) enum BuiltinErrorCode {
     CollectionExpectedOrderedCollection = 100,
     CollectionIndexOutOfBounds = 101,
     CollectionFixedCapacityExceeded = 102,
+    MapExpectedOrderedMap = 110,
+    MapKeyNotFound = 111,
     IntParseInvalidFormat = 200,
     IntParseOutOfRange = 201,
     FloatParseInvalidFormat = 210,
@@ -36,6 +38,8 @@ impl BuiltinErrorCode {
             BuiltinErrorCode::CollectionFixedCapacityExceeded => {
                 "Fixed collection capacity exceeded"
             }
+            BuiltinErrorCode::MapExpectedOrderedMap => "Map operation expects an ordered map",
+            BuiltinErrorCode::MapKeyNotFound => "Map key not found",
             BuiltinErrorCode::IntParseInvalidFormat => "Cannot parse Int from text",
             BuiltinErrorCode::IntParseOutOfRange => "Int value is out of supported range",
             BuiltinErrorCode::FloatParseInvalidFormat => "Cannot parse Float from text",

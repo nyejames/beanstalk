@@ -224,6 +224,23 @@ impl<'a> HirBuilder<'a> {
                 location,
             ),
 
+            NodeKind::MapBuiltinCall {
+                receiver,
+                op,
+                receiver_requires_mutable,
+                args,
+                result_type_ids,
+                location,
+                ..
+            } => self.lower_map_builtin_call_expression(
+                *op,
+                receiver,
+                *receiver_requires_mutable,
+                args,
+                result_type_ids,
+                location,
+            ),
+
             _ => {
                 return_hir_transformation_error!(
                     format!("AST node is not an expression: {:?}", node.kind),

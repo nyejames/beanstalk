@@ -19,6 +19,7 @@ mod choices;
 mod cloning;
 mod collections;
 mod errors;
+mod maps;
 mod places;
 mod results;
 mod strings;
@@ -41,21 +42,25 @@ impl<'hir> JsEmitter<'hir> {
     ///   error helpers           — normalises file paths, constructs canonical error records
     ///   result helpers          — `?` propagation and `or` fallback helpers
     ///   collection helpers      — guarded get/push/remove/length for ordered collections
+    ///   map helpers             — guarded get/set/remove and infallible contains/clear/length for ordered maps
     ///   string helpers          — value-to-string conversion and IO output
     ///   cast helpers            — numeric and string casting with Result-typed errors
     ///   choice helpers          — structural equality for nominal choice carriers
     ///
     /// All groups use JS `function` declarations, which are hoisted by the JS engine.
     /// Ordering here is for readability only; correctness does not depend on it.
-    pub(crate) fn emit_runtime_prelude(&mut self) {
+    pub(crate) fn emit_runtime_prelude(&mut self, emitted_code_uses_maps: bool) {
         self.emit_runtime_binding_helpers();
         self.emit_runtime_alias_helpers();
         self.emit_runtime_computed_place_helpers();
-        self.emit_runtime_clone_helpers();
+        self.emit_runtime_clone_helpers(emitted_code_uses_maps);
         self.emit_runtime_error_helpers();
         self.emit_runtime_result_helpers();
         self.emit_runtime_collection_helpers();
-        self.emit_runtime_string_helpers();
+        if emitted_code_uses_maps {
+            self.emit_runtime_map_helpers();
+        }
+        self.emit_runtime_string_helpers(emitted_code_uses_maps);
         self.emit_runtime_cast_helpers();
     }
 }

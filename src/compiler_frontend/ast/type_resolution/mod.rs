@@ -51,6 +51,7 @@ pub(crate) use resolve_type::fold_collection_capacity_expression;
 pub(crate) use resolve_type::resolve_diagnostic_type_to_type_id;
 #[cfg(test)]
 pub(crate) use resolve_type::resolve_diagnostic_type_to_type_id_opt;
+pub(crate) use resolve_type::validate_map_key_type;
 pub(crate) use resolve_type::{
     TypeResolutionContext, TypeResolutionContextInputs, resolve_diagnostic_type_to_type_id_checked,
     resolve_parsed_type_annotation, resolve_type,

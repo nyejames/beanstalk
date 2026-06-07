@@ -13,11 +13,12 @@ use crate::compiler_frontend::compiler_messages::{
     InvalidCollectionTypeReason, InvalidCompileTimePathReason, InvalidConfigReason,
     InvalidDynamicTraitTypeReason, InvalidFunctionSignatureReason, InvalidGenericParameterReason,
     InvalidImportClauseReason, InvalidImportPathReason, InvalidLoopHeaderReason,
-    InvalidMatchArmReason, InvalidMutableAccessReason, InvalidPageMetadataReason,
-    InvalidResultOperandReason, InvalidSignatureMemberReason, InvalidStandaloneStatementReason,
-    InvalidStatementPositionReason, InvalidTemplateDirectiveReason, InvalidTemplateStructureReason,
-    InvalidTraitConformanceReason, InvalidTraitKeywordUsageReason, InvalidTypeAnnotationReason,
-    NameNamespace, NamespaceTypeValueMisuseKind, NamingConvention, NumberLiteralErrorReason,
+    InvalidMapLiteralReason, InvalidMapTypeReason, InvalidMatchArmReason,
+    InvalidMutableAccessReason, InvalidPageMetadataReason, InvalidResultOperandReason,
+    InvalidSignatureMemberReason, InvalidStandaloneStatementReason, InvalidStatementPositionReason,
+    InvalidTemplateDirectiveReason, InvalidTemplateStructureReason, InvalidTraitConformanceReason,
+    InvalidTraitKeywordUsageReason, InvalidTypeAnnotationReason, NameNamespace,
+    NamespaceTypeValueMisuseKind, NamingConvention, NumberLiteralErrorReason,
     OperatorOperandPosition, PathKind, RangeOperandKind, RuleDiagnosticKind, SyntaxDiagnosticKind,
     TypeAnnotationContext, TypeDiagnosticKind, TypeMismatchContext, UnsupportedOperatorCategory,
 };
@@ -953,6 +954,25 @@ impl CompilerDiagnostic {
             DiagnosticKind::Syntax(SyntaxDiagnosticKind::InvalidCollectionType),
             location,
             DiagnosticPayload::InvalidCollectionType { reason },
+        )
+    }
+
+    pub(crate) fn invalid_map_type(reason: InvalidMapTypeReason, location: SourceLocation) -> Self {
+        Self::new(
+            DiagnosticKind::Syntax(SyntaxDiagnosticKind::InvalidMapType),
+            location,
+            DiagnosticPayload::InvalidMapType { reason },
+        )
+    }
+
+    pub(crate) fn invalid_map_literal(
+        reason: InvalidMapLiteralReason,
+        location: SourceLocation,
+    ) -> Self {
+        Self::new(
+            DiagnosticKind::Syntax(SyntaxDiagnosticKind::InvalidMapLiteral),
+            location,
+            DiagnosticPayload::InvalidMapLiteral { reason },
         )
     }
 

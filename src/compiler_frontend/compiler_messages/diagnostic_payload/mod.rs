@@ -318,6 +318,14 @@ pub enum DiagnosticPayload {
         reason: InvalidCollectionTypeReason,
     },
 
+    InvalidMapType {
+        reason: InvalidMapTypeReason,
+    },
+
+    InvalidMapLiteral {
+        reason: InvalidMapLiteralReason,
+    },
+
     InvalidGenericParameter {
         reason: InvalidGenericParameterReason,
     },

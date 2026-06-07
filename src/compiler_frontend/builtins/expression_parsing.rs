@@ -11,17 +11,18 @@ use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::expressions::parse_expression::{
     ExpressionTrailingPolicy, create_expression_with_trailing_newline_policy,
 };
-use crate::compiler_frontend::ast::statements::collections::new_collection;
+use crate::compiler_frontend::ast::statements::collections::new_curly_literal;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::builtins::error_type::resolve_builtin_error_type_typed;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidBuiltinCallReason, TypeMismatchContext,
 };
+use crate::compiler_frontend::datatypes::diagnostic_type_spelling;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::type_coercion::parse_context::{
-    ExpectedCollectionContext, ExpectedType,
+    ExpectedCollectionContext, ExpectedCurlyLiteralContext, ExpectedMapContext, ExpectedType,
 };
 use crate::compiler_frontend::value_mode::ValueMode;
 
@@ -127,11 +128,13 @@ fn builtin_cast_name(cast_kind: &TokenKind, string_table: &mut StringTable) -> O
 }
 
 /// Parses collection literal expressions (`{...}`) for declared and inferred collection types.
+/// Parses curly-brace literal expressions (`{...}`) for collections, maps, and inferred targets.
 ///
-/// WHAT: validates that collection literals are used with a compatible expected type.
-/// WHY: collection literals are compiler-owned syntax and should be centralized with builtin
-/// parsing helpers for consistency and future extension.
-pub(crate) fn parse_collection_expression(
+/// WHAT: validates that `{...}` literals are used with a compatible expected type and dispatches
+///       to the correct collection or map parser.
+/// WHY: curly-brace syntax introduces both homogeneous collections and ordered maps; the builtin
+///      parsing helper must own the dispatch so the expression parser stays flat.
+pub(crate) fn parse_curly_literal_expression(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
@@ -140,10 +143,30 @@ pub(crate) fn parse_collection_expression(
     expression: &mut Vec<AstNode>,
     string_table: &mut StringTable,
 ) -> Result<(), ExpressionParseError> {
-    let collection_context = match expected_type {
+    let curly_context = match expected_type {
         ExpectedType::Known(type_id) => {
             let type_environment = type_interner.environment();
-            let Some(shape) = type_environment.collection_shape(*type_id) else {
+            if let Some(map_shape) = type_environment.map_shape(*type_id) {
+                ExpectedCurlyLiteralContext::Map(ExpectedMapContext {
+                    key_type_id: map_shape.key_type,
+                    value_type_id: map_shape.value_type,
+                    key_diagnostic_type: diagnostic_type_spelling(
+                        map_shape.key_type,
+                        type_environment,
+                    ),
+                    value_diagnostic_type: diagnostic_type_spelling(
+                        map_shape.value_type,
+                        type_environment,
+                    ),
+                    map_type_id: Some(*type_id),
+                })
+            } else if let Some(shape) = type_environment.collection_shape(*type_id) {
+                ExpectedCurlyLiteralContext::Collection(ExpectedCollectionContext::Explicit {
+                    collection_type_id: *type_id,
+                    element_type_id: shape.element_type,
+                    fixed_capacity: shape.fixed_capacity,
+                })
+            } else {
                 return Err(CompilerDiagnostic::type_mismatch(
                     *type_id,
                     type_environment.builtins().string,
@@ -151,21 +174,16 @@ pub(crate) fn parse_collection_expression(
                     token_stream.current_location(),
                 )
                 .into());
-            };
-            ExpectedCollectionContext::Explicit {
-                collection_type_id: *type_id,
-                element_type_id: shape.element_type,
-                fixed_capacity: shape.fixed_capacity,
             }
         }
 
-        ExpectedType::Infer => ExpectedCollectionContext::InferGrowable,
+        ExpectedType::Infer => ExpectedCurlyLiteralContext::Infer,
     };
 
     expression.push(AstNode {
-        kind: NodeKind::Rvalue(new_collection(
+        kind: NodeKind::Rvalue(new_curly_literal(
             token_stream,
-            collection_context,
+            curly_context,
             context,
             type_interner,
             value_mode,

@@ -190,6 +190,12 @@ fn validate_node(
             args,
             result_type_ids,
             ..
+        }
+        | NodeKind::MapBuiltinCall {
+            receiver,
+            args,
+            result_type_ids,
+            ..
         } => {
             validate_node(receiver, type_environment, string_table)?;
             validate_call_arguments(args, type_environment, string_table)?;
@@ -384,6 +390,14 @@ fn validate_expression(
                 &expression.location,
                 type_environment,
             )
+        }
+
+        ExpressionKind::MapLiteral(entries) => {
+            for entry in entries {
+                validate_expression(&entry.key, type_environment, string_table)?;
+                validate_expression(&entry.value, type_environment, string_table)?;
+            }
+            Ok(())
         }
 
         // Terminal literals and references — types were resolved at construction.

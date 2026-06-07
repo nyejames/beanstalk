@@ -7,6 +7,7 @@
 mod builtin_call_args;
 mod collection_builtin;
 mod field_member;
+mod map_builtin;
 mod parse_chain;
 mod receiver_access;
 mod receiver_calls;

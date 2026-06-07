@@ -46,7 +46,8 @@ fn push_accessed_symbol_statement(
         // because they may have side effects.
         NodeKind::MethodCall { .. }
         | NodeKind::DynamicTraitMethodCall { .. }
-        | NodeKind::CollectionBuiltinCall { .. } => {
+        | NodeKind::CollectionBuiltinCall { .. }
+        | NodeKind::MapBuiltinCall { .. } => {
             ast.push(AstNode {
                 kind: NodeKind::Rvalue(accessed_node.get_expr()?),
                 location: accessed_node.location,

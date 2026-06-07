@@ -15,8 +15,8 @@ use crate::compiler_frontend::ast::type_resolution::{
 };
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, DeferredFeatureReason, DiagnosticPayload, GenericApplicationErrorReason,
-    InvalidCollectionTypeReason, InvalidGenericInstantiationReason, InvalidTypeAnnotationReason,
-    NameNamespace,
+    InvalidCollectionTypeReason, InvalidGenericInstantiationReason, InvalidMapTypeReason,
+    InvalidTypeAnnotationReason, NameNamespace,
 };
 use crate::compiler_frontend::datatypes::definitions::{StructTypeDefinition, TypeDefinition};
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
@@ -1351,4 +1351,529 @@ fn rejects_collection_type_missing_close_curly_with_expected_token() {
         },
         "ExpectedToken(CloseCurly)",
     );
+}
+
+// -------------------------------------------------------------
+//  Map type syntax parsing tests (Phase 3)
+// -------------------------------------------------------------
+
+#[test]
+fn parses_simple_map_type() {
+    let mut string_table = StringTable::new();
+    let mut stream = stream_from_tokens(
+        vec![
+            token(TokenKind::OpenCurly),
+            token(TokenKind::DatatypeString),
+            token(TokenKind::Assign),
+            token(TokenKind::DatatypeInt),
+            token(TokenKind::CloseCurly),
+            token(TokenKind::Eof),
+        ],
+        &mut string_table,
+    );
+
+    let parsed = parse_type_annotation(
+        &mut stream,
+        TypeAnnotationContext::DeclarationTarget,
+        &string_table,
+    )
+    .expect("simple map type should parse");
+
+    assert!(matches!(parsed, ParsedTypeRef::Map {
+        key,
+        value,
+        ..
+    } if matches!(*key, ParsedTypeRef::BuiltinString { .. })
+        && matches!(*value, ParsedTypeRef::BuiltinInt { .. })
+    ));
+}
+
+#[test]
+fn parses_map_type_with_collection_value() {
+    let mut string_table = StringTable::new();
+    let mut stream = stream_from_tokens(
+        vec![
+            token(TokenKind::OpenCurly),
+            token(TokenKind::DatatypeString),
+            token(TokenKind::Assign),
+            token(TokenKind::OpenCurly),
+            token(TokenKind::DatatypeInt),
+            token(TokenKind::CloseCurly),
+            token(TokenKind::CloseCurly),
+            token(TokenKind::Eof),
+        ],
+        &mut string_table,
+    );
+
+    let parsed = parse_type_annotation(
+        &mut stream,
+        TypeAnnotationContext::SignatureParameter,
+        &string_table,
+    )
+    .expect("map with collection value should parse");
+
+    assert!(matches!(parsed, ParsedTypeRef::Map {
+        ref key,
+        ref value,
+        ..
+    } if matches!(**key, ParsedTypeRef::BuiltinString { .. })
+        && matches!(**value, ParsedTypeRef::Collection { ref element, .. }
+            if matches!(**element, ParsedTypeRef::BuiltinInt { .. })
+        )
+    ));
+}
+
+#[test]
+fn parses_map_type_with_nested_map_value() {
+    let mut string_table = StringTable::new();
+    let mut stream = stream_from_tokens(
+        vec![
+            token(TokenKind::OpenCurly),
+            token(TokenKind::DatatypeString),
+            token(TokenKind::Assign),
+            token(TokenKind::OpenCurly),
+            token(TokenKind::DatatypeString),
+            token(TokenKind::Assign),
+            token(TokenKind::DatatypeInt),
+            token(TokenKind::CloseCurly),
+            token(TokenKind::CloseCurly),
+            token(TokenKind::Eof),
+        ],
+        &mut string_table,
+    );
+
+    let parsed = parse_type_annotation(
+        &mut stream,
+        TypeAnnotationContext::SignatureReturn,
+        &string_table,
+    )
+    .expect("map with nested map value should parse");
+
+    assert!(matches!(parsed, ParsedTypeRef::Map {
+        key,
+        value,
+        ..
+    } if matches!(*key, ParsedTypeRef::BuiltinString { .. })
+        && matches!(*value, ParsedTypeRef::Map { .. })
+    ));
+}
+
+#[test]
+fn parses_map_type_in_parameter_context() {
+    let mut string_table = StringTable::new();
+    let mut stream = stream_from_tokens(
+        vec![
+            token(TokenKind::OpenCurly),
+            token(TokenKind::DatatypeBool),
+            token(TokenKind::Assign),
+            token(TokenKind::DatatypeString),
+            token(TokenKind::CloseCurly),
+            token(TokenKind::Eof),
+        ],
+        &mut string_table,
+    );
+
+    let parsed = parse_type_annotation(
+        &mut stream,
+        TypeAnnotationContext::SignatureParameter,
+        &string_table,
+    )
+    .expect("map type in parameter context should parse");
+
+    assert!(matches!(parsed, ParsedTypeRef::Map { .. }));
+}
+
+#[test]
+fn rejects_map_type_with_empty_key() {
+    let mut string_table = StringTable::new();
+    let mut stream = stream_from_tokens(
+        vec![
+            token(TokenKind::OpenCurly),
+            token(TokenKind::Assign),
+            token(TokenKind::DatatypeInt),
+            token(TokenKind::CloseCurly),
+            token(TokenKind::Eof),
+        ],
+        &mut string_table,
+    );
+
+    let error = parse_type_annotation(
+        &mut stream,
+        TypeAnnotationContext::DeclarationTarget,
+        &string_table,
+    )
+    .expect_err("empty map key should fail");
+
+    assert_diagnostic_payload(
+        error,
+        |payload| {
+            matches!(
+                payload,
+                DiagnosticPayload::InvalidMapType {
+                    reason: InvalidMapTypeReason::EmptyMapKeyType,
+                }
+            )
+        },
+        "InvalidMapType(EmptyMapKeyType)",
+    );
+}
+
+#[test]
+fn rejects_map_type_with_empty_value() {
+    let mut string_table = StringTable::new();
+    let mut stream = stream_from_tokens(
+        vec![
+            token(TokenKind::OpenCurly),
+            token(TokenKind::DatatypeString),
+            token(TokenKind::Assign),
+            token(TokenKind::CloseCurly),
+            token(TokenKind::Eof),
+        ],
+        &mut string_table,
+    );
+
+    let error = parse_type_annotation(
+        &mut stream,
+        TypeAnnotationContext::DeclarationTarget,
+        &string_table,
+    )
+    .expect_err("empty map value should fail");
+
+    assert_diagnostic_payload(
+        error,
+        |payload| {
+            matches!(
+                payload,
+                DiagnosticPayload::InvalidMapType {
+                    reason: InvalidMapTypeReason::EmptyMapValueType,
+                }
+            )
+        },
+        "InvalidMapType(EmptyMapValueType)",
+    );
+}
+
+#[test]
+fn rejects_map_type_with_multiple_separators() {
+    let mut string_table = StringTable::new();
+    let mut stream = stream_from_tokens(
+        vec![
+            token(TokenKind::OpenCurly),
+            token(TokenKind::DatatypeString),
+            token(TokenKind::Assign),
+            token(TokenKind::DatatypeInt),
+            token(TokenKind::Assign),
+            token(TokenKind::DatatypeBool),
+            token(TokenKind::CloseCurly),
+            token(TokenKind::Eof),
+        ],
+        &mut string_table,
+    );
+
+    let error = parse_type_annotation(
+        &mut stream,
+        TypeAnnotationContext::DeclarationTarget,
+        &string_table,
+    )
+    .expect_err("multiple map separators should fail");
+
+    assert_diagnostic_payload(
+        error,
+        |payload| {
+            matches!(
+                payload,
+                DiagnosticPayload::InvalidMapType {
+                    reason: InvalidMapTypeReason::MultipleMapSeparators,
+                }
+            )
+        },
+        "InvalidMapType(MultipleMapSeparators)",
+    );
+}
+
+#[test]
+fn rejects_fixed_capacity_map_syntax_on_key_side() {
+    let mut string_table = StringTable::new();
+    let mut stream = stream_from_tokens(
+        vec![
+            token(TokenKind::OpenCurly),
+            token(TokenKind::IntLiteral(4)),
+            token(TokenKind::DatatypeString),
+            token(TokenKind::Assign),
+            token(TokenKind::DatatypeInt),
+            token(TokenKind::CloseCurly),
+            token(TokenKind::Eof),
+        ],
+        &mut string_table,
+    );
+
+    let error = parse_type_annotation(
+        &mut stream,
+        TypeAnnotationContext::SignatureParameter,
+        &string_table,
+    )
+    .expect_err("fixed capacity on key side should fail");
+
+    assert_diagnostic_payload(
+        error,
+        |payload| {
+            matches!(
+                payload,
+                DiagnosticPayload::InvalidMapType {
+                    reason: InvalidMapTypeReason::FixedCapacityNotAllowed,
+                }
+            )
+        },
+        "InvalidMapType(FixedCapacityNotAllowed)",
+    );
+}
+
+#[test]
+fn rejects_fixed_capacity_map_syntax_on_value_side() {
+    let mut string_table = StringTable::new();
+    let mut stream = stream_from_tokens(
+        vec![
+            token(TokenKind::OpenCurly),
+            token(TokenKind::DatatypeString),
+            token(TokenKind::Assign),
+            token(TokenKind::IntLiteral(4)),
+            token(TokenKind::DatatypeInt),
+            token(TokenKind::CloseCurly),
+            token(TokenKind::Eof),
+        ],
+        &mut string_table,
+    );
+
+    let error = parse_type_annotation(
+        &mut stream,
+        TypeAnnotationContext::SignatureParameter,
+        &string_table,
+    )
+    .expect_err("fixed capacity on value side should fail");
+
+    assert_diagnostic_payload(
+        error,
+        |payload| {
+            matches!(
+                payload,
+                DiagnosticPayload::InvalidMapType {
+                    reason: InvalidMapTypeReason::FixedCapacityNotAllowed,
+                }
+            )
+        },
+        "InvalidMapType(FixedCapacityNotAllowed)",
+    );
+}
+
+#[test]
+fn rejects_named_capacity_map_syntax() {
+    let mut string_table = StringTable::new();
+    let capacity_name = string_table.intern("capacity");
+    let mut stream = stream_from_tokens(
+        vec![
+            token(TokenKind::OpenCurly),
+            token(TokenKind::Symbol(capacity_name)),
+            token(TokenKind::DatatypeString),
+            token(TokenKind::Assign),
+            token(TokenKind::DatatypeInt),
+            token(TokenKind::CloseCurly),
+            token(TokenKind::Eof),
+        ],
+        &mut string_table,
+    );
+
+    let error = parse_type_annotation(
+        &mut stream,
+        TypeAnnotationContext::SignatureParameter,
+        &string_table,
+    )
+    .expect_err("named capacity on map key side should fail");
+
+    assert_diagnostic_payload(
+        error,
+        |payload| {
+            matches!(
+                payload,
+                DiagnosticPayload::InvalidMapType {
+                    reason: InvalidMapTypeReason::FixedCapacityNotAllowed,
+                }
+            )
+        },
+        "InvalidMapType(FixedCapacityNotAllowed)",
+    );
+}
+
+#[test]
+fn rejects_postfix_capacity_map_syntax_with_colon() {
+    let mut string_table = StringTable::new();
+    let mut stream = stream_from_tokens(
+        vec![
+            token(TokenKind::OpenCurly),
+            token(TokenKind::DatatypeString),
+            token(TokenKind::Assign),
+            token(TokenKind::DatatypeInt),
+            token(TokenKind::Colon),
+            token(TokenKind::IntLiteral(5)),
+            token(TokenKind::CloseCurly),
+            token(TokenKind::Eof),
+        ],
+        &mut string_table,
+    );
+
+    let error = parse_type_annotation(
+        &mut stream,
+        TypeAnnotationContext::SignatureParameter,
+        &string_table,
+    )
+    .expect_err("postfix capacity with colon on map value side should fail");
+
+    assert_diagnostic_payload(
+        error,
+        |payload| {
+            matches!(
+                payload,
+                DiagnosticPayload::InvalidMapType {
+                    reason: InvalidMapTypeReason::FixedCapacityNotAllowed,
+                }
+            )
+        },
+        "InvalidMapType(FixedCapacityNotAllowed)",
+    );
+}
+
+#[test]
+fn rejects_postfix_capacity_map_syntax_with_number() {
+    let mut string_table = StringTable::new();
+    let mut stream = stream_from_tokens(
+        vec![
+            token(TokenKind::OpenCurly),
+            token(TokenKind::DatatypeString),
+            token(TokenKind::Assign),
+            token(TokenKind::DatatypeInt),
+            token(TokenKind::IntLiteral(5)),
+            token(TokenKind::CloseCurly),
+            token(TokenKind::Eof),
+        ],
+        &mut string_table,
+    );
+
+    let error = parse_type_annotation(
+        &mut stream,
+        TypeAnnotationContext::SignatureParameter,
+        &string_table,
+    )
+    .expect_err("postfix capacity with number on map value side should fail");
+
+    assert_diagnostic_payload(
+        error,
+        |payload| {
+            matches!(
+                payload,
+                DiagnosticPayload::InvalidMapType {
+                    reason: InvalidMapTypeReason::FixedCapacityNotAllowed,
+                }
+            )
+        },
+        "InvalidMapType(FixedCapacityNotAllowed)",
+    );
+}
+
+#[test]
+fn rejects_postfix_capacity_map_syntax_on_key_side() {
+    let mut string_table = StringTable::new();
+    let mut stream = stream_from_tokens(
+        vec![
+            token(TokenKind::OpenCurly),
+            token(TokenKind::DatatypeString),
+            token(TokenKind::Colon),
+            token(TokenKind::IntLiteral(5)),
+            token(TokenKind::Assign),
+            token(TokenKind::DatatypeInt),
+            token(TokenKind::CloseCurly),
+            token(TokenKind::Eof),
+        ],
+        &mut string_table,
+    );
+
+    let error = parse_type_annotation(
+        &mut stream,
+        TypeAnnotationContext::SignatureParameter,
+        &string_table,
+    )
+    .expect_err("postfix capacity with colon on map key side should fail");
+
+    assert_diagnostic_payload(
+        error,
+        |payload| {
+            matches!(
+                payload,
+                DiagnosticPayload::InvalidMapType {
+                    reason: InvalidMapTypeReason::FixedCapacityNotAllowed,
+                }
+            )
+        },
+        "InvalidMapType(FixedCapacityNotAllowed)",
+    );
+}
+
+#[test]
+fn map_separator_inside_nested_braces_is_ignored() {
+    let mut string_table = StringTable::new();
+    let mut stream = stream_from_tokens(
+        vec![
+            token(TokenKind::OpenCurly),
+            token(TokenKind::OpenCurly),
+            token(TokenKind::DatatypeString),
+            token(TokenKind::Assign),
+            token(TokenKind::DatatypeInt),
+            token(TokenKind::CloseCurly),
+            token(TokenKind::Assign),
+            token(TokenKind::DatatypeBool),
+            token(TokenKind::CloseCurly),
+            token(TokenKind::Eof),
+        ],
+        &mut string_table,
+    );
+
+    let parsed = parse_type_annotation(
+        &mut stream,
+        TypeAnnotationContext::DeclarationTarget,
+        &string_table,
+    )
+    .expect("map with inner map key should parse");
+
+    assert!(matches!(parsed, ParsedTypeRef::Map {
+        key,
+        value,
+        ..
+    } if matches!(*key, ParsedTypeRef::Map { .. })
+        && matches!(*value, ParsedTypeRef::BuiltinBool { .. })
+    ));
+}
+
+#[test]
+fn map_type_walker_visits_named_types_in_key_and_value() {
+    let mut string_table = StringTable::new();
+    let key_name = string_table.intern("MyKey");
+    let value_name = string_table.intern("MyValue");
+
+    let parsed = ParsedTypeRef::Map {
+        key: Box::new(ParsedTypeRef::Named {
+            name: key_name,
+            location: SourceLocation::default(),
+        }),
+        value: Box::new(ParsedTypeRef::Named {
+            name: value_name,
+            location: SourceLocation::default(),
+        }),
+        location: SourceLocation::default(),
+    };
+
+    let mut found = Vec::new();
+    crate::compiler_frontend::declaration_syntax::type_syntax::for_each_named_type_in_parsed_ref(
+        &parsed,
+        &mut |name| found.push(name),
+    );
+
+    assert_eq!(found, vec![key_name, value_name]);
 }

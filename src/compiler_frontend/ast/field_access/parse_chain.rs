@@ -25,6 +25,7 @@ use crate::compiler_frontend::value_mode::ValueMode;
 
 use super::collection_builtin::parse_collection_builtin_member_typed;
 use super::field_member::{parse_field_member_access_typed, parse_member_name_typed};
+use super::map_builtin::parse_map_builtin_member_typed;
 use super::receiver_calls::parse_receiver_method_call_typed;
 use super::{MemberStepContext, ReceiverAccessMode};
 
@@ -176,6 +177,17 @@ fn parse_postfix_chain_typed(
             string_table,
         )? {
             receiver_node = collection_builtin_call;
+            encountered_receiver_call = true;
+            continue;
+        }
+
+        if let Some(map_builtin_call) = parse_map_builtin_member_typed(
+            token_stream,
+            member_context.to_owned(),
+            type_interner,
+            string_table,
+        )? {
+            receiver_node = map_builtin_call;
             encountered_receiver_call = true;
             continue;
         }

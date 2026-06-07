@@ -5,6 +5,7 @@
 //! entrypoint easier to inspect without changing the borrow-analysis model.
 
 use super::*;
+use crate::compiler_frontend::hir::expressions::HirMapOp;
 use crate::compiler_frontend::hir::ids::LocalId;
 
 pub(crate) fn transfer_statement(
@@ -148,6 +149,47 @@ pub(crate) fn transfer_statement(
             )?;
         }
 
+        HirStatementKind::MapOp {
+            op,
+            receiver,
+            args,
+            result,
+        } => {
+            let location = context.diagnostics.statement_error_location(statement);
+            let mut call_args = Vec::with_capacity(args.len() + 1);
+            call_args.push(CallArgumentTransfer {
+                argument: receiver,
+                effect: if op.requires_mutable_receiver() {
+                    ArgEffect::MutableBorrow
+                } else {
+                    ArgEffect::SharedBorrow
+                },
+            });
+            for (arg_index, arg) in args.iter().enumerate() {
+                call_args.push(CallArgumentTransfer {
+                    argument: arg,
+                    effect: map_argument_effect(*op, arg_index),
+                });
+            }
+
+            transfer_call_arguments_and_result(
+                &mut CallTransferContext {
+                    context,
+                    layout,
+                    state,
+                    block_id,
+                    current_order: statement_order,
+                    tracker: &mut tracker,
+                    location,
+                    stats,
+                    value_fact_buffer,
+                },
+                &call_args,
+                *result,
+                map_result_alias(*op),
+            )?;
+        }
+
         HirStatementKind::Expr(expression) => {
             let location = context.diagnostics.statement_error_location(statement);
             let mut read_env = SharedReadEnv {
@@ -191,6 +233,50 @@ pub(crate) fn transfer_statement(
                 &mut RootSet::empty(layout.local_count()),
             )?;
         }
+    }
+
+    // Aggregate literal children must be moved into the constructed value.
+    match &statement.kind {
+        HirStatementKind::Assign { value, .. } => {
+            transfer_aggregate_expression_ownership(
+                layout,
+                state,
+                value,
+                block_id,
+                statement_order,
+                context.diagnostics.statement_error_location(statement),
+                &context.diagnostics,
+            )?;
+        }
+        HirStatementKind::Expr(expression) => {
+            transfer_aggregate_expression_ownership(
+                layout,
+                state,
+                expression,
+                block_id,
+                statement_order,
+                context.diagnostics.value_error_location(
+                    expression.id,
+                    context.diagnostics.statement_error_location(statement),
+                ),
+                &context.diagnostics,
+            )?;
+        }
+        HirStatementKind::PushRuntimeFragment { value, .. } => {
+            transfer_aggregate_expression_ownership(
+                layout,
+                state,
+                value,
+                block_id,
+                statement_order,
+                context.diagnostics.value_error_location(
+                    value.id,
+                    context.diagnostics.statement_error_location(statement),
+                ),
+                &context.diagnostics,
+            )?;
+        }
+        _ => {}
     }
 
     let statement_fact = StatementBorrowFact {
@@ -496,5 +582,21 @@ fn dynamic_trait_arg_effect(effect: HirDynamicTraitCallArgumentEffect) -> ArgEff
     match effect {
         HirDynamicTraitCallArgumentEffect::SharedBorrow => ArgEffect::SharedBorrow,
         HirDynamicTraitCallArgumentEffect::MayConsume => ArgEffect::MayConsume,
+    }
+}
+
+fn map_argument_effect(op: HirMapOp, arg_index: usize) -> ArgEffect {
+    if matches!(op, HirMapOp::Set) && matches!(arg_index, 0 | 1) {
+        ArgEffect::MayConsume
+    } else {
+        ArgEffect::SharedBorrow
+    }
+}
+
+fn map_result_alias(op: HirMapOp) -> CallResultAlias {
+    if matches!(op, HirMapOp::Get) {
+        CallResultAlias::AliasArgs(vec![0])
+    } else {
+        CallResultAlias::Fresh
     }
 }

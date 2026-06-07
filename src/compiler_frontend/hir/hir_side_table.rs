@@ -703,6 +703,10 @@ fn remap_type_identity_key(key: &mut TypeIdentityKey, remap: &StringIdRemap) {
         TypeIdentityKey::Collection { element: inner, .. } | TypeIdentityKey::Option(inner) => {
             remap_type_identity_key(inner, remap)
         }
+        TypeIdentityKey::Map { key, value } => {
+            remap_type_identity_key(key, remap);
+            remap_type_identity_key(value, remap);
+        }
 
         TypeIdentityKey::FallibleCarrier { success, error } => {
             remap_type_identity_key(success, remap);

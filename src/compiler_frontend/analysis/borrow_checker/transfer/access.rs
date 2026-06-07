@@ -16,6 +16,8 @@ use crate::compiler_frontend::analysis::borrow_checker::types::{
     LocalMode, StatementBorrowFact, TerminatorBorrowFact, ValueAccessClassification,
 };
 use crate::compiler_frontend::compiler_errors::SourceLocation;
+use crate::compiler_frontend::compiler_messages::InvalidMutableAccessReason;
+use crate::compiler_frontend::datatypes::builtin_type_ids;
 use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, ValueKind};
 use crate::compiler_frontend::hir::ids::BlockId;
 use crate::compiler_frontend::hir::patterns::{HirMatchArm, HirPattern};
@@ -619,6 +621,12 @@ fn record_shared_reads_in_expression(
                 record_shared_reads_in_expression(env, element, location.clone(), roots)?;
             }
         }
+        HirExpressionKind::MapLiteral(entries) => {
+            for entry in entries {
+                record_shared_reads_in_expression(env, &entry.key, location.clone(), roots)?;
+                record_shared_reads_in_expression(env, &entry.value, location.clone(), roots)?;
+            }
+        }
         HirExpressionKind::TupleGet { tuple, .. } => {
             record_shared_reads_in_expression(env, tuple, location.clone(), roots)?;
         }
@@ -705,6 +713,26 @@ fn collect_expression_roots(
                 )?;
             }
         }
+        HirExpressionKind::MapLiteral(entries) => {
+            for entry in entries {
+                collect_expression_roots(
+                    layout,
+                    state,
+                    &entry.key,
+                    out,
+                    location.clone(),
+                    diagnostics,
+                )?;
+                collect_expression_roots(
+                    layout,
+                    state,
+                    &entry.value,
+                    out,
+                    location.clone(),
+                    diagnostics,
+                )?;
+            }
+        }
         HirExpressionKind::TupleGet { tuple, .. } => {
             collect_expression_roots(layout, state, tuple, out, location.clone(), diagnostics)?;
         }
@@ -744,6 +772,289 @@ fn collect_expression_roots(
         }
         HirExpressionKind::ConstructDynamicTraitValue { value, .. } => {
             collect_expression_roots(layout, state, value, out, location, diagnostics)?;
+        }
+    }
+
+    Ok(())
+}
+
+/// WHAT: transfers ownership for children of aggregate literals (MapLiteral and Collection)
+///        by moving their root locals into the freshly constructed value.
+/// WHY: aggregate literals own their children; without this transfer, the borrow checker
+///      would only read the children and leave them available for later use.
+pub(super) fn transfer_aggregate_expression_ownership(
+    layout: &FunctionLayout,
+    state: &mut BorrowState,
+    expression: &HirExpression,
+    block_id: BlockId,
+    current_order: i32,
+    location: SourceLocation,
+    diagnostics: &BorrowDiagnostics<'_>,
+) -> Result<(), BorrowCheckError> {
+    match &expression.kind {
+        HirExpressionKind::MapLiteral(entries) => {
+            for entry in entries {
+                transfer_aggregate_child(
+                    layout,
+                    state,
+                    &entry.key,
+                    block_id,
+                    current_order,
+                    location.clone(),
+                    diagnostics,
+                )?;
+                transfer_aggregate_child(
+                    layout,
+                    state,
+                    &entry.value,
+                    block_id,
+                    current_order,
+                    location.clone(),
+                    diagnostics,
+                )?;
+            }
+        }
+
+        HirExpressionKind::Collection(elements) => {
+            for element in elements {
+                transfer_aggregate_child(
+                    layout,
+                    state,
+                    element,
+                    block_id,
+                    current_order,
+                    location.clone(),
+                    diagnostics,
+                )?;
+            }
+        }
+
+        HirExpressionKind::BinOp { left, right, .. } => {
+            transfer_aggregate_expression_ownership(
+                layout,
+                state,
+                left,
+                block_id,
+                current_order,
+                location.clone(),
+                diagnostics,
+            )?;
+            transfer_aggregate_expression_ownership(
+                layout,
+                state,
+                right,
+                block_id,
+                current_order,
+                location,
+                diagnostics,
+            )?;
+        }
+
+        HirExpressionKind::UnaryOp { operand, .. } => {
+            transfer_aggregate_expression_ownership(
+                layout,
+                state,
+                operand,
+                block_id,
+                current_order,
+                location,
+                diagnostics,
+            )?;
+        }
+
+        HirExpressionKind::TupleGet { tuple, .. } => {
+            transfer_aggregate_expression_ownership(
+                layout,
+                state,
+                tuple,
+                block_id,
+                current_order,
+                location,
+                diagnostics,
+            )?;
+        }
+
+        HirExpressionKind::Range { start, end } => {
+            transfer_aggregate_expression_ownership(
+                layout,
+                state,
+                start,
+                block_id,
+                current_order,
+                location.clone(),
+                diagnostics,
+            )?;
+            transfer_aggregate_expression_ownership(
+                layout,
+                state,
+                end,
+                block_id,
+                current_order,
+                location,
+                diagnostics,
+            )?;
+        }
+
+        HirExpressionKind::FallibleUnwrapSuccess { result }
+        | HirExpressionKind::FallibleUnwrapError { result }
+        | HirExpressionKind::BuiltinCast { value: result, .. } => {
+            transfer_aggregate_expression_ownership(
+                layout,
+                state,
+                result,
+                block_id,
+                current_order,
+                location,
+                diagnostics,
+            )?;
+        }
+
+        HirExpressionKind::VariantPayloadGet { source, .. } => {
+            transfer_aggregate_expression_ownership(
+                layout,
+                state,
+                source,
+                block_id,
+                current_order,
+                location,
+                diagnostics,
+            )?;
+        }
+
+        HirExpressionKind::ConstructDynamicTraitValue { value, .. } => {
+            transfer_aggregate_expression_ownership(
+                layout,
+                state,
+                value,
+                block_id,
+                current_order,
+                location,
+                diagnostics,
+            )?;
+        }
+
+        HirExpressionKind::StructConstruct { fields, .. } => {
+            for (_, value) in fields {
+                transfer_aggregate_expression_ownership(
+                    layout,
+                    state,
+                    value,
+                    block_id,
+                    current_order,
+                    location.clone(),
+                    diagnostics,
+                )?;
+            }
+        }
+
+        HirExpressionKind::TupleConstruct { elements } => {
+            for element in elements {
+                transfer_aggregate_expression_ownership(
+                    layout,
+                    state,
+                    element,
+                    block_id,
+                    current_order,
+                    location.clone(),
+                    diagnostics,
+                )?;
+            }
+        }
+
+        HirExpressionKind::VariantConstruct { fields, .. } => {
+            for field in fields {
+                transfer_aggregate_expression_ownership(
+                    layout,
+                    state,
+                    &field.value,
+                    block_id,
+                    current_order,
+                    location.clone(),
+                    diagnostics,
+                )?;
+            }
+        }
+
+        HirExpressionKind::Int(_)
+        | HirExpressionKind::Float(_)
+        | HirExpressionKind::Bool(_)
+        | HirExpressionKind::Char(_)
+        | HirExpressionKind::StringLiteral(_)
+        | HirExpressionKind::Copy(_)
+        | HirExpressionKind::Load(_) => {}
+    }
+
+    Ok(())
+}
+
+/// WHAT: attempts to move one direct child of an aggregate literal into the constructed value.
+/// WHY: direct children that are places must be owned by the aggregate. Computed children
+///      produce fresh values, but any nested aggregate literals inside them still need this
+///      ownership pass before the outer aggregate stores the fresh result.
+fn transfer_aggregate_child(
+    layout: &FunctionLayout,
+    state: &mut BorrowState,
+    expression: &HirExpression,
+    block_id: BlockId,
+    current_order: i32,
+    location: SourceLocation,
+    diagnostics: &BorrowDiagnostics<'_>,
+) -> Result<(), BorrowCheckError> {
+    // Nested aggregate literals own their own children before the outer aggregate stores
+    // the resulting fresh value. This keeps `{ "outer" = { "inner" = value } }`
+    // aligned with the direct `{ "inner" = value }` case.
+    transfer_aggregate_expression_ownership(
+        layout,
+        state,
+        expression,
+        block_id,
+        current_order,
+        location.clone(),
+        diagnostics,
+    )?;
+
+    if let HirExpressionKind::Load(place) = &expression.kind {
+        let roots = roots_for_place(layout, state, place, location.clone(), diagnostics)?;
+        if roots.is_empty() {
+            return Ok(());
+        }
+
+        // Scalar builtins are implicitly copied into aggregate literals.
+        // Only non-scalar values require an explicit move or mutable binding.
+        if expression.ty == builtin_type_ids::BOOL
+            || expression.ty == builtin_type_ids::INT
+            || expression.ty == builtin_type_ids::FLOAT
+            || expression.ty == builtin_type_ids::CHAR
+            || expression.ty == builtin_type_ids::NONE
+        {
+            return Ok(());
+        }
+
+        match classify_move_decision(layout, block_id, &roots, current_order) {
+            MoveDecision::Move => {
+                for root_index in roots.iter_ones() {
+                    state.invalidate_root(root_index);
+                }
+            }
+            MoveDecision::Borrow => {
+                let Some(root_index) = roots.iter_ones().next() else {
+                    return Ok(());
+                };
+                return Err(diagnostics.invalid_mutable_access(
+                    diagnostics.local_place(layout.local_ids[root_index]),
+                    InvalidMutableAccessReason::AliasedValueRequiresExclusiveAccess,
+                    None,
+                    location.clone(),
+                ));
+            }
+            MoveDecision::Inconsistent(root_index) => {
+                return Err(
+                    diagnostics.invalid_access_after_possible_ownership_transfer(
+                        diagnostics.local_place(layout.local_ids[root_index]),
+                        location.clone(),
+                    ),
+                );
+            }
         }
     }
 

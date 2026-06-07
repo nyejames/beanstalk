@@ -277,7 +277,8 @@ impl<'a> ConstFactCollector<'a> {
                 self.walk_call_arguments_for_body_local(args, env);
             }
 
-            NodeKind::CollectionBuiltinCall { receiver, args, .. } => {
+            NodeKind::CollectionBuiltinCall { receiver, args, .. }
+            | NodeKind::MapBuiltinCall { receiver, args, .. } => {
                 self.walk_node_for_body_local(receiver, env);
                 self.walk_call_arguments_for_body_local(args, env);
             }
@@ -437,6 +438,13 @@ impl<'a> ConstFactCollector<'a> {
 
             ExpressionKind::Collection(items) => {
                 self.walk_expressions_for_body_local(items, env);
+            }
+
+            ExpressionKind::MapLiteral(entries) => {
+                for entry in entries {
+                    self.walk_expression_for_body_local(&entry.key, env);
+                    self.walk_expression_for_body_local(&entry.value, env);
+                }
             }
 
             ExpressionKind::StructDefinition(fields) | ExpressionKind::StructInstance(fields) => {

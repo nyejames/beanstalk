@@ -818,6 +818,12 @@ fn collect_statement_loaded_locals(statement: &HirStatement, visitor: &mut impl 
                 collect_expression_loaded_locals(&arg.value, visitor);
             }
         }
+        HirStatementKind::MapOp { receiver, args, .. } => {
+            collect_expression_loaded_locals(receiver, visitor);
+            for arg in args {
+                collect_expression_loaded_locals(arg, visitor);
+            }
+        }
         HirStatementKind::Expr(expression) => {
             collect_expression_loaded_locals(expression, visitor);
         }
@@ -840,8 +846,13 @@ fn collect_statement_written_locals(statement: &HirStatement, visitor: &mut impl
             result: Some(local),
             ..
         } => visitor(*local),
+        HirStatementKind::MapOp {
+            result: Some(local),
+            ..
+        } => visitor(*local),
         HirStatementKind::Call { result: None, .. }
         | HirStatementKind::CallDynamicTraitMethod { result: None, .. }
+        | HirStatementKind::MapOp { result: None, .. }
         | HirStatementKind::Expr(_)
         | HirStatementKind::Drop(_)
         | HirStatementKind::PushRuntimeFragment { .. } => {}
@@ -935,6 +946,12 @@ fn collect_expression_loaded_locals(expression: &HirExpression, visitor: &mut im
         | HirExpressionKind::TupleConstruct { elements } => {
             for element in elements {
                 collect_expression_loaded_locals(element, visitor);
+            }
+        }
+        HirExpressionKind::MapLiteral(entries) => {
+            for entry in entries {
+                collect_expression_loaded_locals(&entry.key, visitor);
+                collect_expression_loaded_locals(&entry.value, visitor);
             }
         }
         HirExpressionKind::TupleGet { tuple, .. } => {

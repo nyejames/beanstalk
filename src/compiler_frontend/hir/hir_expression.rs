@@ -22,8 +22,8 @@ use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::external_packages::CallTarget;
 use crate::compiler_frontend::hir::blocks::{HirBlock, HirLocal};
 use crate::compiler_frontend::hir::expressions::{
-    HirBuiltinCastKind, HirExpression, HirExpressionKind, HirVariantCarrier, HirVariantField,
-    ValueKind,
+    HirBuiltinCastKind, HirExpression, HirExpressionKind, HirMapEntry, HirVariantCarrier,
+    HirVariantField, ValueKind,
 };
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_side_table::HirLocalOriginKind;
@@ -325,6 +325,29 @@ impl<'a> HirBuilder<'a> {
                 })
             }
 
+            ExpressionKind::MapLiteral(entries) => {
+                let mut prelude = Vec::new();
+                let mut hir_entries = Vec::with_capacity(entries.len());
+                for entry in entries {
+                    let key = self.lower_child_expression_for_parent(&mut prelude, &entry.key)?;
+                    let value =
+                        self.lower_child_expression_for_parent(&mut prelude, &entry.value)?;
+                    hir_entries.push(HirMapEntry { key, value });
+                }
+                let region = self.current_region_or_error(&expr.location)?;
+                let ty = self.lower_type_id(expr.type_id, &expr.location)?;
+                Ok(LoweredExpression {
+                    prelude,
+                    value: self.make_expression(
+                        &expr.location,
+                        HirExpressionKind::MapLiteral(hir_entries),
+                        ty,
+                        ValueKind::RValue,
+                        region,
+                    ),
+                })
+            }
+
             ExpressionKind::Range(start, end) => {
                 let mut prelude = Vec::new();
                 let lowered_start = self.lower_child_expression_for_parent(&mut prelude, start)?;
@@ -599,6 +622,10 @@ impl<'a> HirBuilder<'a> {
             ExpressionKind::Collection(items) => items
                 .iter()
                 .any(|item| self.expression_needs_current_block_lowering(item)),
+            ExpressionKind::MapLiteral(entries) => entries.iter().any(|entry| {
+                self.expression_needs_current_block_lowering(&entry.key)
+                    || self.expression_needs_current_block_lowering(&entry.value)
+            }),
             ExpressionKind::Range(start, end) => {
                 self.expression_needs_current_block_lowering(start)
                     || self.expression_needs_current_block_lowering(end)
@@ -677,7 +704,8 @@ impl<'a> HirBuilder<'a> {
                 .any(|arg| self.expression_needs_current_block_lowering(&arg.value)),
             NodeKind::MethodCall { receiver, args, .. }
             | NodeKind::DynamicTraitMethodCall { receiver, args, .. }
-            | NodeKind::CollectionBuiltinCall { receiver, args, .. } => {
+            | NodeKind::CollectionBuiltinCall { receiver, args, .. }
+            | NodeKind::MapBuiltinCall { receiver, args, .. } => {
                 self.ast_node_needs_current_block_lowering(receiver)
                     || args
                         .iter()

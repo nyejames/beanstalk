@@ -19,6 +19,7 @@ use crate::compiler_frontend::ast::expressions::expression::{
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::statements::match_patterns::MatchArm;
 use crate::compiler_frontend::builtins::CollectionBuiltinOp;
+use crate::compiler_frontend::builtins::maps::MapBuiltinOp;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::{TypeId, builtin_type_ids};
@@ -226,6 +227,16 @@ pub enum NodeKind {
         location: SourceLocation,
     },
 
+    // For compiler-owned map builtins: map.get/contains/set/remove/clear/length
+    MapBuiltinCall {
+        receiver: Box<AstNode>,
+        op: MapBuiltinOp,
+        receiver_requires_mutable: bool,
+        args: Vec<CallArgument>,
+        result_type_ids: Vec<TypeId>,
+        location: SourceLocation,
+    },
+
     FunctionCall {
         name: InternedPath,
         args: Vec<CallArgument>,
@@ -319,6 +330,9 @@ impl AstNode {
             }
             | NodeKind::CollectionBuiltinCall {
                 result_type_ids, ..
+            }
+            | NodeKind::MapBuiltinCall {
+                result_type_ids, ..
             } => expression_type_id_for_call_result(result_type_ids),
 
             NodeKind::FieldAccess { type_id, .. } => Ok(*type_id),
@@ -358,7 +372,8 @@ impl AstNode {
             | NodeKind::HandledFallibleFunctionCall { .. }
             | NodeKind::MethodCall { .. }
             | NodeKind::DynamicTraitMethodCall { .. }
-            | NodeKind::CollectionBuiltinCall { .. } => Ok(false),
+            | NodeKind::CollectionBuiltinCall { .. }
+            | NodeKind::MapBuiltinCall { .. } => Ok(false),
 
             NodeKind::FieldAccess {
                 const_record_state, ..
@@ -512,6 +527,11 @@ impl AstNode {
                 ..
             }
             | NodeKind::CollectionBuiltinCall {
+                result_type_ids,
+                location,
+                ..
+            }
+            | NodeKind::MapBuiltinCall {
                 result_type_ids,
                 location,
                 ..
@@ -788,6 +808,12 @@ impl NodeKind {
             }
 
             NodeKind::CollectionBuiltinCall {
+                receiver,
+                args,
+                location,
+                ..
+            }
+            | NodeKind::MapBuiltinCall {
                 receiver,
                 args,
                 location,

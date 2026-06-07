@@ -53,6 +53,11 @@ pub(crate) fn render_payload(
                     .to_owned(),
             ]
         }
+        DiagnosticPayload::EmptyCollectionTypeAmbiguity => {
+            vec![
+                "Add an explicit type annotation, for example `scores {String = Int} = {}` for an empty map or `items {Int} = {}` for an empty collection.".to_owned(),
+            ]
+        }
         _ => Vec::new(),
     };
 
@@ -231,6 +236,10 @@ fn render_payload_message(
         }
         DiagnosticPayload::InvalidCollectionType { reason } => {
             invalid_collection_type_message(*reason).to_owned()
+        }
+        DiagnosticPayload::InvalidMapType { reason } => invalid_map_type_message(*reason, context),
+        DiagnosticPayload::InvalidMapLiteral { reason } => {
+            invalid_map_literal_message(*reason).to_owned()
         }
         DiagnosticPayload::InvalidGenericParameter { reason } => {
             invalid_generic_parameter_message(reason, string_table)
@@ -416,7 +425,8 @@ fn render_payload_message(
             compile_time_evaluation_error_message(*reason, *operation, string_table)
         }
         DiagnosticPayload::EmptyCollectionTypeAmbiguity => {
-            "Cannot infer the element type of an empty collection literal".to_owned()
+            "Cannot infer the type of an empty `{}` literal. Add an explicit type annotation."
+                .to_owned()
         }
         DiagnosticPayload::UnsupportedOperatorTypes { category, lhs, rhs } => {
             unsupported_operator_types_message(*category, *lhs, *rhs, context)

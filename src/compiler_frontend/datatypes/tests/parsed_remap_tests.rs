@@ -286,3 +286,50 @@ fn generic_parameter_list_remaps_all_parameters() {
     assert_eq!(global.resolve(list.parameters[0].name), "T");
     assert_eq!(global.resolve(list.parameters[1].name), "U");
 }
+
+#[test]
+fn parsed_type_ref_map_remaps_key_value_and_location() {
+    let mut local = StringTable::new();
+    let mut global = StringTable::new();
+
+    let key_name = local.intern("String");
+    let value_name = local.intern("Int");
+
+    let mut parsed = ParsedTypeRef::Map {
+        key: Box::new(ParsedTypeRef::Named {
+            name: key_name,
+            location: make_location(&mut local),
+        }),
+        value: Box::new(ParsedTypeRef::Named {
+            name: value_name,
+            location: make_location(&mut local),
+        }),
+        location: make_location(&mut local),
+    };
+
+    let remap = global.merge_from(&local);
+    parsed.remap_string_ids(&remap);
+
+    match parsed {
+        ParsedTypeRef::Map {
+            key,
+            value,
+            location,
+        } => {
+            match *key {
+                ParsedTypeRef::Named { name, .. } => {
+                    assert_eq!(global.resolve(name), "String");
+                }
+                _ => panic!("expected Named key"),
+            }
+            match *value {
+                ParsedTypeRef::Named { name, .. } => {
+                    assert_eq!(global.resolve(name), "Int");
+                }
+                _ => panic!("expected Named value"),
+            }
+            assert_test_location(&location, &global);
+        }
+        _ => panic!("expected Map"),
+    }
+}

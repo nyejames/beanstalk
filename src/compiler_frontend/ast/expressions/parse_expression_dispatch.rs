@@ -26,7 +26,7 @@ use crate::compiler_frontend::ast::statements::match_arm_boundaries::current_tok
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::builtins::expression_parsing::{
-    parse_builtin_cast_expression, parse_collection_expression,
+    parse_builtin_cast_expression, parse_curly_literal_expression,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_messages::{
@@ -345,7 +345,7 @@ pub(super) fn dispatch_expression_token(
         }
 
         TokenKind::OpenCurly => {
-            parse_collection_expression(
+            parse_curly_literal_expression(
                 token_stream,
                 context,
                 type_interner,

@@ -63,6 +63,7 @@ Beanstalk enforces a small, strict set of rules that apply uniformly across the 
 - Shared access is read-only
 - Shared references never imply ownership
 - **No explicit `&` or `&mut` operators** - these don't exist in Beanstalk
+- Hashmap `get` returns shared access into the map, so the map cannot be mutated while that result is live
 
 This allows aggressive reuse of values without copying.
 
@@ -75,6 +76,7 @@ Mutable access must always be explicit.
 - `~` stays place-only: use it for existing mutable places (`~place`), not fresh literals/temporaries/computed values
 - Mutable/exclusive parameters can be satisfied by either explicit `~place` or a plain fresh value lowered through a compiler-introduced hidden local
 - Collections and mutable receiver/member calls follow the same explicit rule
+- Hashmap `set`, `remove`, and `clear` follow the same explicit mutable receiver rule
 - Mutable access excludes all other access (shared or mutable)
 - The user never writes `~` for fresh values. `~` requests mutable/exclusive access to an existing place.
 
@@ -101,6 +103,7 @@ There may be some monomorphization, but the extent to which the compiler will st
 - No implicit copying for any types unless they are part of an expression creating a new value out of multiple references, or when used inside a template head
 - All types require explicit copy semantics when copying is needed
 - Most operations use borrowing instead of copying
+- Hashmaps own stored keys and values. Inserting into a map follows the same move/copy rules as storing values in other aggregate data.
 
 ## Last-Use Analysis
 Beanstalk uses last-use analysis as a sufficient condition for ownership transfer, not a necessary one.

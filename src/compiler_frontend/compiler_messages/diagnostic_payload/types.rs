@@ -468,6 +468,58 @@ pub enum InvalidCollectionTypeReason {
     ShorthandNonLiteralRhs,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum InvalidMapTypeReason {
+    /// The key type is not one of the supported scalar types.
+    UnsupportedKeyType { key_type: TypeId },
+    /// Generic key parameters require a `HASHABLE` bound, which is not yet implemented.
+    GenericKeyRequiresHashableBound { parameter_name: StringId },
+    /// Map types are nested too deeply inline; use a type alias instead.
+    ExcessiveInlineNesting { depth: usize },
+    /// Map type is missing the key type before the '=' separator.
+    EmptyMapKeyType,
+    /// Map type is missing the value type after the '=' separator.
+    EmptyMapValueType,
+    /// Map type contains more than one top-level '=' separator.
+    MultipleMapSeparators,
+    /// Fixed or capacity map syntax is not supported in V1.
+    FixedCapacityNotAllowed,
+}
+
+impl InvalidMapTypeReason {
+    pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
+        match self {
+            Self::UnsupportedKeyType { .. }
+            | Self::ExcessiveInlineNesting { .. }
+            | Self::EmptyMapKeyType
+            | Self::EmptyMapValueType
+            | Self::MultipleMapSeparators
+            | Self::FixedCapacityNotAllowed => {}
+            Self::GenericKeyRequiresHashableBound { parameter_name } => {
+                *parameter_name = remap.get(*parameter_name);
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum InvalidMapLiteralReason {
+    /// A literal was classified as a map but an entry lacks a top-level `=`.
+    MixedCollectionMapEntries,
+    /// A foldable literal key appears more than once in the same map literal.
+    DuplicateKnownKey,
+    /// A map entry has `=` before any key expression.
+    MissingKeyExpression,
+    /// A map entry ends before a value expression appears after `=`.
+    MissingValueExpression,
+}
+
+impl InvalidMapLiteralReason {
+    pub(crate) fn remap_string_ids(&mut self, _remap: &StringIdRemap) {
+        // All variants are unit-like; no string IDs to remap.
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum InvalidGenericParameterReason {
     EmptyParameterList,
@@ -809,6 +861,8 @@ pub enum InvalidAssignmentTargetReason {
     ImmutableVariable,
     UnavailableInCatchRecovery,
     CollectionIndexedWriteRemoved,
+    MapIndexedWriteRemoved,
+    MapPropertyWriteRemoved,
     ExpectedAssignmentOperator,
 }
 
@@ -845,6 +899,7 @@ pub enum InvalidBuiltinCallReason {
     TooManyArguments,
     RuntimeMessageExpressionDeferred,
     ExpressionPositionNotAllowed,
+    MapLengthIsProperty,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -854,6 +909,7 @@ pub enum InvalidReceiverCallReason {
     ConstStructNoRuntimeCalls,
     MutablePlaceRequired,
     MutableCollectionRequired,
+    MutableMapRequired,
     MissingMutableAccessMarker,
     UnneededMutableAccessMarker,
     MutableMarkerOnNonReceiverCall,

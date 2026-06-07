@@ -13,6 +13,7 @@ mod emission_policy;
 mod expressions;
 mod host;
 mod inline_expressions;
+mod map_statements;
 mod prelude;
 mod receiver_methods;
 mod results;

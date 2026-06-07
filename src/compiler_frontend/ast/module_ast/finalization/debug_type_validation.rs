@@ -186,6 +186,12 @@ fn debug_validate_node_type_ids(node: &AstNode, type_environment: &TypeEnvironme
             args,
             result_type_ids,
             ..
+        }
+        | NodeKind::MapBuiltinCall {
+            receiver,
+            args,
+            result_type_ids,
+            ..
         } => {
             debug_validate_node_type_ids(receiver, type_environment);
             debug_validate_call_arguments_type_ids(args, type_environment);
@@ -380,6 +386,13 @@ fn debug_validate_expression_type_id(expression: &Expression, type_environment: 
 
         ExpressionKind::Collection(items) => {
             debug_validate_expressions_type_ids(items, type_environment);
+        }
+
+        ExpressionKind::MapLiteral(entries) => {
+            for entry in entries {
+                debug_validate_expression_type_id(&entry.key, type_environment);
+                debug_validate_expression_type_id(&entry.value, type_environment);
+            }
         }
 
         ExpressionKind::StructDefinition(fields) | ExpressionKind::StructInstance(fields) => {

@@ -142,6 +142,17 @@ fn display_constructed(
                 "Collection".to_owned()
             }
         }
+        TypeConstructor::Builtin(BuiltinTypeConstructor::OrderedMap) => {
+            if let [key, value] = constructed.arguments.as_ref() {
+                format!(
+                    "{{{key_type} = {value_type}}}",
+                    key_type = display_type(*key, env, table),
+                    value_type = display_type(*value, env, table)
+                )
+            } else {
+                "Map".to_owned()
+            }
+        }
         TypeConstructor::Builtin(BuiltinTypeConstructor::Option) => {
             if let Some(inner) = constructed.arguments.first() {
                 format!("{}?", display_type(*inner, env, table))

@@ -30,6 +30,7 @@ pub enum GenericBaseType {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum BuiltinGenericType {
     Collection { fixed_capacity: Option<usize> },
+    Map,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -57,6 +58,10 @@ pub enum TypeIdentityKey {
     Collection {
         element: Box<TypeIdentityKey>,
         fixed_capacity: Option<usize>,
+    },
+    Map {
+        key: Box<TypeIdentityKey>,
+        value: Box<TypeIdentityKey>,
     },
     Option(Box<TypeIdentityKey>),
     FallibleCarrier {
@@ -111,6 +116,11 @@ impl TypeIdentityKey {
 
             TypeIdentityKey::Collection { element: inner, .. } => {
                 inner.remap_string_ids(remap);
+            }
+
+            TypeIdentityKey::Map { key, value } => {
+                key.remap_string_ids(remap);
+                value.remap_string_ids(remap);
             }
 
             TypeIdentityKey::Option(inner) => {
@@ -173,6 +183,13 @@ fn display_type_identity_key(key: &TypeIdentityKey, string_table: &StringTable) 
             ),
             None => format!("{{{}}}", display_type_identity_key(inner, string_table)),
         },
+        TypeIdentityKey::Map { key, value } => {
+            format!(
+                "{{{key_display} = {value_display}}}",
+                key_display = display_type_identity_key(key, string_table),
+                value_display = display_type_identity_key(value, string_table)
+            )
+        }
         TypeIdentityKey::Option(inner) => {
             format!("{}?", display_type_identity_key(inner, string_table))
         }
@@ -252,6 +269,20 @@ pub fn data_type_to_type_identity_key(data_type: &DataType) -> Option<TypeIdenti
             }
             _ => None,
         },
+        DataType::GenericInstance {
+            base: GenericBaseType::Builtin(BuiltinGenericType::Map),
+            arguments,
+        } => match arguments.as_slice() {
+            [key, value] => {
+                let key_id = data_type_to_type_identity_key(key)?;
+                let value_id = data_type_to_type_identity_key(value)?;
+                Some(TypeIdentityKey::Map {
+                    key: Box::new(key_id),
+                    value: Box::new(value_id),
+                })
+            }
+            _ => None,
+        },
         DataType::Option(inner) => {
             data_type_to_type_identity_key(inner).map(|key| TypeIdentityKey::Option(Box::new(key)))
         }
@@ -301,6 +332,11 @@ pub(crate) fn type_identity_key_to_type_id(
         } => {
             let element_id = type_identity_key_to_type_id(inner, type_environment)?;
             Some(type_environment.intern_collection(element_id, *fixed_capacity))
+        }
+        TypeIdentityKey::Map { key, value } => {
+            let key_id = type_identity_key_to_type_id(key, type_environment)?;
+            let value_id = type_identity_key_to_type_id(value, type_environment)?;
+            Some(type_environment.intern_map(key_id, value_id))
         }
         TypeIdentityKey::Option(inner) => {
             let inner_id = type_identity_key_to_type_id(inner, type_environment)?;

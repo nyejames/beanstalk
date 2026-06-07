@@ -203,3 +203,42 @@ fn runtime_prelude_contains_cast_helpers() {
 }
 
 // ---------------------------------------------------------------------------
+
+/// Verifies that the map helper group is present in the emitted prelude. [prelude-presence]
+#[test]
+fn runtime_prelude_contains_map_helpers() {
+    let source = lower_minimal_map_module("main");
+
+    assert!(
+        source.contains("function __bs_map_new("),
+        "prelude must contain __bs_map_new"
+    );
+    assert!(
+        source.contains("function __bs_map_is_valid("),
+        "prelude must contain __bs_map_is_valid"
+    );
+    assert!(
+        source.contains("function __bs_map_get("),
+        "prelude must contain __bs_map_get"
+    );
+    assert!(
+        source.contains("function __bs_map_contains("),
+        "prelude must contain __bs_map_contains"
+    );
+    assert!(
+        source.contains("function __bs_map_set("),
+        "prelude must contain __bs_map_set"
+    );
+    assert!(
+        source.contains("function __bs_map_remove("),
+        "prelude must contain __bs_map_remove"
+    );
+    assert!(
+        source.contains("function __bs_map_clear("),
+        "prelude must contain __bs_map_clear"
+    );
+    assert!(
+        source.contains("function __bs_map_length("),
+        "prelude must contain __bs_map_length"
+    );
+}

@@ -39,6 +39,7 @@ pub(super) fn order_expression_nodes(
             | NodeKind::MethodCall { .. }
             | NodeKind::DynamicTraitMethodCall { .. }
             | NodeKind::CollectionBuiltinCall { .. }
+            | NodeKind::MapBuiltinCall { .. }
             | NodeKind::HostFunctionCall { .. } => {
                 output_queue.push(node);
             }

@@ -107,6 +107,16 @@ fn syntax_descriptor(kind: SyntaxDiagnosticKind) -> DiagnosticDescriptor {
             "Invalid collection type",
             DiagnosticSeverity::Error,
         ),
+        SyntaxDiagnosticKind::InvalidMapType => DiagnosticDescriptor::new(
+            "BST-SYNTAX-0016-MAP",
+            "Invalid map type",
+            DiagnosticSeverity::Error,
+        ),
+        SyntaxDiagnosticKind::InvalidMapLiteral => DiagnosticDescriptor::new(
+            "BST-SYNTAX-0033",
+            "Invalid map literal",
+            DiagnosticSeverity::Error,
+        ),
         SyntaxDiagnosticKind::UnexpectedEndOfFile => DiagnosticDescriptor::new(
             "BST-SYNTAX-0017",
             "Unexpected end of file",

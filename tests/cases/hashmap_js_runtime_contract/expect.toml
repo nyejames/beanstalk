@@ -1,0 +1,25 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["hashmap_runtime has_ada=true has_linus=false insert_len=3 replace_len=3 removed=12 remove_len=2 clear_len=0 missing=99 duplicate=2 duplicate_len=1"]
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = [
+    "function __bs_map_new(",
+    "function __bs_map_get(",
+    "function __bs_map_contains(",
+    "function __bs_map_set(",
+    "function __bs_map_remove(",
+    "function __bs_map_clear(",
+    "function __bs_map_length(",
+]
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = [
+    "Map key not found",
+    "Map operation expects an ordered map",
+]

@@ -15,6 +15,7 @@ use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 pub(super) enum ReceiverAccessDiagnostic {
     CollectionBuiltin { method_name: StringId },
+    MapBuiltin { method_name: StringId },
     ReceiverMethod { method_name: StringId },
 }
 
@@ -72,6 +73,14 @@ fn reject_non_place_receiver(
                 location.to_owned(),
             ))
         }
+        ReceiverAccessDiagnostic::MapBuiltin { method_name } => {
+            Err(CompilerDiagnostic::invalid_receiver_call(
+                InvalidReceiverCallReason::MutableMapRequired,
+                None,
+                Some(*method_name),
+                location.to_owned(),
+            ))
+        }
         ReceiverAccessDiagnostic::ReceiverMethod { method_name } => {
             Err(CompilerDiagnostic::invalid_receiver_call(
                 InvalidReceiverCallReason::MutablePlaceRequired,
@@ -96,6 +105,14 @@ fn reject_immutable_receiver(
                 location.to_owned(),
             ))
         }
+        ReceiverAccessDiagnostic::MapBuiltin { method_name } => {
+            Err(CompilerDiagnostic::invalid_receiver_call(
+                InvalidReceiverCallReason::MutableMapRequired,
+                None,
+                Some(*method_name),
+                location.to_owned(),
+            ))
+        }
         ReceiverAccessDiagnostic::ReceiverMethod { method_name } => {
             Err(CompilerDiagnostic::invalid_receiver_call(
                 InvalidReceiverCallReason::MutablePlaceRequired,
@@ -112,15 +129,9 @@ fn reject_missing_mutable_access_marker(
     location: &SourceLocation,
 ) -> Result<(), CompilerDiagnostic> {
     match access_diagnostic {
-        ReceiverAccessDiagnostic::CollectionBuiltin { method_name } => {
-            Err(CompilerDiagnostic::invalid_receiver_call(
-                InvalidReceiverCallReason::MissingMutableAccessMarker,
-                None,
-                Some(*method_name),
-                location.to_owned(),
-            ))
-        }
-        ReceiverAccessDiagnostic::ReceiverMethod { method_name } => {
+        ReceiverAccessDiagnostic::CollectionBuiltin { method_name }
+        | ReceiverAccessDiagnostic::MapBuiltin { method_name }
+        | ReceiverAccessDiagnostic::ReceiverMethod { method_name } => {
             Err(CompilerDiagnostic::invalid_receiver_call(
                 InvalidReceiverCallReason::MissingMutableAccessMarker,
                 None,
@@ -136,15 +147,9 @@ fn reject_unneeded_mutable_access_marker(
     location: &SourceLocation,
 ) -> Result<(), CompilerDiagnostic> {
     match access_diagnostic {
-        ReceiverAccessDiagnostic::CollectionBuiltin { method_name } => {
-            Err(CompilerDiagnostic::invalid_receiver_call(
-                InvalidReceiverCallReason::UnneededMutableAccessMarker,
-                None,
-                Some(*method_name),
-                location.to_owned(),
-            ))
-        }
-        ReceiverAccessDiagnostic::ReceiverMethod { method_name } => {
+        ReceiverAccessDiagnostic::CollectionBuiltin { method_name }
+        | ReceiverAccessDiagnostic::MapBuiltin { method_name }
+        | ReceiverAccessDiagnostic::ReceiverMethod { method_name } => {
             Err(CompilerDiagnostic::invalid_receiver_call(
                 InvalidReceiverCallReason::UnneededMutableAccessMarker,
                 None,

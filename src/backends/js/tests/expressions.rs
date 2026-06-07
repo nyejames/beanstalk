@@ -3,7 +3,7 @@
 use super::support::*;
 use crate::compiler_frontend::hir::blocks::HirBlock;
 use crate::compiler_frontend::hir::expressions::{
-    HirExpressionKind, HirVariantCarrier, HirVariantField, ValueKind,
+    HirExpressionKind, HirMapEntry, HirVariantCarrier, HirVariantField, ValueKind,
 };
 use crate::compiler_frontend::hir::functions::HirFunction;
 use crate::compiler_frontend::hir::ids::{BlockId, FunctionId, LocalId, RegionId};
@@ -430,5 +430,117 @@ fn fixed_collection_empty_expression_lowers_to_wrapper() {
     assert!(
         output.source.contains("__bs_fixed_collection([], 2)"),
         "empty fixed collection must lower to __bs_fixed_collection([], capacity)"
+    );
+}
+
+// Map literal expression lowering tests [map]
+// ---------------------------------------------------------------------------
+
+/// Verifies that a map literal with entries lowers to `__bs_map_new([[key, value], ...])`. [map]
+#[test]
+fn map_literal_with_entries_lowers_to_map_new() {
+    let mut string_table = StringTable::new();
+    let (type_environment, types) = build_type_environment();
+
+    let entry1 = HirMapEntry {
+        key: string_expression(1, "Ada", types.string, RegionId(0)),
+        value: int_expression(2, 10, types.int, RegionId(0)),
+    };
+    let entry2 = HirMapEntry {
+        key: string_expression(3, "Grace", types.string, RegionId(0)),
+        value: int_expression(4, 12, types.int, RegionId(0)),
+    };
+
+    let map_expr = expression(
+        5,
+        HirExpressionKind::MapLiteral(vec![entry1, entry2]),
+        types.map_string_int,
+        RegionId(0),
+        ValueKind::RValue,
+    );
+
+    let map_statement = statement(1, HirStatementKind::Expr(map_expr), 1);
+
+    let block = HirBlock {
+        id: BlockId(0),
+        region: RegionId(0),
+        locals: vec![],
+        statements: vec![map_statement],
+        terminator: HirTerminator::Return(unit_expression(6, types.unit, RegionId(0))),
+    };
+
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.unit,
+        return_aliases: vec![],
+    };
+
+    let module = build_module(&mut string_table, "main", vec![block], function, &[]);
+
+    let output = lower_hir_to_js(
+        &module,
+        &BorrowCheckReport::default(),
+        &string_table,
+        default_config(),
+        &type_environment,
+    )
+    .expect("JS lowering should succeed");
+
+    assert!(
+        output
+            .source
+            .contains("__bs_map_new([[\"Ada\", 10], [\"Grace\", 12]])"),
+        "map literal must lower to __bs_map_new with ordered key-value pairs"
+    );
+}
+
+/// Verifies that an empty map literal lowers to `__bs_map_new([])`. [map]
+#[test]
+fn empty_map_literal_lowers_to_map_new_with_empty_array() {
+    let mut string_table = StringTable::new();
+    let (type_environment, types) = build_type_environment();
+
+    let map_expr = expression(
+        1,
+        HirExpressionKind::MapLiteral(vec![]),
+        types.map_string_int,
+        RegionId(0),
+        ValueKind::RValue,
+    );
+
+    let map_statement = statement(1, HirStatementKind::Expr(map_expr), 1);
+
+    let block = HirBlock {
+        id: BlockId(0),
+        region: RegionId(0),
+        locals: vec![],
+        statements: vec![map_statement],
+        terminator: HirTerminator::Return(unit_expression(2, types.unit, RegionId(0))),
+    };
+
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.unit,
+        return_aliases: vec![],
+    };
+
+    let module = build_module(&mut string_table, "main", vec![block], function, &[]);
+
+    let output = lower_hir_to_js(
+        &module,
+        &BorrowCheckReport::default(),
+        &string_table,
+        default_config(),
+        &type_environment,
+    )
+    .expect("JS lowering should succeed");
+
+    assert!(
+        output.source.contains("__bs_map_new([])"),
+        "empty map literal must lower to __bs_map_new([])"
     );
 }

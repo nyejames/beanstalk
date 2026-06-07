@@ -21,20 +21,25 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::definitions::{
     BuiltinTypeDefinition, ChoiceTypeDefinition, ChoiceVariantDefinition,
-    ChoiceVariantPayloadDefinition, ConstructedTypeDefinition, ExternalTypeDefinition,
-    FieldDefinition, FunctionParameterDefinition, FunctionTypeDefinition,
+    ChoiceVariantPayloadDefinition, ConstructedTypeDefinition, DynamicTraitTypeDefinition,
+    ExternalTypeDefinition, FieldDefinition, FunctionParameterDefinition, FunctionTypeDefinition,
     GenericInstanceDefinition, GenericParameterDefinition, StructTypeDefinition, TypeDefinition,
 };
 use super::generic_bindings::{BindingConflict, GenericTypeBindings};
-use super::generic_identity_bridge::{GenericInstantiationKey, TypeIdentityKey};
+use super::generic_identity_bridge::{
+    BuiltinGenericType, BuiltinTypeKey as BridgeBuiltinTypeKey, GenericBaseType,
+    GenericInstantiationKey, TypeIdentityKey,
+};
 use super::generic_parameters::{
     GenericParameterList as ParsedGenericParameterList, TypeParameterId,
 };
 use super::ids::{
-    BuiltinTypeKey, ConstructedTypeKey, FunctionTypeId, FunctionTypeKey, GenericInstanceKey,
-    GenericParameterId, GenericParameterListId, NominalTypeId, TypeConstructor, TypeId,
+    BuiltinTypeConstructor, BuiltinTypeKey, ConstructedTypeKey, FunctionTypeId, FunctionTypeKey,
+    GenericInstanceKey, GenericParameterId, GenericParameterListId, NominalTypeId, TypeConstructor,
+    TypeId,
 };
-use super::{BuiltinScalarReceiver, DataType, ReceiverKey};
+use super::queries::TypeKind;
+use super::{BuiltinScalarReceiver, DataType, ReceiverKey, fallible_carrier_constructor};
 
 // -----------------------------------------------------------
 //  Supporting Types
@@ -45,6 +50,13 @@ use super::{BuiltinScalarReceiver, DataType, ReceiverKey};
 pub(crate) struct CollectionShape {
     pub(crate) element_type: TypeId,
     pub(crate) fixed_capacity: Option<usize>,
+}
+
+/// The resolved shape of an ordered map type.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct MapShape {
+    pub(crate) key_type: TypeId,
+    pub(crate) value_type: TypeId,
 }
 
 /// Compact handles for all builtin types seeded in a fresh `TypeEnvironment`.
@@ -844,9 +856,10 @@ impl TypeEnvironment {
             return existing;
         }
 
-        let id = self.insert_definition(TypeDefinition::DynamicTrait(
-            super::definitions::DynamicTraitTypeDefinition { trait_id, name },
-        ));
+        let id = self.insert_definition(TypeDefinition::DynamicTrait(DynamicTraitTypeDefinition {
+            trait_id,
+            name,
+        }));
 
         self.dynamic_trait_ids.insert(trait_id, id);
         id
@@ -1003,9 +1016,7 @@ impl TypeEnvironment {
     }
 
     /// Returns the high-level kind of the type.
-    pub fn type_kind(&self, id: TypeId) -> Option<super::queries::TypeKind> {
-        use super::queries::TypeKind;
-
+    pub fn type_kind(&self, id: TypeId) -> Option<TypeKind> {
         self.get(id).map(|definition| match definition {
             TypeDefinition::Builtin(..) => TypeKind::Builtin,
             TypeDefinition::Struct(..) => TypeKind::Struct,
@@ -1082,12 +1093,12 @@ impl TypeEnvironment {
     pub(crate) fn collection_shape(&self, id: TypeId) -> Option<CollectionShape> {
         match self.get(id) {
             Some(TypeDefinition::Constructed(constructed)) => match &constructed.constructor {
-                TypeConstructor::Builtin(super::ids::BuiltinTypeConstructor::Collection {
-                    fixed_capacity,
-                }) => Some(CollectionShape {
-                    element_type: *constructed.arguments.first()?,
-                    fixed_capacity: *fixed_capacity,
-                }),
+                TypeConstructor::Builtin(BuiltinTypeConstructor::Collection { fixed_capacity }) => {
+                    Some(CollectionShape {
+                        element_type: *constructed.arguments.first()?,
+                        fixed_capacity: *fixed_capacity,
+                    })
+                }
                 _ => None,
             },
             _ => None,
@@ -1112,11 +1123,56 @@ impl TypeEnvironment {
         fixed_capacity: Option<usize>,
     ) -> TypeId {
         self.intern_constructed(
-            TypeConstructor::Builtin(super::ids::BuiltinTypeConstructor::Collection {
-                fixed_capacity,
-            }),
+            TypeConstructor::Builtin(BuiltinTypeConstructor::Collection { fixed_capacity }),
             Box::new([element_type]),
         )
+    }
+
+    /// Interns the canonical ordered map type for key and value semantic types.
+    ///
+    /// WHAT: gives map construction a named owner in `TypeEnvironment`.
+    /// WHY: map identity is semantic `TypeId` identity; parser-shaped `DataType::Map`
+    ///      must remain a diagnostic spelling instead of the canonical representation.
+    pub fn intern_map(&mut self, key_type: TypeId, value_type: TypeId) -> TypeId {
+        self.intern_constructed(
+            TypeConstructor::Builtin(BuiltinTypeConstructor::OrderedMap),
+            Box::new([key_type, value_type]),
+        )
+    }
+
+    /// Returns true if the type is an ordered map.
+    pub fn is_map_type(&self, id: TypeId) -> bool {
+        self.map_shape(id).is_some()
+    }
+
+    /// Returns the key type of a map, if this type is a map.
+    pub fn map_key_type(&self, id: TypeId) -> Option<TypeId> {
+        self.map_shape(id).map(|shape| shape.key_type)
+    }
+
+    /// Returns the value type of a map, if this type is a map.
+    pub fn map_value_type(&self, id: TypeId) -> Option<TypeId> {
+        self.map_shape(id).map(|shape| shape.value_type)
+    }
+
+    /// Returns the full shape of a map type, if this type is a map.
+    pub(crate) fn map_shape(&self, id: TypeId) -> Option<MapShape> {
+        match self.get(id) {
+            Some(TypeDefinition::Constructed(constructed)) => match &constructed.constructor {
+                TypeConstructor::Builtin(BuiltinTypeConstructor::OrderedMap) => {
+                    if let [key_type, value_type] = constructed.arguments.as_ref() {
+                        Some(MapShape {
+                            key_type: *key_type,
+                            value_type: *value_type,
+                        })
+                    } else {
+                        None
+                    }
+                }
+                _ => None,
+            },
+            _ => None,
+        }
     }
 
     /// Interns the canonical built-in option type for an inner semantic type.
@@ -1126,7 +1182,7 @@ impl TypeEnvironment {
     ///      must remain a diagnostic spelling instead of the canonical representation.
     pub fn intern_option(&mut self, inner: TypeId) -> TypeId {
         self.intern_constructed(
-            TypeConstructor::Builtin(super::ids::BuiltinTypeConstructor::Option),
+            TypeConstructor::Builtin(BuiltinTypeConstructor::Option),
             Box::new([inner]),
         )
     }
@@ -1140,7 +1196,7 @@ impl TypeEnvironment {
     pub fn option_inner_type(&self, id: TypeId) -> Option<TypeId> {
         match self.get(id) {
             Some(TypeDefinition::Constructed(constructed)) => match &constructed.constructor {
-                TypeConstructor::Builtin(super::ids::BuiltinTypeConstructor::Option) => {
+                TypeConstructor::Builtin(BuiltinTypeConstructor::Option) => {
                     constructed.arguments.first().copied()
                 }
                 _ => None,
@@ -1156,7 +1212,7 @@ impl TypeEnvironment {
     ///      `HirExpression.ty`, `HirLocal.ty`, and `HirFunction.return_type`.
     pub fn intern_tuple(&mut self, fields: Vec<TypeId>) -> TypeId {
         self.intern_constructed(
-            TypeConstructor::Builtin(super::ids::BuiltinTypeConstructor::Tuple),
+            TypeConstructor::Builtin(BuiltinTypeConstructor::Tuple),
             fields.into_boxed_slice(),
         )
     }
@@ -1165,7 +1221,7 @@ impl TypeEnvironment {
     pub fn tuple_field_ids(&self, id: TypeId) -> Option<&[TypeId]> {
         match self.get(id) {
             Some(TypeDefinition::Constructed(constructed)) => match &constructed.constructor {
-                TypeConstructor::Builtin(super::ids::BuiltinTypeConstructor::Tuple) => {
+                TypeConstructor::Builtin(BuiltinTypeConstructor::Tuple) => {
                     Some(constructed.arguments.as_ref())
                 }
                 _ => None,
@@ -1471,48 +1527,40 @@ impl TypeEnvironment {
     pub fn type_id_to_type_identity_key(&self, id: TypeId) -> Option<TypeIdentityKey> {
         match self.get(id)? {
             TypeDefinition::Builtin(builtin) => match builtin.key {
-                BuiltinTypeKey::Bool => Some(TypeIdentityKey::Builtin(
-                    super::generic_identity_bridge::BuiltinTypeKey::Bool,
-                )),
-                BuiltinTypeKey::Int => Some(TypeIdentityKey::Builtin(
-                    super::generic_identity_bridge::BuiltinTypeKey::Int,
-                )),
-                BuiltinTypeKey::Float => Some(TypeIdentityKey::Builtin(
-                    super::generic_identity_bridge::BuiltinTypeKey::Float,
-                )),
-                BuiltinTypeKey::Decimal => Some(TypeIdentityKey::Builtin(
-                    super::generic_identity_bridge::BuiltinTypeKey::Decimal,
-                )),
-                BuiltinTypeKey::String => Some(TypeIdentityKey::Builtin(
-                    super::generic_identity_bridge::BuiltinTypeKey::String,
-                )),
-                BuiltinTypeKey::Char => Some(TypeIdentityKey::Builtin(
-                    super::generic_identity_bridge::BuiltinTypeKey::Char,
-                )),
-                BuiltinTypeKey::Range => Some(TypeIdentityKey::Builtin(
-                    super::generic_identity_bridge::BuiltinTypeKey::Range,
-                )),
+                BuiltinTypeKey::Bool => Some(TypeIdentityKey::Builtin(BridgeBuiltinTypeKey::Bool)),
+                BuiltinTypeKey::Int => Some(TypeIdentityKey::Builtin(BridgeBuiltinTypeKey::Int)),
+                BuiltinTypeKey::Float => {
+                    Some(TypeIdentityKey::Builtin(BridgeBuiltinTypeKey::Float))
+                }
+                BuiltinTypeKey::Decimal => {
+                    Some(TypeIdentityKey::Builtin(BridgeBuiltinTypeKey::Decimal))
+                }
+                BuiltinTypeKey::String => {
+                    Some(TypeIdentityKey::Builtin(BridgeBuiltinTypeKey::String))
+                }
+                BuiltinTypeKey::Char => Some(TypeIdentityKey::Builtin(BridgeBuiltinTypeKey::Char)),
+                BuiltinTypeKey::Range => {
+                    Some(TypeIdentityKey::Builtin(BridgeBuiltinTypeKey::Range))
+                }
                 BuiltinTypeKey::None => None,
             },
             TypeDefinition::Struct(def) => Some(TypeIdentityKey::Nominal(def.path.clone())),
             TypeDefinition::Choice(def) => Some(TypeIdentityKey::Nominal(def.path.clone())),
             TypeDefinition::Constructed(constructed) => match constructed.constructor {
-                TypeConstructor::Builtin(super::ids::BuiltinTypeConstructor::Collection {
-                    fixed_capacity,
-                }) => {
+                TypeConstructor::Builtin(BuiltinTypeConstructor::Collection { fixed_capacity }) => {
                     let element_id = constructed.arguments.first()?;
                     Some(TypeIdentityKey::Collection {
                         element: Box::new(self.type_id_to_type_identity_key(*element_id)?),
                         fixed_capacity,
                     })
                 }
-                TypeConstructor::Builtin(super::ids::BuiltinTypeConstructor::Option) => {
+                TypeConstructor::Builtin(BuiltinTypeConstructor::Option) => {
                     let inner_id = constructed.arguments.first()?;
                     Some(TypeIdentityKey::Option(Box::new(
                         self.type_id_to_type_identity_key(*inner_id)?,
                     )))
                 }
-                TypeConstructor::Builtin(super::ids::BuiltinTypeConstructor::FallibleCarrier) => {
+                TypeConstructor::Builtin(BuiltinTypeConstructor::FallibleCarrier) => {
                     let success_id = constructed.arguments.first()?;
                     let error_id = constructed.arguments.get(1)?;
                     Some(TypeIdentityKey::FallibleCarrier {
@@ -1520,7 +1568,15 @@ impl TypeEnvironment {
                         error: Box::new(self.type_id_to_type_identity_key(*error_id)?),
                     })
                 }
-                TypeConstructor::Builtin(super::ids::BuiltinTypeConstructor::Tuple) => None,
+                TypeConstructor::Builtin(BuiltinTypeConstructor::OrderedMap) => {
+                    let key_id = constructed.arguments.first()?;
+                    let value_id = constructed.arguments.get(1)?;
+                    Some(TypeIdentityKey::Map {
+                        key: Box::new(self.type_id_to_type_identity_key(*key_id)?),
+                        value: Box::new(self.type_id_to_type_identity_key(*value_id)?),
+                    })
+                }
+                TypeConstructor::Builtin(BuiltinTypeConstructor::Tuple) => None,
                 TypeConstructor::Nominal(_) | TypeConstructor::External(_) => None,
             },
             TypeDefinition::GenericInstance(instance) => {
@@ -1765,9 +1821,7 @@ impl TypeEnvironment {
             DataType::Option(inner) => {
                 let inner_id = self.data_type_to_type_id(inner)?;
                 let key = ConstructedTypeKey {
-                    constructor: TypeConstructor::Builtin(
-                        super::ids::BuiltinTypeConstructor::Option,
-                    ),
+                    constructor: TypeConstructor::Builtin(BuiltinTypeConstructor::Option),
                     arguments: Box::new([inner_id]),
                 };
                 self.constructed_ids.get(&key).copied()
@@ -1776,33 +1830,38 @@ impl TypeEnvironment {
                 let success_id = self.data_type_to_type_id(success)?;
                 let error_id = self.data_type_to_type_id(error)?;
                 let key = ConstructedTypeKey {
-                    constructor: super::fallible_carrier_constructor(),
+                    constructor: fallible_carrier_constructor(),
                     arguments: Box::new([success_id, error_id]),
                 };
                 self.constructed_ids.get(&key).copied()
             }
             DataType::GenericInstance {
-                base:
-                    super::generic_identity_bridge::GenericBaseType::Builtin(
-                        super::generic_identity_bridge::BuiltinGenericType::Collection {
-                            fixed_capacity,
-                        },
-                    ),
+                base: GenericBaseType::Builtin(BuiltinGenericType::Collection { fixed_capacity }),
                 arguments,
             } => {
                 let element_id = self.data_type_to_type_id(arguments.first()?)?;
                 let key = ConstructedTypeKey {
-                    constructor: TypeConstructor::Builtin(
-                        super::ids::BuiltinTypeConstructor::Collection {
-                            fixed_capacity: *fixed_capacity,
-                        },
-                    ),
+                    constructor: TypeConstructor::Builtin(BuiltinTypeConstructor::Collection {
+                        fixed_capacity: *fixed_capacity,
+                    }),
                     arguments: Box::new([element_id]),
                 };
                 self.constructed_ids.get(&key).copied()
             }
             DataType::GenericInstance {
-                base: super::generic_identity_bridge::GenericBaseType::ResolvedNominal(path),
+                base: GenericBaseType::Builtin(BuiltinGenericType::Map),
+                arguments,
+            } => {
+                let key_id = self.data_type_to_type_id(arguments.first()?)?;
+                let value_id = self.data_type_to_type_id(arguments.get(1)?)?;
+                let key = ConstructedTypeKey {
+                    constructor: TypeConstructor::Builtin(BuiltinTypeConstructor::OrderedMap),
+                    arguments: Box::new([key_id, value_id]),
+                };
+                self.constructed_ids.get(&key).copied()
+            }
+            DataType::GenericInstance {
+                base: GenericBaseType::ResolvedNominal(path),
                 arguments,
             } => {
                 let base_nominal = self.nominal_id_for_path(path)?;

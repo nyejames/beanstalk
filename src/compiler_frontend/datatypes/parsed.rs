@@ -96,6 +96,12 @@ pub enum ParsedTypeRef {
         fixed_capacity: Option<ParsedCollectionCapacity>,
     },
 
+    Map {
+        key: Box<ParsedTypeRef>,
+        value: Box<ParsedTypeRef>,
+        location: SourceLocation,
+    },
+
     Optional {
         inner: Box<ParsedTypeRef>,
         location: SourceLocation,
@@ -172,6 +178,16 @@ impl ParsedTypeRef {
                         token.remap_string_ids(remap);
                     }
                 }
+            }
+
+            ParsedTypeRef::Map {
+                key,
+                value,
+                location,
+            } => {
+                key.remap_string_ids(remap);
+                value.remap_string_ids(remap);
+                location.remap_string_ids(remap);
             }
 
             ParsedTypeRef::Optional { inner, location } => {

@@ -142,6 +142,7 @@ fn normalize_ast_node_templates(
         | NodeKind::MethodCall { .. }
         | NodeKind::DynamicTraitMethodCall { .. }
         | NodeKind::CollectionBuiltinCall { .. }
+        | NodeKind::MapBuiltinCall { .. }
         | NodeKind::HandledFallibleHostFunctionCall { .. }
         | NodeKind::HandledFallibleFunctionCall { .. } => normalize_call_templates(node, context),
 
@@ -329,7 +330,8 @@ fn normalize_call_templates(
     match &mut node.kind {
         NodeKind::MethodCall { receiver, args, .. }
         | NodeKind::DynamicTraitMethodCall { receiver, args, .. }
-        | NodeKind::CollectionBuiltinCall { receiver, args, .. } => {
+        | NodeKind::CollectionBuiltinCall { receiver, args, .. }
+        | NodeKind::MapBuiltinCall { receiver, args, .. } => {
             normalize_ast_node_templates(receiver, context)?;
             normalize_call_argument_values(args, context)?;
             Ok(())
@@ -659,6 +661,21 @@ fn normalize_expression_templates_with_context(
         ExpressionKind::ChoiceConstruct { fields, .. } => {
             for field in fields {
                 normalize_expression_templates(&mut field.value, context)?;
+            }
+            None
+        }
+        ExpressionKind::MapLiteral(entries) => {
+            for entry in entries {
+                normalize_expression_templates_with_context(
+                    &mut entry.key,
+                    context,
+                    helper_artifact_policy,
+                )?;
+                normalize_expression_templates_with_context(
+                    &mut entry.value,
+                    context,
+                    helper_artifact_policy,
+                )?;
             }
             None
         }

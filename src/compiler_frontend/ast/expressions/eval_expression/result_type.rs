@@ -80,6 +80,9 @@ pub(super) fn resolve_expression_result_type(
             | NodeKind::CollectionBuiltinCall {
                 result_type_ids, ..
             }
+            | NodeKind::MapBuiltinCall {
+                result_type_ids, ..
+            }
             | NodeKind::HostFunctionCall {
                 result_type_ids, ..
             }

@@ -20,6 +20,7 @@
 //! - All other targets: pass `Inferred` so the expression resolves its own
 //!   natural type and the call site validates/coerces after the fact.
 
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 
@@ -63,6 +64,10 @@ pub(crate) fn parse_expectation_for_type_id(
         }
     }
 
+    if type_environment.is_map_type(target_id) {
+        return ExpectedType::Known(target_id);
+    }
+
     ExpectedType::Infer
 }
 
@@ -76,9 +81,6 @@ pub(crate) fn parse_expectation_for_type_id(
 ///      and produce the correct canonical `TypeId`.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ExpectedCollectionContext {
-    /// No annotation: infer element from first item and intern a growable collection.
-    InferGrowable,
-
     /// Explicit collection annotation (growable or fixed) with known element type.
     Explicit {
         collection_type_id: TypeId,
@@ -88,4 +90,36 @@ pub(crate) enum ExpectedCollectionContext {
 
     /// Capacity-only shorthand `{N}`: element must be inferred from the literal.
     CapacityOnlyShorthand { fixed_capacity: usize },
+}
+
+/// Map-specific parse-time context passed into map literal parsing.
+///
+/// WHAT: carries the full map shape so the parser can validate keys, coerce
+///       values, and produce the correct canonical `TypeId`.
+/// WHY: map literal behavior differs from collections; the parser needs both
+///      key and value types to validate entries and detect empty-literal errors.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct ExpectedMapContext {
+    pub(crate) key_type_id: TypeId,
+    pub(crate) value_type_id: TypeId,
+    pub(crate) key_diagnostic_type: DataType,
+    pub(crate) value_diagnostic_type: DataType,
+    pub(crate) map_type_id: Option<TypeId>,
+}
+
+/// Unified curly-brace literal context that distinguishes collections, maps,
+/// and inferred targets so the parser can dispatch to the correct literal shape.
+///
+/// WHAT: replaces the raw `ExpectedCollectionContext` at the expression-dispatch
+///       boundary so `{...}` can lower to either a collection or a map.
+/// WHY: the same source token (`{`) introduces two different literal shapes;
+///      the decision is made from the expected type or from the first entry.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) enum ExpectedCurlyLiteralContext {
+    /// No annotation: the literal shape must be discovered from the first entry.
+    Infer,
+    /// Explicit or contextual collection type.
+    Collection(ExpectedCollectionContext),
+    /// Explicit or contextual map type.
+    Map(ExpectedMapContext),
 }
