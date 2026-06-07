@@ -51,17 +51,12 @@ pub(in crate::compiler_frontend::ast::templates) fn resolve_slot_application(
     string_table: &StringTable,
     resolution_mode: SlotResolutionMode,
 ) -> Result<SlotResolutionOutcome, TemplateSlotError> {
-    let routed = route_slot_contributions(wrapper, fill_content, location, string_table)?;
+    let routed = route_slot_contributions(wrapper, fill_content, location)?;
 
     if resolution_mode.allows_runtime_plans() && sources::should_lower_as_runtime(&routed) {
         let wrapper_content = sources::content_prepared_for_runtime_rendering(&wrapper.content);
         let sources = sources::build_runtime_contribution_sources(&routed, location, string_table);
-        let wrapper = sites::build_runtime_wrapper_site_plan(
-            &wrapper_content,
-            &sources,
-            location,
-            string_table,
-        )?;
+        let wrapper = sites::build_runtime_wrapper_site_plan(&wrapper_content, &sources, location)?;
 
         return Ok(SlotResolutionOutcome::Runtime(RuntimeSlotApplicationPlan {
             wrapper_plan: wrapper.wrapper_plan,

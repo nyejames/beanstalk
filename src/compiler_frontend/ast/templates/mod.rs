@@ -70,6 +70,7 @@ pub(crate) mod template_formatting;
 pub(crate) mod template_head_parser;
 pub(crate) mod template_render_plan;
 pub(crate) mod template_render_units;
+pub(crate) mod template_renderability;
 pub(crate) mod template_slots;
 pub(crate) mod template_types;
 pub(crate) mod top_level_templates;

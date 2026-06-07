@@ -10,7 +10,6 @@
 //!   contract, so this logic should be centralized and isolated from core directives.
 
 #![allow(clippy::result_large_err)]
-#![allow(clippy::needless_return)]
 
 use super::directive_args::parse_optional_parenthesized_expression;
 use crate::compiler_frontend::ast::ScopeContext;
@@ -89,6 +88,10 @@ fn apply_style_directive_effects(template: &mut Template, effects: StyleDirectiv
     });
 }
 
+/// Parses the optional handler argument and validates whether this directive
+/// accepts one. Early exits keep the no-argument and invalid-argument cases
+/// distinct from later normalization.
+#[allow(clippy::needless_return)]
 fn parse_optional_handler_style_argument(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
@@ -144,6 +147,10 @@ fn parse_optional_handler_style_argument(
     })
 }
 
+/// Normalizes a compile-time handler directive argument.
+///
+/// Early returns keep each rejected argument-kind branch close to its diagnostic.
+#[allow(clippy::needless_return)]
 fn normalize_provided_style_argument_value(
     expression: Expression,
     argument_type: StyleDirectiveArgumentType,

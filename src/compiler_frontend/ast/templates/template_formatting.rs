@@ -505,8 +505,10 @@ mod tests {
         fn format(
             &self,
             _input: FormatterInput,
-            _string_table: &mut StringTable,
+            string_table: &mut StringTable,
         ) -> Result<FormatterResult, CompilerMessages> {
+            let _ = string_table;
+
             Ok(FormatterResult {
                 output: FormatterOutput {
                     pieces: vec![FormatterOutputPiece::Opaque(FormatterOpaquePiece {

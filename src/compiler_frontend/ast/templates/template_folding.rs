@@ -1,10 +1,10 @@
 //! Compile-time template folding.
 //!
-//! WHAT: Converts fully-resolved template content into interned string IDs
-//! by recursively folding atoms (text, nested templates, head/body segments).
+//! WHAT: Converts fully-resolved template render plans and const control-flow
+//! bodies into interned string IDs.
 //!
-//! WHY: Separates folding logic from parsing and composition so it can later
-//! be rebuilt on top of the render-plan IR without entangling parser code.
+//! WHY: Keeps compile-time folding on the same AST-prepared render-plan shapes
+//! that runtime lowering consumes, without entangling parser or HIR code.
 
 use crate::ast_log;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, RangeEndKind};
@@ -14,11 +14,10 @@ use crate::compiler_frontend::ast::templates::error::TemplateError;
 use crate::compiler_frontend::ast::templates::template::{
     TemplateAtom, TemplateContent, TemplateSegment, TemplateSegmentOrigin, TemplateType,
 };
-use crate::compiler_frontend::ast::templates::template_composition::{
-    compose_template_head_chain, wrap_direct_child_atom,
-};
+use crate::compiler_frontend::ast::templates::template_composition::wrap_direct_child_atom;
 use crate::compiler_frontend::ast::templates::template_control_flow::{
-    TemplateBranchChain, TemplateBranchSelector, TemplateConditionalBranch, TemplateControlFlow,
+    TemplateAggregatePiece, TemplateAggregateRenderPlan, TemplateBranchChain,
+    TemplateBranchSelector, TemplateConditionalBranch, TemplateControlFlow,
     TemplateLoopControlFlow, TemplateLoopControlKind, TemplateLoopHeader,
 };
 use crate::compiler_frontend::ast::templates::template_formatting::apply_body_formatter;
@@ -168,13 +167,12 @@ impl Template {
             return Ok(TemplateEmission::Output(output));
         };
 
-        let emission = fold_control_flow(self, control_flow, fold_context)?;
+        let emission = fold_control_flow(control_flow, fold_context)?;
         apply_conditional_child_wrappers(self, emission, fold_context)
     }
 }
 
 fn fold_control_flow(
-    template: &Template,
     control_flow: &TemplateControlFlow,
     fold_context: &mut TemplateFoldContext<'_>,
 ) -> Result<TemplateEmission, TemplateError> {
@@ -183,9 +181,7 @@ fn fold_control_flow(
             fold_template_branch_chain(branch_chain, fold_context)
         }
 
-        TemplateControlFlow::Loop(template_loop) => {
-            fold_template_loop(template, template_loop, fold_context)
-        }
+        TemplateControlFlow::Loop(template_loop) => fold_template_loop(template_loop, fold_context),
 
         TemplateControlFlow::LoopControl(signal) => match signal.kind {
             TemplateLoopControlKind::Break => Ok(TemplateEmission::Break(None)),
@@ -330,7 +326,6 @@ fn option_capture_const_deferred_error(expression: &Expression) -> CompilerDiagn
 }
 
 fn fold_template_loop(
-    template: &Template,
     template_loop: &TemplateLoopControlFlow,
     fold_context: &mut TemplateFoldContext<'_>,
 ) -> Result<TemplateEmission, TemplateError> {
@@ -340,7 +335,6 @@ fn fold_template_loop(
         .unwrap_or_else(|| TemplateRenderPlan::from_content(&template_loop.body_content));
 
     let mut aggregate = String::new();
-    let mut emitted_iterations = 0usize;
     let mut emitted_output = false;
 
     match &template_loop.header {
@@ -359,45 +353,29 @@ fn fold_template_loop(
         }
 
         TemplateLoopHeader::Range { bindings, range } => {
-            let range_values = const_range_values(range)?;
-            for counter in range_values.iterations(
+            let mut cursor = ConstRangeCursor::new(
+                range,
                 fold_context.template_const_loop_iteration_limit,
-                &template_loop.location,
-            )? {
-                emitted_iterations += 1;
-                enforce_loop_iteration_limit(
-                    emitted_iterations,
-                    fold_context.template_const_loop_iteration_limit,
-                    &template_loop.location,
-                )?;
+                template_loop.location.clone(),
+            )?;
 
+            while let Some(counter) = cursor.next_counter()? {
                 let iteration_bindings =
-                    build_range_iteration_bindings(bindings, counter, emitted_iterations - 1);
-                match fold_loop_body_iteration(
+                    build_range_iteration_bindings(bindings, counter, cursor.iteration_count() - 1);
+                let (did_emit, signal) = fold_template_loop_iteration(
                     &body_plan,
                     iteration_bindings,
                     fold_context,
                     &template_loop.location,
                     &mut aggregate,
-                )? {
-                    TemplateEmission::NoOutput => {}
-                    TemplateEmission::Output(_) => emitted_output = true,
-                    TemplateEmission::Break(output) => {
-                        emitted_output |= append_optional_signal_output(
-                            output,
-                            fold_context.string_table,
-                            &mut aggregate,
-                        );
-                        break;
-                    }
-                    TemplateEmission::Continue(output) => {
-                        emitted_output |= append_optional_signal_output(
-                            output,
-                            fold_context.string_table,
-                            &mut aggregate,
-                        );
-                        continue;
-                    }
+                )?;
+
+                emitted_output |= did_emit;
+
+                match signal {
+                    Some(TemplateLoopControlKind::Break) => break,
+                    Some(TemplateLoopControlKind::Continue) => continue,
+                    None => {}
                 }
             }
         }
@@ -405,39 +383,31 @@ fn fold_template_loop(
         TemplateLoopHeader::Collection { bindings, iterable } => {
             let items = const_collection_items(iterable)?;
             for (index, item) in items.iter().enumerate() {
-                emitted_iterations += 1;
-                enforce_loop_iteration_limit(
-                    emitted_iterations,
-                    fold_context.template_const_loop_iteration_limit,
-                    &template_loop.location,
-                )?;
+                if index >= fold_context.template_const_loop_iteration_limit {
+                    return Err(CompilerDiagnostic::invalid_template_structure(
+                        InvalidTemplateStructureReason::TemplateConstLoopExpansionLimitExceeded {
+                            limit: fold_context.template_const_loop_iteration_limit,
+                        },
+                        template_loop.location.clone(),
+                    )
+                    .into());
+                }
 
                 let iteration_bindings = build_collection_iteration_bindings(bindings, item, index);
-                match fold_loop_body_iteration(
+                let (did_emit, signal) = fold_template_loop_iteration(
                     &body_plan,
                     iteration_bindings,
                     fold_context,
                     &template_loop.location,
                     &mut aggregate,
-                )? {
-                    TemplateEmission::NoOutput => {}
-                    TemplateEmission::Output(_) => emitted_output = true,
-                    TemplateEmission::Break(output) => {
-                        emitted_output |= append_optional_signal_output(
-                            output,
-                            fold_context.string_table,
-                            &mut aggregate,
-                        );
-                        break;
-                    }
-                    TemplateEmission::Continue(output) => {
-                        emitted_output |= append_optional_signal_output(
-                            output,
-                            fold_context.string_table,
-                            &mut aggregate,
-                        );
-                        continue;
-                    }
+                )?;
+
+                emitted_output |= did_emit;
+
+                match signal {
+                    Some(TemplateLoopControlKind::Break) => break,
+                    Some(TemplateLoopControlKind::Continue) => continue,
+                    None => {}
                 }
             }
         }
@@ -448,7 +418,15 @@ fn fold_template_loop(
     }
 
     let aggregate_id = fold_context.string_table.intern(&aggregate);
-    apply_loop_shared_head(template, aggregate_id, fold_context)
+    let aggregate_plan = template_loop
+        .aggregate_render_plan
+        .as_ref()
+        .ok_or_else(|| {
+            CompilerError::compiler_error(
+                "Const loop folding missing aggregate render plan; prepare_control_flow_render_units should have populated it.",
+            )
+        })?;
+    fold_aggregate_render_plan(aggregate_plan, aggregate_id, fold_context)
 }
 
 fn fold_conditional_loop_const_condition(
@@ -481,42 +459,44 @@ fn condition_location_or_loop_location(
     }
 }
 
-fn fold_loop_body_iteration(
+/// Single const loop body fold that appends output to the aggregate and
+/// reports whether any output was emitted and whether a break/continue
+/// signal terminated the iteration.
+fn fold_template_loop_iteration(
     body_plan: &TemplateRenderPlan,
     iteration_bindings: Vec<TemplateFoldBinding>,
     fold_context: &mut TemplateFoldContext<'_>,
-    diagnostic_location: &crate::compiler_frontend::tokenizer::tokens::SourceLocation,
+    loop_location: &SourceLocation,
     aggregate: &mut String,
-) -> Result<TemplateEmission, TemplateError> {
+) -> Result<(bool, Option<TemplateLoopControlKind>), TemplateError> {
     let previous_bindings_len = fold_context.push_bindings(iteration_bindings);
     let folded_result = fold_plan_to_emission(body_plan, fold_context);
     fold_context.restore_bindings(previous_bindings_len);
 
     let emission =
-        folded_result.map_err(|error| loop_body_not_const_error(error, diagnostic_location))?;
+        folded_result.map_err(|error| loop_body_not_const_error(error, loop_location))?;
 
     match emission {
-        TemplateEmission::NoOutput => Ok(TemplateEmission::NoOutput),
+        TemplateEmission::NoOutput => Ok((false, None)),
         TemplateEmission::Output(output) => {
             aggregate.push_str(fold_context.string_table.resolve(output));
-            Ok(TemplateEmission::Output(output))
+            Ok((true, None))
         }
-        TemplateEmission::Break(output) => Ok(TemplateEmission::Break(output)),
-        TemplateEmission::Continue(output) => Ok(TemplateEmission::Continue(output)),
+        TemplateEmission::Break(output) => {
+            let did_emit = output.is_some();
+            if let Some(output) = output {
+                aggregate.push_str(fold_context.string_table.resolve(output));
+            }
+            Ok((did_emit, Some(TemplateLoopControlKind::Break)))
+        }
+        TemplateEmission::Continue(output) => {
+            let did_emit = output.is_some();
+            if let Some(output) = output {
+                aggregate.push_str(fold_context.string_table.resolve(output));
+            }
+            Ok((did_emit, Some(TemplateLoopControlKind::Continue)))
+        }
     }
-}
-
-fn append_optional_signal_output(
-    output: Option<StringId>,
-    string_table: &StringTable,
-    aggregate: &mut String,
-) -> bool {
-    let Some(output) = output else {
-        return false;
-    };
-
-    aggregate.push_str(string_table.resolve(output));
-    true
 }
 
 fn loop_body_not_const_error(
@@ -533,49 +513,45 @@ fn loop_body_not_const_error(
     }
 }
 
-fn enforce_loop_iteration_limit(
-    emitted_iterations: usize,
-    iteration_limit: usize,
-    location: &crate::compiler_frontend::tokenizer::tokens::SourceLocation,
-) -> Result<(), TemplateError> {
-    if emitted_iterations <= iteration_limit {
-        return Ok(());
-    }
-
-    Err(CompilerDiagnostic::invalid_template_structure(
-        InvalidTemplateStructureReason::TemplateConstLoopExpansionLimitExceeded {
-            limit: iteration_limit,
-        },
-        location.clone(),
-    )
-    .into())
-}
-
-fn apply_loop_shared_head(
-    template: &Template,
-    aggregate_id: StringId,
+fn fold_aggregate_render_plan(
+    aggregate_plan: &TemplateAggregateRenderPlan,
+    aggregate_output: StringId,
     fold_context: &mut TemplateFoldContext<'_>,
 ) -> Result<TemplateEmission, TemplateError> {
-    let aggregate_expression = Expression::string_slice(
-        aggregate_id,
-        template.location.clone(),
-        ValueMode::ImmutableOwned,
-    );
-    let mut content = template.content.to_owned();
-    content.add(aggregate_expression);
+    let mut output_buffer = String::new();
+    let mut emitted_output = false;
 
-    let mut can_fold = true;
-    let composed = compose_template_head_chain(
-        &content,
-        &mut can_fold,
-        fold_context.string_table,
-        SlotResolutionMode::ComposeOnly,
-    )
-    .map_err(TemplateError::from)?;
-    let plan = TemplateRenderPlan::from_content(&composed);
-    let output = fold_plan(&plan, fold_context)?;
+    for piece in &aggregate_plan.pieces {
+        match piece {
+            TemplateAggregatePiece::Aggregate => {
+                output_buffer.push_str(fold_context.string_table.resolve(aggregate_output));
+                emitted_output = true;
+            }
+            TemplateAggregatePiece::Render(render_piece) => {
+                if fold_render_piece(
+                    render_piece,
+                    &mut output_buffer,
+                    &mut emitted_output,
+                    fold_context,
+                )?
+                .is_some()
+                {
+                    return Err(CompilerError::compiler_error(
+                        "Loop-control signal reached aggregate render plan folding; aggregate wrapper plans should not contain loop control.",
+                    )
+                    .into());
+                }
+            }
+        }
+    }
 
-    Ok(TemplateEmission::Output(output))
+    if !emitted_output {
+        return Ok(TemplateEmission::NoOutput);
+    }
+
+    Ok(TemplateEmission::Output(
+        fold_context.string_table.intern(&output_buffer),
+    ))
 }
 
 fn fold_bool_condition(
@@ -609,127 +585,260 @@ fn fold_resolved_bool_condition(
     }
 }
 
-#[derive(Clone, Copy)]
-enum ConstRangeValues {
+// -------------------------
+//  Const Range Streaming
+// -------------------------
+
+/// Streaming driver for const numeric range loops.
+///
+/// WHAT: produces one counter at a time while enforcing the iteration limit
+///       and hardened range edge-case rules, instead of preallocating a vector.
+/// WHY: avoids O(N) upfront allocation for large or unbounded ranges, and keeps
+///       validation (by-0, overflow, non-finite, non-progressing) near the range
+///       shape rather than spread across separate vector-building helpers.
+struct ConstRangeCursor {
+    kind: ConstRangeCursorKind,
+    emitted_iterations: usize,
+    limit: usize,
+    location: SourceLocation,
+}
+
+enum ConstRangeCursorKind {
     Int {
-        start: i64,
+        current: i64,
         end: i64,
         end_kind: RangeEndKind,
-        step_magnitude: i64,
+        step: i64,
     },
     Float {
-        start: f64,
+        current: f64,
         end: f64,
         end_kind: RangeEndKind,
-        step_magnitude: f64,
+        step: f64,
     },
 }
 
 #[derive(Clone, Copy)]
-enum ConstRangeCounter {
+enum ConstRangeIterationValue {
     Int(i64),
     Float(f64),
 }
 
-impl ConstRangeValues {
-    fn iterations(
-        self,
-        iteration_limit: usize,
-        location: &crate::compiler_frontend::tokenizer::tokens::SourceLocation,
-    ) -> Result<Vec<ConstRangeCounter>, TemplateError> {
-        match self {
-            Self::Int {
-                start,
-                end,
-                end_kind,
-                step_magnitude,
-            } => int_range_iterations(
-                start,
-                end,
-                end_kind,
-                step_magnitude,
-                iteration_limit,
-                location,
-            ),
+impl ConstRangeCursor {
+    fn new(
+        range: &crate::compiler_frontend::ast::ast_nodes::RangeLoopSpec,
+        limit: usize,
+        location: SourceLocation,
+    ) -> Result<Self, TemplateError> {
+        let start = const_numeric_expression(&range.start)?;
+        let end = const_numeric_expression(&range.end)?;
+        let step = range
+            .step
+            .as_ref()
+            .map(const_numeric_expression)
+            .transpose()?;
+        let step_location = range
+            .step
+            .as_ref()
+            .map(|step_expression| step_expression.location.clone());
 
-            Self::Float {
-                start,
-                end,
-                end_kind,
-                step_magnitude,
-            } => float_range_iterations(
-                start,
-                end,
-                end_kind,
-                step_magnitude,
-                iteration_limit,
+        match (start, end, step) {
+            (ConstNumericValue::Int(start), ConstNumericValue::Int(end), None) => Ok(Self {
+                kind: ConstRangeCursorKind::Int {
+                    current: start,
+                    end,
+                    end_kind: range.end_kind,
+                    step: if start <= end { 1 } else { -1 },
+                },
+                emitted_iterations: 0,
+                limit,
                 location,
-            ),
+            }),
+
+            (
+                ConstNumericValue::Int(start),
+                ConstNumericValue::Int(end),
+                Some(ConstNumericValue::Int(step)),
+            ) => {
+                let step_magnitude =
+                    int_step_magnitude(step, step_location.unwrap_or_else(|| location.clone()))?;
+
+                if step_magnitude == 0 {
+                    return Err(CompilerDiagnostic::invalid_template_structure(
+                        InvalidTemplateStructureReason::TemplateLoopRangeBoundsNotConst,
+                        location.clone(),
+                    )
+                    .into());
+                }
+
+                Ok(Self {
+                    kind: ConstRangeCursorKind::Int {
+                        current: start,
+                        end,
+                        end_kind: range.end_kind,
+                        step: if start <= end {
+                            step_magnitude
+                        } else {
+                            -step_magnitude
+                        },
+                    },
+                    emitted_iterations: 0,
+                    limit,
+                    location,
+                })
+            }
+
+            (start, end, step) => {
+                let start = start.as_float();
+                let end = end.as_float();
+
+                if !start.is_finite() || !end.is_finite() {
+                    return Err(CompilerDiagnostic::invalid_template_structure(
+                        InvalidTemplateStructureReason::TemplateLoopRangeBoundsNotConst,
+                        location.clone(),
+                    )
+                    .into());
+                }
+
+                let step_magnitude = match step {
+                    None => {
+                        return Err(CompilerDiagnostic::invalid_template_structure(
+                            InvalidTemplateStructureReason::TemplateLoopRangeBoundsNotConst,
+                            location.clone(),
+                        )
+                        .into());
+                    }
+                    Some(step_value) => {
+                        let magnitude = step_value.as_float().abs();
+                        if magnitude == 0.0 || !magnitude.is_finite() {
+                            return Err(CompilerDiagnostic::invalid_template_structure(
+                                InvalidTemplateStructureReason::TemplateLoopRangeBoundsNotConst,
+                                location.clone(),
+                            )
+                            .into());
+                        }
+                        magnitude
+                    }
+                };
+
+                let step = if start <= end {
+                    step_magnitude
+                } else {
+                    -step_magnitude
+                };
+
+                if start + step == start {
+                    return Err(CompilerDiagnostic::invalid_template_structure(
+                        InvalidTemplateStructureReason::TemplateLoopRangeBoundsNotConst,
+                        location.clone(),
+                    )
+                    .into());
+                }
+
+                Ok(Self {
+                    kind: ConstRangeCursorKind::Float {
+                        current: start,
+                        end,
+                        end_kind: range.end_kind,
+                        step,
+                    },
+                    emitted_iterations: 0,
+                    limit,
+                    location,
+                })
+            }
         }
     }
-}
 
-fn const_range_values(
-    range: &crate::compiler_frontend::ast::ast_nodes::RangeLoopSpec,
-) -> Result<ConstRangeValues, TemplateError> {
-    let start = const_numeric_expression(&range.start)?;
-    let end = const_numeric_expression(&range.end)?;
-    let step = range
-        .step
-        .as_ref()
-        .map(const_numeric_expression)
-        .transpose()?;
+    fn iteration_count(&self) -> usize {
+        self.emitted_iterations
+    }
 
-    match (start, end, step) {
-        (ConstNumericValue::Int(start), ConstNumericValue::Int(end), None) => {
-            Ok(ConstRangeValues::Int {
-                start,
+    fn next_counter(&mut self) -> Result<Option<ConstRangeIterationValue>, TemplateError> {
+        match &mut self.kind {
+            ConstRangeCursorKind::Int {
+                current,
                 end,
-                end_kind: range.end_kind,
-                step_magnitude: 1,
-            })
-        }
-
-        (
-            ConstNumericValue::Int(start),
-            ConstNumericValue::Int(end),
-            Some(ConstNumericValue::Int(step)),
-        ) => Ok(ConstRangeValues::Int {
-            start,
-            end,
-            end_kind: range.end_kind,
-            step_magnitude: int_step_magnitude(
+                end_kind,
                 step,
-                range
-                    .step
-                    .as_ref()
-                    .map(|step_expression| &step_expression.location)
-                    .unwrap_or(&range.start.location),
-            )?,
-        }),
+            } => {
+                let ascending = *step > 0;
+                if !int_range_contains(*current, *end, *end_kind, ascending) {
+                    return Ok(None);
+                }
 
-        (start, end, step) => {
-            let start = start.as_float();
-            let end = end.as_float();
-            let step_magnitude = step.map(ConstNumericValue::as_float).unwrap_or(1.0).abs();
-            Ok(ConstRangeValues::Float {
-                start,
+                if self.emitted_iterations >= self.limit {
+                    return Err(CompilerDiagnostic::invalid_template_structure(
+                        InvalidTemplateStructureReason::TemplateConstLoopExpansionLimitExceeded {
+                            limit: self.limit,
+                        },
+                        self.location.clone(),
+                    )
+                    .into());
+                }
+
+                let counter = ConstRangeIterationValue::Int(*current);
+                self.emitted_iterations += 1;
+
+                *current = current.checked_add(*step).ok_or_else(|| {
+                    CompilerDiagnostic::invalid_template_structure(
+                        InvalidTemplateStructureReason::TemplateLoopRangeBoundsNotConst,
+                        self.location.clone(),
+                    )
+                })?;
+
+                Ok(Some(counter))
+            }
+
+            ConstRangeCursorKind::Float {
+                current,
                 end,
-                end_kind: range.end_kind,
-                step_magnitude,
-            })
+                end_kind,
+                step,
+            } => {
+                let ascending = *step > 0.0;
+                if !float_range_contains(*current, *end, *end_kind, ascending) {
+                    return Ok(None);
+                }
+
+                if self.emitted_iterations >= self.limit {
+                    return Err(CompilerDiagnostic::invalid_template_structure(
+                        InvalidTemplateStructureReason::TemplateConstLoopExpansionLimitExceeded {
+                            limit: self.limit,
+                        },
+                        self.location.clone(),
+                    )
+                    .into());
+                }
+
+                let counter = ConstRangeIterationValue::Float(*current);
+                self.emitted_iterations += 1;
+
+                let previous = *current;
+                *current += *step;
+
+                if !current.is_finite() || *current == previous {
+                    return Err(CompilerDiagnostic::invalid_template_structure(
+                        InvalidTemplateStructureReason::TemplateLoopRangeBoundsNotConst,
+                        self.location.clone(),
+                    )
+                    .into());
+                }
+
+                Ok(Some(counter))
+            }
         }
     }
 }
 
 fn int_step_magnitude(
     step: i64,
-    location: &crate::compiler_frontend::tokenizer::tokens::SourceLocation,
+    location: crate::compiler_frontend::tokenizer::tokens::SourceLocation,
 ) -> Result<i64, TemplateError> {
     step.checked_abs().ok_or_else(|| {
         CompilerDiagnostic::invalid_template_structure(
             InvalidTemplateStructureReason::TemplateLoopRangeBoundsNotConst,
-            location.clone(),
+            location,
         )
         .into()
     })
@@ -763,49 +872,6 @@ fn const_numeric_expression(expression: &Expression) -> Result<ConstNumericValue
     }
 }
 
-fn int_range_iterations(
-    start: i64,
-    end: i64,
-    end_kind: RangeEndKind,
-    step_magnitude: i64,
-    iteration_limit: usize,
-    location: &crate::compiler_frontend::tokenizer::tokens::SourceLocation,
-) -> Result<Vec<ConstRangeCounter>, TemplateError> {
-    if step_magnitude == 0 {
-        return Err(CompilerDiagnostic::invalid_template_structure(
-            InvalidTemplateStructureReason::TemplateLoopRangeBoundsNotConst,
-            location.clone(),
-        )
-        .into());
-    }
-
-    let mut counters = Vec::new();
-    let ascending = start <= end;
-    let step = if ascending {
-        step_magnitude
-    } else {
-        -step_magnitude
-    };
-    let mut current = start;
-
-    while int_range_contains(current, end, end_kind, ascending) {
-        counters.push(ConstRangeCounter::Int(current));
-        enforce_loop_iteration_limit(counters.len(), iteration_limit, location)?;
-        current = match current.checked_add(step) {
-            Some(next) => next,
-            None => {
-                return Err(CompilerDiagnostic::invalid_template_structure(
-                    InvalidTemplateStructureReason::TemplateLoopRangeBoundsNotConst,
-                    location.clone(),
-                )
-                .into());
-            }
-        };
-    }
-
-    Ok(counters)
-}
-
 fn int_range_contains(current: i64, end: i64, end_kind: RangeEndKind, ascending: bool) -> bool {
     match (ascending, end_kind) {
         (true, RangeEndKind::Exclusive) => current < end,
@@ -813,52 +879,6 @@ fn int_range_contains(current: i64, end: i64, end_kind: RangeEndKind, ascending:
         (false, RangeEndKind::Exclusive) => current > end,
         (false, RangeEndKind::Inclusive) => current >= end,
     }
-}
-
-fn float_range_iterations(
-    start: f64,
-    end: f64,
-    end_kind: RangeEndKind,
-    step_magnitude: f64,
-    iteration_limit: usize,
-    location: &crate::compiler_frontend::tokenizer::tokens::SourceLocation,
-) -> Result<Vec<ConstRangeCounter>, TemplateError> {
-    if !start.is_finite()
-        || !end.is_finite()
-        || step_magnitude == 0.0
-        || !step_magnitude.is_finite()
-    {
-        return Err(CompilerDiagnostic::invalid_template_structure(
-            InvalidTemplateStructureReason::TemplateLoopRangeBoundsNotConst,
-            location.clone(),
-        )
-        .into());
-    }
-
-    let mut counters = Vec::new();
-    let ascending = start <= end;
-    let step = if ascending {
-        step_magnitude
-    } else {
-        -step_magnitude
-    };
-    let mut current = start;
-
-    while float_range_contains(current, end, end_kind, ascending) {
-        counters.push(ConstRangeCounter::Float(current));
-        enforce_loop_iteration_limit(counters.len(), iteration_limit, location)?;
-        current += step;
-
-        if !current.is_finite() {
-            return Err(CompilerDiagnostic::invalid_template_structure(
-                InvalidTemplateStructureReason::TemplateLoopRangeBoundsNotConst,
-                location.clone(),
-            )
-            .into());
-        }
-    }
-
-    Ok(counters)
 }
 
 fn float_range_contains(current: f64, end: f64, end_kind: RangeEndKind, ascending: bool) -> bool {
@@ -884,19 +904,19 @@ fn const_collection_items(iterable: &Expression) -> Result<Vec<Expression>, Temp
 
 fn build_range_iteration_bindings(
     bindings: &crate::compiler_frontend::ast::ast_nodes::LoopBindings,
-    counter: ConstRangeCounter,
+    counter: ConstRangeIterationValue,
     zero_based_index: usize,
 ) -> Vec<TemplateFoldBinding> {
     let mut fold_bindings = Vec::new();
 
     if let Some(item) = &bindings.item {
         let value = match counter {
-            ConstRangeCounter::Int(value) => Expression::int(
+            ConstRangeIterationValue::Int(value) => Expression::int(
                 value,
                 item.value.location.clone(),
                 ValueMode::ImmutableOwned,
             ),
-            ConstRangeCounter::Float(value) => Expression::float(
+            ConstRangeIterationValue::Float(value) => Expression::float(
                 value,
                 item.value.location.clone(),
                 ValueMode::ImmutableOwned,
@@ -1102,6 +1122,123 @@ fn fold_plan(
     }
 }
 
+/// Folds a single render piece, appending any output to the buffer.
+///
+/// Returns `Some(signal_kind)` when the piece (or a nested template within it)
+/// produced a loop-control signal. The caller must intern the buffer and build
+/// the appropriate `TemplateEmission`.
+fn fold_render_piece(
+    piece: &RenderPiece,
+    output_buffer: &mut String,
+    emitted_output: &mut bool,
+    fold_context: &mut TemplateFoldContext<'_>,
+) -> Result<Option<TemplateLoopControlKind>, TemplateError> {
+    // Map each render piece to an optional expression to fold. Head and body text
+    // are treated identically during folding — the distinction only matters for
+    // formatter boundary detection, which already ran before this stage.
+    let maybe_expression = match piece {
+        RenderPiece::Text(p) => Some(Expression::string_slice(
+            p.text,
+            p.location.clone(),
+            ValueMode::ImmutableOwned,
+        )),
+        RenderPiece::HeadContent(p) => Some(Expression::string_slice(
+            p.text,
+            p.location.clone(),
+            ValueMode::ImmutableOwned,
+        )),
+        RenderPiece::ChildTemplate(p) => Some(p.expression.clone()),
+        RenderPiece::DynamicExpression(p) => Some(p.expression.clone()),
+        RenderPiece::LoopControl(signal) => {
+            return Ok(Some(signal.kind));
+        }
+        RenderPiece::Slot(_) => {
+            // Unfilled slots intentionally fold to empty; the surrounding authored
+            // content still renders.
+            None
+        }
+        RenderPiece::RuntimeSlotSite(_) => None,
+    };
+
+    let Some(expression) = maybe_expression else {
+        return Ok(None);
+    };
+    let expression = resolve_fold_bindings_in_expression(expression, fold_context)?;
+
+    // Delegate the "what can become string content" policy to the coercion module.
+    // Template mechanics (slot resolution, formatting) live in the template subsystem;
+    // the decision about which expression kinds are renderable lives in type_coercion::string.
+    match fold_expression_kind_to_string(&expression.kind, fold_context.string_table) {
+        Some(FoldedStringPiece::Text(text)) => {
+            *emitted_output = true;
+            output_buffer.push_str(&text);
+        }
+
+        Some(FoldedStringPiece::Char(ch)) => {
+            *emitted_output = true;
+            output_buffer.push(ch);
+        }
+
+        Some(FoldedStringPiece::Skip) => {
+            return Ok(None);
+        }
+
+        Some(FoldedStringPiece::NestedTemplate) => {
+            // The expression kind was a Template — retrieve the template from the
+            // original piece to recursively fold it with full project context.
+            let ExpressionKind::Template(template) = expression.kind else {
+                return Err(CompilerError::compiler_error(
+                    "String coercion returned NestedTemplate for a non-Template expression kind.",
+                )
+                .into());
+            };
+
+            if matches!(template.kind, TemplateType::SlotInsert(_))
+                || template.contains_slot_insertions()
+            {
+                return Err(CompilerError::compiler_error(
+                    "Invalid template content reached string folding: unresolved slot insertions cannot be rendered directly.",
+                )
+                .into());
+            }
+
+            // Nested templates that became fully resolved only after wrapper
+            // composition are folded here to preserve authored nesting order.
+            match template.fold_to_emission(fold_context)? {
+                TemplateEmission::NoOutput => {}
+                TemplateEmission::Output(folded_nested) => {
+                    *emitted_output = true;
+                    output_buffer.push_str(fold_context.string_table.resolve(folded_nested));
+                }
+                TemplateEmission::Break(output) => {
+                    if let Some(output) = output {
+                        *emitted_output = true;
+                        output_buffer.push_str(fold_context.string_table.resolve(output));
+                    }
+                    return Ok(Some(TemplateLoopControlKind::Break));
+                }
+                TemplateEmission::Continue(output) => {
+                    if let Some(output) = output {
+                        *emitted_output = true;
+                        output_buffer.push_str(fold_context.string_table.resolve(output));
+                    }
+                    return Ok(Some(TemplateLoopControlKind::Continue));
+                }
+            }
+        }
+
+        // Anything else can't be folded and should not get to this stage.
+        None => {
+            return Err(CompilerError::compiler_error(
+                "Invalid Expression Used Inside template when trying to fold into a string. The compiler_frontend should not be trying to fold this template.",
+            )
+            .into());
+        }
+    }
+
+    Ok(None)
+}
+
 /// Recursively folds a render plan while preserving structural loop-control signals.
 fn fold_plan_to_emission(
     plan: &TemplateRenderPlan,
@@ -1111,117 +1248,14 @@ fn fold_plan_to_emission(
     let mut emitted_output = false;
 
     for piece in &plan.pieces {
-        // Map each render piece to an optional expression to fold. Head and body text
-        // are treated identically during folding — the distinction only matters for
-        // formatter boundary detection, which already ran before this stage.
-        let maybe_expression = match piece {
-            RenderPiece::Text(p) => Some(Expression::string_slice(
-                p.text,
-                p.location.clone(),
-                ValueMode::ImmutableOwned,
-            )),
-            RenderPiece::HeadContent(p) => Some(Expression::string_slice(
-                p.text,
-                p.location.clone(),
-                ValueMode::ImmutableOwned,
-            )),
-            RenderPiece::ChildTemplate(p) => Some(p.expression.clone()),
-            RenderPiece::DynamicExpression(p) => Some(p.expression.clone()),
-            RenderPiece::LoopControl(signal) => {
-                let output =
-                    emitted_output.then(|| fold_context.string_table.intern(&output_buffer));
-                return Ok(match signal.kind {
-                    TemplateLoopControlKind::Break => TemplateEmission::Break(output),
-                    TemplateLoopControlKind::Continue => TemplateEmission::Continue(output),
-                });
-            }
-            RenderPiece::Slot(_) => {
-                // Unfilled slots intentionally fold to empty; the surrounding authored
-                // content still renders.
-                None
-            }
-            RenderPiece::RuntimeSlotSite(_) => None,
-        };
-
-        let Some(expression) = maybe_expression else {
-            continue;
-        };
-        let expression = resolve_fold_bindings_in_expression(expression, fold_context)?;
-
-        // Delegate the "what can become string content" policy to the coercion module.
-        // Template mechanics (slot resolution, formatting) live in the template subsystem;
-        // the decision about which expression kinds are renderable lives in type_coercion::string.
-        match fold_expression_kind_to_string(&expression.kind, fold_context.string_table) {
-            Some(FoldedStringPiece::Text(text)) => {
-                emitted_output = true;
-                output_buffer.push_str(&text);
-            }
-
-            Some(FoldedStringPiece::Char(ch)) => {
-                emitted_output = true;
-                output_buffer.push(ch);
-            }
-
-            Some(FoldedStringPiece::Skip) => {
-                continue;
-            }
-
-            Some(FoldedStringPiece::NestedTemplate) => {
-                // The expression kind was a Template — retrieve the template from the
-                // original piece to recursively fold it with full project context.
-                let ExpressionKind::Template(template) = expression.kind else {
-                    return Err(CompilerError::compiler_error(
-                        "String coercion returned NestedTemplate for a non-Template expression kind.",
-                    )
-                    .into());
-                };
-
-                if matches!(template.kind, TemplateType::SlotInsert(_))
-                    || template.contains_slot_insertions()
-                {
-                    return Err(CompilerError::compiler_error(
-                        "Invalid template content reached string folding: unresolved slot insertions cannot be rendered directly.",
-                    )
-                    .into());
-                }
-
-                // Nested templates that became fully resolved only after wrapper
-                // composition are folded here to preserve authored nesting order.
-                match template.fold_to_emission(fold_context)? {
-                    TemplateEmission::NoOutput => {}
-                    TemplateEmission::Output(folded_nested) => {
-                        emitted_output = true;
-                        output_buffer.push_str(fold_context.string_table.resolve(folded_nested));
-                    }
-                    TemplateEmission::Break(output) => {
-                        if let Some(output) = output {
-                            emitted_output = true;
-                            output_buffer.push_str(fold_context.string_table.resolve(output));
-                        }
-                        let output = emitted_output
-                            .then(|| fold_context.string_table.intern(&output_buffer));
-                        return Ok(TemplateEmission::Break(output));
-                    }
-                    TemplateEmission::Continue(output) => {
-                        if let Some(output) = output {
-                            emitted_output = true;
-                            output_buffer.push_str(fold_context.string_table.resolve(output));
-                        }
-                        let output = emitted_output
-                            .then(|| fold_context.string_table.intern(&output_buffer));
-                        return Ok(TemplateEmission::Continue(output));
-                    }
-                }
-            }
-
-            // Anything else can't be folded and should not get to this stage.
-            None => {
-                return Err(CompilerError::compiler_error(
-                    "Invalid Expression Used Inside template when trying to fold into a string.\
-                         The compiler_frontend should not be trying to fold this template.",
-                )
-                .into());
-            }
+        if let Some(kind) =
+            fold_render_piece(piece, &mut output_buffer, &mut emitted_output, fold_context)?
+        {
+            let output = emitted_output.then(|| fold_context.string_table.intern(&output_buffer));
+            return Ok(match kind {
+                TemplateLoopControlKind::Break => TemplateEmission::Break(output),
+                TemplateLoopControlKind::Continue => TemplateEmission::Continue(output),
+            });
         }
     }
 

@@ -181,7 +181,7 @@ pub(in crate::compiler_frontend::ast::templates) fn prepare_control_flow_render_
             )?;
             template_loop.body_content = body_unit.content.clone();
             template_loop.body_render_plan = Some(body_unit.render_plan);
-            template_loop.aggregate_render_plan = Some(prepare_loop_aggregate_render_plan(
+            template_loop.aggregate_render_plan = Some(prepare_template_aggregate_render_plan(
                 shared_head_prefix,
                 string_table,
             )?);
@@ -193,7 +193,7 @@ pub(in crate::compiler_frontend::ast::templates) fn prepare_control_flow_render_
     Ok(())
 }
 
-fn prepare_loop_aggregate_render_plan(
+pub(in crate::compiler_frontend::ast::templates) fn prepare_template_aggregate_render_plan(
     shared_head_prefix: &TemplateContent,
     string_table: &StringTable,
 ) -> Result<TemplateAggregateRenderPlan, TemplateError> {

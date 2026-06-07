@@ -14,6 +14,7 @@
 //! - Runtime planning in `runtime_plan/` consumes the same routed data without
 //!   duplicating target validation or loose routing.
 
+use super::contribution_shape::classify_contribution_atom;
 use super::contributions::{
     SlotContributions, SlotInsertContribution, collect_loose_contributions,
     split_fill_atom_for_composition,
@@ -66,7 +67,6 @@ pub(super) fn route_slot_contributions(
     wrapper: &Template,
     fill_content: TemplateContent,
     location: &SourceLocation,
-    string_table: &StringTable,
 ) -> Result<RoutedSlotContributions, TemplateSlotError> {
     let slot_schema = collect_slot_schema(wrapper, location)?;
 
@@ -94,7 +94,7 @@ pub(super) fn route_slot_contributions(
             } = slot_insert;
 
             if !slot_schema.accepts_target(&target) {
-                return Err(unknown_slot_target_error(&target, &location, string_table));
+                return Err(unknown_slot_target_error(&target, &location));
             }
 
             match target {
@@ -221,28 +221,27 @@ pub(super) fn expand_slot_placeholder(
     let mut expanded = Vec::with_capacity(slot_atoms.len());
 
     for source_atom in slot_atoms {
-        let wrapped_atom = if placeholder.child_wrappers.is_empty()
-            || contribution_skips_parent_child_wrappers(source_atom)
-        {
-            source_atom.clone()
-        } else if contribution_is_child_template_output(source_atom)
-            || contribution_template_ref(source_atom).is_some()
-        {
-            // `$children(..)` applies to this direct slot contribution as a whole.
-            // It must not descend into the contribution and wrap grandchildren.
-            wrap_child_slot_contribution(
-                source_atom,
-                &placeholder.child_wrappers,
-                string_table,
-                resolution_mode,
-            )?
-        } else {
-            source_atom.clone()
-        };
+        let shape = classify_contribution_atom(source_atom);
+        let wrapped_atom =
+            if placeholder.child_wrappers.is_empty() || shape.skips_parent_child_wrappers {
+                source_atom.clone()
+            } else if shape.is_child_template_contribution {
+                // `$children(..)` applies to this direct slot contribution as a whole.
+                // It must not descend into the contribution and wrap grandchildren.
+                wrap_child_slot_contribution(
+                    source_atom,
+                    &placeholder.child_wrappers,
+                    string_table,
+                    resolution_mode,
+                )?
+            } else {
+                source_atom.clone()
+            };
 
+        let post_wrap_shape = classify_contribution_atom(&wrapped_atom);
         if !placeholder.skip_parent_child_wrappers
             && !placeholder.applied_child_wrappers.is_empty()
-            && is_child_slot_contribution(&wrapped_atom)
+            && post_wrap_shape.is_child_template_contribution
         {
             expanded.push(wrap_child_slot_contribution(
                 &wrapped_atom,
@@ -256,15 +255,6 @@ pub(super) fn expand_slot_placeholder(
     }
 
     Ok(expanded)
-}
-
-fn is_child_slot_contribution(atom: &TemplateAtom) -> bool {
-    let TemplateAtom::Content(segment) = atom else {
-        return false;
-    };
-
-    segment.is_child_template_output
-        || matches!(segment.expression.kind, ExpressionKind::Template(_))
 }
 
 fn wrap_child_slot_contribution(
@@ -314,36 +304,6 @@ fn single_control_flow_child_atom(content: &TemplateContent) -> Option<TemplateA
     template.is_control_flow_template().then(|| atom.to_owned())
 }
 
-fn contribution_template_ref(atom: &TemplateAtom) -> Option<&Template> {
-    let TemplateAtom::Content(segment) = atom else {
-        return None;
-    };
-
-    if let Some(source_child_template) = &segment.source_child_template {
-        return Some(source_child_template.as_ref());
-    }
-
-    match &segment.expression.kind {
-        ExpressionKind::Template(template) => Some(template.as_ref()),
-        _ => None,
-    }
-}
-
-fn contribution_skips_parent_child_wrappers(atom: &TemplateAtom) -> bool {
-    contribution_template_ref(atom)
-        .is_some_and(|template| template.style.skip_parent_child_wrappers)
-}
-
-/// Returns true when the atom is a child template output that was folded into a
-/// string slice at parse time. These must be treated like template contributions
-/// for the purpose of applying `$children(..)` wrappers in slot expansion.
-fn contribution_is_child_template_output(atom: &TemplateAtom) -> bool {
-    let TemplateAtom::Content(segment) = atom else {
-        return false;
-    };
-    segment.is_child_template_output
-}
-
 fn contribution_origin(atom: &TemplateAtom) -> TemplateSegmentOrigin {
     match atom {
         TemplateAtom::Content(segment) => segment.origin,
@@ -366,7 +326,6 @@ fn contribution_location(atom: &TemplateAtom) -> SourceLocation {
 /// scope and must produce a clear error.
 pub(in crate::compiler_frontend::ast::templates) fn ensure_no_slot_insertions_remain(
     template: &Template,
-    _string_table: &StringTable,
 ) -> Result<(), TemplateSlotError> {
     if template.contains_slot_insertions() {
         return Err(CompilerDiagnostic::invalid_template_slot(

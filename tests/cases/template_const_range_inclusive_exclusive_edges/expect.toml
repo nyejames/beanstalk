@@ -1,0 +1,9 @@
+[backends.html]
+mode = "success"
+warnings = "forbid"
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_contain = ["excl-1;", "excl-2;", "incl-1;", "incl-2;", "incl-3;"]
+must_not_contain = ["excl-3;"]

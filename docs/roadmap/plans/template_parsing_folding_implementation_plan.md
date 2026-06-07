@@ -21,6 +21,17 @@ The coding agent must preserve the current compiler stage boundaries:
 6. Tests cover behavior through integration cases where possible, with focused unit tests only for internal invariants.
 7. Documentation and the implementation matrix are updated where behavior, module structure, or coverage changes.
 
+## Progress
+
+- Phase 1 reviewed and corrected on 2026-06-07. Normal `.bst` template heads and bodies now report `BST-SYNTAX-0017` for EOF/truncation instead of accepting EOF as a boundary. `TemplateBodyBoundary::Eof` was removed, the head parser separator state is named, and integration coverage now includes unclosed heads, bodies, `if` suffix bodies, `loop` suffix bodies, nested children, and `$children(...)` argument templates. Beandown remains on the strict path because synthetic header preparation injects an explicit template close token; existing HTML integration coverage passed after the correction.
+- Phase 2 implemented and parent-corrected on 2026-06-07. Template-head value validation now uses an AST-template-owned `TypeId` renderability classifier, inferred-type validation defers only for the local unresolved constant placeholder reference, unsupported-head diagnostics carry semantic `TypeId`s and render names at the diagnostic boundary, and the obsolete broad unresolved-placeholder table query was removed. Integration coverage now includes alias-to-string success, alias-to-struct rejection, generic struct instance rejection, external opaque rejection, and const-record rejection while a later unrelated constant placeholder is pending.
+- Phase 3 implemented and parent-corrected on 2026-06-07. Compile-time slot composition and runtime slot-site planning now share an AST-template-owned child-contribution classifier for folded child output, direct template contributions, source child-template references, and `$fresh` / parent-wrapper skip behavior. The duplicate predicate helpers were removed from both paths without adding new integration fixtures because the existing runtime slot and adversarial `$children` / `$fresh` cases already cover the behavior.
+- Phase 4 implemented and parent-corrected on 2026-06-07. Const loop folding now consumes the same prepared `TemplateAggregateRenderPlan` that runtime lowering uses for `[head, loop ...:]` aggregate wrapping instead of rebuilding shared-head content through a separate folding path. Existing aggregate-loop unit and integration coverage passed unchanged.
+- Phase 5 implemented and parent-corrected on 2026-06-07. Const range-loop folding now streams counters through an AST-local cursor instead of preallocating range vectors, range and collection loops share one const iteration folding/output/signal handler, and dead vector helpers were removed. Integer stepping still rejects zero, `i64::MIN.abs()` overflow, and checked-add overflow. Float const ranges defensively require an explicit step, reject non-finite / zero / non-progressing steps, and retain descending support. Integration coverage now includes const float missing-step and zero-step parser diagnostics, non-progress folding diagnostics, descending float success, exact custom iteration-limit success, and inclusive/exclusive endpoint behavior.
+- Phase 6 implemented on 2026-06-07. Touched template modules no longer carry stale EOF-leniency wording, unused `_directive_name` / `_string_table` plumbing, vector const-range helpers, or file-wide `clippy::needless_return` suppressions. Parser state-machine functions now carry local documented `needless_return` allowances where early exits make token boundaries clearer, and the top-level folding docs describe the current render-plan-based folding path.
+- Phase 7 completed on 2026-06-07. No compiler-design update was needed because `template_folding.rs` stayed a single module. `docs/language-overview.md` already documents explicit `.bst` template closing, nested Beandown template close behavior, and float range `by` requirements. The progress matrix now records strict template EOF diagnostics, `TypeId` template-head validation, shared child-contribution routing, aggregate render-plan reuse, streamed const range folding, and the new float/inclusive/limit coverage.
+- Phase 9 final audit completed on 2026-06-07. Targeted static checks found no stale EOF-leniency comments, no rendered `type_name` payload in `UnsupportedTypeInTemplateHead`, no `DataType` semantic gate in template-head validation, no duplicate slot contribution predicates, no vector-producing const range helpers, and no production `unwrap()` in touched template parser/folding code. Manual AST/HIR review confirmed template parsing, slot routing, folding, render-plan preparation, and helper elimination remain AST-owned while HIR only consumes finalized runtime template plans. `just validate` passed as the final repository gate.
+
 ## Current repo anchors
 
 Use these files as the starting point:
@@ -37,6 +48,7 @@ src/compiler_frontend/ast/templates/template_head_parser/head_expressions.rs
 src/compiler_frontend/ast/templates/template_head_parser/control_flow_suffix.rs
 src/compiler_frontend/ast/templates/template_render_units.rs
 src/compiler_frontend/ast/templates/template_folding.rs
+src/compiler_frontend/ast/templates/template_slots/contribution_shape.rs
 src/compiler_frontend/ast/templates/template_slots/composition.rs
 src/compiler_frontend/ast/templates/template_slots/runtime_plan/sites.rs
 src/compiler_frontend/ast/templates/template_slots/runtime_plan/sources.rs
@@ -938,15 +950,15 @@ Template coverage is already broad. Prefer extending existing cases and adding f
 
 ## Completion checklist
 
-- [ ] Normal source templates reject EOF/truncation with structured diagnostics.
-- [ ] Beandown implicit-body behavior remains correct and tested.
-- [ ] Template-head renderability uses `TypeId` / `TypeEnvironment`.
-- [ ] Unsupported template-head type diagnostics no longer carry rendered names.
-- [ ] Compile-time and runtime slot paths share child-contribution classification.
-- [ ] Const and runtime loop aggregate wrapping use the same aggregate-plan preparation.
-- [ ] Const range loops stream iterations instead of preallocating all counters.
-- [ ] Float const range behavior is explicit, tested, and documented.
-- [ ] Stale comments, unused parameters, broad clippy suppressions, and duplicate helpers are removed.
-- [ ] New docs are updated where behavior/module shape changed.
-- [ ] `just validate` passes.
-- [ ] Manual AST/HIR diagnostic/type boundary review is complete.
+- [x] Normal source templates reject EOF/truncation with structured diagnostics.
+- [x] Beandown implicit-body behavior remains correct and tested.
+- [x] Template-head renderability uses `TypeId` / `TypeEnvironment`.
+- [x] Unsupported template-head type diagnostics no longer carry rendered names.
+- [x] Compile-time and runtime slot paths share child-contribution classification.
+- [x] Const and runtime loop aggregate wrapping use the same aggregate-plan preparation.
+- [x] Const range loops stream iterations instead of preallocating all counters.
+- [x] Float const range behavior is explicit, tested, and documented.
+- [x] Stale comments, unused parameters, broad clippy suppressions, and duplicate helpers are removed.
+- [x] New docs are updated where behavior/module shape changed.
+- [x] `just validate` passes.
+- [x] Manual AST/HIR diagnostic/type boundary review is complete.

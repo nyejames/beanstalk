@@ -9,19 +9,16 @@
 //! - Head parsing needs one place for foldability and const-context checks so the
 //!   orchestration loop remains readable and consistent.
 
-#![allow(clippy::result_large_err)]
-#![allow(clippy::needless_return)]
-
 use crate::ast_log;
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::templates::template::{TemplateSegmentOrigin, TemplateType};
+use crate::compiler_frontend::ast::templates::template_renderability::is_template_renderable_type;
 use crate::compiler_frontend::ast::templates::template_types::Template;
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidTemplateStructureReason,
 };
-use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::rendered_path_usage::resolve_compile_time_paths_for_rendered_output;
@@ -58,21 +55,16 @@ fn validate_template_head_value_type(
     // text. Templates and paths are handled by separate code paths, so this
     // function only sees non-template, non-path expression values.
     //
-    // Use TypeId equality against the built-in scalar types rather than
-    // matching on DataType, which is a parse/diagnostic-only representation.
-    let builtins = type_environment.builtins();
-    let type_id = expression.type_id;
-    if type_id == builtins.string
-        || type_id == builtins.int
-        || type_id == builtins.float
-        || type_id == builtins.bool
-        || type_id == builtins.char
-    {
+    // Use the shared renderability classifier so the policy lives in one
+    // AST-template-owned place and uses semantic TypeId identity.
+    if is_template_renderable_type(expression.type_id, type_environment) {
         return Ok(());
     }
 
     Err(CompilerDiagnostic::invalid_template_structure(
-        InvalidTemplateStructureReason::UnsupportedTypeInTemplateHead { type_id },
+        InvalidTemplateStructureReason::UnsupportedTypeInTemplateHead {
+            type_id: expression.type_id,
+        },
         location.to_owned(),
     ))
 }
@@ -85,7 +77,6 @@ pub(super) fn handle_template_value_in_template_head(
     parent_template: &mut Template,
     foldable: &mut bool,
     location: &SourceLocation,
-    _string_table: &StringTable,
 ) -> Result<(), CompilerDiagnostic> {
     if context.kind.is_constant_context() && matches!(value.kind, TemplateType::StringFunction) {
         return Err(CompilerDiagnostic::invalid_template_structure(
@@ -125,7 +116,6 @@ pub(super) fn push_template_head_expression(
     parent_template: &mut Template,
     foldable: &mut bool,
     location: &SourceLocation,
-    string_table: &mut StringTable,
 ) -> Result<(), CompilerDiagnostic> {
     if let ExpressionKind::Template(template_value) = &expression.kind {
         return handle_template_value_in_template_head(
@@ -134,14 +124,11 @@ pub(super) fn push_template_head_expression(
             parent_template,
             foldable,
             location,
-            string_table,
         );
     }
 
-    let defer_inferred_type_validation = matches!(expression.diagnostic_type, DataType::Inferred)
-        && context
-            .top_level_declarations
-            .has_unresolved_constant_placeholder();
+    let defer_inferred_type_validation =
+        is_unresolved_constant_placeholder_reference(&expression, context);
 
     if !defer_inferred_type_validation {
         validate_template_head_value_type(&expression, location, type_environment)?;

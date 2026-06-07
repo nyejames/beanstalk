@@ -19,7 +19,6 @@
 //! - **Slot modules** own slot schema and composition; they do not parse tokens.
 
 #![allow(clippy::result_large_err)]
-#![allow(clippy::needless_return)]
 
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
@@ -47,9 +46,9 @@ pub(crate) fn advance_into_directive_arguments(token_stream: &mut FileTokens) {
 }
 
 /// Rejects parenthesized arguments for directives that do not accept them.
+#[allow(clippy::needless_return)]
 pub(crate) fn reject_unexpected_directive_arguments(
     token_stream: &FileTokens,
-    _directive_name: &str,
 ) -> Result<(), CompilerDiagnostic> {
     if directive_has_arguments(token_stream) {
         return Err(CompilerDiagnostic::unexpected_token(
@@ -62,6 +61,7 @@ pub(crate) fn reject_unexpected_directive_arguments(
 
 /// Returns an error if the current token is `)`, signalling empty directive
 /// parentheses.
+#[allow(clippy::needless_return)]
 pub(crate) fn reject_empty_directive_parens(
     token_stream: &FileTokens,
 ) -> Result<(), CompilerDiagnostic> {
@@ -76,6 +76,7 @@ pub(crate) fn reject_empty_directive_parens(
 
 /// Expects the current token to be `)`. Returns a syntax error with a
 /// suggestion if it is not.
+#[allow(clippy::needless_return)]
 pub(crate) fn expect_directive_close_paren(
     token_stream: &FileTokens,
 ) -> Result<(), CompilerDiagnostic> {
@@ -102,6 +103,7 @@ pub(crate) fn expect_directive_close_paren(
 /// - rejects empty parentheses
 /// - rejects extra comma-separated arguments
 /// - expects `)` after the expression
+#[allow(clippy::needless_return)]
 fn parse_single_expression_in_directive_parens(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
@@ -137,6 +139,7 @@ fn parse_single_expression_in_directive_parens(
 ///
 /// Returns `Ok(None)` if no `(` follows the directive.
 /// Returns `Ok(Some(expression))` if a single expression was parsed.
+#[allow(clippy::needless_return)]
 pub(crate) fn parse_optional_parenthesized_expression(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
@@ -160,6 +163,7 @@ pub(crate) fn parse_optional_parenthesized_expression(
 /// Parses a required parenthesized compile-time expression after a directive.
 ///
 /// Returns an error if no `(` follows the directive.
+#[allow(clippy::needless_return)]
 pub(crate) fn parse_required_parenthesized_expression(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
@@ -184,6 +188,7 @@ pub(crate) fn parse_required_parenthesized_expression(
 
 /// Parses the optional argument to `$slot`: default (no parens), named string,
 /// or positive positional integer.
+#[allow(clippy::needless_return)]
 pub(crate) fn parse_optional_slot_target_argument(
     token_stream: &mut FileTokens,
 ) -> Result<SlotKey, CompilerDiagnostic> {
@@ -224,6 +229,7 @@ pub(crate) fn parse_optional_slot_target_argument(
 }
 
 /// Parses the required named target argument to `$insert("name")`.
+#[allow(clippy::needless_return)]
 pub(crate) fn parse_required_slot_name_argument(
     token_stream: &mut FileTokens,
 ) -> Result<StringId, CompilerDiagnostic> {

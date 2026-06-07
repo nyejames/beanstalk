@@ -10,7 +10,6 @@ use crate::compiler_frontend::ast::templates::template::SlotKey;
 use crate::compiler_frontend::ast::templates::template_slots::error::TemplateSlotError;
 use crate::compiler_frontend::compiler_errors::SourceLocation;
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, InvalidTemplateSlotReason};
-use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 pub(super) fn extra_loose_content_without_default_slot_error(
     location: &SourceLocation,
@@ -37,7 +36,6 @@ pub(super) fn loose_content_without_default_slot_error(
 pub(super) fn unknown_slot_target_error(
     target: &SlotKey,
     location: &SourceLocation,
-    _string_table: &StringTable,
 ) -> TemplateSlotError {
     match target {
         SlotKey::Default => CompilerDiagnostic::invalid_template_slot(

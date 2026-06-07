@@ -80,7 +80,6 @@ impl TemplateBodyControlContext {
 /// Boundary where body parsing stopped.
 pub(super) enum TemplateBodyBoundary {
     TemplateClose,
-    Eof,
     Else {
         location: SourceLocation,
     },

@@ -212,9 +212,7 @@ impl DiagnosticPayload {
             | DiagnosticPayload::InvalidGenericParameter { .. }
             | DiagnosticPayload::InvalidStructDefaultValue => {}
 
-
             DiagnosticPayload::InvalidTemplateStructure { .. } => {}
-
 
             DiagnosticPayload::InvalidChoiceVariant {
                 choice_name,
