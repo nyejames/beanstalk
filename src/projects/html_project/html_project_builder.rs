@@ -1,7 +1,7 @@
-// HTML project builder orchestration.
-//
-// WHAT: coordinates module output-path resolution, homepage checks, and backend selection.
-// WHY: project builders own artifact assembly policy while compiler backends stay generic.
+//! HTML project builder orchestration.
+//!
+//! WHAT: coordinates module output-path resolution, homepage checks, and backend selection.
+//! WHY: project builders own artifact assembly policy while compiler backends stay generic.
 use crate::backends::backend_feature_validation::{
     BackendFeatureValidationError, validate_hir_backend_feature_support,
 };

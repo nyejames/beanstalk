@@ -15,7 +15,6 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 - first class Reactivity syntax with message / action patterns in templates
 - Build out core IO library
 - Compile time arbitary precision aritmetic + Decimals Type support
-
 - Write a Wasm backend design baseline covering the v1 target, explicit deferred features, ABI/layout rules, runtime helper contracts, and HTML-Wasm bootstrap contract.
 - Freeze Wasm v1 as core Wasm, linear-memory handles, single-result ABI, dispatcher-loop CFG, JS/host bootstrap, no Wasm GC, no reference types, no Component Model.
 - Add a Wasm capability matrix tracking scalar operations, strings/templates, structs, choices, options/results, collections, generics, traits, external packages, core libraries, assertions, IO, and runtime memory helpers.

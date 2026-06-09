@@ -15,6 +15,10 @@ use crate::compiler_frontend::hir::reachability::{
 };
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
+/// Failure mode for backend feature validation.
+///
+/// WHAT: either a user-facing diagnostic for an unsupported reachable operation, or an
+///       infrastructure error if reachability collection itself fails.
 pub enum BackendFeatureValidationError {
     Diagnostic(Box<CompilerDiagnostic>),
     Infrastructure(Box<CompilerError>),

@@ -1052,7 +1052,6 @@ impl Expression {
     /// WHY: per-file header parsing produces expression defaults using local string tables;
     ///      remapping keeps them valid after merge into the module/global table.
     // Called by per-file frontend output remapping before module-wide dependency sorting.
-    #[allow(dead_code)]
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         self.diagnostic_type.remap_string_ids(remap);
         if let Some(receiver) = &mut self.function_receiver {

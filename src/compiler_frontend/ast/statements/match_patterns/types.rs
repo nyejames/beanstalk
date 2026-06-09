@@ -162,7 +162,6 @@ impl MatchArm {
     /// Remap pattern, guard, and body expressions/nodes recursively.
     ///
     /// Called by per-file frontend output remapping before module-wide dependency sorting.
-    #[allow(dead_code)]
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         self.pattern.remap_string_ids(remap);
         if let Some(guard) = &mut self.guard {
@@ -178,7 +177,6 @@ impl MatchPattern {
     /// Remap interned names, paths, and nested expressions in this match pattern.
     ///
     /// Called by per-file frontend output remapping before module-wide dependency sorting.
-    #[allow(dead_code)]
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         match self {
             MatchPattern::Literal(expression) => {
@@ -250,24 +248,10 @@ impl ChoicePayloadCapture {
     /// Remap field names, binding names, and paths in this capture.
     ///
     /// Called by per-file frontend output remapping before module-wide dependency sorting.
-    #[allow(dead_code)]
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         self.field_name = remap.get(self.field_name);
         self.binding_name = remap.get(self.binding_name);
         self.binding_path.remap_string_ids(remap);
-        self.location.remap_string_ids(remap);
-        self.binding_location.remap_string_ids(remap);
-    }
-}
-
-impl ParsedChoicePayloadCapture {
-    /// Remap field names, binding names, and types in this parsed capture.
-    ///
-    /// Called by per-file frontend output remapping before module-wide dependency sorting.
-    #[allow(dead_code)]
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        self.field_name = remap.get(self.field_name);
-        self.binding_name = remap.get(self.binding_name);
         self.location.remap_string_ids(remap);
         self.binding_location.remap_string_ids(remap);
     }

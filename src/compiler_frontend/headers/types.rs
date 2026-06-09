@@ -433,7 +433,6 @@ pub struct FileFrontendPrepareOutput {
     // Phase 6 parallel preparation keeps this contribution explicit for validation and future
     // fragment instrumentation, even though Alpha currently permits const templates only in the
     // single entry file.
-    #[allow(dead_code)]
     pub const_template_count: usize,
     /// Number of runtime fragments contributed by this file.
     pub runtime_fragment_count: usize,

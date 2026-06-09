@@ -13,6 +13,12 @@ use std::path::Path;
 //  Source Extraction
 // -------------------------
 
+/// Reads the contents of a source file from disk.
+///
+/// WHAT: performs UTF-8 file read with structured `CompilerError` diagnostics for common
+///       failure modes (not found, permission denied).
+/// WHY: every source file entering the compiler pipeline goes through this single boundary
+///      so I/O failures are reported uniformly instead of leaking `std::io::Error`.
 pub fn extract_source_code(
     file_path: &Path,
     string_table: &mut StringTable,

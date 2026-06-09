@@ -35,6 +35,9 @@ use rustc_hash::FxHashMap;
 /// frontend `TypeEnvironment`; `frontend_type_id` traces this entry back to the canonical type.
 #[derive(Debug, Clone)]
 pub struct HirChoice {
+    /// The stable `ChoiceId` assigned during HIR lowering.
+    /// WHY: preserved so the choice layout entry carries its own identity for future
+    ///      diagnostics and backend validation. Currently not read outside tests.
     #[allow(dead_code)]
     pub id: crate::compiler_frontend::hir::ids::ChoiceId,
 
@@ -49,6 +52,9 @@ pub struct HirChoice {
 
 #[derive(Debug, Clone)]
 pub struct HirChoiceVariant {
+    /// The interned variant name from the frontend `TypeEnvironment`.
+    /// WHY: preserved for completeness and future diagnostic rendering.
+    ///      Currently not read outside tests.
     #[allow(dead_code)]
     pub name: StringId,
     pub fields: Vec<HirChoiceField>,

@@ -154,8 +154,6 @@ pub(crate) fn validate_failure_result(
             .iter()
             .any(|msg| contains_ordered_substrings(msg, &expectation.message_contains))
         {
-            eprintln!("DEBUG: rendered_messages = {:?}", rendered_messages);
-            eprintln!("DEBUG: expected = {:?}", expectation.message_contains);
             return CaseExecutionResult {
                 passed: false,
                 panic_message: None,

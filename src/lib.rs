@@ -1,5 +1,7 @@
-// Targeted #[allow(...)] attributes are used where needed, each with a justification
-// comment. Avoid blanket crate-level allowances.
+//! Beanstalk compiler library root.
+//!
+//! Targeted `#[allow(...)]` attributes are used where needed, each with a justification
+//! comment. Avoid blanket crate-level allowances.
 
 mod compiler_tests {
     #[cfg(test)]

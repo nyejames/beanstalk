@@ -1,3 +1,10 @@
+//! Short-circuit CFG generation for `and` / `or` operators.
+//!
+//! WHAT: emits conditional branches, short-circuit blocks, and merge blocks so RHS
+//!       side effects are only evaluated when the operator semantics require them.
+//! WHY: without explicit short-circuit CFG, AST RPN trees would eagerly evaluate
+//!      both sides, breaking lazy boolean semantics and causing invalid borrow access.
+
 use crate::compiler_frontend::ast::expressions::expression::Operator;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::ids::TypeId;

@@ -544,17 +544,18 @@ fn build_debug_outputs(
 
 fn emit_debug_outputs_if_enabled(debug: &HtmlWasmDebugOutputs) {
     // Toggle-gated debug printing keeps normal builds deterministic and quiet.
+    // Uses stderr so debug output does not pollute stdout for downstream tooling.
     if SHOW_HTML_WASM_PLAN && let Some(text) = &debug.plan_summary {
-        println!("{text}");
+        eprintln!("{text}");
     }
     if SHOW_HTML_WASM_EXPORTS && let Some(text) = &debug.helper_exports_summary {
-        println!("{text}");
+        eprintln!("{text}");
     }
     if SHOW_HTML_WASM_EXPORTS && let Some(text) = &debug.artifact_summary {
-        println!("{text}");
+        eprintln!("{text}");
     }
     if SHOW_HTML_WASM_JS && let Some(text) = &debug.js_bootstrap_preview {
-        println!("{text}");
+        eprintln!("{text}");
     }
 }
 

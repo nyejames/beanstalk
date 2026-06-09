@@ -65,7 +65,6 @@ pub struct CompileTimePath {
 impl CompileTimePath {
     /// Remap source and public paths into the merged string table.
     // Called by per-file frontend output remapping before module-wide dependency sorting.
-    #[allow(dead_code)]
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         self.source_path.remap_string_ids(remap);
         self.public_path.remap_string_ids(remap);
@@ -75,7 +74,6 @@ impl CompileTimePath {
 impl CompileTimePaths {
     /// Remap every compile-time path in this collection.
     // Called by per-file frontend output remapping before module-wide dependency sorting.
-    #[allow(dead_code)]
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         for path in &mut self.paths {
             path.remap_string_ids(remap);

@@ -55,7 +55,6 @@ impl DeclarationSyntax {
     /// and source location into a merged string table.
     ///
     // Called by per-file frontend output remapping before module-wide dependency sorting.
-    #[allow(dead_code)]
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         self.type_annotation.remap_string_ids(remap);
         for token in &mut self.initializer_tokens {
@@ -64,18 +63,6 @@ impl DeclarationSyntax {
         for reference in &mut self.initializer_references {
             reference.remap_string_ids(remap);
         }
-        self.location.remap_string_ids(remap);
-    }
-}
-
-impl BindingTargetSyntax {
-    /// Remap name, type annotation, and source location into a merged string table.
-    ///
-    // Called by per-file frontend output remapping before module-wide dependency sorting.
-    #[allow(dead_code)]
-    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        self.name = remap.get(self.name);
-        self.type_annotation.remap_string_ids(remap);
         self.location.remap_string_ids(remap);
     }
 }

@@ -22,6 +22,10 @@ pub enum BackendTarget {
     Wasm,
 }
 
+/// Failure mode for external-package backend support validation.
+///
+/// WHAT: either a user-facing diagnostic for an unsupported external function call, or an
+///       infrastructure error if reachability collection itself fails.
 pub enum ExternalPackageValidationError {
     Diagnostic(Box<CompilerDiagnostic>),
     Infrastructure(Box<CompilerError>),

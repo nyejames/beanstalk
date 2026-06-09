@@ -1,3 +1,10 @@
+//! Global compiler and project constants.
+//!
+//! WHAT: defines file extensions, reserved names, heuristic capacity constants, and project
+//!       configuration structures shared across the compiler and build system.
+//! WHY: keeping these values in one module prevents magic literals from spreading through the
+//!      codebase and makes capacity tuning explicit.
+
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages, SourceLocation};
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, InvalidConfigReason};
 use crate::compiler_frontend::symbols::string_interning::StringTable;

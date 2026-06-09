@@ -48,7 +48,6 @@ impl GenericParameter {
     /// Remap the parameter name and source location into a merged string table.
     ///
     // Called by per-file frontend output remapping before module-wide dependency sorting.
-    #[allow(dead_code)]
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         self.name = remap.get(self.name);
         self.location.remap_string_ids(remap);
@@ -62,7 +61,6 @@ impl GenericParameterList {
     /// Remap every generic parameter in this list.
     ///
     // Called by per-file frontend output remapping before module-wide dependency sorting.
-    #[allow(dead_code)]
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         for parameter in &mut self.parameters {
             parameter.remap_string_ids(remap);

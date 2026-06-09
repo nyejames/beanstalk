@@ -206,7 +206,6 @@ impl FunctionSignature {
     /// WHY: per-file header parsing produces function signatures using local string tables;
     ///      remapping keeps them valid after merge into the module/global table.
     // Called by per-file frontend output remapping before module-wide dependency sorting.
-    #[allow(dead_code)]
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         for parameter in &mut self.parameters {
             parameter.remap_string_ids(remap);
@@ -220,7 +219,6 @@ impl FunctionSignature {
 impl FunctionReturn {
     /// Remap interned string IDs in the diagnostic type spelling.
     // Called by per-file frontend output remapping before module-wide dependency sorting.
-    #[allow(dead_code)]
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         match self {
             FunctionReturn::Value(data_type) => {
@@ -237,7 +235,6 @@ impl FunctionReturn {
 impl ReturnSlot {
     /// Remap interned string IDs in the return slot's diagnostic type.
     // Called by per-file frontend output remapping before module-wide dependency sorting.
-    #[allow(dead_code)]
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         self.value.remap_string_ids(remap);
         // type_id is a canonical semantic ID and must not be remapped.

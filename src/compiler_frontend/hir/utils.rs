@@ -1,3 +1,10 @@
+//! HIR control-flow traversal helpers.
+//!
+//! WHAT: small utilities for extracting successor block IDs from terminators and
+//!       walking the HIR block graph.
+//! WHY: reachability, validation, and backend passes all need terminator-target
+//!      iteration; centralising it here avoids duplicated match logic.
+
 use crate::compiler_frontend::hir::ids::BlockId;
 use crate::compiler_frontend::hir::terminators::HirTerminator;
 use rustc_hash::FxHashSet;

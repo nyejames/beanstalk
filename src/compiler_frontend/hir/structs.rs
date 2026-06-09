@@ -21,7 +21,6 @@ pub struct HirStruct {
     /// Trace to the canonical frontend `TypeId` in `TypeEnvironment`.
     /// WHY: this field makes the lowering-local → semantic type link explicit.
     ///      Not all current consumers read it, but it is part of the HIR layout contract.
-    #[allow(dead_code)]
     pub frontend_type_id: TypeId,
 
     pub fields: Vec<HirField>,

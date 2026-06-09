@@ -249,7 +249,6 @@ impl ExpressionKind {
     /// Remap all interned string IDs and paths in this expression kind recursively.
     ///
     /// Called by per-file frontend output remapping before module-wide dependency sorting.
-    #[allow(dead_code)]
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         match self {
             // Leaf variants: nothing to remap.

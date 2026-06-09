@@ -1,3 +1,10 @@
+//! Temp-local materialisation for short-circuit merge values.
+//!
+//! WHAT: allocates a temporary `LocalId` and emits an assignment so that the result
+//!       of a short-circuit expression can be consumed uniformly from the merge block.
+//! WHY: branch-local expressions must be lifted to named locals before the merge
+//!      block so the merge block can read a single stable place.
+
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKind, ValueKind};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;

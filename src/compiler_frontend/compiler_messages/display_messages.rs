@@ -1,3 +1,8 @@
+//! User-facing message display helpers.
+//!
+//! WHAT: renders compiled diagnostics and errors into human-readable terminal output.
+//! WHY: this is the final boundary between internal structured diagnostics and what the user sees.
+
 use crate::backends::error_types::BackendErrorType;
 use crate::compiler_frontend::compiler_errors::{
     CompilerError, CompilerErrorMetadataKey, CompilerMessages, ErrorType,

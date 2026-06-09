@@ -1,14 +1,10 @@
-// ============================================================
-// HIR Type Classification
-// ============================================================
-//
-// HIR carries frontend semantic `TypeId`s directly.
-// There is no separate HIR type interner; `TypeEnvironment` owns canonical identity.
-//
-// This module provides backend-agnostic type classification helpers that
-// backends use to decide ABI, lowering strategy, and runtime representation.
-//
-// ============================================================
+//! HIR Type Classification.
+//!
+//! HIR carries frontend semantic `TypeId`s directly.
+//! There is no separate HIR type interner; `TypeEnvironment` owns canonical identity.
+//!
+//! This module provides backend-agnostic type classification helpers that
+//! backends use to decide ABI, lowering strategy, and runtime representation.
 
 use crate::compiler_frontend::datatypes::definitions::TypeDefinition;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;

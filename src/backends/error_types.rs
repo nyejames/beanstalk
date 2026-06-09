@@ -7,6 +7,10 @@
 
 use crate::compiler_frontend::compiler_messages::compiler_errors::{CompilerError, ErrorType};
 
+/// Backend-specific error category.
+///
+/// WHAT: distinguishes LIR transformation failures from Wasm generation failures so that
+///       error messages can name the correct backend stage.
 #[derive(PartialEq, Debug, Clone)]
 pub enum BackendErrorType {
     LirTransformation,
@@ -14,6 +18,7 @@ pub enum BackendErrorType {
 }
 
 impl BackendErrorType {
+    /// Human-readable label for this error category.
     pub fn as_str(&self) -> &'static str {
         match self {
             Self::LirTransformation => "LIR Transformation",

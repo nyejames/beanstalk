@@ -1,3 +1,10 @@
+//! Build a runtime RPN expression tree from AST nodes.
+//!
+//! WHAT: converts a flat AST node sequence into a tree-shaped `RuntimeRpnTree` that
+//!       preserves parser precedence while enabling dedicated CFG lowering.
+//! WHY: tree-shaped RPN makes short-circuit `and`/`or` lowering possible and keeps
+//!      operator arity validation in one place before HIR expression emission.
+
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;

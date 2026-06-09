@@ -47,7 +47,6 @@ impl Declaration {
 
     /// Remap interned path and expression in this declaration.
     // Called by per-file frontend output remapping before module-wide dependency sorting.
-    #[allow(dead_code)]
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         self.id.remap_string_ids(remap);
         self.value.remap_string_ids(remap);
@@ -603,7 +602,6 @@ impl AstNode {
 impl MultiBindTarget {
     /// Remap interned path, diagnostic type, and location.
     // Called by per-file frontend output remapping before module-wide dependency sorting.
-    #[allow(dead_code)]
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         self.id.remap_string_ids(remap);
         self.diagnostic_type.remap_string_ids(remap);
@@ -614,7 +612,6 @@ impl MultiBindTarget {
 impl AssertMessage {
     /// Remap the interned string ID in this assertion message.
     // Called by per-file frontend output remapping before module-wide dependency sorting.
-    #[allow(dead_code)]
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         self.text = remap.get(self.text);
         self.location.remap_string_ids(remap);
@@ -624,7 +621,6 @@ impl AssertMessage {
 impl LoopBindings {
     /// Remap declaration names/expressions in loop bindings.
     // Called by per-file frontend output remapping before module-wide dependency sorting.
-    #[allow(dead_code)]
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         if let Some(item) = &mut self.item {
             item.remap_string_ids(remap);
@@ -638,7 +634,6 @@ impl LoopBindings {
 impl RangeLoopSpec {
     /// Remap expressions in range bounds and step.
     // Called by per-file frontend output remapping before module-wide dependency sorting.
-    #[allow(dead_code)]
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         self.start.remap_string_ids(remap);
         self.end.remap_string_ids(remap);
@@ -651,7 +646,6 @@ impl RangeLoopSpec {
 impl AstNode {
     /// Remap scope, location, and kind for this AST node.
     // Called by per-file frontend output remapping before module-wide dependency sorting.
-    #[allow(dead_code)]
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         self.scope.remap_string_ids(remap);
         self.location.remap_string_ids(remap);
@@ -662,7 +656,6 @@ impl AstNode {
 impl NodeKind {
     /// Remap all interned string IDs and paths in this node kind recursively.
     // Called by per-file frontend output remapping before module-wide dependency sorting.
-    #[allow(dead_code)]
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         match self {
             NodeKind::Return(expressions) => {

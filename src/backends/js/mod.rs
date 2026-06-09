@@ -32,7 +32,12 @@ use crate::compiler_frontend::external_packages::{ExternalFunctionId, ExternalPa
 use crate::compiler_frontend::hir::ids::FunctionId;
 use std::collections::{HashMap, HashSet};
 
-/// Selects which HIR functions should be lowered into one JS bundle.
+/// Policy controlling which HIR functions are emitted in a JS bundle.
+///
+/// WHAT: determines whether every HIR function is lowered or only those reachable from the
+///       module entry `start` function.
+/// WHY: HTML page bundles need reachable-only emission to avoid pulling in unused source-library
+///      wrappers that would request unavailable runtime glue or assets.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JsFunctionEmissionPolicy {
     /// Emit every HIR function. This is the direct JS backend contract and test default.
@@ -134,6 +139,9 @@ pub(crate) fn external_module_export_glue_function_name(id: ExternalFunctionId) 
 }
 
 /// Result of lowering a HIR module to JavaScript.
+///
+/// WHAT: carries the complete emitted JS source plus metadata needed by the HTML builder to
+///       construct import maps, glue wrappers, and runtime asset plans.
 #[derive(Debug, Clone)]
 pub struct JsModule {
     /// Complete JS source code.

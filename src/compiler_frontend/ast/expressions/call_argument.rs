@@ -108,7 +108,6 @@ impl CallArgument {
     /// WHY: per-file header parsing produces argument expressions using local string tables;
     ///      remapping keeps them valid after merge into the module/global table.
     // Called by per-file frontend output remapping before module-wide dependency sorting.
-    #[allow(dead_code)]
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         self.value.remap_string_ids(remap);
         if let Some(target_param) = &mut self.target_param {

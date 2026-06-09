@@ -70,7 +70,6 @@ pub struct RenderExpressionPiece {
 impl TemplateRenderPlan {
     /// Remap all pieces in this render plan recursively.
     // Called by per-file frontend output remapping before module-wide dependency sorting.
-    #[allow(dead_code)]
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         for piece in &mut self.pieces {
             piece.remap_string_ids(remap);
@@ -81,7 +80,6 @@ impl TemplateRenderPlan {
 impl RenderPiece {
     /// Remap text strings, expressions, and slot placeholders in this piece.
     // Called by per-file frontend output remapping before module-wide dependency sorting.
-    #[allow(dead_code)]
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         match self {
             RenderPiece::Text(text) | RenderPiece::HeadContent(text) => {
@@ -112,7 +110,6 @@ impl RenderPiece {
 impl RenderTextPiece {
     /// Remap text string ID and location.
     // Called by per-file frontend output remapping before module-wide dependency sorting.
-    #[allow(dead_code)]
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         self.text = remap.get(self.text);
         self.location.remap_string_ids(remap);
@@ -122,7 +119,6 @@ impl RenderTextPiece {
 impl RenderChildPiece {
     /// Remap the child expression.
     // Called by per-file frontend output remapping before module-wide dependency sorting.
-    #[allow(dead_code)]
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         self.expression.remap_string_ids(remap);
     }
@@ -131,7 +127,6 @@ impl RenderChildPiece {
 impl RenderExpressionPiece {
     /// Remap the dynamic expression.
     // Called by per-file frontend output remapping before module-wide dependency sorting.
-    #[allow(dead_code)]
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         self.expression.remap_string_ids(remap);
     }

@@ -1,3 +1,10 @@
+//! Lower runtime RPN trees into HIR expressions.
+//!
+//! WHAT: walks a `RuntimeRpnTree` and emits `HirExpression` values, including calls
+//!       to operators, external functions, dynamic trait methods, and fallible carriers.
+//! WHY: this is the bridge from AST-owned runtime expression shape to HIR-owned
+//!      value kind and effect representation.
+
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{FallibleHandling, Operator};
 use crate::compiler_frontend::compiler_errors::CompilerError;

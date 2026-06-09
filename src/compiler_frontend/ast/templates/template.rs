@@ -1,3 +1,10 @@
+//! Core template data types.
+//!
+//! WHAT: defines slot keys, directive kinds, template node classifications, and the
+//!       runtime/compile-time `Template` type consumed by AST lowering and HIR generation.
+//! WHY: templates are a first-class Beanstalk construct; this module owns the shared
+//!      vocabulary used by parsing, folding, slot routing, and render-plan preparation.
+
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::templates::styles::whitespace::TemplateWhitespacePassProfile;
 use crate::compiler_frontend::ast::templates::template_render_plan::{
@@ -80,7 +87,6 @@ pub enum TemplateType {
 impl TemplateType {
     /// Remap slot keys carried by template head directives.
     // Called by per-file frontend output remapping before module-wide dependency sorting.
-    #[allow(dead_code)]
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         match self {
             TemplateType::SlotDefinition(key) | TemplateType::SlotInsert(key) => {
@@ -170,7 +176,6 @@ impl SlotPlaceholder {
 
     /// Remap slot key and child wrapper templates recursively.
     // Called by per-file frontend output remapping before module-wide dependency sorting.
-    #[allow(dead_code)]
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         self.key.remap_string_ids(remap);
         for wrapper in &mut self.applied_child_wrappers {
@@ -277,7 +282,6 @@ impl TemplateContent {
 
     /// Remap all atoms in this template content.
     // Called by per-file frontend output remapping before module-wide dependency sorting.
-    #[allow(dead_code)]
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         for atom in &mut self.atoms {
             atom.remap_string_ids(remap);
@@ -365,7 +369,6 @@ impl TemplateAtom {
 
     /// Remap content segments and slot placeholders recursively.
     // Called by per-file frontend output remapping before module-wide dependency sorting.
-    #[allow(dead_code)]
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         match self {
             TemplateAtom::Content(segment) => {
@@ -430,7 +433,6 @@ impl TemplateSegment {
 
     /// Remap expression and source child template recursively.
     // Called by per-file frontend output remapping before module-wide dependency sorting.
-    #[allow(dead_code)]
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         self.expression.remap_string_ids(remap);
         if let Some(source_child) = &mut self.source_child_template {

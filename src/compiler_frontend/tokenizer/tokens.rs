@@ -111,11 +111,6 @@ pub struct PathTokenItem {
 }
 
 impl PathTokenItem {
-    #[allow(dead_code)]
-    pub fn path_only(&self) -> InternedPath {
-        self.path.clone()
-    }
-
     /// Remap all interned string IDs in this path token item into a merged string table.
     ///
     /// WHAT: updates `path`, `alias`, and both locations after a string-table merge.

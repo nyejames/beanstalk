@@ -1,6 +1,6 @@
 //! String-ID remapping tests for declaration shells and type-annotation helpers.
 //!
-//! WHAT: verifies that `DeclarationSyntax`, `BindingTargetSyntax`, `InitializerReference`,
+//! WHAT: verifies that `DeclarationSyntax`, `InitializerReference`,
 //!      and `ParsedTypeRef::Collection` can be remapped after a string-table merge.
 //! WHY: header parsing produces declaration shells using local string tables; remapping must
 //!      preserve all names, type annotations, initializer tokens, and source locations.
@@ -9,7 +9,7 @@ use crate::compiler_frontend::compiler_messages::source_location::{CharPosition,
 use crate::compiler_frontend::datatypes::parsed::{ParsedCollectionCapacity, ParsedTypeRef};
 use crate::compiler_frontend::declaration_syntax::binding_mode::BindingMode;
 use crate::compiler_frontend::declaration_syntax::declaration_shell::{
-    BindingTargetSyntax, DeclarationSyntax, InitializerReference,
+    DeclarationSyntax, InitializerReference,
 };
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
@@ -165,36 +165,4 @@ fn declaration_syntax_remaps_all_fields() {
     );
     assert_test_location(&declaration.initializer_references[0].location, &global);
     assert_test_location(&declaration.location, &global);
-}
-
-#[test]
-fn binding_target_syntax_remaps_all_fields() {
-    let mut local = StringTable::new();
-    let mut global = StringTable::new();
-
-    let name = local.intern("my_var");
-    let type_name = local.intern("Bool");
-
-    let mut target = BindingTargetSyntax {
-        name,
-        binding_mode: BindingMode::ImmutableRuntime,
-        type_annotation: ParsedTypeRef::Named {
-            name: type_name,
-            location: make_location(&mut local),
-        },
-        location: make_location(&mut local),
-    };
-
-    let remap = global.merge_from(&local);
-    target.remap_string_ids(&remap);
-
-    assert_eq!(global.resolve(target.name), "my_var");
-
-    match target.type_annotation {
-        ParsedTypeRef::Named { name, .. } => {
-            assert_eq!(global.resolve(name), "Bool");
-        }
-        _ => panic!("expected Named type annotation"),
-    }
-    assert_test_location(&target.location, &global);
 }

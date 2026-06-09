@@ -1,3 +1,10 @@
+//! Developer-oriented logging and benchmark observation helpers.
+//!
+//! WHAT: provides feature-gated macros (`token_log!`, `timer_log!`, `hir_log!`) and benchmark
+//!       snapshot types for debugging compiler internals without affecting release builds.
+//! WHY: keeping developer instrumentation behind feature flags keeps normal builds deterministic,
+//!      quiet, and free of debug output overhead.
+
 #[cfg(feature = "detailed_timers")]
 use std::time::Duration;
 

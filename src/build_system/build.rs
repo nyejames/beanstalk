@@ -63,7 +63,6 @@ pub struct ResolvedConstFragment {
 #[derive(Debug, Clone)]
 // Kept ahead of the backend handoff: external provider/runtime metadata is recorded by the
 // frontend today, while the current HTML path only reads the subset it can lower.
-#[allow(dead_code)]
 pub(crate) struct ModuleExternalImport {
     pub(crate) package_id: ExternalPackageId,
     pub(crate) runtime_asset: Option<RuntimeAssetIdentity>,

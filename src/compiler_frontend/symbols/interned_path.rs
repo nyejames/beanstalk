@@ -1,3 +1,10 @@
+//! Efficient path representation using interned string components.
+//!
+//! WHAT: `InternedPath` stores path components as `Vec<StringId>`, enabling memory-efficient
+//!       storage, fast path operations, and efficient comparison when paths share common prefixes.
+//! WHY: scope tracking in the compiler frontend produces many paths with shared prefixes; interning
+//!      avoids redundant string storage and makes path comparisons cheap.
+
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap, StringTable};
 use std::path::{Path, PathBuf};
 

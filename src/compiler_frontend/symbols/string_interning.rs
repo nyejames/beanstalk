@@ -1,3 +1,10 @@
+//! String interning for the compiler frontend.
+//!
+//! WHAT: deduplicates strings into a centralized table and hands out compact `StringId` handles,
+//!       making equality comparisons O(1) and reducing memory pressure from repeated identifiers.
+//! WHY: the compiler frontend deals with thousands of repeated identifiers, paths, and keywords;
+//!      interning is one of the cheapest ways to lower allocation overhead and speed up lookups.
+
 use crate::compiler_frontend::instrumentation::{
     FrontendCounter, add_frontend_counter, increment_frontend_counter,
 };

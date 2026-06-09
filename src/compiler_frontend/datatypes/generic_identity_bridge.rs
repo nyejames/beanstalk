@@ -74,7 +74,6 @@ pub enum TypeIdentityKey {
 impl GenericBaseType {
     /// Remap interned names and paths in this generic base type.
     // Called by per-file frontend output remapping before module-wide dependency sorting.
-    #[allow(dead_code)]
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         match self {
             GenericBaseType::Named(name) => {
@@ -93,7 +92,6 @@ impl GenericBaseType {
 impl GenericInstantiationKey {
     /// Remap the base path and every argument key recursively.
     // Called by per-file frontend output remapping before module-wide dependency sorting.
-    #[allow(dead_code)]
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         self.base_path.remap_string_ids(remap);
         for argument in &mut self.arguments {
@@ -105,7 +103,6 @@ impl GenericInstantiationKey {
 impl TypeIdentityKey {
     /// Remap interned paths in this identity key recursively.
     // Called by per-file frontend output remapping before module-wide dependency sorting.
-    #[allow(dead_code)]
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         match self {
             TypeIdentityKey::Builtin(_) | TypeIdentityKey::External(_) => {}

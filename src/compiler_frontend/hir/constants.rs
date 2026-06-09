@@ -15,7 +15,11 @@ pub enum HirDocFragmentKind {
 #[derive(Debug, Clone)]
 pub struct HirDocFragment {
     pub kind: HirDocFragmentKind,
-    #[allow(dead_code)] // Used only in tests
+    /// The resolved documentation text.
+    ///
+    /// WHY: preserved for HIR-to-backend metadata and documentation-fragment extraction.
+    ///      Currently read only in tests; retained so the struct carries the full fragment shape.
+    #[allow(dead_code)]
     pub rendered_text: String,
     pub location: SourceLocation,
 }
@@ -28,6 +32,9 @@ pub struct HirConstField {
 
 #[derive(Debug, Clone)]
 pub enum HirConstValue {
+    /// Scalar payloads are preserved for data-model completeness even though
+    /// current validation matches them with `_`. Tests and future backends may
+    /// read these values.
     #[allow(dead_code)]
     Int(i64),
     #[allow(dead_code)]
@@ -41,11 +48,15 @@ pub enum HirConstValue {
     Record(Vec<HirConstField>),
     Range(Box<HirConstValue>, Box<HirConstValue>),
     Result {
+        /// Stored for completeness so the const-value payload carries the full
+        /// result shape. Currently not read outside of test assertions.
         #[allow(dead_code)]
         variant: crate::compiler_frontend::hir::expressions::FallibleCarrierVariant,
         value: Box<HirConstValue>,
     },
     Choice {
+        /// Stored for completeness so the const-value payload carries the full
+        /// choice shape. Currently not read outside of test assertions.
         #[allow(dead_code)]
         tag: usize,
         fields: Vec<HirConstField>,

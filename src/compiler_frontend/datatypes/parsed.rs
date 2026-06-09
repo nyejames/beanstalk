@@ -123,7 +123,6 @@ impl ParsedTypeRef {
     /// WHY: per-file header parsing produces `ParsedTypeRef` values using local string tables;
     ///      remapping keeps them valid after merge into the module/global table.
     // Called by per-file frontend output remapping before module-wide dependency sorting.
-    #[allow(dead_code)]
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         match self {
             ParsedTypeRef::Inferred => {}

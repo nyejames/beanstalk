@@ -109,7 +109,6 @@ impl FallibleHandling {
     /// Remap error binding names and body AST nodes in this handling shape.
     ///
     /// Called by per-file frontend output remapping before module-wide dependency sorting.
-    #[allow(dead_code)]
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         match self {
             FallibleHandling::Propagate => {}
@@ -130,7 +129,6 @@ impl CatchErrorBinding {
     /// Remap error name and binding path.
     ///
     /// Called by per-file frontend output remapping before module-wide dependency sorting.
-    #[allow(dead_code)]
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         self.error_name = remap.get(self.error_name);
         self.error_binding.remap_string_ids(remap);
