@@ -166,7 +166,3 @@ pub(crate) fn ensure_not_keyword_shadow_identifier(
 
     Ok(())
 }
-
-#[cfg(test)]
-#[path = "identifier_policy_tests.rs"]
-mod identifier_policy_tests;

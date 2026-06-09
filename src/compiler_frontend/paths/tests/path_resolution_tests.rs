@@ -7,12 +7,12 @@ use crate::compiler_frontend::compiler_messages::{
     DiagnosticPayload, ImportDiagnosticKind, InvalidCompileTimePathReason, InvalidImportPathReason,
     RuleDiagnosticKind,
 };
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::compile_time_paths::{
     CompileTimePathBase, CompileTimePathKind, CompileTimePathResolutionError,
 };
 use crate::compiler_frontend::paths::import_resolution::ImportPathResolutionError;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::libraries::{SourceFileKind, SourceFileKindRegistry};
 use std::fs;

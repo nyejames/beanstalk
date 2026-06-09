@@ -20,7 +20,7 @@ use crate::compiler_frontend::compiler_messages::source_location::{CharPosition,
 use crate::compiler_frontend::datatypes::definitions::StructTypeDefinition;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::{NominalTypeId, builtin_type_ids};
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{PathTokenItem, TokenKind};
 use std::collections::HashSet;

@@ -58,7 +58,7 @@ pub(crate) struct ParsedMatchBlock {
     pub default: Option<Vec<AstNode>>,
     pub exhaustiveness: MatchExhaustiveness,
     pub location: SourceLocation,
-    pub scope: crate::compiler_frontend::interned_path::InternedPath,
+    pub scope: crate::compiler_frontend::symbols::interned_path::InternedPath,
 }
 
 /// Peek at the next non-newline token without advancing the stream.

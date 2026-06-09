@@ -1,10 +1,10 @@
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::compiler_frontend::token_scan::{
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
+use crate::compiler_frontend::utilities::token_scan::{
     collect_declaration_initializer_tokens, consume_balanced_template_region,
     find_expression_end_index, has_top_level_comma_before_statement_end,
 };
-use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
 
 fn token(kind: TokenKind) -> Token {
     Token::new(kind, SourceLocation::default())
@@ -247,7 +247,7 @@ fn collect_symbol_references_matches_initializer_behavior_for_bare_symbol() {
         token(TokenKind::Newline),
         token(TokenKind::Eof),
     ];
-    let refs = crate::compiler_frontend::token_scan::collect_symbol_references(&tokens);
+    let refs = crate::compiler_frontend::utilities::token_scan::collect_symbol_references(&tokens);
     assert_eq!(refs.len(), 1);
     assert_eq!(string_table.resolve(refs[0].name), "value");
     assert!(refs[0].dot_member.is_none());
@@ -266,7 +266,7 @@ fn collect_symbol_references_matches_initializer_behavior_for_dot_member() {
         token(TokenKind::Symbol(member)),
         token(TokenKind::Newline),
     ];
-    let refs = crate::compiler_frontend::token_scan::collect_symbol_references(&tokens);
+    let refs = crate::compiler_frontend::utilities::token_scan::collect_symbol_references(&tokens);
     assert_eq!(refs.len(), 1);
     assert_eq!(string_table.resolve(refs[0].name), "config");
     assert_eq!(
@@ -285,7 +285,7 @@ fn collect_symbol_references_matches_initializer_behavior_for_call() {
         token(TokenKind::OpenParenthesis),
         token(TokenKind::CloseParenthesis),
     ];
-    let refs = crate::compiler_frontend::token_scan::collect_symbol_references(&tokens);
+    let refs = crate::compiler_frontend::utilities::token_scan::collect_symbol_references(&tokens);
     assert_eq!(refs.len(), 1);
     assert_eq!(string_table.resolve(refs[0].name), "helper");
     assert!(refs[0].followed_by_call);
@@ -301,7 +301,7 @@ fn collect_symbol_references_matches_initializer_behavior_for_choice_namespace()
         token(TokenKind::DoubleColon),
         token(TokenKind::Symbol(string_table.intern("Ready"))),
     ];
-    let refs = crate::compiler_frontend::token_scan::collect_symbol_references(&tokens);
+    let refs = crate::compiler_frontend::utilities::token_scan::collect_symbol_references(&tokens);
     assert_eq!(refs.len(), 1);
     assert_eq!(string_table.resolve(refs[0].name), "Status");
     assert!(!refs[0].followed_by_call);

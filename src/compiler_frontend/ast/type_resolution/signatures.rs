@@ -13,7 +13,7 @@ use crate::compiler_frontend::datatypes::definitions::TypeDefinition;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::{GenericParameterListId, TypeId};
 use crate::compiler_frontend::datatypes::{ReceiverKey, diagnostic_type_spelling};
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 use super::{ResolvedFunctionSignature, resolve_named_signature_type};

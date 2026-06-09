@@ -5,7 +5,7 @@
 //! import surfaces. Keeping the spellings and matching rules here prevents discovery,
 //! headers, sorting, and import binding from drifting.
 
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 pub(crate) const MOD_FILE_NAME: &str = "#mod.bst";

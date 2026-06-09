@@ -4,8 +4,8 @@
 //! paths and public path values. They do not own import visibility, facade policy, or diagnostic
 //! construction.
 
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::compile_time_paths::CompileTimePathBase;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::libraries::{SourceFileKind, SourceFileKindRegistry};
 use std::fs;

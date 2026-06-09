@@ -19,6 +19,7 @@ mod symbols;
 mod value_use;
 
 #[cfg(test)]
+#[path = "tests/test_symbol_helpers.rs"]
 pub(crate) mod test_symbol_helpers;
 #[cfg(test)]
 mod tests;

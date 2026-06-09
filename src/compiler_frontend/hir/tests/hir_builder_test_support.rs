@@ -21,7 +21,7 @@ use crate::compiler_frontend::hir::ids::{
 };
 use crate::compiler_frontend::hir::module::HirModule;
 use crate::compiler_frontend::hir::structs::{HirField, HirStruct};
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 // Re-export TypeId-first AST construction helpers from the bridge module so existing

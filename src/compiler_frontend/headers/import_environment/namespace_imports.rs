@@ -18,9 +18,9 @@ use crate::compiler_frontend::headers::module_symbols::{
     FacadeExportEntry, FacadeExportTarget, GenericDeclarationKind,
 };
 use crate::compiler_frontend::headers::parse_file_headers::FileImport;
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::keywords::is_valid_identifier;
 use crate::compiler_frontend::source_libraries::mod_file::MOD_FILE_NAME;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringId;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use rustc_hash::{FxHashMap, FxHashSet};

@@ -38,7 +38,7 @@ use crate::compiler_frontend::hir::statements::{
 use crate::compiler_frontend::hir::structs::{HirField, HirStruct};
 use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::hir::tests::hir_expression_lowering_tests::location;
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::type_id_fixture_support::{
     no_value_expr, reference_expr, success_return_slot,

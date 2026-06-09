@@ -39,7 +39,6 @@ pub(crate) mod ast_nodes;
 pub(crate) mod const_values;
 pub(crate) mod generic_bounds;
 pub(crate) mod generic_functions;
-pub(crate) mod instrumentation;
 mod module_ast;
 mod receiver_methods;
 pub(crate) mod type_interner;
@@ -55,6 +54,8 @@ pub(crate) mod expressions {
     pub(crate) mod expression;
     pub(crate) mod expression_kind;
     #[cfg(test)]
+    #[cfg(test)]
+    #[path = "tests/expression_test_support.rs"]
     pub(crate) mod expression_test_support;
     pub(crate) mod expression_types;
     pub(crate) mod external_namespace_members;
@@ -116,7 +117,6 @@ pub use templates::top_level_templates::AstDocFragmentKind;
 // Imports for the AST entry point and body-parsing helper.
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration};
 use crate::compiler_frontend::ast::const_values::facts::AstConstFacts;
-use crate::compiler_frontend::ast::instrumentation::{log_ast_counters, reset_ast_counters};
 use crate::compiler_frontend::ast::module_ast::build_context::AstPhaseContext;
 use crate::compiler_frontend::ast::module_ast::emission::AstEmitter;
 use crate::compiler_frontend::ast::module_ast::environment::{
@@ -126,6 +126,7 @@ use crate::compiler_frontend::ast::module_ast::finalization::AstFinalizer;
 use crate::compiler_frontend::ast::statements::body_dispatch::parse_function_body_statements;
 use crate::compiler_frontend::ast::templates::top_level_templates::AstConstTopLevelFragment;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
+use crate::compiler_frontend::instrumentation::{log_ast_counters, reset_ast_counters};
 
 use crate::benchmark_timer_log;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
@@ -137,8 +138,8 @@ use crate::compiler_frontend::headers::parse_file_headers::{
     Header, HeaderKind, TopLevelConstFragment,
 };
 use crate::compiler_frontend::instrumentation::{FrontendCounter, add_frontend_counter};
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::FileTokens;
 use crate::compiler_frontend::traits::environment::TraitEnvironment;

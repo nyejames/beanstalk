@@ -10,11 +10,11 @@ use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::headers::types::{
     Header, HeaderBuildContext, HeaderExportMode, HeaderKind,
 };
-use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::token_scan::{
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
+use crate::compiler_frontend::utilities::token_scan::{
     InitializerReference, NestingDepth, collect_symbol_references,
 };
-use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
 use crate::projects::settings::TOP_LEVEL_CONST_TEMPLATE_NAME;
 use std::collections::HashSet;
 
@@ -38,7 +38,7 @@ pub(super) fn create_top_level_const_template(
     let start_location = token_stream.current_location();
 
     let closing_bracket = context.string_table.intern("]");
-    crate::compiler_frontend::token_scan::consume_balanced_template_region(
+    crate::compiler_frontend::utilities::token_scan::consume_balanced_template_region(
         token_stream,
         |token, token_kind| {
             if let TokenKind::Symbol(name_id) = token_kind

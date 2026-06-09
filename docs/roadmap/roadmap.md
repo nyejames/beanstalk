@@ -12,14 +12,6 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 
 # Plans / TODOS
 -  `cast` keyword for builtin type casting sugar for builtin Beanstalk types: ``
-- Some tidy up:
-  - Move `keyword_tests` into a test folder somewhere away from main pipeline code
-  - `instrumentation.rs` should be separated into somewhere else since its optimisation info only (since isn't a part of the actual compiler pipeline)
-  - `deferred_feature_diagnostics.rs` should live in `compiler_messages/`
-  - `src/compiler_frontend/reserved_trait_syntax.rs` is now just a core part of the language so should be renamed or this file should be removed if no longer relevant
-  - `basic_utility_functions.rs` and shared utility files like `token_scan.rs` need to be organised into a new `utilies/` folder
-  - Move `interned_path.rs` into `src/compiler_frontend/symbols` and put all test files inside symbols/ into their own `symbols/tests` folder to keep them organised away from production code.
-  - Evaluate places in the compiler that are similarly making these subtle organisation mistakes: multiple test files inside a directory that need to be organised into their own folder, shared utilies or similar grouped files that should be organised into their own directory or outdated file naming / obsolete files / legacy code that needs to be removed.
 - first class Reactivity syntax with message / action patterns in templates
 - Build out core IO library
 - Compile time arbitary precision aritmetic + Decimals Type support

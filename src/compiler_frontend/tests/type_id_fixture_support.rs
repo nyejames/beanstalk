@@ -29,8 +29,8 @@ use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant;
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::module::HirModule;
 use crate::compiler_frontend::hir::terminators::HirTerminator;
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::value_mode::ValueMode;
 
 // ---------------------------------------------------------------------------

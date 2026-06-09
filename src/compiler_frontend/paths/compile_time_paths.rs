@@ -10,7 +10,7 @@ use crate::compiler_frontend::compiler_messages::source_location::SourceLocation
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidCompileTimePathReason,
 };
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringIdRemap, StringTable};
 use std::path::{Path, PathBuf};
 

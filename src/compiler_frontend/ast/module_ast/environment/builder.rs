@@ -39,8 +39,8 @@ use crate::compiler_frontend::headers::module_symbols::{
     GenericDeclarationMetadata, ModuleSymbols,
 };
 use crate::compiler_frontend::headers::parse_file_headers::Header;
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::traits::environment::TraitEnvironment;
 use crate::compiler_frontend::traits::evidence::{

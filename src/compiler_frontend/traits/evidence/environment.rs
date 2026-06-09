@@ -6,7 +6,7 @@
 //!      and code generation without rescanning syntax.
 
 use crate::compiler_frontend::datatypes::ids::TypeId;
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringIdRemap;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::traits::ids::{TraitEvidenceId, TraitId, TraitRequirementId};

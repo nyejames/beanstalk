@@ -13,7 +13,7 @@
 use crate::compiler_frontend::ast::const_values::facts::{
     AstConstFacts, ConstBindingScope, ConstBindingSource, ConstFactValueKind,
 };
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringIdRemap;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use rustc_hash::FxHashMap;

@@ -4,7 +4,7 @@
 //! WHY: all diagnostics now preserve interned paths and resolve them through the shared
 //!      `StringTable` only at rendering or filesystem-adjacent boundaries.
 
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringIdRemap, StringTable};
 use std::cmp::Ordering;
 use std::path::Path;

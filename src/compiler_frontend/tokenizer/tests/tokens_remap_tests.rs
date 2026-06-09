@@ -6,7 +6,7 @@
 //! module-wide header parsing and dependency sorting consume them.
 
 use crate::compiler_frontend::compiler_messages::source_location::{CharPosition, SourceLocation};
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, PathTokenItem, Token, TokenKind};
 

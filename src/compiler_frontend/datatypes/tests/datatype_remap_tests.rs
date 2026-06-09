@@ -11,7 +11,7 @@ use crate::compiler_frontend::datatypes::generic_identity_bridge::{
     BuiltinTypeKey, GenericBaseType, GenericInstantiationKey, TypeIdentityKey,
 };
 use crate::compiler_frontend::datatypes::{DataType, ReceiverKey};
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 fn make_location(string_table: &mut StringTable) -> SourceLocation {

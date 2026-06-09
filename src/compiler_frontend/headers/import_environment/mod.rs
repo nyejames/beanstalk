@@ -45,8 +45,8 @@ use crate::compiler_frontend::headers::module_symbols::{
 };
 use crate::compiler_frontend::headers::parse_file_headers::FileImport;
 use crate::compiler_frontend::headers::types::FileRole;
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::source_libraries::mod_file::import_path_references_special_file;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::libraries::SourceFileKind;

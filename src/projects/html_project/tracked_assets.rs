@@ -51,7 +51,7 @@ pub(crate) struct HtmlTrackedAsset {
     /// Canonical source file on disk used for dedupe, emission, and warnings.
     pub source_filesystem_path: PathBuf,
     /// Authored compile-time path as written in source.
-    pub source_path: crate::compiler_frontend::interned_path::InternedPath,
+    pub source_path: crate::compiler_frontend::symbols::interned_path::InternedPath,
     /// Builder-chosen output path under the project output root.
     pub emitted_output_path: PathBuf,
     /// Whether the HTML reference is rooted or page-relative.

@@ -29,11 +29,11 @@ use crate::compiler_frontend::builtins::expression_parsing::{
     parse_builtin_cast_expression, parse_curly_literal_expression,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::compiler_messages::trait_keyword_diagnostics::{
+    reserved_trait_keyword_error, reserved_trait_keyword_or_dispatch_mismatch,
+};
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidBuiltinCallReason, InvalidControlFlowStatementReason,
-};
-use crate::compiler_frontend::reserved_trait_syntax::{
-    reserved_trait_keyword_error, reserved_trait_keyword_or_dispatch_mismatch,
 };
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::syntax_errors::expression_position::check_expression_common_mistake;

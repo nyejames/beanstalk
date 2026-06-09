@@ -6,14 +6,14 @@
 //! WHY: Consolidates duplicated template folding logic to ensure consistent
 //! behavior across all normalization contexts.
 
-use crate::compiler_frontend::ast::instrumentation::{AstCounter, increment_ast_counter};
 use crate::compiler_frontend::ast::module_ast::finalization::normalize_ast::TemplateNormalizationError;
 use crate::compiler_frontend::ast::templates::template::TemplateConstValueKind;
 use crate::compiler_frontend::ast::templates::template_folding::TemplateFoldContext;
 use crate::compiler_frontend::ast::templates::template_types::Template;
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::instrumentation::{AstCounter, increment_ast_counter};
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 
 /// Folds a compile-time template into a `StringSlice` expression.

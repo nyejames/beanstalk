@@ -9,7 +9,7 @@ use crate::compiler_frontend::hir::constants::HirModuleConst;
 use crate::compiler_frontend::hir::hir_side_table::HirSideTable;
 use crate::compiler_frontend::hir::ids::{FunctionId, HirConstId};
 use crate::compiler_frontend::hir::module::HirModule;
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use std::path::PathBuf;
 
 fn test_module(string_table: &mut StringTable) -> HirModule {

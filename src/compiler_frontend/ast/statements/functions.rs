@@ -27,7 +27,7 @@ use crate::compiler_frontend::declaration_syntax::signature_members::{
     SignatureMemberSyntax, alias_return_type_mismatch_diagnostic, parse_function_signature_syntax,
 };
 use crate::compiler_frontend::declaration_syntax::type_syntax::parsed_ref_to_data_type;
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringIdRemap, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
 use crate::compiler_frontend::type_coercion::parse_context::parse_expectation_for_type_id;

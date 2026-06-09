@@ -379,7 +379,3 @@ pub(crate) fn consume_balanced_template_region<E>(
 
     Ok(())
 }
-
-#[cfg(test)]
-#[path = "tests/token_scan_tests.rs"]
-mod token_scan_tests;

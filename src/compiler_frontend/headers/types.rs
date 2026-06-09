@@ -16,13 +16,13 @@ use crate::compiler_frontend::declaration_syntax::signature_members::{
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::import_environment::HeaderImportEnvironment;
 use crate::compiler_frontend::headers::module_symbols::ModuleSymbols;
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::symbols::identity::FileId;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap, StringTable};
-use crate::compiler_frontend::token_scan::InitializerReference;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation};
 use crate::compiler_frontend::traits::syntax::{TraitConformanceSyntax, TraitDeclarationSyntax};
+use crate::compiler_frontend::utilities::token_scan::InitializerReference;
 use std::collections::HashSet;
 use std::fmt::Display;
 

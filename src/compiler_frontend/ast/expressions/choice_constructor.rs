@@ -21,6 +21,9 @@ use crate::compiler_frontend::ast::expressions::generic_nominal_inference::{
 };
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_errors::CompilerError;
+use crate::compiler_frontend::compiler_messages::trait_keyword_diagnostics::{
+    reserved_trait_keyword_error, reserved_trait_keyword_or_dispatch_mismatch,
+};
 use crate::compiler_frontend::compiler_messages::{
     CompileTimeEvaluationErrorReason, CompilerDiagnostic, InvalidChoiceVariantReason,
 };
@@ -29,9 +32,6 @@ use crate::compiler_frontend::datatypes::definitions::{
     ChoiceVariantDefinition, ChoiceVariantPayloadDefinition, FieldDefinition,
 };
 use crate::compiler_frontend::declaration_syntax::choice::{ChoiceVariant, ChoiceVariantPayload};
-use crate::compiler_frontend::reserved_trait_syntax::{
-    reserved_trait_keyword_error, reserved_trait_keyword_or_dispatch_mismatch,
-};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::value_mode::ValueMode;

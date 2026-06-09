@@ -429,7 +429,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         &mut self,
         trait_name: StringId,
         requirements: &[ResolvedTraitRequirement],
-        public_facade_file: &crate::compiler_frontend::interned_path::InternedPath,
+        public_facade_file: &crate::compiler_frontend::symbols::interned_path::InternedPath,
         trait_environment: &TraitEnvironment,
         string_table: &mut StringTable,
     ) -> Result<(), CompilerMessages> {
@@ -464,7 +464,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         &self,
         trait_name: StringId,
         type_id: crate::compiler_frontend::datatypes::ids::TypeId,
-        public_facade_file: &crate::compiler_frontend::interned_path::InternedPath,
+        public_facade_file: &crate::compiler_frontend::symbols::interned_path::InternedPath,
         location: SourceLocation,
         trait_environment: &TraitEnvironment,
         string_table: &StringTable,

@@ -7,10 +7,10 @@
 //! relative preservation) belong in one shared module so all builders
 //! consume consistent output without reimplementing the rules.
 
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::compile_time_paths::{
     CompileTimePath, CompileTimePathBase, CompileTimePathKind, CompileTimePaths,
 };
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 /// Output path separator style.

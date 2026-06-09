@@ -35,9 +35,6 @@ use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::generic_functions::{
     GenericFunctionInstanceKey, GenericFunctionInstantiationRequest,
 };
-use crate::compiler_frontend::ast::instrumentation::{
-    AstCounter, add_ast_counter, increment_ast_counter,
-};
 use crate::compiler_frontend::ast::module_ast::environment::{
     AstModuleLookups, DeclarationSemanticKind, DeclarationSemanticTable, TopLevelDeclarationTable,
 };
@@ -63,11 +60,14 @@ use crate::compiler_frontend::headers::import_environment::{
 use crate::compiler_frontend::headers::module_symbols::{
     GenericDeclarationMetadata, ModuleSymbols,
 };
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::instrumentation::{
+    AstCounter, add_ast_counter, increment_ast_counter,
+};
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
 use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::traits::environment::TraitEnvironment;
 use crate::compiler_frontend::traits::evidence::TraitEvidenceEnvironment;

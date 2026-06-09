@@ -11,7 +11,6 @@ use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, DiagnosticKind, ImportDiagnosticKind, InvalidCompileTimePathReason,
     InvalidConfigReason, InvalidImportPathReason,
 };
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::compile_time_paths::{
     CompileTimePath, CompileTimePathBase, CompileTimePathKind, CompileTimePathResolutionError,
     CompileTimePaths, classify_existing_target,
@@ -26,6 +25,7 @@ use crate::compiler_frontend::paths::path_normalization::{
     is_relative_import_path, join_and_normalize_path,
 };
 use crate::compiler_frontend::source_libraries::mod_file::MOD_FILE_NAME;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::libraries::{SourceFileKind, SourceFileKindRegistry, SourceLibraryRegistry};
 use std::collections::{HashMap, HashSet};

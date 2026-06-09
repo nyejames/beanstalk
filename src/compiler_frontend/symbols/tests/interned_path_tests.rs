@@ -1,4 +1,5 @@
-use super::*;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 #[test]
 fn to_portable_string_normalizes_windows_separator() {

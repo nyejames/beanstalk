@@ -11,8 +11,8 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::ast::statements::match_patterns::MatchPattern;
 use crate::compiler_frontend::ast::templates::template::{TemplateAtom, TemplateContent};
 use crate::compiler_frontend::ast::templates::template_types::Template;
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::optimizers::constant_folding::{ConstantFoldResult, constant_fold};
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 use super::types::{

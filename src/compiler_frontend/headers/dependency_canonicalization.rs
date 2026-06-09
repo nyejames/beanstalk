@@ -11,7 +11,7 @@ use crate::compiler_frontend::compiler_messages::DiagnosticBag;
 use crate::compiler_frontend::headers::import_environment::HeaderImportEnvironment;
 use crate::compiler_frontend::headers::parse_file_headers::FileImport;
 use crate::compiler_frontend::headers::types::Header;
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use rustc_hash::FxHashMap;
 
 use std::collections::HashSet;

@@ -52,7 +52,7 @@ impl<'a> HirBuilder<'a> {
     pub(crate) fn resolve_or_register_generic_struct(
         &mut self,
         key: &crate::compiler_frontend::datatypes::generic_identity_bridge::GenericInstantiationKey,
-        nominal_path: &crate::compiler_frontend::interned_path::InternedPath,
+        nominal_path: &crate::compiler_frontend::symbols::interned_path::InternedPath,
         _type_id: crate::compiler_frontend::datatypes::ids::TypeId,
         location: &SourceLocation,
     ) -> Result<crate::compiler_frontend::hir::ids::StructId, CompilerError> {
@@ -142,7 +142,7 @@ impl<'a> HirBuilder<'a> {
     pub(crate) fn resolve_or_register_generic_choice(
         &mut self,
         key: &crate::compiler_frontend::datatypes::generic_identity_bridge::GenericInstantiationKey,
-        nominal_path: &crate::compiler_frontend::interned_path::InternedPath,
+        nominal_path: &crate::compiler_frontend::symbols::interned_path::InternedPath,
         _type_id: crate::compiler_frontend::datatypes::ids::TypeId,
         _location: &SourceLocation,
     ) -> Result<crate::compiler_frontend::hir::ids::ChoiceId, CompilerError> {

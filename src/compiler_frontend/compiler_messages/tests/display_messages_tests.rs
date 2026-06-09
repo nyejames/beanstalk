@@ -1,6 +1,5 @@
 use super::{error_display_name, error_visual, format_error_guidance_lines};
 use crate::backends::error_types::BackendErrorType;
-use crate::compiler_frontend::basic_utility_functions::normalize_path;
 use crate::compiler_frontend::compiler_errors::{
     CompilerError, CompilerErrorMetadataKey, CompilerMessages, ErrorType, SourceLocation,
 };
@@ -8,8 +7,9 @@ use crate::compiler_frontend::compiler_messages::render::{
     relative_display_path_from_root, resolve_source_file_path, resolved_display_path,
 };
 use crate::compiler_frontend::compiler_messages::{DiagnosticKind, InfrastructureDiagnosticKind};
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::utilities::basic::normalize_path;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -190,7 +190,7 @@ fn with_scope_path_preserves_existing_span_positions() {
     let mut error = CompilerError::new(
         "bad compiler state",
         SourceLocation::new(
-            crate::compiler_frontend::interned_path::InternedPath::from_path_buf(
+            crate::compiler_frontend::symbols::interned_path::InternedPath::from_path_buf(
                 Path::new("old.bst"),
                 &mut string_table,
             ),
@@ -241,10 +241,11 @@ fn resolve_source_file_path_strips_header_suffix_before_lookup() {
 
     let mut string_table = StringTable::new();
     let header_scope = source_file.join("title.header");
-    let header_scope = crate::compiler_frontend::interned_path::InternedPath::from_path_buf(
-        &header_scope,
-        &mut string_table,
-    );
+    let header_scope =
+        crate::compiler_frontend::symbols::interned_path::InternedPath::from_path_buf(
+            &header_scope,
+            &mut string_table,
+        );
     let resolved = resolve_source_file_path(&header_scope, &string_table);
 
     let expected = fs::canonicalize(&source_file).expect("should canonicalize source file");
@@ -264,10 +265,11 @@ fn formatted_warning_uses_resolved_source_file_path_for_header_scopes() {
 
     let mut string_table = StringTable::new();
     let header_scope = source_file.join("title.header");
-    let header_scope = crate::compiler_frontend::interned_path::InternedPath::from_path_buf(
-        &header_scope,
-        &mut string_table,
-    );
+    let header_scope =
+        crate::compiler_frontend::symbols::interned_path::InternedPath::from_path_buf(
+            &header_scope,
+            &mut string_table,
+        );
 
     let displayed = resolved_display_path(&header_scope, &string_table);
     assert!(displayed.ends_with("main.bst"));

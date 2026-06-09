@@ -6,7 +6,6 @@
 //! WHY: builders need semantic path provenance after path formatting has converted a value into
 //! text, but output placement policy must stay builder-owned rather than frontend-owned.
 
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::compile_time_paths::{
     CompileTimePathBase, CompileTimePathKind, CompileTimePathResolutionError, CompileTimePaths,
 };
@@ -14,6 +13,7 @@ use crate::compiler_frontend::paths::path_format::{
     PathStringFormatConfig, format_compile_time_paths,
 };
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use std::path::{Path, PathBuf};

@@ -47,10 +47,10 @@ use crate::compiler_frontend::declaration_syntax::declaration_shell::{
 use crate::compiler_frontend::declaration_syntax::r#struct::{
     parse_struct_shell, validate_struct_default_values,
 };
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::identifier_policy::{
     IdentifierNamingKind, ensure_not_keyword_shadow_identifier, naming_warning_for_identifier,
 };
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::syntax_errors::signature_position::check_signature_common_mistake;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, Token, TokenKind};

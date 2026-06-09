@@ -39,9 +39,9 @@ use crate::compiler_frontend::symbols::identifier_policy::{
     IdentifierNamingKind, ensure_not_keyword_shadow_identifier, naming_warning_for_identifier,
 };
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::compiler_frontend::token_scan::has_top_level_comma_before_statement_end;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::type_coercion::parse_context::ExpectedType;
+use crate::compiler_frontend::utilities::token_scan::has_top_level_comma_before_statement_end;
 use crate::compiler_frontend::value_mode::ValueMode;
 use std::collections::HashSet;
 

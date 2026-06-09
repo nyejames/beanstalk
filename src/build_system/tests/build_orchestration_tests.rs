@@ -7,12 +7,12 @@ use crate::build_system::build::{
     FileKind, OutputFile, Project, ProjectBuilder, build_project, resolve_project_output_root,
 };
 use crate::compiler_frontend::Flag;
-use crate::compiler_frontend::basic_utility_functions::normalize_path;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::compiler_messages::DiagnosticCategory;
 use crate::compiler_frontend::compiler_messages::render::{
     DiagnosticRenderContext, resolve_source_file_path, terse,
 };
+use crate::compiler_frontend::utilities::basic::normalize_path;
 use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;
 use crate::projects::settings::Config;
 use std::fs;

@@ -9,8 +9,8 @@
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, ImportClauseKind, InvalidImportClauseReason, PathKind,
 };
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::keywords::{is_keyword, is_valid_identifier};
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::lexer::{
     consume_all_whitespace, consume_non_newline_whitespace,

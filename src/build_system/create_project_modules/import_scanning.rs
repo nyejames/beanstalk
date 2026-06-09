@@ -5,9 +5,9 @@
 // Import scanning preserves the same `SourceDiscoveryError` boundary as reachable-file discovery,
 // so syntax diagnostics and file/tooling failures stay typed until the Stage 0 boundary.
 
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::const_paths::collect_paths_from_tokens;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::TokenizerEntryMode;

@@ -6,11 +6,11 @@ use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, DiagnosticKind, DiagnosticPayload, NumberLiteralErrorReason,
     SyntaxDiagnosticKind,
 };
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::style_directives::{
     StyleDirectiveHandlerSpec, StyleDirectiveRegistry, StyleDirectiveSpec,
     TemplateHeadCompatibility,
 };
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_tests::test_support::frontend_test_style_directives;
 use crate::libraries::SourceFileKind;
 use crate::projects::html_project::style_directives::html_project_style_directives;

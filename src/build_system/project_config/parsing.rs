@@ -20,11 +20,11 @@ use crate::compiler_frontend::headers::parse_file_headers::{
     FileFrontendPrepareOutput, Header, HeaderKind, HeaderParseOptions, Headers, parse_headers,
     prepare_file_from_tokens,
 };
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::module_dependencies::resolve_module_dependencies;
 use crate::compiler_frontend::paths::import_resolution::ImportPathResolutionError;
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::{ImportRootPolicy, ProjectPathResolver};
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::lexer::tokenize;
 use crate::compiler_frontend::tokenizer::tokens::{Token, TokenKind, TokenizerEntryMode};

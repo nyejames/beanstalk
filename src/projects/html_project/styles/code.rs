@@ -10,10 +10,10 @@ use crate::compiler_frontend::ast::templates::template::{
 use crate::compiler_frontend::ast::templates::template_render_plan::{
     FormatterInput, FormatterInputPiece, FormatterOutput, FormatterOutputPiece,
 };
-use crate::compiler_frontend::basic_utility_functions::CharacterParsing;
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::style_directives::StyleDirectiveArgumentValue;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::utilities::basic::CharacterParsing;
 use std::sync::Arc;
 pub(crate) fn code_formatter_factory(
     argument: Option<&StyleDirectiveArgumentValue>,

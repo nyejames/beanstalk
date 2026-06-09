@@ -1,4 +1,4 @@
-use super::*;
+use crate::compiler_frontend::symbols::identifier_policy::*;
 
 #[test]
 fn keyword_shadow_matching_ignores_case_and_leading_underscores() {

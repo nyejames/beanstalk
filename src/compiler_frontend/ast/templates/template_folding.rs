@@ -30,10 +30,10 @@ use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, DiagnosticSeverity, InvalidTemplateStructureReason,
 };
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::optimizers::constant_folding::{ConstantFoldResult, constant_fold};
 use crate::compiler_frontend::paths::path_format::PathStringFormatConfig;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::type_coercion::string::{

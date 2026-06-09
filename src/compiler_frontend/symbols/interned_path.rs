@@ -189,7 +189,3 @@ impl Default for InternedPath {
         Self::new()
     }
 }
-
-#[cfg(test)]
-#[path = "tests/interned_path_tests.rs"]
-mod interned_path_tests;

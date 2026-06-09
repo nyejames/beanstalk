@@ -137,7 +137,7 @@ fn parse_option_present_capture(
     // Binding path is filled in by the caller (branching.rs) once the arm scope is known.
     Ok(MatchPattern::OptionPresentCapture {
         name,
-        binding_path: crate::compiler_frontend::interned_path::InternedPath::new(),
+        binding_path: crate::compiler_frontend::symbols::interned_path::InternedPath::new(),
         inner_type_id,
         location,
         binding_location,

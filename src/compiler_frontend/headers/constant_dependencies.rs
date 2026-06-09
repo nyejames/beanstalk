@@ -14,9 +14,9 @@ use crate::compiler_frontend::headers::import_environment::{
 };
 use crate::compiler_frontend::headers::module_symbols::{GenericDeclarationKind, ModuleSymbols};
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
-use crate::compiler_frontend::token_scan::InitializerReference;
+use crate::compiler_frontend::utilities::token_scan::InitializerReference;
 use rustc_hash::{FxHashMap, FxHashSet};
 
 pub(crate) struct ConstantDependencyInput<'a> {

@@ -6,11 +6,11 @@
 //!      construction, and ensures all statement-position errors emit structured
 //!      `CompilerDiagnostic` records instead of legacy `CompilerError`.
 
+use crate::compiler_frontend::compiler_messages::trait_keyword_diagnostics::{
+    reserved_trait_keyword, reserved_trait_keyword_error,
+};
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidStatementPositionReason,
-};
-use crate::compiler_frontend::reserved_trait_syntax::{
-    reserved_trait_keyword, reserved_trait_keyword_error,
 };
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{SourceLocation, TokenKind};

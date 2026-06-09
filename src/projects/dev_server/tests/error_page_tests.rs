@@ -5,7 +5,7 @@ use super::{
 };
 use crate::compiler_frontend::compiler_errors::{CompilerMessages, SourceLocation};
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, InvalidConfigReason};
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::CharPosition;
 use crate::compiler_tests::test_support::temp_dir;

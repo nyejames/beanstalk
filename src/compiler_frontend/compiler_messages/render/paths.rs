@@ -3,9 +3,9 @@
 //! WHAT: converts canonical/interned paths and raw source positions into user-facing display text.
 //! WHY: diagnostics should centralize filesystem-adjacent rendering at the render boundary.
 
-use crate::compiler_frontend::basic_utility_functions::normalize_path;
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::utilities::basic::normalize_path;
 use std::path::{Path, PathBuf};
 
 pub(crate) fn relative_display_path_from_root(scope: &Path, root: &Path) -> String {

@@ -15,8 +15,8 @@ use crate::compiler_frontend::ast::statements::loop_headers::{
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, InvalidLoopHeaderReason};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::compiler_frontend::token_scan::NestingDepth;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::compiler_frontend::utilities::token_scan::NestingDepth;
 
 /// Parse a complete `loop` statement after the `loop` keyword has been consumed.
 pub fn create_loop(

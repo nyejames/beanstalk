@@ -5,8 +5,10 @@
 //! WHY: parallel per-file frontend preparation depends on every local table starting from the same
 //!      fixed symbol universe with identical IDs.
 
-use super::compiler_symbols::{CompilerSymbolIds, CompilerSymbolSet, PreseededStringTable};
-use super::string_interning::StringTable;
+use crate::compiler_frontend::symbols::compiler_symbols::{
+    CompilerSymbolIds, CompilerSymbolSet, PreseededStringTable,
+};
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 fn preseeded_table() -> PreseededStringTable {
     CompilerSymbolSet::preseeded_table(0)

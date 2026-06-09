@@ -5,7 +5,7 @@
 //!      cloned into every expression node.
 
 use crate::compiler_frontend::external_packages::ExternalTypeId;
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringId;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::traits::ids::TraitId;

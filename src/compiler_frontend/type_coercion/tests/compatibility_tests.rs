@@ -4,7 +4,7 @@ use crate::compiler_frontend::datatypes::definitions::StructTypeDefinition;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::BuiltinTypeConstructor;
 use crate::compiler_frontend::datatypes::ids::{NominalTypeId, TypeConstructor};
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::type_coercion::compatibility::{
     TypeCompatibilityCache, TypeCompatibilityMode, is_declaration_compatible,

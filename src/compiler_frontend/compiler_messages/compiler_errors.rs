@@ -83,7 +83,7 @@ use crate::compiler_frontend::compiler_messages::{
     InfrastructureDiagnosticKind,
 };
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringIdRemap, StringTable};
 use std::collections::HashMap;
 use std::ops::Range;

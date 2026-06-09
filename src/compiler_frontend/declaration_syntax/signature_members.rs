@@ -7,6 +7,9 @@
 
 #![allow(clippy::result_large_err)]
 
+use crate::compiler_frontend::compiler_messages::trait_keyword_diagnostics::{
+    reserved_trait_keyword_error, reserved_trait_keyword_or_dispatch_mismatch,
+};
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, DeferredFeatureReason, InvalidFunctionSignatureReason,
     InvalidSignatureMemberReason, TypeMismatchContext,
@@ -15,17 +18,14 @@ use crate::compiler_frontend::datatypes::parsed::ParsedTypeRef;
 use crate::compiler_frontend::declaration_syntax::type_syntax::{
     TypeAnnotationContext, parse_type_annotation,
 };
-use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::reserved_trait_syntax::{
-    reserved_trait_keyword_error, reserved_trait_keyword_or_dispatch_mismatch,
-};
 use crate::compiler_frontend::symbols::identifier_policy::{
     IdentifierNamingKind, ensure_not_keyword_shadow_identifier, naming_warning_for_identifier,
 };
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap, StringTable};
 use crate::compiler_frontend::syntax_errors::signature_position::check_signature_common_mistake;
-use crate::compiler_frontend::token_scan::NestingDepth;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
+use crate::compiler_frontend::utilities::token_scan::NestingDepth;
 use crate::compiler_frontend::value_mode::ValueMode;
 
 /// Distinguishes the two syntactic contexts that share `| ... |` member parsing.

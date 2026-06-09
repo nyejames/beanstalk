@@ -5,7 +5,9 @@
 //! type-resolution policy.
 
 use super::*;
-use crate::compiler_frontend::token_scan::{InitializerReference, collect_symbol_references};
+use crate::compiler_frontend::utilities::token_scan::{
+    InitializerReference, collect_symbol_references,
+};
 
 /// Visit every named type reference inside a `ParsedTypeRef`.
 pub(crate) fn for_each_named_type_in_parsed_ref(

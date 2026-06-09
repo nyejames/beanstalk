@@ -10,7 +10,7 @@ use super::{FileVisibility, ImportEnvironmentBuilder, VisibleNameRegistry};
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::external_packages::ExternalSymbolId;
 use crate::compiler_frontend::headers::parse_file_headers::FileImport;
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringId;
 use crate::libraries::external_import_providers::provider::ResolvedExternalImport;
 

@@ -12,7 +12,7 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::compiler_errors::SourceLocation;
 use crate::compiler_frontend::datatypes::definitions::FieldDefinition;
 use crate::compiler_frontend::datatypes::ids::TypeId;
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 
 /// Lightweight view of one constructor parameter for call validation.
 ///

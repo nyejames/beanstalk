@@ -14,7 +14,7 @@ export function __bs_glue_fn180(...args) {
     try {
         result = __bs_external_fn180(...args);
     } catch (e) {
-        return { tag: "err", value: { message: String(e.message || e), code: 0 } };
+        return { tag: "err", value: { bst_message_fld0: String(e.message || e), bst_code_fld1: 0 } };
     }
 
     if (result && typeof result.ok === "boolean") {
@@ -23,7 +23,7 @@ export function __bs_glue_fn180(...args) {
         }
         if (result.ok === false) {
             const error = result.error || { message: "Unknown error", code: 0 };
-            return { tag: "err", value: { message: error.message || "Unknown error", code: typeof error.code === "number" ? error.code : 0 } };
+            return { tag: "err", value: { bst_message_fld0: error.message || "Unknown error", bst_code_fld1: typeof error.code === "number" ? error.code : 0 } };
         }
     }
 

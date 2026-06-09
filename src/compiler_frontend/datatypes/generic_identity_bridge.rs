@@ -11,7 +11,7 @@ use super::display::format_fallible_signature_parts;
 use super::environment::TypeEnvironment;
 use super::ids::TypeId;
 use crate::compiler_frontend::external_packages::ExternalTypeId;
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap, StringTable};
 
 // -----------------------------------------------------------

@@ -24,12 +24,12 @@ use crate::compiler_frontend::ast::generic_functions::{
     GenericCallExpectedContext, GenericFunctionInferenceInput, GenericFunctionInstantiationRequest,
     infer_generic_function_call, recursive_generic_function_instantiation,
 };
-use crate::compiler_frontend::ast::instrumentation::{AstCounter, increment_ast_counter};
 use crate::compiler_frontend::ast::receiver_methods::ReceiverMethodEntry;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, InvalidReceiverCallReason};
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::TypeId;
+use crate::compiler_frontend::instrumentation::{AstCounter, increment_ast_counter};
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
 

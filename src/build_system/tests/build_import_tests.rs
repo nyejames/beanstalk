@@ -4,7 +4,7 @@
 
 use super::*;
 use crate::build_system::build::{ProjectBuilder, build_project};
-use crate::compiler_frontend::basic_utility_functions::normalize_path;
+use crate::compiler_frontend::utilities::basic::normalize_path;
 use crate::projects::html_project::html_project_builder::HtmlProjectBuilder;
 use std::fs;
 

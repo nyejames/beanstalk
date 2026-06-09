@@ -15,13 +15,9 @@ pub(crate) mod optimizers {
 
 pub(crate) mod module_dependencies;
 
-pub(crate) mod basic_utility_functions;
 pub(crate) mod builtins;
-pub(crate) mod deferred_feature_diagnostics;
 pub(crate) mod instrumentation;
 pub(crate) mod keywords;
-
-pub(crate) mod reserved_trait_syntax;
 pub(crate) mod traits;
 
 pub(crate) mod compiler_messages;
@@ -30,22 +26,19 @@ pub(crate) mod symbols {
     pub(crate) mod compiler_symbols;
     pub(crate) mod identifier_policy;
     pub(crate) mod identity;
+    pub(crate) mod interned_path;
     pub(crate) mod string_interning;
 
     #[cfg(test)]
-    pub(crate) mod compiler_symbols_tests;
-
-    #[cfg(test)]
-    pub(crate) mod string_interning_tests;
+    mod tests;
 }
 
 pub(crate) use compiler_messages::compiler_errors;
 pub(crate) use compiler_messages::display_messages;
 pub(crate) mod datatypes;
-pub(crate) mod interned_path;
 pub(crate) mod syntax_errors;
-pub(crate) mod token_scan;
 pub(crate) mod type_coercion;
+pub(crate) mod utilities;
 pub(crate) mod value_mode;
 
 pub(crate) mod external_packages;
@@ -78,14 +71,12 @@ pub enum FrontendBuildProfile {
 }
 
 #[cfg(test)]
-mod keyword_tests;
-
-#[cfg(test)]
 pub(crate) mod tests {
     pub(crate) mod ast_fixture_support;
     pub(crate) mod borrow_fixture_support;
     pub(crate) mod external_package_support;
     pub(crate) mod hir_fixture_support;
+    mod keyword_tests;
     pub(crate) mod parse_support;
     pub(crate) mod type_id_fixture_support;
 }

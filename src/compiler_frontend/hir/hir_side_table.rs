@@ -20,7 +20,7 @@ use crate::compiler_frontend::hir::ids::{
     BlockId, ChoiceId, FieldId, FunctionId, HirNodeId, HirValueId, LocalId, StructId,
 };
 use crate::compiler_frontend::hir::statements::HirStatement;
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringIdRemap, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use rustc_hash::FxHashMap;

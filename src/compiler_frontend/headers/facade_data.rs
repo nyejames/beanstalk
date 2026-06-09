@@ -29,8 +29,8 @@ use crate::compiler_frontend::headers::module_symbols::{
     FacadeExportEntry, FacadeExportTarget, ModuleSymbols,
 };
 use crate::compiler_frontend::headers::types::{FileRole, Header, HeaderExportMode, HeaderKind};
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 

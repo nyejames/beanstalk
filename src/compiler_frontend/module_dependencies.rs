@@ -23,7 +23,7 @@ use crate::compiler_frontend::headers::parse_file_headers::{
     Header, HeaderKind, Headers, TopLevelConstFragment,
 };
 use crate::compiler_frontend::instrumentation::{FrontendCounter, add_frontend_counter};
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::header_log;
 use rustc_hash::{FxHashMap, FxHashSet};

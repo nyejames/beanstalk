@@ -8,6 +8,9 @@
 //! item handling; this module keeps the high-level loop visible while delegated modules own details.
 
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
+use crate::compiler_frontend::compiler_messages::trait_keyword_diagnostics::{
+    reserved_trait_keyword, reserved_trait_keyword_error,
+};
 use crate::compiler_frontend::headers::file_imports::{
     parse_and_record_export_path_clause, parse_and_record_imports, parse_and_record_public_imports,
 };
@@ -22,9 +25,6 @@ use crate::compiler_frontend::headers::top_level_classifier::{
 use crate::compiler_frontend::headers::types::{
     FileFrontendPrepareError, FileFrontendPrepareOutput, FileRole, HeaderBuildContext,
     HeaderExportMode, HeaderKind, HeaderParseContext,
-};
-use crate::compiler_frontend::reserved_trait_syntax::{
-    reserved_trait_keyword, reserved_trait_keyword_error,
 };
 use crate::compiler_frontend::symbols::string_interning::StringId;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
@@ -107,7 +107,7 @@ fn parse_headers_in_file_inner(
             }
 
             HeaderFileItem::ReservedTraitSyntax => {
-                handle_reserved_trait_syntax(&current_token, current_location)?;
+                handle_trait_keyword_header_item(&current_token, current_location)?;
             }
 
             HeaderFileItem::RuntimeTemplate => {
@@ -376,7 +376,7 @@ fn handle_prelude_symbol_item(
     Ok(())
 }
 
-fn handle_reserved_trait_syntax(
+fn handle_trait_keyword_header_item(
     current_token: &Token,
     current_location: SourceLocation,
 ) -> Result<(), CompilerDiagnostic> {

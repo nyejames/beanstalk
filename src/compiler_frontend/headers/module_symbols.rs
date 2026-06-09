@@ -38,7 +38,7 @@ use crate::compiler_frontend::declaration_syntax::type_syntax::parsed_ref_to_dat
 use crate::compiler_frontend::headers::parse_file_headers::{
     FileImport, FileRole, Header, HeaderKind,
 };
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::value_mode::ValueMode;

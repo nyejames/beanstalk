@@ -11,7 +11,7 @@ use crate::compiler_frontend::hir::ids::FunctionId;
 use crate::compiler_frontend::hir::reachability::{
     ReachableDynamicTraitOperation, ReachableDynamicTraitOperationKind,
 };
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::traits::ids::{TraitEvidenceId, TraitRequirementId};
 
 impl<'hir> JsEmitter<'hir> {

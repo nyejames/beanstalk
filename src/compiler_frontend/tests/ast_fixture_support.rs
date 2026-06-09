@@ -13,7 +13,7 @@ use crate::compiler_frontend::ast::statements::functions::{
     FunctionReturn, FunctionSignature, ReturnChannel, ReturnSlot,
 };
 use crate::compiler_frontend::datatypes::{DataType, TypeId};
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::CharPosition;
 use crate::compiler_frontend::value_mode::ValueMode;

@@ -5,8 +5,8 @@
 //! WHY: header splitting and AST statement parsing both need token-boundary facts,
 //! but neither stage should duplicate delimiter-depth scans or depend on the other.
 
-use crate::compiler_frontend::token_scan::NestingDepth;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::compiler_frontend::utilities::token_scan::NestingDepth;
 
 fn find_top_level_token_on_line(
     token_stream: &FileTokens,

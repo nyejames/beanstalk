@@ -21,8 +21,8 @@ use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidTemplateStructureReason,
 };
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::compiler_frontend::token_scan::NestingDepth;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, Token, TokenKind};
+use crate::compiler_frontend::utilities::token_scan::NestingDepth;
 
 /// Parse a template `if` suffix after the `if` token has been seen.
 #[allow(clippy::result_large_err)]

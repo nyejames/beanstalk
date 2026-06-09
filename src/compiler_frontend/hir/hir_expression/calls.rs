@@ -29,7 +29,7 @@ use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::statements::{
     HirDynamicTraitCallArgument, HirDynamicTraitCallArgumentEffect, HirStatement, HirStatementKind,
 };
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::traits::ids::{TraitId, TraitRequirementId};
 use crate::return_hir_transformation_error;

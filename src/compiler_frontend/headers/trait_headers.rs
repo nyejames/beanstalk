@@ -11,8 +11,8 @@ use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidDeclarationReason, InvalidSignatureMemberReason,
 };
 use crate::compiler_frontend::declaration_syntax::signature_members::parse_trait_requirement_signature_syntax;
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::identifier_policy::is_uppercase_constant_name;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
 use crate::compiler_frontend::traits::syntax::{

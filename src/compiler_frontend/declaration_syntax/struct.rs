@@ -28,7 +28,7 @@ pub fn parse_struct_shell(
     token_stream: &mut FileTokens,
     string_table: &mut StringTable,
     warnings: &mut Vec<CompilerDiagnostic>,
-    owner_path: &crate::compiler_frontend::interned_path::InternedPath,
+    owner_path: &crate::compiler_frontend::symbols::interned_path::InternedPath,
 ) -> Result<Vec<SignatureMemberSyntax>, CompilerDiagnostic> {
     parse_record_body(
         token_stream,

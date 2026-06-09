@@ -15,7 +15,7 @@ use super::ids::{
     ExternalConstantId, ExternalFunctionId, ExternalPackageId, ExternalSymbolId, ExternalTypeId,
 };
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::return_compiler_error;
 use std::collections::HashMap;
@@ -559,7 +559,7 @@ impl ExternalPackageRegistry {
     /// missing source file.
     pub fn unsupported_known_package_import(
         &self,
-        import_path: &crate::compiler_frontend::interned_path::InternedPath,
+        import_path: &crate::compiler_frontend::symbols::interned_path::InternedPath,
         string_table: &crate::compiler_frontend::symbols::string_interning::StringTable,
     ) -> Option<&'static str> {
         let components = import_path.as_components();

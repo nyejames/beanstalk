@@ -5,7 +5,7 @@
 //! WHY: parallel module compilation can merge overlapping local suffixes, so remapping must stay
 //! correct even when inherited IDs remain identity.
 
-use super::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 #[test]
 fn shared_fork_resolves_base_strings_without_local_entries() {

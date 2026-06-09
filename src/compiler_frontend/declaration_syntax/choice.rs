@@ -17,19 +17,19 @@ use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::compiler_messages::DeferredFeatureReason;
 use crate::compiler_frontend::compiler_messages::DiagnosticBag;
 use crate::compiler_frontend::compiler_messages::InvalidChoiceVariantReason;
+use crate::compiler_frontend::compiler_messages::trait_keyword_diagnostics::{
+    reserved_trait_keyword, reserved_trait_keyword_error,
+    reserved_trait_keyword_or_dispatch_mismatch,
+};
 use crate::compiler_frontend::datatypes::parsed::ParsedTypeRef;
 use crate::compiler_frontend::declaration_syntax::record_body::parse_record_body;
 use crate::compiler_frontend::declaration_syntax::signature_members::{
     SignatureMemberContext, SignatureMemberSyntax,
 };
-use crate::compiler_frontend::interned_path::InternedPath;
-use crate::compiler_frontend::reserved_trait_syntax::{
-    reserved_trait_keyword, reserved_trait_keyword_error,
-    reserved_trait_keyword_or_dispatch_mismatch,
-};
 use crate::compiler_frontend::symbols::identifier_policy::{
     IdentifierNamingKind, ensure_not_keyword_shadow_identifier, naming_warning_for_identifier,
 };
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
 use rustc_hash::FxHashMap;

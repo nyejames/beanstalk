@@ -2167,7 +2167,7 @@ fn project_local_lib_directory_is_discovered_as_source_library_root() {
     .expect("resolver should build");
 
     // Import path `@helper/utils` should resolve to the project-local lib root.
-    let mut path = crate::compiler_frontend::interned_path::InternedPath::new();
+    let mut path = crate::compiler_frontend::symbols::interned_path::InternedPath::new();
     path.push_str("helper", &mut string_table);
     path.push_str("utils", &mut string_table);
 
@@ -2261,7 +2261,7 @@ fn configured_library_folder_is_discovered_as_source_library_root() {
     )
     .expect("resolver should build");
 
-    let mut path = crate::compiler_frontend::interned_path::InternedPath::new();
+    let mut path = crate::compiler_frontend::symbols::interned_path::InternedPath::new();
     path.push_str("helper", &mut string_table);
     path.push_str("utils", &mut string_table);
 

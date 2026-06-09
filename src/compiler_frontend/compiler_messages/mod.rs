@@ -13,6 +13,7 @@
 pub(crate) mod compiler_dev_logging;
 pub(crate) mod compiler_diagnostic;
 pub(crate) mod compiler_errors;
+pub(crate) mod deferred_feature_diagnostics;
 pub(crate) mod diagnostic_bag;
 pub(crate) mod diagnostic_descriptor;
 pub(crate) mod diagnostic_kind;
@@ -23,6 +24,7 @@ pub(crate) mod diagnostic_severity;
 pub(crate) mod display_messages;
 pub(crate) mod render;
 pub(crate) mod source_location;
+pub(crate) mod trait_keyword_diagnostics;
 
 pub(crate) use compiler_diagnostic::CompilerDiagnostic;
 pub(crate) use diagnostic_bag::DiagnosticBag;

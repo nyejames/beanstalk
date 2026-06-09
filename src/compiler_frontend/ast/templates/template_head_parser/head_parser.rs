@@ -38,9 +38,9 @@ use crate::compiler_frontend::style_directives::{
     StyleDirectiveKind, StyleDirectiveSpec, TemplateHeadCompatibility, TemplateHeadTag,
 };
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::compiler_frontend::token_scan::NestingDepth;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind, path_token_paths};
 use crate::compiler_frontend::type_coercion::parse_context::ExpectedType;
+use crate::compiler_frontend::utilities::token_scan::NestingDepth;
 use crate::compiler_frontend::value_mode::ValueMode;
 use crate::projects::settings::BS_VAR_PREFIX;
 

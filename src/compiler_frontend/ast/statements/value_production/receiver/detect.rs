@@ -8,8 +8,8 @@
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::compiler_messages::InvalidControlFlowStatementReason;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
-use crate::compiler_frontend::token_scan::find_expression_end_index;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::compiler_frontend::utilities::token_scan::find_expression_end_index;
 
 /// Classified shape of an `if` header at a value-producing receiver.
 ///

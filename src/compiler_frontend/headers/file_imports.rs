@@ -10,10 +10,10 @@ use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::headers::file_state::HeaderFileParseState;
 use crate::compiler_frontend::headers::imports::normalize_import_dependency_path;
 use crate::compiler_frontend::headers::types::{FileImport, HeaderExportMode, HeaderParseContext};
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::const_paths::{
     parse_export_path_clause_items, parse_import_clause_items,
 };
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringId;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation};
 

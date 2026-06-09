@@ -30,8 +30,8 @@ use crate::compiler_frontend::hir::hir_side_table::HirLocalOriginKind;
 use crate::compiler_frontend::hir::ids::{LocalId, RegionId};
 use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_format::format_compile_time_paths;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::hir_log;
 use crate::return_hir_transformation_error;
 

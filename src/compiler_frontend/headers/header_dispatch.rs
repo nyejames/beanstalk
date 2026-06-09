@@ -34,14 +34,14 @@ use crate::compiler_frontend::headers::dependency_edges::{
 use crate::compiler_frontend::headers::types::{
     Header, HeaderBuildContext, HeaderExportMode, HeaderKind,
 };
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::identifier_policy::{
     IdentifierNamingKind, ensure_not_keyword_shadow_identifier, naming_warning_for_identifier,
 };
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::compiler_frontend::token_scan::InitializerReference;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
 use crate::compiler_frontend::traits::syntax::{ConformanceTargetKind, ConformanceTargetSyntax};
+use crate::compiler_frontend::utilities::token_scan::InitializerReference;
 use rustc_hash::FxHashSet;
 use std::collections::HashSet;
 

@@ -1,12 +1,12 @@
 //! Unit tests for compile-time path string formatting.
 
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::compile_time_paths::{
     CompileTimePath, CompileTimePathBase, CompileTimePathKind, CompileTimePaths,
 };
 use crate::compiler_frontend::paths::path_format::{
     OutputPathStyle, PathStringFormatConfig, format_compile_time_path, format_compile_time_paths,
 };
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use std::path::PathBuf;
 

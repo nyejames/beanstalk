@@ -6,7 +6,7 @@
 
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::datatypes::ids::GenericParameterListId;
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation};
 
 #[derive(Clone, Debug)]

@@ -13,11 +13,11 @@ use crate::compiler_frontend::ast::field_access::{
 use crate::compiler_frontend::ast::place_access::ast_node_is_place;
 use crate::compiler_frontend::ast::statements::declarations::create_reference;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
+use crate::compiler_frontend::compiler_messages::trait_keyword_diagnostics::{
+    reserved_trait_keyword_error, reserved_trait_keyword_or_dispatch_mismatch,
+};
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidCopyTargetReason, InvalidReceiverCallReason, NameNamespace,
-};
-use crate::compiler_frontend::reserved_trait_syntax::{
-    reserved_trait_keyword_error, reserved_trait_keyword_or_dispatch_mismatch,
 };
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};

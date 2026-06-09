@@ -14,7 +14,7 @@ use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::headers::import_environment::diagnostics;
 use crate::compiler_frontend::headers::module_symbols::FacadeExportTarget;
 use crate::compiler_frontend::headers::parse_file_headers::FileImport;
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 impl<'a> ImportEnvironmentBuilder<'a> {

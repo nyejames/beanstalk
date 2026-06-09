@@ -5,15 +5,14 @@
 //! callers can run it against worker-local string tables before deterministic module aggregation.
 #![allow(clippy::result_large_err)]
 
-use crate::compiler_frontend::basic_utility_functions::CharacterParsing;
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::keywords::{
     is_identifier_continue, is_valid_identifier, keyword_token_kind,
 };
 use crate::compiler_frontend::paths::const_paths::parse_file_path;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
 use crate::compiler_frontend::symbols::identity::FileId;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::newline_handling::normalize_consumed_carriage_return_newline;
 use crate::compiler_frontend::tokenizer::numeric::tokenize_numeric_literal;
@@ -25,6 +24,7 @@ use crate::compiler_frontend::tokenizer::tokens::{
     FileTokens, SourceLocation, TemplateBodyMode, Token, TokenKind, TokenStream, TokenizeMode,
     TokenizerEntryMode,
 };
+use crate::compiler_frontend::utilities::basic::CharacterParsing;
 use crate::projects::settings;
 use crate::token_log;
 

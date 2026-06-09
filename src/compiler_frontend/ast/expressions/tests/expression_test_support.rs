@@ -16,8 +16,8 @@ use crate::compiler_frontend::ast::expressions::expression_types::ConstRecordSta
 use crate::compiler_frontend::datatypes::ids::{TypeId, builtin_type_ids};
 use crate::compiler_frontend::datatypes::{DataType, PathTypeKind};
 use crate::compiler_frontend::external_packages::ExternalFunctionId;
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::compile_time_paths::CompileTimePaths;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::value_mode::ValueMode;
 

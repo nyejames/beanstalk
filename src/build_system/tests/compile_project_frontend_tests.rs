@@ -10,8 +10,8 @@ use crate::compiler_frontend::external_packages::{
     ExternalSignatureType, ExternalTypeId, ExternalTypeSpec,
 };
 use crate::compiler_frontend::hir::statements::HirStatementKind;
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_tests::test_support::temp_dir;
 use crate::libraries::LibrarySet;

@@ -4,8 +4,8 @@
 //! WHY: semantic identity must not be reconstructed from filesystem/path strings.
 
 use crate::compiler_frontend::compiler_errors::CompilerError;
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::paths::path_resolution::ProjectPathResolver;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use rustc_hash::FxHashMap;
 use std::path::{Path, PathBuf};

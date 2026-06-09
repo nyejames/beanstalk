@@ -21,7 +21,7 @@ pub(super) fn push_runtime_template_tokens_to_start_function(
     // Mutation: EOF diagnostics for unclosed templates intern the expected closing delimiter
     // ("]") so the diagnostic payload can be remapped and rendered later.
     let closing_bracket = string_table.intern("]");
-    crate::compiler_frontend::token_scan::consume_balanced_template_region(
+    crate::compiler_frontend::utilities::token_scan::consume_balanced_template_region(
         token_stream,
         |token, _token_kind| {
             start_function_body.push(token);

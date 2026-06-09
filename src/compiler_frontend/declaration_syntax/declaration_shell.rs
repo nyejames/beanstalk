@@ -15,13 +15,13 @@ use crate::compiler_frontend::declaration_syntax::type_syntax::{
     TypeAnnotationContext, parse_type_annotation,
 };
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap, StringTable};
-use crate::compiler_frontend::token_scan::{
+use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
+use crate::compiler_frontend::utilities::token_scan::{
     collect_declaration_initializer_tokens, collect_symbol_references,
 };
-use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
 use crate::compiler_frontend::value_mode::ValueMode;
 
-pub use crate::compiler_frontend::token_scan::InitializerReference;
+pub use crate::compiler_frontend::utilities::token_scan::InitializerReference;
 
 // All the component parts of a declaration before it is resolved / parsed.
 // Header parsing stores the shell; AST resolves the shell into a fully typed declaration.

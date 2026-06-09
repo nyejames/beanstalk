@@ -18,7 +18,7 @@ use crate::compiler_frontend::datatypes::{
     BuiltinScalarReceiver, DataType, ReceiverKey, builtin_type_ids,
 };
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::value_mode::ValueMode;

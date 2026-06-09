@@ -10,7 +10,7 @@ use crate::compiler_frontend::headers::types::{
     FileFrontendPrepareError, FileFrontendPrepareOutput, FileImport, FileRole, Header, HeaderKind,
     TopLevelConstFragment,
 };
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringId;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
 use crate::projects::settings::{

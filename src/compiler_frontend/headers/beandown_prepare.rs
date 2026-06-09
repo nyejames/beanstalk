@@ -13,11 +13,11 @@ use crate::compiler_frontend::declaration_syntax::declaration_shell::Declaration
 use crate::compiler_frontend::headers::types::{
     FileFrontendPrepareOutput, FileRole, Header, HeaderExportMode, HeaderKind,
 };
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::identity::FileId;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
-use crate::compiler_frontend::token_scan::collect_symbol_references;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
+use crate::compiler_frontend::utilities::token_scan::collect_symbol_references;
 use std::collections::HashSet;
 use std::path::PathBuf;
 

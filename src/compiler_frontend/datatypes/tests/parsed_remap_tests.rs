@@ -10,7 +10,7 @@ use crate::compiler_frontend::datatypes::generic_parameters::{
     GenericParameter, GenericParameterList, TypeParameterId,
 };
 use crate::compiler_frontend::datatypes::parsed::ParsedTypeRef;
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 fn make_location(string_table: &mut StringTable) -> SourceLocation {

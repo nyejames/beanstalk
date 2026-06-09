@@ -6,7 +6,7 @@
 //! `TypeId` arguments, not by rendered names or local import aliases.
 
 use crate::compiler_frontend::datatypes::ids::TypeId;
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]

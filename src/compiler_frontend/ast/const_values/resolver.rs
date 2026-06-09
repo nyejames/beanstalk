@@ -10,8 +10,8 @@ use crate::compiler_frontend::ast::const_values::facts::{
     AstConstDeclarationFact, ConstBindingScope, ConstBindingSource, ConstFactValueKind,
 };
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::interned_path::InternedPath;
 use crate::compiler_frontend::optimizers::constant_folding::{ConstantFoldResult, constant_fold};
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use rustc_hash::FxHashMap;
 

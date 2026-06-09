@@ -11,7 +11,7 @@ use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::external_packages::{ExternalFunctionId, ExternalSymbolId};
 use crate::compiler_frontend::headers::import_environment::NamespaceRecordSource;
 use crate::compiler_frontend::headers::import_environment::diagnostics;
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use rustc_hash::FxHashMap;

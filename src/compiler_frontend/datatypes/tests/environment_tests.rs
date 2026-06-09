@@ -17,7 +17,7 @@ use crate::compiler_frontend::datatypes::{
     BuiltinScalarReceiver, DataType, ReceiverKey, diagnostic_type_spelling,
 };
 use crate::compiler_frontend::external_packages::ExternalTypeId;
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use rustc_hash::FxHashMap;

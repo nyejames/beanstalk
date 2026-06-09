@@ -38,8 +38,8 @@ use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidTemplateStructureReason,
 };
 use crate::compiler_frontend::symbols::string_interning::StringTable;
-use crate::compiler_frontend::token_scan::consume_balanced_template_region;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
+use crate::compiler_frontend::utilities::token_scan::consume_balanced_template_region;
 use crate::compiler_frontend::value_mode::ValueMode;
 
 // -------------------------

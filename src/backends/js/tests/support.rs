@@ -29,7 +29,7 @@ use crate::compiler_frontend::hir::module::{HirChoice, HirModule};
 use crate::compiler_frontend::hir::regions::HirRegion;
 use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
 use crate::compiler_frontend::hir::terminators::HirTerminator;
-pub(super) use crate::compiler_frontend::interned_path::InternedPath;
+pub(super) use crate::compiler_frontend::symbols::interned_path::InternedPath;
 pub(super) use crate::compiler_frontend::symbols::string_interning::StringTable;
 pub(super) use crate::compiler_frontend::tokenizer::tokens::{CharPosition, SourceLocation};
 

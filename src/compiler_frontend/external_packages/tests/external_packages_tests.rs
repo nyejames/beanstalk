@@ -9,7 +9,7 @@ use crate::compiler_frontend::external_packages::{
     ExternalFunctionLowerings, ExternalPackageOrigin, ExternalPackageRegistry, ExternalParameter,
     ExternalReturnAlias, ExternalReturnSlot, ExternalSignatureType, external_success_returns,
 };
-use crate::compiler_frontend::interned_path::InternedPath;
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 
 fn import_path(components: &[&str], string_table: &mut StringTable) -> InternedPath {
