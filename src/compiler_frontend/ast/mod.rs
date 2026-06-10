@@ -54,7 +54,6 @@ pub(crate) mod expressions {
     pub(crate) mod expression;
     pub(crate) mod expression_kind;
     #[cfg(test)]
-    #[cfg(test)]
     #[path = "tests/expression_test_support.rs"]
     pub(crate) mod expression_test_support;
     pub(crate) mod expression_types;

@@ -68,8 +68,7 @@ pub(super) fn tokenize_numeric_literal(
             has_decimal_point = true;
             last_segment_was_digit = false;
 
-            let dot = advance_after_peek(
-                stream,
+            let dot = stream.advance_after_peek(
                 "Tokenizer peeked a decimal point but could not advance the stream.",
             );
             token_value.push(dot);
@@ -77,8 +76,7 @@ pub(super) fn tokenize_numeric_literal(
         }
 
         if next_char.is_numeric() {
-            let digit = advance_after_peek(
-                stream,
+            let digit = stream.advance_after_peek(
                 "Tokenizer peeked a numeric character but could not advance the stream.",
             );
             token_value.push(digit);
@@ -141,13 +139,4 @@ pub(super) fn tokenize_numeric_literal(
     }
 
     return_token!(TokenKind::FloatLiteral(parsed_value), stream);
-}
-
-/// Advance after a successful `peek` in tokenizer loops.
-///
-/// WHAT: numeric tokenization inspects the next character before consuming it.
-/// Once `peek` has returned `Some`, `next` returning `None` means the stream
-/// invariant is broken, not that user source is malformed.
-fn advance_after_peek(stream: &mut TokenStream<'_>, invariant_message: &'static str) -> char {
-    stream.next().expect(invariant_message)
 }

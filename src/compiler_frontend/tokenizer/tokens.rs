@@ -350,6 +350,14 @@ impl<'a> TokenStream<'a> {
     pub fn peek(&mut self) -> Option<&char> {
         self.chars.peek()
     }
+    /// WHAT: advance the stream after a successful `peek`, panicking only on an internal
+    /// invariant failure.
+    ///
+    /// WHY: once `peek` has returned `Some`, `next` returning `None` means the stream
+    /// invariant is broken, not that user source is malformed.
+    pub fn advance_after_peek(&mut self, invariant_message: &'static str) -> char {
+        self.next().expect(invariant_message)
+    }
 
     pub fn new_location(&mut self) -> SourceLocation {
         let start_pos = self.start_position;

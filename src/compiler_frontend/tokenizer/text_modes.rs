@@ -94,8 +94,7 @@ pub(super) fn tokenize_template_body(
             }
 
             _ => {
-                let next_char = advance_after_peek(
-                    stream,
+                let next_char = stream.advance_after_peek(
                     "Tokenizer peeked a template-body character but could not advance the stream.",
                 );
                 token_value.push(next_char);
@@ -139,8 +138,7 @@ pub(super) fn tokenize_code_template_body(
             break;
         }
 
-        let next_char = advance_after_peek(
-            stream,
+        let next_char = stream.advance_after_peek(
             "Tokenizer peeked a code-template body character but could not advance the stream.",
         );
 
@@ -210,14 +208,4 @@ fn append_code_template_body_char(
     }
 
     token_value.push(ch);
-}
-
-/// Advance after a successful `peek` in text-mode tokenizer loops.
-///
-/// WHAT: text-mode tokenization peeks delimiter characters before deciding
-/// whether to consume them.
-/// WHY: if `peek` returned `Some`, a subsequent `next` returning `None` would be
-/// an internal stream invariant failure, not malformed user source.
-fn advance_after_peek(stream: &mut TokenStream<'_>, invariant_message: &'static str) -> char {
-    stream.next().expect(invariant_message)
 }

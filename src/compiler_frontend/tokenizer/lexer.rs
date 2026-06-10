@@ -510,8 +510,7 @@ fn tokenize_style_directive(
     }
 
     let mut directive_text = String::new();
-    let first_directive_char = advance_after_peek(
-        stream,
+    let first_directive_char = stream.advance_after_peek(
         "Tokenizer validated a style directive name but failed to consume its first character.",
     );
     directive_text.push(first_directive_char);
@@ -521,8 +520,7 @@ fn tokenize_style_directive(
             break;
         }
 
-        let directive_char = advance_after_peek(
-            stream,
+        let directive_char = stream.advance_after_peek(
             "Tokenizer peeked a style directive character but could not advance the stream.",
         );
         directive_text.push(directive_char);
@@ -560,8 +558,7 @@ pub(crate) fn tokenize_identifier_or_keyword(
         if let Some(char) = stream.peek()
             && is_identifier_continue(*char)
         {
-            let identifier_char = advance_after_peek(
-                stream,
+            let identifier_char = stream.advance_after_peek(
                 "Tokenizer peeked an identifier character but could not advance the stream.",
             );
             token_value.push(identifier_char);
@@ -583,19 +580,6 @@ pub(crate) fn tokenize_identifier_or_keyword(
     }
 }
 
-// -----------
-//  Utilities
-// -----------
-
-/// Advance after a successful `peek` in tokenizer loops.
-///
-/// WHAT: Several lexer paths inspect the next character before consuming it so
-/// they can decide whether the character belongs to the current token. Once
-/// `peek` has returned `Some`, `next` returning `None` would mean the stream
-/// invariant is broken, not that user source is malformed.
-fn advance_after_peek(stream: &mut TokenStream<'_>, invariant_message: &'static str) -> char {
-    stream.next().expect(invariant_message)
-}
 
 pub fn consume_non_newline_whitespace(stream: &mut TokenStream) -> bool {
     let mut consumed = false;
