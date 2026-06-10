@@ -9,6 +9,7 @@
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorType};
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, InvalidDeclarationReason};
 use crate::compiler_frontend::datatypes::generic_parameters::GenericParameterList;
+use crate::compiler_frontend::symbols::string_interning::StringId;
 
 use crate::compiler_frontend::declaration_syntax::choice::parse_choice_shell as parse_choice_header_payload;
 use crate::compiler_frontend::declaration_syntax::declaration_shell::{
@@ -480,7 +481,7 @@ pub(super) fn create_header(
 
 fn emit_header_naming_warning(
     warnings: &mut Vec<CompilerDiagnostic>,
-    identifier: crate::compiler_frontend::symbols::string_interning::StringId,
+    identifier: StringId,
     location: SourceLocation,
     naming_kind: IdentifierNamingKind,
     string_table: &crate::compiler_frontend::symbols::string_interning::StringTable,
@@ -508,9 +509,7 @@ fn parse_optional_generic_parameters(
     )
 }
 
-fn generic_parameter_forbidden_names(
-    context: &mut HeaderBuildContext<'_>,
-) -> FxHashSet<crate::compiler_frontend::symbols::string_interning::StringId> {
+fn generic_parameter_forbidden_names(context: &mut HeaderBuildContext<'_>) -> FxHashSet<StringId> {
     let mut forbidden_names = FxHashSet::default();
 
     for import in context.file_import_entries {

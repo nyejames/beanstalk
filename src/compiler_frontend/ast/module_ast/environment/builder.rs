@@ -41,7 +41,7 @@ use crate::compiler_frontend::headers::module_symbols::{
 use crate::compiler_frontend::headers::parse_file_headers::Header;
 use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
-use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::traits::environment::TraitEnvironment;
 use crate::compiler_frontend::traits::evidence::{
     TraitEvidenceEnvironment, ValidateTraitEvidenceInput, validate_trait_evidence,
@@ -537,7 +537,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
 
     pub(in crate::compiler_frontend::ast) fn validate_public_generic_bounds(
         &self,
-        owner_name: crate::compiler_frontend::symbols::string_interning::StringId,
+        owner_name: StringId,
         generic_parameters: &GenericParameterList,
         resolved_bounds_by_local: &FxHashMap<TypeParameterId, Vec<TraitId>>,
         public_facade_file: &InternedPath,

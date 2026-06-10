@@ -19,6 +19,7 @@ use crate::compiler_frontend::builtins::error_type::{
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidAssignmentTargetReason, InvalidBuiltinCallReason,
 };
+use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::instrumentation::{AstCounter, increment_ast_counter};
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
@@ -52,10 +53,10 @@ fn collection_builtin_method_name(
 }
 
 fn fallible_collection_result(
-    ok_type_id: crate::compiler_frontend::datatypes::ids::TypeId,
+    ok_type_id: TypeId,
     error_type: ResolvedBuiltinType,
     type_interner: &mut AstTypeInterner<'_>,
-) -> Vec<crate::compiler_frontend::datatypes::ids::TypeId> {
+) -> Vec<TypeId> {
     // Temporary carrier bridge: collection fallibility is public `Error!` control flow, not a
     // first-class `Result` value. HIR consumes this carrier immediately while lowering the
     // handled call into explicit success/error edges.

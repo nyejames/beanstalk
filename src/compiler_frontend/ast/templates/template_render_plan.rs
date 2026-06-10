@@ -5,6 +5,7 @@
 
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
+use crate::compiler_frontend::ast::expressions::expression_types::ConstRecordState;
 use crate::compiler_frontend::ast::templates::template::{
     SlotPlaceholder, TemplateAtom, TemplateContent, TemplateSegmentOrigin, TemplateType,
 };
@@ -339,7 +340,7 @@ impl TemplateRenderPlan {
                             diagnostic_type: DataType::Template,
                             function_receiver: None,
                             value_mode: ValueMode::ImmutableOwned,
-                            const_record_state: crate::compiler_frontend::ast::expressions::expression_types::ConstRecordState::RuntimeValue,
+                            const_record_state: ConstRecordState::RuntimeValue,
                             location: child_piece.expression.location.clone(),
                             contains_regular_division: child_piece
                                 .expression

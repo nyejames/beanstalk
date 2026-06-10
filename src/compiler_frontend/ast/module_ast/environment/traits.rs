@@ -35,7 +35,7 @@ use crate::compiler_frontend::traits::definitions::{
 use crate::compiler_frontend::traits::environment::{
     TraitEnvironment, requirement_parameter_from_type, trait_this_name,
 };
-use crate::compiler_frontend::traits::ids::TraitRequirementId;
+use crate::compiler_frontend::traits::ids::{TraitId, TraitRequirementId};
 use crate::compiler_frontend::traits::syntax::{
     TraitDeclarationSyntax, TraitReferenceSyntax, TraitRequirementSyntax,
 };
@@ -406,7 +406,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         visibility: &crate::compiler_frontend::headers::import_environment::FileVisibility,
         trait_environment: &TraitEnvironment,
         string_table: &mut StringTable,
-    ) -> Result<crate::compiler_frontend::traits::ids::TraitId, CompilerMessages> {
+    ) -> Result<TraitId, CompilerMessages> {
         if let Some(path) = visibility.visible_trait_names.get(&trait_ref.name)
             && let Some(id) = trait_environment.id_for_path(path)
         {
@@ -463,7 +463,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
     fn validate_public_trait_type(
         &self,
         trait_name: StringId,
-        type_id: crate::compiler_frontend::datatypes::ids::TypeId,
+        type_id: TypeId,
         public_facade_file: &crate::compiler_frontend::symbols::interned_path::InternedPath,
         location: SourceLocation,
         trait_environment: &TraitEnvironment,

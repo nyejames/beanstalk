@@ -799,156 +799,21 @@ fn fallback_parsed_ref_to_data_type(
 //  Diagnostic / parse-only DataType helpers
 // ------------------------------------
 
-/// Converts a parsed or diagnostic `DataType` into a canonical `TypeId`.
+/// Resolve a diagnostic `DataType` spelling into a canonical `TypeId`.
 ///
-/// WHAT: parse-resolution bridge from written type syntax to the canonical `TypeId`-based identity.
-/// WHY: header parsing, signature parsing, and type annotation resolution still produce `DataType`
-///      as an intermediate parsed representation; this converts that representation to `TypeId`.
+/// WHAT: thin wrapper around `resolve_diagnostic_type_to_type_id_opt` that maps `None`
+///       to the builtin `None` type so callers do not need to handle the option at every site.
+/// WHY: many AST construction paths need a valid `TypeId` for every parsed annotation,
+///      even when the nominal type has not yet been registered.
 ///
-/// DO NOT use this to re-derive semantic `TypeId`s from `DataType` values that were already
-/// resolved. Semantic type identity is `TypeId` equality in `TypeEnvironment`, not `DataType`.
-///
-/// PRECONDITION: `data_type` must be fully resolved. `NamedType` and `Inferred` are not valid
-/// and map to `none` as a defensive fallback.
-///
-/// TEMPORARY: this unchecked helper remains for internal use by `instantiate_generic_nominal`
-/// and `returns_diagnostic_type_to_type_id`. Production call sites outside this module should
-/// prefer `resolve_diagnostic_type_to_type_id_checked` or `resolve_diagnostic_type_to_type_id_opt`.
+/// Prefer `resolve_diagnostic_type_to_type_id_checked` or `resolve_diagnostic_type_to_type_id_opt`
+/// when the caller must distinguish unresolved types from the actual `None` type.
 pub(crate) fn resolve_diagnostic_type_to_type_id(
     data_type: &DataType,
     type_environment: &mut TypeEnvironment,
 ) -> TypeId {
-    match data_type {
-        DataType::Bool => type_environment.builtins().bool,
-        DataType::Int => type_environment.builtins().int,
-        DataType::Float => type_environment.builtins().float,
-        DataType::Decimal => type_environment.builtins().decimal,
-        DataType::StringSlice => type_environment.builtins().string,
-        DataType::Char => type_environment.builtins().char,
-        DataType::Range => type_environment.builtins().range,
-        DataType::None => type_environment.builtins().none,
-        DataType::Template | DataType::TemplateWrapper => type_environment.builtins().string,
-        DataType::True | DataType::False => type_environment.builtins().bool,
-        DataType::Option(inner) => {
-            let inner_id = resolve_diagnostic_type_to_type_id(inner, type_environment);
-            type_environment.intern_option(inner_id)
-        }
-        DataType::FallibleCarrier { success, error } => {
-            let success_id = resolve_diagnostic_type_to_type_id(success, type_environment);
-            let error_id = resolve_diagnostic_type_to_type_id(error, type_environment);
-            type_environment.intern_fallible_carrier(success_id, error_id)
-        }
-        DataType::Reference(inner) => resolve_diagnostic_type_to_type_id(inner, type_environment),
-        DataType::Struct {
-            type_id,
-            nominal_path,
-            generic_instance_key,
-            ..
-        }
-        | DataType::Choices {
-            type_id,
-            nominal_path,
-            generic_instance_key,
-            ..
-        } => {
-            if *type_id != builtin_type_ids::NONE && generic_instance_key.is_none() {
-                // Base nominal with a resolved TypeId.
-                *type_id
-            } else if let Some(key) = generic_instance_key {
-                // Generic instance: intern it now so that later queries return
-                // substituted fields/variants. This handles cases where the
-                // instance was not interned during resolve_type (e.g. because
-                // the TypeResolutionContext had no TypeEnvironment).
-                if let Some(nominal_id) = type_environment.nominal_id_for_path(nominal_path) {
-                    if let Some(arg_ids) =
-                        generic_instantiation_key_argument_type_ids(key, type_environment)
-                    {
-                        type_environment.intern_generic_instance(nominal_id, arg_ids)
-                    } else {
-                        type_environment.builtins().none
-                    }
-                } else {
-                    type_environment.builtins().none
-                }
-            } else if *type_id != builtin_type_ids::NONE {
-                // Generic instance that was already interned.
-                *type_id
-            } else {
-                // Fallback for unresolved structs/choices in diagnostic-only paths.
-                type_environment
-                    .nominal_id_for_path(nominal_path)
-                    .and_then(|nominal_id| type_environment.type_id_for_nominal_id(nominal_id))
-                    .unwrap_or_else(|| type_environment.builtins().none)
-            }
-        }
-        DataType::TypeParameter {
-            canonical_id: Some(canonical_id),
-            name,
-            ..
-        } => type_environment.intern_generic_parameter(*canonical_id, *name),
-        DataType::TypeParameter {
-            canonical_id: None, ..
-        } => type_environment.builtins().none,
-        DataType::GenericInstance { base, arguments } => match base {
-            GenericBaseType::Builtin(BuiltinGenericType::Collection { fixed_capacity }) => {
-                let element_id =
-                    resolve_diagnostic_type_to_type_id(&arguments[0], type_environment);
-                type_environment.intern_collection(element_id, *fixed_capacity)
-            }
-            GenericBaseType::Builtin(BuiltinGenericType::Map) => {
-                let key_id = resolve_diagnostic_type_to_type_id(&arguments[0], type_environment);
-                let value_id = resolve_diagnostic_type_to_type_id(&arguments[1], type_environment);
-                type_environment.intern_map(key_id, value_id)
-            }
-            GenericBaseType::ResolvedNominal(path) => {
-                if let Some(nominal_id) = type_environment.nominal_id_for_path(path) {
-                    let arg_ids: Box<[TypeId]> = arguments
-                        .iter()
-                        .map(|arg| resolve_diagnostic_type_to_type_id(arg, type_environment))
-                        .collect();
-                    type_environment.intern_generic_instance(nominal_id, arg_ids)
-                } else {
-                    // Base nominal not yet registered (e.g. recursive generic type during
-                    // its own resolution). Fallback to none; validation will catch the cycle.
-                    type_environment.builtins().none
-                }
-            }
-            _ => type_environment.builtins().none,
-        },
-        DataType::Function(_, signature) => {
-            let param_ids: Box<[TypeId]> = signature
-                .parameters
-                .iter()
-                .map(|p| {
-                    resolve_diagnostic_type_to_type_id(&p.value.diagnostic_type, type_environment)
-                })
-                .collect();
-            let return_ids: Box<[TypeId]> = signature
-                .returns
-                .iter()
-                .filter_map(|r| match &r.value {
-                    FunctionReturn::Value(dt) => {
-                        Some(resolve_diagnostic_type_to_type_id(dt, type_environment))
-                    }
-                    _ => None,
-                })
-                .collect();
-            type_environment.intern_function(FunctionTypeKey {
-                parameters: param_ids,
-                returns: return_ids,
-                error_return: None,
-            })
-        }
-        DataType::Returns(values) => returns_diagnostic_type_to_type_id(values, type_environment),
-        DataType::External { type_id } => type_environment.intern_external(*type_id),
-        DataType::DynamicTrait { type_id, .. } => *type_id,
-        DataType::Path(_) => type_environment.builtins().string,
-        DataType::Parameters(_) => type_environment.builtins().none,
-        DataType::Inferred | DataType::NamedType(_) | DataType::NamespacedType { .. } => {
-            // Invariant: unresolved types should not reach this function.
-            type_environment.builtins().none
-        }
-    }
+    resolve_diagnostic_type_to_type_id_opt(data_type, type_environment)
+        .unwrap_or_else(|| type_environment.builtins().none)
 }
 
 /// Resolve a fully checked production type spelling into canonical `TypeId` identity.
@@ -1120,23 +985,6 @@ pub(crate) fn resolve_diagnostic_type_to_type_id_opt(
         | DataType::Inferred
         | DataType::NamedType(_)
         | DataType::NamespacedType { .. } => None,
-    }
-}
-
-fn returns_diagnostic_type_to_type_id(
-    values: &[DataType],
-    type_environment: &mut TypeEnvironment,
-) -> TypeId {
-    match values {
-        [] => type_environment.builtins().none,
-        [single] => resolve_diagnostic_type_to_type_id(single, type_environment),
-        multiple => {
-            let field_ids = multiple
-                .iter()
-                .map(|value| resolve_diagnostic_type_to_type_id(value, type_environment))
-                .collect();
-            type_environment.intern_tuple(field_ids)
-        }
     }
 }
 

@@ -22,7 +22,7 @@ use crate::compiler_frontend::headers::types::{
     FileFrontendPrepareOutput, FileRole, Header, HeaderExportMode, HeaderKind,
 };
 use crate::compiler_frontend::symbols::identifier_policy::ensure_not_keyword_shadow_identifier;
-use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::projects::settings::IMPLICIT_START_FUNC_NAME;
 
 /// Collect all order-independent top-level symbol metadata from parsed (unsorted) headers.
@@ -141,7 +141,7 @@ fn is_receiver_method_candidate(
 fn receiver_method_receiver_name(
     signature: &FunctionSignatureSyntax,
     string_table: &mut StringTable,
-) -> Option<crate::compiler_frontend::symbols::string_interning::StringId> {
+) -> Option<StringId> {
     let first_parameter = signature.parameters.first()?;
 
     if first_parameter.id.name_str(string_table) != Some("this") {

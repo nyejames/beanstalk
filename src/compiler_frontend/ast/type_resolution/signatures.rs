@@ -14,7 +14,7 @@ use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::{GenericParameterListId, TypeId};
 use crate::compiler_frontend::datatypes::{ReceiverKey, diagnostic_type_spelling};
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
-use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 
 use super::{ResolvedFunctionSignature, resolve_named_signature_type};
 
@@ -156,7 +156,7 @@ pub(crate) fn resolve_function_signature(
 }
 
 fn receiver_key_for_resolved_parameter(
-    function_name_id: crate::compiler_frontend::symbols::string_interning::StringId,
+    function_name_id: StringId,
     receiver_type_id: TypeId,
     generic_parameter_list_id: Option<GenericParameterListId>,
     type_environment: &TypeEnvironment,
@@ -253,7 +253,7 @@ fn receiver_key_for_generic_instance_base(
 }
 
 fn generic_receiver_type_diagnostic(
-    function_name_id: crate::compiler_frontend::symbols::string_interning::StringId,
+    function_name_id: StringId,
     receiver_type_id: TypeId,
     type_environment: &TypeEnvironment,
     location: &crate::compiler_frontend::tokenizer::tokens::SourceLocation,
@@ -270,7 +270,7 @@ fn generic_receiver_type_diagnostic(
 }
 
 fn unsupported_receiver_type_diagnostic(
-    function_name_id: crate::compiler_frontend::symbols::string_interning::StringId,
+    function_name_id: StringId,
     receiver_type_id: TypeId,
     type_environment: &TypeEnvironment,
     location: &crate::compiler_frontend::tokenizer::tokens::SourceLocation,
@@ -290,7 +290,7 @@ fn receiver_type_name(
     receiver_type_id: TypeId,
     type_environment: &TypeEnvironment,
     string_table: &mut StringTable,
-) -> crate::compiler_frontend::symbols::string_interning::StringId {
+) -> StringId {
     let spelling = diagnostic_type_spelling(receiver_type_id, type_environment);
     string_table.intern(&spelling.display_with_table(string_table))
 }

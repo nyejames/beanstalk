@@ -22,6 +22,7 @@ use crate::compiler_frontend::ast::expressions::function_calls::parse_call_argum
 use crate::compiler_frontend::ast::field_access::receiver_access::{
     ReceiverAccessDiagnostic, ReceiverAccessRequirement, validate_receiver_access,
 };
+use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, InvalidReceiverCallReason};
 use crate::compiler_frontend::datatypes::definitions::TypeDefinition;
@@ -36,7 +37,7 @@ use crate::compiler_frontend::traits::definitions::{
 pub(super) struct DynamicTraitReceiverMethod<'a> {
     pub(super) trait_definition: &'a ResolvedTraitDefinition,
     pub(super) requirement: &'a ResolvedTraitRequirement,
-    pub(super) signature: crate::compiler_frontend::ast::statements::functions::FunctionSignature,
+    pub(super) signature: FunctionSignature,
     pub(super) receiver_mutable: bool,
 }
 

@@ -11,6 +11,7 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 ---
 
 # Plans / TODOS
+- Language surface hardening and enforcing stricter design constraints: `docs/roadmap/plans/language_surface_hardening_plan.md`
 -  `cast` keyword for builtin type casting sugar for builtin Beanstalk types: ``
 - first class Reactivity syntax with message / action patterns in templates
 - Build out core IO library

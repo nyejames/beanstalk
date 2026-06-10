@@ -35,11 +35,12 @@ use crate::compiler_frontend::datatypes::definitions::{
     ChoiceTypeDefinition, ChoiceVariantDefinition, ChoiceVariantPayloadDefinition,
     StructTypeDefinition,
 };
-use crate::compiler_frontend::datatypes::ids::NominalTypeId;
+use crate::compiler_frontend::datatypes::ids::{NominalTypeId, TypeId};
 use crate::compiler_frontend::declaration_syntax::choice::{
     ChoiceVariant, ChoiceVariantPayload, ChoiceVariantPayloadSyntax, ChoiceVariantSyntax,
 };
 use crate::compiler_frontend::declaration_syntax::signature_members::SignatureMemberSyntax;
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
 use crate::compiler_frontend::headers::import_environment::FileVisibility;
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
@@ -786,8 +787,8 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
 
     fn validate_nominal_generic_bound_type_id(
         &self,
-        type_id: crate::compiler_frontend::datatypes::ids::TypeId,
-        location: crate::compiler_frontend::tokenizer::tokens::SourceLocation,
+        type_id: TypeId,
+        location: SourceLocation,
         validation_context: &NominalBoundSurfaceValidationContext<'_>,
         string_table: &mut StringTable,
     ) -> Result<(), CompilerMessages> {

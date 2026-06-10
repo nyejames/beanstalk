@@ -13,7 +13,7 @@ use crate::compiler_frontend::compiler_messages::{
 use crate::compiler_frontend::declaration_syntax::signature_members::parse_trait_requirement_signature_syntax;
 use crate::compiler_frontend::symbols::identifier_policy::is_uppercase_constant_name;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
-use crate::compiler_frontend::symbols::string_interning::StringTable;
+use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
 use crate::compiler_frontend::traits::syntax::{
     ConformanceTargetKind, ConformanceTargetSyntax, TraitConformanceSyntax, TraitDeclarationSyntax,
@@ -28,7 +28,7 @@ use super::types::HeaderBuildContext;
 
 pub(super) fn parse_trait_declaration(
     token_stream: &mut FileTokens,
-    declaration_name: crate::compiler_frontend::symbols::string_interning::StringId,
+    declaration_name: StringId,
     name_location: SourceLocation,
     context: &mut HeaderBuildContext<'_>,
 ) -> Result<TraitDeclarationSyntax, CompilerDiagnostic> {
@@ -223,7 +223,7 @@ pub(super) fn parse_trait_conformance(
 
 pub(super) fn parse_specialized_conformance_target(
     token_stream: &mut FileTokens,
-    target_name: crate::compiler_frontend::symbols::string_interning::StringId,
+    target_name: StringId,
     name_location: SourceLocation,
 ) -> Result<ConformanceTargetSyntax, CompilerDiagnostic> {
     token_stream.advance(); // past `of`
@@ -264,7 +264,7 @@ pub(super) fn conformance_header_path(
 }
 
 pub(super) fn ensure_trait_name_is_all_caps(
-    trait_name: crate::compiler_frontend::symbols::string_interning::StringId,
+    trait_name: StringId,
     location: SourceLocation,
     string_table: &StringTable,
 ) -> Result<(), CompilerDiagnostic> {

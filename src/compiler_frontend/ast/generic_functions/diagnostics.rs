@@ -10,6 +10,7 @@ use crate::compiler_frontend::compiler_messages::{
     GenericSubstitutionDiagnostic, InvalidGenericInstantiationReason,
 };
 use crate::compiler_frontend::datatypes::generic_bindings::BindingConflict;
+use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::symbols::string_interning::StringId;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
@@ -76,7 +77,7 @@ pub(crate) fn missing_generic_function_trait_evidence(
     function_name: Option<StringId>,
     parameter_name: StringId,
     trait_name: StringId,
-    concrete_type_id: crate::compiler_frontend::datatypes::ids::TypeId,
+    concrete_type_id: TypeId,
     location: SourceLocation,
 ) -> CompilerDiagnostic {
     CompilerDiagnostic::invalid_generic_instantiation(

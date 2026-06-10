@@ -36,7 +36,9 @@ use crate::compiler_frontend::compiler_messages::{
 use crate::compiler_frontend::datatypes::diagnostic_type_spelling;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::generic_bindings::{BindingConflict, GenericTypeBindings};
-use crate::compiler_frontend::datatypes::ids::{GenericParameterId, TypeId};
+use crate::compiler_frontend::datatypes::ids::{
+    GenericParameterId, GenericParameterListId, TypeId,
+};
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
@@ -742,7 +744,7 @@ fn substitute_return_slot(
 }
 
 pub(crate) fn concrete_argument_mapping(
-    parameter_list_id: crate::compiler_frontend::datatypes::ids::GenericParameterListId,
+    parameter_list_id: GenericParameterListId,
     arguments: &[TypeId],
     type_environment: &TypeEnvironment,
 ) -> Option<FxHashMap<GenericParameterId, TypeId>> {

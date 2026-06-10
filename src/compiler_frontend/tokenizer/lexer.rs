@@ -580,7 +580,6 @@ pub(crate) fn tokenize_identifier_or_keyword(
     }
 }
 
-
 pub fn consume_non_newline_whitespace(stream: &mut TokenStream) -> bool {
     let mut consumed = false;
 

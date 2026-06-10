@@ -28,6 +28,7 @@ use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidControlFlowStatementReason, InvalidMatchArmReason,
 };
+use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
 
@@ -58,7 +59,7 @@ pub(crate) struct ParsedMatchBlock {
     pub default: Option<Vec<AstNode>>,
     pub exhaustiveness: MatchExhaustiveness,
     pub location: SourceLocation,
-    pub scope: crate::compiler_frontend::symbols::interned_path::InternedPath,
+    pub scope: InternedPath,
 }
 
 /// Peek at the next non-newline token without advancing the stream.

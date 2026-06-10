@@ -501,7 +501,7 @@ fn fold_template_loop_iteration(
 
 fn loop_body_not_const_error(
     error: TemplateError,
-    diagnostic_location: &crate::compiler_frontend::tokenizer::tokens::SourceLocation,
+    diagnostic_location: &SourceLocation,
 ) -> TemplateError {
     match error {
         TemplateError::Diagnostic(diagnostic) => TemplateError::Diagnostic(diagnostic),
@@ -556,7 +556,7 @@ fn fold_aggregate_render_plan(
 
 fn fold_bool_condition(
     condition: &Expression,
-    fallback_location: &crate::compiler_frontend::tokenizer::tokens::SourceLocation,
+    fallback_location: &SourceLocation,
     fold_context: &mut TemplateFoldContext<'_>,
 ) -> Result<bool, TemplateError> {
     let condition = resolve_fold_bindings_in_expression(condition.to_owned(), fold_context)?;
@@ -566,7 +566,7 @@ fn fold_bool_condition(
 
 fn fold_resolved_bool_condition(
     condition: &Expression,
-    fallback_location: &crate::compiler_frontend::tokenizer::tokens::SourceLocation,
+    fallback_location: &SourceLocation,
 ) -> Result<bool, TemplateError> {
     match &condition.kind {
         ExpressionKind::Bool(value) => Ok(*value),
@@ -831,10 +831,7 @@ impl ConstRangeCursor {
     }
 }
 
-fn int_step_magnitude(
-    step: i64,
-    location: crate::compiler_frontend::tokenizer::tokens::SourceLocation,
-) -> Result<i64, TemplateError> {
+fn int_step_magnitude(step: i64, location: SourceLocation) -> Result<i64, TemplateError> {
     step.checked_abs().ok_or_else(|| {
         CompilerDiagnostic::invalid_template_structure(
             InvalidTemplateStructureReason::TemplateLoopRangeBoundsNotConst,
