@@ -178,8 +178,8 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         // --------------------------
         // Trait definitions are needed before function signatures so declaration-site
         // generic bounds can be resolved into canonical TraitIds. They are also needed
-        // before struct fields, choice payloads, and constants so dynamic trait annotations
-        // resolve correctly on those surfaces.
+        // before struct fields, choice payloads, and constants so trait names in ordinary
+        // type positions can be rejected with the trait-specific diagnostic.
         // Evidence validation stays after receiver catalog construction because it needs
         // resolved receiver methods.
         let trait_resolution_start = Instant::now();
@@ -195,8 +195,8 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         // -------------------------------------------
         // WHAT: resolves constructor shells, constants, struct fields, and choice
         // payload types with trait-aware type resolution.
-        // WHY: dynamic trait annotations on fields, payloads, and constant
-        // declarations need the trait environment available during resolution.
+        // WHY: static trait metadata must be available so ordinary type annotations can
+        // reject trait names without falling through to an unknown-type diagnostic.
         let member_resolution_start = Instant::now();
         self.resolve_nominal_members_and_constants(
             sorted_headers,
@@ -491,7 +491,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             visible_namespace_records: Some(&visibility.visible_namespace_records),
             trait_environment,
             trait_evidence_environment: None,
-            visible_trait_names: trait_environment.map(|_| &visibility.visible_trait_names),
+            visible_trait_names: Some(&visibility.visible_trait_names),
             source_file_scope: None,
         });
         if let Some(gp) = generic_parameters {

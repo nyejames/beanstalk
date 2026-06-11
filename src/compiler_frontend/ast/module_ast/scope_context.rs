@@ -177,7 +177,7 @@ pub struct ScopeShared {
     pub(crate) receiver_methods: Rc<ReceiverMethodCatalog>,
 
     // Constant-header contexts are built before the final module lookup package exists, but
-    // dynamic trait annotations still need resolved trait metadata there.
+    // trait names still need to be recognized and rejected in ordinary type positions there.
     pub(crate) trait_environment_override: Option<Rc<TraitEnvironment>>,
 }
 

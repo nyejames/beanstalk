@@ -153,7 +153,6 @@ pub(super) fn parse_struct_constructor_expression(
             string_table,
             type_environment: type_check_context.type_environment,
             compatibility_cache: type_check_context.compatibility_cache,
-            scope_context: Some(context),
         },
     )?;
 

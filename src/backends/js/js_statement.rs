@@ -44,32 +44,6 @@ impl<'hir> JsEmitter<'hir> {
                 self.emit_call_statement(target, args, result)?;
             }
 
-            HirStatementKind::CallDynamicTraitMethod {
-                receiver,
-                requirement_id,
-                args,
-                result,
-                ..
-            } => {
-                let receiver = self.lower_expr(receiver)?;
-
-                let args = args
-                    .iter()
-                    .map(|arg| {
-                        self.lower_expression_for_use(&arg.value, JsValueUse::BeanstalkCallArgument)
-                    })
-                    .collect::<Result<Vec<_>, _>>()?;
-
-                let call = self.lower_dynamic_trait_dispatch(receiver, *requirement_id, args);
-
-                if let Some(result_local) = result {
-                    let result_name = self.local_name(*result_local)?;
-                    self.emit_line(&format!("__bs_assign_value({result_name}, {call});"));
-                } else {
-                    self.emit_line(&format!("{call};"));
-                }
-            }
-
             HirStatementKind::MapOp {
                 op,
                 receiver,

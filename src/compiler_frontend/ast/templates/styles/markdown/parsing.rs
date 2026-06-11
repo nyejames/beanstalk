@@ -6,7 +6,7 @@
 
 use super::{
     MarkdownInlineAtom, MarkdownLine, MarkdownListKind, ParsedMarkdownHeadingLine,
-    ParsedMarkdownListItemLine, ParsedMarkdownLink,
+    ParsedMarkdownLink, ParsedMarkdownListItemLine,
 };
 
 pub(super) fn parse_heading_line(line: &MarkdownLine) -> Option<ParsedMarkdownHeadingLine> {
@@ -161,7 +161,9 @@ pub(super) fn trim_atoms(atoms: &[MarkdownInlineAtom]) -> Vec<MarkdownInlineAtom
     atoms[start..end].to_vec()
 }
 
-pub(super) fn trim_leading_horizontal_whitespace(atoms: &[MarkdownInlineAtom]) -> Vec<MarkdownInlineAtom> {
+pub(super) fn trim_leading_horizontal_whitespace(
+    atoms: &[MarkdownInlineAtom],
+) -> Vec<MarkdownInlineAtom> {
     atoms[skip_leading_horizontal_whitespace(atoms)..].to_vec()
 }
 
@@ -317,4 +319,3 @@ fn is_scheme_char(ch: char) -> bool {
 fn is_horizontal_whitespace(ch: char) -> bool {
     matches!(ch, ' ' | '\t')
 }
-

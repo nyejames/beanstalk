@@ -538,8 +538,7 @@ fn collect_type_parameter_ids_from_type_id(
             TypeDefinition::Builtin(..)
             | TypeDefinition::Struct(..)
             | TypeDefinition::Choice(..)
-            | TypeDefinition::External(..)
-            | TypeDefinition::DynamicTrait(..),
+            | TypeDefinition::External(..),
         )
         | None => {}
     }

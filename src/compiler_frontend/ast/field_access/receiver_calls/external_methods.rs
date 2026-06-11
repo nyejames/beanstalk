@@ -106,7 +106,6 @@ pub(super) fn parse_external_receiver_method_call(
             string_table,
             type_environment: type_check_context.type_environment,
             compatibility_cache: type_check_context.compatibility_cache,
-            scope_context: Some(scope_context),
         },
     )?;
 

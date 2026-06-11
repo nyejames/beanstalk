@@ -1,8 +1,7 @@
 //! Receiver-call dispatch orchestration.
 //!
 //! WHAT: dispatches a receiver method call through the ordered lookup sequence:
-//!       dynamic trait → source method → generic-bound method → external method
-//!       → concrete trait evidence fallback.
+//!       source method → generic-bound method → external method → concrete trait evidence fallback.
 //! WHY: keeping the dispatch order explicit in one file makes the precedence
 //!      between overlapping method sources obvious and easy to audit.
 
@@ -14,7 +13,6 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::FileTokens;
 
 mod concrete_trait_evidence;
-mod dynamic_trait_methods;
 mod external_methods;
 mod generic_bound_methods;
 mod shared;
@@ -35,31 +33,7 @@ pub(super) fn parse_receiver_method_call_typed(
         scope_context,
     } = member_step_context;
 
-    // 1. Dynamic trait receiver method.
-    if let Some(dynamic_method) = dynamic_trait_methods::lookup_dynamic_trait_receiver_method(
-        scope_context,
-        receiver_type_id,
-        member_name,
-        type_interner.environment(),
-        string_table,
-    ) {
-        let node = dynamic_trait_methods::parse_dynamic_trait_method_call_typed(
-            dynamic_trait_methods::DynamicTraitMethodCallInput {
-                token_stream,
-                receiver_node,
-                member_name,
-                member_location,
-                receiver_access_mode,
-                scope_context,
-                method: dynamic_method,
-                type_interner,
-                string_table,
-            },
-        )?;
-        return Ok(Some(node));
-    }
-
-    // 2. Visible declared source receiver method.
+    // 1. Visible declared source receiver method.
     if let Some(method_entry) = source_methods::lookup_receiver_method(
         scope_context,
         receiver_type_id,
@@ -82,7 +56,7 @@ pub(super) fn parse_receiver_method_call_typed(
         return Ok(Some(node));
     }
 
-    // 3. Static generic-bound receiver method.
+    // 2. Static generic-bound receiver method.
     if let Some(generic_bound_method) = generic_bound_methods::lookup_generic_bound_receiver_method(
         scope_context,
         receiver_node,
@@ -110,7 +84,7 @@ pub(super) fn parse_receiver_method_call_typed(
         return Ok(Some(node));
     }
 
-    // 4. External platform-package receiver method.
+    // 3. External platform-package receiver method.
     if let Some(node) = external_methods::parse_external_receiver_method_call(
         external_methods::ExternalReceiverMethodCallInput {
             token_stream,
@@ -127,7 +101,7 @@ pub(super) fn parse_receiver_method_call_typed(
         return Ok(Some(node));
     }
 
-    // 5. Visible concrete trait evidence fallback.
+    // 4. Visible concrete trait evidence fallback.
     // Concrete evidence runs after direct methods and external packages so explicit receiver syntax
     // and backend-provided methods take priority over implicit trait conformance.
     if let Some(evidence_method) =

@@ -18,7 +18,7 @@ use crate::compiler_frontend::hir::ids::{BlockId, FunctionId, HirNodeId};
 use crate::compiler_frontend::hir::module::HirModule;
 use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
 use crate::compiler_frontend::hir::terminators::HirTerminator;
-use crate::compiler_frontend::traits::ids::{TraitEvidenceId, TraitId, TraitRequirementId};
+
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::VecDeque;
 
@@ -32,7 +32,6 @@ pub(crate) struct HirReachability {
     pub(crate) reachable_blocks: FxHashSet<BlockId>,
     pub(crate) reachable_external_functions: FxHashSet<ExternalFunctionId>,
     pub(crate) reachable_external_calls: Vec<ReachableExternalCall>,
-    pub(crate) reachable_dynamic_trait_operations: Vec<ReachableDynamicTraitOperation>,
     pub(crate) reachable_map_uses: Vec<ReachableMapUse>,
 }
 
@@ -61,28 +60,6 @@ pub(crate) struct ReachableExternalCall {
     pub(crate) function_id: ExternalFunctionId,
     pub(crate) statement_id: HirNodeId,
     pub(crate) location: SourceLocation,
-}
-
-/// A dynamic trait runtime operation reachable from the selected HIR roots.
-///
-/// WHY: JS lowering and unsupported-backend validation both need to know which dynamic trait
-/// wrappers or dispatches can execute, but neither should rediscover that by scanning source.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) struct ReachableDynamicTraitOperation {
-    pub(crate) kind: ReachableDynamicTraitOperationKind,
-    pub(crate) location: SourceLocation,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum ReachableDynamicTraitOperationKind {
-    Construct {
-        trait_id: TraitId,
-        evidence_id: TraitEvidenceId,
-    },
-    Dispatch {
-        trait_id: TraitId,
-        requirement_id: TraitRequirementId,
-    },
 }
 
 pub(crate) struct HirReachabilityInput<'a> {
@@ -222,33 +199,6 @@ impl<'a> HirReachabilityContext<'a> {
                 }
             }
 
-            // Dynamic trait dispatch: record the operation, then recurse into receiver and args.
-            HirStatementKind::CallDynamicTraitMethod {
-                receiver,
-                trait_id,
-                requirement_id,
-                args,
-                ..
-            } => {
-                self.reachability.reachable_dynamic_trait_operations.push(
-                    ReachableDynamicTraitOperation {
-                        kind: ReachableDynamicTraitOperationKind::Dispatch {
-                            trait_id: *trait_id,
-                            requirement_id: *requirement_id,
-                        },
-                        location: statement.location.clone(),
-                    },
-                );
-
-                self.collect_runtime_feature_uses_from_expression(receiver, &statement.location);
-                for arg in args {
-                    self.collect_runtime_feature_uses_from_expression(
-                        &arg.value,
-                        &statement.location,
-                    );
-                }
-            }
-
             HirStatementKind::PushRuntimeFragment { value, .. } => {
                 self.collect_runtime_feature_uses_from_expression(value, &statement.location);
             }
@@ -323,24 +273,6 @@ impl<'a> HirReachabilityContext<'a> {
             .clone();
 
         match &expression.kind {
-            // Dynamic trait construction.
-            HirExpressionKind::ConstructDynamicTraitValue {
-                value,
-                trait_id,
-                evidence_id,
-            } => {
-                self.reachability.reachable_dynamic_trait_operations.push(
-                    ReachableDynamicTraitOperation {
-                        kind: ReachableDynamicTraitOperationKind::Construct {
-                            trait_id: *trait_id,
-                            evidence_id: *evidence_id,
-                        },
-                        location: expression_location.clone(),
-                    },
-                );
-                self.collect_runtime_feature_uses_from_expression(value, &expression_location);
-            }
-
             // Map literals.
             HirExpressionKind::MapLiteral(entries) => {
                 self.reachability.reachable_map_uses.push(ReachableMapUse {

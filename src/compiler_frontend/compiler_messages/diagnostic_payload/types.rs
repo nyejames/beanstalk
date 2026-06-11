@@ -777,47 +777,6 @@ pub enum InvalidTraitConformanceReason {
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum InvalidDynamicTraitTypeReason {
-    BoundOnly {
-        reason: BoundOnlyTraitDiagnosticReason,
-        requirement_name: Option<StringId>,
-    },
-    Constant,
-    Applied,
-    StaticBoundSubstitution {
-        dynamic_type_id: TypeId,
-    },
-    MissingEvidence {
-        concrete_type_id: TypeId,
-    },
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum BoundOnlyTraitDiagnosticReason {
-    ThisParameter,
-    ThisReturn,
-}
-
-impl InvalidDynamicTraitTypeReason {
-    pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        match self {
-            Self::BoundOnly {
-                requirement_name, ..
-            } => {
-                if let Some(requirement_name) = requirement_name {
-                    *requirement_name = remap.get(*requirement_name);
-                }
-            }
-
-            Self::Constant
-            | Self::Applied
-            | Self::StaticBoundSubstitution { .. }
-            | Self::MissingEvidence { .. } => {}
-        }
-    }
-}
-
 impl InvalidTraitConformanceReason {
     pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         match self {

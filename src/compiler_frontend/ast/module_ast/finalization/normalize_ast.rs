@@ -140,7 +140,6 @@ fn normalize_ast_node_templates(
         NodeKind::FunctionCall { .. }
         | NodeKind::HostFunctionCall { .. }
         | NodeKind::MethodCall { .. }
-        | NodeKind::DynamicTraitMethodCall { .. }
         | NodeKind::CollectionBuiltinCall { .. }
         | NodeKind::MapBuiltinCall { .. }
         | NodeKind::HandledFallibleHostFunctionCall { .. }
@@ -329,7 +328,6 @@ fn normalize_call_templates(
 ) -> Result<(), TemplateNormalizationError> {
     match &mut node.kind {
         NodeKind::MethodCall { receiver, args, .. }
-        | NodeKind::DynamicTraitMethodCall { receiver, args, .. }
         | NodeKind::CollectionBuiltinCall { receiver, args, .. }
         | NodeKind::MapBuiltinCall { receiver, args, .. } => {
             normalize_ast_node_templates(receiver, context)?;
@@ -640,11 +638,6 @@ fn normalize_expression_templates_with_context(
                     )?;
                 }
             }
-            None
-        }
-
-        ExpressionKind::ConstructDynamicTraitValue { value, .. } => {
-            normalize_expression_templates_with_context(value, context, helper_artifact_policy)?;
             None
         }
 

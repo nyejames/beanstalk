@@ -122,7 +122,6 @@ fn display_definition(
                 .collect();
             format!("{base_name} of {}", args.join(", "))
         }
-        TypeDefinition::DynamicTrait(definition) => table.resolve(definition.name).to_owned(),
     }
 }
 

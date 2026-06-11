@@ -175,12 +175,6 @@ fn debug_validate_node_type_ids(node: &AstNode, type_environment: &TypeEnvironme
             result_type_ids,
             ..
         }
-        | NodeKind::DynamicTraitMethodCall {
-            receiver,
-            args,
-            result_type_ids,
-            ..
-        }
         | NodeKind::CollectionBuiltinCall {
             receiver,
             args,
@@ -435,20 +429,6 @@ fn debug_validate_expression_type_id(expression: &Expression, type_environment: 
                 debug_validate_expression_type_id(&value_catch.handled_value, type_environment);
             }
         },
-
-        ExpressionKind::ConstructDynamicTraitValue { value, coercion } => {
-            debug_validate_expression_type_id(value, type_environment);
-            debug_validate_type_id(
-                coercion.source_concrete_type_id,
-                type_environment,
-                "dynamic trait coercion source",
-            );
-            debug_validate_type_id(
-                coercion.target_dynamic_trait_type_id,
-                type_environment,
-                "dynamic trait coercion target",
-            );
-        }
 
         // Leaf expressions that carry no nested type identities.
         ExpressionKind::NoValue

@@ -35,10 +35,9 @@ use crate::compiler_frontend::ast::{
 use crate::compiler_frontend::builtins::error_type::is_reserved_builtin_symbol;
 use crate::compiler_frontend::compiler_messages::{
     CompileTimeEvaluationErrorReason, CompilerDiagnostic, InvalidCollectionTypeReason,
-    InvalidDeclarationReason, InvalidDynamicTraitTypeReason, InvalidResultHandlingReason,
-    TypeMismatchContext,
+    InvalidDeclarationReason, InvalidResultHandlingReason, TypeMismatchContext,
 };
-use crate::compiler_frontend::datatypes::definitions::TypeDefinition;
+
 use crate::compiler_frontend::datatypes::parsed::{ParsedCollectionCapacity, ParsedTypeRef};
 use crate::compiler_frontend::datatypes::{DataType, ReceiverKey};
 use crate::compiler_frontend::declaration_syntax::declaration_shell::{
@@ -395,18 +394,6 @@ pub fn resolve_declaration_syntax(
         .map_err(|diagnostic| *diagnostic)?
     };
 
-    if context.kind.is_constant_context()
-        && let Some(type_id) = resolved_annotation.type_id
-        && let Some(TypeDefinition::DynamicTrait(definition)) =
-            type_interner.environment().get(type_id)
-    {
-        return Err(CompilerDiagnostic::invalid_dynamic_trait_type(
-            definition.name,
-            InvalidDynamicTraitTypeReason::Constant,
-            declaration_location,
-        ));
-    }
-
     let mut initializer_tokens = declaration_syntax.initializer_tokens;
     initializer_tokens.push(Token::new(
         TokenKind::Eof,
@@ -518,8 +505,8 @@ pub fn resolve_declaration_syntax(
             };
 
             if let Some(declared_type_id) = declared_type_id {
-                // This is an explicit typed boundary: apply ordinary contextual
-                // coercions and dynamic trait wrapping in one shared path.
+                // This is an explicit typed boundary: apply ordinary contextual coercions in
+                // one shared path.
                 coerce_expression_to_explicit_type_boundary(
                     expression,
                     declared_type_id,

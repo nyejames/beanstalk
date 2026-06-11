@@ -4,13 +4,14 @@
 //! WHY: separating block logic from inline and parsing keeps each module focused
 //!      on one level of the markdown formatter.
 
-use super::{
-    MarkdownInlineAtom, MarkdownLine, MarkdownListKind, MarkdownListItemFragment,
-    MarkdownListItemBlock, ParsedMarkdownHeadingLine,
-    LeadingChildTemplateLine,
-};
 use super::output::MarkdownOutputBuilder;
-use crate::compiler_frontend::ast::templates::template_render_plan::{FormatterOutputPiece, FormatterOpaqueKind};
+use super::{
+    LeadingChildTemplateLine, MarkdownInlineAtom, MarkdownLine, MarkdownListItemBlock,
+    MarkdownListItemFragment, MarkdownListKind, ParsedMarkdownHeadingLine,
+};
+use crate::compiler_frontend::ast::templates::template_render_plan::{
+    FormatterOpaqueKind, FormatterOutputPiece,
+};
 
 /// Groups plain non-list lines into paragraphs, applying child-template line boundaries.
 ///
@@ -23,7 +24,10 @@ use crate::compiler_frontend::ast::templates::template_render_plan::{FormatterOu
 /// - `$markdown` needs to keep child templates opaque while still letting a single
 ///   newline before a child break paragraph context without splitting inline helpers
 ///   from their same-line text.
-pub(super) fn render_plain_region(lines: &[MarkdownLine], default_tag: &str) -> Vec<FormatterOutputPiece> {
+pub(super) fn render_plain_region(
+    lines: &[MarkdownLine],
+    default_tag: &str,
+) -> Vec<FormatterOutputPiece> {
     enum PlainRegionBlock {
         Paragraph(Vec<Vec<MarkdownInlineAtom>>),
         StandaloneInline(Vec<MarkdownInlineAtom>),
@@ -71,10 +75,18 @@ pub(super) fn render_plain_region(lines: &[MarkdownLine], default_tag: &str) -> 
         match block {
             PlainRegionBlock::Paragraph(lines) => {
                 let atoms = super::parsing::join_lines_with_spaces(&lines);
-                output.append_pieces(super::inline::render_inline_atoms(&atoms, Some(default_tag), true));
+                output.append_pieces(super::inline::render_inline_atoms(
+                    &atoms,
+                    Some(default_tag),
+                    true,
+                ));
             }
             PlainRegionBlock::StandaloneInline(atoms) => {
-                output.append_pieces(super::inline::render_inline_atoms(&atoms, Some(default_tag), false));
+                output.append_pieces(super::inline::render_inline_atoms(
+                    &atoms,
+                    Some(default_tag),
+                    false,
+                ));
             }
         }
     }
@@ -130,7 +142,9 @@ pub(super) fn render_list_block(
 
         while consumed_lines < lines.len() {
             let next_line = &lines[consumed_lines];
-            if super::line_is_blank(next_line) || super::parsing::parse_heading_line(next_line).is_some() {
+            if super::line_is_blank(next_line)
+                || super::parsing::parse_heading_line(next_line).is_some()
+            {
                 break;
             }
 
@@ -150,7 +164,9 @@ pub(super) fn render_list_block(
                 continue;
             }
 
-            fragments.push(MarkdownListItemFragment::Line(super::parsing::trim_atoms(&next_line.atoms)));
+            fragments.push(MarkdownListItemFragment::Line(super::parsing::trim_atoms(
+                &next_line.atoms,
+            )));
             consumed_lines += 1;
         }
 
@@ -202,13 +218,21 @@ fn render_list_item_fragments(
             MarkdownListItemBlock::Paragraph(lines) => {
                 let atoms = super::parsing::join_lines_with_spaces(&lines);
                 if should_wrap_paragraphs {
-                    output.append_pieces(super::inline::render_inline_atoms(&atoms, Some(default_tag), true));
+                    output.append_pieces(super::inline::render_inline_atoms(
+                        &atoms,
+                        Some(default_tag),
+                        true,
+                    ));
                 } else {
                     output.append_pieces(super::inline::render_inline_atoms(&atoms, None, false));
                 }
             }
             MarkdownListItemBlock::StandaloneInline(atoms) => {
-                output.append_pieces(super::inline::render_inline_atoms(&atoms, Some(default_tag), false));
+                output.append_pieces(super::inline::render_inline_atoms(
+                    &atoms,
+                    Some(default_tag),
+                    false,
+                ));
             }
             MarkdownListItemBlock::NestedList(pieces) => {
                 output.append_pieces(pieces);
@@ -273,7 +297,9 @@ fn build_list_item_blocks(fragments: &[MarkdownListItemFragment]) -> Vec<Markdow
     blocks
 }
 
-pub(super) fn render_heading_line(heading: &ParsedMarkdownHeadingLine) -> Vec<FormatterOutputPiece> {
+pub(super) fn render_heading_line(
+    heading: &ParsedMarkdownHeadingLine,
+) -> Vec<FormatterOutputPiece> {
     let heading_tag = format!("h{}", heading.level);
     super::inline::render_inline_atoms(&heading.content, Some(heading_tag.as_str()), true)
 }
@@ -304,4 +330,3 @@ fn classify_leading_child_template_line(atoms: &[MarkdownInlineAtom]) -> Leading
         LeadingChildTemplateLine::Standalone
     }
 }
-

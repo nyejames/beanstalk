@@ -10,7 +10,7 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::lexer::{
     consume_all_whitespace, consume_non_newline_whitespace,
 };
-use crate::compiler_frontend::tokenizer::tokens::{TokenStream};
+use crate::compiler_frontend::tokenizer::tokens::TokenStream;
 
 use super::{ParseComponentContext, PathComponents};
 
@@ -108,7 +108,8 @@ pub(super) fn parse_bare_component(
     let mut value = String::new();
 
     while let Some(next) = stream.peek().copied() {
-        if next.is_whitespace() || super::is_component_terminator(stream, context, next, value.is_empty())
+        if next.is_whitespace()
+            || super::is_component_terminator(stream, context, next, value.is_empty())
         {
             break;
         }

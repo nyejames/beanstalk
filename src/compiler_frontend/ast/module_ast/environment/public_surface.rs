@@ -237,7 +237,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         &self,
         type_id: TypeId,
         public_facade_file: &InternedPath,
-        trait_environment: &TraitEnvironment,
+        _trait_environment: &TraitEnvironment,
         visited_types: &mut FxHashSet<TypeId>,
     ) -> bool {
         if !visited_types.insert(type_id) {
@@ -257,19 +257,13 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 self.source_path_is_public_from_facade(&definition.path, public_facade_file)
             }
 
-            Some(TypeDefinition::DynamicTrait(definition)) => trait_environment
-                .get(definition.trait_id)
-                .is_some_and(|trait_definition| {
-                    self.public_trait_definition_is_nameable(trait_definition, public_facade_file)
-                }),
-
             Some(TypeDefinition::Constructed(definition)) => {
                 self.type_constructor_is_public(&definition.constructor, public_facade_file)
                     && definition.arguments.iter().all(|argument| {
                         self.public_type_id_is_nameable(
                             *argument,
                             public_facade_file,
-                            trait_environment,
+                            _trait_environment,
                             visited_types,
                         )
                     })
@@ -280,21 +274,21 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                     self.public_type_id_is_nameable(
                         parameter.type_id,
                         public_facade_file,
-                        trait_environment,
+                        _trait_environment,
                         visited_types,
                     )
                 }) && definition.returns.iter().all(|return_type| {
                     self.public_type_id_is_nameable(
                         *return_type,
                         public_facade_file,
-                        trait_environment,
+                        _trait_environment,
                         visited_types,
                     )
                 }) && definition.error_return.is_none_or(|error_type| {
                     self.public_type_id_is_nameable(
                         error_type,
                         public_facade_file,
-                        trait_environment,
+                        _trait_environment,
                         visited_types,
                     )
                 })
@@ -306,7 +300,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                         self.public_type_id_is_nameable(
                             *argument,
                             public_facade_file,
-                            trait_environment,
+                            _trait_environment,
                             visited_types,
                         )
                     })

@@ -271,8 +271,7 @@ impl<'a> ConstFactCollector<'a> {
                 self.walk_node_for_body_local(base, env);
             }
 
-            NodeKind::MethodCall { receiver, args, .. }
-            | NodeKind::DynamicTraitMethodCall { receiver, args, .. } => {
+            NodeKind::MethodCall { receiver, args, .. } => {
                 self.walk_node_for_body_local(receiver, env);
                 self.walk_call_arguments_for_body_local(args, env);
             }
@@ -494,10 +493,6 @@ impl<'a> ConstFactCollector<'a> {
                     self.walk_expression_for_body_local(&value_catch.handled_value, env);
                 }
             },
-
-            ExpressionKind::ConstructDynamicTraitValue { value, .. } => {
-                self.walk_expression_for_body_local(value, env);
-            }
 
             // Terminal expression kinds carry no nested structure to walk.
             ExpressionKind::NoValue

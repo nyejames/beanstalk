@@ -45,7 +45,6 @@ fn push_accessed_symbol_statement(
         // Method calls and collection builtins are valid as standalone statements
         // because they may have side effects.
         NodeKind::MethodCall { .. }
-        | NodeKind::DynamicTraitMethodCall { .. }
         | NodeKind::CollectionBuiltinCall { .. }
         | NodeKind::MapBuiltinCall { .. } => {
             ast.push(AstNode {

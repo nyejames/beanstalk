@@ -550,9 +550,9 @@ fn rule_descriptor(kind: RuleDiagnosticKind) -> DiagnosticDescriptor {
             "Private trait exposed by generic bound",
             DiagnosticSeverity::Error,
         ),
-        RuleDiagnosticKind::InvalidDynamicTraitType => DiagnosticDescriptor::new(
+        RuleDiagnosticKind::TraitNameUsedAsType => DiagnosticDescriptor::new(
             "BST-RULE-0075",
-            "Invalid dynamic trait type",
+            "Trait name used as value type",
             DiagnosticSeverity::Error,
         ),
         RuleDiagnosticKind::InvalidTraitKeywordUsage => DiagnosticDescriptor::new(

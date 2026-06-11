@@ -5,9 +5,7 @@
 //!      extracting it into its own module keeps the block orchestration readable.
 
 use super::{MarkdownInlineAtom, MarkdownOutputBuilder};
-use crate::compiler_frontend::ast::templates::template_render_plan::{
-    FormatterOutputPiece,
-};
+use crate::compiler_frontend::ast::templates::template_render_plan::FormatterOutputPiece;
 
 /// Renders inline markdown atoms into escaped HTML and preserved opaque anchors.
 ///
@@ -284,7 +282,10 @@ fn literalize_pending_stars(
     *pending_open_strength = 0;
 }
 
-pub(super) fn count_consecutive_star_chars(atoms: &[MarkdownInlineAtom], start_index: usize) -> usize {
+pub(super) fn count_consecutive_star_chars(
+    atoms: &[MarkdownInlineAtom],
+    start_index: usize,
+) -> usize {
     let mut count = 0usize;
     let mut index = start_index;
 
@@ -311,4 +312,3 @@ pub(super) fn em_tag_strength(strength: i32, is_closing_tag: bool) -> &'static s
         }
     }
 }
-

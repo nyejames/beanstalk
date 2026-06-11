@@ -17,7 +17,7 @@ use crate::compiler_frontend::datatypes::ids::TypeId;
 ///
 /// Allowed: String, Int, Float, Bool, Char.
 /// Rejected: structs, const records, choices, collections, functions,
-///           external opaque types, dynamic trait values, generic instances,
+///           external opaque types, trait names, generic instances,
 ///           generic parameters, and other builtin types such as Range and None.
 pub(crate) fn is_template_renderable_type(
     type_id: TypeId,

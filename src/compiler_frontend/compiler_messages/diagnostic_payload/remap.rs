@@ -591,9 +591,8 @@ impl DiagnosticPayload {
                 reason.remap_string_ids(remap);
             }
 
-            DiagnosticPayload::InvalidDynamicTraitType { trait_name, reason } => {
+            DiagnosticPayload::TraitNameUsedAsType { trait_name } => {
                 *trait_name = remap.get(*trait_name);
-                reason.remap_string_ids(remap);
             }
 
             DiagnosticPayload::InvalidExpression

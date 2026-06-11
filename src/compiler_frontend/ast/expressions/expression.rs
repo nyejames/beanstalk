@@ -271,10 +271,6 @@ impl Expression {
             ExpressionKind::OptionNone => String::new(),
             ExpressionKind::Coerced { value, .. } => value.as_string(string_table),
 
-            ExpressionKind::ConstructDynamicTraitValue { value, .. } => {
-                value.as_string(string_table)
-            }
-
             ExpressionKind::ValueBlock { .. } => String::new(),
         }
     }
@@ -1028,11 +1024,7 @@ impl Expression {
             // Delegate const classification to the wrapped value — the coercion
             // does not change whether an expression is compile-time foldable.
             ExpressionKind::Coerced { value, .. } => value.const_value_kind(),
-
             // Dynamic trait wrappers are runtime-only; they cannot appear in const contexts
-            // because declarations already reject dynamic trait annotations in constant
-            // contexts, but this arm makes the classification explicit.
-            ExpressionKind::ConstructDynamicTraitValue { .. } => ConstValueKind::NonConst,
         }
     }
 

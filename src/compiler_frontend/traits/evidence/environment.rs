@@ -7,7 +7,6 @@
 
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
-use crate::compiler_frontend::symbols::string_interning::StringIdRemap;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::traits::ids::{TraitEvidenceId, TraitId, TraitRequirementId};
 use rustc_hash::FxHashMap;
@@ -123,19 +122,6 @@ impl TraitEvidenceEnvironment {
         reusable.chain(file_local).collect()
     }
 
-    pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        for definition in &mut self.evidence {
-            definition.source_file.remap_string_ids(remap);
-            definition.declaration_location.remap_string_ids(remap);
-
-            for requirement in &mut definition.requirements {
-                requirement.method_path.remap_string_ids(remap);
-            }
-        }
-
-        self.rebuild_indexes();
-    }
-
     #[allow(dead_code)] // No compiler-owned builtin conformances are registered yet.
     pub(crate) fn insert_builtin(&mut self, mut definition: TraitEvidenceDefinition) {
         let id = TraitEvidenceId(self.evidence.len() as u32);
@@ -191,19 +177,6 @@ impl TraitEvidenceEnvironment {
                     .or_default()
                     .push(definition.id);
             }
-        }
-    }
-
-    fn rebuild_indexes(&mut self) {
-        self.canonical_by_target_and_trait.clear();
-        self.file_local_by_source_target_and_trait.clear();
-        self.builtin_by_target_and_trait.clear();
-        self.reusable_by_target.clear();
-        self.file_local_by_source_and_target.clear();
-
-        let definitions = self.evidence.clone();
-        for definition in &definitions {
-            self.index_definition(definition);
         }
     }
 }

@@ -9,7 +9,6 @@ use crate::compiler_frontend::hir::expressions::{HirExpression, HirMapOp};
 use crate::compiler_frontend::hir::ids::{HirNodeId, LocalId};
 use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
-use crate::compiler_frontend::traits::ids::{TraitId, TraitRequirementId};
 
 #[derive(Debug, Clone)]
 pub struct HirStatement {
@@ -34,22 +33,6 @@ pub enum HirStatementKind {
     Call {
         target: CallTarget,
         args: Vec<HirExpression>,
-        result: Option<LocalId>,
-    },
-
-    /// Dispatch a method through a dynamic trait wrapper.
-    ///
-    /// WHAT: stores the trait/requirement identity chosen by AST plus the lowered receiver and
-    /// argument access facts needed by borrow validation.
-    /// WHY: JS lowers runtime method tables from these explicit facts; backends must not
-    /// rediscover trait evidence or concrete implementation methods.
-    CallDynamicTraitMethod {
-        receiver: HirExpression,
-        receiver_effect: HirDynamicTraitCallArgumentEffect,
-        #[allow(dead_code)] // Reserved for backend validation and future table selection.
-        trait_id: TraitId,
-        requirement_id: TraitRequirementId,
-        args: Vec<HirDynamicTraitCallArgument>,
         result: Option<LocalId>,
     },
 
@@ -92,16 +75,4 @@ pub enum HirStatementKind {
         /// Local that receives the operation result, if any.
         result: Option<LocalId>,
     },
-}
-
-#[derive(Debug, Clone)]
-pub struct HirDynamicTraitCallArgument {
-    pub value: HirExpression,
-    pub effect: HirDynamicTraitCallArgumentEffect,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum HirDynamicTraitCallArgumentEffect {
-    SharedBorrow,
-    MayConsume,
 }

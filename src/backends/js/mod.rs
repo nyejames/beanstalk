@@ -3,7 +3,6 @@
 //! This backend lowers HIR into readable JavaScript using GC semantics.
 //! Borrowing and ownership are optimization concerns and therefore ignored here.
 
-mod dynamic_traits;
 mod emitter;
 mod identifiers;
 mod js_calls;

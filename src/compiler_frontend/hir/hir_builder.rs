@@ -51,11 +51,7 @@ pub fn lower_module(
     path_format_config: PathStringFormatConfig,
 ) -> Result<(HirModule, TypeEnvironment), CompilerMessages> {
     let type_environment = ast.type_environment.clone();
-    let trait_environment = ast.trait_environment.clone();
-    let trait_evidence_environment = ast.trait_evidence_environment.clone();
-    let mut ctx = HirBuilder::new(string_table, path_format_config, type_environment);
-    ctx.module.trait_environment = trait_environment;
-    ctx.module.trait_evidence_environment = trait_evidence_environment;
+    let ctx = HirBuilder::new(string_table, path_format_config, type_environment);
     ctx.build_hir_module(ast)
 }
 

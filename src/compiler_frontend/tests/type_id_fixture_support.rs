@@ -392,8 +392,7 @@ fn register_collection_types_from_node(node: &mut AstNode, type_environment: &mu
         NodeKind::FieldAccess { base, .. } => {
             register_collection_types_from_node(base, type_environment);
         }
-        NodeKind::MethodCall { receiver, args, .. }
-        | NodeKind::DynamicTraitMethodCall { receiver, args, .. } => {
+        NodeKind::MethodCall { receiver, args, .. } => {
             register_collection_types_from_node(receiver, type_environment);
             for arg in args {
                 register_collection_types_from_expression(&mut arg.value, type_environment);
@@ -630,9 +629,6 @@ pub(crate) fn build_ast_with_choices(
             )
             .collect(),
         type_environment,
-        trait_environment: crate::compiler_frontend::traits::environment::TraitEnvironment::new(),
-        trait_evidence_environment:
-            crate::compiler_frontend::traits::evidence::TraitEvidenceEnvironment::new(),
         const_facts: AstConstFacts::default(),
     }
 }

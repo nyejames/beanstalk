@@ -1,7 +1,7 @@
 //! Lower runtime RPN trees into HIR expressions.
 //!
 //! WHAT: walks a `RuntimeRpnTree` and emits `HirExpression` values, including calls
-//!       to operators, external functions, dynamic trait methods, and fallible carriers.
+//!       to operators, external functions, and fallible carriers.
 //! WHY: this is the bridge from AST-owned runtime expression shape to HIR-owned
 //!      value kind and effect representation.
 
@@ -18,9 +18,7 @@ use crate::compiler_frontend::hir::statements::HirStatement;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::return_hir_transformation_error;
 
-use super::super::{
-    DynamicTraitMethodCallLoweringInput, ExternalFallibleCallLoweringInput, LoweredExpression,
-};
+use super::super::{ExternalFallibleCallLoweringInput, LoweredExpression};
 use super::RuntimeRpnTree;
 
 impl<'a> HirBuilder<'a> {
@@ -302,26 +300,6 @@ impl<'a> HirBuilder<'a> {
                 args,
                 result_type_ids,
                 location,
-            ),
-            NodeKind::DynamicTraitMethodCall {
-                receiver,
-                trait_id,
-                requirement_id,
-                receiver_requires_mutable,
-                args,
-                result_type_ids,
-                location,
-                ..
-            } => self.lower_dynamic_trait_method_call_expression(
-                DynamicTraitMethodCallLoweringInput {
-                    receiver,
-                    trait_id: *trait_id,
-                    requirement_id: *requirement_id,
-                    receiver_requires_mutable: *receiver_requires_mutable,
-                    args,
-                    result_type_ids,
-                    location,
-                },
             ),
             NodeKind::CollectionBuiltinCall {
                 receiver,

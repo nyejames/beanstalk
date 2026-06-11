@@ -574,9 +574,8 @@ pub enum DiagnosticPayload {
         reason: InvalidTraitConformanceReason,
     },
 
-    InvalidDynamicTraitType {
+    TraitNameUsedAsType {
         trait_name: StringId,
-        reason: InvalidDynamicTraitTypeReason,
     },
 
     InvalidExpression,

@@ -34,9 +34,9 @@ use crate::compiler_frontend::ast::statements::functions::FunctionReturn;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::type_resolution::TypeResolutionResult;
 use crate::compiler_frontend::compiler_messages::{
-    BoundOnlyTraitDiagnosticReason, CompilerDiagnostic, DeferredFeatureReason,
-    InvalidCollectionTypeReason, InvalidDynamicTraitTypeReason, InvalidGenericInstantiationReason,
-    InvalidMapTypeReason, InvalidTypeAnnotationReason, NameNamespace, NamespaceTypeValueMisuseKind,
+    CompilerDiagnostic, DeferredFeatureReason, InvalidCollectionTypeReason,
+    InvalidGenericInstantiationReason, InvalidMapTypeReason, InvalidTypeAnnotationReason,
+    NameNamespace, NamespaceTypeValueMisuseKind,
 };
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::generic_identity_bridge::{
@@ -64,7 +64,6 @@ use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, Token};
 use crate::compiler_frontend::tokenizer::tokens::{SourceLocation, TokenKind};
-use crate::compiler_frontend::traits::definitions::{BoundOnlyTraitReason, TraitDynamicSafety};
 use crate::compiler_frontend::traits::environment::TraitEnvironment;
 use crate::compiler_frontend::traits::evidence::TraitEvidenceEnvironment;
 use crate::compiler_frontend::type_coercion::compatibility::TypeCompatibilityCache;
@@ -979,7 +978,6 @@ pub(crate) fn resolve_diagnostic_type_to_type_id_opt(
             returns_diagnostic_type_to_type_id_opt(values, type_environment)
         }
         DataType::External { type_id } => Some(type_environment.intern_external(*type_id)),
-        DataType::DynamicTrait { type_id, .. } => Some(*type_id),
         DataType::Path(_) => Some(type_environment.builtins().string),
         DataType::Parameters(_)
         | DataType::Inferred
@@ -1356,11 +1354,13 @@ fn resolve_named_type_from_context(
         return Ok(DataType::External { type_id: *type_id });
     }
 
-    // 5) Visible trait names in normal type positions are dynamic trait value types.
-    if let Some(dynamic_trait_type) =
-        resolve_dynamic_trait_type(type_name, location, context, string_table)?
-    {
-        return Ok(dynamic_trait_type);
+    // 5) Traits are static contracts. They are valid in trait declarations,
+    // conformances, and generic bounds, but never as ordinary value types.
+    if let Some(trait_name) = visible_static_trait_name(type_name, context, string_table) {
+        return Err(Box::new(CompilerDiagnostic::trait_name_used_as_type(
+            trait_name,
+            location.clone(),
+        )));
     }
 
     // 6) Builtin type names that may still appear as named placeholders.
@@ -1374,98 +1374,25 @@ fn resolve_named_type_from_context(
     )))
 }
 
-fn resolve_dynamic_trait_type(
-    type_name: StringId,
-    location: &SourceLocation,
-    context: &mut TypeResolutionContext<'_>,
-    string_table: &StringTable,
-) -> TypeResolutionResult<Option<DataType>> {
-    let Some(trait_environment) = context.trait_environment else {
-        return Ok(None);
-    };
-
-    let Some(trait_id) = visible_dynamic_trait_id(type_name, context, string_table) else {
-        return Ok(None);
-    };
-    let Some(trait_definition) = trait_environment.get(trait_id) else {
-        return Ok(None);
-    };
-
-    match &trait_definition.dynamic_safety {
-        TraitDynamicSafety::DynamicSafe => {
-            let type_id = context
-                .type_environment
-                .intern_dynamic_trait(trait_id, trait_definition.name);
-            Ok(Some(DataType::DynamicTrait {
-                trait_id,
-                type_id,
-                name: trait_definition.name,
-            }))
-        }
-
-        TraitDynamicSafety::BoundOnly {
-            reason,
-            offending_requirement,
-        } => {
-            let requirement_name = trait_definition
-                .requirements
-                .iter()
-                .find(|requirement| requirement.id == *offending_requirement)
-                .map(|requirement| requirement.name);
-            Err(Box::new(CompilerDiagnostic::invalid_dynamic_trait_type(
-                trait_definition.name,
-                InvalidDynamicTraitTypeReason::BoundOnly {
-                    reason: bound_only_reason_for_diagnostic(*reason),
-                    requirement_name,
-                },
-                location.clone(),
-            )))
-        }
-    }
-}
-
-fn visible_dynamic_trait_id(
-    type_name: StringId,
-    context: &TypeResolutionContext<'_>,
-    string_table: &StringTable,
-) -> Option<crate::compiler_frontend::traits::ids::TraitId> {
-    let trait_environment = context.trait_environment?;
-
-    let trait_id = context
-        .visible_trait_names
-        .and_then(|visible_traits| visible_traits.get(&type_name))
-        .and_then(|path| trait_environment.id_for_path(path));
-
-    if trait_id.is_some() {
-        return trait_id;
-    }
-
-    if let Some(id) = trait_environment.displayable_trait_id_for_name(type_name, string_table) {
-        return Some(id);
-    }
-
-    None
-}
-
-fn visible_dynamic_trait_name(
+fn visible_static_trait_name(
     type_name: StringId,
     context: &TypeResolutionContext<'_>,
     string_table: &StringTable,
 ) -> Option<StringId> {
-    let trait_id = visible_dynamic_trait_id(type_name, context, string_table)?;
-    context
-        .trait_environment?
-        .get(trait_id)
-        .map(|definition| definition.name)
-}
-
-fn bound_only_reason_for_diagnostic(
-    reason: BoundOnlyTraitReason,
-) -> BoundOnlyTraitDiagnosticReason {
-    match reason {
-        BoundOnlyTraitReason::ThisParameter => BoundOnlyTraitDiagnosticReason::ThisParameter,
-        BoundOnlyTraitReason::ThisReturn => BoundOnlyTraitDiagnosticReason::ThisReturn,
+    if context
+        .visible_trait_names
+        .is_some_and(|visible_traits| visible_traits.contains_key(&type_name))
+    {
+        return Some(type_name);
     }
+
+    let trait_environment = context.trait_environment?;
+
+    if let Some(id) = trait_environment.displayable_trait_id_for_name(type_name, string_table) {
+        return trait_environment.get(id).map(|definition| definition.name);
+    }
+
+    None
 }
 
 fn resolve_namespaced_type_from_context(
@@ -1581,11 +1508,9 @@ fn resolve_generic_base_type(
                 );
             }
 
-            if let Some(trait_name) = visible_dynamic_trait_name(*type_name, context, string_table)
-            {
-                return Err(Box::new(CompilerDiagnostic::invalid_dynamic_trait_type(
+            if let Some(trait_name) = visible_static_trait_name(*type_name, context, string_table) {
+                return Err(Box::new(CompilerDiagnostic::trait_name_used_as_type(
                     trait_name,
-                    InvalidDynamicTraitTypeReason::Applied,
                     location.clone(),
                 )));
             }

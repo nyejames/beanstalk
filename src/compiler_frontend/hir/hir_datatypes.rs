@@ -55,8 +55,7 @@ pub fn classify_hir_type(type_id: TypeId, type_environment: &TypeEnvironment) ->
         | TypeDefinition::Constructed(..)
         | TypeDefinition::External(..)
         | TypeDefinition::GenericInstance(..)
-        | TypeDefinition::GenericParameter(..)
-        | TypeDefinition::DynamicTrait(..) => HirTypeClass::HeapAllocated,
+        | TypeDefinition::GenericParameter(..) => HirTypeClass::HeapAllocated,
 
         TypeDefinition::Function(..) => HirTypeClass::Function,
     }

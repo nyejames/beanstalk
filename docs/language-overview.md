@@ -35,7 +35,7 @@ Design principles:
 | Parameters/fields | Function parameters and struct/choice fields use `|...|`. Defaults use `=`. |
 | Results/options | Error returns use `Error!`; options use `T?`. |
 | Generics | Declaration-site generics use `type`: `Box type A = | value A |`. Concrete instances use `of`: `Box of String`. |
-| Traits | Trait declarations and conformances use `must`; generic bounds use `is`; dynamic trait value annotations use the trait name directly. |
+| Traits | Trait declarations and conformances use `must`; generic bounds use `is`. Trait names are static contracts, not value types. |
 | Renaming | `as` is used for type aliases, namespace import aliases, and grouped import aliases. |
 | Shadowing | No visible name may be redeclared while still in scope. |
 
@@ -360,7 +360,7 @@ Rules:
 - Hashmaps are insertion ordered. First insertion determines entry position; replacing an existing key updates the value without moving the entry or replacing the stored key.
 - Removing a key removes that entry from the order. Re-inserting the key appends a new entry.
 - V1 key types are `String`, `Int`, `Bool`, and `Char`.
-- `Float`, structs, choices, collections, hashmaps, dynamic trait values, functions, external opaque types, templates as a distinct key type, and generic parameters without a future `HASHABLE` bound are invalid keys.
+- `Float`, structs, choices, collections, hashmaps, traits, functions, external opaque types, templates as a distinct key type, and generic parameters are invalid keys.
 - Values follow the same runtime-storable rules as collection elements.
 - Maps own stored keys and values.
 - `get`, `contains`, and `remove` borrow the lookup key.
@@ -800,27 +800,30 @@ Rules:
 - Canonical conformance evidence for same-file structs, choices, and generic type constructors is reusable wherever both the type and trait are visible.
 - File-local extension evidence for builtins, imported types, and external opaque types is usable only in the declaring file and cannot override visible canonical evidence.
 
-A trait name in a normal type annotation means a dynamic trait value.
-A trait name in a generic bound constrains a concrete generic parameter.
-These are different features.
+Traits are not value types. A trait name may appear in a trait declaration, an explicit
+conformance declaration, or a generic bound. It is invalid as an ordinary variable, parameter,
+field, return, collection element, choice payload, or alias target type.
+
+Use a generic bound for static reuse:
 
 ```beanstalk
-render_dynamic |value DISPLAY_TEXT| -> String:
-    return value.display()
-;
-
-render_static type Item is DISPLAY_TEXT |value Item| -> String:
+render type Item is DISPLAY_TEXT |value Item| -> String:
     return value.display()
 ;
 ```
 
-Dynamic trait values are opaque owning wrappers. Concrete values coerce to dynamic trait values only at explicit typed boundaries: annotated declarations, function arguments, returns, struct fields, choice payloads, and explicitly typed collection elements. Unannotated locals and collection literals do not infer trait values.
+Use a choice for runtime heterogeneity:
 
-All traits can be generic bounds. Only dynamic-safe traits can be value types. A trait is not dynamic-safe if a requirement returns `This`, takes `This` outside the receiver, or otherwise requires recovering the erased concrete identity.
+```beanstalk
+Renderable ::
+    LabelItem | value Label |,
+    ButtonItem | value Button |,
+;
+```
 
-Dynamic trait runtime lowering is supported by the JavaScript backend. HTML-Wasm rejects reachable dynamic trait construction and dispatch with structured unsupported-backend diagnostics; unreachable dynamic-only helper functions are ignored by that reachability validation. Static trait declarations, conformances, and generic bounds remain frontend semantics and are backend-independent.
+Static trait declarations, conformances, and generic bounds are frontend semantics and are backend-independent.
 
-Deferred trait surfaces include default methods, associated types/constants, static non-method requirements, inheritance, generic traits, generic trait methods, specialized or conditional conformance, dynamic trait aliases/composition/downcasting, file-local evidence-backed generic bound dispatch, automatic primitive conformances, Wasm dynamic trait runtime lowering, `DISPLAYABLE` output coercion, and operator-to-trait integration.
+Deferred trait surfaces include default methods, static non-method requirements, automatic primitive conformances, `DISPLAYABLE` output coercion, and operator-to-trait integration. Dynamic trait values / trait objects, trait aliases/composition/downcasting, associated types/constants, inheritance, generic traits, generic trait methods, and specialized or conditional conformance are outside the current language design scope.
 
 ## Choices
 
@@ -912,7 +915,7 @@ render_pair type A is DISPLAY_TEXT, B is DISPLAY_TEXT |left A, right B| -> Strin
 ;
 ```
 
-Use `and` for multiple bounds on one parameter. Commas still separate generic parameters. `where` syntax remains rejected. Concrete generic calls and generic struct/choice instantiations require visible reusable evidence for each concrete type argument. Dynamic trait values do not satisfy static generic bounds.
+Use `and` for multiple bounds on one parameter. Commas still separate generic parameters. `where` syntax remains rejected. Concrete generic calls and generic struct/choice instantiations require visible reusable evidence for each concrete type argument. Trait names cannot appear as value types, so there is no trait value that can satisfy or fail a static generic bound.
 
 Operations that require behavior from an unconstrained generic type are rejected. Trait bounds currently enable unique bound-provided receiver calls. Arithmetic, equality/comparison, field access, template interpolation requiring string-like behavior, and external/IO behavior still require concrete type support or a future dedicated trait integration.
 

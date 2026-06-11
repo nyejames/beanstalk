@@ -185,8 +185,6 @@ impl<'context, 'services> AstFinalizer<'context, 'services> {
             lookups,
             type_environment,
         } = self.environment;
-        let trait_environment = lookups.trait_environment.as_ref().clone();
-        let trait_evidence_environment = lookups.trait_evidence_environment.as_ref().clone();
 
         #[cfg(debug_assertions)]
         debug_validate_type_ids_for_hir(
@@ -206,8 +204,6 @@ impl<'context, 'services> AstFinalizer<'context, 'services> {
             warnings: emitted.warnings,
             choice_definitions,
             type_environment,
-            trait_environment,
-            trait_evidence_environment,
             const_facts,
         })
     }

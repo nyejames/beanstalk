@@ -454,7 +454,7 @@ fn resolve_user_function_call_arguments(
     location: SourceLocation,
     string_table: &mut StringTable,
     type_interner: &mut AstTypeInterner<'_>,
-    scope_context: Option<&ScopeContext>,
+    _scope_context: Option<&ScopeContext>,
 ) -> Result<Vec<CallArgument>, ExpressionParseError> {
     let callee_name = function_name
         .name_str(string_table)
@@ -472,7 +472,6 @@ fn resolve_user_function_call_arguments(
             string_table,
             type_environment: type_check_context.type_environment,
             compatibility_cache: type_check_context.compatibility_cache,
-            scope_context,
         },
     )
     .map_err(ExpressionParseError::from)
@@ -536,7 +535,6 @@ fn parse_external_function_call_typed(
             string_table,
             type_environment: type_check_context.type_environment,
             compatibility_cache: type_check_context.compatibility_cache,
-            scope_context: Some(context),
         },
     )
     .map_err(ExpressionParseError::from)?;

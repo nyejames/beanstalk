@@ -7,7 +7,7 @@
 //! those bounds; file-local extension evidence cannot safely participate.
 
 use crate::compiler_frontend::compiler_messages::{
-    CompilerDiagnostic, InvalidDynamicTraitTypeReason, InvalidGenericInstantiationReason,
+    CompilerDiagnostic, InvalidGenericInstantiationReason,
 };
 use crate::compiler_frontend::datatypes::definitions::TypeDefinition;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
@@ -101,8 +101,7 @@ fn validate_type_recursive(
             | TypeDefinition::Struct(..)
             | TypeDefinition::Choice(..)
             | TypeDefinition::External(..)
-            | TypeDefinition::GenericParameter(..)
-            | TypeDefinition::DynamicTrait(..),
+            | TypeDefinition::GenericParameter(..),
         )
         | None => {}
     }
@@ -164,18 +163,6 @@ fn validate_single_bound(
     let Some(evidence_environment) = context.trait_evidence_environment else {
         return Ok(());
     };
-
-    if let Some(TypeDefinition::DynamicTrait(definition)) =
-        context.type_environment.get(concrete_type_id)
-    {
-        return Err(CompilerDiagnostic::invalid_dynamic_trait_type(
-            definition.name,
-            InvalidDynamicTraitTypeReason::StaticBoundSubstitution {
-                dynamic_type_id: concrete_type_id,
-            },
-            location.clone(),
-        ));
-    }
 
     let trait_is_visible =
         trait_is_visible(trait_id, trait_environment, context.visible_trait_names);

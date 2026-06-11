@@ -237,8 +237,8 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
     ///
     /// WHY: headers are already dependency-sorted; constants are parsed in that order.
     /// Struct defaults require constant-context parsing and import gates.
-    /// Trait metadata is available so dynamic trait annotations on fields, payloads,
-    /// and constant declarations are resolved or rejected with `BST-RULE-0075`.
+    /// Trait metadata is available so trait names on fields, payloads, and constant declarations
+    /// are rejected as static contracts instead of falling through to an unknown-type diagnostic.
     pub(in crate::compiler_frontend::ast) fn resolve_nominal_members_and_constants(
         &mut self,
         sorted_headers: &[Header],

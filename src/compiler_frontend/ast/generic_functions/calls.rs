@@ -146,7 +146,6 @@ pub(crate) fn parse_generic_function_call(
             string_table,
             type_environment: type_check_context.type_environment,
             compatibility_cache: type_check_context.compatibility_cache,
-            scope_context: Some(context),
         },
     )
     .map_err(ExpressionParseError::from)?;
@@ -231,7 +230,6 @@ pub(crate) fn validate_generic_function_template_call(
         call_location.clone(),
         string_table,
         type_interner.environment(),
-        Some(context),
     )
     .map_err(ExpressionParseError::from)?;
 

@@ -7,6 +7,7 @@
 //! MUST NOT: parse executable bodies, fold constants, or perform AST semantic validation.
 
 mod bindings;
+mod builder;
 mod diagnostics;
 mod external_imports;
 mod facade_resolution;
@@ -16,7 +17,6 @@ mod receiver_imports;
 mod source_imports;
 mod target_resolution;
 mod visible_names;
-mod builder;
 
 pub(crate) use bindings::{
     FileVisibility, HeaderImportEnvironment, NamespaceRecord, NamespaceRecordSource,
@@ -93,4 +93,3 @@ pub(crate) fn prepare_import_environment(
     builder.environment.warnings = builder.warnings;
     Ok(builder.environment)
 }
-

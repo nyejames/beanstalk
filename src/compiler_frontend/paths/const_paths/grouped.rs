@@ -13,10 +13,7 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::lexer::consume_all_whitespace;
 use crate::compiler_frontend::tokenizer::tokens::{SourceLocation, TokenStream};
 
-use super::{
-    GroupedPathExpansion, ParseComponentContext,
-    RelativePathExpansions,
-};
+use super::{GroupedPathExpansion, ParseComponentContext, RelativePathExpansions};
 
 pub(super) fn parse_grouped_block(
     stream: &mut TokenStream,
@@ -203,8 +200,11 @@ fn parse_grouped_entry(
                 ));
             }
 
-            let parsed_component =
-                super::components::parse_component(stream, ParseComponentContext::GroupedEntry, string_table)?;
+            let parsed_component = super::components::parse_component(
+                stream,
+                ParseComponentContext::GroupedEntry,
+                string_table,
+            )?;
             super::components::push_validated_component(
                 &mut components,
                 parsed_component,
@@ -272,8 +272,11 @@ fn parse_grouped_entry(
         }
 
         let alias_start = stream.position;
-        let alias_component =
-            super::components::parse_bare_component(stream, ParseComponentContext::GroupedEntry, string_table)?;
+        let alias_component = super::components::parse_bare_component(
+            stream,
+            ParseComponentContext::GroupedEntry,
+            string_table,
+        )?;
         let alias_end = stream.position;
         let location = SourceLocation::new(stream.file_path.to_owned(), alias_start, alias_end);
 
@@ -301,4 +304,3 @@ fn parse_grouped_entry(
         alias_location,
     })
 }
-

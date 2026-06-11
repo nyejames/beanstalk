@@ -2,7 +2,7 @@ import @html {center}
 import @styles/docs {navbar, title, section, styled_table, header, data, codeblock, theme_head}
 
 page_title #= "Traits in Beanstalk"
-page_description #= "Current Alpha trait declarations, explicit conformance, static bounds, and dynamic trait values."
+page_description #= "Current Alpha trait declarations, explicit conformance, and static generic bounds."
 page_head #= theme_head
 
 #[navbar]
@@ -13,9 +13,7 @@ page_head #= theme_head
 
     Beanstalk traits are explicit and nominal: a type satisfies a trait only when source declares `Type must TRAIT`. Matching method shapes alone are not conformance.
 
-    A trait name in a normal type annotation means a dynamic trait value.
-    A trait name in a generic bound constrains a concrete generic parameter.
-    These are different features.
+    Trait names are static contracts. They can appear in trait declarations, explicit conformance declarations, and generic bounds. They are not ordinary value types.
 ]
 
 #[section, $markdown:
@@ -136,44 +134,35 @@ page_head #= theme_head
         ;
     ]
 
-    Concrete calls and generic struct/choice instantiations require visible reusable evidence for the chosen concrete type. A dynamic trait value does not satisfy a static generic bound.
+    Concrete calls and generic struct/choice instantiations require visible reusable evidence for the chosen concrete type. Trait names cannot be supplied as value types or concrete generic arguments.
 ]
 
 #[section, $markdown:
-    # Dynamic trait values
+    # Traits are not value types
 
-    A trait name in a normal type annotation creates a dynamic trait value type.
+    A trait name in a normal type annotation is rejected.
 
     [codeblock, $code("bst"):
-        render_dynamic |value DISPLAY_TEXT| -> String:
+        -- invalid: DISPLAY_TEXT is a trait, not a value type
+        render |value DISPLAY_TEXT| -> String:
             return value.display()
         ;
-
-        text = render_dynamic(Label("hello"))
     ]
 
-    Dynamic trait values erase the concrete type and expose only the trait surface. They are runtime-only opaque owning wrappers in the current Alpha surface, not static evidence for generic bounds.
-
-    Dynamic coercion from a concrete value happens only at explicit typed boundaries:
-
-    - annotated declarations
-    - function arguments
-    - function returns
-    - struct fields
-    - choice payloads
-    - explicitly typed collection elements
-
-    Unannotated locals and collection literals do not infer trait values.
+    Use `type T is TRAIT` when static reuse is intended. Use choices when runtime heterogeneity is needed.
 ]
 
 #[section, $markdown:
-    # Dynamic-safe traits
+    # Runtime heterogeneity
 
-    All traits can be used as generic bounds. Only dynamic-safe traits can be used as dynamic value types.
+    Runtime heterogeneity is represented with choices, not trait objects.
 
-    A trait is dynamic-safe when its requirements do not need the erased concrete type again after wrapping. Requirements that return `This`, take `This` as a non-receiver parameter, or otherwise require concrete identity are bound-only and cannot be used as dynamic value annotations.
-
-    When static dispatch is intended, write a generic bound with `type T is TRAIT` instead of annotating a value directly with `TRAIT`.
+    [codeblock, $code("bst"):
+        Renderable ::
+            LabelItem | value Label |,
+            ButtonItem | value Button |,
+        ;
+    ]
 ]
 
 #[section, $markdown:
@@ -181,7 +170,7 @@ page_head #= theme_head
 
     Ordinary concrete receiver methods resolve before trait evidence. If no ordinary method is visible, visible trait evidence can make a trait-surface method callable.
 
-    Dynamic trait method calls dispatch through the wrapper's method table in the JavaScript backend. HTML-Wasm rejects reachable dynamic trait construction and dynamic dispatch with a structured unsupported-backend diagnostic before Wasm lowering. Dynamic-only helper functions that are not reachable from the page entry do not block an HTML-Wasm build.
+    Static trait-bound method calls resolve to concrete source methods before HIR. Backends do not receive trait-object construction, erased dispatch, or selected trait evidence for runtime method tables.
 ]
 
 #[section, $markdown:
@@ -203,15 +192,16 @@ page_head #= theme_head
     - generic traits and generic trait methods
     - specialized generic instance conformance such as `Box of Int must DISPLAY_TEXT`
     - static requirements that are not receiver methods
-    - conditional conformances
-    - dynamic trait composition
-    - dynamic trait aliases
-    - downcasting, reflection, and pattern matching on erased concrete types
     - composed `This` forms
     - file-local evidence-backed generic bound dispatch
     - automatic primitive conformances
     - output coercion through `DISPLAYABLE`
     - operator-to-trait integration
-    - Wasm dynamic trait runtime lowering
     - deriving, hashing, ordering, formatting, iteration, and serialization traits
+]
+
+#[section, $markdown:
+    # Outside language design scope
+
+    Dynamic trait values / trait objects, trait aliases or composition, downcasting, reflection, pattern matching on erased concrete types, associated types/constants, trait inheritance, generic traits/methods, and conditional or specialized conformance are intentionally outside the current language design scope.
 ]

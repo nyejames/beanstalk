@@ -395,8 +395,8 @@ page_head #= theme_head
 
     Concrete generic function calls and concrete generic struct/choice instantiations require
     explicit visible reusable evidence for each concrete type argument. File-local extension
-    evidence can support local dynamic values or local concrete fallback, but it cannot satisfy
-    public/static generic API obligations across files.
+    evidence can support local concrete fallback, but it cannot satisfy public/static generic API
+    obligations across files.
 
     [codeblock, $code("bst"):
         Label = |
@@ -412,13 +412,11 @@ page_head #= theme_head
         value = render(Label("ok"))
     ]
 
-    A trait name in a normal type annotation means a dynamic trait value.
-    A trait name in a generic bound constrains a concrete generic parameter.
-    These are different features.
+    Trait names are static contracts. They can appear in generic bounds, trait declarations, and
+    conformance declarations, but not as normal value types or concrete generic arguments.
 
-    Dynamic trait values do not satisfy static generic bounds.
-    Bound-provided receiver methods use the selected static evidence; dynamic wrappers use runtime
-    dispatch and are a separate value representation.
+    Bound-provided receiver methods use the selected static evidence and lower to concrete calls
+    before HIR.
     `where` clauses remain rejected; write bounds directly on the generic parameter list.
 ]
 

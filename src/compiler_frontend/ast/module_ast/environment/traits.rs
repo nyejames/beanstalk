@@ -29,8 +29,8 @@ use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::traits::definitions::{
-    BoundOnlyTraitReason, ResolvedTraitDefinition, ResolvedTraitRequirement, ResolvedTraitReturn,
-    TraitDynamicSafety, TraitReceiverRequirement, TraitVisibility,
+    ResolvedTraitDefinition, ResolvedTraitRequirement, ResolvedTraitReturn,
+    TraitReceiverRequirement, TraitVisibility,
 };
 use crate::compiler_frontend::traits::environment::{
     TraitEnvironment, requirement_parameter_from_type, trait_this_name,
@@ -192,8 +192,6 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             )?;
         }
 
-        let dynamic_safety = classify_trait_dynamic_safety(this_type, &requirements);
-
         Ok(ResolvedTraitDefinition {
             id: trait_environment.next_trait_id(),
             name: declaration.name,
@@ -205,7 +203,6 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             visibility: TraitVisibility::Source {
                 exported: header.export_mode.is_public(),
             },
-            dynamic_safety,
         })
     }
 
@@ -498,33 +495,6 @@ fn trait_this_parameter_list(
             trait_bounds: Vec::new(),
         }],
     }
-}
-
-fn classify_trait_dynamic_safety(
-    this_type: TypeId,
-    requirements: &[ResolvedTraitRequirement],
-) -> TraitDynamicSafety {
-    for requirement in requirements {
-        for parameter in &requirement.parameters {
-            if parameter.type_id == this_type {
-                return TraitDynamicSafety::BoundOnly {
-                    reason: BoundOnlyTraitReason::ThisParameter,
-                    offending_requirement: requirement.id,
-                };
-            }
-        }
-
-        for return_slot in &requirement.returns {
-            if return_slot.type_id == this_type {
-                return TraitDynamicSafety::BoundOnly {
-                    reason: BoundOnlyTraitReason::ThisReturn,
-                    offending_requirement: requirement.id,
-                };
-            }
-        }
-    }
-
-    TraitDynamicSafety::DynamicSafe
 }
 
 fn signature_with_trait_this_as_parameter(

@@ -880,119 +880,44 @@ path = "trait_bound_generic_file_local_evidence_rejected"
 tags = ["integration","generics","traits","structs","diagnostics"]
 
 [[case]]
-id = "dynamic_trait_annotation_success"
-path = "dynamic_trait_annotation_success"
-tags = ["integration","traits","dynamic"]
+id = "trait_bound_trait_name_generic_argument_rejected"
+path = "trait_bound_trait_name_generic_argument_rejected"
+tags = ["integration","generics","traits","diagnostics"]
 
 [[case]]
-id = "dynamic_trait_bound_only_rejected"
-path = "dynamic_trait_bound_only_rejected"
-tags = ["integration","traits","dynamic","diagnostics"]
+id = "trait_name_parameter_type_rejected"
+path = "trait_name_parameter_type_rejected"
+tags = ["integration","traits","diagnostics"]
 
 [[case]]
-id = "dynamic_trait_bound_only_static_bound_success"
-path = "dynamic_trait_bound_only_static_bound_success"
-tags = ["integration","generics","traits","dynamic"]
+id = "trait_name_return_type_rejected"
+path = "trait_name_return_type_rejected"
+tags = ["integration","traits","diagnostics"]
 
 [[case]]
-id = "dynamic_trait_composition_rejected"
-path = "dynamic_trait_composition_rejected"
-tags = ["integration","traits","dynamic","diagnostics"]
+id = "trait_name_struct_field_rejected"
+path = "trait_name_struct_field_rejected"
+tags = ["integration","traits","structs","diagnostics"]
 
 [[case]]
-id = "dynamic_trait_struct_field_success"
-path = "dynamic_trait_struct_field_success"
-tags = ["integration","traits","dynamic"]
+id = "trait_name_choice_payload_rejected"
+path = "trait_name_choice_payload_rejected"
+tags = ["integration","traits","choices","diagnostics"]
 
 [[case]]
-id = "dynamic_trait_choice_payload_success"
-path = "dynamic_trait_choice_payload_success"
-tags = ["integration","traits","dynamic"]
+id = "trait_name_collection_element_rejected"
+path = "trait_name_collection_element_rejected"
+tags = ["integration","traits","collections","diagnostics"]
 
 [[case]]
-id = "dynamic_trait_const_rejected"
-path = "dynamic_trait_const_rejected"
-tags = ["integration","traits","dynamic","diagnostics"]
+id = "trait_name_alias_target_rejected"
+path = "trait_name_alias_target_rejected"
+tags = ["integration","traits","aliases","diagnostics"]
 
 [[case]]
-id = "dynamic_trait_struct_field_bound_only_rejected"
-path = "dynamic_trait_struct_field_bound_only_rejected"
-tags = ["integration","traits","dynamic","diagnostics"]
-
-[[case]]
-id = "dynamic_trait_coercion_boundaries_success"
-path = "dynamic_trait_coercion_boundaries_success"
-tags = ["integration","traits","dynamic","coercion"]
-
-[[case]]
-id = "dynamic_trait_missing_evidence_rejected"
-path = "dynamic_trait_missing_evidence_rejected"
-tags = ["integration","traits","dynamic","coercion","diagnostics"]
-
-[[case]]
-id = "dynamic_trait_unannotated_inference_rejected"
-path = "dynamic_trait_unannotated_inference_rejected"
-tags = ["integration","traits","dynamic","collections","diagnostics"]
-
-[[case]]
-id = "dynamic_trait_method_call_success"
-path = "dynamic_trait_method_call_success"
-tags = ["integration","traits","dynamic"]
-
-[[case]]
-id = "dynamic_trait_js_runtime_argument"
-path = "dynamic_trait_js_runtime_argument"
-tags = ["integration","traits","dynamic","js"]
-
-[[case]]
-id = "dynamic_trait_js_runtime_return"
-path = "dynamic_trait_js_runtime_return"
-tags = ["integration","traits","dynamic","js"]
-
-[[case]]
-id = "dynamic_trait_js_runtime_collection"
-path = "dynamic_trait_js_runtime_collection"
-tags = ["integration","traits","dynamic","collections","js"]
-
-[[case]]
-id = "dynamic_trait_js_file_local_extension_runtime"
-path = "dynamic_trait_js_file_local_extension_runtime"
-tags = ["integration","traits","dynamic","js"]
-
-[[case]]
-id = "dynamic_trait_js_private_concrete_return"
-path = "dynamic_trait_js_private_concrete_return"
-tags = ["integration","traits","dynamic","imports","js"]
-
-[[case]]
-id = "dynamic_trait_js_unreachable_helper_not_emitted"
-path = "dynamic_trait_js_unreachable_helper_not_emitted"
-tags = ["integration","traits","dynamic","js"]
-
-[[case]]
-id = "dynamic_trait_wasm_reachable_rejected"
-path = "dynamic_trait_wasm_reachable_rejected"
-tags = ["integration","traits","dynamic","html-wasm","diagnostics","reachability"]
-
-[[case]]
-id = "dynamic_trait_wasm_unreachable_ignored"
-path = "dynamic_trait_wasm_unreachable_ignored"
-tags = ["integration","traits","dynamic","html-wasm","reachability"]
-
-[[case]]
-id = "dynamic_trait_concrete_method_rejected"
-path = "dynamic_trait_concrete_method_rejected"
-tags = ["integration","traits","dynamic","diagnostics"]
-
-[[case]]
-id = "dynamic_trait_mutable_method_requires_mutable_receiver"
-path = "dynamic_trait_mutable_method_requires_mutable_receiver"
-tags = ["integration","traits","dynamic","diagnostics"]
-
-[[case]]
-id = "trait_bound_dynamic_value_rejected"
-path = "trait_bound_dynamic_value_rejected"
-tags = ["integration","generics","traits","dynamic","diagnostics"]
+id = "choice_runtime_heterogeneity_success"
+path = "choice_runtime_heterogeneity_success"
+tags = ["integration","language","choices","traits"]
 
 [[case]]
 id = "trait_bound_cross_file_grouped_success"

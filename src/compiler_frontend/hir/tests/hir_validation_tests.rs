@@ -32,9 +32,7 @@ use crate::compiler_frontend::hir::module::{
 use crate::compiler_frontend::hir::patterns::{HirMatchArm, HirPattern};
 use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::regions::HirRegion;
-use crate::compiler_frontend::hir::statements::{
-    HirDynamicTraitCallArgumentEffect, HirStatement, HirStatementKind,
-};
+use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
 use crate::compiler_frontend::hir::structs::{HirField, HirStruct};
 use crate::compiler_frontend::hir::terminators::HirTerminator;
 use crate::compiler_frontend::hir::tests::hir_expression_lowering_tests::location;
@@ -43,11 +41,7 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::type_id_fixture_support::{
     no_value_expr, reference_expr, success_return_slot,
 };
-use crate::compiler_frontend::traits::evidence::TraitEvidenceDefinition;
-use crate::compiler_frontend::traits::evidence::environment::{
-    TraitEvidenceKind, TraitRequirementEvidence,
-};
-use crate::compiler_frontend::traits::ids::{TraitEvidenceId, TraitId, TraitRequirementId};
+
 use crate::compiler_frontend::value_mode::ValueMode;
 
 fn test_location(line: i32) -> SourceLocation {
@@ -166,49 +160,6 @@ fn inject_collection_expression_statement(
     module.side_table.map_statement(&location, &statement);
     module.side_table.map_value(&location, value_id, &location);
     entry_block.statements.push(statement);
-}
-
-fn register_displayable_evidence_for_type(
-    module: &mut HirModule,
-    type_environment: &mut TypeEnvironment,
-    string_table: &mut StringTable,
-    target_type_id: TypeId,
-) -> (TypeId, TraitId, TraitEvidenceId, TraitRequirementId) {
-    let trait_id = module
-        .trait_environment
-        .register_core_displayable(type_environment, string_table);
-    let trait_definition = module
-        .trait_environment
-        .get(trait_id)
-        .expect("core DISPLAYABLE trait should be registered");
-    let requirement = trait_definition
-        .requirements
-        .first()
-        .expect("core DISPLAYABLE should have one requirement");
-    let dynamic_trait_type_id =
-        type_environment.intern_dynamic_trait(trait_id, trait_definition.name);
-
-    module
-        .trait_evidence_environment
-        .insert_validated(TraitEvidenceDefinition {
-            id: TraitEvidenceId(0),
-            kind: TraitEvidenceKind::Canonical,
-            target_type_id,
-            trait_id,
-            source_file: InternedPath::new(),
-            declaration_location: test_location(30),
-            requirements: vec![TraitRequirementEvidence {
-                requirement_id: requirement.id,
-                method_path: InternedPath::new(),
-            }],
-        });
-
-    (
-        dynamic_trait_type_id,
-        trait_id,
-        TraitEvidenceId(0),
-        requirement.id,
-    )
 }
 
 #[test]
@@ -873,120 +824,6 @@ fn lowering_errors_preserve_string_table_context() {
     assert!(
         resolved_scope.ends_with("main.bst"),
         "HIR lowering errors should preserve the source path in the returned StringTable, got '{resolved_scope}'",
-    );
-}
-
-// ---------------------------------------------------------------------------
-// Dynamic trait validation
-// ---------------------------------------------------------------------------
-
-#[test]
-fn validator_rejects_dynamic_trait_dispatch_with_non_dynamic_receiver() {
-    let (mut string_table, mut module, mut type_environment) = minimal_lowered_hir_module();
-    let (_dynamic_type_id, trait_id, _evidence_id, requirement_id) =
-        register_displayable_evidence_for_type(
-            &mut module,
-            &mut type_environment,
-            &mut string_table,
-            builtin_type_ids::INT,
-        );
-    let entry_block =
-        &mut module.blocks[module.functions[module.start_function.0 as usize].entry.0 as usize];
-    let region = entry_block.region;
-    let receiver_id = HirValueId(9000);
-    let statement_id = HirNodeId(9000);
-    let location = test_location(40);
-
-    let receiver = HirExpression {
-        id: receiver_id,
-        kind: HirExpressionKind::Int(1),
-        ty: builtin_type_ids::INT,
-        value_kind: ValueKind::Const,
-        region,
-    };
-    let statement = HirStatement {
-        id: statement_id,
-        kind: HirStatementKind::CallDynamicTraitMethod {
-            receiver,
-            receiver_effect: HirDynamicTraitCallArgumentEffect::SharedBorrow,
-            trait_id,
-            requirement_id,
-            args: Vec::new(),
-            result: None,
-        },
-        location: location.clone(),
-    };
-
-    module.side_table.map_statement(&location, &statement);
-    module
-        .side_table
-        .map_value(&location, receiver_id, &location);
-    entry_block.statements.push(statement);
-
-    let error = validate_module_for_tests(&module, &string_table, &type_environment)
-        .expect_err("validator should reject dynamic dispatch through a non-dynamic receiver");
-    assert_eq!(error.error_type, ErrorType::HirTransformation);
-    assert!(
-        error.msg.contains("not a dynamic trait type"),
-        "expected dynamic receiver type error, got: {}",
-        error.msg
-    );
-}
-
-#[test]
-fn validator_rejects_dynamic_trait_construction_with_wrong_evidence_target() {
-    let (mut string_table, mut module, mut type_environment) = minimal_lowered_hir_module();
-    let (dynamic_type_id, trait_id, evidence_id, _requirement_id) =
-        register_displayable_evidence_for_type(
-            &mut module,
-            &mut type_environment,
-            &mut string_table,
-            builtin_type_ids::INT,
-        );
-    let entry_block =
-        &mut module.blocks[module.functions[module.start_function.0 as usize].entry.0 as usize];
-    let region = entry_block.region;
-    let inner_id = HirValueId(9000);
-    let outer_id = HirValueId(9001);
-    let statement_id = HirNodeId(9000);
-    let location = test_location(50);
-
-    let inner_value = HirExpression {
-        id: inner_id,
-        kind: HirExpressionKind::StringLiteral("wrong target".to_owned()),
-        ty: builtin_type_ids::STRING,
-        value_kind: ValueKind::Const,
-        region,
-    };
-    let expression = HirExpression {
-        id: outer_id,
-        kind: HirExpressionKind::ConstructDynamicTraitValue {
-            value: Box::new(inner_value),
-            trait_id,
-            evidence_id,
-        },
-        ty: dynamic_type_id,
-        value_kind: ValueKind::RValue,
-        region,
-    };
-    let statement = HirStatement {
-        id: statement_id,
-        kind: HirStatementKind::Expr(expression),
-        location: location.clone(),
-    };
-
-    module.side_table.map_statement(&location, &statement);
-    module.side_table.map_value(&location, inner_id, &location);
-    module.side_table.map_value(&location, outer_id, &location);
-    entry_block.statements.push(statement);
-
-    let error = validate_module_for_tests(&module, &string_table, &type_environment)
-        .expect_err("validator should reject evidence that targets a different concrete type");
-    assert_eq!(error.error_type, ErrorType::HirTransformation);
-    assert!(
-        error.msg.contains("targets type"),
-        "expected evidence target type error, got: {}",
-        error.msg
     );
 }
 

@@ -15,8 +15,8 @@ use crate::compiler_frontend::ast::templates::template::{
     Formatter, FormatterResult, TemplateFormatter,
 };
 use crate::compiler_frontend::ast::templates::template_render_plan::{
-    FormatterInput, FormatterInputPiece, FormatterOpaquePiece,
-    FormatterOutput, FormatterOutputPiece,
+    FormatterInput, FormatterInputPiece, FormatterOpaquePiece, FormatterOutput,
+    FormatterOutputPiece,
 };
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::style_directives::StyleDirectiveArgumentValue;
@@ -159,7 +159,8 @@ fn render_markdown_stream(lines: &[MarkdownLine], default_tag: &str) -> Vec<Form
         }
 
         if parsing::parse_list_item_line(&lines[line_index]).is_some() {
-            let (rendered, consumed_lines) = blocks::render_list_block(&lines[line_index..], default_tag);
+            let (rendered, consumed_lines) =
+                blocks::render_list_block(&lines[line_index..], default_tag);
             if consumed_lines == 0 {
                 break;
             }

@@ -17,9 +17,9 @@ use crate::compiler_frontend::tokenizer::tokens::{
 };
 use crate::return_token;
 
-mod import_clauses;
 mod components;
 mod grouped;
+mod import_clauses;
 
 pub use import_clauses::*;
 
@@ -243,8 +243,11 @@ fn parse_path_prefix(
                 ));
             }
 
-            let parsed_component =
-                components::parse_component(stream, ParseComponentContext::OrdinaryPath, string_table)?;
+            let parsed_component = components::parse_component(
+                stream,
+                ParseComponentContext::OrdinaryPath,
+                string_table,
+            )?;
             components::push_validated_component(
                 &mut components,
                 parsed_component,

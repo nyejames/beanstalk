@@ -27,9 +27,7 @@ use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::return_hir_transformation_error;
 use rustc_hash::FxHashSet;
 
-use super::{
-    DynamicTraitMethodCallLoweringInput, ExternalFallibleCallLoweringInput, LoweredExpression,
-};
+use super::{ExternalFallibleCallLoweringInput, LoweredExpression};
 
 impl<'a> HirBuilder<'a> {
     // WHAT: converts an AST node that semantically yields a value into HIR expression form.
@@ -185,27 +183,6 @@ impl<'a> HirBuilder<'a> {
                 args,
                 result_type_ids,
                 location,
-            ),
-
-            NodeKind::DynamicTraitMethodCall {
-                receiver,
-                trait_id,
-                requirement_id,
-                receiver_requires_mutable,
-                args,
-                result_type_ids,
-                location,
-                ..
-            } => self.lower_dynamic_trait_method_call_expression(
-                DynamicTraitMethodCallLoweringInput {
-                    receiver,
-                    trait_id: *trait_id,
-                    requirement_id: *requirement_id,
-                    receiver_requires_mutable: *receiver_requires_mutable,
-                    args,
-                    result_type_ids,
-                    location,
-                },
             ),
 
             NodeKind::CollectionBuiltinCall {
@@ -443,31 +420,6 @@ impl<'a> HirBuilder<'a> {
                     args,
                     result_type_ids,
                     location,
-                )?;
-                let place = self.place_from_expression(&lowered.value, &node.location)?;
-                Ok((lowered.prelude, place))
-            }
-
-            NodeKind::DynamicTraitMethodCall {
-                receiver,
-                trait_id,
-                requirement_id,
-                receiver_requires_mutable,
-                args,
-                result_type_ids,
-                location,
-                ..
-            } => {
-                let lowered = self.lower_dynamic_trait_method_call_expression(
-                    DynamicTraitMethodCallLoweringInput {
-                        receiver,
-                        trait_id: *trait_id,
-                        requirement_id: *requirement_id,
-                        receiver_requires_mutable: *receiver_requires_mutable,
-                        args,
-                        result_type_ids,
-                        location,
-                    },
                 )?;
                 let place = self.place_from_expression(&lowered.value, &node.location)?;
                 Ok((lowered.prelude, place))

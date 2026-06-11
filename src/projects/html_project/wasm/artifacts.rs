@@ -268,19 +268,6 @@ fn first_generic_runtime_statement_location(
         HirStatementKind::Call { args, .. } => args.iter().find_map(|arg| {
             first_generic_runtime_expression_location(arg, module, type_environment)
         }),
-        HirStatementKind::CallDynamicTraitMethod { receiver, args, .. } => {
-            first_generic_runtime_expression_location(receiver, module, type_environment).or_else(
-                || {
-                    args.iter().find_map(|arg| {
-                        first_generic_runtime_expression_location(
-                            &arg.value,
-                            module,
-                            type_environment,
-                        )
-                    })
-                },
-            )
-        }
         HirStatementKind::MapOp { receiver, args, .. } => {
             first_generic_runtime_expression_location(receiver, module, type_environment).or_else(
                 || {
@@ -359,7 +346,6 @@ fn first_generic_runtime_expression_location(
         | HirExpressionKind::FallibleUnwrapSuccess { result: operand }
         | HirExpressionKind::FallibleUnwrapError { result: operand }
         | HirExpressionKind::BuiltinCast { value: operand, .. }
-        | HirExpressionKind::ConstructDynamicTraitValue { value: operand, .. }
         | HirExpressionKind::VariantPayloadGet {
             source: operand, ..
         } => first_generic_runtime_expression_location(operand, module, type_environment),

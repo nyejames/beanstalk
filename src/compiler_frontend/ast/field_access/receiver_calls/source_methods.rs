@@ -192,7 +192,6 @@ pub(super) fn parse_source_receiver_method_target_call_typed(
             string_table,
             type_environment: type_check_context.type_environment,
             compatibility_cache: type_check_context.compatibility_cache,
-            scope_context: Some(scope_context),
         },
     )?;
     let result_type_ids = receiver_result_type_ids_for_call(

@@ -316,7 +316,7 @@ impl ScopeContext {
     ///
     /// WHAT: replaces the synthetic empty `TraitEnvironment` created by `ScopeContext::new`
     /// with the real module trait metadata so type resolution in constant headers can
-    /// resolve and reject dynamic trait annotations.
+    /// recognize and reject trait names in ordinary type annotations.
     /// WHY: constant-header parsing runs while the AST environment is still being built;
     /// it needs trait awareness without waiting for the full `AstModuleLookups` package.
     pub(crate) fn with_trait_environment(

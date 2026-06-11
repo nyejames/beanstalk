@@ -22,15 +22,13 @@ use crate::libraries::external_import_providers::resolution_table::ExternalImpor
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::{
-    FileVisibility, HeaderImportEnvironment,
-    FacadeLookupResult, FacadeResolutionInput, ModuleBoundaryCheckInput,
-    SourceLibraryBoundaryCheckInput, check_module_boundary, check_source_library_boundary,
-    resolve_facade_import,
-    ExternalPackageSymbolLookup, ExternalPackageSymbolResolutionInput, ImportTargetResolutionInput,
-    NamespaceTargetResolutionInput, ResolvedImportTarget,
-    SourceImportAccess, has_explicit_bst_extension, resolve_external_package_symbol,
-    resolve_import_target, resolve_namespace_target,
-    ReceiverMethodImportTarget, VisibleNameBinding, VisibleNameRegistry, check_alias_case_warning,
+    ExternalPackageSymbolLookup, ExternalPackageSymbolResolutionInput, FacadeLookupResult,
+    FacadeResolutionInput, FileVisibility, HeaderImportEnvironment, ImportTargetResolutionInput,
+    ModuleBoundaryCheckInput, NamespaceTargetResolutionInput, ReceiverMethodImportTarget,
+    ResolvedImportTarget, SourceImportAccess, SourceLibraryBoundaryCheckInput, VisibleNameBinding,
+    VisibleNameRegistry, check_alias_case_warning, check_module_boundary,
+    check_source_library_boundary, has_explicit_bst_extension, resolve_external_package_symbol,
+    resolve_facade_import, resolve_import_target, resolve_namespace_target,
 };
 
 #[derive(Clone, Debug)]
@@ -73,7 +71,11 @@ impl<'a> ImportEnvironmentBuilder<'a> {
     }
 
     /// Emit an alias-case warning when an explicit alias changes leading case.
-    pub(super) fn emit_alias_case_warning_if_needed(&mut self, import: &FileImport, symbol_name: StringId) {
+    pub(super) fn emit_alias_case_warning_if_needed(
+        &mut self,
+        import: &FileImport,
+        symbol_name: StringId,
+    ) {
         let Some(alias) = import.alias else {
             return;
         };
@@ -617,7 +619,9 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                         super::facade_resolution::FacadeType::SourceLibrary => {
                             ImportFacadeType::SourceLibrary
                         }
-                        super::facade_resolution::FacadeType::ModuleRoot => ImportFacadeType::ModuleRoot,
+                        super::facade_resolution::FacadeType::ModuleRoot => {
+                            ImportFacadeType::ModuleRoot
+                        }
                     };
                     return Err(super::diagnostics::not_exported_by_facade(
                         &import.header_path,
@@ -663,18 +667,14 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                             .source_library_facade_files,
                         string_table: self.string_table,
                     })?;
-                    check_module_boundary(
-                        ModuleBoundaryCheckInput {
-                            importer_file: source_file,
-                            target_file,
-                            symbol_path: &symbol_path,
-                            location: import.location.clone(),
-                            file_module_membership: &self.module_symbols.file_module_membership,
-                            module_root_facade_exports: &self
-                                .module_symbols
-                                .module_root_facade_exports,
-                        },
-                    )?;
+                    check_module_boundary(ModuleBoundaryCheckInput {
+                        importer_file: source_file,
+                        target_file,
+                        symbol_path: &symbol_path,
+                        location: import.location.clone(),
+                        file_module_membership: &self.module_symbols.file_module_membership,
+                        module_root_facade_exports: &self.module_symbols.module_root_facade_exports,
+                    })?;
                 }
 
                 let effective_requirement = if self.is_internal_import(source_file, &symbol_path) {
