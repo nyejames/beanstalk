@@ -50,9 +50,8 @@ use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::datatypes::{DataType, ReceiverKey};
 use crate::compiler_frontend::declaration_syntax::choice::ChoiceVariant;
 use crate::compiler_frontend::external_packages::{
-    ExternalAbiType, ExternalConstantDef, ExternalConstantId, ExternalFunctionDef,
-    ExternalFunctionId, ExternalPackageRegistry, ExternalSignatureType, ExternalSymbolId,
-    ExternalTypeDef, ExternalTypeId,
+    ExternalConstantDef, ExternalConstantId, ExternalFunctionDef, ExternalFunctionId,
+    ExternalPackageRegistry, ExternalSymbolId, ExternalTypeDef, ExternalTypeId,
 };
 use crate::compiler_frontend::headers::import_environment::{
     FileVisibility, HeaderImportEnvironment,
@@ -88,45 +87,6 @@ mod diagnostic_sinks;
 mod local_declarations;
 mod lookup;
 mod required_services;
-
-/// Checks whether an `ExternalSignatureType` is compatible with a frontend `TypeId`
-/// for receiver method dispatch.
-///
-/// WHAT: boundary check between external package signature types and canonical frontend
-///       type identity. Exact `External(type_id)` requires the same canonical external
-///       type; `Abi(Handle)` preserves the old broad "any external type" matching.
-/// WHY: receiver dispatch should not rebuild parse-only `DataType` just to
-///      decide whether a visible external method applies, and package-scoped opaque
-///      types must not collapse into indistinguishable handles.
-fn external_signature_type_matches_type_id(
-    signature_type: &ExternalSignatureType,
-    type_id: TypeId,
-    type_environment: &TypeEnvironment,
-) -> bool {
-    match signature_type {
-        ExternalSignatureType::Abi(abi_type) => match abi_type {
-            ExternalAbiType::Inferred => true,
-            ExternalAbiType::I32 => type_id == type_environment.builtins().int,
-            ExternalAbiType::F64 => type_id == type_environment.builtins().float,
-            ExternalAbiType::Bool => type_id == type_environment.builtins().bool,
-            ExternalAbiType::Utf8Str => type_id == type_environment.builtins().string,
-            ExternalAbiType::Char => type_id == type_environment.builtins().char,
-            ExternalAbiType::Handle => matches!(
-                type_environment.get(type_id),
-                Some(TypeDefinition::External(..))
-            ),
-            ExternalAbiType::Void => false,
-        },
-        ExternalSignatureType::BuiltinError => {
-            // BuiltinError is not a valid receiver type.
-            false
-        }
-        ExternalSignatureType::External(expected_external_id) => matches!(
-            type_environment.get(type_id),
-            Some(TypeDefinition::External(def)) if def.type_id == *expected_external_id
-        ),
-    }
-}
 
 /// Global counter for generating unique synthetic scope paths in child control-flow contexts.
 pub(super) static CONTROL_FLOW_SCOPE_COUNTER: AtomicUsize = AtomicUsize::new(0);
@@ -177,7 +137,7 @@ pub struct ScopeShared {
     pub(crate) receiver_methods: Rc<ReceiverMethodCatalog>,
 
     // Constant-header contexts are built before the final module lookup package exists, but
-    // dynamic trait annotations still need resolved trait metadata there.
+    // trait names still need to be recognized and rejected in ordinary type positions there.
     pub(crate) trait_environment_override: Option<Rc<TraitEnvironment>>,
 }
 
@@ -198,6 +158,11 @@ pub struct ScopeContext {
     // Indexed local lookup: name → ordered indices into local_declarations.
     // Preserves "latest visible local wins" without reverse scanning the full vec.
     local_declarations_by_name: FxHashMap<StringId, Vec<u32>>,
+
+    // Declarations authored with `#` that are visible to this context. Foldable
+    // runtime bindings may still be compile-time values, but fixed-capacity type
+    // syntax requires an explicit compile-time constant name.
+    explicit_compile_time_constant_declarations: FxHashSet<InternedPath>,
 
     // Assignment targets are readable on the success side of an assignment expression, but not from
     // catch recovery subtrees attached to that assignment. The pending set is activated only when
@@ -409,6 +374,7 @@ impl ScopeContext {
             shared,
             local_declarations: Vec::new(),
             local_declarations_by_name: FxHashMap::default(),
+            explicit_compile_time_constant_declarations: FxHashSet::default(),
             unavailable_assignment_targets: FxHashSet::default(),
             pending_catch_assignment_targets: FxHashSet::default(),
             visible_declaration_ids: None,
@@ -464,6 +430,9 @@ impl ScopeContext {
             shared: Rc::clone(&self.shared),
             local_declarations: self.local_declarations.clone(),
             local_declarations_by_name: self.local_declarations_by_name.clone(),
+            explicit_compile_time_constant_declarations: self
+                .explicit_compile_time_constant_declarations
+                .clone(),
             unavailable_assignment_targets: self.unavailable_assignment_targets.clone(),
             pending_catch_assignment_targets: self.pending_catch_assignment_targets.clone(),
             visible_declaration_ids: self.visible_declaration_ids.clone(),
@@ -528,6 +497,9 @@ impl ScopeContext {
             shared: Rc::clone(&self.shared),
             local_declarations: self.local_declarations.clone(),
             local_declarations_by_name: self.local_declarations_by_name.clone(),
+            explicit_compile_time_constant_declarations: self
+                .explicit_compile_time_constant_declarations
+                .clone(),
             unavailable_assignment_targets: self.unavailable_assignment_targets.clone(),
             pending_catch_assignment_targets: self.pending_catch_assignment_targets.clone(),
             visible_declaration_ids: self.visible_declaration_ids.clone(),
@@ -565,6 +537,9 @@ impl ScopeContext {
             shared: Rc::clone(&self.shared),
             local_declarations: self.local_declarations.clone(),
             local_declarations_by_name: self.local_declarations_by_name.clone(),
+            explicit_compile_time_constant_declarations: self
+                .explicit_compile_time_constant_declarations
+                .clone(),
             unavailable_assignment_targets: self.unavailable_assignment_targets.clone(),
             pending_catch_assignment_targets: self.pending_catch_assignment_targets.clone(),
             visible_declaration_ids: self.visible_declaration_ids.clone(),
@@ -598,6 +573,9 @@ impl ScopeContext {
             shared: Rc::clone(&parent.shared),
             local_declarations: parent.local_declarations.clone(),
             local_declarations_by_name: parent.local_declarations_by_name.clone(),
+            explicit_compile_time_constant_declarations: parent
+                .explicit_compile_time_constant_declarations
+                .clone(),
             unavailable_assignment_targets: parent.unavailable_assignment_targets.clone(),
             pending_catch_assignment_targets: parent.pending_catch_assignment_targets.clone(),
             visible_declaration_ids: parent.visible_declaration_ids.clone(),

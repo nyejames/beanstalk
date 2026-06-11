@@ -1,5 +1,0 @@
-[backends.html]
-mode = "failure"
-warnings = "forbid"
-diagnostic_codes = ["BST-RULE-0048"]
-message_contains = ["only_label"]

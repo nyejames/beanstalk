@@ -425,12 +425,6 @@ impl DiagnosticPayload {
                         *parameter_name = remap.get(*parameter_name);
                         *trait_name = remap.get(*trait_name);
                     }
-                    InvalidGenericInstantiationReason::FileLocalNominalTraitEvidenceUnsupported {
-                        trait_name,
-                        ..
-                    } => {
-                        *trait_name = remap.get(*trait_name);
-                    }
                     InvalidGenericInstantiationReason::WrongArgumentCount { .. }
                     | InvalidGenericInstantiationReason::TypeDoesNotAcceptArguments
                     | InvalidGenericInstantiationReason::ExternalTypeArgumentsUnsupported
@@ -591,9 +585,8 @@ impl DiagnosticPayload {
                 reason.remap_string_ids(remap);
             }
 
-            DiagnosticPayload::InvalidDynamicTraitType { trait_name, reason } => {
+            DiagnosticPayload::TraitNameUsedAsType { trait_name } => {
                 *trait_name = remap.get(*trait_name);
-                reason.remap_string_ids(remap);
             }
 
             DiagnosticPayload::InvalidExpression
@@ -615,16 +608,6 @@ impl DiagnosticPayload {
 
             DiagnosticPayload::InfrastructureError { .. } => {
                 // Infrastructure payloads carry rendered strings; no interned IDs to remap.
-            }
-
-            DiagnosticPayload::ReceiverMethodImportRequiresVisibleReceiverType {
-                method_name,
-                receiver_type_name,
-            } => {
-                *method_name = remap.get(*method_name);
-                if let Some(name) = receiver_type_name {
-                    *name = remap.get(*name);
-                }
             }
         }
     }

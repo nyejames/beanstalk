@@ -61,8 +61,8 @@ page_head #= theme_head
 
         [data:
             [: Generic aliases with parameters]
-            [: Deferred]
-            [: Alias only a fully concrete generic instance for now.]
+            [: Outside scope]
+            [: Alias only a fully concrete generic instance; parameterized aliases create a separate type-level abstraction layer.]
         ]
 
         [data:
@@ -73,7 +73,7 @@ page_head #= theme_head
 
         [data:
             [: Generic function values]
-            [: Rejected / Deferred]
+            [: Outside scope]
             [: Generic functions are callable declarations only, not first-class values.]
         ]
 
@@ -85,14 +85,14 @@ page_head #= theme_head
 
         [data:
             [: Type values / type-level CTFE]
-            [: Not supported]
+            [: Outside scope]
             [: Types are compile-time annotation facts, not runtime or compile-time values.]
         ]
 
         [data:
             [: Trait bounds]
             [: Partial]
-            [: Declaration-site [$html:<code>type T is TRAIT</code>] and [$html:<code>type T is A and B, U is C</code>] bounds are supported for generic functions, structs, and choices. [$html:<code>where</code>] clauses and file-local evidence-backed generic bound dispatch remain deferred.]
+            [: Declaration-site [$html:<code>type T is TRAIT</code>] and [$html:<code>type T is A and B, U is C</code>] bounds are supported for generic functions, structs, and choices. [$html:<code>where</code>] clauses and file-local evidence-backed generic-bound dispatch are outside scope.]
         ]
     ]
 ]
@@ -395,8 +395,8 @@ page_head #= theme_head
 
     Concrete generic function calls and concrete generic struct/choice instantiations require
     explicit visible reusable evidence for each concrete type argument. File-local extension
-    evidence can support local dynamic values or local concrete fallback, but it cannot satisfy
-    public/static generic API obligations across files.
+    evidence can support local concrete fallback, but it cannot satisfy public/static generic API
+    obligations across files.
 
     [codeblock, $code("bst"):
         Label = |
@@ -412,34 +412,43 @@ page_head #= theme_head
         value = render(Label("ok"))
     ]
 
-    A trait name in a normal type annotation means a dynamic trait value.
-    A trait name in a generic bound constrains a concrete generic parameter.
-    These are different features.
+    Trait names are static contracts. They can appear in generic bounds, trait declarations, and
+    conformance declarations, but not as normal value types or concrete generic arguments.
 
-    Dynamic trait values do not satisfy static generic bounds.
-    Bound-provided receiver methods use the selected static evidence; dynamic wrappers use runtime
-    dispatch and are a separate value representation.
+    Bound-provided receiver methods use the selected static evidence and lower to concrete calls
+    before HIR.
     `where` clauses remain rejected; write bounds directly on the generic parameter list.
 ]
 
 #[section, $markdown:
-    # Deferred features
+    # Deferred generic work
 
-    The following are not current Alpha generics:
+    The following fit the language design but are not current Alpha generics:
 
     - explicit generic call syntax such as `identity of Int(42)`, `identity<Int>(42)`, `["identity[Int](42)"]`, or `identity(42 Int)`
     - inline generic sugar such as `|value type A|`
-    - generic function values and higher-order generic functions
-    - `where` clauses and file-local evidence-backed generic bound dispatch
-    - type values, type-returning functions, type-level `#if`, and compile-time type inspection
     - recursive generic structs or choices
     - receiver methods on instantiated generic types
     - namespace or wildcard facade exports and function alias exports through `#mod.bst`
     - generic JS or external package functions
-    - generic aliases with parameters
-    - partial type application
     - nested generic type application beyond the collection element exception
     - public `Option of T` or `Result of T, E`
     - `Option.Some`, `Result.Ok`, public `Ok` or `Err` constructors
-    - higher-kinded types, const generics, lifetime parameters, specialization, associated types, and dynamic generic reification
+]
+
+#[section, $markdown:
+    # Outside generic design scope
+
+    These features are intentionally outside Beanstalk's generic design scope:
+
+    - generic function values and higher-order polymorphism
+    - type values, type-returning functions, type-level `#if`, and compile-time type inspection
+    - `where` clauses and file-local evidence-backed generic-bound dispatch
+    - parameterized aliases and partial type application
+    - higher-kinded types
+    - const generics beyond fixed collection capacity
+    - lifetime parameters
+    - specialization
+    - associated types
+    - dynamic generic reification
 ]

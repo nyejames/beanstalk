@@ -1,13 +1,12 @@
 //! Trait conformance validation orchestration.
 //!
 //! WHAT: Orchestrates validation of all `Type must TRAIT` conformance headers across files,
-//!       detecting duplicate declarations, file-local overrides of canonical declarations,
-//!       and checking method compatibility.
+//!       detecting duplicate declarations and checking method compatibility.
 //! WHY: Fuses syntactic headers, resolved traits, visible method catalogs, and import rules
 //!      into a consistent, valid `TraitEvidenceEnvironment`.
 
 use super::diagnostics::{invalid_conformance, previous_declaration_label};
-use super::environment::{TraitEvidenceDefinition, TraitEvidenceEnvironment, TraitEvidenceKind};
+use super::environment::{TraitEvidenceDefinition, TraitEvidenceEnvironment};
 use super::requirement_matching::{RequirementValidationContext, validate_requirements};
 use super::target_resolution::{
     ConformanceTarget, ResolveConformanceTargetContext, resolve_conformance_target,
@@ -53,8 +52,8 @@ struct PendingConformanceEvidence {
 
 /// Validate explicit conformance declarations and store indexed evidence facts.
 ///
-/// WHAT: classifies each declaration as canonical or file-local extension evidence before
-/// matching trait requirements against receiver methods in the declaring file.
+/// WHAT: validates same-file nominal conformance evidence before matching trait requirements
+/// against receiver methods in the declaring file.
 /// WHY: later dispatch phases need stable evidence indexes and must not rediscover conformance
 /// headers or infer structural conformance from arbitrary matching methods.
 pub(crate) fn validate_trait_evidence(
@@ -64,10 +63,6 @@ pub(crate) fn validate_trait_evidence(
     let mut pending_evidence = Vec::new();
     let mut pending_canonical_locations: FxHashMap<(TypeId, TraitId), SourceLocation> =
         FxHashMap::default();
-    let mut pending_file_local_locations: FxHashMap<
-        (InternedPath, TypeId, TraitId),
-        SourceLocation,
-    > = FxHashMap::default();
 
     for header in input.sorted_headers {
         let HeaderKind::TraitConformance { conformance } = &header.kind else {
@@ -131,39 +126,18 @@ pub(crate) fn validate_trait_evidence(
                 ));
             }
 
-            match target.evidence_kind {
-                TraitEvidenceKind::Canonical => {
-                    let key = (target.type_id, trait_id);
-                    if let Some(previous_location) = pending_canonical_locations.get(&key) {
-                        return Err(invalid_conformance(
-                            conformance.target.name,
-                            Some(trait_ref.name),
-                            InvalidTraitConformanceReason::DuplicateCanonicalEvidence,
-                            trait_ref.location.clone(),
-                            previous_declaration_label(Some(previous_location.clone())),
-                        ));
-                    }
-
-                    pending_canonical_locations.insert(key, conformance.location.clone());
-                }
-
-                TraitEvidenceKind::FileLocalExtension => {
-                    let key = (conformance_source_file.clone(), target.type_id, trait_id);
-                    if let Some(previous_location) = pending_file_local_locations.get(&key) {
-                        return Err(invalid_conformance(
-                            conformance.target.name,
-                            Some(trait_ref.name),
-                            InvalidTraitConformanceReason::DuplicateFileLocalExtensionEvidence,
-                            trait_ref.location.clone(),
-                            previous_declaration_label(Some(previous_location.clone())),
-                        ));
-                    }
-
-                    pending_file_local_locations.insert(key, conformance.location.clone());
-                }
-
-                TraitEvidenceKind::Builtin => {}
+            let key = (target.type_id, trait_id);
+            if let Some(previous_location) = pending_canonical_locations.get(&key) {
+                return Err(invalid_conformance(
+                    conformance.target.name,
+                    Some(trait_ref.name),
+                    InvalidTraitConformanceReason::DuplicateCanonicalEvidence,
+                    trait_ref.location.clone(),
+                    previous_declaration_label(Some(previous_location.clone())),
+                ));
             }
+
+            pending_canonical_locations.insert(key, conformance.location.clone());
 
             pending_evidence.push(PendingConformanceEvidence {
                 target: target.clone(),
@@ -174,21 +148,6 @@ pub(crate) fn validate_trait_evidence(
                 declaration_location: conformance.location.clone(),
                 trait_location: trait_ref.location.clone(),
             });
-        }
-    }
-
-    for pending in &pending_evidence {
-        if pending.target.evidence_kind == TraitEvidenceKind::FileLocalExtension
-            && let Some(canonical_location) =
-                pending_canonical_locations.get(&(pending.target.type_id, pending.trait_id))
-        {
-            return Err(invalid_conformance(
-                pending.target_name,
-                Some(pending.trait_name),
-                InvalidTraitConformanceReason::FileLocalExtensionOverridesCanonicalEvidence,
-                pending.trait_location.clone(),
-                previous_declaration_label(Some(canonical_location.clone())),
-            ));
         }
     }
 

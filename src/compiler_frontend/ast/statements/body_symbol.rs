@@ -45,7 +45,6 @@ fn push_accessed_symbol_statement(
         // Method calls and collection builtins are valid as standalone statements
         // because they may have side effects.
         NodeKind::MethodCall { .. }
-        | NodeKind::DynamicTraitMethodCall { .. }
         | NodeKind::CollectionBuiltinCall { .. }
         | NodeKind::MapBuiltinCall { .. } => {
             ast.push(AstNode {
@@ -364,8 +363,29 @@ pub(crate) fn parse_symbol_statement(
         ));
     }
 
+    // Namespace-record calls such as `canvas.fill_rect(...)` have no local binding for the
+    // namespace symbol, but they are valid side-effect statements when the field access resolves
+    // to a call. Route them through expression-statement validation before declaration parsing
+    // interprets the leading symbol as a malformed declaration.
+    if token_stream.peek_next_token() == Some(&TokenKind::Dot) {
+        let expression = parse_symbol_expression_statement_candidate(
+            token_stream,
+            context,
+            symbol_id,
+            type_interner,
+            string_table,
+        )?;
+
+        ast.push(AstNode {
+            kind: NodeKind::Rvalue(expression),
+            location: token_stream.current_location(),
+            scope: context.scope.clone(),
+        });
+        return Ok(());
+    }
+
     // No existing reference and no call target: this must be a new declaration.
-    let declaration = new_declaration(
+    let resolved_declaration = new_declaration(
         token_stream,
         symbol_id,
         context,
@@ -373,6 +393,8 @@ pub(crate) fn parse_symbol_statement(
         warnings,
         string_table,
     )?;
+    let declaration = resolved_declaration.declaration;
+    let is_compile_time_binding = resolved_declaration.is_compile_time_binding;
 
     // Lift struct definitions and functions to the AST statement level;
     // everything else becomes a local variable declaration.
@@ -406,6 +428,10 @@ pub(crate) fn parse_symbol_statement(
         }
     }
 
-    context.add_var(declaration);
+    if is_compile_time_binding {
+        context.add_compile_time_var(declaration);
+    } else {
+        context.add_var(declaration);
+    }
     Ok(())
 }

@@ -27,7 +27,7 @@ use crate::compiler_frontend::datatypes::{DataType, diagnostic_type_spelling};
 use crate::compiler_frontend::external_packages::ExternalFunctionId;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap};
-use crate::compiler_frontend::traits::ids::{TraitId, TraitRequirementId};
+
 use crate::compiler_frontend::value_mode::ValueMode;
 use crate::return_compiler_error;
 
@@ -200,22 +200,6 @@ pub enum NodeKind {
         location: SourceLocation,
     },
 
-    /// Dynamic trait receiver dispatch selected from the erased trait surface.
-    ///
-    /// WHAT: carries the trait requirement identity instead of a concrete method path.
-    /// WHY: dynamic values expose only the trait surface; HIR/backend lowering dispatches through
-    /// the wrapper's method table without repeating receiver lookup.
-    DynamicTraitMethodCall {
-        receiver: Box<AstNode>,
-        trait_id: TraitId,
-        requirement_id: TraitRequirementId,
-        method: StringId,
-        receiver_requires_mutable: bool,
-        args: Vec<CallArgument>,
-        result_type_ids: Vec<TypeId>,
-        location: SourceLocation,
-    },
-
     // For compiler-owned collection builtins: collection.get/set/push/remove/length(...)
     CollectionBuiltinCall {
         receiver: Box<AstNode>,
@@ -324,9 +308,6 @@ impl AstNode {
             | NodeKind::MethodCall {
                 result_type_ids, ..
             }
-            | NodeKind::DynamicTraitMethodCall {
-                result_type_ids, ..
-            }
             | NodeKind::CollectionBuiltinCall {
                 result_type_ids, ..
             }
@@ -370,7 +351,6 @@ impl AstNode {
             | NodeKind::HandledFallibleHostFunctionCall { .. }
             | NodeKind::HandledFallibleFunctionCall { .. }
             | NodeKind::MethodCall { .. }
-            | NodeKind::DynamicTraitMethodCall { .. }
             | NodeKind::CollectionBuiltinCall { .. }
             | NodeKind::MapBuiltinCall { .. } => Ok(false),
 
@@ -516,11 +496,6 @@ impl AstNode {
                 Ok(expression)
             }
             NodeKind::MethodCall {
-                result_type_ids,
-                location,
-                ..
-            }
-            | NodeKind::DynamicTraitMethodCall {
                 result_type_ids,
                 location,
                 ..
@@ -778,21 +753,6 @@ impl NodeKind {
             } => {
                 receiver.remap_string_ids(remap);
                 method_path.remap_string_ids(remap);
-                *method = remap.get(*method);
-                for arg in args {
-                    arg.remap_string_ids(remap);
-                }
-                location.remap_string_ids(remap);
-            }
-
-            NodeKind::DynamicTraitMethodCall {
-                receiver,
-                method,
-                args,
-                location,
-                ..
-            } => {
-                receiver.remap_string_ids(remap);
                 *method = remap.get(*method);
                 for arg in args {
                     arg.remap_string_ids(remap);

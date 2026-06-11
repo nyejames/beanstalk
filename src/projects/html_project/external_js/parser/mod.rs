@@ -1,9 +1,10 @@
 //! HTML JavaScript `@bst.*` annotation parser.
 //!
 //! WHAT: turns a single JS source file into a `ParsedJsLibrary` containing opaque types,
-//!       free functions, receiver methods, registered runtime imports, and diagnostics.
+//!       free functions, receiver-shaped signatures, registered runtime imports, and diagnostics.
 //! WHY: this parser stays independent from compiler diagnostics and package registration so
-//!      project-local JS providers and built-in JS-backed packages can share one source model.
+//!      provider and built-in package registration can share one source model while rejecting
+//!      receiver-shaped signatures consistently.
 //!
 //! ## Module layout
 //!

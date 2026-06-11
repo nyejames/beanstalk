@@ -11,11 +11,11 @@ use crate::compiler_frontend::compiler_messages::{
     DiagnosticSeverity, GenericApplicationErrorReason, ImportClauseKind, ImportDiagnosticKind,
     ImportFacadeType, IncompatibleChoiceComparisonReason, InvalidChoiceVariantReason,
     InvalidCollectionTypeReason, InvalidCompileTimePathReason, InvalidConfigReason,
-    InvalidDynamicTraitTypeReason, InvalidFunctionSignatureReason, InvalidGenericParameterReason,
-    InvalidImportClauseReason, InvalidImportPathReason, InvalidLoopHeaderReason,
-    InvalidMapLiteralReason, InvalidMapTypeReason, InvalidMatchArmReason,
-    InvalidMutableAccessReason, InvalidPageMetadataReason, InvalidResultOperandReason,
-    InvalidSignatureMemberReason, InvalidStandaloneStatementReason, InvalidStatementPositionReason,
+    InvalidFunctionSignatureReason, InvalidGenericParameterReason, InvalidImportClauseReason,
+    InvalidImportPathReason, InvalidLoopHeaderReason, InvalidMapLiteralReason,
+    InvalidMapTypeReason, InvalidMatchArmReason, InvalidMutableAccessReason,
+    InvalidPageMetadataReason, InvalidResultOperandReason, InvalidSignatureMemberReason,
+    InvalidStandaloneStatementReason, InvalidStatementPositionReason,
     InvalidTemplateDirectiveReason, InvalidTemplateStructureReason, InvalidTraitConformanceReason,
     InvalidTraitKeywordUsageReason, InvalidTypeAnnotationReason, NameNamespace,
     NamespaceTypeValueMisuseKind, NamingConvention, NumberLiteralErrorReason,
@@ -386,23 +386,6 @@ impl CompilerDiagnostic {
             DiagnosticKind::Import(ImportDiagnosticKind::InvalidExternalLibrary),
             location,
             DiagnosticPayload::InvalidExternalLibrary { path, message },
-        )
-    }
-
-    pub(crate) fn receiver_method_import_requires_visible_receiver_type(
-        method_name: StringId,
-        receiver_type_name: Option<StringId>,
-        location: SourceLocation,
-    ) -> Self {
-        Self::new(
-            DiagnosticKind::Import(
-                ImportDiagnosticKind::ReceiverMethodImportRequiresVisibleReceiverType,
-            ),
-            location,
-            DiagnosticPayload::ReceiverMethodImportRequiresVisibleReceiverType {
-                method_name,
-                receiver_type_name,
-            },
         )
     }
 
@@ -1356,15 +1339,11 @@ impl CompilerDiagnostic {
         )
     }
 
-    pub(crate) fn invalid_dynamic_trait_type(
-        trait_name: StringId,
-        reason: InvalidDynamicTraitTypeReason,
-        location: SourceLocation,
-    ) -> Self {
+    pub(crate) fn trait_name_used_as_type(trait_name: StringId, location: SourceLocation) -> Self {
         Self::new(
-            DiagnosticKind::Rule(RuleDiagnosticKind::InvalidDynamicTraitType),
+            DiagnosticKind::Rule(RuleDiagnosticKind::TraitNameUsedAsType),
             location,
-            DiagnosticPayload::InvalidDynamicTraitType { trait_name, reason },
+            DiagnosticPayload::TraitNameUsedAsType { trait_name },
         )
     }
 

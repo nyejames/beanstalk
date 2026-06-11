@@ -37,7 +37,6 @@ pub(super) fn order_expression_nodes(
             | NodeKind::HandledFallibleFunctionCall { .. }
             | NodeKind::HandledFallibleHostFunctionCall { .. }
             | NodeKind::MethodCall { .. }
-            | NodeKind::DynamicTraitMethodCall { .. }
             | NodeKind::CollectionBuiltinCall { .. }
             | NodeKind::MapBuiltinCall { .. }
             | NodeKind::HostFunctionCall { .. } => {

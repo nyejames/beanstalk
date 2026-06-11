@@ -7,14 +7,14 @@
 
 use super::diagnostics::invalid_conformance;
 use super::environment::TraitEvidenceKind;
-use crate::compiler_frontend::ast::ReceiverMethodKind;
+
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, DeferredFeatureReason, InvalidTraitConformanceReason,
 };
+use crate::compiler_frontend::datatypes::ReceiverKey;
 use crate::compiler_frontend::datatypes::definitions::TypeDefinition;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
-use crate::compiler_frontend::datatypes::ids::{BuiltinTypeKey, TypeId};
-use crate::compiler_frontend::datatypes::{BuiltinScalarReceiver, ReceiverKey};
+use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::external_packages::ExternalSymbolId;
 use crate::compiler_frontend::headers::import_environment::FileVisibility;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
@@ -33,7 +33,6 @@ pub(super) struct ConformanceTarget {
     pub(super) path: Option<InternedPath>,
     pub(super) is_generic_constructor: bool,
     pub(super) evidence_kind: TraitEvidenceKind,
-    pub(super) required_method_kind: ReceiverMethodKind,
 }
 
 pub(super) struct ResolveConformanceTargetContext<'a> {
@@ -59,39 +58,29 @@ pub(super) fn resolve_conformance_target(
         ));
     }
 
-    if let Some(builtin_target) =
-        resolve_builtin_scalar_target(target.name, context.type_environment, context.string_table)
-    {
-        return Ok(builtin_target);
+    if is_builtin_scalar_target(target.name, context.string_table) {
+        return Err(invalid_conformance(
+            target.name,
+            None,
+            InvalidTraitConformanceReason::BuiltinTarget,
+            target.location.clone(),
+            Vec::new(),
+        ));
     }
 
     if let Some(symbol_id) = context
         .visibility
         .visible_external_symbols
         .get(&target.name)
-        && let ExternalSymbolId::Type(external_type_id) = symbol_id
+        && let ExternalSymbolId::Type(_) = symbol_id
     {
-        let Some(type_id) = context
-            .type_environment
-            .type_id_for_external(*external_type_id)
-        else {
-            return Err(invalid_conformance(
-                target.name,
-                None,
-                InvalidTraitConformanceReason::NonCanonicalTarget,
-                target.location.clone(),
-                Vec::new(),
-            ));
-        };
-
-        return Ok(ConformanceTarget {
-            type_id,
-            receiver_key: ReceiverKey::External(*external_type_id),
-            path: None,
-            is_generic_constructor: false,
-            evidence_kind: TraitEvidenceKind::FileLocalExtension,
-            required_method_kind: ReceiverMethodKind::FileLocalExtension,
-        });
+        return Err(invalid_conformance(
+            target.name,
+            None,
+            InvalidTraitConformanceReason::ExternalOpaqueTarget,
+            target.location.clone(),
+            Vec::new(),
+        ));
     }
 
     if context
@@ -140,16 +129,22 @@ pub(super) fn resolve_conformance_target(
                 .struct_source_by_path
                 .get(&definition.path)
                 .is_some_and(|source_file| source_file == context.conformance_source_file);
-            let evidence_kind = evidence_kind_for_source_target(target_is_declared_here);
-            let required_method_kind = method_kind_for_source_target(target_is_declared_here);
+            if !target_is_declared_here {
+                return Err(invalid_conformance(
+                    target.name,
+                    None,
+                    InvalidTraitConformanceReason::NonlocalSourceTarget,
+                    target.location.clone(),
+                    Vec::new(),
+                ));
+            }
 
             Ok(ConformanceTarget {
                 type_id,
                 receiver_key: ReceiverKey::Struct(definition.path.clone()),
                 path: Some(definition.path.clone()),
                 is_generic_constructor: definition.generic_parameters.is_some(),
-                evidence_kind,
-                required_method_kind,
+                evidence_kind: TraitEvidenceKind::Canonical,
             })
         }
 
@@ -158,16 +153,22 @@ pub(super) fn resolve_conformance_target(
                 .choice_source_by_path
                 .get(&definition.path)
                 .is_some_and(|source_file| source_file == context.conformance_source_file);
-            let evidence_kind = evidence_kind_for_source_target(target_is_declared_here);
-            let required_method_kind = method_kind_for_source_target(target_is_declared_here);
+            if !target_is_declared_here {
+                return Err(invalid_conformance(
+                    target.name,
+                    None,
+                    InvalidTraitConformanceReason::NonlocalSourceTarget,
+                    target.location.clone(),
+                    Vec::new(),
+                ));
+            }
 
             Ok(ConformanceTarget {
                 type_id,
                 receiver_key: ReceiverKey::Choice(definition.path.clone()),
                 path: Some(definition.path.clone()),
                 is_generic_constructor: definition.generic_parameters.is_some(),
-                evidence_kind,
-                required_method_kind,
+                evidence_kind: TraitEvidenceKind::Canonical,
             })
         }
 
@@ -181,46 +182,11 @@ pub(super) fn resolve_conformance_target(
     }
 }
 
-fn resolve_builtin_scalar_target(
-    name: StringId,
-    type_environment: &TypeEnvironment,
-    string_table: &StringTable,
-) -> Option<ConformanceTarget> {
-    let (builtin_key, receiver) = match string_table.resolve(name) {
-        "Int" => (BuiltinTypeKey::Int, BuiltinScalarReceiver::Int),
-        "Float" => (BuiltinTypeKey::Float, BuiltinScalarReceiver::Float),
-        "Bool" => (BuiltinTypeKey::Bool, BuiltinScalarReceiver::Bool),
-        "String" => (BuiltinTypeKey::String, BuiltinScalarReceiver::String),
-        "Char" => (BuiltinTypeKey::Char, BuiltinScalarReceiver::Char),
-        _ => return None,
-    };
-
-    let type_id = type_environment.type_id_for_builtin(builtin_key)?;
-
-    Some(ConformanceTarget {
-        type_id,
-        receiver_key: ReceiverKey::BuiltinScalar(receiver),
-        path: None,
-        is_generic_constructor: false,
-        evidence_kind: TraitEvidenceKind::FileLocalExtension,
-        required_method_kind: ReceiverMethodKind::FileLocalExtension,
-    })
-}
-
-fn evidence_kind_for_source_target(target_is_declared_here: bool) -> TraitEvidenceKind {
-    if target_is_declared_here {
-        TraitEvidenceKind::Canonical
-    } else {
-        TraitEvidenceKind::FileLocalExtension
-    }
-}
-
-fn method_kind_for_source_target(target_is_declared_here: bool) -> ReceiverMethodKind {
-    if target_is_declared_here {
-        ReceiverMethodKind::Canonical
-    } else {
-        ReceiverMethodKind::FileLocalExtension
-    }
+fn is_builtin_scalar_target(name: StringId, string_table: &StringTable) -> bool {
+    matches!(
+        string_table.resolve(name),
+        "Int" | "Float" | "Bool" | "String" | "Char"
+    )
 }
 
 pub(super) fn resolve_trait_reference(

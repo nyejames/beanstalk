@@ -1355,7 +1355,7 @@ fn builtin_web_canvas_library_parses_expanded_surface() {
     assert_opaque_types(
         &library,
         &[
-            "Canvas",
+            "CanvasElement",
             "Canvas2d",
             "CanvasGradient",
             "CanvasPattern",
@@ -1378,19 +1378,6 @@ fn builtin_web_canvas_library_parses_expanded_surface() {
         "to_data_url_quality",
         "image_data_get_red",
         "text_width",
-    ] {
-        assert!(
-            free_function_names.contains(&expected),
-            "expected expanded canvas free function {expected}"
-        );
-    }
-
-    let receiver_method_names: Vec<&str> = library
-        .receiver_methods
-        .iter()
-        .map(|function| function.beanstalk_name.as_str())
-        .collect();
-    for expected in [
         "set_canvas_size",
         "set_fill_style",
         "create_linear_gradient",
@@ -1399,8 +1386,13 @@ fn builtin_web_canvas_library_parses_expanded_surface() {
         "image_data_set_pixel",
     ] {
         assert!(
-            receiver_method_names.contains(&expected),
-            "expected expanded canvas receiver method {expected}"
+            free_function_names.contains(&expected),
+            "expected expanded canvas free function {expected}"
         );
     }
+
+    assert!(
+        library.receiver_methods.is_empty(),
+        "built-in @web/canvas must expose only opaque types and free functions"
+    );
 }

@@ -161,11 +161,6 @@ pub enum DiagnosticPayload {
         message: StringId,
     },
 
-    ReceiverMethodImportRequiresVisibleReceiverType {
-        method_name: StringId,
-        receiver_type_name: Option<StringId>,
-    },
-
     // -----------------
     //  Borrow Payloads
     // -----------------
@@ -574,9 +569,8 @@ pub enum DiagnosticPayload {
         reason: InvalidTraitConformanceReason,
     },
 
-    InvalidDynamicTraitType {
+    TraitNameUsedAsType {
         trait_name: StringId,
-        reason: InvalidDynamicTraitTypeReason,
     },
 
     InvalidExpression,

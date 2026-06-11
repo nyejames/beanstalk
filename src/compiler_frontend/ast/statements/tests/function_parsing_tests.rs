@@ -470,12 +470,20 @@ fn rejects_receiver_parameter_when_not_first() {
 }
 
 #[test]
-fn allows_builtin_scalar_receiver_parameter() {
-    let (ast, string_table) =
-        parse_single_file_ast("reset |this Int| -> Int:\n    return this\n;\n");
+fn rejects_builtin_scalar_receiver_parameter() {
+    let payload =
+        parse_function_diagnostic_payload("reset |this Int| -> Int:\n    return this\n;\n");
 
-    let signature = function_signature_by_name(&ast, &string_table, "reset");
-    assert_eq!(signature.parameters[0].value.diagnostic_type, DataType::Int);
+    assert!(
+        matches!(
+            payload,
+            DiagnosticPayload::InvalidReceiverDeclaration {
+                reason: InvalidReceiverDeclarationReason::BuiltinScalarType,
+                ..
+            }
+        ),
+        "{payload:?}"
+    );
 }
 
 #[test]
@@ -517,14 +525,6 @@ fn rejects_field_method_name_collisions() {
 fn rejects_free_function_call_syntax_for_receiver_methods() {
     assert_invalid_receiver_call(
         "Point = |\n    x Int = 0,\n|\n\nreset |this Point|:\n    return\n;\n\npoint ~= Point()\nreset(point)\n",
-        InvalidReceiverCallReason::CalledAsFreeFunction,
-    );
-}
-
-#[test]
-fn rejects_free_function_call_syntax_for_builtin_receiver_methods() {
-    assert_invalid_receiver_call(
-        "double |this Int| -> Int:\n    return this + this\n;\n\ndouble(21)\n",
         InvalidReceiverCallReason::CalledAsFreeFunction,
     );
 }

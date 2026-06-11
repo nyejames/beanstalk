@@ -594,7 +594,7 @@ fn receiver_key_queries_use_type_id_semantics() {
     assert_eq!(
         env.receiver_key_for_type_id(external_type_id),
         Some(ReceiverKey::External(external_type)),
-        "external opaque types can host file-local extension receiver methods"
+        "external opaque types keep receiver keys for builder-owned external member metadata"
     );
 
     let box_parameter_name = table.intern("T");

@@ -148,7 +148,6 @@ pub(crate) fn infer_generic_nominal_constructor(
                 .file_visibility
                 .as_ref()
                 .map(|visibility| &visibility.visible_trait_names),
-            source_file_scope: context.source_file_scope.as_ref(),
         };
         validate_nominal_generic_bound_evidence(
             instance_type_id,

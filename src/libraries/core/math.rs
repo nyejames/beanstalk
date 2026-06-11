@@ -133,8 +133,6 @@ pub fn register_core_math_package(registry: &mut ExternalPackageRegistry) {
                         ExternalReturnAlias::Fresh,
                     ),
                     error_return_type: None,
-                    receiver_type: None,
-                    receiver_access: ExternalAccessKind::Shared,
                     lowerings: ExternalFunctionLowerings {
                         js: Some(js_lowering.clone()),
                         wasm: None,

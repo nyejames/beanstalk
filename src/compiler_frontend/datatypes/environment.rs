@@ -21,8 +21,8 @@ use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::definitions::{
     BuiltinTypeDefinition, ChoiceTypeDefinition, ChoiceVariantDefinition,
-    ChoiceVariantPayloadDefinition, ConstructedTypeDefinition, DynamicTraitTypeDefinition,
-    ExternalTypeDefinition, FieldDefinition, FunctionParameterDefinition, FunctionTypeDefinition,
+    ChoiceVariantPayloadDefinition, ConstructedTypeDefinition, ExternalTypeDefinition,
+    FieldDefinition, FunctionParameterDefinition, FunctionTypeDefinition,
     GenericInstanceDefinition, GenericParameterDefinition, StructTypeDefinition, TypeDefinition,
 };
 use super::generic_bindings::{BindingConflict, GenericTypeBindings};
@@ -88,7 +88,6 @@ pub struct TypeEnvironment {
     function_ids: FxHashMap<FunctionTypeKey, TypeId>,
     external_ids: FxHashMap<ExternalTypeId, TypeId>,
     generic_instance_ids: FxHashMap<GenericInstanceKey, TypeId>,
-    dynamic_trait_ids: FxHashMap<TraitId, TypeId>,
 
     // Nominal definition storage.
     // `NominalTypeId.0` indexes into `nominal_registry`.
@@ -252,7 +251,6 @@ impl TypeEnvironment {
             function_ids: FxHashMap::default(),
             external_ids: FxHashMap::default(),
             generic_instance_ids: FxHashMap::default(),
-            dynamic_trait_ids: FxHashMap::default(),
             nominal_registry: Vec::new(),
             struct_definitions: Vec::new(),
             choice_definitions: Vec::new(),
@@ -597,8 +595,7 @@ impl TypeEnvironment {
             | TypeDefinition::Struct(..)
             | TypeDefinition::Choice(..)
             | TypeDefinition::External(..)
-            | TypeDefinition::GenericParameter(..)
-            | TypeDefinition::DynamicTrait(..) => None,
+            | TypeDefinition::GenericParameter(..) => None,
         }
     }
 
@@ -845,26 +842,6 @@ impl TypeEnvironment {
         id
     }
 
-    /// Interns a dynamic trait value type.
-    ///
-    /// WHAT: creates the canonical `TypeId` for a normal type annotation whose name resolves to a
-    /// dynamic-safe trait.
-    /// WHY: trait declarations and evidence remain in `TraitEnvironment`; only the erased runtime
-    /// value identity belongs in `TypeEnvironment`.
-    pub(crate) fn intern_dynamic_trait(&mut self, trait_id: TraitId, name: StringId) -> TypeId {
-        if let Some(&existing) = self.dynamic_trait_ids.get(&trait_id) {
-            return existing;
-        }
-
-        let id = self.insert_definition(TypeDefinition::DynamicTrait(DynamicTraitTypeDefinition {
-            trait_id,
-            name,
-        }));
-
-        self.dynamic_trait_ids.insert(trait_id, id);
-        id
-    }
-
     /// Interns a generic nominal instance (e.g. `Box of Int`).
     pub fn intern_generic_instance(
         &mut self,
@@ -1026,7 +1003,6 @@ impl TypeEnvironment {
             TypeDefinition::External(..) => TypeKind::External,
             TypeDefinition::GenericParameter(..) => TypeKind::GenericParameter,
             TypeDefinition::GenericInstance(..) => TypeKind::GenericInstance,
-            TypeDefinition::DynamicTrait(..) => TypeKind::DynamicTrait,
         })
     }
 
@@ -1263,7 +1239,6 @@ impl TypeEnvironment {
             | Some(TypeDefinition::Function(..))
             | Some(TypeDefinition::External(..))
             | Some(TypeDefinition::GenericParameter(..))
-            | Some(TypeDefinition::DynamicTrait(..))
             | None => false,
         }
     }
@@ -1514,8 +1489,7 @@ impl TypeEnvironment {
 
             TypeDefinition::Constructed(..)
             | TypeDefinition::Function(..)
-            | TypeDefinition::GenericParameter(..)
-            | TypeDefinition::DynamicTrait(..) => None,
+            | TypeDefinition::GenericParameter(..) => None,
         }
     }
 
@@ -1592,9 +1566,7 @@ impl TypeEnvironment {
                 }))
             }
             TypeDefinition::External(ext) => Some(TypeIdentityKey::External(ext.type_id)),
-            TypeDefinition::Function(_)
-            | TypeDefinition::GenericParameter(_)
-            | TypeDefinition::DynamicTrait(_) => None,
+            TypeDefinition::Function(_) | TypeDefinition::GenericParameter(_) => None,
         }
     }
 
@@ -1731,9 +1703,7 @@ impl TypeEnvironment {
             TypeDefinition::GenericParameter(definition) => {
                 definition.name = remap.get(definition.name);
             }
-            TypeDefinition::DynamicTrait(definition) => {
-                definition.name = remap.get(definition.name);
-            }
+
             TypeDefinition::Builtin(..)
             | TypeDefinition::Constructed(..)
             | TypeDefinition::External(..)

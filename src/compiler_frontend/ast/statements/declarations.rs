@@ -23,7 +23,7 @@ use crate::compiler_frontend::ast::statements::functions::{
 };
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::type_resolution::{
-    TypeResolutionContext, TypeResolutionContextInputs, fold_collection_capacity_expression,
+    TypeResolutionContext, TypeResolutionContextInputs, fold_collection_capacity,
     resolve_diagnostic_type_to_type_id_checked, resolve_parsed_type_annotation,
 };
 use crate::compiler_frontend::ast::{
@@ -35,10 +35,9 @@ use crate::compiler_frontend::ast::{
 use crate::compiler_frontend::builtins::error_type::is_reserved_builtin_symbol;
 use crate::compiler_frontend::compiler_messages::{
     CompileTimeEvaluationErrorReason, CompilerDiagnostic, InvalidCollectionTypeReason,
-    InvalidDeclarationReason, InvalidDynamicTraitTypeReason, InvalidResultHandlingReason,
-    TypeMismatchContext,
+    InvalidDeclarationReason, InvalidResultHandlingReason, TypeMismatchContext,
 };
-use crate::compiler_frontend::datatypes::definitions::TypeDefinition;
+
 use crate::compiler_frontend::datatypes::parsed::{ParsedCollectionCapacity, ParsedTypeRef};
 use crate::compiler_frontend::datatypes::{DataType, ReceiverKey};
 use crate::compiler_frontend::declaration_syntax::declaration_shell::{
@@ -112,18 +111,29 @@ pub fn create_reference(
     )
 }
 
+/// Body-local declaration plus syntax-origin facts that are not stored on `Declaration`.
+///
+/// WHAT: carries whether the user authored the binding with `#`.
+/// WHY: fixed-capacity type syntax accepts bare explicit constants only, so body
+///      parsing must preserve the distinction between `#` constants and foldable
+///      runtime immutable bindings while registering locals.
+pub(crate) struct ResolvedDeclaration {
+    pub(crate) declaration: Declaration,
+    pub(crate) is_compile_time_binding: bool,
+}
+
 /// Parse a new body-local declaration from the token stream.
 ///
 /// Handles function declarations as a fast path (they use a dedicated signature/body syntax)
 /// before falling through to generic value declaration parsing via `resolve_declaration_syntax`.
-pub fn new_declaration(
+pub(crate) fn new_declaration(
     token_stream: &mut FileTokens,
     symbol_id: StringId,
     context: &mut ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     warnings: &mut Vec<CompilerDiagnostic>,
     string_table: &mut StringTable,
-) -> Result<Declaration, CompilerDiagnostic> {
+) -> Result<ResolvedDeclaration, CompilerDiagnostic> {
     let declaration_name = string_table.resolve(symbol_id).to_owned();
     ensure_not_keyword_shadow_identifier(symbol_id, token_stream.current_location(), string_table)?;
 
@@ -183,15 +193,18 @@ pub fn new_declaration(
         )
         .map_err(|diagnostic| *diagnostic)?;
 
-        return Ok(Declaration {
-            id: qualified_name,
-            value: Expression::function(
-                receiver,
-                function_signature,
-                function_body,
-                function_type_id,
-                token_stream.current_location(),
-            ),
+        return Ok(ResolvedDeclaration {
+            declaration: Declaration {
+                id: qualified_name,
+                value: Expression::function(
+                    receiver,
+                    function_signature,
+                    function_body,
+                    function_type_id,
+                    token_stream.current_location(),
+                ),
+            },
+            is_compile_time_binding: false,
         });
     }
 
@@ -227,13 +240,19 @@ pub fn new_declaration(
         context.emit_warning(warning);
     }
 
-    resolve_declaration_syntax(
+    let is_compile_time_binding = declaration_syntax.binding_mode.is_compile_time();
+    let declaration = resolve_declaration_syntax(
         declaration_syntax,
         qualified_name,
         &mut *context,
         type_interner,
         string_table,
-    )
+    )?;
+
+    Ok(ResolvedDeclaration {
+        declaration,
+        is_compile_time_binding,
+    })
 }
 
 /// Extract the receiver key from a function signature when the first parameter is named `this`.
@@ -281,11 +300,10 @@ pub fn resolve_declaration_syntax(
     // Capacity-only shorthand (`{N}`) requires special handling: the element type must be
     // inferred from the initializer literal, so we intercept before normal resolution.
     if let Some(capacity) = capacity_only_shorthand(&declaration_syntax.type_annotation) {
-        let folded_capacity = fold_collection_capacity_expression(
+        let folded_capacity = fold_collection_capacity(
             capacity,
             Some(context),
             type_interner.environment_mut_for_derived_types(),
-            string_table,
         )?;
 
         let mut initializer_tokens = declaration_syntax.initializer_tokens.clone();
@@ -382,7 +400,6 @@ pub fn resolve_declaration_syntax(
                     .file_visibility
                     .as_ref()
                     .map(|fv| &fv.visible_trait_names),
-                source_file_scope: context.source_file_scope.as_ref(),
             })
             .with_active_generic_type_context(context.active_generic_type_context());
         resolve_parsed_type_annotation(
@@ -394,18 +411,6 @@ pub fn resolve_declaration_syntax(
         )
         .map_err(|diagnostic| *diagnostic)?
     };
-
-    if context.kind.is_constant_context()
-        && let Some(type_id) = resolved_annotation.type_id
-        && let Some(TypeDefinition::DynamicTrait(definition)) =
-            type_interner.environment().get(type_id)
-    {
-        return Err(CompilerDiagnostic::invalid_dynamic_trait_type(
-            definition.name,
-            InvalidDynamicTraitTypeReason::Constant,
-            declaration_location,
-        ));
-    }
 
     let mut initializer_tokens = declaration_syntax.initializer_tokens;
     initializer_tokens.push(Token::new(
@@ -518,8 +523,8 @@ pub fn resolve_declaration_syntax(
             };
 
             if let Some(declared_type_id) = declared_type_id {
-                // This is an explicit typed boundary: apply ordinary contextual
-                // coercions and dynamic trait wrapping in one shared path.
+                // This is an explicit typed boundary: apply ordinary contextual coercions in
+                // one shared path.
                 coerce_expression_to_explicit_type_boundary(
                     expression,
                     declared_type_id,

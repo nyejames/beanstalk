@@ -48,15 +48,17 @@ page_head #= theme_head
 
     ## Imports and Receiver Methods
     Namespace imports expose receiver methods only through receiver-call syntax, never as namespace fields.
-    Grouped receiver method imports can be aliased, but that alias follows the normal file-local collision rules.
-    Receiver-method names can be shared by receiver methods because dispatch includes the receiver type, but they still collide with ordinary value, type, namespace, prelude, and builtin names.
-    A grouped receiver method import also requires its receiver type to be visible in the importing file, either through the same grouped import, an existing type import, a namespace import from the same surface, or an exact transparent type alias.
+    Source-authored receiver methods are visible through their receiver type; they are not imported,
+    aliased, or re-exported independently.
+    Receiver-method names can be shared across different receiver types because dispatch includes
+    the receiver type.
 
     ## External JavaScript Signatures
     Annotated `.js` imports use `@bst.opaque` and `@bst.sig` comments.
     Supported JavaScript export forms are `export function name(...) { ... }` and block-bodied `export const name = (...) => { ... }`.
     Expression-bodied arrow exports are rejected.
-    In `@bst.sig`, `this` may appear only once and only as the first parameter to declare a receiver method.
+    Source-authored `@bst.sig` comments should expose free functions and opaque types; `this`
+    receiver signatures are being kept out of the source receiver-method surface.
     JS libraries may import registered runtime modules such as `@beanstalk/runtime` with named static imports only.
     The named runtime import list may span multiple lines.
     Runtime modules and import maps are emitted from the actual accepted JS imports, so fallible JS functions may either use `bstOk` / `bstErr` helpers or return the wrapper shape manually.

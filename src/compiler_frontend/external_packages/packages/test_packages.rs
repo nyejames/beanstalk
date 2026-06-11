@@ -43,8 +43,6 @@ pub(crate) fn register_test_packages_for_integration(registry: &mut ExternalPack
                     ExternalReturnAlias::Fresh,
                 ),
                 error_return_type: None,
-                receiver_type: None,
-                receiver_access: ExternalAccessKind::Shared,
                 lowerings: ExternalFunctionLowerings {
                     js: Some(ExternalJsLowering::RuntimeFunction(
                         "__bs_test_pkg_a_open".to_owned(),
@@ -67,8 +65,6 @@ pub(crate) fn register_test_packages_for_integration(registry: &mut ExternalPack
                 }],
                 returns: vec![ExternalReturnSlot::fresh(ExternalAbiType::Utf8Str)],
                 error_return_type: Some(ExternalSignatureType::BuiltinError),
-                receiver_type: None,
-                receiver_access: ExternalAccessKind::Shared,
                 lowerings: ExternalFunctionLowerings {
                     js: Some(ExternalJsLowering::InlineExpression(
                         "({ tag: \"ok\", value: #0 })".to_owned(),
@@ -88,8 +84,6 @@ pub(crate) fn register_test_packages_for_integration(registry: &mut ExternalPack
                 parameters: Vec::new(),
                 returns: vec![ExternalReturnSlot::fresh(ExternalAbiType::Utf8Str)],
                 error_return_type: Some(ExternalSignatureType::BuiltinError),
-                receiver_type: None,
-                receiver_access: ExternalAccessKind::Shared,
                 lowerings: ExternalFunctionLowerings {
                     js: Some(ExternalJsLowering::InlineExpression(
                         "({ tag: \"err\", value: { message: \"external failed\", code: 91 } })"
@@ -110,8 +104,6 @@ pub(crate) fn register_test_packages_for_integration(registry: &mut ExternalPack
                 parameters: Vec::new(),
                 returns: vec![ExternalReturnSlot::fresh(ExternalAbiType::Utf8Str)],
                 error_return_type: Some(ExternalSignatureType::External(ExternalTypeId(1005))),
-                receiver_type: None,
-                receiver_access: ExternalAccessKind::Shared,
                 lowerings: ExternalFunctionLowerings {
                     js: Some(ExternalJsLowering::InlineExpression(
                         "({ tag: \"ok\", value: \"custom-ok\" })".to_owned(),
@@ -140,8 +132,6 @@ pub(crate) fn register_test_packages_for_integration(registry: &mut ExternalPack
                     ExternalReturnAlias::Fresh,
                 ),
                 error_return_type: None,
-                receiver_type: None,
-                receiver_access: ExternalAccessKind::Shared,
                 lowerings: ExternalFunctionLowerings {
                     js: Some(ExternalJsLowering::RuntimeFunction(
                         "__bs_test_pkg_b_open".to_owned(),

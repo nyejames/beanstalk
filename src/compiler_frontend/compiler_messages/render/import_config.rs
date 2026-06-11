@@ -493,21 +493,6 @@ pub(crate) fn nested_traversal_message(
     )
 }
 
-pub(crate) fn receiver_method_import_requires_visible_receiver_type_message(
-    method_name: StringId,
-    receiver_type_name: Option<StringId>,
-    string_table: &StringTable,
-) -> String {
-    let method = string_table.resolve(method_name);
-    let type_hint = receiver_type_name
-        .map(|name| format!("'{}'", string_table.resolve(name)))
-        .unwrap_or_else(|| "its receiver type".to_owned());
-    format!(
-        "Receiver method import '{method}' requires {type_hint} to be visible. \
-         Import the receiver type or use a namespace import from the same surface."
-    )
-}
-
 pub(crate) fn invalid_import_clause_message(reason: InvalidImportClauseReason) -> &'static str {
     match reason {
         InvalidImportClauseReason::MissingPath => "Expected a path after the 'import' keyword.",

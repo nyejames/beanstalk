@@ -4,6 +4,7 @@ import @core/time {
     mark_now,
     elapsed_since,
     duration_between,
+    as_milliseconds,
 }
 
 -- Reduce live time to stable ok/bad output
@@ -14,7 +15,7 @@ delta = duration_between(mark1, mark2)
 elapsed = elapsed_since(mark1)
 
 -- Both deltas should be non-negative
-delta_ok = delta.as_milliseconds() >= 0.0
-elapsed_ok = elapsed.as_milliseconds() >= 0.0
+delta_ok = as_milliseconds(delta) >= 0.0
+elapsed_ok = as_milliseconds(elapsed) >= 0.0
 
 io([:mark_delta delta_ok=[delta_ok] elapsed_ok=[elapsed_ok]])

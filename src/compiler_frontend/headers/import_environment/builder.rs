@@ -7,7 +7,7 @@
 //!      makes the module structure easier to navigate.
 
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, ImportFacadeType};
-use crate::compiler_frontend::external_packages::{ExternalFunctionId, ExternalPackageRegistry};
+use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::module_symbols::{
     FacadeExportEntry, FacadeExportTarget, ModuleSymbols,
 };
@@ -22,24 +22,14 @@ use crate::libraries::external_import_providers::resolution_table::ExternalImpor
 use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::{
-    FileVisibility, HeaderImportEnvironment,
-    FacadeLookupResult, FacadeResolutionInput, ModuleBoundaryCheckInput,
-    SourceLibraryBoundaryCheckInput, check_module_boundary, check_source_library_boundary,
-    resolve_facade_import,
-    ExternalPackageSymbolLookup, ExternalPackageSymbolResolutionInput, ImportTargetResolutionInput,
-    NamespaceTargetResolutionInput, ResolvedImportTarget,
-    SourceImportAccess, has_explicit_bst_extension, resolve_external_package_symbol,
+    ExternalPackageSymbolLookup, ExternalPackageSymbolResolutionInput, FacadeLookupResult,
+    FacadeResolutionInput, FileVisibility, HeaderImportEnvironment, ImportTargetResolutionInput,
+    ModuleBoundaryCheckInput, NamespaceTargetResolutionInput, ResolvedImportTarget,
+    SourceImportAccess, SourceLibraryBoundaryCheckInput, VisibleNameBinding, VisibleNameRegistry,
+    check_alias_case_warning, check_module_boundary, check_source_library_boundary,
+    has_explicit_bst_extension, resolve_external_package_symbol, resolve_facade_import,
     resolve_import_target, resolve_namespace_target,
-    ReceiverMethodImportTarget, VisibleNameBinding, VisibleNameRegistry, check_alias_case_warning,
 };
-
-#[derive(Clone, Debug)]
-pub(crate) struct PendingReceiverMethodValidation {
-    pub(super) local_name: StringId,
-    pub(super) source_path: Option<InternedPath>,
-    pub(super) external_function_id: Option<ExternalFunctionId>,
-    pub(super) location: SourceLocation,
-}
 
 pub(crate) struct ImportEnvironmentBuilder<'a> {
     pub(super) module_symbols: &'a ModuleSymbols,
@@ -48,7 +38,6 @@ pub(crate) struct ImportEnvironmentBuilder<'a> {
     pub(super) string_table: &'a mut StringTable,
     pub(super) environment: HeaderImportEnvironment,
     pub(super) warnings: Vec<crate::compiler_frontend::compiler_messages::CompilerDiagnostic>,
-    pub(super) pending_receiver_validations: Vec<PendingReceiverMethodValidation>,
 }
 
 impl<'a> ImportEnvironmentBuilder<'a> {
@@ -73,7 +62,11 @@ impl<'a> ImportEnvironmentBuilder<'a> {
     }
 
     /// Emit an alias-case warning when an explicit alias changes leading case.
-    pub(super) fn emit_alias_case_warning_if_needed(&mut self, import: &FileImport, symbol_name: StringId) {
+    pub(super) fn emit_alias_case_warning_if_needed(
+        &mut self,
+        import: &FileImport,
+        symbol_name: StringId,
+    ) {
         let Some(alias) = import.alias else {
             return;
         };
@@ -132,8 +125,6 @@ impl<'a> ImportEnvironmentBuilder<'a> {
     ) -> Result<(), CompilerDiagnostic> {
         let mut file_visibility = FileVisibility::default();
         let mut registry = VisibleNameRegistry::new();
-        self.pending_receiver_validations.clear();
-
         // 1. Register same-file declarations.
         if let Some(declared_paths) = self.module_symbols.declared_paths_by_file.get(source_file) {
             for path in declared_paths {
@@ -146,19 +137,9 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                 };
 
                 if self.module_symbols.receiver_method_paths.contains(path) {
-                    // Same-file receiver methods reserve their spelling for collision
-                    // checks, but they are not ordinary source names. AST resolves them
-                    // through the receiver catalog so `method(value)` remains invalid
-                    // while `value.method()` can dispatch by receiver type.
-                    registry.register(
-                        name,
-                        VisibleNameBinding::ReceiverMethodImport {
-                            target: ReceiverMethodImportTarget::SourceMethod {
-                                canonical_path: path.clone(),
-                            },
-                        },
-                        SourceLocation::default(),
-                    )?;
+                    // Source receiver methods are receiver-call-only declarations. They do not
+                    // reserve ordinary value/import names, because dispatch includes the receiver
+                    // type and `method(value)` is diagnosed from the receiver catalog instead.
                     Self::add_visible_receiver_method(
                         &mut file_visibility,
                         name,
@@ -298,16 +279,6 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                 a_str.cmp(&b_str)
             });
         }
-
-        for methods in file_visibility
-            .visible_external_receiver_methods
-            .values_mut()
-        {
-            methods.sort_by_key(|function_id| format!("{function_id:?}"));
-        }
-
-        self.validate_pending_receiver_methods(&file_visibility)?;
-        self.pending_receiver_validations.clear();
 
         self.environment
             .file_visibility_by_source
@@ -617,7 +588,9 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                         super::facade_resolution::FacadeType::SourceLibrary => {
                             ImportFacadeType::SourceLibrary
                         }
-                        super::facade_resolution::FacadeType::ModuleRoot => ImportFacadeType::ModuleRoot,
+                        super::facade_resolution::FacadeType::ModuleRoot => {
+                            ImportFacadeType::ModuleRoot
+                        }
                     };
                     return Err(super::diagnostics::not_exported_by_facade(
                         &import.header_path,
@@ -663,18 +636,14 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                             .source_library_facade_files,
                         string_table: self.string_table,
                     })?;
-                    check_module_boundary(
-                        ModuleBoundaryCheckInput {
-                            importer_file: source_file,
-                            target_file,
-                            symbol_path: &symbol_path,
-                            location: import.location.clone(),
-                            file_module_membership: &self.module_symbols.file_module_membership,
-                            module_root_facade_exports: &self
-                                .module_symbols
-                                .module_root_facade_exports,
-                        },
-                    )?;
+                    check_module_boundary(ModuleBoundaryCheckInput {
+                        importer_file: source_file,
+                        target_file,
+                        symbol_path: &symbol_path,
+                        location: import.location.clone(),
+                        file_module_membership: &self.module_symbols.file_module_membership,
+                        module_root_facade_exports: &self.module_symbols.module_root_facade_exports,
+                    })?;
                 }
 
                 let effective_requirement = if self.is_internal_import(source_file, &symbol_path) {

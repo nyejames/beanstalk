@@ -15,13 +15,14 @@ use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::external_packages::ExternalTypeId;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap, StringTable};
-use crate::compiler_frontend::traits::ids::TraitId;
 
 use super::definitions::TypeDefinition;
 use super::display::format_fallible_signature_parts;
 use super::environment::TypeEnvironment;
 use super::generic_identity_bridge::display_generic_instantiation_key;
-use super::generic_identity_bridge::{BuiltinGenericType, GenericBaseType, GenericInstantiationKey};
+use super::generic_identity_bridge::{
+    BuiltinGenericType, GenericBaseType, GenericInstantiationKey,
+};
 use super::generic_parameters::TypeParameterId;
 use super::ids::{self, GenericParameterId, TypeId};
 
@@ -94,15 +95,7 @@ pub enum DataType {
     External {
         type_id: ExternalTypeId,
     },
-    /// Display spelling for an erased dynamic trait value type.
-    ///
-    /// Semantic identity lives in `TypeEnvironment::DynamicTrait`; this variant keeps AST
-    /// diagnostics from treating a resolved trait annotation as an unresolved name.
-    DynamicTrait {
-        trait_id: TraitId,
-        type_id: TypeId,
-        name: StringId,
-    },
+
     /// Parse/diagnostic spelling for built-in options.
     ///
     /// Semantic option identity is owned by `TypeEnvironment::intern_option`.
@@ -203,7 +196,6 @@ impl DataType {
             }
             DataType::Char => Some(ReceiverKey::BuiltinScalar(BuiltinScalarReceiver::Char)),
             DataType::External { type_id } => Some(ReceiverKey::External(*type_id)),
-            DataType::DynamicTrait { .. } => None,
             _ => None,
         }
     }
@@ -438,7 +430,7 @@ impl DataType {
     /// Remap all interned string IDs and paths in this diagnostic type spelling.
     ///
     /// WHAT: updates `StringId`, `InternedPath`, `SourceLocation`, and nested `DataType`
-    ///       fields recursively, including generic keys, struct/choice paths, function
+    ///       fields recursively, including generic arguments, struct/choice paths, function
     ///       signatures, and declaration shells.
     /// WHY: per-file header parsing produces `DataType` values using local string tables;
     ///      remapping keeps them valid after merge into the module/global table.
@@ -527,10 +519,6 @@ impl DataType {
 
             DataType::External { .. } => {}
 
-            DataType::DynamicTrait { name, .. } => {
-                *name = remap.get(*name);
-            }
-
             DataType::Option(inner) => {
                 inner.remap_string_ids(remap);
             }
@@ -611,7 +599,6 @@ impl DataType {
                 // External types are opaque; display uses the stable ID.
                 format!("External({})", type_id.0)
             }
-            DataType::DynamicTrait { name, .. } => string_table.resolve(*name).to_owned(),
             DataType::Returns(returns) => {
                 let returns_string = returns
                     .iter()
@@ -860,18 +847,7 @@ impl PartialEq for DataType {
             (DataType::External { type_id: id_a }, DataType::External { type_id: id_b }) => {
                 id_a == id_b
             }
-            (
-                DataType::DynamicTrait {
-                    trait_id: trait_a,
-                    type_id: type_a,
-                    ..
-                },
-                DataType::DynamicTrait {
-                    trait_id: trait_b,
-                    type_id: type_b,
-                    ..
-                },
-            ) => trait_a == trait_b && type_a == type_b,
+
             _ => false,
         }
     }
@@ -1035,11 +1011,7 @@ fn type_id_to_data_type(type_id: ids::TypeId, type_environment: &TypeEnvironment
                 DataType::None
             }
         }
-        Some(TypeDefinition::DynamicTrait(def)) => DataType::DynamicTrait {
-            trait_id: def.trait_id,
-            type_id,
-            name: def.name,
-        },
+
         None => DataType::None,
     }
 }

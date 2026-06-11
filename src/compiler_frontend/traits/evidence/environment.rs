@@ -7,7 +7,6 @@
 
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
-use crate::compiler_frontend::symbols::string_interning::StringIdRemap;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::traits::ids::{TraitEvidenceId, TraitId, TraitRequirementId};
 use rustc_hash::FxHashMap;
@@ -17,7 +16,6 @@ use rustc_hash::FxHashMap;
 #[allow(dead_code)] // Compiler-owned builtin evidence is scaffolded but not registered yet.
 pub(crate) enum TraitEvidenceKind {
     Canonical,
-    FileLocalExtension,
     Builtin,
 }
 
@@ -47,11 +45,8 @@ pub(crate) struct TraitEvidenceDefinition {
 pub(crate) struct TraitEvidenceEnvironment {
     evidence: Vec<TraitEvidenceDefinition>,
     canonical_by_target_and_trait: FxHashMap<(TypeId, TraitId), TraitEvidenceId>,
-    file_local_by_source_target_and_trait:
-        FxHashMap<(InternedPath, TypeId, TraitId), TraitEvidenceId>,
     builtin_by_target_and_trait: FxHashMap<(TypeId, TraitId), TraitEvidenceId>,
     reusable_by_target: FxHashMap<TypeId, Vec<TraitEvidenceId>>,
-    file_local_by_source_and_target: FxHashMap<(InternedPath, TypeId), Vec<TraitEvidenceId>>,
 }
 
 impl TraitEvidenceEnvironment {
@@ -74,18 +69,6 @@ impl TraitEvidenceEnvironment {
             .copied()
     }
 
-    #[allow(dead_code)] // File-local evidence is unavailable to generic bounds in current lowering.
-    pub(crate) fn file_local_for(
-        &self,
-        source_file: &InternedPath,
-        target_type_id: TypeId,
-        trait_id: TraitId,
-    ) -> Option<TraitEvidenceId> {
-        self.file_local_by_source_target_and_trait
-            .get(&(source_file.clone(), target_type_id, trait_id))
-            .copied()
-    }
-
     pub(crate) fn builtin_for(
         &self,
         target_type_id: TypeId,
@@ -98,42 +81,19 @@ impl TraitEvidenceEnvironment {
 
     /// Return evidence records that may participate in concrete receiver fallback.
     ///
-    /// WHAT: exposes reusable canonical/builtin evidence for a target type plus file-local
-    /// evidence authored in the current source file.
+    /// WHAT: exposes reusable canonical/builtin evidence for a target type.
     /// WHY: receiver-call parsing needs an evidence-backed fallback without scanning raw
-    /// conformance headers or accidentally exporting file-local extension evidence.
+    /// conformance headers or depending on source-local extension state.
     pub(crate) fn receiver_fallback_candidates(
         &self,
         target_type_id: TypeId,
-        source_file: &InternedPath,
     ) -> Vec<TraitEvidenceId> {
-        let reusable = self
-            .reusable_by_target
+        self.reusable_by_target
             .get(&target_type_id)
             .into_iter()
             .flatten()
-            .copied();
-        let file_local = self
-            .file_local_by_source_and_target
-            .get(&(source_file.clone(), target_type_id))
-            .into_iter()
-            .flatten()
-            .copied();
-
-        reusable.chain(file_local).collect()
-    }
-
-    pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        for definition in &mut self.evidence {
-            definition.source_file.remap_string_ids(remap);
-            definition.declaration_location.remap_string_ids(remap);
-
-            for requirement in &mut definition.requirements {
-                requirement.method_path.remap_string_ids(remap);
-            }
-        }
-
-        self.rebuild_indexes();
+            .copied()
+            .collect()
     }
 
     #[allow(dead_code)] // No compiler-owned builtin conformances are registered yet.
@@ -166,21 +126,6 @@ impl TraitEvidenceEnvironment {
                     .push(definition.id);
             }
 
-            TraitEvidenceKind::FileLocalExtension => {
-                self.file_local_by_source_target_and_trait.insert(
-                    (
-                        definition.source_file.clone(),
-                        definition.target_type_id,
-                        definition.trait_id,
-                    ),
-                    definition.id,
-                );
-                self.file_local_by_source_and_target
-                    .entry((definition.source_file.clone(), definition.target_type_id))
-                    .or_default()
-                    .push(definition.id);
-            }
-
             TraitEvidenceKind::Builtin => {
                 self.builtin_by_target_and_trait.insert(
                     (definition.target_type_id, definition.trait_id),
@@ -191,19 +136,6 @@ impl TraitEvidenceEnvironment {
                     .or_default()
                     .push(definition.id);
             }
-        }
-    }
-
-    fn rebuild_indexes(&mut self) {
-        self.canonical_by_target_and_trait.clear();
-        self.file_local_by_source_target_and_trait.clear();
-        self.builtin_by_target_and_trait.clear();
-        self.reusable_by_target.clear();
-        self.file_local_by_source_and_target.clear();
-
-        let definitions = self.evidence.clone();
-        for definition in &definitions {
-            self.index_definition(definition);
         }
     }
 }

@@ -8,7 +8,7 @@
 //! This module owns:
 //! - token-to-type annotation parsing for declaration/signature contexts
 //! - optional suffix (`?`) annotation rules
-//! - collection type parsing with capacity expressions (e.g. `{64 Int}`, `{T}`)
+//! - collection type parsing with fixed-capacity syntax (e.g. `{64 Int}`, `{T}`)
 //! - `parsed_ref_to_data_type` syntax-to-diagnostic spelling
 //! - parsed-ref walkers used by header dependency extraction
 //!

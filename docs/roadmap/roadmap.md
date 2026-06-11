@@ -21,13 +21,12 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 - Add a Wasm capability matrix tracking scalar operations, strings/templates, structs, choices, options/results, collections, generics, traits, external packages, core libraries, assertions, IO, and runtime memory helpers.
 - Harden reachable unsupported-backend diagnostics so every unsupported Wasm feature fails before HIR-to-LIR lowering or byte emission.
 - Stabilize the HIR-to-Wasm-LIR contract and document which HIR constructs are accepted, rejected, or lowered through runtime helpers.
-- Define the Wasm ABI type mapping for scalars, handles, strings, collections, structs, choices, options, results, errors, and dynamic wrappers.
+- Define the Wasm ABI type mapping for scalars, handles, strings, collections, structs, choices, options, and errors.
 - Complete the runtime string model: allocation, UTF-8 layout, interpolation helpers, host string extraction, release hooks, and replacement of bridge-only helpers.
 - Design and implement Wasm layout for structs, including field offsets, alignment, construction, field access, mutation, and ownership hooks.
 - Design and implement Wasm layout for choices, including unit variants, payload variants, tag representation, payload storage, equality, matching, and generic choices.
 - Design and implement Wasm lowering for options, fallible results, multi-return carriers, `catch`, postfix `!`, postfix `?`, and error payload propagation.
 - Decide the v1 generic runtime policy: monomorphized concrete layouts, explicit rejection boundaries, or a handle-erased fallback for specific cases.
-- Keep dynamic trait runtime lowering deferred until static trait/generic behavior and concrete layout rules are stable.
 - Define the Wasm external package policy: host imports, JS-backed package rejection, core library native lowerings, and future package-provided Wasm imports.
 - Add Wasm lowerings for selected core packages in order: `@core/math`, `@core/text`, `@core/random`, then `@core/time`.
 - Split HTML-Wasm integration from generic Wasm module output so browser bootstrap policy does not leak into the core backend.
@@ -37,25 +36,35 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 - Add a follow-up plan for future Component Model / Wasm module-system integration after core module ABI and external package semantics are stable.
 
 
+# Outside Language Design Scope
+
+These surfaces are intentionally not roadmap items unless the language philosophy is explicitly
+changed first:
+
+- Dynamic trait values / trait objects, dynamic trait runtime lowering, trait aliases/composition,
+  downcasting/reflection, associated types/constants, inheritance, generic traits/methods, and
+  blanket/conditional/negative/specialized conformance.
+- `HASHABLE`, generic builtin map keys, user-defined builtin map keys, custom hashers/comparers,
+  `Float` map keys, language-level map equality, mutable entry APIs, fixed/capacity maps, and
+  language hashsets.
+- First-class public `Result` values, exceptions, reflection/runtime type IDs, broad type-level
+  programming, higher-kinded types, parameterized aliases, partial type application, and general
+  macro systems.
+
 # Notes
 - Hash Maps V1 is complete in `docs/roadmap/plans/hashmaps-implementation-plan.md`: first-class insertion-ordered hashmaps with `{Key = Value}` type syntax, `{key = value}` literals, frontend/HIR/borrow validation, HTML JavaScript support, and HTML-Wasm unsupported-feature diagnostics.
 
-- Hash map follow-ups after V1: `HASHABLE` trait and generic key maps, derived/user-defined
-  hashability, `Float` key policy, map iteration, map equality semantics, const hashmaps,
-  map display / `DISPLAYABLE` / `DEBUG_DISPLAY`, fixed/capacity-specialized maps,
-  optimized map variants, hashsets in core/std, and HTML-Wasm map runtime/lowering.
+- Hash map follow-ups after V1: Wasm runtime/lowering for the existing scalar-keyed builtin map
+  surface and possible read-only map iteration only if it does not introduce `HASHABLE`, custom
+  equality, custom hashers, mutable entry APIs, or user-defined key semantics.
 
 - Collection follow-ups after fixed collection type constraints: default-fill syntax such as
   `{...none}` / `{...0}`, explicit fixed/growable conversion through `copy` after cast/copy
   hardening, and growable initial-capacity hints only if future backend work shows they are useful.
 
-- Trait ecosystem follow-ups after Traits v1: default methods, associated types/constants,
-  static non-method requirements, trait inheritance/composition, generic traits/methods,
-  conditional and specialized generic instance conformances, dynamic trait composition,
-  aliases/downcasting/reflection, file-local evidence-backed generic bound dispatch,
-  compiler-owned builtin conformances, `DISPLAYABLE` output coercion, operator/boolean keyword
-  integration, broader standard trait taxonomy, automatic primitive conformances, and Wasm
-  dynamic trait lowering.
+- Trait ecosystem follow-ups after Traits v1: static non-method requirements, compiler-owned
+  builtin conformance facts, diagnostics/tooling polish, and broader standard trait taxonomy that
+  keeps traits as static contracts only.
 
 - Time library follow-ups after the first `@core/time` JS slice: civil/calendar types
   (`Date`, `TimeOfDay`, `DateTime`, `TimeZone`, `ZonedDateTime`, `Period`),

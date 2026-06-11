@@ -237,8 +237,8 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
     ///
     /// WHY: headers are already dependency-sorted; constants are parsed in that order.
     /// Struct defaults require constant-context parsing and import gates.
-    /// Trait metadata is available so dynamic trait annotations on fields, payloads,
-    /// and constant declarations are resolved or rejected with `BST-RULE-0075`.
+    /// Trait metadata is available so trait names on fields, payloads, and constant declarations
+    /// are rejected as static contracts instead of falling through to an unknown-type diagnostic.
     pub(in crate::compiler_frontend::ast) fn resolve_nominal_members_and_constants(
         &mut self,
         sorted_headers: &[Header],
@@ -991,6 +991,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 header,
                 ConstantHeaderParseContext {
                     top_level_declarations: Rc::clone(&self.declaration_table),
+                    module_constants: &self.module_constants,
                     file_visibility: visibility,
                     resolved_type_aliases: Rc::clone(&resolved_type_aliases),
                     resolved_type_alias_annotations: Rc::new(
@@ -1162,6 +1163,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         .with_template_const_loop_iteration_limit(self.context.template_const_loop_iteration_limit)
         .with_rendered_path_usage_sink(Rc::clone(&self.rendered_path_usages))
         .with_file_visibility(Rc::new(visibility.clone()))
+        .with_explicit_compile_time_constants(&self.module_constants)
         .with_resolved_type_aliases(Rc::new(self.resolved_type_aliases_by_path.clone()))
         .with_resolved_type_alias_annotations(Rc::new(
             self.resolved_type_alias_annotations_by_path.clone(),

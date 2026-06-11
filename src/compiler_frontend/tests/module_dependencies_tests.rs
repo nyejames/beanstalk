@@ -256,8 +256,8 @@ fn function_error_return_dependency_orders_error_type_before_function() {
 
 #[test]
 fn capacity_reference_in_collection_type_orders_constant_before_user() {
-    // WHY: capacity expressions in fixed collection types create value-namespace dependency
-    // edges to the referenced constant, even when the declaration is not a constant.
+    // WHY: bare capacity constants in fixed collection types create value-namespace
+    // dependency edges to the referenced constant, even when the declaration is not a constant.
     let (headers, mut string_table) = parse_module_headers(
         &[
             (

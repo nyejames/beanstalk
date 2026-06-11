@@ -22,9 +22,7 @@ use crate::compiler_frontend::hir::expressions::{HirExpression, HirExpressionKin
 use crate::compiler_frontend::hir::ids::BlockId;
 use crate::compiler_frontend::hir::patterns::{HirMatchArm, HirPattern};
 use crate::compiler_frontend::hir::places::HirPlace;
-use crate::compiler_frontend::hir::statements::{
-    HirDynamicTraitCallArgumentEffect, HirStatement, HirStatementKind,
-};
+use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
 use crate::compiler_frontend::hir::terminators::HirTerminator;
 
 mod conflicts;
@@ -645,9 +643,6 @@ fn record_shared_reads_in_expression(
         HirExpressionKind::VariantPayloadGet { source, .. } => {
             record_shared_reads_in_expression(env, source, location.clone(), roots)?;
         }
-        HirExpressionKind::ConstructDynamicTraitValue { value, .. } => {
-            record_shared_reads_in_expression(env, value, location.clone(), roots)?;
-        }
     }
 
     let classification = if roots.is_empty() {
@@ -769,9 +764,6 @@ fn collect_expression_roots(
 
         HirExpressionKind::VariantPayloadGet { source, .. } => {
             collect_expression_roots(layout, state, source, out, location, diagnostics)?;
-        }
-        HirExpressionKind::ConstructDynamicTraitValue { value, .. } => {
-            collect_expression_roots(layout, state, value, out, location, diagnostics)?;
         }
     }
 
@@ -914,18 +906,6 @@ pub(super) fn transfer_aggregate_expression_ownership(
                 layout,
                 state,
                 source,
-                block_id,
-                current_order,
-                location,
-                diagnostics,
-            )?;
-        }
-
-        HirExpressionKind::ConstructDynamicTraitValue { value, .. } => {
-            transfer_aggregate_expression_ownership(
-                layout,
-                state,
-                value,
                 block_id,
                 current_order,
                 location,

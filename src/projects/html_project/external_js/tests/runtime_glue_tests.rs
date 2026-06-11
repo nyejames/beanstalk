@@ -448,9 +448,6 @@ fn create_registry_with_export(
                 parameters: Vec::new(),
                 returns: vec![ExternalReturnSlot::fresh(ExternalAbiType::I32)],
                 error_return_type: None,
-                receiver_type: None,
-                receiver_access:
-                    crate::compiler_frontend::external_packages::ExternalAccessKind::Shared,
                 lowerings: ExternalFunctionLowerings {
                     js: Some(ExternalJsLowering::ExternalModuleExport {
                         export_name: export_name.to_owned(),
@@ -485,9 +482,6 @@ fn create_registry_with_fallible_export(
                 parameters: Vec::new(),
                 returns: vec![ExternalReturnSlot::fresh(ExternalAbiType::I32)],
                 error_return_type: Some(ExternalSignatureType::BuiltinError),
-                receiver_type: None,
-                receiver_access:
-                    crate::compiler_frontend::external_packages::ExternalAccessKind::Shared,
                 lowerings: ExternalFunctionLowerings {
                     js: Some(ExternalJsLowering::ExternalModuleExport {
                         export_name: export_name.to_owned(),

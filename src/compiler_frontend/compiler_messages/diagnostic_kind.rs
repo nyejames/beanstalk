@@ -250,7 +250,7 @@ pub enum RuleDiagnosticKind {
     UnsupportedTraitFeature,
     InvalidTraitConformance,
     GenericBoundPrivateSurfaceLeak,
-    InvalidDynamicTraitType,
+    TraitNameUsedAsType,
     InvalidTraitKeywordUsage,
     ExportOutsideModuleFacade,
     MissingExportTarget,
@@ -329,7 +329,7 @@ impl RuleDiagnosticKind {
             Self::UnsupportedTraitFeature,
             Self::InvalidTraitConformance,
             Self::GenericBoundPrivateSurfaceLeak,
-            Self::InvalidDynamicTraitType,
+            Self::TraitNameUsedAsType,
             Self::InvalidTraitKeywordUsage,
             Self::ExportOutsideModuleFacade,
             Self::MissingExportTarget,
@@ -368,7 +368,6 @@ pub enum ImportDiagnosticKind {
     DuplicateBeandownInputPath,
     UnsupportedExternalExtension,
     InvalidExternalLibrary,
-    ReceiverMethodImportRequiresVisibleReceiverType,
 }
 
 #[cfg(test)]
@@ -399,7 +398,6 @@ impl ImportDiagnosticKind {
             Self::DuplicateBeandownInputPath,
             Self::UnsupportedExternalExtension,
             Self::InvalidExternalLibrary,
-            Self::ReceiverMethodImportRequiresVisibleReceiverType,
         ]
         .into_iter()
     }

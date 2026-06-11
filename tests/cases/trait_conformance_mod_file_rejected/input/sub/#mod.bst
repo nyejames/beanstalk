@@ -2,7 +2,7 @@ export Label = |
     text String,
 |
 
-export display |this Label| -> String:
+display |this Label| -> String:
     return this.text
 ;
 

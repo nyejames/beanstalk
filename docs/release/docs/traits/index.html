@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="color-scheme" content="light dark">
     <title>Traits in Beanstalk | Beanstalk</title>
-    <meta name="description" content="Current Alpha trait declarations, explicit conformance, static bounds, and dynamic trait values.">
+    <meta name="description" content="Current Alpha trait declarations, explicit conformance, and static generic bounds.">
     <style>
 /*!
   BS CSS CORE (absolute basics CSS reset)
@@ -317,7 +317,7 @@ body {
         </div>
     </nav>
      <h1 style="font-size: 2em;text-align: center;"> TRAITS IN BEANSTALK</h1>
-    <section class="container"><p>Traits define named behavioural contracts for types.</p><p>Beanstalk traits are explicit and nominal: a type satisfies a trait only when source declares <code>Type must TRAIT</code>. Matching method shapes alone are not conformance.</p><p>A trait name in a normal type annotation means a dynamic trait value. A trait name in a generic bound constrains a concrete generic parameter. These are different features.</p></section>
+    <section class="container"><p>Traits define named behavioural contracts for types.</p><p>Beanstalk traits are explicit and nominal: a type satisfies a trait only when source declares <code>Type must TRAIT</code>. Matching method shapes alone are not conformance.</p><p>Trait names are static contracts. They can appear in trait declarations, explicit conformance declarations, and generic bounds. They are not ordinary value types.</p></section>
     <section class="container"><h1>Trait declarations</h1><p>Trait declarations use <code>must:</code> and contain method requirements.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
@@ -412,8 +412,8 @@ body {
     render type <span class='bst-code-struct'>Item</span> is <span class='bst-code-struct'>DISPLAY_TEXT</span> and <span class='bst-code-struct'>NAMED</span> <span class='bst-code-operator'>|</span>item <span class='bst-code-struct'>Item</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-keyword'>return</span> item.display<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
     ;
-    </code></pre><p>Concrete calls and generic struct/choice instantiations require visible reusable evidence for the chosen concrete type. A dynamic trait value does not satisfy a static generic bound.</p></section>
-    <section class="container"><h1>Dynamic trait values</h1><p>A trait name in a normal type annotation creates a dynamic trait value type.</p><pre style="
+    </code></pre><p>Concrete calls and generic struct/choice instantiations require visible reusable evidence for the chosen concrete type. Trait names cannot be supplied as value types or concrete generic arguments.</p></section>
+    <section class="container"><h1>Traits are not value types</h1><p>A trait name in a normal type annotation is rejected.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -421,16 +421,28 @@ body {
         white-space: pre;
         overflow-x: auto;
     "><code class='codeblock'>
-    render_dynamic <span class='bst-code-operator'>|</span>value <span class='bst-code-struct'>DISPLAY_TEXT</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
+    <span class='bst-code-comment'>-- invalid: DISPLAY_TEXT is a trait, not a value type</span>
+    render <span class='bst-code-operator'>|</span>value <span class='bst-code-struct'>DISPLAY_TEXT</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-keyword'>return</span> value.display<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
     ;
-
-    text <span class='bst-code-operator'>=</span> render_dynamic<span class='bst-code-parenthesis'>(</span><span class='bst-code-struct'>Label</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;hello&quot;</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>)</span>
-    </code></pre><p>Dynamic trait values erase the concrete type and expose only the trait surface. They are runtime-only opaque owning wrappers in the current Alpha surface, not static evidence for generic bounds.</p><p>Dynamic coercion from a concrete value happens only at explicit typed boundaries:</p><ul><li>annotated declarations</li><li>function arguments</li><li>function returns</li><li>struct fields</li><li>choice payloads</li><li>explicitly typed collection elements</li></ul><p>Unannotated locals and collection literals do not infer trait values.</p></section>
-    <section class="container"><h1>Dynamic-safe traits</h1><p>All traits can be used as generic bounds. Only dynamic-safe traits can be used as dynamic value types.</p><p>A trait is dynamic-safe when its requirements do not need the erased concrete type again after wrapping. Requirements that return <code>This</code>, take <code>This</code> as a non-receiver parameter, or otherwise require concrete identity are bound-only and cannot be used as dynamic value annotations.</p><p>When static dispatch is intended, write a generic bound with <code>type T is TRAIT</code> instead of annotating a value directly with <code>TRAIT</code>.</p></section>
-    <section class="container"><h1>Dispatch and backends</h1><p>Ordinary concrete receiver methods resolve before trait evidence. If no ordinary method is visible, visible trait evidence can make a trait-surface method callable.</p><p>Dynamic trait method calls dispatch through the wrapper&#39;s method table in the JavaScript backend. HTML-Wasm rejects reachable dynamic trait construction and dynamic dispatch with a structured unsupported-backend diagnostic before Wasm lowering. Dynamic-only helper functions that are not reachable from the page entry do not block an HTML-Wasm build.</p></section>
+    </code></pre><p>Use <code>type T is TRAIT</code> when static reuse is intended. Use choices when runtime heterogeneity is needed.</p></section>
+    <section class="container"><h1>Runtime heterogeneity</h1><p>Runtime heterogeneity is represented with choices, not trait objects.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>Renderable</span> <span class='bst-code-operator'>:</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-struct'>LabelItem</span> <span class='bst-code-operator'>|</span> value <span class='bst-code-struct'>Label</span> <span class='bst-code-operator'>|</span>,
+        <span class='bst-code-struct'>ButtonItem</span> <span class='bst-code-operator'>|</span> value <span class='bst-code-struct'>Button</span> <span class='bst-code-operator'>|</span>,
+    ;
+    </code></pre></section>
+    <section class="container"><h1>Dispatch and backends</h1><p>Ordinary concrete receiver methods resolve before trait evidence. If no ordinary method is visible, visible trait evidence can make a trait-surface method callable.</p><p>Static trait-bound method calls resolve to concrete source methods before HIR. Backends do not receive trait-object construction, erased dispatch, or selected trait evidence for runtime method tables.</p></section>
     <section class="container"><h1>DISPLAYABLE scaffold</h1><p><code>DISPLAYABLE</code> exists as compiler-owned trait metadata for conformance and generic-bound tests.</p><p>It does not change <code>io(...)</code>, template interpolation, string coercion, equality, or operators. Implement <code>display |This| -&gt; String</code> yourself and call it explicitly.</p></section>
-    <section class="container"><h1>Deferred trait ecosystem</h1><p>Deferred surfaces include:</p><ul><li>default methods</li><li>associated types and associated constants</li><li>trait inheritance and composition</li><li>generic traits and generic trait methods</li><li>specialized generic instance conformance such as <code>Box of Int must DISPLAY_TEXT</code></li><li>static requirements that are not receiver methods</li><li>conditional conformances</li><li>dynamic trait composition</li><li>dynamic trait aliases</li><li>downcasting, reflection, and pattern matching on erased concrete types</li><li>composed <code>This</code> forms</li><li>file-local evidence-backed generic bound dispatch</li><li>automatic primitive conformances</li><li>output coercion through <code>DISPLAYABLE</code></li><li>operator-to-trait integration</li><li>Wasm dynamic trait runtime lowering</li><li>deriving, hashing, ordering, formatting, iteration, and serialization traits</li></ul></section>
+    <section class="container"><h1>Deferred trait ecosystem</h1><p>Deferred surfaces include:</p><ul><li>default methods</li><li>associated types and associated constants</li><li>trait inheritance and composition</li><li>generic traits and generic trait methods</li><li>specialized generic instance conformance such as <code>Box of Int must DISPLAY_TEXT</code></li><li>static requirements that are not receiver methods</li><li>composed <code>This</code> forms</li><li>file-local evidence-backed generic bound dispatch</li><li>automatic primitive conformances</li><li>output coercion through <code>DISPLAYABLE</code></li><li>operator-to-trait integration</li><li>deriving, hashing, ordering, formatting, iteration, and serialization traits</li></ul></section>
+    <section class="container"><h1>Outside language design scope</h1><p>Dynamic trait values / trait objects, trait aliases or composition, downcasting, reflection, pattern matching on erased concrete types, associated types/constants, trait inheritance, generic traits/methods, and conditional or specialized conformance are intentionally outside the current language design scope.</p></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;

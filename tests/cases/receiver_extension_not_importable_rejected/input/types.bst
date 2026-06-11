@@ -1,4 +1,0 @@
-Point = |
-    x Int,
-    y Int,
-|

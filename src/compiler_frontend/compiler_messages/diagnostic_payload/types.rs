@@ -472,8 +472,6 @@ pub enum InvalidCollectionTypeReason {
 pub enum InvalidMapTypeReason {
     /// The key type is not one of the supported scalar types.
     UnsupportedKeyType { key_type: TypeId },
-    /// Generic key parameters require a `HASHABLE` bound, which is not yet implemented.
-    GenericKeyRequiresHashableBound { parameter_name: StringId },
     /// Map types are nested too deeply inline; use a type alias instead.
     ExcessiveInlineNesting { depth: usize },
     /// Map type is missing the key type before the '=' separator.
@@ -482,12 +480,12 @@ pub enum InvalidMapTypeReason {
     EmptyMapValueType,
     /// Map type contains more than one top-level '=' separator.
     MultipleMapSeparators,
-    /// Fixed or capacity map syntax is not supported in V1.
+    /// Fixed or capacity map syntax is outside the builtin hashmap design.
     FixedCapacityNotAllowed,
 }
 
 impl InvalidMapTypeReason {
-    pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
+    pub(crate) fn remap_string_ids(&mut self, _remap: &StringIdRemap) {
         match self {
             Self::UnsupportedKeyType { .. }
             | Self::ExcessiveInlineNesting { .. }
@@ -495,9 +493,6 @@ impl InvalidMapTypeReason {
             | Self::EmptyMapValueType
             | Self::MultipleMapSeparators
             | Self::FixedCapacityNotAllowed => {}
-            Self::GenericKeyRequiresHashableBound { parameter_name } => {
-                *parameter_name = remap.get(*parameter_name);
-            }
         }
     }
 }
@@ -626,6 +621,7 @@ pub enum InvalidFunctionSignatureReason {
     AliasReturnNotAllowedInTraitRequirement,
     MultipleErrorReturnSlots,
     ErrorSlotNotLast,
+    GenericWhereConstraintsUnsupported,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -668,14 +664,12 @@ pub enum InvalidTraitKeywordUsageReason {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum InvalidReceiverDeclarationReason {
     UnknownStructTarget,
-    WrongSourceFile,
+    NonlocalSourceType,
+    BuiltinScalarType,
+    ExternalOpaqueType,
     FieldNameConflict,
     DuplicateMethod,
-    ReceiverTypeNotVisible,
-    ExtensionOverridesCanonicalMethod,
-    NonExportableExtensionMethodImport,
-    ImportedReceiverTypeNotVisible,
-    ImportedMethodCollision,
+    DuplicateVisibleMethod,
     GenericReceiverType {
         function_name: StringId,
         type_name: StringId,
@@ -684,6 +678,7 @@ pub enum InvalidReceiverDeclarationReason {
         function_name: StringId,
         type_name: StringId,
     },
+    ReceiverMethodImportNotAllowed,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -724,7 +719,7 @@ pub enum InvalidDeclarationReason {
     DuplicateGenericParameter { parameter_name: StringId },
     GenericParameterNameCollision { parameter_name: StringId },
     ReservedGenericParameterName { parameter_name: StringId },
-    GenericTraitsDeferred,
+    GenericTraitsUnsupported,
     InvalidTraitName,
     TraitConformanceMissingTrait,
     TraitConformanceSemicolon,
@@ -735,9 +730,10 @@ pub enum InvalidTraitConformanceReason {
     ModuleFacade,
     AliasTarget,
     NonCanonicalTarget,
+    NonlocalSourceTarget,
+    BuiltinTarget,
+    ExternalOpaqueTarget,
     DuplicateCanonicalEvidence,
-    DuplicateFileLocalExtensionEvidence,
-    FileLocalExtensionOverridesCanonicalEvidence,
     BuiltinEvidenceOverride,
     MissingMethod {
         requirement_name: StringId,
@@ -777,47 +773,6 @@ pub enum InvalidTraitConformanceReason {
     },
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub enum InvalidDynamicTraitTypeReason {
-    BoundOnly {
-        reason: BoundOnlyTraitDiagnosticReason,
-        requirement_name: Option<StringId>,
-    },
-    Constant,
-    Applied,
-    StaticBoundSubstitution {
-        dynamic_type_id: TypeId,
-    },
-    MissingEvidence {
-        concrete_type_id: TypeId,
-    },
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum BoundOnlyTraitDiagnosticReason {
-    ThisParameter,
-    ThisReturn,
-}
-
-impl InvalidDynamicTraitTypeReason {
-    pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        match self {
-            Self::BoundOnly {
-                requirement_name, ..
-            } => {
-                if let Some(requirement_name) = requirement_name {
-                    *requirement_name = remap.get(*requirement_name);
-                }
-            }
-
-            Self::Constant
-            | Self::Applied
-            | Self::StaticBoundSubstitution { .. }
-            | Self::MissingEvidence { .. } => {}
-        }
-    }
-}
-
 impl InvalidTraitConformanceReason {
     pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         match self {
@@ -847,9 +802,10 @@ impl InvalidTraitConformanceReason {
             Self::ModuleFacade
             | Self::AliasTarget
             | Self::NonCanonicalTarget
+            | Self::NonlocalSourceTarget
+            | Self::BuiltinTarget
+            | Self::ExternalOpaqueTarget
             | Self::DuplicateCanonicalEvidence
-            | Self::DuplicateFileLocalExtensionEvidence
-            | Self::FileLocalExtensionOverridesCanonicalEvidence
             | Self::BuiltinEvidenceOverride => {}
         }
     }
@@ -915,7 +871,6 @@ pub enum InvalidReceiverCallReason {
     MutableMarkerOnNonReceiverCall,
     AmbiguousGenericBoundMethod,
     AmbiguousTraitEvidenceMethod,
-    FileLocalGenericBoundEvidenceUnsupported,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -1244,7 +1199,6 @@ pub enum InvalidReturnShapeReason {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum DeferredFeatureReason {
     NamedFeature { feature: StringId },
-    GenericWhereConstraints,
     CaptureTaggedPattern,
     NegatedMatchPattern,
     NamedPayloadPatternAssignment,
@@ -1428,10 +1382,6 @@ pub enum InvalidGenericInstantiationReason {
     },
     MissingNominalTraitEvidence {
         parameter_name: StringId,
-        trait_name: StringId,
-        concrete_type_id: TypeId,
-    },
-    FileLocalNominalTraitEvidenceUnsupported {
         trait_name: StringId,
         concrete_type_id: TypeId,
     },

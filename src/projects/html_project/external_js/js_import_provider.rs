@@ -22,7 +22,9 @@ use crate::projects::html_project::external_js::package_registration::{
     register_parsed_js_library, required_runtime_imports_from_parsed,
 };
 use crate::projects::html_project::external_js::parser::parse_js_library;
-use crate::projects::html_project::external_js::parser::parsed_js_library::JsParserDiagnostic;
+use crate::projects::html_project::external_js::parser::parsed_js_library::{
+    JsParserDiagnostic, ParsedJsLibrary,
+};
 use crate::projects::html_project::external_js::path_identity::{
     sanitized_path_stem, stable_path_hash_hex,
 };
@@ -82,11 +84,21 @@ impl ExternalImportProvider for JsExternalImportProvider {
 
         let parsed = parse_js_library(&source, &RuntimeModuleRegistry::v1());
 
-        let diagnostics = convert_js_parser_diagnostics(
+        let mut diagnostics = convert_js_parser_diagnostics(
             &parsed.diagnostics,
             &request.canonical_source_path,
             context.string_table,
         );
+
+        // Reject project-local JS imports that declare receiver-style signatures.
+        // WHY: source-authored `@bst.sig` signatures must expose free functions and opaque
+        //      types, not `this` receiver parameters. The shared parser still classifies
+        //      receiver-shaped signatures so every registration boundary can reject them.
+        diagnostics.extend(reject_receiver_methods_in_project_local_js(
+            &parsed,
+            &request.canonical_source_path,
+            context.string_table,
+        ));
 
         if diagnostics
             .iter()
@@ -113,7 +125,6 @@ impl ExternalImportProvider for JsExternalImportProvider {
             package_id,
             exported_types: registered.exported_types,
             exported_free_functions: registered.exported_free_functions,
-            exported_receiver_methods: registered.exported_receiver_methods,
             runtime_asset: Some(RuntimeAssetIdentity {
                 canonical_source_path: request.canonical_source_path,
                 asset_kind: "js".to_owned(),
@@ -133,6 +144,36 @@ fn js_provider_package_path(canonical_source_path: &Path) -> String {
     let hash = stable_path_hash_hex(canonical_source_path);
 
     format!("@html-js/{safe_stem}-{hash}")
+}
+
+// ------------------------------------------
+//  Receiver method rejection
+// ------------------------------------------
+
+fn reject_receiver_methods_in_project_local_js(
+    parsed: &ParsedJsLibrary,
+    js_source_path: &Path,
+    string_table: &mut StringTable,
+) -> Vec<CompilerDiagnostic> {
+    let mut diagnostics = Vec::new();
+    let path = InternedPath::from_path_buf(js_source_path, string_table);
+
+    for receiver_method in &parsed.receiver_methods {
+        let message = format!(
+            "JS library signature for '{}' uses a 'this' receiver parameter. Project-local JS imports must expose free functions and opaque types only.",
+            receiver_method.beanstalk_name
+        );
+        let message_id = string_table.intern(&message);
+        let location = js_parser_source_location(path.clone(), &receiver_method.annotation_span);
+
+        diagnostics.push(CompilerDiagnostic::invalid_external_library(
+            path.clone(),
+            message_id,
+            location,
+        ));
+    }
+
+    diagnostics
 }
 
 // ------------------------------------------

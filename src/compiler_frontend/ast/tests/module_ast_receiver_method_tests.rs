@@ -1,16 +1,15 @@
 //! Receiver method catalog and dispatch regression tests.
 //!
-//! WHAT: validates how receiver methods are indexed, resolved, and dispatched across struct
-//!       and scalar types.
-//! WHY: receiver methods bridge user-defined behavior to builtin types; catalog drift breaks
-//!      both call resolution and backend lowering.
+//! WHAT: validates how receiver methods are indexed, resolved, and dispatched across same-file
+//!       nominal types plus compiler-owned builtin scalar receivers.
+//! WHY: source-authored receiver methods travel with their declaring receiver type, while builtin
+//!      receiver behavior stays compiler-owned; catalog drift breaks both call paths.
 
 use super::environment::TopLevelDeclarationTable;
 use super::scope_context::{ContextKind, ScopeContext};
 use super::*;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::ast::receiver_methods::ReceiverMethodKind;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::type_resolution::validate_no_recursive_runtime_structs;
 use crate::compiler_frontend::compiler_messages::{DiagnosticPayload, InvalidDeclarationReason};
@@ -38,9 +37,7 @@ fn empty_receiver_entry(
     ReceiverMethodEntry {
         function_path,
         receiver,
-        visibility_source_file: source_file.to_owned(),
         source_file,
-        kind: ReceiverMethodKind::Canonical,
         exported,
         receiver_mutable: false,
         signature: FunctionSignature {

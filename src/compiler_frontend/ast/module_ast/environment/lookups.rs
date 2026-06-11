@@ -83,8 +83,8 @@ pub(crate) struct AstModuleLookups {
     pub(crate) receiver_methods: Rc<ReceiverMethodCatalog>,
 
     // Resolved trait metadata.
-    // WHY: evidence validation, bounds, dynamic coercion, and dispatch need stable trait IDs and
-    // requirement TypeIds without querying raw headers.
+    // WHY: evidence validation, generic bounds, and trait-surface receiver fallback need stable
+    // trait IDs and requirement TypeIds without querying raw headers.
     #[allow(dead_code)]
     pub(crate) trait_environment: Rc<TraitEnvironment>,
 

@@ -26,15 +26,14 @@ pub struct RegisteredJsLibrary {
     pub exported_types: Vec<crate::compiler_frontend::external_packages::ExternalTypeId>,
     pub exported_free_functions:
         Vec<crate::compiler_frontend::external_packages::ExternalFunctionId>,
-    pub exported_receiver_methods:
-        Vec<crate::compiler_frontend::external_packages::ExternalFunctionId>,
 }
 
 /// Registers parsed JS library symbols into the external package registry.
 ///
-/// WHAT: converts parsed opaque types, free functions, and receiver methods into registry
-///       entries with `ExternalModuleExport` JS lowerings.
-/// WHY: shared between the JS external import provider and built-in package registration.
+/// WHAT: converts parsed opaque types and free functions into registry entries with
+///       `ExternalModuleExport` JS lowerings.
+/// WHY: shared between the JS external import provider and built-in package registration,
+///      while keeping external packages on one free-function-only surface.
 pub fn register_parsed_js_library(
     package_id: ExternalPackageId,
     parsed: &ParsedJsLibrary,
@@ -59,27 +58,23 @@ pub fn register_parsed_js_library(
     }
 
     let mut exported_free_functions = Vec::new();
-    let mut exported_receiver_methods = Vec::new();
 
-    for function in parsed
-        .free_functions
-        .iter()
-        .chain(parsed.receiver_methods.iter())
-    {
+    if let Some(receiver_method) = parsed.receiver_methods.first() {
+        return Err(CompilerError::compiler_error(format!(
+            "JS package registration reached receiver-style signature '{}'. External packages must expose free functions and opaque types only.",
+            receiver_method.beanstalk_name
+        )));
+    }
+
+    for function in &parsed.free_functions {
         let spec = convert_parsed_function_to_spec(function, &type_id_by_opaque_name)?;
         let function_id = registry.register_external_function(package_id, spec)?;
-
-        if function.signature.has_receiver() {
-            exported_receiver_methods.push(function_id);
-        } else {
-            exported_free_functions.push(function_id);
-        }
+        exported_free_functions.push(function_id);
     }
 
     Ok(RegisteredJsLibrary {
         exported_types,
         exported_free_functions,
-        exported_receiver_methods,
     })
 }
 
@@ -114,22 +109,6 @@ fn convert_parsed_function_to_spec(
     assert_parsed_signature_receiver_invariants(&function.signature);
 
     let mut parameters = Vec::new();
-    let mut receiver_type: Option<ExternalSignatureType> = None;
-    let mut receiver_access = ExternalAccessKind::Shared;
-
-    // Extract receiver metadata from the first parameter only, matching
-    // ParsedSignature::has_receiver() and ::receiver_parameter().
-    if let Some(receiver_param) = function.signature.receiver_parameter() {
-        receiver_type = Some(parsed_type_to_signature_type(
-            &receiver_param.type_name,
-            type_id_by_opaque_name,
-        )?);
-        receiver_access = if receiver_param.is_mutable {
-            ExternalAccessKind::Mutable
-        } else {
-            ExternalAccessKind::Shared
-        };
-    }
 
     for parameter in &function.signature.parameters {
         let language_type =
@@ -164,8 +143,6 @@ fn convert_parsed_function_to_spec(
         parameters,
         returns,
         error_return_type,
-        receiver_type,
-        receiver_access,
         lowerings: ExternalFunctionLowerings {
             js: Some(ExternalJsLowering::ExternalModuleExport {
                 export_name: function.js_name.clone(),

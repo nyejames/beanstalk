@@ -120,13 +120,11 @@ fn generic_bound_requirement_candidates<'a>(
     candidates
 }
 
-fn evidence_for_bound_method<'a>(
+fn evidence_for_bound_method(
     trait_id: TraitId,
     receiver_type_id: TypeId,
-    member_name: StringId,
-    member_location: &SourceLocation,
-    scope_context: &'a ScopeContext,
-) -> Result<Option<&'a TraitEvidenceDefinition>, ExpressionParseError> {
+    scope_context: &ScopeContext,
+) -> Result<Option<&TraitEvidenceDefinition>, ExpressionParseError> {
     let evidence_environment = scope_context.trait_evidence_environment();
 
     if let Some(evidence_id) = evidence_environment.builtin_for(receiver_type_id, trait_id) {
@@ -135,21 +133,6 @@ fn evidence_for_bound_method<'a>(
 
     if let Some(evidence_id) = evidence_environment.canonical_for(receiver_type_id, trait_id) {
         return Ok(evidence_environment.get(evidence_id));
-    }
-
-    let source_file_scope =
-        scope_context.required_source_file_scope("generic-bound receiver method dispatch")?;
-    if evidence_environment
-        .file_local_for(source_file_scope, receiver_type_id, trait_id)
-        .is_some()
-    {
-        return Err(CompilerDiagnostic::invalid_receiver_call(
-            InvalidReceiverCallReason::FileLocalGenericBoundEvidenceUnsupported,
-            None,
-            Some(member_name),
-            member_location.clone(),
-        )
-        .into());
     }
 
     Ok(None)
@@ -215,8 +198,6 @@ pub(super) fn lookup_generic_bound_receiver_method(
                 let Some(evidence) = evidence_for_bound_method(
                     candidate.trait_definition.id,
                     receiver_type_id,
-                    member_name,
-                    member_location,
                     scope_context,
                 )?
                 else {

@@ -1,8 +1,0 @@
-[backends.html]
-mode = "failure"
-warnings = "forbid"
-diagnostic_codes = ["BST-RULE-0057"]
-message_contains = [
-    "Generic type 'Box' cannot use file-local evidence for trait 'DISPLAY_TEXT'",
-    "Generic nominal instances require reusable canonical or compiler-owned evidence",
-]

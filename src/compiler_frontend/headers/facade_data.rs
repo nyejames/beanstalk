@@ -16,7 +16,9 @@
 //! - Pass 2 resolves public imports against the completed authored export maps.
 
 use crate::compiler_frontend::compiler_errors::compiler_error_to_diagnostic;
-use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, ImportFacadeType};
+use crate::compiler_frontend::compiler_messages::{
+    CompilerDiagnostic, ImportFacadeType, InvalidReceiverDeclarationReason,
+};
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::import_environment::{
     ExternalPackageSymbolLookup, ExternalPackageSymbolResolutionInput, FacadeLookupResult,
@@ -74,7 +76,7 @@ pub(super) fn build_facade_data(
 ) -> Result<(), CompilerDiagnostic> {
     // Pass 1: collect public authored declarations for all facades.
     build_source_library_facade_exports(module_symbols, headers, resolver, string_table)?;
-    build_module_root_facade_exports_pass1(module_symbols, headers, resolver, string_table);
+    build_module_root_facade_exports_pass1(module_symbols, headers, resolver, string_table)?;
 
     // Membership does not depend on import resolution.
     build_source_library_membership(module_symbols, resolver, string_table);
@@ -132,6 +134,11 @@ fn build_source_library_facade_exports(
             }
 
             if let Some(export_name) = header.tokens.src_path.name() {
+                reject_source_receiver_method_export(
+                    module_symbols,
+                    &header.tokens.src_path,
+                    header.name_location.clone(),
+                )?;
                 collector.insert(
                     export_name,
                     FacadeExportTarget::Source(header.tokens.src_path.clone()),
@@ -171,7 +178,6 @@ fn build_source_library_facade_imports(
             .file_imports_by_source
             .get(&mod_file_interned)
         {
-            let mut receiver_method_validations = Vec::new();
             for import in imports {
                 if import.export_mode != HeaderExportMode::Public {
                     continue;
@@ -186,22 +192,13 @@ fn build_source_library_facade_imports(
                     string_table,
                 )?;
 
-                record_receiver_method_export_validation(
+                reject_facade_export_target_if_source_receiver_method(
                     module_symbols,
-                    export_name,
                     &target,
                     import.location.clone(),
-                    &mut receiver_method_validations,
-                );
+                )?;
                 collector.insert(export_name, target, import.location.clone())?;
             }
-
-            validate_receiver_method_exports_have_public_receivers(
-                module_symbols,
-                &collector.exports,
-                &receiver_method_validations,
-                string_table,
-            )?;
         }
 
         module_symbols
@@ -221,7 +218,7 @@ fn build_module_root_facade_exports_pass1(
     headers: &[Header],
     resolver: &ProjectPathResolver,
     string_table: &mut StringTable,
-) {
+) -> Result<(), CompilerDiagnostic> {
     let mut module_root_prefixes =
         build_module_root_prefixes(module_symbols, resolver, string_table);
     module_root_prefixes.sort_by_key(|(prefix, _)| std::cmp::Reverse(prefix.len()));
@@ -251,6 +248,11 @@ fn build_module_root_facade_exports_pass1(
             && is_authored_facade_export(header)
             && let Some(export_name) = header.tokens.src_path.name()
         {
+            reject_source_receiver_method_export(
+                module_symbols,
+                &header.tokens.src_path,
+                header.name_location.clone(),
+            )?;
             let exports = module_symbols
                 .module_root_facade_exports
                 .entry(module_root_interned)
@@ -261,6 +263,8 @@ fn build_module_root_facade_exports_pass1(
             });
         }
     }
+
+    Ok(())
 }
 
 fn build_module_root_facade_imports(
@@ -304,8 +308,6 @@ fn build_module_root_facade_imports(
             .cloned()
             .unwrap_or_default();
         let mut collector = FacadeExportCollector::from_existing(&current_exports);
-        let mut receiver_method_validations = Vec::new();
-
         let imports = module_symbols
             .file_imports_by_source
             .get(&facade_source)
@@ -326,22 +328,13 @@ fn build_module_root_facade_imports(
                 string_table,
             )?;
 
-            record_receiver_method_export_validation(
+            reject_facade_export_target_if_source_receiver_method(
                 module_symbols,
-                export_name,
                 &target,
                 import.location.clone(),
-                &mut receiver_method_validations,
-            );
+            )?;
             collector.insert(export_name, target, import.location.clone())?;
         }
-
-        validate_receiver_method_exports_have_public_receivers(
-            module_symbols,
-            &collector.exports,
-            &receiver_method_validations,
-            string_table,
-        )?;
 
         module_symbols
             .module_root_facade_exports
@@ -351,122 +344,31 @@ fn build_module_root_facade_imports(
     Ok(())
 }
 
-#[derive(Clone, Debug)]
-struct PublicReceiverMethodExportValidation {
-    export_name: StringId,
-    method_path: InternedPath,
-    location: SourceLocation,
-}
-
-fn record_receiver_method_export_validation(
+fn reject_facade_export_target_if_source_receiver_method(
     module_symbols: &ModuleSymbols,
-    export_name: StringId,
     target: &FacadeExportTarget,
     location: SourceLocation,
-    validations: &mut Vec<PublicReceiverMethodExportValidation>,
-) {
+) -> Result<(), CompilerDiagnostic> {
     let FacadeExportTarget::Source(method_path) = target else {
-        return;
+        return Ok(());
     };
 
-    if !module_symbols.receiver_method_paths.contains(method_path) {
-        return;
-    }
-
-    validations.push(PublicReceiverMethodExportValidation {
-        export_name,
-        method_path: method_path.clone(),
-        location,
-    });
+    reject_source_receiver_method_export(module_symbols, method_path, location)
 }
 
-fn validate_receiver_method_exports_have_public_receivers(
+fn reject_source_receiver_method_export(
     module_symbols: &ModuleSymbols,
-    exports: &FxHashSet<FacadeExportEntry>,
-    validations: &[PublicReceiverMethodExportValidation],
-    string_table: &mut StringTable,
+    method_path: &InternedPath,
+    location: SourceLocation,
 ) -> Result<(), CompilerDiagnostic> {
-    for validation in validations {
-        if public_receiver_type_is_visible_for_method(
-            module_symbols,
-            exports,
-            &validation.method_path,
-            string_table,
-        ) {
-            continue;
-        }
-
-        let receiver_type_name = module_symbols
-            .receiver_method_receiver_names
-            .get(&validation.method_path)
-            .copied();
-        return Err(
-            CompilerDiagnostic::receiver_method_import_requires_visible_receiver_type(
-                validation.export_name,
-                receiver_type_name,
-                validation.location.clone(),
-            ),
-        );
+    if module_symbols.receiver_method_paths.contains(method_path) {
+        return Err(CompilerDiagnostic::invalid_receiver_declaration(
+            InvalidReceiverDeclarationReason::ReceiverMethodImportNotAllowed,
+            location,
+        ));
     }
 
     Ok(())
-}
-
-fn public_receiver_type_is_visible_for_method(
-    module_symbols: &ModuleSymbols,
-    exports: &FxHashSet<FacadeExportEntry>,
-    method_path: &InternedPath,
-    string_table: &mut StringTable,
-) -> bool {
-    let Some(receiver_name) = module_symbols
-        .receiver_method_receiver_names
-        .get(method_path)
-    else {
-        return false;
-    };
-
-    if receiver_name_is_builtin_scalar(*receiver_name, string_table) {
-        return true;
-    }
-
-    let Some(receiver_type_path) =
-        source_receiver_nominal_type_path(module_symbols, method_path, *receiver_name)
-    else {
-        return false;
-    };
-
-    exports
-        .iter()
-        .any(|entry| matches!(&entry.target, FacadeExportTarget::Source(path) if path == &receiver_type_path))
-}
-
-fn receiver_name_is_builtin_scalar(receiver_name: StringId, string_table: &StringTable) -> bool {
-    matches!(
-        string_table.resolve(receiver_name),
-        "Int" | "Float" | "Bool" | "String" | "Char"
-    )
-}
-
-fn source_receiver_nominal_type_path(
-    module_symbols: &ModuleSymbols,
-    receiver_method_path: &InternedPath,
-    receiver_name: StringId,
-) -> Option<InternedPath> {
-    let method_source = module_symbols
-        .canonical_source_by_symbol_path
-        .get(receiver_method_path)?;
-
-    module_symbols
-        .nominal_type_paths
-        .iter()
-        .find(|type_path| {
-            type_path.name() == Some(receiver_name)
-                && module_symbols
-                    .canonical_source_by_symbol_path
-                    .get(*type_path)
-                    .is_some_and(|type_source| type_source == method_source)
-        })
-        .cloned()
 }
 
 // --------------------------

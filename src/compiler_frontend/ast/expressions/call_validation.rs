@@ -5,7 +5,6 @@
 //! WHY: function calls, struct constructors, receiver methods, and builtin members all need the
 //! same argument policy even though they build different AST nodes afterward.
 
-use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::call_argument::{
     CallAccessMode, CallArgument, CallPassingMode,
@@ -30,9 +29,6 @@ use crate::compiler_frontend::type_coercion::compatibility::{
     TypeCompatibilityCache, TypeCompatibilityMode,
 };
 use crate::compiler_frontend::type_coercion::contextual::coerce_expression_to_declared_type;
-use crate::compiler_frontend::type_coercion::dynamic_trait::{
-    construct_dynamic_trait_value, select_dynamic_trait_coercion_for_expression,
-};
 use rustc_hash::FxHashMap;
 
 pub(crate) enum CallValidationError {
@@ -151,14 +147,12 @@ pub(crate) struct CallArgumentResolutionContext<'a> {
     pub(crate) string_table: &'a mut StringTable,
     pub(crate) type_environment: &'a TypeEnvironment,
     pub(crate) compatibility_cache: &'a mut TypeCompatibilityCache,
-    pub(crate) scope_context: Option<&'a ScopeContext>,
 }
 
 struct CallArgumentPolicyContext<'a> {
     string_table: &'a mut StringTable,
     type_environment: &'a TypeEnvironment,
     type_validation: CallTypeValidation<'a>,
-    scope_context: Option<&'a ScopeContext>,
 }
 
 /// Builds one expectation per user-defined parameter declaration.
@@ -187,8 +181,8 @@ pub(crate) fn expectations_from_user_parameters(
 ///
 /// WHAT: converts `ExternalSignatureType` and `ExternalAccessKind` into the canonical
 ///       `ExpectedParameterType` and `ExpectedAccessMode` used by call validation.
-/// WHY: `expectations_from_host_function` and `expectations_from_external_method` share
-///      exactly this logic; extracting it avoids near-duplicate map closures.
+/// WHY: every external function, including package functions that operate on opaque handles,
+///      uses the same argument validation path.
 fn parameter_expectation_from_external(
     parameter: &ExternalParameter,
     type_environment: &mut TypeEnvironment,
@@ -219,19 +213,6 @@ pub(crate) fn expectations_from_host_function(
     function
         .parameters
         .iter()
-        .map(|parameter| parameter_expectation_from_external(parameter, type_environment))
-        .collect()
-}
-
-/// Build parameter expectations for an external receiver method (excludes the receiver parameter).
-pub(crate) fn expectations_from_external_method(
-    function: &ExternalFunctionDef,
-    type_environment: &mut TypeEnvironment,
-) -> Vec<ParameterExpectation> {
-    function
-        .parameters
-        .iter()
-        .skip(1)
         .map(|parameter| parameter_expectation_from_external(parameter, type_environment))
         .collect()
 }
@@ -279,7 +260,6 @@ pub(crate) fn resolve_call_arguments(
             string_table: context.string_table,
             type_environment: context.type_environment,
             type_validation: CallTypeValidation::Validate(context.compatibility_cache),
-            scope_context: context.scope_context,
         },
     )
 }
@@ -301,7 +281,6 @@ pub(crate) fn resolve_call_arguments_shape_and_access(
     location: SourceLocation,
     string_table: &mut StringTable,
     type_environment: &TypeEnvironment,
-    scope_context: Option<&ScopeContext>,
 ) -> Result<Vec<CallArgument>, CallValidationError> {
     resolve_call_arguments_with_type_policy(
         diagnostics,
@@ -312,7 +291,6 @@ pub(crate) fn resolve_call_arguments_shape_and_access(
             string_table,
             type_environment,
             type_validation: CallTypeValidation::Skip,
-            scope_context,
         },
     )
 }
@@ -328,7 +306,6 @@ fn resolve_call_arguments_with_type_policy(
         string_table,
         type_environment,
         mut type_validation,
-        scope_context,
     } = context;
 
     // Validation flow order is intentionally fixed:
@@ -413,8 +390,6 @@ fn resolve_call_arguments_with_type_policy(
         };
         let actual_type_id = argument.value.type_id;
 
-        let mut dynamic_coercion = None;
-
         if let CallTypeValidation::Validate(compatibility_cache) = &mut type_validation
             && !is_call_argument_type_compatible(
                 expectation,
@@ -424,56 +399,30 @@ fn resolve_call_arguments_with_type_policy(
                 compatibility_cache,
             )
         {
-            if let Some(scope) = scope_context {
-                match select_dynamic_trait_coercion_for_expression(
-                    &argument.value,
-                    expected_type_id,
-                    type_environment,
-                    scope,
-                ) {
-                    Ok(Some(coercion)) => {
-                        dynamic_coercion = Some(coercion);
-                    }
-                    Ok(None) => {
-                        // Not a dynamic trait target; fall through to type mismatch.
-                    }
-                    Err(diagnostic) => {
-                        return Err(diagnostic.into());
-                    }
+            let mismatch_context = match diagnostics.kind {
+                CallSurfaceKind::StructConstructor | CallSurfaceKind::ChoiceConstructor => {
+                    TypeMismatchContext::ConstructorArgument
                 }
-            }
-
-            if dynamic_coercion.is_none() {
-                let mismatch_context = match diagnostics.kind {
-                    CallSurfaceKind::StructConstructor | CallSurfaceKind::ChoiceConstructor => {
-                        TypeMismatchContext::ConstructorArgument
-                    }
-                    CallSurfaceKind::ReceiverMethod | CallSurfaceKind::BuiltinMember => {
-                        TypeMismatchContext::ReceiverArgument
-                    }
-                    _ => TypeMismatchContext::FunctionArgument,
-                };
-                return Err(CompilerDiagnostic::type_mismatch(
-                    expected_type_id,
-                    actual_type_id,
-                    mismatch_context,
-                    argument.location.clone(),
-                )
-                .into());
-            }
+                CallSurfaceKind::ReceiverMethod | CallSurfaceKind::BuiltinMember => {
+                    TypeMismatchContext::ReceiverArgument
+                }
+                _ => TypeMismatchContext::FunctionArgument,
+            };
+            return Err(CompilerDiagnostic::type_mismatch(
+                expected_type_id,
+                actual_type_id,
+                mismatch_context,
+                argument.location.clone(),
+            )
+            .into());
         }
 
         let mut normalized_argument = argument.with_passing_mode(passing_mode);
-        if let Some(coercion) = dynamic_coercion {
-            normalized_argument.value =
-                construct_dynamic_trait_value(normalized_argument.value, coercion);
-        } else {
-            normalized_argument.value = coerce_expression_to_declared_type(
-                normalized_argument.value,
-                expected_type_id,
-                type_environment,
-            );
-        }
+        normalized_argument.value = coerce_expression_to_declared_type(
+            normalized_argument.value,
+            expected_type_id,
+            type_environment,
+        );
 
         ordered.push(normalized_argument);
     }

@@ -1,4 +1,4 @@
-import @helper { Counter, tick }
+import @helper { Counter }
 
 run || -> String:
     c = Counter(0)

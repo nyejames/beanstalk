@@ -25,8 +25,6 @@ fn return_slots_preserve_alias_metadata() {
             vec![1],
         )],
         error_return_type: None,
-        receiver_type: None,
-        receiver_access: ExternalAccessKind::Shared,
         lowerings: ExternalFunctionLowerings::default(),
     };
 
@@ -51,8 +49,6 @@ fn register_function_rejects_duplicates() {
             parameters: Vec::new(),
             returns: external_success_returns(ExternalAbiType::Void, ExternalReturnAlias::Fresh),
             error_return_type: None,
-            receiver_type: None,
-            receiver_access: ExternalAccessKind::Shared,
             lowerings: ExternalFunctionLowerings::default(),
         })
         .unwrap();
@@ -62,8 +58,6 @@ fn register_function_rejects_duplicates() {
         parameters: Vec::new(),
         returns: external_success_returns(ExternalAbiType::Void, ExternalReturnAlias::Fresh),
         error_return_type: None,
-        receiver_type: None,
-        receiver_access: ExternalAccessKind::Shared,
         lowerings: ExternalFunctionLowerings::default(),
     });
 
@@ -71,34 +65,22 @@ fn register_function_rejects_duplicates() {
 }
 
 #[test]
-fn collection_methods_have_receiver_type() {
+fn collection_helpers_keep_receiver_parameter_access_modes() {
     let registry = ExternalPackageRegistry::new();
     let push = registry
         .get_function_by_id(ExternalFunctionId::CollectionPush)
         .unwrap();
-    assert!(
-        push.receiver_type.is_some(),
-        "collection push should have receiver_type"
-    );
-    assert_eq!(push.receiver_access, ExternalAccessKind::Mutable);
+    assert_eq!(push.parameters[0].access_kind, ExternalAccessKind::Mutable);
 
     let set = registry
         .get_function_by_id(ExternalFunctionId::CollectionSet)
         .unwrap();
-    assert!(
-        set.receiver_type.is_some(),
-        "collection set should have receiver_type"
-    );
-    assert_eq!(set.receiver_access, ExternalAccessKind::Mutable);
+    assert_eq!(set.parameters[0].access_kind, ExternalAccessKind::Mutable);
 
     let length = registry
         .get_function_by_id(ExternalFunctionId::CollectionLength)
         .unwrap();
-    assert!(
-        length.receiver_type.is_some(),
-        "collection length should have receiver_type"
-    );
-    assert_eq!(length.receiver_access, ExternalAccessKind::Shared);
+    assert_eq!(length.parameters[0].access_kind, ExternalAccessKind::Shared);
 }
 
 #[test]

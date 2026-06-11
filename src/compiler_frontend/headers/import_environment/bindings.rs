@@ -8,7 +8,7 @@
 
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
-use crate::compiler_frontend::external_packages::{ExternalFunctionId, ExternalSymbolId};
+use crate::compiler_frontend::external_packages::ExternalSymbolId;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringId;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
@@ -82,8 +82,8 @@ pub(crate) struct FileVisibility {
     /// Trait declarations: local visible name → canonical trait path.
     ///
     /// WHY: traits are compile-time contracts, not value declarations or datatypes. Keeping them
-    /// in their own map lets conformances resolve imported trait names without making `TRAIT`
-    /// usable as a normal type annotation before dynamic trait values are implemented.
+    /// in their own map lets conformances and generic bounds resolve imported trait names without
+    /// making `TRAIT` usable as a normal type annotation.
     pub(crate) visible_trait_names: FxHashMap<StringId, InternedPath>,
 
     /// External package functions/types/constants visible from this file.
@@ -96,23 +96,17 @@ pub(crate) struct FileVisibility {
     /// diagnostics so the secondary label can point to the import site.
     pub(crate) visible_external_symbol_locations: FxHashMap<StringId, SourceLocation>,
 
-    /// External receiver methods visible in this file.
-    ///
-    /// WHY: receiver methods are callable only through receiver syntax. Keeping them outside
-    /// `visible_external_symbols` prevents grouped or namespace imports from accidentally making
-    /// `method(...)` a valid free-function call.
-    pub(crate) visible_external_receiver_methods: FxHashMap<StringId, Vec<ExternalFunctionId>>,
-
     /// Namespace import records visible in this file.
     /// Populated by bare `import @path` and `import @path as alias` syntax.
     pub(crate) visible_namespace_records: FxHashMap<StringId, NamespaceRecord>,
 
     /// Receiver methods visible in this file.
-    /// Key is the local method name (may be aliased for grouped imports).
+    /// Key is the source method name.
     /// Value is the list of canonical function paths with that local name.
     /// WHY: receiver methods are callable only through receiver syntax, not as free
-    ///      functions or namespace-record value members. Import preparation routes
-    ///      them here so AST lookup can filter the module-wide catalog by file.
+    ///      functions or namespace-record value members. Import preparation derives
+    ///      this map from visible receiver types so AST lookup can filter the
+    ///      module-wide catalog by file.
     ///      Multiple paths per name are needed because different receiver types can
     ///      share a method name (e.g. String.length and Array.length).
     pub(crate) visible_receiver_methods: FxHashMap<StringId, Vec<ReceiverMethodVisibility>>,

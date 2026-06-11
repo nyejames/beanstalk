@@ -26,104 +26,14 @@ use crate::compiler_frontend::external_packages::ExternalFunctionId;
 use crate::compiler_frontend::hir::expressions::{HirExpressionKind, HirMapOp, ValueKind};
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::places::HirPlace;
-use crate::compiler_frontend::hir::statements::{
-    HirDynamicTraitCallArgument, HirDynamicTraitCallArgumentEffect, HirStatement, HirStatementKind,
-};
+use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
-use crate::compiler_frontend::traits::ids::{TraitId, TraitRequirementId};
 use crate::return_hir_transformation_error;
 
 use super::LoweredExpression;
 
-pub(crate) struct DynamicTraitMethodCallLoweringInput<'a> {
-    pub(crate) receiver: &'a AstNode,
-    pub(crate) trait_id: TraitId,
-    pub(crate) requirement_id: TraitRequirementId,
-    pub(crate) receiver_requires_mutable: bool,
-    pub(crate) args: &'a [CallArgument],
-    pub(crate) result_type_ids: &'a [FrontendTypeId],
-    pub(crate) location: &'a SourceLocation,
-}
-
 impl<'a> HirBuilder<'a> {
-    pub(crate) fn lower_dynamic_trait_method_call_expression(
-        &mut self,
-        input: DynamicTraitMethodCallLoweringInput<'_>,
-    ) -> Result<LoweredExpression, CompilerError> {
-        let DynamicTraitMethodCallLoweringInput {
-            receiver,
-            trait_id,
-            requirement_id,
-            receiver_requires_mutable,
-            args,
-            result_type_ids,
-            location,
-        } = input;
-        let mut prelude = Vec::new();
-        let receiver_expression = receiver.get_expr()?;
-        let lowered_receiver =
-            self.lower_child_expression_for_parent(&mut prelude, &receiver_expression)?;
-        let mut lowered_args = Vec::with_capacity(args.len());
-
-        for (arg_index, argument) in args.iter().enumerate() {
-            if self.expression_needs_current_block_lowering(&argument.value) {
-                self.flush_pending_call_prelude(&mut prelude, location)?;
-            }
-
-            let lowered = self.lower_call_argument_value(argument, location, arg_index)?;
-            prelude.extend(lowered.prelude);
-            lowered_args.push(HirDynamicTraitCallArgument {
-                value: lowered.value,
-                effect: dynamic_trait_call_argument_effect(argument),
-            });
-        }
-
-        let statement_id = self.allocate_node_id();
-        let region = self.current_region_or_error(location)?;
-        let result = if result_type_ids.is_empty() {
-            None
-        } else {
-            let call_result_type = self.lower_call_result_type(result_type_ids, location)?;
-            Some(self.allocate_temp_local(call_result_type, Some(location.to_owned()))?)
-        };
-
-        let statement = HirStatement {
-            id: statement_id,
-            kind: HirStatementKind::CallDynamicTraitMethod {
-                receiver: lowered_receiver,
-                receiver_effect: if receiver_requires_mutable {
-                    HirDynamicTraitCallArgumentEffect::MayConsume
-                } else {
-                    HirDynamicTraitCallArgumentEffect::SharedBorrow
-                },
-                trait_id,
-                requirement_id,
-                args: lowered_args,
-                result,
-            },
-            location: location.to_owned(),
-        };
-
-        self.side_table.map_statement(location, &statement);
-        prelude.push(statement);
-
-        let value = if let Some(result_local) = result {
-            let call_result_type = self.lower_call_result_type(result_type_ids, location)?;
-            self.make_expression(
-                location,
-                HirExpressionKind::Load(HirPlace::Local(result_local)),
-                call_result_type,
-                ValueKind::RValue,
-                region,
-            )
-        } else {
-            self.unit_expression(location, region)
-        };
-
-        Ok(LoweredExpression { prelude, value })
-    }
-
     pub(crate) fn lower_receiver_method_call_expression(
         &mut self,
         method_path: &InternedPath,
@@ -476,16 +386,5 @@ fn hir_map_op_from_builtin(op: MapBuiltinOp) -> HirMapOp {
         MapBuiltinOp::Remove => HirMapOp::Remove,
         MapBuiltinOp::Clear => HirMapOp::Clear,
         MapBuiltinOp::Length => HirMapOp::Length,
-    }
-}
-
-fn dynamic_trait_call_argument_effect(
-    argument: &CallArgument,
-) -> HirDynamicTraitCallArgumentEffect {
-    match argument.passing_mode {
-        CallPassingMode::Shared => HirDynamicTraitCallArgumentEffect::SharedBorrow,
-        CallPassingMode::MutablePlace | CallPassingMode::FreshMutableValue => {
-            HirDynamicTraitCallArgumentEffect::MayConsume
-        }
     }
 }

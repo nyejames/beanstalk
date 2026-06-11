@@ -1,6 +1,6 @@
 entry = "."
 
 [backends.html]
-mode = "failure"
+mode = "success"
 warnings = "forbid"
-diagnostic_codes = ["BST-RULE-0048"]
+rendered_output_contains = ["receiver_facade_namespace_no_private_method value=42"]

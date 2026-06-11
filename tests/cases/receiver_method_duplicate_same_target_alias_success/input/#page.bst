@@ -1,9 +1,8 @@
-import @helper { Counter, tick as next }
-import @helper { tick as next }
+import @helper { Counter }
 
 run || -> String:
     c = Counter(41)
-    result = c.next()
+    result = c.tick()
     return "duplicate_receiver_alias_ok"
 ;
 

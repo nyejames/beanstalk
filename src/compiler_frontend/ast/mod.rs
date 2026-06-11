@@ -109,7 +109,7 @@ pub(crate) mod templates;
 pub use module_ast::build_context::AstBuildContext;
 pub(crate) use module_ast::environment::TopLevelDeclarationTable;
 pub use module_ast::scope_context::{ContextKind, ScopeContext};
-pub(crate) use receiver_methods::{ReceiverMethodCatalog, ReceiverMethodEntry, ReceiverMethodKind};
+pub(crate) use receiver_methods::{ReceiverMethodCatalog, ReceiverMethodEntry};
 pub use templates::top_level_templates::AstDocFragment;
 pub use templates::top_level_templates::AstDocFragmentKind;
 
@@ -141,8 +141,6 @@ use crate::compiler_frontend::paths::rendered_path_usage::RenderedPathUsage;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::FileTokens;
-use crate::compiler_frontend::traits::environment::TraitEnvironment;
-use crate::compiler_frontend::traits::evidence::TraitEvidenceEnvironment;
 use std::time::Instant;
 
 /// Resolved choice definition carried from AST to HIR for pre-registration.
@@ -186,19 +184,6 @@ pub struct Ast {
     /// WHAT: carries the canonical TypeEnvironment from AST construction to HIR lowering.
     /// WHY: HIR needs to query substituted fields/variants for generic struct/choice instances.
     pub type_environment: TypeEnvironment,
-
-    /// Resolved trait declarations available at the backend boundary.
-    ///
-    /// WHAT: carries stable trait and requirement IDs selected by AST/HIR dynamic operations.
-    /// WHY: dynamic runtime lowering must use frontend-selected metadata instead of re-solving
-    /// traits or scanning source declarations in the backend.
-    pub(crate) trait_environment: TraitEnvironment,
-
-    /// Validated conformance evidence selected by dynamic coercion and static trait paths.
-    ///
-    /// WHAT: maps evidence IDs to concrete receiver-method implementations.
-    /// WHY: JS method-table construction needs the exact evidence chosen by the frontend.
-    pub(crate) trait_evidence_environment: TraitEvidenceEnvironment,
 
     /// Compile-time const facts for all declarations that resolve to constant values.
     ///

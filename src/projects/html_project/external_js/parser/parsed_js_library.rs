@@ -88,8 +88,9 @@ pub struct JsParserDiagnostic {
 
 /// A single parameter parsed from a `@bst.sig` signature.
 ///
-/// WHAT: describes one Beanstalk-facing parameter, including receiver methods where
-///       the first parameter is named `this`.
+/// WHAT: describes one Beanstalk-facing parameter. Receiver-shaped signatures are still
+///       classified when the first parameter is named `this` so registration boundaries
+///       can reject them with a targeted diagnostic.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ParsedParameter {
     pub name: String,
@@ -131,14 +132,6 @@ impl ParsedSignature {
     pub fn has_receiver(&self) -> bool {
         self.parameters.first().is_some_and(|p| p.is_receiver)
     }
-
-    /// Returns the receiver parameter if the first parameter is `this`.
-    ///
-    /// WHY: package registration should extract receiver metadata from the first parameter
-    ///      only, ignoring any malformed `this` placed later by a buggy signature.
-    pub fn receiver_parameter(&self) -> Option<&ParsedParameter> {
-        self.parameters.first().filter(|p| p.is_receiver)
-    }
 }
 
 /// A function or method discovered in a JS file and matched to a `@bst.sig` annotation.
@@ -176,7 +169,7 @@ pub struct ParsedRuntimeImport {
 
 /// Final result of parsing one JS source file.
 ///
-/// WHAT: collects all opaque types, free functions, receiver methods, registered
+/// WHAT: collects all opaque types, free functions, receiver-shaped signatures, registered
 ///       runtime imports, and any diagnostics produced while scanning.
 /// WHY: this is the complete parser output consumed by the JS import provider and
 ///      built-in JS-backed package registration.

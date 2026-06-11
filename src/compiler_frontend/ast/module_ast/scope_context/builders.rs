@@ -133,12 +133,27 @@ impl ScopeContext {
     ///
     /// WHAT: maps type alias declaration paths to their fully resolved
     /// `ResolvedTypeAnnotation`. Used during type checking to expand aliases with
-    /// preserved fixed-collection capacity expressions before canonical `TypeId` resolution.
+    /// preserved fixed-collection capacity syntax before canonical `TypeId` resolution.
     pub(crate) fn with_resolved_type_alias_annotations(
         mut self,
         annotations: Rc<FxHashMap<InternedPath, ResolvedTypeAnnotation>>,
     ) -> ScopeContext {
         Rc::make_mut(&mut self.shared).resolved_type_alias_annotations = Some(annotations);
+        self
+    }
+
+    /// Seed explicit compile-time constants known before final module lookups exist.
+    ///
+    /// WHAT: records top-level `#` constants already resolved by the environment builder.
+    /// WHY: constant-header and nominal-member contexts run before final `AstModuleLookups`
+    ///      contains `module_constants`, but fixed-capacity type syntax still needs to
+    ///      distinguish explicit constants from merely foldable runtime bindings.
+    pub(crate) fn with_explicit_compile_time_constants(
+        mut self,
+        constants: &[Declaration],
+    ) -> ScopeContext {
+        self.explicit_compile_time_constant_declarations
+            .extend(constants.iter().map(|constant| constant.id.clone()));
         self
     }
 
@@ -316,7 +331,7 @@ impl ScopeContext {
     ///
     /// WHAT: replaces the synthetic empty `TraitEnvironment` created by `ScopeContext::new`
     /// with the real module trait metadata so type resolution in constant headers can
-    /// resolve and reject dynamic trait annotations.
+    /// recognize and reject trait names in ordinary type annotations.
     /// WHY: constant-header parsing runs while the AST environment is still being built;
     /// it needs trait awareness without waiting for the full `AstModuleLookups` package.
     pub(crate) fn with_trait_environment(

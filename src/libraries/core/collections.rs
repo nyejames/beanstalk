@@ -39,8 +39,6 @@ pub fn register_core_collections_package(registry: &mut ExternalPackageRegistry)
                     ExternalReturnAlias::Fresh,
                 ),
                 error_return_type: None,
-                receiver_type: Some(ExternalSignatureType::Abi(ExternalAbiType::Inferred)),
-                receiver_access: ExternalAccessKind::Shared,
                 lowerings: ExternalFunctionLowerings {
                     js: Some(ExternalJsLowering::RuntimeFunction(
                         "__bs_collection_get".to_owned(),
@@ -76,8 +74,6 @@ pub fn register_core_collections_package(registry: &mut ExternalPackageRegistry)
                     ExternalReturnAlias::Fresh,
                 ),
                 error_return_type: None,
-                receiver_type: Some(ExternalSignatureType::Abi(ExternalAbiType::Inferred)),
-                receiver_access: ExternalAccessKind::Mutable,
                 lowerings: ExternalFunctionLowerings {
                     js: Some(ExternalJsLowering::RuntimeFunction(
                         "__bs_collection_set".to_owned(),
@@ -109,8 +105,6 @@ pub fn register_core_collections_package(registry: &mut ExternalPackageRegistry)
                     ExternalReturnAlias::Fresh,
                 ),
                 error_return_type: None,
-                receiver_type: Some(ExternalSignatureType::Abi(ExternalAbiType::Inferred)),
-                receiver_access: ExternalAccessKind::Mutable,
                 lowerings: ExternalFunctionLowerings {
                     js: Some(ExternalJsLowering::RuntimeFunction(
                         "__bs_collection_push".to_owned(),
@@ -142,8 +136,6 @@ pub fn register_core_collections_package(registry: &mut ExternalPackageRegistry)
                     ExternalReturnAlias::Fresh,
                 ),
                 error_return_type: None,
-                receiver_type: Some(ExternalSignatureType::Abi(ExternalAbiType::Inferred)),
-                receiver_access: ExternalAccessKind::Mutable,
                 lowerings: ExternalFunctionLowerings {
                     js: Some(ExternalJsLowering::RuntimeFunction(
                         "__bs_collection_remove".to_owned(),
@@ -168,8 +160,6 @@ pub fn register_core_collections_package(registry: &mut ExternalPackageRegistry)
                 ],
                 returns: external_success_returns(ExternalAbiType::I32, ExternalReturnAlias::Fresh),
                 error_return_type: None,
-                receiver_type: Some(ExternalSignatureType::Abi(ExternalAbiType::Inferred)),
-                receiver_access: ExternalAccessKind::Shared,
                 lowerings: ExternalFunctionLowerings {
                     js: Some(ExternalJsLowering::RuntimeFunction(
                         "__bs_collection_length".to_owned(),

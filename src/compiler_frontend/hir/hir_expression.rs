@@ -45,7 +45,6 @@ mod runtime;
 mod templates;
 mod types;
 
-pub(crate) use self::calls::DynamicTraitMethodCallLoweringInput;
 pub(crate) use self::fallible::ExternalFallibleCallLoweringInput;
 
 #[derive(Debug, Clone)]
@@ -471,28 +470,6 @@ impl<'a> HirBuilder<'a> {
                 })
             }
 
-            ExpressionKind::ConstructDynamicTraitValue { value, coercion } => {
-                let mut prelude = Vec::new();
-                let lowered_value = self.lower_child_expression_for_parent(&mut prelude, value)?;
-                let region = self.current_region_or_error(&expr.location)?;
-                let ty = self.lower_type_id(expr.type_id, &expr.location)?;
-
-                Ok(LoweredExpression {
-                    prelude,
-                    value: self.make_expression(
-                        &expr.location,
-                        HirExpressionKind::ConstructDynamicTraitValue {
-                            value: Box::new(lowered_value),
-                            trait_id: coercion.target_trait_id,
-                            evidence_id: coercion.selected_evidence_id,
-                        },
-                        ty,
-                        ValueKind::RValue,
-                        region,
-                    ),
-                })
-            }
-
             ExpressionKind::Function(_, _) => {
                 return_hir_transformation_error!(
                     "Function expressions are not lowered in this phase",
@@ -614,8 +591,7 @@ impl<'a> HirBuilder<'a> {
                 .any(|arg| self.expression_needs_current_block_lowering(&arg.value)),
             ExpressionKind::BuiltinCast { value, .. }
             | ExpressionKind::FallibleCarrierConstruct { value, .. }
-            | ExpressionKind::Coerced { value, .. }
-            | ExpressionKind::ConstructDynamicTraitValue { value, .. } => {
+            | ExpressionKind::Coerced { value, .. } => {
                 self.expression_needs_current_block_lowering(value)
             }
             ExpressionKind::Copy(value) => self.ast_node_needs_current_block_lowering(value),
@@ -703,7 +679,6 @@ impl<'a> HirBuilder<'a> {
                 .iter()
                 .any(|arg| self.expression_needs_current_block_lowering(&arg.value)),
             NodeKind::MethodCall { receiver, args, .. }
-            | NodeKind::DynamicTraitMethodCall { receiver, args, .. }
             | NodeKind::CollectionBuiltinCall { receiver, args, .. }
             | NodeKind::MapBuiltinCall { receiver, args, .. } => {
                 self.ast_node_needs_current_block_lowering(receiver)

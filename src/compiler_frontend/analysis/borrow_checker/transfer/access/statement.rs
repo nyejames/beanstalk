@@ -111,44 +111,6 @@ pub(crate) fn transfer_statement(
             )?;
         }
 
-        HirStatementKind::CallDynamicTraitMethod {
-            receiver,
-            receiver_effect,
-            args,
-            result,
-            ..
-        } => {
-            let location = context.diagnostics.statement_error_location(statement);
-            let mut call_args = Vec::with_capacity(args.len() + 1);
-            call_args.push(CallArgumentTransfer {
-                argument: receiver,
-                effect: dynamic_trait_arg_effect(*receiver_effect),
-            });
-            for arg in args {
-                call_args.push(CallArgumentTransfer {
-                    argument: &arg.value,
-                    effect: dynamic_trait_arg_effect(arg.effect),
-                });
-            }
-
-            transfer_call_arguments_and_result(
-                &mut CallTransferContext {
-                    context,
-                    layout,
-                    state,
-                    block_id,
-                    current_order: statement_order,
-                    tracker: &mut tracker,
-                    location,
-                    stats,
-                    value_fact_buffer,
-                },
-                &call_args,
-                *result,
-                CallResultAlias::Unknown,
-            )?;
-        }
-
         HirStatementKind::MapOp {
             op,
             receiver,
@@ -576,13 +538,6 @@ fn transfer_call_result_alias(
     };
     input.state.update_local_state(local_index, new_local_state);
     Ok(())
-}
-
-fn dynamic_trait_arg_effect(effect: HirDynamicTraitCallArgumentEffect) -> ArgEffect {
-    match effect {
-        HirDynamicTraitCallArgumentEffect::SharedBorrow => ArgEffect::SharedBorrow,
-        HirDynamicTraitCallArgumentEffect::MayConsume => ArgEffect::MayConsume,
-    }
 }
 
 fn map_argument_effect(op: HirMapOp, arg_index: usize) -> ArgEffect {

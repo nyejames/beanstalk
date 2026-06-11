@@ -6,9 +6,8 @@
 
 use super::*;
 use crate::compiler_frontend::compiler_messages::{
-    BoundOnlyTraitDiagnosticReason, DiagnosticPayload, InvalidDynamicTraitTypeReason,
-    InvalidTraitConformanceReason, InvalidTraitKeywordUsageReason, NamingConvention,
-    ReservedNameOwner,
+    DiagnosticPayload, InvalidTraitConformanceReason, InvalidTraitKeywordUsageReason,
+    NamingConvention, ReservedNameOwner,
 };
 use crate::libraries::SourceFileKind;
 
@@ -122,8 +121,7 @@ fn render_payload_message(
         | DiagnosticPayload::InvalidBeandownApiScopeItem { .. }
         | DiagnosticPayload::DuplicateBeandownInputPath { .. }
         | DiagnosticPayload::UnsupportedExternalExtension { .. }
-        | DiagnosticPayload::InvalidExternalLibrary { .. }
-        | DiagnosticPayload::ReceiverMethodImportRequiresVisibleReceiverType { .. } => {
+        | DiagnosticPayload::InvalidExternalLibrary { .. } => {
             import_payload_message(payload, string_table)
         }
         DiagnosticPayload::BorrowConflict { .. }
@@ -354,8 +352,8 @@ fn render_payload_message(
             trait_name,
             reason,
         } => invalid_trait_conformance_message(*target_name, *trait_name, reason, context),
-        DiagnosticPayload::InvalidDynamicTraitType { trait_name, reason } => {
-            invalid_dynamic_trait_type_message(*trait_name, reason, context)
+        DiagnosticPayload::TraitNameUsedAsType { trait_name } => {
+            trait_name_used_as_type_message(*trait_name, context)
         }
         DiagnosticPayload::ShadowedName { name, .. } => {
             format!("Shadowed name '{}'", string_table.resolve(*name))
@@ -520,21 +518,26 @@ fn invalid_trait_conformance_message(
         }
         InvalidTraitConformanceReason::NonCanonicalTarget => {
             format!(
-                "'{target}' cannot produce trait evidence{trait_text}. Trait conformance targets must be a visible nominal type, builtin scalar, or external opaque type."
+                "'{target}' cannot produce trait evidence{trait_text}. User-authored conformance targets must be a user-defined struct, choice, or generic type constructor declared in the same file."
+            )
+        }
+        InvalidTraitConformanceReason::NonlocalSourceTarget => {
+            format!(
+                "User-authored trait conformance for '{target}'{trait_text} is allowed only when the type is declared in the same file. Use a local wrapper choice or struct when adapting an imported type."
+            )
+        }
+        InvalidTraitConformanceReason::BuiltinTarget => {
+            format!(
+                "Builtin type '{target}' cannot declare user-authored trait conformance{trait_text}. Use a local wrapper choice or struct when adapting a builtin value."
+            )
+        }
+        InvalidTraitConformanceReason::ExternalOpaqueTarget => {
+            format!(
+                "External opaque type '{target}' cannot declare user-authored trait conformance{trait_text}. Use a local wrapper choice or struct when adapting an external type."
             )
         }
         InvalidTraitConformanceReason::DuplicateCanonicalEvidence => {
             format!("Duplicate canonical trait evidence for '{target}'{trait_text}.")
-        }
-        InvalidTraitConformanceReason::DuplicateFileLocalExtensionEvidence => {
-            format!(
-                "Duplicate file-local extension trait evidence for '{target}'{trait_text} in this file."
-            )
-        }
-        InvalidTraitConformanceReason::FileLocalExtensionOverridesCanonicalEvidence => {
-            format!(
-                "File-local extension trait evidence for '{target}'{trait_text} cannot override visible canonical evidence."
-            )
         }
         InvalidTraitConformanceReason::BuiltinEvidenceOverride => {
             format!(
@@ -631,51 +634,14 @@ fn invalid_trait_keyword_usage_message(reason: InvalidTraitKeywordUsageReason) -
     }
 }
 
-fn invalid_dynamic_trait_type_message(
+fn trait_name_used_as_type_message(
     trait_name: StringId,
-    reason: &InvalidDynamicTraitTypeReason,
     context: DiagnosticRenderContext<'_>,
 ) -> String {
     let trait_text = context.string_table.resolve(trait_name);
-
-    match reason {
-        InvalidDynamicTraitTypeReason::BoundOnly {
-            reason,
-            requirement_name,
-        } => {
-            let requirement_text = requirement_name
-                .map(|name| format!(" requirement '{}'", context.string_table.resolve(name)))
-                .unwrap_or_else(|| " requirement".to_owned());
-            let reason_text = match reason {
-                BoundOnlyTraitDiagnosticReason::ThisParameter => {
-                    "`This` appears as a non-receiver parameter"
-                }
-                BoundOnlyTraitDiagnosticReason::ThisReturn => "`This` appears as a return type",
-            };
-
-            format!(
-                "Trait '{trait_text}' is bound-only because{requirement_text} is not dynamic-safe: {reason_text}. Use `type T is {trait_text}` when static dispatch is intended."
-            )
-        }
-
-        InvalidDynamicTraitTypeReason::Constant => format!(
-            "Dynamic trait value type '{trait_text}' cannot be used in a compile-time constant. Dynamic trait values are runtime-only."
-        ),
-
-        InvalidDynamicTraitTypeReason::Applied => format!(
-            "Dynamic trait type '{trait_text}' cannot be applied or composed in a type annotation."
-        ),
-
-        InvalidDynamicTraitTypeReason::StaticBoundSubstitution { dynamic_type_id } => format!(
-            "Dynamic trait value type {} cannot satisfy a static generic bound. Use a concrete type with visible trait evidence instead.",
-            diagnostic_type_name(*dynamic_type_id, context)
-        ),
-
-        InvalidDynamicTraitTypeReason::MissingEvidence { concrete_type_id } => format!(
-            "No visible trait evidence allows {} to be used as dynamic trait value '{trait_text}'. Ensure the concrete type has an explicit conformance declaration and that both the type and trait are visible.",
-            diagnostic_type_name(*concrete_type_id, context)
-        ),
-    }
+    format!(
+        "Trait '{trait_text}' is a static contract and cannot be used as a value type. Use `type T is {trait_text}` for static reuse or a choice for runtime heterogeneity."
+    )
 }
 
 fn import_payload_message(payload: &DiagnosticPayload, string_table: &StringTable) -> String {
@@ -786,14 +752,6 @@ fn import_payload_message(payload: &DiagnosticPayload, string_table: &StringTabl
         DiagnosticPayload::InvalidExternalLibrary { path, message } => {
             invalid_external_library_message(path, *message, string_table)
         }
-        DiagnosticPayload::ReceiverMethodImportRequiresVisibleReceiverType {
-            method_name,
-            receiver_type_name,
-        } => receiver_method_import_requires_visible_receiver_type_message(
-            *method_name,
-            *receiver_type_name,
-            string_table,
-        ),
         _ => String::new(),
     }
 }

@@ -46,7 +46,7 @@ pub(crate) use recursive_types::{
 // Re-export the return type so `resolve_parsed_type_annotation` has a nameable
 // crate-visible result without making the implementation module public.
 pub(crate) use resolve_type::ResolvedTypeAnnotation;
-pub(crate) use resolve_type::fold_collection_capacity_expression;
+pub(crate) use resolve_type::fold_collection_capacity;
 pub(crate) use resolve_type::resolve_diagnostic_type_to_type_id;
 #[cfg(test)]
 pub(crate) use resolve_type::resolve_diagnostic_type_to_type_id_opt;

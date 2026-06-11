@@ -72,6 +72,23 @@ impl ScopeContext {
             .get_visible_non_receiver_by_name(*name, self.visible_declaration_ids.as_ref())
     }
 
+    /// Return whether a declaration is visible as an authored `#` constant in this context.
+    ///
+    /// WHAT: accepts body-local constants recorded during scope growth plus top-level
+    /// module constants from either seeded header contexts or completed module lookups.
+    /// WHY: fixed-capacity type syntax must reject foldable runtime bindings while still
+    /// allowing visible explicit constants before and after the final lookup package exists.
+    pub(crate) fn is_explicit_compile_time_constant(&self, declaration: &Declaration) -> bool {
+        self.explicit_compile_time_constant_declarations
+            .contains(&declaration.id)
+            || self
+                .shared
+                .lookups
+                .module_constants
+                .iter()
+                .any(|constant| constant.id == declaration.id)
+    }
+
     pub(crate) fn lookup_generic_function_template(
         &self,
         function_path: &InternedPath,
@@ -190,8 +207,8 @@ impl ScopeContext {
             return None;
         }
 
-        // Test contexts that don't set file_visibility fall back to the old
-        // source-file + exported check.
+        // Unit-test contexts can omit file visibility. They still prefer same-file
+        // methods, then any method that is publicly visible through its type surface.
         let entries = self
             .receiver_methods
             .by_receiver_and_name
@@ -224,8 +241,8 @@ impl ScopeContext {
             return None;
         }
 
-        // Test contexts that don't set file_visibility fall back to the old
-        // source-file + exported check.
+        // Unit-test contexts can omit file visibility. They still prefer same-file
+        // methods, then any method that is publicly visible through its type surface.
         let current_source_file = self.source_file_scope.as_ref()?;
         let entries = self.receiver_methods.by_method_name.get(&method_name)?;
 
@@ -248,9 +265,6 @@ impl ScopeContext {
         let definition = self
             .external_package_registry
             .get_function_by_id(function_id)?;
-        if definition.receiver_type.is_some() {
-            return None;
-        }
 
         Some((function_id, definition))
     }
@@ -303,40 +317,6 @@ impl ScopeContext {
         self.external_package_registry
             .get_constant_by_id(constant_id)
             .map(|definition| (constant_id, definition))
-    }
-
-    /// Look up a visible external receiver method by receiver type and method name.
-    ///
-    /// WHAT: only considers external functions in
-    ///       `file_visibility.visible_external_receiver_methods`; checks receiver compatibility
-    ///       against the definition's `receiver_type`.
-    /// WHY: package-scoped external symbols must respect file-local visibility.
-    pub(crate) fn lookup_visible_external_method(
-        &self,
-        receiver_type_id: TypeId,
-        method_name: StringId,
-        type_environment: &TypeEnvironment,
-    ) -> Option<(ExternalFunctionId, &ExternalFunctionDef)> {
-        let file_visibility = self.file_visibility.as_ref()?;
-        let visible_function_ids = file_visibility
-            .visible_external_receiver_methods
-            .get(&method_name)?;
-
-        for function_id in visible_function_ids {
-            let definition = self
-                .external_package_registry
-                .get_function_by_id(*function_id)?;
-            let expected_signature = definition.receiver_type.as_ref()?;
-            if external_signature_type_matches_type_id(
-                expected_signature,
-                receiver_type_id,
-                type_environment,
-            ) {
-                return Some((*function_id, definition));
-            }
-        }
-
-        None
     }
 
     /// Check whether a name is a visible type alias, regardless of whether its target

@@ -7,6 +7,7 @@
 //! MUST NOT: parse executable bodies, fold constants, or perform AST semantic validation.
 
 mod bindings;
+mod builder;
 mod diagnostics;
 mod external_imports;
 mod facade_resolution;
@@ -16,7 +17,6 @@ mod receiver_imports;
 mod source_imports;
 mod target_resolution;
 mod visible_names;
-mod builder;
 
 pub(crate) use bindings::{
     FileVisibility, HeaderImportEnvironment, NamespaceRecord, NamespaceRecordSource,
@@ -34,11 +34,9 @@ pub(crate) use target_resolution::{
     SourceImportAccess, has_explicit_bst_extension, resolve_external_package_symbol,
     resolve_import_target, resolve_namespace_target,
 };
-pub(crate) use visible_names::{
-    ReceiverMethodImportTarget, VisibleNameBinding, VisibleNameRegistry, check_alias_case_warning,
-};
+pub(crate) use visible_names::{VisibleNameBinding, VisibleNameRegistry, check_alias_case_warning};
 
-pub(crate) use builder::{ImportEnvironmentBuilder, PendingReceiverMethodValidation};
+pub(crate) use builder::ImportEnvironmentBuilder;
 
 use crate::compiler_frontend::compiler_errors::CompilerMessages;
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
@@ -77,7 +75,6 @@ pub(crate) fn prepare_import_environment(
         string_table: input.string_table,
         environment: HeaderImportEnvironment::default(),
         warnings: Vec::new(),
-        pending_receiver_validations: Vec::new(),
     };
 
     for source_file in input.module_symbols.module_file_paths.clone() {
@@ -93,4 +90,3 @@ pub(crate) fn prepare_import_environment(
     builder.environment.warnings = builder.warnings;
     Ok(builder.environment)
 }
-

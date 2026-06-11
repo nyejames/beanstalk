@@ -4,4 +4,3 @@ entry = "."
 mode = "failure"
 warnings = "forbid"
 diagnostic_codes = ["BST-SYNTAX-0016-MAP"]
-message_contains = ["HASHABLE"]

@@ -401,12 +401,6 @@ fn collect_statement_values(kind: HirStatementKind, out: &mut FxHashSet<HirValue
                 collect_expression_values(&arg, out);
             }
         }
-        HirStatementKind::CallDynamicTraitMethod { receiver, args, .. } => {
-            collect_expression_values(&receiver, out);
-            for arg in args {
-                collect_expression_values(&arg.value, out);
-            }
-        }
         HirStatementKind::MapOp { receiver, args, .. } => {
             collect_expression_values(&receiver, out);
             for arg in args {
@@ -512,9 +506,6 @@ fn collect_expression_values(expression: &HirExpression, out: &mut FxHashSet<Hir
 
         HirExpressionKind::VariantPayloadGet { source, .. } => {
             collect_expression_values(source, out);
-        }
-        HirExpressionKind::ConstructDynamicTraitValue { value, .. } => {
-            collect_expression_values(value, out);
         }
     }
 }

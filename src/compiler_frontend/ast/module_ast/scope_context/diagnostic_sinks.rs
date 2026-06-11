@@ -21,6 +21,17 @@ impl ScopeContext {
         self.local_declarations.push(declaration);
     }
 
+    /// Register a body-local declaration authored with `#`.
+    ///
+    /// WHAT: keeps normal local lookup behavior while recording the syntax-origin fact.
+    /// WHY: foldability alone is broader than the fixed-capacity rule, which requires
+    ///      a bare explicit compile-time constant name.
+    pub(crate) fn add_compile_time_var(&mut self, declaration: Declaration) {
+        self.explicit_compile_time_constant_declarations
+            .insert(declaration.id.clone());
+        self.add_var(declaration);
+    }
+
     pub fn is_inside_loop(&self) -> bool {
         self.loop_depth > 0
     }

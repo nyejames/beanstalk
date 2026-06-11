@@ -8,7 +8,6 @@ use crate::compiler_frontend::hir::ids::{ChoiceId, FieldId, HirValueId, RegionId
 use crate::compiler_frontend::hir::operators::{HirBinOp, HirUnaryOp};
 use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::symbols::string_interning::StringId;
-use crate::compiler_frontend::traits::ids::{TraitEvidenceId, TraitId};
 
 /// Shared carrier tag for variant construction in HIR.
 ///
@@ -221,20 +220,9 @@ pub enum HirExpressionKind {
     ///       preserved before the literal value is produced.
     /// WHY: map literals are first-class compiler-owned values, not external calls.
     MapLiteral(Vec<HirMapEntry>),
-
     // -------------------------
     //  Dynamic Trait Operations
     // -------------------------
-    /// Wrap a concrete value into a dynamic trait value.
-    ///
-    /// WHAT: carries the evidence ID selected by the frontend so the backend knows
-    ///       which method table to attach without rediscovering trait evidence.
-    /// WHY: dynamic coercion is frontend-owned; this node makes it explicit in HIR.
-    ConstructDynamicTraitValue {
-        value: Box<HirExpression>,
-        trait_id: TraitId,
-        evidence_id: TraitEvidenceId,
-    },
 }
 
 // Option none/some are represented through VariantConstruct with HirVariantCarrier::Option.

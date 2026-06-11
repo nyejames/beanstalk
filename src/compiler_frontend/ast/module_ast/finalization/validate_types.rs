@@ -179,12 +179,6 @@ fn validate_node(
             result_type_ids,
             ..
         }
-        | NodeKind::DynamicTraitMethodCall {
-            receiver,
-            args,
-            result_type_ids,
-            ..
-        }
         | NodeKind::CollectionBuiltinCall {
             receiver,
             args,
@@ -377,20 +371,6 @@ fn validate_expression(
                 validate_expression(&value_catch.handled_value, type_environment, string_table)
             }
         },
-
-        ExpressionKind::ConstructDynamicTraitValue { value, coercion } => {
-            validate_expression(value, type_environment, string_table)?;
-            validate_type_id(
-                coercion.source_concrete_type_id,
-                &expression.location,
-                type_environment,
-            )?;
-            validate_type_id(
-                coercion.target_dynamic_trait_type_id,
-                &expression.location,
-                type_environment,
-            )
-        }
 
         ExpressionKind::MapLiteral(entries) => {
             for entry in entries {

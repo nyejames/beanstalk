@@ -1,24 +1,11 @@
-entry = "."
-
 [backends.html]
-mode = "success"
+mode = "failure"
 warnings = "forbid"
+diagnostic_codes = ["BST-RULE-0041"]
+message_contains = ["cannot target builtin scalar types"]
 
 [backends.html_wasm]
-mode = "success"
+mode = "failure"
 warnings = "forbid"
-
-[[backends.html_wasm.artifact_assertions]]
-path = "page.wasm"
-kind = "wasm"
-validate_wasm = true
-must_export = ["memory", "bst_str_ptr", "bst_str_len", "bst_release", "bst_start", "bst_vec_new", "bst_vec_push", "bst_vec_len", "bst_vec_get"]
-
-[[backends.html_wasm.artifact_assertions]]
-path = "page.js"
-kind = "js"
-must_contain = [
-    "__bst_instantiate_wasm",
-    "instance.exports.bst_start()",
-    "\"./page.wasm\"",
-]
+diagnostic_codes = ["BST-RULE-0041"]
+message_contains = ["cannot target builtin scalar types"]

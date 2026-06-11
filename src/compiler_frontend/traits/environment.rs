@@ -8,12 +8,11 @@ use crate::compiler_frontend::ast::statements::functions::ReturnChannel;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
-use crate::compiler_frontend::symbols::string_interning::StringIdRemap;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::traits::definitions::{
     ResolvedTraitDefinition, ResolvedTraitParameter, ResolvedTraitRequirement, ResolvedTraitReturn,
-    TraitDynamicSafety, TraitReceiverRequirement, TraitVisibility,
+    TraitReceiverRequirement, TraitVisibility,
 };
 use crate::compiler_frontend::traits::ids::{TraitId, TraitRequirementId};
 use crate::compiler_frontend::value_mode::ValueMode;
@@ -84,7 +83,6 @@ impl TraitEnvironment {
             requirements: vec![requirement],
             declaration_location: location,
             visibility: TraitVisibility::Core,
-            dynamic_safety: TraitDynamicSafety::DynamicSafe,
         };
 
         self.ids_by_path.insert(path, id);
@@ -116,7 +114,7 @@ impl TraitEnvironment {
     /// Resolves the compiler-owned `DISPLAYABLE` scaffold by source spelling.
     ///
     /// WHY: core trait metadata is not registered through normal file visibility, but user source
-    /// still refers to it with the ordinary trait name in conformances and dynamic type positions.
+    /// still refers to it with the ordinary trait name in conformances and static bounds.
     pub(crate) fn displayable_trait_id_for_name(
         &self,
         trait_name: StringId,
@@ -127,33 +125,6 @@ impl TraitEnvironment {
         }
 
         None
-    }
-
-    pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
-        self.ids_by_path.clear();
-
-        for definition in &mut self.definitions {
-            definition.canonical_path.remap_string_ids(remap);
-            definition.source_file.remap_string_ids(remap);
-            definition.declaration_location.remap_string_ids(remap);
-
-            for requirement in &mut definition.requirements {
-                requirement.name_location.remap_string_ids(remap);
-                requirement.location.remap_string_ids(remap);
-
-                for parameter in &mut requirement.parameters {
-                    parameter.name.remap_string_ids(remap);
-                    parameter.location.remap_string_ids(remap);
-                }
-
-                for return_slot in &mut requirement.returns {
-                    return_slot.location.remap_string_ids(remap);
-                }
-            }
-
-            self.ids_by_path
-                .insert(definition.canonical_path.clone(), definition.id);
-        }
     }
 
     pub(crate) fn next_trait_id(&self) -> TraitId {

@@ -21,6 +21,7 @@ page_head #= theme_head
             TimeMark,
             mark_now,
             duration_between,
+            as_seconds,
         }
     ]
 ]
@@ -38,7 +39,7 @@ page_head #= theme_head
         delta = duration_between(previous, current)
         previous = current
 
-        seconds = delta.as_seconds()
+        seconds = as_seconds(delta)
     ]
 
     This shape works for frame-delta style code without requiring a scheduler or animation package.
@@ -54,6 +55,7 @@ page_head #= theme_head
             Timestamp,
             timestamp_from_iso_string,
             timestamp_from_unix_milliseconds,
+            to_iso_string,
         }
 
         parse_created || -> Timestamp, Error!:
@@ -64,7 +66,7 @@ page_head #= theme_head
             then timestamp_from_unix_milliseconds(0.0)
         ;
 
-        io(created.to_iso_string())
+        io(to_iso_string(created))
     ]
 
     Invalid ISO strings are ordinary fallible calls:
@@ -130,42 +132,42 @@ page_head #= theme_head
         ]
 
         [data:
-            [: [$html:<code>duration.as_seconds()</code>]]
+            [: [$html:<code>as_seconds(duration)</code>]]
             [: Convert a [$html:<code>Duration</code>] to seconds.]
         ]
 
         [data:
-            [: [$html:<code>duration.as_milliseconds()</code>]]
+            [: [$html:<code>as_milliseconds(duration)</code>]]
             [: Convert a [$html:<code>Duration</code>] to milliseconds.]
         ]
 
         [data:
-            [: [$html:<code>duration.is_negative()</code>]]
+            [: [$html:<code>is_negative(duration)</code>]]
             [: Check whether a [$html:<code>Duration</code>] is below zero.]
         ]
 
         [data:
-            [: [$html:<code>duration.abs()</code>]]
+            [: [$html:<code>abs(duration)</code>]]
             [: Absolute [$html:<code>Duration</code>].]
         ]
 
         [data:
-            [: [$html:<code>duration.clamp(min, max)</code>]]
+            [: [$html:<code>clamp(duration, min, max)</code>]]
             [: Bound a [$html:<code>Duration</code>] to a range.]
         ]
 
         [data:
-            [: [$html:<code>timestamp.unix_seconds()</code>]]
+            [: [$html:<code>unix_seconds(timestamp)</code>]]
             [: Convert a [$html:<code>Timestamp</code>] to Unix seconds.]
         ]
 
         [data:
-            [: [$html:<code>timestamp.unix_milliseconds()</code>]]
+            [: [$html:<code>unix_milliseconds(timestamp)</code>]]
             [: Convert a [$html:<code>Timestamp</code>] to Unix milliseconds.]
         ]
 
         [data:
-            [: [$html:<code>timestamp.to_iso_string()</code>]]
+            [: [$html:<code>to_iso_string(timestamp)</code>]]
             [: Format a [$html:<code>Timestamp</code>] as UTC ISO text.]
         ]
     ]
