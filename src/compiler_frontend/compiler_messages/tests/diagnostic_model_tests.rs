@@ -6,11 +6,10 @@ use super::{
     IncompatibleChoiceComparisonReason, InfrastructureDiagnosticKind,
     InvalidAssignmentTargetReason, InvalidChoiceVariantReason, InvalidCollectionTypeReason,
     InvalidConfigReason, InvalidFunctionSignatureReason, InvalidGenericParameterReason,
-    InvalidImportClauseReason, InvalidMapTypeReason, InvalidResultOperandReason,
-    InvalidSignatureMemberReason, InvalidTemplateDirectiveReason, InvalidTraitKeywordUsageReason,
-    InvalidTypeAnnotationReason, NameNamespace, NumberLiteralErrorReason, PathKind,
-    RuleDiagnosticKind, SyntaxDiagnosticKind, TypeAnnotationContext, TypeDiagnosticKind,
-    TypeMismatchContext, UnsupportedOperatorCategory,
+    InvalidImportClauseReason, InvalidResultOperandReason, InvalidSignatureMemberReason,
+    InvalidTemplateDirectiveReason, InvalidTraitKeywordUsageReason, InvalidTypeAnnotationReason,
+    NameNamespace, NumberLiteralErrorReason, PathKind, RuleDiagnosticKind, SyntaxDiagnosticKind,
+    TypeAnnotationContext, TypeDiagnosticKind, TypeMismatchContext, UnsupportedOperatorCategory,
 };
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_messages::render::{
@@ -528,32 +527,6 @@ fn remap_string_ids_updates_locations_payloads_labels_and_tokens() {
 }
 
 #[test]
-fn remap_string_ids_updates_invalid_map_type_reason() {
-    let mut local_table = StringTable::new();
-    let path = InternedPath::from_single_str("main.bst", &mut local_table);
-    let parameter_name = local_table.intern("Key");
-
-    let mut diagnostic = CompilerDiagnostic::invalid_map_type(
-        InvalidMapTypeReason::GenericKeyRequiresHashableBound { parameter_name },
-        location(path),
-    );
-
-    let mut merged_table = StringTable::new();
-    let remap = merged_table.merge_from(&local_table);
-    diagnostic.remap_string_ids(&remap);
-
-    match diagnostic.payload {
-        DiagnosticPayload::InvalidMapType {
-            reason:
-                InvalidMapTypeReason::GenericKeyRequiresHashableBound {
-                    parameter_name: actual,
-                },
-        } => assert_eq!(merged_table.resolve(actual), "Key"),
-        payload => panic!("unexpected payload: {payload:?}"),
-    }
-}
-
-#[test]
 fn type_mismatch_constructor_carries_type_ids_without_rendering() {
     let mut string_table = StringTable::new();
     let source_path = InternedPath::from_single_str("main.bst", &mut string_table);
@@ -817,7 +790,7 @@ fn syntax_renderers_keep_typed_prose_without_error_conversion() {
                 InvalidCollectionTypeReason::CapacityNotConstant,
                 location(source_path.clone()),
             ),
-            "Collection capacity must be a compile-time constant expression.",
+            "Collection capacity must be a positive integer literal or a bare `#Int` constant name.",
             "CapacityNotConstant",
         ),
         (

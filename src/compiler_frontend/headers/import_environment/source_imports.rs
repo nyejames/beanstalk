@@ -7,10 +7,12 @@
 //! MUST NOT: register external package symbols or build namespace records.
 
 use super::{
-    FileVisibility, ImportEnvironmentBuilder, ReceiverMethodImportTarget, SourceImportAccess,
-    VisibleNameBinding, VisibleNameRegistry,
+    FileVisibility, ImportEnvironmentBuilder, SourceImportAccess, VisibleNameBinding,
+    VisibleNameRegistry,
 };
-use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
+use crate::compiler_frontend::compiler_messages::{
+    CompilerDiagnostic, InvalidReceiverDeclarationReason,
+};
 use crate::compiler_frontend::headers::import_environment::diagnostics;
 use crate::compiler_frontend::headers::module_symbols::FacadeExportTarget;
 use crate::compiler_frontend::headers::parse_file_headers::FileImport;
@@ -23,7 +25,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
     /// WHAT: when a struct or choice type is imported, all receiver methods declared in the same
     ///       file whose receiver matches that type become visible through the receiver catalog.
     /// WHY: receiver methods travel with their receiver type on the same import surface.
-    fn auto_import_receiver_methods_for_type(
+    pub(super) fn auto_import_receiver_methods_for_type(
         &self,
         file_visibility: &mut FileVisibility,
         nominal_type_path: &InternedPath,
@@ -50,15 +52,19 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                 .canonical_source_by_symbol_path
                 .get(path)
                 .is_some_and(|source_file| source_file == target_file)
-                && self.receiver_method_visible_for_source_access(path, access)
                 && let Some(name) = path.name()
             {
-                Self::add_visible_receiver_method(
-                    file_visibility,
-                    name,
-                    path,
-                    SourceLocation::default(),
-                );
+                let is_visible =
+                    self.receiver_type_visible_for_method_surface(nominal_type_path, access);
+
+                if is_visible {
+                    Self::add_visible_receiver_method(
+                        file_visibility,
+                        name,
+                        path,
+                        SourceLocation::default(),
+                    );
+                }
             }
         }
     }
@@ -84,24 +90,20 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         self.source_files_share_import_boundary(importer_file, target_file)
     }
 
-    /// Whether a receiver method can travel with a source type imported through this access path.
+    /// Whether receiver methods can travel with a source type imported through this access path.
     ///
-    /// WHAT: internal imports preserve the existing file/module-local receiver behavior; direct
-    /// source imports require the method itself to be importable from its source file; facade
-    /// imports use the exact explicit facade surface that exposed the receiver type.
-    pub(super) fn receiver_method_visible_for_source_access(
+    /// WHAT: methods travel with the receiver type, not with an independent method export.
+    /// Internal imports and direct source exports have already proven the type is visible. Facade
+    /// imports must expose the receiver type through the facade surface.
+    pub(super) fn receiver_type_visible_for_method_surface(
         &self,
-        method_path: &InternedPath,
+        nominal_type_path: &InternedPath,
         access: &SourceImportAccess,
     ) -> bool {
         match access {
-            SourceImportAccess::Internal => true,
-            SourceImportAccess::DirectSourceExport => self
-                .module_symbols
-                .importable_source_symbol_paths
-                .contains(method_path),
+            SourceImportAccess::Internal | SourceImportAccess::DirectSourceExport => true,
             SourceImportAccess::Facade { exported_entries } => exported_entries.iter().any(
-                |entry| matches!(&entry.target, FacadeExportTarget::Source(path) if path == method_path),
+                |entry| matches!(&entry.target, FacadeExportTarget::Source(path) if path == nominal_type_path),
             ),
         }
     }
@@ -116,7 +118,30 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         import: &FileImport,
         access: SourceImportAccess,
     ) -> Result<(), CompilerDiagnostic> {
-        // Check export requirement.
+        let local_name = self.derive_import_local_name(import)?;
+
+        if let Some(symbol_name) = symbol_path.name() {
+            self.emit_alias_case_warning_if_needed(import, symbol_name);
+        }
+
+        let is_type_alias = self.module_symbols.type_alias_paths.contains(symbol_path);
+        let is_trait = self.module_symbols.trait_paths.contains(symbol_path);
+        let is_receiver_method = self
+            .module_symbols
+            .receiver_method_paths
+            .contains(symbol_path);
+
+        if is_receiver_method {
+            // Source-authored receiver methods are not independently importable or aliasable.
+            // They travel with their receiver type's visibility.
+            return Err(CompilerDiagnostic::invalid_receiver_declaration(
+                InvalidReceiverDeclarationReason::ReceiverMethodImportNotAllowed,
+                import.location.clone(),
+            ));
+        }
+
+        // Check export requirement after the source receiver-method guard so explicit method
+        // imports report the Phase 5 receiver policy instead of an incidental export failure.
         if matches!(&access, SourceImportAccess::DirectSourceExport) {
             let is_importable = self
                 .module_symbols
@@ -130,56 +155,9 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             }
         }
 
-        let local_name = self.derive_import_local_name(import)?;
-
-        if let Some(symbol_name) = symbol_path.name() {
-            self.emit_alias_case_warning_if_needed(import, symbol_name);
-        }
-
         file_visibility
             .visible_declaration_paths
             .insert(symbol_path.clone());
-
-        let is_type_alias = self.module_symbols.type_alias_paths.contains(symbol_path);
-        let is_trait = self.module_symbols.trait_paths.contains(symbol_path);
-        let is_receiver_method = self
-            .module_symbols
-            .receiver_method_paths
-            .contains(symbol_path);
-
-        if is_receiver_method {
-            // Receiver methods are not ordinary value imports. Reserve the local name
-            // in the visible-name registry so aliases participate in collision checks,
-            // then add receiver-call visibility.
-            registry.register(
-                local_name,
-                VisibleNameBinding::ReceiverMethodImport {
-                    target: ReceiverMethodImportTarget::SourceMethod {
-                        canonical_path: symbol_path.clone(),
-                    },
-                },
-                import.location.clone(),
-            )?;
-            Self::add_visible_receiver_method(
-                file_visibility,
-                local_name,
-                symbol_path,
-                import.location.clone(),
-            );
-
-            // Explicit grouped receiver-method imports are validated for receiver-type
-            // visibility after all imports in the file are processed.
-            if import.from_grouped {
-                self.pending_receiver_validations
-                    .push(super::PendingReceiverMethodValidation {
-                        local_name,
-                        source_path: Some(symbol_path.clone()),
-                        external_function_id: None,
-                        location: import.location.clone(),
-                    });
-            }
-            return Ok(());
-        }
 
         let binding = if is_type_alias {
             VisibleNameBinding::TypeAlias {

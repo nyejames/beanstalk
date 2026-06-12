@@ -19,19 +19,12 @@
 
 use crate::compiler_frontend::ast::TopLevelDeclarationTable;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
-use crate::compiler_frontend::ast::const_values::resolver::ConstResolutionError;
-use crate::compiler_frontend::ast::const_values::resolver::{
-    ConstValueEnvironment, ConstValueResolver,
-};
-use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
-use crate::compiler_frontend::ast::expressions::parse_expression::create_expression_until;
 use crate::compiler_frontend::ast::generic_bounds::{
     GenericBoundEvidenceContext, validate_nominal_generic_bound_evidence,
 };
 use crate::compiler_frontend::ast::module_ast::scope_context::ScopeContext;
 use crate::compiler_frontend::ast::statements::functions::FunctionReturn;
-use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::type_resolution::TypeResolutionResult;
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, DeferredFeatureReason, InvalidCollectionTypeReason,
@@ -62,13 +55,9 @@ use crate::compiler_frontend::headers::module_symbols::{
 };
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
-use crate::compiler_frontend::tokenizer::tokens::{FileTokens, Token};
 use crate::compiler_frontend::tokenizer::tokens::{SourceLocation, TokenKind};
 use crate::compiler_frontend::traits::environment::TraitEnvironment;
 use crate::compiler_frontend::traits::evidence::TraitEvidenceEnvironment;
-use crate::compiler_frontend::type_coercion::compatibility::TypeCompatibilityCache;
-use crate::compiler_frontend::type_coercion::parse_context::ExpectedType;
-use crate::compiler_frontend::value_mode::ValueMode;
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::rc::Rc;
 
@@ -100,7 +89,6 @@ pub(crate) struct TypeResolutionContext<'a> {
     pub trait_environment: Option<&'a TraitEnvironment>,
     pub trait_evidence_environment: Option<&'a TraitEvidenceEnvironment>,
     pub visible_trait_names: Option<&'a FxHashMap<StringId, InternedPath>>,
-    pub source_file_scope: Option<&'a InternedPath>,
 }
 
 pub(crate) struct TypeResolutionContextInputs<'a> {
@@ -121,7 +109,6 @@ pub(crate) struct TypeResolutionContextInputs<'a> {
     pub trait_environment: Option<&'a TraitEnvironment>,
     pub trait_evidence_environment: Option<&'a TraitEvidenceEnvironment>,
     pub visible_trait_names: Option<&'a FxHashMap<StringId, InternedPath>>,
-    pub source_file_scope: Option<&'a InternedPath>,
 }
 
 impl<'a> TypeResolutionContext<'a> {
@@ -147,7 +134,6 @@ impl<'a> TypeResolutionContext<'a> {
             trait_environment: None,
             trait_evidence_environment: None,
             visible_trait_names: None,
-            source_file_scope: None,
         }
     }
 
@@ -169,7 +155,6 @@ impl<'a> TypeResolutionContext<'a> {
             trait_environment: inputs.trait_environment,
             trait_evidence_environment: inputs.trait_evidence_environment,
             visible_trait_names: inputs.visible_trait_names,
-            source_file_scope: inputs.source_file_scope,
         }
     }
 
@@ -214,155 +199,103 @@ pub(crate) struct ResolvedTypeAnnotation {
     pub(crate) type_id: Option<TypeId>,
 }
 
-/// Fold a parsed collection capacity expression into a canonical `usize`.
+/// Fold a parsed collection capacity into a canonical `usize`.
 ///
-/// WHAT: parses capacity tokens as an `Int` expression, substitutes visible compile-time
-///       constants, and folds to a single integer value.
-/// WHY: collection type identity requires a compile-time-known capacity; this helper
-///      reuses the existing expression parser and constant folder instead of inventing
-///      a parallel evaluator.
-pub(crate) fn fold_collection_capacity_expression(
+/// WHAT: resolves the narrow `ParsedCollectionCapacity` forms (integer literal or bare
+///       constant name) directly without invoking the full expression parser.
+/// WHY: the parser already rejected general capacity forms, so type resolution only
+///      needs to validate literals and look up bare constants in the visible scope.
+pub(crate) fn fold_collection_capacity(
     capacity: &ParsedCollectionCapacity,
     scope_context: Option<&ScopeContext>,
     type_environment: &mut TypeEnvironment,
-    string_table: &mut StringTable,
 ) -> Result<usize, CompilerDiagnostic> {
-    // Fast path: a single integer literal needs no expression parsing.
-    if let [
-        Token {
-            kind: TokenKind::IntLiteral(value),
-            ..
-        },
-    ] = capacity.tokens.as_slice()
-    {
-        if *value < 0 {
-            return Err(CompilerDiagnostic::invalid_collection_type(
-                InvalidCollectionTypeReason::NegativeCapacity,
-                capacity.location.clone(),
-            ));
-        }
-        if *value == 0 {
-            return Err(CompilerDiagnostic::invalid_collection_type(
-                InvalidCollectionTypeReason::ZeroCapacity,
-                capacity.location.clone(),
-            ));
-        }
-        let Ok(capacity_value) = usize::try_from(*value) else {
-            return Err(CompilerDiagnostic::invalid_collection_type(
-                InvalidCollectionTypeReason::CapacityOverflow,
-                capacity.location.clone(),
-            ));
-        };
-        return Ok(capacity_value);
-    }
-
-    let Some(scope_context) = scope_context else {
-        return Err(CompilerDiagnostic::invalid_collection_type(
-            InvalidCollectionTypeReason::CapacityNotConstant,
-            capacity.location.clone(),
-        ));
-    };
-
-    // Parse the capacity token slice as an `Int` expression.
-    let mut capacity_tokens = capacity.tokens.clone();
-    capacity_tokens.push(Token::new(TokenKind::Eof, capacity.location.clone()));
-    let mut token_stream = FileTokens::new(capacity.location.scope.clone(), capacity_tokens);
-
-    let mut expected_type = ExpectedType::Known(type_environment.builtins().int);
-    let capacity_context =
-        scope_context.new_child_expression(vec![type_environment.builtins().int]);
-    let mut compatibility_cache = TypeCompatibilityCache::new();
-    let mut type_interner = AstTypeInterner::new(type_environment, &mut compatibility_cache);
-
-    let expression = create_expression_until(
-        &mut token_stream,
-        &capacity_context,
-        &mut type_interner,
-        &mut expected_type,
-        &ValueMode::ImmutableOwned,
-        &[TokenKind::Eof],
-        string_table,
-    )
-    .map_err(|error| capacity_expression_parse_error(capacity, error))?;
-
-    // Build a const-value environment from visible constant declarations.
-    let mut const_env = ConstValueEnvironment::default();
-    for declaration in scope_context.top_level_declarations.iter() {
-        if declaration.value.is_compile_time_constant() {
-            const_env.insert(declaration.id.clone(), declaration.value.clone());
-        }
-    }
-    for declaration in &scope_context.local_declarations {
-        if declaration.value.is_compile_time_constant() {
-            const_env.insert(declaration.id.clone(), declaration.value.clone());
-        }
-    }
-
-    let mut resolver = ConstValueResolver::new(string_table);
-    let resolved = resolver
-        .resolve_expression(&expression, &const_env)
-        .map_err(|err| {
-            let reason = match err {
-                ConstResolutionError::CallInConstContext => {
-                    InvalidCollectionTypeReason::CapacityNotConstant
-                }
-                _ => InvalidCollectionTypeReason::CapacityNotConstant,
-            };
-            CompilerDiagnostic::invalid_collection_type(reason, capacity.location.clone())
-        })?;
-
-    match resolved.kind {
-        ExpressionKind::Int(value) => {
-            if value < 0 {
+    match capacity {
+        ParsedCollectionCapacity::Literal { value, location } => {
+            if *value < 0 {
                 return Err(CompilerDiagnostic::invalid_collection_type(
                     InvalidCollectionTypeReason::NegativeCapacity,
-                    capacity.location.clone(),
+                    location.clone(),
                 ));
             }
-            if value == 0 {
+            if *value == 0 {
                 return Err(CompilerDiagnostic::invalid_collection_type(
                     InvalidCollectionTypeReason::ZeroCapacity,
-                    capacity.location.clone(),
+                    location.clone(),
                 ));
             }
-            let Ok(capacity_value) = usize::try_from(value) else {
+            let Ok(capacity_value) = usize::try_from(*value) else {
                 return Err(CompilerDiagnostic::invalid_collection_type(
                     InvalidCollectionTypeReason::CapacityOverflow,
-                    capacity.location.clone(),
+                    location.clone(),
                 ));
             };
             Ok(capacity_value)
         }
-        ExpressionKind::Float(_) => Err(CompilerDiagnostic::invalid_collection_type(
-            InvalidCollectionTypeReason::CapacityNotInt,
-            capacity.location.clone(),
-        )),
-        _ => Err(CompilerDiagnostic::invalid_collection_type(
-            InvalidCollectionTypeReason::CapacityNotConstant,
-            capacity.location.clone(),
-        )),
-    }
-}
+        ParsedCollectionCapacity::BareConstant { name, location } => {
+            let Some(scope_context) = scope_context else {
+                return Err(CompilerDiagnostic::invalid_collection_type(
+                    InvalidCollectionTypeReason::CapacityNotConstant,
+                    location.clone(),
+                ));
+            };
 
-fn capacity_expression_parse_error(
-    capacity: &ParsedCollectionCapacity,
-    error: ExpressionParseError,
-) -> CompilerDiagnostic {
-    let diagnostic = CompilerDiagnostic::from(error);
-    match diagnostic.payload {
-        crate::compiler_frontend::compiler_messages::DiagnosticPayload::TypeMismatch { .. } => {
-            CompilerDiagnostic::invalid_collection_type(
-                InvalidCollectionTypeReason::CapacityNotInt,
-                capacity.location.clone(),
-            )
+            let Some(declaration) = scope_context.get_reference(name) else {
+                return Err(CompilerDiagnostic::invalid_collection_type(
+                    InvalidCollectionTypeReason::CapacityNotConstant,
+                    location.clone(),
+                ));
+            };
+
+            if !scope_context.is_explicit_compile_time_constant(declaration)
+                || !declaration.value.is_compile_time_constant()
+            {
+                return Err(CompilerDiagnostic::invalid_collection_type(
+                    InvalidCollectionTypeReason::CapacityNotConstant,
+                    location.clone(),
+                ));
+            }
+
+            if declaration.value.type_id != type_environment.builtins().int {
+                return Err(CompilerDiagnostic::invalid_collection_type(
+                    InvalidCollectionTypeReason::CapacityNotInt,
+                    location.clone(),
+                ));
+            }
+
+            let ExpressionKind::Int(value) = &declaration.value.kind else {
+                return Err(CompilerDiagnostic::invalid_collection_type(
+                    InvalidCollectionTypeReason::CapacityNotInt,
+                    location.clone(),
+                ));
+            };
+
+            if *value < 0 {
+                return Err(CompilerDiagnostic::invalid_collection_type(
+                    InvalidCollectionTypeReason::NegativeCapacity,
+                    location.clone(),
+                ));
+            }
+            if *value == 0 {
+                return Err(CompilerDiagnostic::invalid_collection_type(
+                    InvalidCollectionTypeReason::ZeroCapacity,
+                    location.clone(),
+                ));
+            }
+            let Ok(capacity_value) = usize::try_from(*value) else {
+                return Err(CompilerDiagnostic::invalid_collection_type(
+                    InvalidCollectionTypeReason::CapacityOverflow,
+                    location.clone(),
+                ));
+            };
+            Ok(capacity_value)
         }
-        _ => diagnostic,
     }
 }
 
 /// Resolve a parsed type annotation through the parsed-ref-aware path.
 ///
-/// WHAT: folds fixed-collection capacity expressions, re-resolves type aliases from their
+/// WHAT: folds fixed-collection capacity syntax, re-resolves type aliases from their
 ///       stored `ParsedTypeRef`, and produces canonical `TypeId` identity.
 /// WHY: this is the semantic entry point for all type annotations that start as
 ///      `ParsedTypeRef`; it must not hide capacity folding inside `parsed_ref_to_data_type`.
@@ -390,16 +323,15 @@ pub(crate) fn resolve_parsed_type_annotation(
 
             let folded_capacity = match fixed_capacity {
                 Some(capacity) => {
-                    match fold_collection_capacity_expression(
+                    match fold_collection_capacity(
                         capacity,
                         scope_context,
                         context.type_environment,
-                        string_table,
                     ) {
                         Ok(value) => Some(value),
                         Err(diagnostic) => {
-                            // Only fallback to the diagnostic path when the expression is
-                            // genuinely non-constant because no scope context is available.
+                            // Only fall back to the diagnostic path when a bare constant
+                            // cannot be resolved because no scope context is available.
                             // Literal invalid values (zero, overflow) must still be rejected.
                             let is_non_constant_because_no_scope = scope_context.is_none()
                                 && matches!(
@@ -474,7 +406,7 @@ pub(crate) fn resolve_parsed_type_annotation(
             let key_id = key_annotation.type_id.unwrap_or(builtin_type_ids::NONE);
             let value_id = value_annotation.type_id.unwrap_or(builtin_type_ids::NONE);
 
-            // Validate key capability for first-class ordered maps.
+            // Enforce the scalar-key policy for first-class ordered maps.
             validate_map_key_type(key_id, context.type_environment, map_location)?;
 
             let type_id = context.type_environment.intern_map(key_id, value_id);
@@ -629,7 +561,6 @@ fn resolve_alias_annotation(
             .file_visibility
             .as_ref()
             .map(|visibility| &visibility.visible_trait_names),
-        source_file_scope: alias_scope_context.source_file_scope.as_ref(),
     });
 
     resolve_parsed_type_annotation(
@@ -694,11 +625,9 @@ fn map_nesting_depth(parsed: &ParsedTypeRef) -> usize {
 /// Validates that a map key type is supported for V1 ordered maps.
 ///
 /// WHAT: accepts only `String`, `Int`, `Bool`, and `Char` keys.
-/// WHY: V1 hash maps do not support generic keys, user-defined keys, or composite keys.
-///      This helper is the canonical owner of the key capability check.
-///
-/// Future work: when `HASHABLE` trait evidence exists, this helper should consult
-/// `TraitEvidenceEnvironment` instead of a hard-coded allow-list.
+/// WHY: builtin maps are deliberately scalar-keyed. This helper is the canonical owner
+///      of that policy, so generic parameters and user-defined types follow the same
+///      rejection path as every other unsupported key.
 pub(crate) fn validate_map_key_type(
     key_type_id: TypeId,
     type_environment: &TypeEnvironment,
@@ -712,18 +641,6 @@ pub(crate) fn validate_map_key_type(
 
     if is_supported_scalar {
         return Ok(());
-    }
-
-    if let Some(
-        crate::compiler_frontend::datatypes::definitions::TypeDefinition::GenericParameter(param),
-    ) = type_environment.get(key_type_id)
-    {
-        return Err(Box::new(CompilerDiagnostic::invalid_map_type(
-            InvalidMapTypeReason::GenericKeyRequiresHashableBound {
-                parameter_name: param.name,
-            },
-            location.clone(),
-        )));
     }
 
     Err(Box::new(CompilerDiagnostic::invalid_map_type(
@@ -1279,7 +1196,6 @@ fn validate_nominal_bound_evidence_for_instantiation(
         trait_environment: context.trait_environment,
         trait_evidence_environment: context.trait_evidence_environment,
         visible_trait_names: context.visible_trait_names,
-        source_file_scope: context.source_file_scope,
     };
 
     validate_nominal_generic_bound_evidence(type_id, location.clone(), &evidence_context)

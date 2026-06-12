@@ -29,7 +29,7 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tests::parse_support::{
     parse_single_file_ast, parse_single_file_ast_diagnostic, parse_single_file_ast_result,
 };
-use crate::compiler_frontend::tokenizer::tokens::{Token, TokenKind};
+use crate::compiler_frontend::tokenizer::tokens::TokenKind;
 use crate::compiler_frontend::value_mode::ValueMode;
 use std::rc::Rc;
 
@@ -146,7 +146,7 @@ fn optional_conversion_returns_some_for_resolved_builtin() {
 }
 
 // ---------------------------------------------------------------
-//  Fixed-collection capacity expression folding tests
+//  Fixed-collection capacity folding tests
 // ---------------------------------------------------------------
 
 #[test]
@@ -163,8 +163,8 @@ fn literal_capacity_resolves_to_fixed_collection() {
             location: location.clone(),
         }),
         location: location.clone(),
-        fixed_capacity: Some(ParsedCollectionCapacity {
-            tokens: vec![Token::new(TokenKind::IntLiteral(64), location.clone())],
+        fixed_capacity: Some(ParsedCollectionCapacity::Literal {
+            value: 64,
             location: location.clone(),
         }),
     };
@@ -202,8 +202,8 @@ fn zero_capacity_rejected() {
             location: location.clone(),
         }),
         location: location.clone(),
-        fixed_capacity: Some(ParsedCollectionCapacity {
-            tokens: vec![Token::new(TokenKind::IntLiteral(0), location.clone())],
+        fixed_capacity: Some(ParsedCollectionCapacity::Literal {
+            value: 0,
             location: location.clone(),
         }),
     };
@@ -244,8 +244,8 @@ fn negative_capacity_rejected() {
             location: location.clone(),
         }),
         location: location.clone(),
-        fixed_capacity: Some(ParsedCollectionCapacity {
-            tokens: vec![Token::new(TokenKind::IntLiteral(-5), location.clone())],
+        fixed_capacity: Some(ParsedCollectionCapacity::Literal {
+            value: -5,
             location: location.clone(),
         }),
     };
@@ -268,58 +268,6 @@ fn negative_capacity_rejected() {
             }
         ),
         "expected NegativeCapacity error for negative value, got {:?}",
-        error.payload
-    );
-}
-
-#[test]
-fn float_capacity_rejected() {
-    let mut string_table = StringTable::new();
-    let mut type_environment = TypeEnvironment::new();
-    let declaration_table = Rc::new(TopLevelDeclarationTable::new(Vec::new()));
-    let mut resolution_context =
-        TypeResolutionContext::from_declaration_table(&declaration_table, &mut type_environment);
-
-    let location = SourceLocation::default();
-
-    // Provide a scope context so expression parsing can run and detect the float type.
-    let scope_context = ScopeContext::new(
-        ContextKind::Function,
-        InternedPath::new(),
-        declaration_table.clone(),
-        ExternalPackageRegistry::new(),
-        vec![],
-    );
-
-    let parsed = ParsedTypeRef::Collection {
-        element: Box::new(ParsedTypeRef::BuiltinInt {
-            location: location.clone(),
-        }),
-        location: location.clone(),
-        fixed_capacity: Some(ParsedCollectionCapacity {
-            tokens: vec![Token::new(TokenKind::FloatLiteral(2.5), location.clone())],
-            location: location.clone(),
-        }),
-    };
-
-    let error = resolve_parsed_type_annotation(
-        parsed,
-        &location,
-        &mut resolution_context,
-        &mut string_table,
-        Some(&scope_context),
-    )
-    .expect_err("float capacity should be rejected");
-
-    assert!(
-        matches!(
-            &error.payload,
-            DiagnosticPayload::InvalidCollectionType {
-                reason: InvalidCollectionTypeReason::CapacityNotInt,
-                ..
-            }
-        ),
-        "expected CapacityNotInt error for float capacity, got {:?}",
         error.payload
     );
 }
@@ -353,18 +301,15 @@ fn constant_capacity_resolves_to_fixed_collection() {
             ValueMode::ImmutableOwned,
         ),
     };
-    scope_context.add_var(constant_declaration);
+    scope_context.add_compile_time_var(constant_declaration);
 
     let parsed = ParsedTypeRef::Collection {
         element: Box::new(ParsedTypeRef::BuiltinInt {
             location: location.clone(),
         }),
         location: location.clone(),
-        fixed_capacity: Some(ParsedCollectionCapacity {
-            tokens: vec![Token::new(
-                TokenKind::Symbol(capacity_name),
-                location.clone(),
-            )],
+        fixed_capacity: Some(ParsedCollectionCapacity::BareConstant {
+            name: capacity_name,
             location: location.clone(),
         }),
     };
@@ -389,71 +334,6 @@ fn constant_capacity_resolves_to_fixed_collection() {
 }
 
 #[test]
-fn capacity_expression_folds_correctly() {
-    let mut string_table = StringTable::new();
-    let mut type_environment = TypeEnvironment::new();
-    let declaration_table = Rc::new(TopLevelDeclarationTable::new(Vec::new()));
-    let mut resolution_context =
-        TypeResolutionContext::from_declaration_table(&declaration_table, &mut type_environment);
-
-    let location = SourceLocation::default();
-    let capacity_name = string_table.intern("capacity");
-
-    // Build a scope context with a local constant declaration.
-    let mut scope_context = ScopeContext::new(
-        ContextKind::Function,
-        InternedPath::new(),
-        declaration_table.clone(),
-        ExternalPackageRegistry::new(),
-        vec![],
-    );
-    let constant_declaration = Declaration {
-        id: InternedPath::from_components(vec![capacity_name]),
-        value: Expression::new(
-            ExpressionKind::Int(32),
-            location.clone(),
-            builtin_type_ids::INT,
-            DataType::Int,
-            ValueMode::ImmutableOwned,
-        ),
-    };
-    scope_context.add_var(constant_declaration);
-
-    let parsed = ParsedTypeRef::Collection {
-        element: Box::new(ParsedTypeRef::BuiltinInt {
-            location: location.clone(),
-        }),
-        location: location.clone(),
-        fixed_capacity: Some(ParsedCollectionCapacity {
-            tokens: vec![
-                Token::new(TokenKind::Symbol(capacity_name), location.clone()),
-                Token::new(TokenKind::Add, location.clone()),
-                Token::new(TokenKind::IntLiteral(16), location.clone()),
-            ],
-            location: location.clone(),
-        }),
-    };
-
-    let resolved = resolve_parsed_type_annotation(
-        parsed,
-        &location,
-        &mut resolution_context,
-        &mut string_table,
-        Some(&scope_context),
-    )
-    .expect("capacity expression should fold");
-
-    let type_id = resolved.type_id.expect("should have a type id");
-    assert_eq!(
-        resolution_context
-            .type_environment
-            .collection_fixed_capacity(type_id),
-        Some(48),
-        "capacity expression 32 + 16 should fold to 48"
-    );
-}
-
-#[test]
 fn nested_fixed_collections_fold_both_capacities() {
     let mut string_table = StringTable::new();
     let mut type_environment = TypeEnvironment::new();
@@ -467,16 +347,16 @@ fn nested_fixed_collections_fold_both_capacities() {
             location: location.clone(),
         }),
         location: location.clone(),
-        fixed_capacity: Some(ParsedCollectionCapacity {
-            tokens: vec![Token::new(TokenKind::IntLiteral(4), location.clone())],
+        fixed_capacity: Some(ParsedCollectionCapacity::Literal {
+            value: 4,
             location: location.clone(),
         }),
     };
     let outer = ParsedTypeRef::Collection {
         element: Box::new(inner),
         location: location.clone(),
-        fixed_capacity: Some(ParsedCollectionCapacity {
-            tokens: vec![Token::new(TokenKind::IntLiteral(8), location.clone())],
+        fixed_capacity: Some(ParsedCollectionCapacity::Literal {
+            value: 8,
             location: location.clone(),
         }),
     };
@@ -514,7 +394,7 @@ fn nested_fixed_collections_fold_both_capacities() {
 }
 
 #[test]
-fn struct_field_alias_capacity_expression_folds_after_constants() {
+fn struct_field_alias_bare_capacity_constant_folds_after_constants() {
     let source = r#"
 capacity #Int = 4
 Names as {capacity String}
@@ -543,7 +423,7 @@ Buffer = |
         ast.type_environment
             .collection_fixed_capacity(items_field.type_id),
         Some(4),
-        "type alias capacity expression should fold before final struct field TypeId registration"
+        "type alias capacity should fold before final struct field TypeId registration"
     );
 }
 
@@ -570,7 +450,7 @@ take |items {0 Int}|:
 }
 
 #[test]
-fn function_return_capacity_expression_folds_to_type_id() {
+fn function_return_bare_capacity_constant_folds_to_type_id() {
     let source = r#"
 capacity #Int = 3
 
@@ -788,13 +668,8 @@ fn map_type_syntax_rejects_invalid_source_key_types() {
     );
     assert_source_invalid_map_type(
         "Holder type Key = |\n    values {Key = Int},\n|\n",
-        |reason| {
-            matches!(
-                reason,
-                InvalidMapTypeReason::GenericKeyRequiresHashableBound { .. }
-            )
-        },
-        "GenericKeyRequiresHashableBound for generic map keys",
+        |reason| matches!(reason, InvalidMapTypeReason::UnsupportedKeyType { .. }),
+        "UnsupportedKeyType for generic map keys",
     );
 }
 
@@ -880,26 +755,24 @@ fn map_type_rejects_unsupported_key() {
 }
 
 #[test]
-fn map_key_capability_rejects_generic_key_with_targeted_reason() {
+fn map_key_capability_rejects_generic_key_as_unsupported() {
     let mut string_table = StringTable::new();
     let mut type_environment = TypeEnvironment::new();
     let parameter_name = string_table.intern("Key");
     let key_type_id = type_environment.register_synthetic_generic_parameter(parameter_name);
 
     let error = validate_map_key_type(key_type_id, &type_environment, &SourceLocation::default())
-        .expect_err("generic map keys should be rejected until HASHABLE exists");
+        .expect_err("generic map keys should be rejected by the scalar-key policy");
 
     assert!(
         matches!(
             &error.payload,
             DiagnosticPayload::InvalidMapType {
-                reason: InvalidMapTypeReason::GenericKeyRequiresHashableBound {
-                    parameter_name: actual
-                },
+                reason: InvalidMapTypeReason::UnsupportedKeyType { key_type },
                 ..
-            } if *actual == parameter_name
+            } if *key_type == key_type_id
         ),
-        "expected GenericKeyRequiresHashableBound error, got {:?}",
+        "expected UnsupportedKeyType error, got {:?}",
         error.payload
     );
 }

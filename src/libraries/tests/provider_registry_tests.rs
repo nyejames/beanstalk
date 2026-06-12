@@ -54,7 +54,6 @@ impl ExternalImportProvider for DummyProvider {
             package_id,
             exported_types: vec![ExternalTypeId(1)],
             exported_free_functions: vec![ExternalFunctionId::Synthetic(2)],
-            exported_receiver_methods: vec![ExternalFunctionId::Synthetic(3)],
             runtime_asset: Some(RuntimeAssetIdentity {
                 canonical_source_path: PathBuf::from("/test/asset.js"),
                 asset_kind: "js".to_owned(),
@@ -189,7 +188,6 @@ fn resolved_import_can_carry_all_expected_fields() {
         package_id: ExternalPackageId(7),
         exported_types: vec![ExternalTypeId(1), ExternalTypeId(2)],
         exported_free_functions: vec![ExternalFunctionId::Synthetic(10)],
-        exported_receiver_methods: vec![ExternalFunctionId::Synthetic(11)],
         runtime_asset: Some(RuntimeAssetIdentity {
             canonical_source_path: PathBuf::from("/assets/lib.js"),
             asset_kind: "js".to_owned(),
@@ -204,7 +202,6 @@ fn resolved_import_can_carry_all_expected_fields() {
     assert_eq!(resolved.package_id, ExternalPackageId(7));
     assert_eq!(resolved.exported_types.len(), 2);
     assert_eq!(resolved.exported_free_functions.len(), 1);
-    assert_eq!(resolved.exported_receiver_methods.len(), 1);
     assert!(resolved.runtime_asset.is_some());
     assert_eq!(resolved.required_runtime_imports.len(), 1);
 }
@@ -238,7 +235,6 @@ fn dummy_provider_resolves_import_with_all_fields() {
 
     assert_eq!(resolved.exported_types.len(), 1);
     assert_eq!(resolved.exported_free_functions.len(), 1);
-    assert_eq!(resolved.exported_receiver_methods.len(), 1);
     assert!(resolved.runtime_asset.is_some());
     assert_eq!(resolved.required_runtime_imports.len(), 1);
 }
@@ -252,7 +248,6 @@ fn resolution_table_import(package_id: u32) -> ResolvedExternalImport {
         package_id: ExternalPackageId(package_id),
         exported_types: vec![ExternalTypeId(package_id)],
         exported_free_functions: vec![ExternalFunctionId::Synthetic(package_id)],
-        exported_receiver_methods: vec![],
         runtime_asset: None,
         diagnostics: vec![],
         required_runtime_imports: vec![],
@@ -365,7 +360,6 @@ fn cache_stores_and_retrieves_resolved_import() {
         package_id: ExternalPackageId(1),
         exported_types: vec![],
         exported_free_functions: vec![],
-        exported_receiver_methods: vec![],
         runtime_asset: None,
         diagnostics: vec![],
         required_runtime_imports: vec![],

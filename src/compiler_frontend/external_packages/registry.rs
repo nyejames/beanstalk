@@ -711,8 +711,6 @@ pub(crate) mod test_support {
                 .collect(),
             returns: external_success_returns(return_type.into(), return_alias.into()),
             error_return_type: None,
-            receiver_type: None,
-            receiver_access: ExternalAccessKind::Shared,
             lowerings: ExternalFunctionLowerings::default(),
         })
     }

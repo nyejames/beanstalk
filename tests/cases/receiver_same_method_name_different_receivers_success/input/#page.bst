@@ -1,5 +1,5 @@
-import @alpha { Alpha, label }
-import @beta { Beta, label }
+import @alpha { Alpha }
+import @beta { Beta }
 
 alpha = Alpha(10)
 beta = Beta(20)

@@ -87,7 +87,7 @@ pub(super) fn create_header(
     if token_stream.current_token_kind() == &TokenKind::Of {
         if !generic_parameters.is_empty() {
             return Err(CompilerDiagnostic::invalid_declaration(
-                InvalidDeclarationReason::GenericTraitsDeferred,
+                InvalidDeclarationReason::GenericTraitsUnsupported,
                 Some(declaration_name),
                 name_location,
             ));
@@ -128,7 +128,7 @@ pub(super) fn create_header(
     if token_stream.current_token_kind() == &TokenKind::Must {
         if !generic_parameters.is_empty() {
             return Err(CompilerDiagnostic::invalid_declaration(
-                InvalidDeclarationReason::GenericTraitsDeferred,
+                InvalidDeclarationReason::GenericTraitsUnsupported,
                 Some(declaration_name),
                 name_location,
             ));

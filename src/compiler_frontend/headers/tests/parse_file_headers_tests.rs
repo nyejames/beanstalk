@@ -2457,7 +2457,7 @@ fn capacity_references_extract_value_refs_without_treating_element_type_as_value
 
     assert!(
         capacity_names.contains(&"capacity"),
-        "capacity expression should reference the capacity constant"
+        "bare capacity syntax should reference the capacity constant"
     );
     assert!(
         !capacity_names.contains(&"MyType"),

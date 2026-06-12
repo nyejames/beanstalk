@@ -430,7 +430,7 @@ impl DataType {
     /// Remap all interned string IDs and paths in this diagnostic type spelling.
     ///
     /// WHAT: updates `StringId`, `InternedPath`, `SourceLocation`, and nested `DataType`
-    ///       fields recursively, including generic keys, struct/choice paths, function
+    ///       fields recursively, including generic arguments, struct/choice paths, function
     ///       signatures, and declaration shells.
     /// WHY: per-file header parsing produces `DataType` values using local string tables;
     ///      remapping keeps them valid after merge into the module/global table.

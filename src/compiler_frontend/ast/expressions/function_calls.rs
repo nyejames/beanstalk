@@ -668,15 +668,6 @@ fn validate_external_signature_types_are_registered(
         )?;
     }
 
-    if let Some(receiver_type) = &external_function.receiver_type {
-        validate_external_signature_type_is_registered(
-            external_function,
-            receiver_type,
-            context,
-            location.clone(),
-        )?;
-    }
-
     for slot in &external_function.returns {
         validate_external_signature_type_is_registered(
             external_function,

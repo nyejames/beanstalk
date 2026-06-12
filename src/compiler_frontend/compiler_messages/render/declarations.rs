@@ -108,6 +108,10 @@ pub(crate) fn invalid_function_signature_message(
         InvalidFunctionSignatureReason::ErrorSlotNotLast => {
             "The error return slot must be the final return slot in v1.".to_string()
         }
+        InvalidFunctionSignatureReason::GenericWhereConstraintsUnsupported => {
+            "`where` syntax is not part of Beanstalk generic constraints. Use declaration-site bounds such as `type A is TRAIT`."
+                .to_string()
+        }
     }
 }
 
@@ -167,8 +171,8 @@ pub(crate) fn invalid_declaration_message(
             let parameter_name_str = string_table.resolve(parameter_name);
             format!("Generic parameter '{parameter_name_str}' collides with a builtin type name.")
         }
-        InvalidDeclarationReason::GenericTraitsDeferred => {
-            "Generic traits are deferred. Trait declarations cannot have generic parameters."
+        InvalidDeclarationReason::GenericTraitsUnsupported => {
+            "Generic trait declarations are outside Beanstalk's trait design scope. Trait declarations cannot have generic parameters."
                 .to_string()
         }
         InvalidDeclarationReason::InvalidTraitName => {
@@ -272,16 +276,6 @@ pub(crate) fn invalid_generic_instantiation_message(
                 "Generic type {type_name_str} requires '{parameter}' to satisfy trait '{trait_name}', but {concrete_type} has no visible trait evidence for that bound."
             )
         }
-        InvalidGenericInstantiationReason::FileLocalNominalTraitEvidenceUnsupported {
-            trait_name,
-            concrete_type_id,
-        } => {
-            let trait_name = string_table.resolve(*trait_name);
-            let concrete_type = diagnostic_type_name(*concrete_type_id, context);
-            format!(
-                "Generic type {type_name_str} cannot use file-local evidence for trait '{trait_name}' on {concrete_type}. Generic nominal instances require reusable canonical or compiler-owned evidence."
-            )
-        }
         InvalidGenericInstantiationReason::RecursiveFunctionInstantiation => {
             format!(
                 "Generic function {type_name_str} recursively instantiates itself, which is deferred for Alpha."
@@ -308,8 +302,16 @@ pub(crate) fn invalid_receiver_declaration_message(
         InvalidReceiverDeclarationReason::UnknownStructTarget => {
             "Receiver method targets an unknown receiver type.".to_string()
         }
-        InvalidReceiverDeclarationReason::WrongSourceFile => {
-            "Receiver method must be declared in the same file as the receiver type definition."
+        InvalidReceiverDeclarationReason::NonlocalSourceType => {
+            "Source-authored receiver methods must be declared in the same file as their user-defined receiver type. Use a free function for values owned by another file or package."
+                .to_string()
+        }
+        InvalidReceiverDeclarationReason::BuiltinScalarType => {
+            "Source-authored receiver methods cannot target builtin scalar types. Use a free function for builtin values."
+                .to_string()
+        }
+        InvalidReceiverDeclarationReason::ExternalOpaqueType => {
+            "Source-authored receiver methods cannot target external opaque types. Use a free function for values owned by another package."
                 .to_string()
         }
         InvalidReceiverDeclarationReason::FieldNameConflict => {
@@ -318,22 +320,8 @@ pub(crate) fn invalid_receiver_declaration_message(
         InvalidReceiverDeclarationReason::DuplicateMethod => {
             "Duplicate receiver method for this receiver and name.".to_string()
         }
-        InvalidReceiverDeclarationReason::ReceiverTypeNotVisible => {
-            "Receiver method extension targets a type that is not visible in this file."
-                .to_string()
-        }
-        InvalidReceiverDeclarationReason::ExtensionOverridesCanonicalMethod => {
-            "File-local extension receiver methods cannot override a visible canonical receiver method for the same receiver type and method name.".to_string()
-        }
-        InvalidReceiverDeclarationReason::NonExportableExtensionMethodImport => {
-            "File-local extension receiver methods are not importable from another file."
-                .to_string()
-        }
-        InvalidReceiverDeclarationReason::ImportedReceiverTypeNotVisible => {
-            "Imported receiver method is visible without its receiver type. Import the receiver type from the same surface or import the whole namespace.".to_string()
-        }
-        InvalidReceiverDeclarationReason::ImportedMethodCollision => {
-            "Imported receiver methods collide for the same receiver type and method name."
+        InvalidReceiverDeclarationReason::DuplicateVisibleMethod => {
+            "Visible receiver methods collide for the same receiver type and method name."
                 .to_string()
         }
         InvalidReceiverDeclarationReason::GenericReceiverType {
@@ -348,10 +336,14 @@ pub(crate) fn invalid_receiver_declaration_message(
             type_name,
         } => {
             format!(
-                "Function '{}' uses unsupported receiver type '{}'. Receiver methods must target a user-defined struct, choice, external opaque type, or built-in scalar type.",
+                "Function '{}' uses unsupported receiver type '{}'. Source-authored receiver methods must target a user-defined struct or choice.",
                 string_table.resolve(function_name),
                 string_table.resolve(type_name)
             )
+        }
+        InvalidReceiverDeclarationReason::ReceiverMethodImportNotAllowed => {
+            "Receiver methods are not imported or aliased independently. Import the receiver type; its same-file methods are available through receiver-call syntax when the type is visible."
+                .to_string()
         }
     }
 }

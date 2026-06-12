@@ -1,4 +1,5 @@
 import @widget
 
 value widget.Counter = widget.make_counter()
-value.tick()
+
+[:receiver_facade_namespace_no_private_method value=[value.tick()]]

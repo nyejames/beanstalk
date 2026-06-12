@@ -74,6 +74,8 @@ Use this when you want compiler diagnostics without producing final build artifa
 
 <p>The main build system is web based, but the compiler can have any number of pluggable backends through its builder interface. This opens up a future where Beanstalk can be ran or embedded anywhere.</p>
 
+<p>The language surface is deliberately small: static nominal types, explicit trait conformance, constrained generics, no general macro system, and no Rust-style type-level programming.</p>
+
 <p>This is a serious attempt to never have to use TypeScript, web frameworks or bloated UI/web ecosystems again.</p>
 
 <br>

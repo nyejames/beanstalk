@@ -12,8 +12,7 @@ use crate::compiler_frontend::ast::module_ast::scope_context::{
     ContextKind, ReceiverMethodCatalog, ScopeContext,
 };
 use crate::compiler_frontend::ast::receiver_methods::{
-    BuildReceiverMethodCatalogInput, ReceiverMethodCatalogError, ReceiverMethodKind,
-    build_receiver_method_catalog, receiver_type_is_visible_in_file,
+    BuildReceiverMethodCatalogInput, ReceiverMethodCatalogError, build_receiver_method_catalog,
 };
 use crate::compiler_frontend::ast::statements::functions::function_signature_from_syntax_with_unresolved_types;
 use crate::compiler_frontend::ast::statements::functions::{
@@ -29,6 +28,7 @@ use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages}
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidReceiverDeclarationReason,
 };
+use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::definitions::TypeDefinition;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::generic_parameters::{
@@ -37,8 +37,6 @@ use crate::compiler_frontend::datatypes::generic_parameters::{
 use crate::compiler_frontend::datatypes::ids::{
     GenericParameterId, GenericParameterListId, TypeId,
 };
-use crate::compiler_frontend::datatypes::{DataType, ReceiverKey};
-use crate::compiler_frontend::headers::import_environment::ReceiverMethodVisibility;
 use crate::compiler_frontend::headers::parse_file_headers::{Header, HeaderKind};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::traits::environment::TraitEnvironment;
@@ -158,6 +156,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                 .with_resolved_type_alias_annotations(Rc::new(
                     self.resolved_type_alias_annotations_by_path.clone(),
                 ))
+                .with_explicit_compile_time_constants(&self.module_constants)
                 .with_generic_declarations(Rc::new(
                     self.module_symbols.generic_declarations_by_path.clone(),
                 ))
@@ -318,9 +317,6 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             struct_source_by_path: &self.struct_source_by_path,
             choice_source_by_path: &self.choice_source_by_path,
             source_file_by_symbol_path: &self.module_symbols.canonical_source_by_symbol_path,
-            file_visibility_by_source: &self.import_environment.file_visibility_by_source,
-            resolved_type_aliases_by_path: &self.resolved_type_aliases_by_path,
-            external_package_registry: self.context.external_package_registry,
             string_table,
         })
         .map_err(|error| match error {
@@ -343,23 +339,18 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         Ok(Rc::new(catalog))
     }
 
-    /// Validate file-local receiver-method imports against the resolved receiver catalog.
+    /// Validate source receiver-method visibility against the resolved receiver catalog.
     ///
-    /// WHAT: confirms imported methods have a visible receiver type and that a local method name
-    /// does not resolve to two different methods for the same receiver.
-    /// WHY: header import preparation can tell that a declaration is receiver-shaped, but only
-    /// AST signature resolution knows the canonical receiver key. Keeping this semantic check
-    /// here preserves the Stage 2/Stage 4 boundary instead of making headers re-resolve types.
+    /// WHAT: catches impossible duplicate visible methods for the same receiver and method name.
+    /// WHY: source methods travel with receiver type visibility, so this is a defensive
+    /// Stage 4 check over the Stage 2 visibility package rather than an import-alias validator.
     pub(in crate::compiler_frontend::ast) fn validate_receiver_method_import_visibility(
         &self,
         receiver_methods: &ReceiverMethodCatalog,
         string_table: &mut StringTable,
     ) -> Result<(), CompilerMessages> {
-        for (source_file, file_visibility) in &self.import_environment.file_visibility_by_source {
+        for file_visibility in self.import_environment.file_visibility_by_source.values() {
             for visible_methods in file_visibility.visible_receiver_methods.values() {
-                let mut methods_by_receiver: FxHashMap<ReceiverKey, &ReceiverMethodVisibility> =
-                    FxHashMap::default();
-
                 for visible_method in visible_methods {
                     let Some(method_entry) = receiver_methods
                         .by_function_path
@@ -368,41 +359,19 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
                         continue;
                     };
 
-                    if method_entry.kind == ReceiverMethodKind::FileLocalExtension
-                        && &method_entry.visibility_source_file != source_file
-                    {
+                    // Two different methods for the same receiver key were made visible
+                    // under the same local name. This should not happen for source methods
+                    // because they travel with their type, but we keep the guard.
+                    if let Some(_previous) = visible_methods.iter().find(|other| {
+                        other.function_path != visible_method.function_path
+                            && receiver_methods
+                                .by_function_path
+                                .get(&other.function_path)
+                                .is_some_and(|entry| entry.receiver == method_entry.receiver)
+                    }) {
                         return Err(self.diagnostic_messages(
                             CompilerDiagnostic::invalid_receiver_declaration(
-                                InvalidReceiverDeclarationReason::NonExportableExtensionMethodImport,
-                                visible_method.location.clone(),
-                            ),
-                            string_table,
-                        ));
-                    }
-
-                    if !receiver_type_is_visible_in_file(
-                        &method_entry.receiver,
-                        file_visibility,
-                        &self.resolved_type_aliases_by_path,
-                    ) {
-                        return Err(self.diagnostic_messages(
-                            CompilerDiagnostic::invalid_receiver_declaration(
-                                InvalidReceiverDeclarationReason::ImportedReceiverTypeNotVisible,
-                                visible_method.location.clone(),
-                            ),
-                            string_table,
-                        ));
-                    }
-
-                    // Two different methods for the same receiver key were imported
-                    // under the same local name.
-                    if let Some(previous_method) =
-                        methods_by_receiver.insert(method_entry.receiver.to_owned(), visible_method)
-                        && previous_method.function_path != visible_method.function_path
-                    {
-                        return Err(self.diagnostic_messages(
-                            CompilerDiagnostic::invalid_receiver_declaration(
-                                InvalidReceiverDeclarationReason::ImportedMethodCollision,
+                                InvalidReceiverDeclarationReason::DuplicateVisibleMethod,
                                 visible_method.location.clone(),
                             ),
                             string_table,

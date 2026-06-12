@@ -35,12 +35,12 @@ They assemble one or more compiled modules into runnable artifacts such as HTML,
 - `src/compiler_frontend/datatypes/` owns `TypeEnvironment` (canonical semantic type identity) and `DataType` (parse-only / diagnostic-only type syntax). Semantic identity is `TypeId` equality in the relevant `TypeEnvironment`; `DataType` must not be used for semantic decisions in executable AST or HIR.
 - `src/compiler_frontend/type_coercion/` owns contextual compatibility and promotion rules layered on top of type identity
 - `src/compiler_frontend/value_mode.rs` tracks frontend access classification for bindings, expressions, call arguments, and receiver use. It keeps mutability/reference state separate from `DataType`; runtime ownership is a later borrow/lowering concern
-- `src/compiler_frontend/traits/` owns parsed trait shells, resolved trait definitions, explicit conformance evidence, evidence visibility, static generic-bound evidence checks, and trait diagnostics. Trait metadata is compile-time frontend state, not a value type or backend-side source rediscovery path
+- `src/compiler_frontend/traits/` owns parsed trait shells, resolved trait definitions, explicit same-file nominal conformance evidence, reusable evidence visibility, static generic-bound evidence checks, and trait diagnostics. Trait metadata is compile-time frontend state, not a value type or backend-side source rediscovery path
 - `src/compiler_frontend/source_libraries/` resolves builder/project source library roots into normal module inputs
 - `src/compiler_frontend/external_packages/` stores backend-provided virtual package metadata and stable external symbol IDs
 - `src/compiler_frontend/builtins/` owns compiler-defined language symbols and operations that are neither user source declarations nor backend-provided external packages
 - `src/compiler_frontend/style_directives/` owns the merged frontend + builder directive registry used by tokenizer and template parsing
-- `src/compiler_frontend/deferred_feature_diagnostics.rs` centralizes consistent diagnostics for documented or reserved language surface that is not implemented yet
+- Design-scope and deferred-feature diagnostics should be centralized through typed `CompilerDiagnostic` constructors. Deferred features and outside-design-scope rejections must remain distinct diagnostic reasons.
 
 ### Semantic lowering and analysis
 
@@ -160,8 +160,8 @@ Compiler-facing rules:
 - Builder-runtime package metadata lets builder-owned packages share the same backend runtime asset/glue emission path as provider-created imports without pretending they were project-local files
 - External imports resolve to stable frontend IDs such as `ExternalFunctionId`
 - Grouped imports for virtual external packages resolve through external package metadata before source/module facade enforcement. Source imports still go through facade checks before source target resolution, so virtual package lookup does not weaken source-library or module privacy.
-- Explicit grouped receiver-method imports reserve their local spelling in the header-stage visible-name registry before adding receiver-call visibility, so aliases collide consistently with same-file declarations, imports, prelude symbols, builtins, and namespace records. Auto-imported receiver methods from type imports and namespace imports stay receiver-call-only and do not create ordinary visible value fields.
-- Grouped receiver-method imports require the receiver type to be visible in the importing file. Header import preparation validates source nominal types, external opaque type IDs, namespace records, grouped type imports, and language-visible scalar receivers before AST consumes the receiver-call visibility; AST retains the exact transparent source type-alias guard because type-alias targets are resolved there.
+- Header import preparation does not import source-authored receiver methods as independent symbols. Source-authored receiver methods belong to their receiver type's declaring file and become callable wherever the receiver type is visible. Namespace imports may make a receiver type visible, but methods are never namespace fields and cannot be grouped-imported or aliased independently.
+- External packages expose opaque types, constants, and free functions only. They do not register receiver methods or receiver-call visibility. External package imports resolve through package metadata before source/module facade enforcement, so virtual package lookup does not weaken source-library or module privacy.
 - Expression/type resolution uses the active `ScopeContext` visibility maps and import records, not global bare-name lookup
 - HIR carries stable external call IDs only; backends map those IDs to target-specific runtime names, emitted JS assets, generated glue, imports, or helper calls
 
@@ -418,7 +418,7 @@ registration, validation, inference, and concrete instance emission.
 
 Trait declarations and conformances are resolved before HIR. Header parsing records trait and
 conformance shells; AST owns semantic trait identity, requirement type resolution, conformance
-evidence validation, evidence visibility, and generic-bound evidence checks.
+evidence validation, reusable evidence visibility, and generic-bound evidence checks.
 
 - Traits are compile-time metadata in `TraitEnvironment`, not `DataType` values
 - Trait names are valid in trait declarations, conformance declarations, and generic bounds only

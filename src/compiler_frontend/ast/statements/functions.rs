@@ -392,7 +392,6 @@ fn resolve_signature_type_annotation(
                 .file_visibility
                 .as_ref()
                 .map(|fv| &fv.visible_trait_names),
-            source_file_scope: expression_context.source_file_scope.as_ref(),
         })
         .with_active_generic_type_context(expression_context.active_generic_type_context());
 

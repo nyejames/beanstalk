@@ -389,23 +389,6 @@ impl CompilerDiagnostic {
         )
     }
 
-    pub(crate) fn receiver_method_import_requires_visible_receiver_type(
-        method_name: StringId,
-        receiver_type_name: Option<StringId>,
-        location: SourceLocation,
-    ) -> Self {
-        Self::new(
-            DiagnosticKind::Import(
-                ImportDiagnosticKind::ReceiverMethodImportRequiresVisibleReceiverType,
-            ),
-            location,
-            DiagnosticPayload::ReceiverMethodImportRequiresVisibleReceiverType {
-                method_name,
-                receiver_type_name,
-            },
-        )
-    }
-
     // ------------------------------------------------------------------
     //  Borrow Constructors
     // ------------------------------------------------------------------

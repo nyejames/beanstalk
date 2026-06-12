@@ -3,8 +3,7 @@
 //! WHAT: validates declaration-site trait bounds on concrete `Struct of T` and `Choice of T`
 //! instantiations once concrete type arguments are known.
 //! WHY: nominal generic instances are keyed only by constructor plus type arguments. Until
-//! evidence-keyed instances exist, only reusable canonical/compiler-owned evidence may satisfy
-//! those bounds; file-local extension evidence cannot safely participate.
+//! only reusable canonical/compiler-owned evidence may satisfy those bounds.
 
 use crate::compiler_frontend::compiler_messages::{
     CompilerDiagnostic, InvalidGenericInstantiationReason,
@@ -27,7 +26,6 @@ pub(crate) struct GenericBoundEvidenceContext<'a> {
     pub(crate) trait_environment: Option<&'a TraitEnvironment>,
     pub(crate) trait_evidence_environment: Option<&'a TraitEvidenceEnvironment>,
     pub(crate) visible_trait_names: Option<&'a FxHashMap<StringId, InternedPath>>,
-    pub(crate) source_file_scope: Option<&'a InternedPath>,
 }
 
 impl<'a> GenericBoundEvidenceContext<'a> {
@@ -36,14 +34,13 @@ impl<'a> GenericBoundEvidenceContext<'a> {
         trait_environment: &'a TraitEnvironment,
         trait_evidence_environment: &'a TraitEvidenceEnvironment,
         visibility: &'a FileVisibility,
-        source_file_scope: &'a InternedPath,
+        _source_file_scope: &'a InternedPath,
     ) -> Self {
         Self {
             type_environment,
             trait_environment: Some(trait_environment),
             trait_evidence_environment: Some(trait_evidence_environment),
             visible_trait_names: Some(&visibility.visible_trait_names),
-            source_file_scope: Some(source_file_scope),
         }
     }
 }
@@ -192,22 +189,6 @@ fn validate_single_bound(
         .type_environment
         .nominal_path(instance_type_id)
         .and_then(|path| path.name());
-
-    if trait_is_visible
-        && let Some(source_file_scope) = context.source_file_scope
-        && evidence_environment
-            .file_local_for(source_file_scope, concrete_type_id, trait_id)
-            .is_some()
-    {
-        return Err(CompilerDiagnostic::invalid_generic_instantiation(
-            instance_name,
-            InvalidGenericInstantiationReason::FileLocalNominalTraitEvidenceUnsupported {
-                trait_name,
-                concrete_type_id,
-            },
-            location.clone(),
-        ));
-    }
 
     Err(CompilerDiagnostic::invalid_generic_instantiation(
         instance_name,

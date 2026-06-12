@@ -8,23 +8,13 @@
 //! and facade resolution).
 
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
-use crate::compiler_frontend::external_packages::{ExternalFunctionId, ExternalSymbolId};
+use crate::compiler_frontend::external_packages::ExternalSymbolId;
 use crate::compiler_frontend::headers::import_environment::NamespaceRecordSource;
 use crate::compiler_frontend::headers::import_environment::diagnostics;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use rustc_hash::FxHashMap;
-
-/// Target of an explicit grouped receiver-method import.
-///
-/// WHY: source and external receiver methods use different canonical identifiers,
-/// so the registry needs to distinguish them for `is_same_target`.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum ReceiverMethodImportTarget {
-    SourceMethod { canonical_path: InternedPath },
-    ExternalMethod { function_id: ExternalFunctionId },
-}
 
 /// Classification of a visible name binding.
 ///
@@ -52,9 +42,6 @@ pub(crate) enum VisibleNameBinding {
     },
     NamespaceRecord {
         record_source: NamespaceRecordSource,
-    },
-    ReceiverMethodImport {
-        target: ReceiverMethodImportTarget,
     },
 }
 
@@ -174,45 +161,15 @@ fn is_same_target(a: &VisibleNameBinding, b: &VisibleNameBinding) -> bool {
                 record_source: b_src,
             },
         ) => a_src == b_src,
-        (
-            VisibleNameBinding::ReceiverMethodImport { target: a_target },
-            VisibleNameBinding::ReceiverMethodImport { target: b_target },
-        ) => match (a_target, b_target) {
-            (
-                ReceiverMethodImportTarget::SourceMethod {
-                    canonical_path: a_path,
-                },
-                ReceiverMethodImportTarget::SourceMethod {
-                    canonical_path: b_path,
-                },
-            ) => a_path == b_path,
-            (
-                ReceiverMethodImportTarget::ExternalMethod { function_id: a_id },
-                ReceiverMethodImportTarget::ExternalMethod { function_id: b_id },
-            ) => a_id == b_id,
-            _ => false,
-        },
         _ => false,
     }
 }
 
 /// Determine whether two bindings can coexist under the same visible name.
 ///
-/// WHY: receiver methods are dispatched by `(receiver_type, method_name)`, so two
-/// receiver-method imports with the same local name but different underlying targets
-/// (different source paths or different external function IDs) do not conflict in practice.
-/// They must still be prevented from colliding with ordinary value/type bindings.
+/// WHY: same target from two sources is harmless; different targets collide.
 fn can_coexist(a: &VisibleNameBinding, b: &VisibleNameBinding) -> bool {
-    if is_same_target(a, b) {
-        return true;
-    }
-    matches!(
-        (a, b),
-        (
-            VisibleNameBinding::ReceiverMethodImport { .. },
-            VisibleNameBinding::ReceiverMethodImport { .. },
-        )
-    )
+    is_same_target(a, b)
 }
 
 /// Generate a case-convention warning when an alias uses different leading case than the symbol.

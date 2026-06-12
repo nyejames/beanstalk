@@ -80,7 +80,7 @@ pub(crate) fn invalid_collection_type_message(reason: InvalidCollectionTypeReaso
         }
         InvalidCollectionTypeReason::CapacityNotInt => "Collection capacity must be an integer.",
         InvalidCollectionTypeReason::CapacityNotConstant => {
-            "Collection capacity must be a compile-time constant expression."
+            "Collection capacity must be a positive integer literal or a bare `#Int` constant name."
         }
         InvalidCollectionTypeReason::CapacityOverflow => "Collection capacity is too large.",
         InvalidCollectionTypeReason::InitializerExceedsFixedCapacity { .. } => {
@@ -106,13 +106,7 @@ pub(crate) fn invalid_map_type_message(
         InvalidMapTypeReason::UnsupportedKeyType { key_type } => {
             let type_name = diagnostic_type_name(key_type, context);
             format!(
-                "Map key type '{type_name}' is not supported. Only String, Int, Bool, and Char keys are allowed in V1."
-            )
-        }
-        InvalidMapTypeReason::GenericKeyRequiresHashableBound { parameter_name } => {
-            let name = context.string_table.resolve(parameter_name);
-            format!(
-                "Generic map key parameter '{name}' requires a `HASHABLE` bound, which is not yet implemented."
+                "Map key type '{type_name}' is not supported. Builtin hashmap keys are limited to String, Int, Bool, and Char. Use a library or user-defined map type for custom key behavior."
             )
         }
         InvalidMapTypeReason::ExcessiveInlineNesting { depth } => {
@@ -130,7 +124,7 @@ pub(crate) fn invalid_map_type_message(
             "Map type can only contain one top-level '=' separator.".to_owned()
         }
         InvalidMapTypeReason::FixedCapacityNotAllowed => {
-            "Fixed or capacity map syntax is not supported in V1.".to_owned()
+            "Fixed or capacity map syntax is outside Beanstalk's builtin hashmap design.".to_owned()
         }
     }
 }
@@ -498,9 +492,6 @@ pub(crate) fn deferred_feature_message(
 fn deferred_feature_static_message(reason: &DeferredFeatureReason) -> &'static str {
     match reason {
         DeferredFeatureReason::NamedFeature { .. } => "Deferred feature.",
-        DeferredFeatureReason::GenericWhereConstraints => {
-            "`where` syntax is not part of Beanstalk generic constraints. Use declaration-site bounds such as `type A is TRAIT`."
-        }
         DeferredFeatureReason::CaptureTaggedPattern => {
             "Capture/tagged patterns using '|...|' are deferred for Alpha."
         }

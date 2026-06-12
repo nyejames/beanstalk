@@ -800,7 +800,7 @@ fn rejects_unknown_bare_identifier_key() {
 }
 
 #[test]
-fn rejects_unhashable_key_expression() {
+fn rejects_unsupported_key_expression() {
     let diagnostic = parse_single_file_ast_diagnostic("scores ~{Float = Int} = {1.5 = 10}\n");
 
     assert!(matches!(

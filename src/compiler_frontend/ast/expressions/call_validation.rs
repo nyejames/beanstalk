@@ -181,8 +181,8 @@ pub(crate) fn expectations_from_user_parameters(
 ///
 /// WHAT: converts `ExternalSignatureType` and `ExternalAccessKind` into the canonical
 ///       `ExpectedParameterType` and `ExpectedAccessMode` used by call validation.
-/// WHY: `expectations_from_host_function` and `expectations_from_external_method` share
-///      exactly this logic; extracting it avoids near-duplicate map closures.
+/// WHY: every external function, including package functions that operate on opaque handles,
+///      uses the same argument validation path.
 fn parameter_expectation_from_external(
     parameter: &ExternalParameter,
     type_environment: &mut TypeEnvironment,
@@ -213,19 +213,6 @@ pub(crate) fn expectations_from_host_function(
     function
         .parameters
         .iter()
-        .map(|parameter| parameter_expectation_from_external(parameter, type_environment))
-        .collect()
-}
-
-/// Build parameter expectations for an external receiver method (excludes the receiver parameter).
-pub(crate) fn expectations_from_external_method(
-    function: &ExternalFunctionDef,
-    type_environment: &mut TypeEnvironment,
-) -> Vec<ParameterExpectation> {
-    function
-        .parameters
-        .iter()
-        .skip(1)
         .map(|parameter| parameter_expectation_from_external(parameter, type_environment))
         .collect()
 }

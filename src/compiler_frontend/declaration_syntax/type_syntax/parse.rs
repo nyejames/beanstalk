@@ -220,7 +220,7 @@ fn parse_type_postfixes(
 ///
 /// Two main cases:
 ///  1. Growable: `{T}` — the entire inner content parses as a single type.
-///  2. Fixed:    `{N T}` — tokens before the element type become the capacity expression.
+///  2. Fixed:    `{N T}` — tokens before the element type become the capacity syntax.
 ///
 /// Capacity-only shorthand (`{N}`) is only valid for declaration targets, where the
 /// element type is inferred.
@@ -293,7 +293,7 @@ fn parse_collection_type(
     }
 
     // Try 2: find the first valid element type suffix by scanning left-to-right.
-    // Tokens before the suffix become the capacity expression.
+    // Tokens before the suffix become the fixed-capacity syntax.
     for split_idx in 1..inner_tokens.len() {
         let type_tokens = &inner_tokens[split_idx..];
         if !collection_type_slice_can_start_type(type_tokens, context, string_table) {
@@ -307,7 +307,7 @@ fn parse_collection_type(
             return Ok(ParsedTypeRef::Collection {
                 element: Box::new(element),
                 location,
-                fixed_capacity: parsed_capacity(&inner_tokens[..split_idx]),
+                fixed_capacity: parsed_capacity(&inner_tokens[..split_idx])?,
             });
         }
     }
@@ -317,7 +317,7 @@ fn parse_collection_type(
         return Ok(ParsedTypeRef::Collection {
             element: Box::new(ParsedTypeRef::Inferred),
             location,
-            fixed_capacity: parsed_capacity(&inner_tokens),
+            fixed_capacity: parsed_capacity(&inner_tokens)?,
         });
     }
 
@@ -370,18 +370,48 @@ fn collect_collection_inner_tokens(
     Ok(inner_tokens)
 }
 
-/// Wrap raw tokens into a `ParsedCollectionCapacity` without semantic validation.
-///
-/// WHAT: stores the token span and the first token's location for later lowering.
-/// WHY: capacity expressions are parsed opaquely here and evaluated later when the
-///      type environment is available.
-fn parsed_capacity(tokens: &[Token]) -> Option<ParsedCollectionCapacity> {
-    let first = tokens.first()?;
+/// WHAT: accepts only a single integer literal or a single bare symbol token.
+///       Anything else (arithmetic, calls, field access, floats, etc.) is rejected
+///       with a structured diagnostic so users get the narrow-rule message at the
+///       syntax site rather than a generic parse failure.
+/// WHY: the language only allows literal-or-bare-const capacity in type position;
+///      named constants can still hold arithmetic before they are used in type annotations.
+fn parsed_capacity(
+    tokens: &[Token],
+) -> Result<Option<ParsedCollectionCapacity>, CompilerDiagnostic> {
+    if tokens.is_empty() {
+        return Ok(None);
+    }
 
-    Some(ParsedCollectionCapacity {
-        tokens: tokens.to_vec(),
-        location: first.location.clone(),
-    })
+    if tokens.len() == 1 {
+        match &tokens[0].kind {
+            TokenKind::IntLiteral(value) => {
+                return Ok(Some(ParsedCollectionCapacity::Literal {
+                    value: *value,
+                    location: tokens[0].location.clone(),
+                }));
+            }
+            TokenKind::Symbol(name) => {
+                return Ok(Some(ParsedCollectionCapacity::BareConstant {
+                    name: *name,
+                    location: tokens[0].location.clone(),
+                }));
+            }
+            TokenKind::FloatLiteral(_) => {
+                return Err(CompilerDiagnostic::invalid_collection_type(
+                    InvalidCollectionTypeReason::CapacityNotInt,
+                    tokens[0].location.clone(),
+                ));
+            }
+            _ => {}
+        }
+    }
+
+    let location = tokens[0].location.clone();
+    Err(CompilerDiagnostic::invalid_collection_type(
+        InvalidCollectionTypeReason::CapacityNotConstant,
+        location,
+    ))
 }
 
 // -------------------------
@@ -512,7 +542,7 @@ fn try_parse_map_side(
 
 /// Detect prefix capacity-like syntax on a map-type side.
 ///
-/// WHAT: checks whether tokens begin with a valid capacity expression followed by a valid
+/// WHAT: checks whether tokens begin with valid fixed-capacity syntax followed by a valid
 ///      type, which would indicate the user tried to write fixed-capacity syntax inside a map.
 /// WHY: `{4 String = Int}` and similar forms should receive the targeted
 ///      `FixedCapacityNotAllowed` diagnostic rather than a generic parse error.
@@ -526,7 +556,7 @@ fn map_side_looks_like_fixed_capacity(
         let type_tokens = &tokens[split_idx..];
         if collection_type_slice_can_start_type(type_tokens, context, string_table)
             && parse_type_slice_exact(type_tokens, token_stream, context, string_table).is_some()
-            && parsed_capacity(&tokens[..split_idx]).is_some()
+            && matches!(parsed_capacity(&tokens[..split_idx]), Ok(Some(_)))
         {
             return true;
         }
@@ -626,7 +656,7 @@ fn parse_type_slice_exact(
 /// WHAT: examines the first token (and optionally a `Namespace.Type` prefix) to decide
 ///      whether the remaining tokens in a braced body could be an element type.
 /// WHY: used during the left-to-right scan in `parse_collection_type` to find the boundary
-///      between capacity expression and element type.
+///      between fixed-capacity syntax and element type.
 fn collection_type_slice_can_start_type(
     tokens: &[Token],
     context: TypeAnnotationContext,

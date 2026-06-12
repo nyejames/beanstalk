@@ -31,7 +31,7 @@ use crate::compiler_frontend::ast::statements::functions::{
 };
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_messages::{
-    CompilerDiagnostic, InvalidReceiverCallReason, InvalidResultHandlingReason,
+    CompilerDiagnostic, InvalidResultHandlingReason,
 };
 use crate::compiler_frontend::datatypes::diagnostic_type_spelling;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
@@ -479,8 +479,6 @@ fn validate_generic_function_bound_evidence(
         return Ok(());
     };
 
-    let source_file_scope =
-        context.required_source_file_scope("generic function bound evidence")?;
     let trait_environment = context.trait_environment();
     let evidence_environment = context.trait_evidence_environment();
 
@@ -503,20 +501,6 @@ fn validate_generic_function_bound_evidence(
                 .get(*trait_id)
                 .map(|definition| definition.name)
                 .unwrap_or(template.function_path.name().unwrap_or(parameter.name));
-
-            if trait_is_visible
-                && evidence_environment
-                    .file_local_for(source_file_scope, *concrete_type_id, *trait_id)
-                    .is_some()
-            {
-                return Err(CompilerDiagnostic::invalid_receiver_call(
-                    InvalidReceiverCallReason::FileLocalGenericBoundEvidenceUnsupported,
-                    Some(trait_name),
-                    template.function_path.name(),
-                    call_location,
-                )
-                .into());
-            }
 
             return Err(missing_generic_function_trait_evidence(
                 template.function_path.name(),

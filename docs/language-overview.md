@@ -11,6 +11,43 @@ Design principles:
 - Memory safety through GC fallback plus future static ownership optimisation
 - Strict static typing with a small number of concise, opinionated patterns
 
+## Language Design Scope
+
+Beanstalk keeps the source language deliberately small. Compiler complexity is allowed when it
+makes the programmer-facing model simpler, safer, and more predictable.
+
+This document separates future work into two categories:
+
+- **Deferred**: fits Beanstalk's language design but is not implemented yet or is not part of the
+  current Alpha surface.
+- **Outside language design scope**: intentionally not planned because it would make the language
+  broader, more implicit, more solver-heavy, or harder to reason about.
+
+A feature listed outside design scope should not be implemented unless the language philosophy is
+explicitly changed first.
+
+## Outside the Language Design Scope
+
+The following surfaces are intentionally outside Beanstalk's language design scope.
+
+| Surface | Reason |
+|---|---|
+| General-purpose macros, procedural macros, derive macros, and AST macros | They create a second compile-time language and make code harder to inspect. Templates, constants, and builder directives are the constrained compile-time surface. |
+| Dynamic trait values / trait objects | They require erased wrappers, runtime dispatch, dynamic-safety rules, backend-specific runtime support, and a second meaning for trait names. Use choices for runtime heterogeneity and generic trait bounds for static reuse. |
+| Trait inheritance, trait aliases, trait composition, default methods, associated types, and associated constants | These turn traits into a type-level programming system rather than simple method contracts. |
+| Generic traits and generic trait methods | These make trait solving significantly more complex and create Rust-like abstraction patterns. |
+| Blanket, conditional, negative, or specialized conformance | These require coherence and specialization rules outside Beanstalk's simplicity target. |
+| Structural conformance | Matching method shapes must not silently imply conformance. `Type must TRAIT` stays explicit. |
+| Type-set constraints, union constraints, underlying-type constraints, and user-defined numeric/operator constraints | Generic bounds name traits only. They are not a constraint sublanguage. |
+| Operator overloading | Operators remain compiler-owned and predictable. |
+| Source-authored receiver methods for builtins, imported types, dependency/library types, external opaque types, or types declared in another file | Source-authored receiver methods belong only to the same file as their nominal receiver type. Use free functions for other types. |
+| User-defined `HASHABLE`, custom map hashers/comparers, and user-defined keys for builtin maps | Builtin map syntax stays scalar-keyed. More sophisticated maps belong in libraries as ordinary structs. |
+| First-class public `Result` values and result pattern matching | `Error!`, postfix `!`, and `catch` are the language error path. Users can define ordinary choices when they want explicit result values. |
+| Exceptions | Expected failures use `Error!`; invariants use `assert`. |
+| Reflection, runtime type IDs, compile-time type inspection, and type-returning functions | These encourage generic meta-programming and weaken static readability. |
+| Higher-kinded types, type functions, partial type application, and parameterized type aliases | These introduce a type-level abstraction language. |
+| User const generics beyond fixed collection capacity | Capacity syntax remains a small built-in collection feature, not a general type parameter system. |
+
 ## Related references
 
 - `docs/src/docs/**` — user-facing docs-site pages and real `.bst` examples
@@ -287,7 +324,10 @@ empty_values ~{Int} = {}   -- explicit type required
 fixed_values {3 Int} = {10, 20}
 
 capacity #Int = 4
-scratch ~{capacity + 2 String} = {}
+scratch ~{capacity String} = {}
+
+larger_capacity #Int = capacity + 2
+larger_scratch ~{larger_capacity String} = {}
 labels {capacity} = {"alpha", "beta"} -- declaration-target shorthand
 
 items ~= {10, 20, 30}
@@ -304,7 +344,10 @@ Rules:
 - `{T}` is a growable collection type.
 - `{N T}` is a fixed collection type with exact maximum length `N`.
 - Fixed capacity is semantic type identity, not an allocation hint: `{Int}`, `{4 Int}`, and `{8 Int}` are distinct incompatible types.
-- Capacity expressions in type position must fold to a positive `Int` that fits the compiler target. They may use visible compile-time constants and ordinary compile-time arithmetic.
+- Fixed capacity in type position must be either a positive `Int` literal or a bare visible `#Int`
+  constant name. Capacity position is not general expression position: arithmetic, function calls,
+  field access, const-record projection, conditionals, and nested expressions are invalid there.
+  Put any calculation in a named compile-time constant first.
 - `~` is binding/access mode. It is not part of the collection type shape: `~{4 Int}` is mutable access to a `{4 Int}`, not a separate type.
 - Non-empty literals infer their element type from items.
 - Empty literals require an explicit collection type at the declaration site.
@@ -359,7 +402,8 @@ Rules:
 - Bare identifiers in key position are variable references, not string-key shorthand.
 - Hashmaps are insertion ordered. First insertion determines entry position; replacing an existing key updates the value without moving the entry or replacing the stored key.
 - Removing a key removes that entry from the order. Re-inserting the key appends a new entry.
-- V1 key types are `String`, `Int`, `Bool`, and `Char`.
+- Builtin hashmap key types are permanently limited to `String`, `Int`, `Bool`, and `Char`.
+  This is a language-owned map surface, not a general hashing abstraction.
 - `Float`, structs, choices, collections, hashmaps, traits, functions, external opaque types, templates as a distinct key type, and generic parameters are invalid keys.
 - Values follow the same runtime-storable rules as collection elements.
 - Maps own stored keys and values.
@@ -371,7 +415,13 @@ Rules:
 - `contains`, `length`, and `clear` are infallible.
 - `map.length` is a read-only property, not a method call.
 
-Deferred map surfaces include hashsets, user-defined hashers/comparers, `Float` keys, user-defined key types, generic key maps before `HASHABLE`, map equality, map iteration, mutable entry APIs, indexing syntax, const hashmaps, display/debug display, fixed/capacity maps, optimized map variants, and Wasm map lowering/runtime support.
+Outside the builtin hashmap design scope: hashsets as language syntax, user-defined hashers or
+comparers, `Float` keys, user-defined key types, generic key maps through `HASHABLE`, map equality,
+mutable entry APIs, indexing syntax, const hashmaps, fixed/capacity maps, and specialized map
+variants. More sophisticated maps should be ordinary standard-library or user-defined structs.
+
+Wasm hashmap runtime/lowering remains deferred backend work for the existing scalar-keyed builtin map
+surface.
 
 ### Standard Output
 
@@ -741,28 +791,23 @@ Receiver method rules:
 - A receiver method is a top-level function whose first parameter is named `this`.
 - `this` is reserved and may appear only as the first receiver parameter and inside that method body.
 - There may be exactly one `this` parameter.
-- Supported receiver types are user-defined structs, choices, aligned declaration-site generic nominal receivers, built-in scalars (`Int`, `Float`, `Bool`, `String`), imported source nominal types for file-local extensions, and exact external opaque types exposed by backend package metadata.
-- Collection built-ins are compiler-owned operations, not `this` methods.
+- Supported source-authored receiver types are user-defined structs and choices declared in the same source file as the receiver method.
+- Aligned declaration-site generic nominal receivers are valid when the method belongs to the same generic type declaration.
+- Source-authored receiver methods for built-in scalars, imported source types, dependency/library types, external opaque types, and types declared in another file are rejected.
+- Compiler-owned collection operations and compiler/builder-owned builtin operations are not user extension methods.
 - `this T` is immutable; `this ~T` is mutable.
 - Mutable receiver calls require explicit mutable/exclusive receiver syntax: `~value.method(...)`.
 - Receiver methods are called only with receiver syntax; `method(value, ...)` is invalid.
 - Mutable receiver methods require a mutable place receiver; temporaries and rvalues cannot be mutated.
 - Field writes follow the same mutable-place rule.
-- User-defined struct methods must be declared in the same file as the struct. Built-in scalar receiver methods are exempt.
 
-Receiver method visibility:
-- Exported receiver methods become available through the receiver type, not as free-function imports.
-- Namespace imports make receiver methods available through receiver-call syntax but not as namespace fields.
-- Receiver-method names can be shared by receiver methods because dispatch includes receiver type, but they still collide with ordinary value, type, namespace, prelude, and builtin names.
-- Importing a receiver type automatically imports receiver methods for that type from the same import surface.
-- Grouped imports may import/alias receiver methods, but the receiver type must already be visible through the same grouped import, an earlier type import, a namespace import from that surface, or an exact transparent type alias.
-- JS-backed external receiver methods use the exact package-scoped opaque receiver type declared by `@bst.opaque`.
-- Type aliases in a `#mod.bst` facade do not automatically re-export private implementation methods.
+Receiver method visibility is tied to receiver type visibility.
 
-```beanstalk
-import @web/canvas { Canvas2d, fill_rect }
-import @web/canvas { fill_rect } -- invalid unless Canvas2d is visible
-```
+- A source-authored receiver method is visible wherever its receiver type is visible.
+- Receiver methods are not imported, aliased, or re-exported independently.
+- Namespace imports may make the receiver type visible, but receiver methods are not namespace fields.
+- A `#mod.bst` facade exposes a type's same-file receiver methods when it exposes the type.
+- Use free functions for private helpers or operations on types owned by other files or packages.
 
 ## Traits
 
@@ -798,7 +843,7 @@ Rules:
 - A matching method without `Type must TRAIT` is not conformance.
 - Conformance validates exact receiver mutability, non-receiver parameter modes/types, return types, and return channels. Parameter names do not matter.
 - Canonical conformance evidence for same-file structs, choices, and generic type constructors is reusable wherever both the type and trait are visible.
-- File-local extension evidence for builtins, imported types, and external opaque types is usable only in the declaring file and cannot override visible canonical evidence.
+- User-authored conformance for builtins, imported types, dependency/library types, external opaque types, and types declared in another file is rejected.
 
 Traits are not value types. A trait name may appear in a trait declaration, an explicit
 conformance declaration, or a generic bound. It is invalid as an ordinary variable, parameter,
@@ -823,7 +868,14 @@ Renderable ::
 
 Static trait declarations, conformances, and generic bounds are frontend semantics and are backend-independent.
 
-Deferred trait surfaces include default methods, static non-method requirements, automatic primitive conformances, `DISPLAYABLE` output coercion, and operator-to-trait integration. Dynamic trait values / trait objects, trait aliases/composition/downcasting, associated types/constants, inheritance, generic traits, generic trait methods, and specialized or conditional conformance are outside the current language design scope.
+Deferred trait surfaces include static non-method requirements, compiler-owned builtin conformance
+facts, and broader standard trait taxonomy.
+
+Outside trait design scope: default methods, associated types/constants, inheritance,
+aliases/composition, generic traits/methods, blanket/conditional/negative/specialized conformance,
+structural conformance, dynamic trait values / trait objects, downcasting/reflection, output
+coercion, operator integration, automatic primitive conformances, and derive/hash/order/format/
+iteration/serialization trait families.
 
 ## Choices
 
@@ -940,14 +992,17 @@ value Box of StringIntPair = Box(Pair("count", 3))
 Rejected or deferred in the current Alpha surface:
 - explicit call-site syntax such as `identity of Int(42)`, `identity<Int>(42)`, `identity[Int](42)`, or `identity(42 Int)`
 - inline generic sugar such as `|value type A|`
-- generic function values and higher-order polymorphism
-- type values, type-returning functions, type-level `#if`, and compile-time type inspection
 - receiver methods on concrete generic instances
-- `where` clauses and file-local evidence-backed generic bound dispatch
 - generic external package functions and generic external package types
 - recursive generic types
 - nested `of` applications except through concrete alias workarounds
+
+Outside generic design scope:
+- generic function values and higher-order polymorphism
+- type values, type-returning functions, type-level `#if`, and compile-time type inspection
+- `where` clauses and file-local evidence-backed generic-bound dispatch
 - parameterized generic aliases and partial type application
+- higher-kinded types, const generics beyond fixed capacity, lifetime parameters, specialization, and associated types
 
 ## Type Aliases
 
@@ -1059,7 +1114,7 @@ Execution and visibility:
 - Regular `import` in `#mod.bst` is private to that facade file.
 - `export import @path { Symbol }` and `export @path { Symbol }` re-export imported symbols through the facade; grouped aliases define the public API name.
 - Public facade APIs must not expose private facade-only types in signatures, fields, aliases, generic bounds, or exported constant types.
-- Receiver methods are visible through a facade only when the receiver method is explicitly exported by the same facade surface; type aliases in `#mod.bst` do not automatically re-export private implementation methods.
+- Receiver methods are visible through a facade when the facade exposes the receiver type's source surface. Type aliases in `#mod.bst` do not automatically re-export private implementation methods.
 - Bare namespace exports such as `export @path`, wildcard exports, legacy `#import`, and function alias exports are not part of the Alpha surface.
 
 Import resolution:
@@ -1084,11 +1139,11 @@ Library categories:
 
 Core libraries require explicit imports unless they are part of the prelude. Unsupported builder packages are rejected with an unsupported-by-builder diagnostic. Source libraries are normal modules behind `#mod.bst` facades.
 
-The HTML builder's `@html` source library exposes authored HTML helpers, including `canvas`, `CANVAS_ID`, and `get_canvas_context`. Those are real facade declarations backed by local `@web/canvas` imports inside `libraries/html/#mod.bst`. The raw `@web/canvas` symbols themselves are not re-exported through `@html`. Import raw drawing APIs directly from `@web/canvas` when needed.
+The HTML builder's `@html` source library exposes authored HTML helpers, including `canvas`, `CANVAS_ID`, `get_canvas_context`, `Canvas`, and `get_canvas`. Those are real facade declarations backed by local `@web/canvas` imports inside `libraries/html/#mod.bst`. `Canvas` is a source-owned wrapper around the raw external context, so method-style calls such as `~drawing.fill_rect(...)` come from ordinary Beanstalk receiver methods rather than external package metadata. The raw `@web/canvas` symbols themselves are not re-exported through `@html`. Import raw drawing APIs directly from `@web/canvas` when needed.
 
 ### External platform package imports
 
-Project builders may provide virtual packages such as `@core/io`, `@core/math`, or `@web/canvas`. These are typed external packages, not Beanstalk source files. They expose external functions and opaque external types.
+Project builders may provide virtual packages such as `@core/io`, `@core/math`, or `@web/canvas`. These are typed external packages, not Beanstalk source files. They expose opaque external types, compile-time constants, and external free functions only.
 
 ```beanstalk
 import @core/math
@@ -1105,6 +1160,7 @@ Rules:
 - Explicit external imports must not collide with visible source symbols.
 - External aliases follow normal file-local collision and case-convention rules.
 - External opaque types can be passed, returned, and used by external functions, but cannot be constructed with struct syntax or field-accessed.
+- External packages do not expose receiver methods. Use free functions for raw external APIs, or a source-owned wrapper type when method-style ergonomics are wanted.
 
 Initial optional core packages:
 - `@core/math`: `PI`, `TAU`, `E`, and `Float` math helpers.
@@ -1118,7 +1174,7 @@ Time package split:
 - Use `Duration` for elapsed amounts.
 - `timestamp_from_iso_string` is fallible and must be handled with postfix `!` or `catch`.
 
-The HTML builder supports annotated single-file `.js` imports through `@bst.opaque` and `@bst.sig`. JavaScript export names are runtime implementation details; Beanstalk names come from annotations. Supported JS export forms are `export function name(...) { ... }` and block-bodied arrow exports. Runtime imports from builder-registered modules must be named static imports. Unsupported JS features include arbitrary dependency graphs, default exports, re-exports, CommonJS, classes, JS constants, property accessors, callbacks, async functions, collections/options in JS signatures, generic external types, and multi-success JS returns.
+The HTML builder supports annotated single-file `.js` imports through `@bst.opaque` and `@bst.sig`. JavaScript export names are runtime implementation details; Beanstalk names come from annotations. Supported JS export forms are `export function name(...) { ... }` and block-bodied arrow exports. `@bst.sig` annotations expose free functions; `this` receiver-style signatures are rejected during registration. Runtime imports from builder-registered modules must be named static imports. Unsupported JS features include arbitrary dependency graphs, default exports, re-exports, CommonJS, classes, JS constants, property accessors, callbacks, async functions, collections/options in JS signatures, generic external types, receiver methods, and multi-success JS returns.
 
 Deferred library-system features:
 - package manager, versions, remote fetching, lockfiles, and override/shadowing rules

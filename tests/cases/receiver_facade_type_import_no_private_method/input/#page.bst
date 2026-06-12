@@ -1,4 +1,5 @@
 import @widget { Counter }
 
 value Counter = Counter(41)
-value.tick()
+result = value.tick()
+io([:result=[result]])

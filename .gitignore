@@ -5,8 +5,10 @@ test_output/
 benchmarks/local-data/
 benchmarks/old-benchmarks/
 benchmarks/results/
-benchmarks/module-graph/dev/
-benchmarks/module-graph/release/
+
+# Benchmark build outputs
+benchmarks/**/dev/
+benchmarks/**/release/
 
 **/*.rs.bk
 *.pdb
@@ -29,6 +31,10 @@ test.bst
 # Integration golden snapshots should remain versionable even when they
 # contain index.html artifacts.
 !tests/cases/**/golden/**
+
+# Integration fixture build outputs
+tests/cases/**/input/dev/
+tests/cases/**/input/release/
 
 # AI stuff
 AGENTS.md

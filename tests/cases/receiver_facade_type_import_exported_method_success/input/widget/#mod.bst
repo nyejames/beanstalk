@@ -1,1 +1,1 @@
-export @./impl { Counter, tick }
+export @./impl { Counter }

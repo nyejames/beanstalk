@@ -30,17 +30,23 @@ page_head #= theme_head
     loop, function argument, HIR, or borrow-analysis use. A declaration's type must be explicit at
     the declaration site or immediately inferable from its initializer.
 
-    Growable collections use `{T}`. Fixed collections use `{N T}`,
-    where `N` is a compile-time positive `Int` expression and part of the
-    collection type identity.
+    Growable collections use `{T}`. Fixed collections use `{N T}`.
+    `N` is part of the collection type identity and must be either a positive
+    integer literal or a bare visible `#Int` constant name.
 
     [codeblock, $code("bst"):
         fixed_values {3 Int} = {10, 20}
 
         capacity #Int = 4
-        scratch ~{capacity + 2 String} = {}
+        scratch ~{capacity String} = {}
+
+        larger_capacity #Int = capacity + 2
+        larger_scratch ~{larger_capacity String} = {}
         labels {capacity} = {"alpha", "beta"} -- shorthand infers String from the literal
     ]
+
+    Capacity position is not general expression position. Put arithmetic, field access, or other
+    computation in a named compile-time constant before using it in a type annotation.
 
     `{Int}`, `{3 Int}`, and `{4 Int}` are distinct types.
     Fixed capacity is not a growable allocation hint, and Beanstalk does not implicitly convert
@@ -53,8 +59,6 @@ page_head #= theme_head
     Immutable value bindings cannot start from an empty fixed collection literal because there is
     no later mutable owner path to fill them. Mutable empty fixed bindings and fixed struct field
     defaults are valid.
-
-    For unordered keyed collections (Hash Map semantics), keyed method behavior is deferred in this milestone.
 
     Elements inside collections are accessed using ` .get(index)`.
 
@@ -164,27 +168,34 @@ page_head #= theme_head
 
 #[section, $markdown:
     ## Hash Maps
-    Hash map keyed method behavior is deferred at this stage of development.
-    Current built-in collection receiver methods are implemented for ordered collections only.
-
-    The eventual built-in hash map syntax will look something like this:
+    Hash maps are insertion-ordered key/value collections. Builtin map keys are permanently limited
+    to `String`, `Int`, `Bool`, and `Char`.
 
     [codeblock, $code("bst"):
-        -- Create a new hash map with string keys and int values
-        my_map ~= {"key1" = 1, "key2" = 2}
+        scores ~= {"Ada" = 10, "Grace" = 12}
+        empty_scores ~{String = Int} = {}
 
-        -- Get an immutable reference to a value from the map
-        value = my_map.get("key1") catch:
+        score = scores.get("Ada") catch:
             then 0
         ;
 
-        -- Set a value in the map (requires mutable reference)
-        ~my_map.set("key3", 3) catch:
+        ~scores.set("Linus", 7) catch:
         ;
 
-        -- Remove a key-value pair from the map (requires mutable reference)
-        removed = ~my_map.remove("key2") catch:
+        removed = ~scores.remove("Grace") catch:
             then 0
         ;
+
+        if scores.contains("Ada"):
+            io("found")
+        ;
+
+        count = scores.length
+        ~scores.clear()
     ]
+
+    `get`, `set`, and `remove` are fallible. `contains`, `length`, and `clear` are infallible.
+    Mutating map operations require explicit mutable receiver access. More sophisticated maps, such
+    as custom-key maps or custom hash/comparison policies, belong in libraries or user-defined
+    structs rather than the builtin map syntax.
 ]

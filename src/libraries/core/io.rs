@@ -29,8 +29,6 @@ pub fn register_core_io_package(registry: &mut ExternalPackageRegistry) {
                 }],
                 returns: external_success_returns(ExternalAbiType::Void, ExternalReturnAlias::Fresh),
                 error_return_type: None,
-                receiver_type: None,
-                receiver_access: ExternalAccessKind::Shared,
                 lowerings: ExternalFunctionLowerings {
                     js: Some(
                         crate::compiler_frontend::external_packages::ExternalJsLowering::RuntimeFunction("__bs_io".to_owned()),

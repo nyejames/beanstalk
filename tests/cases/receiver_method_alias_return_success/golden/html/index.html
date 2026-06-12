@@ -524,32 +524,32 @@ body {
         return { tag: "err", value: __bs_make_error("Float(...) only accepts Int, Float, or string values", 210, null, null) };
     }
 
-    function bst_self_ref_fn1(bst_this_l3) {
+    function bst_self_ref_fn6(bst_this_l22) {
         
-        bst_this_l3 = __bs_param_binding(bst_this_l3);
+        bst_this_l22 = __bs_param_binding(bst_this_l22);
         
-        return bst_this_l3;
+        return bst_this_l22;
     }
 
-    function bst_start_fn2() {
-        let bst___hir_tmp_2_l4 = __bs_binding(undefined);
-        let bst_p_l5 = __bs_binding(undefined);
-        let bst_q_l6 = __bs_binding(undefined);
-        let bst___hir_tmp_3_l7 = __bs_binding(undefined);
+    function bst_start_fn7() {
+        let bst___hir_tmp_3_l23 = __bs_binding(undefined);
+        let bst_p_l24 = __bs_binding(undefined);
+        let bst_q_l25 = __bs_binding(undefined);
+        let bst___hir_tmp_4_l26 = __bs_binding(undefined);
         
-        __bs_assign_value(bst___hir_tmp_2_l4, []);
-        __bs_assign_value(bst_p_l5, { bst_x_fld2: 1, bst_y_fld3: 2 });
-        __bs_assign_borrow(bst___hir_tmp_3_l7, bst_self_ref_fn1(bst_p_l5));
-        __bs_assign_borrow(bst_q_l6, bst___hir_tmp_3_l7);
-        __bs_write(__bs_field(bst_q_l6, "bst_x_fld2"), 99);
-        __bs_io(__bs_read(__bs_field(bst_q_l6, "bst_x_fld2")));
-        return __bs_read(bst___hir_tmp_2_l4);
+        __bs_assign_value(bst___hir_tmp_3_l23, []);
+        __bs_assign_value(bst_p_l24, { bst_x_fld3: 1, bst_y_fld4: 2 });
+        __bs_assign_borrow(bst___hir_tmp_4_l26, bst_self_ref_fn6(bst_p_l24));
+        __bs_assign_borrow(bst_q_l25, bst___hir_tmp_4_l26);
+        __bs_write(__bs_field(bst_q_l25, "bst_x_fld3"), 99);
+        __bs_io(__bs_read(__bs_field(bst_q_l25, "bst_x_fld3")));
+        return __bs_read(bst___hir_tmp_3_l23);
     }
 
     </script>
     <script>
     (function () {
-      if (typeof bst_start_fn2 === "function") bst_start_fn2();
+      if (typeof bst_start_fn7 === "function") bst_start_fn7();
     })();
     </script>
   </body>

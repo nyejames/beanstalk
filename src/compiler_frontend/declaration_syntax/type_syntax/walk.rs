@@ -5,9 +5,8 @@
 //! type-resolution policy.
 
 use super::*;
-use crate::compiler_frontend::utilities::token_scan::{
-    InitializerReference, collect_symbol_references,
-};
+use crate::compiler_frontend::datatypes::parsed::ParsedCollectionCapacity;
+use crate::compiler_frontend::utilities::token_scan::InitializerReference;
 
 /// Visit every named type reference inside a `ParsedTypeRef`.
 pub(crate) fn for_each_named_type_in_parsed_ref(
@@ -40,12 +39,12 @@ pub(crate) fn for_each_named_type_in_parsed_ref(
     }
 }
 
-/// Collect every capacity-expression symbol reference inside a `ParsedTypeRef`.
+/// Collect every bare-constant capacity reference inside a `ParsedTypeRef`.
 ///
 /// WHAT: walks the parsed type recursively and extracts `InitializerReference` hints from
-/// every `ParsedCollectionCapacity` token slice.
+/// every `ParsedCollectionCapacity::BareConstant` node.
 /// WHY: header dependency sorting needs value-namespace ordering edges for constants used in
-/// fixed-collection capacity expressions.
+/// fixed-collection capacity annotations. Literal capacities need no dependency edge.
 pub(crate) fn collect_capacity_references_in_parsed_ref(
     parsed: &ParsedTypeRef,
     references: &mut Vec<InitializerReference>,
@@ -64,8 +63,15 @@ pub(crate) fn collect_capacity_references_in_parsed_ref(
             fixed_capacity,
             ..
         } => {
-            if let Some(capacity) = fixed_capacity {
-                references.extend(collect_symbol_references(&capacity.tokens));
+            if let Some(ParsedCollectionCapacity::BareConstant { name, location }) = fixed_capacity
+            {
+                references.push(InitializerReference {
+                    name: *name,
+                    dot_member: None,
+                    location: location.clone(),
+                    followed_by_call: false,
+                    followed_by_choice_namespace: false,
+                });
             }
             collect_capacity_references_in_parsed_ref(element, references);
         }

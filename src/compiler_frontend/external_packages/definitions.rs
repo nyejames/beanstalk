@@ -4,10 +4,7 @@
 //! WHY: the registry stores these definitions so the frontend and backends can query signatures
 //! and lowering metadata without re-parsing binding files.
 
-use super::abi::{
-    ExternalAbiType, ExternalAccessKind, ExternalParameter, ExternalReturnAlias,
-    ExternalSignatureType,
-};
+use super::abi::{ExternalAbiType, ExternalParameter, ExternalReturnAlias, ExternalSignatureType};
 use super::ids::{ExternalPackageId, ExternalPackageOrigin};
 use crate::compiler_frontend::datatypes::DataType;
 use std::collections::HashMap;
@@ -52,15 +49,6 @@ pub struct ExternalFunctionDef {
     pub returns: Vec<ExternalReturnSlot>,
     /// Optional final error slot. This maps to `T!` on source functions.
     pub error_return_type: Option<ExternalSignatureType>,
-    /// If this function is a receiver method, the signature type of the receiver.
-    /// The first entry in `parameters` is the receiver argument.
-    ///
-    /// WHAT: `ExternalSignatureType` so exact external type identity is preserved for
-    ///       receiver method dispatch. `Abi(Handle)` preserves the old broad matching;
-    ///       `External(type_id)` enforces exact package-scoped identity.
-    pub receiver_type: Option<ExternalSignatureType>,
-    /// Access kind required for the receiver when this is a method.
-    pub receiver_access: ExternalAccessKind,
     /// Backend-specific lowering metadata.
     pub lowerings: ExternalFunctionLowerings,
 }
@@ -231,8 +219,6 @@ pub struct ExternalFunctionSpec {
     pub parameters: Vec<ExternalParameter>,
     pub returns: Vec<ExternalReturnSlot>,
     pub error_return_type: Option<ExternalSignatureType>,
-    pub receiver_type: Option<ExternalSignatureType>,
-    pub receiver_access: ExternalAccessKind,
     pub lowerings: ExternalFunctionLowerings,
 }
 
@@ -243,8 +229,6 @@ impl From<ExternalFunctionSpec> for ExternalFunctionDef {
             parameters: spec.parameters,
             returns: spec.returns,
             error_return_type: spec.error_return_type,
-            receiver_type: spec.receiver_type,
-            receiver_access: spec.receiver_access,
             lowerings: spec.lowerings,
         }
     }

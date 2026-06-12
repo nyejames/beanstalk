@@ -6,18 +6,27 @@
 //!      be confused with resolved semantic type identity.
 
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap};
-use crate::compiler_frontend::tokenizer::tokens::{SourceLocation, Token};
+use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 
-/// Parsed fixed-capacity expression syntax before semantic folding.
+/// Parsed fixed-capacity syntax before semantic folding.
 ///
-/// WHAT: stores the exact token slice and primary source location for a collection capacity
-///       expression such as `64` or `capacity + 16`.
-/// WHY: the parser owns syntax shape only. AST type resolution later folds these tokens into
-///      the canonical fixed collection capacity once constants and types are available.
+/// WHAT: stores the narrow capacity shape the parser accepts: a positive integer literal
+///       or a bare constant name. Arithmetic and other general expression forms are
+///       rejected at parse time so type resolution only sees canonical capacity forms.
+/// WHY: collection capacity identity requires a compile-time-known value, but the parser
+///      enforces the literal-or-bare-const rule directly rather than carrying raw tokens.
 #[derive(Debug, Clone, PartialEq)]
-pub(crate) struct ParsedCollectionCapacity {
-    pub(crate) tokens: Vec<Token>,
-    pub(crate) location: SourceLocation,
+pub(crate) enum ParsedCollectionCapacity {
+    /// A positive integer literal such as `64`.
+    Literal {
+        value: i64,
+        location: SourceLocation,
+    },
+    /// A bare visible constant name such as `capacity`.
+    BareConstant {
+        name: StringId,
+        location: SourceLocation,
+    },
 }
 
 /// Parsed type annotation before resolution.
@@ -172,9 +181,14 @@ impl ParsedTypeRef {
                 element.remap_string_ids(remap);
                 location.remap_string_ids(remap);
                 if let Some(capacity) = fixed_capacity {
-                    capacity.location.remap_string_ids(remap);
-                    for token in &mut capacity.tokens {
-                        token.remap_string_ids(remap);
+                    match capacity {
+                        ParsedCollectionCapacity::BareConstant { name, location } => {
+                            location.remap_string_ids(remap);
+                            *name = remap.get(*name);
+                        }
+                        ParsedCollectionCapacity::Literal { location, .. } => {
+                            location.remap_string_ids(remap);
+                        }
                     }
                 }
             }

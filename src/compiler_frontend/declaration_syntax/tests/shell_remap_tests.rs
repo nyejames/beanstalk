@@ -36,24 +36,19 @@ fn make_symbol_token(name: StringId, string_table: &mut StringTable) -> Token {
 }
 
 #[test]
-fn collection_capacity_tokens_remap() {
+fn collection_capacity_bare_constant_remap() {
     let mut local = StringTable::new();
     let mut global = StringTable::new();
 
     let cap_name = local.intern("capacity");
-    let cap_tokens = vec![
-        Token::new(TokenKind::Symbol(cap_name), make_location(&mut local)),
-        Token::new(TokenKind::Add, make_location(&mut local)),
-        Token::new(TokenKind::IntLiteral(16), make_location(&mut local)),
-    ];
 
     let mut parsed = ParsedTypeRef::Collection {
         element: Box::new(ParsedTypeRef::BuiltinInt {
             location: make_location(&mut local),
         }),
         location: make_location(&mut local),
-        fixed_capacity: Some(ParsedCollectionCapacity {
-            tokens: cap_tokens,
+        fixed_capacity: Some(ParsedCollectionCapacity::BareConstant {
+            name: cap_name,
             location: make_location(&mut local),
         }),
     };
@@ -73,15 +68,14 @@ fn collection_capacity_tokens_remap() {
                     location: make_location(&mut global),
                 }
             );
-            let capacity = fixed_capacity.expect("capacity tokens should be present");
-            assert_test_location(&capacity.location, &global);
-            assert_eq!(capacity.tokens.len(), 3);
-            match &capacity.tokens[0].kind {
-                TokenKind::Symbol(id) => assert_eq!(global.resolve(*id), "capacity"),
-                other => panic!("expected Symbol, got {:?}", other),
+            let capacity = fixed_capacity.expect("capacity should be present");
+            match capacity {
+                ParsedCollectionCapacity::BareConstant { name, location } => {
+                    assert_test_location(&location, &global);
+                    assert_eq!(global.resolve(name), "capacity");
+                }
+                other => panic!("expected BareConstant, got {:?}", other),
             }
-            assert_eq!(capacity.tokens[1].kind, TokenKind::Add);
-            assert_eq!(capacity.tokens[2].kind, TokenKind::IntLiteral(16));
         }
         other => panic!("expected Collection, got {:?}", other),
     }

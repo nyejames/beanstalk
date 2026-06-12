@@ -492,7 +492,6 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             trait_environment,
             trait_evidence_environment: None,
             visible_trait_names: Some(&visibility.visible_trait_names),
-            source_file_scope: None,
         });
         if let Some(gp) = generic_parameters {
             context = context.with_generic_parameters(Some(gp));

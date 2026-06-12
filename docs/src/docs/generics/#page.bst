@@ -61,8 +61,8 @@ page_head #= theme_head
 
         [data:
             [: Generic aliases with parameters]
-            [: Deferred]
-            [: Alias only a fully concrete generic instance for now.]
+            [: Outside scope]
+            [: Alias only a fully concrete generic instance; parameterized aliases create a separate type-level abstraction layer.]
         ]
 
         [data:
@@ -73,7 +73,7 @@ page_head #= theme_head
 
         [data:
             [: Generic function values]
-            [: Rejected / Deferred]
+            [: Outside scope]
             [: Generic functions are callable declarations only, not first-class values.]
         ]
 
@@ -85,14 +85,14 @@ page_head #= theme_head
 
         [data:
             [: Type values / type-level CTFE]
-            [: Not supported]
+            [: Outside scope]
             [: Types are compile-time annotation facts, not runtime or compile-time values.]
         ]
 
         [data:
             [: Trait bounds]
             [: Partial]
-            [: Declaration-site [$html:<code>type T is TRAIT</code>] and [$html:<code>type T is A and B, U is C</code>] bounds are supported for generic functions, structs, and choices. [$html:<code>where</code>] clauses and file-local evidence-backed generic bound dispatch remain deferred.]
+            [: Declaration-site [$html:<code>type T is TRAIT</code>] and [$html:<code>type T is A and B, U is C</code>] bounds are supported for generic functions, structs, and choices. [$html:<code>where</code>] clauses and file-local evidence-backed generic-bound dispatch are outside scope.]
         ]
     ]
 ]
@@ -421,23 +421,34 @@ page_head #= theme_head
 ]
 
 #[section, $markdown:
-    # Deferred features
+    # Deferred generic work
 
-    The following are not current Alpha generics:
+    The following fit the language design but are not current Alpha generics:
 
     - explicit generic call syntax such as `identity of Int(42)`, `identity<Int>(42)`, `["identity[Int](42)"]`, or `identity(42 Int)`
     - inline generic sugar such as `|value type A|`
-    - generic function values and higher-order generic functions
-    - `where` clauses and file-local evidence-backed generic bound dispatch
-    - type values, type-returning functions, type-level `#if`, and compile-time type inspection
     - recursive generic structs or choices
     - receiver methods on instantiated generic types
     - namespace or wildcard facade exports and function alias exports through `#mod.bst`
     - generic JS or external package functions
-    - generic aliases with parameters
-    - partial type application
     - nested generic type application beyond the collection element exception
     - public `Option of T` or `Result of T, E`
     - `Option.Some`, `Result.Ok`, public `Ok` or `Err` constructors
-    - higher-kinded types, const generics, lifetime parameters, specialization, associated types, and dynamic generic reification
+]
+
+#[section, $markdown:
+    # Outside generic design scope
+
+    These features are intentionally outside Beanstalk's generic design scope:
+
+    - generic function values and higher-order polymorphism
+    - type values, type-returning functions, type-level `#if`, and compile-time type inspection
+    - `where` clauses and file-local evidence-backed generic-bound dispatch
+    - parameterized aliases and partial type application
+    - higher-kinded types
+    - const generics beyond fixed collection capacity
+    - lifetime parameters
+    - specialization
+    - associated types
+    - dynamic generic reification
 ]

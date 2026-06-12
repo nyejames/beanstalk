@@ -48,7 +48,6 @@ pub fn register_core_time_package(registry: &mut ExternalPackageRegistry) {
             parameters: vec![],
             returns: vec![ExternalReturnSlot::fresh(time_mark_type.clone())],
             error_return_type: None,
-            receiver_type: None,
             js_lowering: ExternalJsLowering::InlineExpression(
                 "globalThis.performance.now()".to_owned(),
             ),
@@ -63,7 +62,6 @@ pub fn register_core_time_package(registry: &mut ExternalPackageRegistry) {
             parameters: vec![shared_param(time_mark_type.clone())],
             returns: vec![ExternalReturnSlot::fresh(duration_type.clone())],
             error_return_type: None,
-            receiver_type: None,
             js_lowering: ExternalJsLowering::InlineExpression(
                 "(globalThis.performance.now() - #0)".to_owned(),
             ),
@@ -81,7 +79,6 @@ pub fn register_core_time_package(registry: &mut ExternalPackageRegistry) {
             ],
             returns: vec![ExternalReturnSlot::fresh(duration_type.clone())],
             error_return_type: None,
-            receiver_type: None,
             js_lowering: ExternalJsLowering::InlineExpression("(#1 - #0)".to_owned()),
         },
     );
@@ -96,7 +93,6 @@ pub fn register_core_time_package(registry: &mut ExternalPackageRegistry) {
             parameters: vec![],
             returns: vec![ExternalReturnSlot::fresh(timestamp_type.clone())],
             error_return_type: None,
-            receiver_type: None,
             js_lowering: ExternalJsLowering::InlineExpression("Date.now()".to_owned()),
         },
     );
@@ -113,7 +109,6 @@ pub fn register_core_time_package(registry: &mut ExternalPackageRegistry) {
             ))],
             returns: vec![ExternalReturnSlot::fresh(duration_type.clone())],
             error_return_type: None,
-            receiver_type: None,
             js_lowering: ExternalJsLowering::InlineExpression("(#0 * 1000.0)".to_owned()),
         },
     );
@@ -128,7 +123,6 @@ pub fn register_core_time_package(registry: &mut ExternalPackageRegistry) {
             ))],
             returns: vec![ExternalReturnSlot::fresh(duration_type.clone())],
             error_return_type: None,
-            receiver_type: None,
             js_lowering: ExternalJsLowering::InlineExpression("#0".to_owned()),
         },
     );
@@ -145,7 +139,6 @@ pub fn register_core_time_package(registry: &mut ExternalPackageRegistry) {
             ))],
             returns: vec![ExternalReturnSlot::fresh(timestamp_type.clone())],
             error_return_type: None,
-            receiver_type: None,
             js_lowering: ExternalJsLowering::InlineExpression("(#0 * 1000.0)".to_owned()),
         },
     );
@@ -160,7 +153,6 @@ pub fn register_core_time_package(registry: &mut ExternalPackageRegistry) {
             ))],
             returns: vec![ExternalReturnSlot::fresh(timestamp_type.clone())],
             error_return_type: None,
-            receiver_type: None,
             js_lowering: ExternalJsLowering::InlineExpression("#0".to_owned()),
         },
     );
@@ -175,7 +167,6 @@ pub fn register_core_time_package(registry: &mut ExternalPackageRegistry) {
             ))],
             returns: vec![ExternalReturnSlot::fresh(timestamp_type.clone())],
             error_return_type: Some(ExternalSignatureType::BuiltinError),
-            receiver_type: None,
             js_lowering: ExternalJsLowering::RuntimeFunction(
                 "__bs_time_timestamp_from_iso_string".to_owned(),
             ),
@@ -183,7 +174,7 @@ pub fn register_core_time_package(registry: &mut ExternalPackageRegistry) {
     );
 
     // ------------------------
-    //  Duration receiver methods
+    //  Duration helpers
     // ------------------------
 
     register_external_time_function(
@@ -196,7 +187,6 @@ pub fn register_core_time_package(registry: &mut ExternalPackageRegistry) {
                 ExternalAbiType::F64,
             ))],
             error_return_type: None,
-            receiver_type: Some(duration_type.clone()),
             js_lowering: ExternalJsLowering::InlineExpression("(#0 / 1000.0)".to_owned()),
         },
     );
@@ -211,7 +201,6 @@ pub fn register_core_time_package(registry: &mut ExternalPackageRegistry) {
                 ExternalAbiType::F64,
             ))],
             error_return_type: None,
-            receiver_type: Some(duration_type.clone()),
             js_lowering: ExternalJsLowering::InlineExpression("#0".to_owned()),
         },
     );
@@ -226,7 +215,6 @@ pub fn register_core_time_package(registry: &mut ExternalPackageRegistry) {
                 ExternalAbiType::Bool,
             ))],
             error_return_type: None,
-            receiver_type: Some(duration_type.clone()),
             js_lowering: ExternalJsLowering::InlineExpression("(#0 < 0)".to_owned()),
         },
     );
@@ -239,7 +227,6 @@ pub fn register_core_time_package(registry: &mut ExternalPackageRegistry) {
             parameters: vec![shared_param(duration_type.clone())],
             returns: vec![ExternalReturnSlot::fresh(duration_type.clone())],
             error_return_type: None,
-            receiver_type: Some(duration_type.clone()),
             js_lowering: ExternalJsLowering::InlineExpression("Math.abs(#0)".to_owned()),
         },
     );
@@ -256,7 +243,6 @@ pub fn register_core_time_package(registry: &mut ExternalPackageRegistry) {
             ],
             returns: vec![ExternalReturnSlot::fresh(duration_type.clone())],
             error_return_type: None,
-            receiver_type: Some(duration_type.clone()),
             js_lowering: ExternalJsLowering::InlineExpression(
                 "Math.min(Math.max(#0, #1), #2)".to_owned(),
             ),
@@ -264,7 +250,7 @@ pub fn register_core_time_package(registry: &mut ExternalPackageRegistry) {
     );
 
     // ------------------------
-    //  Timestamp receiver methods
+    //  Timestamp helpers
     // ------------------------
 
     register_external_time_function(
@@ -277,7 +263,6 @@ pub fn register_core_time_package(registry: &mut ExternalPackageRegistry) {
                 ExternalAbiType::F64,
             ))],
             error_return_type: None,
-            receiver_type: Some(timestamp_type.clone()),
             js_lowering: ExternalJsLowering::InlineExpression("(#0 / 1000.0)".to_owned()),
         },
     );
@@ -292,7 +277,6 @@ pub fn register_core_time_package(registry: &mut ExternalPackageRegistry) {
                 ExternalAbiType::F64,
             ))],
             error_return_type: None,
-            receiver_type: Some(timestamp_type.clone()),
             js_lowering: ExternalJsLowering::InlineExpression("#0".to_owned()),
         },
     );
@@ -307,7 +291,6 @@ pub fn register_core_time_package(registry: &mut ExternalPackageRegistry) {
                 ExternalAbiType::Utf8Str,
             ))],
             error_return_type: None,
-            receiver_type: Some(timestamp_type.clone()),
             js_lowering: ExternalJsLowering::InlineExpression(
                 "(new Date(#0)).toISOString()".to_owned(),
             ),
@@ -354,7 +337,6 @@ struct TimeFunctionSpec {
     parameters: Vec<ExternalParameter>,
     returns: Vec<ExternalReturnSlot>,
     error_return_type: Option<ExternalSignatureType>,
-    receiver_type: Option<ExternalSignatureType>,
     js_lowering: ExternalJsLowering,
 }
 
@@ -372,8 +354,6 @@ fn register_external_time_function(
                 parameters: spec.parameters,
                 returns: spec.returns,
                 error_return_type: spec.error_return_type,
-                receiver_type: spec.receiver_type,
-                receiver_access: ExternalAccessKind::Shared,
                 lowerings: ExternalFunctionLowerings {
                     js: Some(spec.js_lowering),
                     wasm: None,

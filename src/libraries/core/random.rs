@@ -26,8 +26,6 @@ pub fn register_core_random_package(registry: &mut ExternalPackageRegistry) {
                 parameters: Vec::new(),
                 returns: external_success_returns(ExternalAbiType::F64, ExternalReturnAlias::Fresh),
                 error_return_type: None,
-                receiver_type: None,
-                receiver_access: ExternalAccessKind::Shared,
                 lowerings: ExternalFunctionLowerings {
                     js: Some(ExternalJsLowering::InlineExpression(
                         "Math.random()".to_owned(),
@@ -51,8 +49,6 @@ pub fn register_core_random_package(registry: &mut ExternalPackageRegistry) {
                 parameters: vec![int_param.clone(), int_param],
                 returns: external_success_returns(ExternalAbiType::I32, ExternalReturnAlias::Fresh),
                 error_return_type: None,
-                receiver_type: None,
-                receiver_access: ExternalAccessKind::Shared,
                 lowerings: ExternalFunctionLowerings {
                     js: Some(ExternalJsLowering::RuntimeFunction(
                         "__bs_random_int".to_owned(),

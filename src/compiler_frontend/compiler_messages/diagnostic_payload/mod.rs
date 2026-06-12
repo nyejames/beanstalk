@@ -161,11 +161,6 @@ pub enum DiagnosticPayload {
         message: StringId,
     },
 
-    ReceiverMethodImportRequiresVisibleReceiverType {
-        method_name: StringId,
-        receiver_type_name: Option<StringId>,
-    },
-
     // -----------------
     //  Borrow Payloads
     // -----------------

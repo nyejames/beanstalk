@@ -93,8 +93,9 @@ impl<'a> ImportEnvironmentBuilder<'a> {
             .visible_namespace_records
             .insert(local_name, record);
 
-        // Namespace imports make receiver methods from the imported surface visible
-        // through the receiver catalog under their original names.
+        // Namespace imports make source receiver methods from the imported surface visible
+        // through the receiver catalog under their original names. External package functions
+        // are namespace value members only; external packages do not expose receiver methods.
         match &namespace_target {
             ResolvedNamespaceTarget::SourceFile(file_path) => {
                 if let Some(access) = source_namespace_access.as_ref() {
@@ -106,14 +107,7 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                     );
                 }
             }
-            ResolvedNamespaceTarget::ExternalPackage { package_path } => {
-                let package_path = self.string_table.resolve(*package_path).to_owned();
-                self.add_external_receiver_methods_from_package(
-                    file_visibility,
-                    &package_path,
-                    None,
-                );
-            }
+            ResolvedNamespaceTarget::ExternalPackage { .. } => {}
         }
 
         Ok(())
@@ -129,20 +123,28 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         match access {
             SourceImportAccess::Facade { exported_entries } => {
                 for entry in exported_entries {
-                    let FacadeExportTarget::Source(path) = &entry.target else {
+                    let FacadeExportTarget::Source(type_path) = &entry.target else {
                         continue;
                     };
 
-                    if self.module_symbols.receiver_method_paths.contains(path)
-                        && let Some(name) = path.name()
-                    {
-                        Self::add_visible_receiver_method(
-                            file_visibility,
-                            name,
-                            path,
-                            location.clone(),
-                        );
+                    if !self.module_symbols.nominal_type_paths.contains(type_path) {
+                        continue;
                     }
+
+                    let Some(target_file) = self
+                        .module_symbols
+                        .canonical_source_by_symbol_path
+                        .get(type_path)
+                    else {
+                        continue;
+                    };
+
+                    self.auto_import_receiver_methods_for_type(
+                        file_visibility,
+                        type_path,
+                        target_file,
+                        access,
+                    );
                 }
             }
 
@@ -154,7 +156,6 @@ impl<'a> ImportEnvironmentBuilder<'a> {
                 {
                     for path in declared_paths {
                         if self.module_symbols.receiver_method_paths.contains(path)
-                            && self.receiver_method_visible_for_source_access(path, access)
                             && let Some(name) = path.name()
                         {
                             Self::add_visible_receiver_method(
@@ -173,7 +174,8 @@ impl<'a> ImportEnvironmentBuilder<'a> {
     /// Receiver-method access model for a source namespace import.
     ///
     /// WHAT: internal source namespaces retain all receiver methods from that file. Facade
-    /// namespaces expose only receiver methods in the facade's explicit public export map.
+    /// namespaces expose receiver-call visibility through exported receiver types, never through
+    /// explicit method fields.
     fn source_namespace_receiver_access(
         &self,
         namespace_file: &InternedPath,
@@ -582,15 +584,10 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         let function_names: Vec<String> = package.functions.keys().cloned().collect();
         for name in function_names {
             let name_id = self.string_table.intern(&name);
-            if let Some((function_id, def)) = self
+            if let Some((function_id, _def)) = self
                 .external_package_registry
                 .resolve_package_function(&package_path_str, &name)
             {
-                // External receiver methods are not exposed as namespace-record value fields.
-                // They are resolved through the external receiver lookup path.
-                if def.receiver_type.is_some() {
-                    continue;
-                }
                 value_members.insert(
                     name_id,
                     NamespaceValueMember::ExternalSymbol(ExternalSymbolId::Function(function_id)),

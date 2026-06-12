@@ -24,6 +24,7 @@ page_head #= theme_head
 
     ### Introduction
     - @./language-overview (Language Basics)
+    - @./design-scope (Language Design Scope)
     - @./getting-started (Getting Started)
 
     ### Core Language Features

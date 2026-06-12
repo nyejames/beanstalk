@@ -109,7 +109,7 @@ pub(crate) mod templates;
 pub use module_ast::build_context::AstBuildContext;
 pub(crate) use module_ast::environment::TopLevelDeclarationTable;
 pub use module_ast::scope_context::{ContextKind, ScopeContext};
-pub(crate) use receiver_methods::{ReceiverMethodCatalog, ReceiverMethodEntry, ReceiverMethodKind};
+pub(crate) use receiver_methods::{ReceiverMethodCatalog, ReceiverMethodEntry};
 pub use templates::top_level_templates::AstDocFragment;
 pub use templates::top_level_templates::AstDocFragmentKind;
 

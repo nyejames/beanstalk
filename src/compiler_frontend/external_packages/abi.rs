@@ -135,7 +135,7 @@ pub struct ExternalParameter {
     pub access_kind: ExternalAccessKind,
 }
 
-/// Borrow access mode for an external parameter or receiver.
+/// Borrow access mode for an external parameter.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ExternalAccessKind {
     Shared,

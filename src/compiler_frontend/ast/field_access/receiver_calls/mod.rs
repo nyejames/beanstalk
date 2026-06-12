@@ -1,7 +1,7 @@
 //! Receiver-call dispatch orchestration.
 //!
 //! WHAT: dispatches a receiver method call through the ordered lookup sequence:
-//!       source method → generic-bound method → external method → concrete trait evidence fallback.
+//!       source method → generic-bound method → concrete trait evidence fallback.
 //! WHY: keeping the dispatch order explicit in one file makes the precedence
 //!      between overlapping method sources obvious and easy to audit.
 
@@ -13,7 +13,6 @@ use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::FileTokens;
 
 mod concrete_trait_evidence;
-mod external_methods;
 mod generic_bound_methods;
 mod shared;
 mod source_methods;
@@ -84,26 +83,9 @@ pub(super) fn parse_receiver_method_call_typed(
         return Ok(Some(node));
     }
 
-    // 3. External platform-package receiver method.
-    if let Some(node) = external_methods::parse_external_receiver_method_call(
-        external_methods::ExternalReceiverMethodCallInput {
-            token_stream,
-            receiver_node,
-            receiver_type_id,
-            member_name,
-            member_location: member_location.clone(),
-            receiver_access_mode,
-            scope_context,
-            type_interner,
-            string_table,
-        },
-    )? {
-        return Ok(Some(node));
-    }
-
-    // 4. Visible concrete trait evidence fallback.
-    // Concrete evidence runs after direct methods and external packages so explicit receiver syntax
-    // and backend-provided methods take priority over implicit trait conformance.
+    // 3. Visible concrete trait evidence fallback.
+    // Concrete evidence runs after direct source and generic-bound methods so explicit methods
+    // take priority over implicit trait conformance.
     if let Some(evidence_method) =
         concrete_trait_evidence::lookup_concrete_trait_evidence_receiver_method(
             scope_context,

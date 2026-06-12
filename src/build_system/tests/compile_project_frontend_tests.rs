@@ -74,7 +74,6 @@ impl ExternalImportProvider for DummyJsImportProvider {
                 make_widget_function_id,
                 use_widget_function_id,
             ],
-            exported_receiver_methods: Vec::new(),
             runtime_asset: None,
             diagnostics: Vec::new(),
             required_runtime_imports: Vec::new(),
@@ -137,8 +136,6 @@ fn register_dummy_draw_function(
                 parameters: Vec::new(),
                 returns: vec![ExternalReturnSlot::fresh(ExternalAbiType::I32)],
                 error_return_type: None,
-                receiver_type: None,
-                receiver_access: ExternalAccessKind::Shared,
                 lowerings: ExternalFunctionLowerings::default(),
             },
         )
@@ -161,8 +158,6 @@ fn register_dummy_make_widget_function(
                     widget_type_id,
                 ))],
                 error_return_type: None,
-                receiver_type: None,
-                receiver_access: ExternalAccessKind::Shared,
                 lowerings: ExternalFunctionLowerings::default(),
             },
         )
@@ -188,8 +183,6 @@ fn register_dummy_use_widget_function(
                 ],
                 returns: vec![ExternalReturnSlot::fresh(ExternalAbiType::I32)],
                 error_return_type: None,
-                receiver_type: None,
-                receiver_access: ExternalAccessKind::Shared,
                 lowerings: ExternalFunctionLowerings::default(),
             },
         )
@@ -254,6 +247,19 @@ fn module_contains_external_module_export(
     })
 }
 
+fn assert_has_diagnostic_code(messages: &CompilerMessages, expected_code: &str) {
+    let actual_codes = messages
+        .diagnostics
+        .iter()
+        .map(|diagnostic| diagnostic.kind.code())
+        .collect::<Vec<_>>();
+
+    assert!(
+        actual_codes.contains(&expected_code),
+        "expected diagnostic code {expected_code}, got {actual_codes:?}"
+    );
+}
+
 // -------------------------
 //  Provider metadata carry
 // -------------------------
@@ -297,7 +303,6 @@ impl ExternalImportProvider for DummyJsImportProviderWithLowering {
             package_id,
             exported_types: Vec::new(),
             exported_free_functions: vec![draw_function_id],
-            exported_receiver_methods: Vec::new(),
             runtime_asset: Some(RuntimeAssetIdentity {
                 canonical_source_path: request.canonical_source_path.clone(),
                 asset_kind: "js".to_owned(),
@@ -321,8 +326,6 @@ fn register_dummy_draw_function_with_js_lowering(
                 parameters: Vec::new(),
                 returns: vec![ExternalReturnSlot::fresh(ExternalAbiType::I32)],
                 error_return_type: None,
-                receiver_type: None,
-                receiver_access: ExternalAccessKind::Shared,
                 lowerings: ExternalFunctionLowerings {
                     js: Some(ExternalJsLowering::RuntimeFunction("draw".to_owned())),
                     wasm: None,
@@ -1274,8 +1277,8 @@ fn html_js_provider_grouped_alias_for_function_and_opaque_type_resolves() {
 }
 
 #[test]
-fn html_js_provider_receiver_method_resolves() {
-    let dir = temp_dir("html_js_provider_receiver_method");
+fn html_js_provider_receiver_method_in_project_local_js_rejected() {
+    let dir = temp_dir("html_js_provider_receiver_method_rejected");
     fs::create_dir_all(&dir).expect("should create temp dir");
     fs::write(dir.join("#config.bst"), "").expect("should write config");
     fs::write(
@@ -1287,28 +1290,29 @@ fn html_js_provider_receiver_method_resolves() {
         dir.join("drawing.js"),
         "/**\n * @bst.opaque Canvas\n */\n/**\n * @bst.sig make_canvas || -> Canvas\n */\nexport function makeCanvas() {\n    return {};\n}\n/**\n * @bst.sig fill_rect |this ~Canvas, x Float, y Float, width Float, height Float|\n */\nexport function fillRect(ctx, x, y, width, height) {}\n",
     )
-    .expect("should write js");
+    .expect("should write js with receiver-style signature");
 
     let mut config = Config::new(dir.clone());
     let style_directives = StyleDirectiveRegistry::built_ins();
     let mut string_table = StringTable::new();
     let mut libraries = library_set_with_html_js_provider();
 
-    let modules = compile_project_frontend(
+    let messages = match compile_project_frontend(
         &mut config,
         &[],
         &style_directives,
         &mut libraries,
         &mut string_table,
-    )
-    .expect("receiver method from JS opaque type should compile");
+    ) {
+        Ok(_) => panic!("project-local JS receiver-style signature should be rejected"),
+        Err(messages) => messages,
+    };
 
     assert!(
-        modules
-            .iter()
-            .any(|module| module_contains_external_module_export(module, "fillRect")),
-        "HIR should preserve receiver method JS export metadata"
+        messages.has_errors(),
+        "expected at least one error diagnostic for project-local JS receiver-style signature"
     );
+    assert_has_diagnostic_code(&messages, "BST-IMPORT-0022");
 
     fs::remove_dir_all(&dir).expect("should remove temp dir");
 }
@@ -1478,6 +1482,49 @@ fn html_js_provider_malformed_receiver_signature_surfaces_diagnostics() {
         messages.has_errors(),
         "expected at least one error diagnostic for malformed receiver signature"
     );
+
+    fs::remove_dir_all(&dir).expect("should remove temp dir");
+}
+
+#[test]
+fn html_js_provider_rejects_well_formed_receiver_methods_in_project_local_js() {
+    let dir = temp_dir("html_js_provider_rejects_receiver_methods");
+    fs::create_dir_all(&dir).expect("should create temp dir");
+    fs::write(dir.join("#config.bst"), "").expect("should write config");
+    fs::write(
+        dir.join("#page.bst"),
+        "import @./drawing.js { Canvas, fill_rect }\n",
+    )
+    .expect("should write page");
+    fs::write(
+        dir.join("drawing.js"),
+        "/**\n * @bst.opaque Canvas\n */\n/**\n * @bst.sig fill_rect |this ~Canvas, x Float, y Float|\n */\nexport function fillRect(ctx, x, y) {}\n",
+    )
+    .expect("should write js with receiver-style signature");
+
+    let mut config = Config::new(dir.clone());
+    let style_directives = StyleDirectiveRegistry::built_ins();
+    let mut string_table = StringTable::new();
+    let mut libraries = library_set_with_html_js_provider();
+
+    let messages = match compile_project_frontend(
+        &mut config,
+        &[],
+        &style_directives,
+        &mut libraries,
+        &mut string_table,
+    ) {
+        Ok(_) => {
+            panic!("well-formed receiver-style signature in project-local JS should be rejected")
+        }
+        Err(messages) => messages,
+    };
+
+    assert!(
+        messages.has_errors(),
+        "expected at least one error diagnostic for project-local JS receiver-style signature"
+    );
+    assert_has_diagnostic_code(&messages, "BST-IMPORT-0022");
 
     fs::remove_dir_all(&dir).expect("should remove temp dir");
 }

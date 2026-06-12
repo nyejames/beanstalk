@@ -33,7 +33,8 @@ page_head #= theme_head
     - trait declarations are top-level declarations
     - requirements are method signatures only
     - empty marker traits are valid
-    - default methods, associated types, associated constants, trait inheritance, generic traits, and generic trait methods are deferred
+    - static non-method requirements are deferred
+    - default methods, associated types, associated constants, trait inheritance, generic traits, and generic trait methods are outside Beanstalk's trait design scope
 ]
 
 #[section, $markdown:
@@ -90,7 +91,7 @@ page_head #= theme_head
 ]
 
 #[section, $markdown:
-    # Canonical and file-local evidence
+    # Canonical evidence
 
     Beanstalk stores explicit conformance as evidence selected by the frontend.
 
@@ -102,17 +103,11 @@ page_head #= theme_head
             [: The conformance target is a struct, choice, or generic type constructor declared in the same file.]
             [: Reusable wherever both the target type and trait are visible.]
         ]
-
-        [data:
-            [: File-local extension]
-            [: The conformance target is imported, builtin, external, or otherwise not declared in the current file.]
-            [: Usable only in the declaring file.]
-        ]
     ]
 
-    File-local extension evidence is useful for local adapter code, but it is never exportable as a reusable conformance fact. It also cannot override visible canonical evidence.
-
-    User-authored conformances for builtin scalar types such as `Int must DISPLAY_TEXT` are file-local extensions. Compiler-owned builtin evidence is a separate metadata path, but it is not registered in the current Alpha scaffold.
+    User-authored conformances for builtin, imported, dependency/library, external opaque, and
+    other-file types are rejected. Use a local wrapper choice or struct when adapting values owned
+    by another file or package.
 ]
 
 #[section, $markdown:
@@ -182,26 +177,30 @@ page_head #= theme_head
 ]
 
 #[section, $markdown:
-    # Deferred trait ecosystem
+    # Outside trait design scope
 
-    Deferred surfaces include:
+    These surfaces are intentionally outside Beanstalk's trait design scope:
 
     - default methods
     - associated types and associated constants
     - trait inheritance and composition
     - generic traits and generic trait methods
+    - blanket, conditional, negative, or specialized conformance
+    - structural conformance
     - specialized generic instance conformance such as `Box of Int must DISPLAY_TEXT`
-    - static requirements that are not receiver methods
     - composed `This` forms
-    - file-local evidence-backed generic bound dispatch
     - automatic primitive conformances
     - output coercion through `DISPLAYABLE`
     - operator-to-trait integration
     - deriving, hashing, ordering, formatting, iteration, and serialization traits
+    - dynamic trait values / trait objects
+    - trait aliases or composition, downcasting, reflection, and pattern matching on erased concrete types
 ]
 
 #[section, $markdown:
-    # Outside language design scope
+    # Deferred trait work
 
-    Dynamic trait values / trait objects, trait aliases or composition, downcasting, reflection, pattern matching on erased concrete types, associated types/constants, trait inheritance, generic traits/methods, and conditional or specialized conformance are intentionally outside the current language design scope.
+    Deferred trait work is limited to static non-method requirements, compiler-owned builtin
+    conformance facts, diagnostics/tooling polish, and broader standard trait taxonomy that does
+    not change traits into runtime values or a type-level programming system.
 ]

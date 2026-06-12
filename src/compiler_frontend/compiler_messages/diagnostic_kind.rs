@@ -368,7 +368,6 @@ pub enum ImportDiagnosticKind {
     DuplicateBeandownInputPath,
     UnsupportedExternalExtension,
     InvalidExternalLibrary,
-    ReceiverMethodImportRequiresVisibleReceiverType,
 }
 
 #[cfg(test)]
@@ -399,7 +398,6 @@ impl ImportDiagnosticKind {
             Self::DuplicateBeandownInputPath,
             Self::UnsupportedExternalExtension,
             Self::InvalidExternalLibrary,
-            Self::ReceiverMethodImportRequiresVisibleReceiverType,
         ]
         .into_iter()
     }

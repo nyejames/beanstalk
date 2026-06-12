@@ -4,7 +4,7 @@
 //!       into structured `ParsedParameter` and `ParsedReturnType` values.
 //! WHY: the scanner should not embed full Beanstalk parser dependency, but it must
 //!      understand enough of the signature shape to validate arity and detect
-//!      receiver methods.
+//!      receiver-shaped signatures that external package registration rejects.
 //!
 //! Limitations (intentional):
 //! - Does not resolve type names against a registry; type names are returned as strings.
@@ -39,8 +39,8 @@ pub struct SignatureParseResult {
 ///       followed by `->` and return types.
 ///
 /// Examples of valid input:
-/// - `|id String| -> Canvas, Error!`
-/// - `|this ~Canvas2d, x Float|`
+/// - `|id String| -> CanvasElement, Error!`
+/// - `|ctx ~Canvas2d, x Float|`
 /// - `|| -> Error!`
 pub fn parse_signature(input: SignatureParseInput) -> SignatureParseResult {
     let mut scanner = SignatureScanner::new(input);

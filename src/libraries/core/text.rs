@@ -73,8 +73,6 @@ pub fn register_core_text_package(registry: &mut ExternalPackageRegistry) {
                         ExternalReturnAlias::Fresh,
                     ),
                     error_return_type: None,
-                    receiver_type: None,
-                    receiver_access: ExternalAccessKind::Shared,
                     lowerings: ExternalFunctionLowerings {
                         js: Some(ExternalJsLowering::RuntimeFunction((*js_name).to_owned())),
                         wasm: None,

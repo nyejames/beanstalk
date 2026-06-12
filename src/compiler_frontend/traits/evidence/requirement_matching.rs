@@ -89,9 +89,7 @@ fn find_same_file_method<'a>(
         .get(&(target.receiver_key.clone(), method_name))?;
 
     for entry in entries {
-        if entry.source_file != *conformance_source_file
-            || entry.kind != target.required_method_kind
-        {
+        if entry.source_file != *conformance_source_file {
             continue;
         }
 

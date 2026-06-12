@@ -200,8 +200,6 @@ pub struct ResolvedExternalImport {
     pub exported_types: Vec<ExternalTypeId>,
     /// Free functions exported by this file.
     pub exported_free_functions: Vec<ExternalFunctionId>,
-    /// Receiver methods exported by this file.
-    pub exported_receiver_methods: Vec<ExternalFunctionId>,
     /// Optional runtime asset that the backend must emit.
     pub runtime_asset: Option<RuntimeAssetIdentity>,
     /// Diagnostics or warnings emitted while parsing the external file.

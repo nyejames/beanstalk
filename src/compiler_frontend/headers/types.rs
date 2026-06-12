@@ -174,9 +174,9 @@ pub struct Header {
     pub tokens: FileTokens,
 
     pub source_file: InternedPath,
-    /// Capacity-expression symbol references discovered in type annotations on this header.
+    /// Bare fixed-capacity constant references discovered in type annotations on this header.
     ///
-    /// WHAT: value-namespace references from fixed-collection capacity expressions.
+    /// WHAT: value-namespace references from fixed-collection capacity annotations.
     /// WHY: dependency sorting must order referenced constants before the declaration that
     ///      uses them, even when the declaration itself is not a constant.
     pub capacity_references: Vec<InitializerReference>,

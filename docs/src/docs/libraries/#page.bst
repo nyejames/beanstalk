@@ -105,8 +105,8 @@ page_head #= theme_head
     - folder imports across module boundaries require a `#mod.bst` facade. Import concrete same-module files directly when no facade is intended.
 
     Namespace imports create a shallow namespace for ordinary fields.
-    Use `math.sin(1.0)` for values and `canvas.Canvas2d` in type position, but do not pass the namespace record itself as a value.
-    Receiver methods are called through receiver-call syntax rather than as namespace fields.
+    Use `math.sin(1.0)` or `canvas.fill_rect(~ctx, 0.0, 0.0, 100.0, 100.0)` for values and `canvas.Canvas2d` in type position, but do not pass the namespace record itself as a value.
+    Source-authored receiver methods are called through receiver-call syntax rather than as namespace fields.
 ]
 
 #[section, $markdown:
@@ -192,7 +192,7 @@ page_head #= theme_head
     - internal implementation files are not public unless the facade wraps or re-exports them intentionally
     - normal imports inside `#mod.bst` are local implementation details
     - exported signatures cannot expose private facade-only types
-    - receiver methods do not become public through facade type aliases; export the receiver method or a wrapper explicitly
+    - receiver methods do not become public through facade type aliases; export the receiver type's source surface or a wrapper explicitly
     - `#mod.bst` is not shared implementation code for sibling files
     - runtime top-level statements and runtime top-level templates are invalid in `#mod.bst`
     - bare namespace exports such as `export @./utils` and wildcard exports remain deferred
@@ -333,7 +333,7 @@ page_head #= theme_head
 
         [data:
             [: [$html:<code>@bst.opaque Canvas2d</code>] ]
-            [: Declares an opaque external type. Beanstalk can name it, pass it, and call receiver methods on it, but does not know its internal fields.]
+            [: Declares an opaque external type. Beanstalk can name it and pass it through external functions, but does not know its internal fields.]
         ]
 
         [data:
@@ -352,8 +352,8 @@ page_head #= theme_head
         ]
 
         [data:
-            [: [$html:<code>@bst.sig fill |this ~Canvas2d, x Float|</code>] ]
-            [: Declares a receiver method on a mutable [$html:<code>Canvas2d</code>] receiver.]
+            [: [$html:<code>@bst.sig fill |ctx ~Canvas2d, x Float|</code>] ]
+            [: Declares a free function whose first parameter takes mutable access to a [$html:<code>Canvas2d</code>] value.]
         ]
     ]
 
@@ -380,11 +380,11 @@ page_head #= theme_head
         import { bstOk, bstErr } from "@beanstalk/runtime";
 
         /**
-         * @bst.opaque Canvas
+         * @bst.opaque CanvasElement
          */
 
         /**
-         * @bst.sig get_canvas |id String| -> Canvas, Error!
+         * @bst.sig get_canvas |id String| -> CanvasElement, Error!
          */
         export function getCanvas(id) {
             const canvas = document.getElementById(id);
@@ -416,11 +416,11 @@ page_head #= theme_head
 ]
 
 #[section, $markdown:
-    # Receiver methods from JavaScript
+    # Mutable JavaScript free functions
 
-    Use the `this` parameter to declare a JavaScript export as a receiver method.
-    `this` must be the first parameter and may appear at most once.
-    Add `~` when the method mutates the receiver.
+    JavaScript-backed external packages expose free functions only.
+    Put the opaque value in the first parameter when a function acts on that value, and add `~` when the function mutates it.
+    `this` receiver-style signatures are rejected for JS imports and builder-owned external packages.
 
     [codeblock, $code("js"):
         /**
@@ -428,37 +428,36 @@ page_head #= theme_head
          */
 
         /**
-         * @bst.sig set_fill_style |this ~Canvas2d, color String|
+         * @bst.sig set_fill_style |ctx ~Canvas2d, color String|
          */
         export function setFillStyle(ctx, color) {
             ctx.fillStyle = color;
         }
 
         /**
-         * @bst.sig fill_rect |this ~Canvas2d, x Float, y Float, width Float, height Float|
+         * @bst.sig fill_rect |ctx ~Canvas2d, x Float, y Float, width Float, height Float|
          */
         export function fillRect(ctx, x, y, width, height) {
             ctx.fillRect(x, y, width, height);
         }
     ]
 
-    The first JavaScript parameter is the receiver object.
-    Beanstalk calls it with receiver-call syntax:
+    The first JavaScript parameter receives the opaque context object.
+    Beanstalk calls these as ordinary free functions:
 
     [codeblock, $code("bst"):
-        import @web/canvas {get_canvas, context_2d, Canvas2d}
+        import @web/canvas {get_canvas, context_2d, Canvas2d, set_fill_style, fill_rect}
 
         run |id String| -> String, Error!:
             canvas_ref = get_canvas(id)!
             ctx ~Canvas2d = context_2d(canvas_ref)!
-            ~ctx.set_fill_style("red")
-            ~ctx.fill_rect(0.0, 0.0, 100.0, 100.0)
+            set_fill_style(~ctx, "red")
+            fill_rect(~ctx, 0.0, 0.0, 100.0, 100.0)
             return "canvas_ok"
         ;
     ]
 
-    Receiver-method dispatch includes the receiver type, so the same method name can exist for different receiver types.
-    The receiver type must still be visible in the importing file.
+    Source libraries can wrap raw external values in ordinary Beanstalk structs when they want method-style ergonomics.
 ]
 
 #[section, $markdown:
@@ -475,8 +474,8 @@ page_head #= theme_head
         run |id String| -> String, Error!:
             canvas_ref = canvas.get_canvas(id)!
             ctx ~= canvas.context_2d(canvas_ref)!
-            ~ctx.set_fill_style("red")
-            ~ctx.fill_rect(0.0, 0.0, 100.0, 100.0)
+            canvas.set_fill_style(~ctx, "red")
+            canvas.fill_rect(~ctx, 0.0, 0.0, 100.0, 100.0)
             return "canvas_ok"
         ;
 
@@ -485,6 +484,24 @@ page_head #= theme_head
         ;
 
         io(result)
+    ]
+
+    The higher-level `@html` source library exposes a source-owned `Canvas` wrapper and convenience `get_canvas()` helper for the built-in canvas component:
+
+    [codeblock, $code("bst"):
+        import @html {canvas, Canvas, get_canvas}
+
+        #[canvas:
+            640
+            480
+        ]
+
+        draw || -> String, Error!:
+            drawing ~= get_canvas()!
+            ~drawing.set_fill_style("#202020")
+            ~drawing.fill_rect(0.0, 0.0, 640.0, 480.0)
+            return "canvas_ok"
+        ;
     ]
 
     The JavaScript source lives inside the HTML builder:
@@ -496,14 +513,14 @@ page_head #= theme_head
     ]
 
     `canvas.js` is ordinary JavaScript plus Beanstalk annotations.
-    It declares opaque types such as `Canvas` and `Canvas2d`, free functions such as `get_canvas` and `context_2d`, and receiver methods such as `fill_rect`, `set_fill_style`, `begin_path`, `move_to`, `line_to`, and `stroke`.
+    It declares opaque types such as `CanvasElement` and `Canvas2d`, plus free functions such as `get_canvas`, `context_2d`, `fill_rect`, `set_fill_style`, `begin_path`, `move_to`, `line_to`, and `stroke`.
 
     The Rust registration code does the builder-owned part:
 
     - embeds the `canvas.js` source with `include_str!`
     - parses it with the same JS parser used for project-local `.js` imports
     - registers the package path `@web/canvas`
-    - registers its opaque types, free functions, and receiver methods in the external package registry
+    - registers its opaque types and free functions in the external package registry
     - records the canvas JS file as a runtime asset that the HTML builder must emit
     - records runtime imports such as `@beanstalk/runtime` so the build can emit the runtime module and import map
 

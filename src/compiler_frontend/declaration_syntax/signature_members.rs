@@ -11,8 +11,8 @@ use crate::compiler_frontend::compiler_messages::trait_keyword_diagnostics::{
     reserved_trait_keyword_error, reserved_trait_keyword_or_dispatch_mismatch,
 };
 use crate::compiler_frontend::compiler_messages::{
-    CompilerDiagnostic, DeferredFeatureReason, InvalidFunctionSignatureReason,
-    InvalidSignatureMemberReason, TypeMismatchContext,
+    CompilerDiagnostic, InvalidFunctionSignatureReason, InvalidSignatureMemberReason,
+    TypeMismatchContext,
 };
 use crate::compiler_frontend::datatypes::parsed::ParsedTypeRef;
 use crate::compiler_frontend::declaration_syntax::type_syntax::{
@@ -744,8 +744,8 @@ fn parse_return_list_syntax(
                 }
             }
             TokenKind::Symbol(symbol) if string_table.resolve(*symbol) == "where" => {
-                return Err(CompilerDiagnostic::deferred_feature_reason(
-                    DeferredFeatureReason::GenericWhereConstraints,
+                return Err(CompilerDiagnostic::invalid_function_signature(
+                    InvalidFunctionSignatureReason::GenericWhereConstraintsUnsupported,
                     token_stream.current_location(),
                 ));
             }

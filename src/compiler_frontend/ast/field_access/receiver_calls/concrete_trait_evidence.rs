@@ -1,12 +1,10 @@
 //! Concrete trait evidence fallback dispatch.
 //!
-//! WHAT: after direct source methods, generic bounds, and external methods have
-//!       been tried, looks up visible trait evidence for the concrete receiver
-//!       type and builds a trait-surface call if exactly one unambiguous match
-//!       exists.
+//! WHAT: after direct source methods and generic bounds have been tried, looks up visible trait
+//!       evidence for the concrete receiver type and builds a trait-surface call if exactly one
+//!       unambiguous match exists.
 //! WHY: concrete evidence fallback must run after all direct dispatch paths so
-//!      that explicit receiver methods and external package methods take priority
-//!      over implicit trait conformance.
+//!      that explicit receiver methods take priority over implicit trait conformance.
 
 use super::shared::{
     TraitSurfaceReceiverMethod, method_path_from_evidence, requirement_receiver_is_mutable,
@@ -35,14 +33,10 @@ fn concrete_trait_evidence_requirement_candidates<'a>(
     member_name: StringId,
     scope_context: &'a ScopeContext,
 ) -> Result<Vec<ConcreteTraitEvidenceRequirementCandidate<'a>>, ExpressionParseError> {
-    let source_file_scope =
-        scope_context.required_source_file_scope("concrete trait receiver fallback")?;
     let evidence_environment = scope_context.trait_evidence_environment();
     let mut candidates = Vec::new();
 
-    for evidence_id in
-        evidence_environment.receiver_fallback_candidates(receiver_type_id, source_file_scope)
-    {
+    for evidence_id in evidence_environment.receiver_fallback_candidates(receiver_type_id) {
         let Some(evidence) = evidence_environment.get(evidence_id) else {
             continue;
         };

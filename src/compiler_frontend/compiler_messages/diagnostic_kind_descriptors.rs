@@ -691,13 +691,6 @@ fn import_descriptor(kind: ImportDiagnosticKind) -> DiagnosticDescriptor {
             "Invalid external library",
             DiagnosticSeverity::Error,
         ),
-        ImportDiagnosticKind::ReceiverMethodImportRequiresVisibleReceiverType => {
-            DiagnosticDescriptor::new(
-                "BST-IMPORT-0023",
-                "Receiver method import requires visible receiver type",
-                DiagnosticSeverity::Error,
-            )
-        }
         ImportDiagnosticKind::ExplicitSourceExtension => DiagnosticDescriptor::new(
             "BST-IMPORT-0024",
             "Explicit source extension in import",

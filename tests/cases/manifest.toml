@@ -875,8 +875,8 @@ path = "trait_bound_generic_matching_method_without_conformance_rejected"
 tags = ["integration","generics","traits","structs","diagnostics"]
 
 [[case]]
-id = "trait_bound_generic_file_local_evidence_rejected"
-path = "trait_bound_generic_file_local_evidence_rejected"
+id = "generic_bound_builtin_conformance_target_rejected"
+path = "generic_bound_builtin_conformance_target_rejected"
 tags = ["integration","generics","traits","structs","diagnostics"]
 
 [[case]]
@@ -960,8 +960,8 @@ path = "generic_bound_receiver_ambiguous_rejected"
 tags = ["integration","generics","traits","functions","receivers","diagnostics"]
 
 [[case]]
-id = "generic_bound_file_local_evidence_rejected"
-path = "generic_bound_file_local_evidence_rejected"
+id = "generic_bound_nonlocal_receiver_method_rejected"
+path = "generic_bound_nonlocal_receiver_method_rejected"
 tags = ["integration","generics","traits","functions","receivers","diagnostics"]
 
 [[case]]
@@ -985,8 +985,8 @@ path = "trait_evidence_method_visible_without_concrete_method_export_success"
 tags = ["integration","traits","receivers","imports","facade"]
 
 [[case]]
-id = "trait_evidence_file_local_builtin_fallback_success"
-path = "trait_evidence_file_local_builtin_fallback_success"
+id = "trait_evidence_builtin_receiver_rejected"
+path = "trait_evidence_builtin_receiver_rejected"
 tags = ["integration","traits","receivers","scalars"]
 
 [[case]]
@@ -1525,9 +1525,39 @@ path = "fixed_collection_const_capacity_success"
 tags = ["integration", "collections", "fixed-collections"]
 
 [[case]]
-id = "fixed_collection_capacity_expression_success"
-path = "fixed_collection_capacity_expression_success"
+id = "fixed_collection_capacity_runtime_variable_rejected"
+path = "fixed_collection_capacity_runtime_variable_rejected"
+tags = ["integration", "collections", "fixed-collections", "diagnostics"]
+
+[[case]]
+id = "fixed_collection_named_constant_arithmetic_success"
+path = "fixed_collection_named_constant_arithmetic_success"
 tags = ["integration", "collections", "fixed-collections"]
+
+[[case]]
+id = "fixed_collection_capacity_addition_rejected"
+path = "fixed_collection_capacity_addition_rejected"
+tags = ["integration", "collections", "fixed-collections", "diagnostics"]
+
+[[case]]
+id = "fixed_collection_capacity_constant_addition_rejected"
+path = "fixed_collection_capacity_constant_addition_rejected"
+tags = ["integration", "collections", "fixed-collections", "diagnostics"]
+
+[[case]]
+id = "fixed_collection_capacity_field_access_rejected"
+path = "fixed_collection_capacity_field_access_rejected"
+tags = ["integration", "collections", "fixed-collections", "diagnostics"]
+
+[[case]]
+id = "fixed_collection_capacity_function_call_rejected"
+path = "fixed_collection_capacity_function_call_rejected"
+tags = ["integration", "collections", "fixed-collections", "diagnostics"]
+
+[[case]]
+id = "fixed_collection_capacity_non_int_constant_rejected"
+path = "fixed_collection_capacity_non_int_constant_rejected"
+tags = ["integration", "collections", "fixed-collections", "diagnostics"]
 
 [[case]]
 id = "fixed_collection_shorthand_success"
@@ -2519,6 +2549,11 @@ path = "hashmap_js_runtime_contract"
 tags = ["integration","js-backend","hashmaps"]
 
 [[case]]
+id = "hashmap_scalar_key_types_success"
+path = "hashmap_scalar_key_types_success"
+tags = ["integration","js-backend","hashmaps"]
+
+[[case]]
 id = "hashmap_wasm_reachable_literal_rejected"
 path = "hashmap_wasm_reachable_literal_rejected"
 tags = ["integration","wasm-backend","hashmaps"]
@@ -2555,8 +2590,8 @@ path = "hashmap_duplicate_key_rejected"
 tags = ["integration","diagnostics","hashmaps"]
 
 [[case]]
-id = "hashmap_unhashable_key_rejected"
-path = "hashmap_unhashable_key_rejected"
+id = "hashmap_unsupported_key_rejected"
+path = "hashmap_unsupported_key_rejected"
 tags = ["integration","diagnostics","hashmaps"]
 
 [[case]]
@@ -2597,6 +2632,21 @@ tags = ["integration","diagnostics","hashmaps"]
 [[case]]
 id = "hashmap_generic_key_rejected"
 path = "hashmap_generic_key_rejected"
+tags = ["integration","diagnostics","hashmaps"]
+
+[[case]]
+id = "hashmap_choice_key_rejected"
+path = "hashmap_choice_key_rejected"
+tags = ["integration","diagnostics","hashmaps"]
+
+[[case]]
+id = "hashmap_alias_unsupported_key_rejected"
+path = "hashmap_alias_unsupported_key_rejected"
+tags = ["integration","diagnostics","hashmaps"]
+
+[[case]]
+id = "hashmap_external_opaque_key_rejected"
+path = "hashmap_external_opaque_key_rejected"
 tags = ["integration","diagnostics","hashmaps"]
 
 [[case]]
@@ -3190,18 +3240,8 @@ path = "receiver_method_basic_call"
 tags = ["integration","receivers"]
 
 [[case]]
-id = "receiver_extension_imported_source_success"
-path = "receiver_extension_imported_source_success"
-tags = ["integration","receivers","receiver-methods","imports"]
-
-[[case]]
-id = "receiver_extension_not_importable_rejected"
-path = "receiver_extension_not_importable_rejected"
-tags = ["integration","receivers","receiver-methods","imports","diagnostics"]
-
-[[case]]
-id = "receiver_extension_canonical_override_rejected"
-path = "receiver_extension_canonical_override_rejected"
+id = "receiver_method_nonlocal_imported_type_rejected"
+path = "receiver_method_nonlocal_imported_type_rejected"
 tags = ["integration","receivers","receiver-methods","imports","diagnostics"]
 
 [[case]]
@@ -4331,33 +4371,33 @@ path = "trait_conformance_order_independent_success"
 tags = ["integration","traits"]
 
 [[case]]
-id = "trait_conformance_builtin_extension_success"
-path = "trait_conformance_builtin_extension_success"
-tags = ["integration","traits"]
-
-[[case]]
-id = "trait_conformance_builtin_extension_not_importable_rejected"
-path = "trait_conformance_builtin_extension_not_importable_rejected"
+id = "trait_conformance_builtin_target_rejected"
+path = "trait_conformance_builtin_target_rejected"
 tags = ["integration","traits","diagnostics"]
 
 [[case]]
-id = "trait_conformance_imported_source_extension_success"
-path = "trait_conformance_imported_source_extension_success"
-tags = ["integration","traits"]
+id = "receiver_method_builtin_imported_helper_rejected"
+path = "receiver_method_builtin_imported_helper_rejected"
+tags = ["integration","traits","receiver-methods","diagnostics"]
 
 [[case]]
-id = "trait_conformance_external_opaque_extension_success"
-path = "trait_conformance_external_opaque_extension_success"
-tags = ["integration","traits"]
+id = "receiver_method_imported_source_type_rejected"
+path = "receiver_method_imported_source_type_rejected"
+tags = ["integration","traits","receiver-methods","diagnostics"]
 
 [[case]]
-id = "trait_conformance_duplicate_file_local_extension_rejected"
-path = "trait_conformance_duplicate_file_local_extension_rejected"
-tags = ["integration","traits", "diagnostics"]
+id = "receiver_method_external_opaque_type_rejected"
+path = "receiver_method_external_opaque_type_rejected"
+tags = ["integration","traits","receiver-methods","diagnostics"]
 
 [[case]]
-id = "trait_conformance_extension_overrides_canonical_rejected"
-path = "trait_conformance_extension_overrides_canonical_rejected"
+id = "trait_conformance_external_opaque_target_rejected"
+path = "trait_conformance_external_opaque_target_rejected"
+tags = ["integration","traits","diagnostics"]
+
+[[case]]
+id = "trait_conformance_imported_source_target_rejected"
+path = "trait_conformance_imported_source_target_rejected"
 tags = ["integration","traits", "diagnostics"]
 
 [[case]]
@@ -4542,13 +4582,13 @@ path = "receiver_method_nested_struct_success"
 tags = ["integration", "receiver-methods", "structs"]
 
 [[case]]
-id = "receiver_method_scalar_int_success"
-path = "receiver_method_scalar_int_success"
+id = "receiver_method_scalar_int_rejected"
+path = "receiver_method_scalar_int_rejected"
 tags = ["integration", "receiver-methods", "scalars"]
 
 [[case]]
-id = "receiver_method_scalar_string_success"
-path = "receiver_method_scalar_string_success"
+id = "receiver_method_scalar_string_rejected"
+path = "receiver_method_scalar_string_rejected"
 tags = ["integration", "receiver-methods", "scalars"]
 
 [[case]]
@@ -4582,8 +4622,8 @@ path = "receiver_namespace_record_method_field_rejected"
 tags = ["integration", "receiver-methods", "imports", "namespace-imports", "diagnostics"]
 
 [[case]]
-id = "receiver_grouped_method_alias_success"
-path = "receiver_grouped_method_alias_success"
+id = "receiver_grouped_method_alias_rejected"
+path = "receiver_grouped_method_alias_rejected"
 tags = ["integration", "receiver-methods", "imports", "aliases"]
 
 [[case]]
@@ -6020,19 +6060,9 @@ path = "core_time_grouped_alias_success"
 tags = ["integration", "language", "external-packages", "core-libraries", "time", "imports", "aliases"]
 
 [[case]]
-id = "core_time_receiver_visibility_success"
-path = "core_time_receiver_visibility_success"
+id = "core_time_duration_free_functions_success"
+path = "core_time_duration_free_functions_success"
 tags = ["integration", "language", "external-packages", "core-libraries", "time", "receiver-methods", "imports"]
-
-[[case]]
-id = "receiver_extension_external_opaque_success"
-path = "receiver_extension_external_opaque_success"
-tags = ["integration", "language", "external-packages", "core-libraries", "time", "receiver-methods", "imports"]
-
-[[case]]
-id = "receiver_extension_external_override_rejected"
-path = "receiver_extension_external_override_rejected"
-tags = ["integration", "language", "external-packages", "core-libraries", "time", "receiver-methods", "imports", "diagnostics"]
 
 [[case]]
 id = "core_time_old_api_rejected"
@@ -6050,8 +6080,8 @@ path = "core_time_opaque_field_access_rejected"
 tags = ["integration", "language", "external-packages", "core-libraries", "time", "diagnostics", "opaque-types"]
 
 [[case]]
-id = "core_time_receiver_method_without_visible_type_rejected"
-path = "core_time_receiver_method_without_visible_type_rejected"
+id = "core_time_raw_method_call_rejected"
+path = "core_time_raw_method_call_rejected"
 tags = ["integration", "language", "external-packages", "core-libraries", "time", "diagnostics", "receiver-methods", "imports"]
 
 [[case]]
@@ -6430,13 +6460,13 @@ path = "web_canvas_namespace_import"
 tags = ["integration", "external-imports", "web-canvas", "positive", "js-backend"]
 
 [[case]]
-id = "web_canvas_grouped_alias"
-path = "web_canvas_grouped_alias"
-tags = ["integration", "external-imports", "web-canvas", "positive", "js-backend", "aliases"]
+id = "web_canvas_grouped_alias_free_function_call"
+path = "web_canvas_grouped_alias_free_function_call"
+tags = ["integration", "external-imports", "web-canvas", "diagnostics", "receiver-methods", "aliases"]
 
 [[case]]
-id = "web_canvas_grouped_type_auto_method"
-path = "web_canvas_grouped_type_auto_method"
+id = "web_canvas_grouped_free_function_call"
+path = "web_canvas_grouped_free_function_call"
 tags = ["integration", "external-imports", "web-canvas", "positive", "js-backend", "receiver-methods"]
 
 [[case]]
@@ -6500,8 +6530,8 @@ path = "html_canvas_helper_reachable_wasm_unsupported"
 tags = ["integration", "source-libraries", "external-imports", "web-canvas", "html-wasm", "diagnostics", "reachability"]
 
 [[case]]
-id = "html_canvas_raw_get_canvas_not_reexported"
-path = "html_canvas_raw_get_canvas_not_reexported"
+id = "html_canvas_raw_context_2d_not_reexported"
+path = "html_canvas_raw_context_2d_not_reexported"
 tags = ["integration", "source-libraries", "external-imports", "web-canvas", "diagnostics", "facade"]
 
 [[case]]
@@ -6530,28 +6560,28 @@ path = "receiver_method_source_alias_collision_namespace"
 tags = ["integration", "receiver-methods", "diagnostics", "imports", "aliases", "namespace-imports"]
 
 [[case]]
-id = "web_canvas_grouped_method_alias_collision_prelude"
-path = "web_canvas_grouped_method_alias_collision_prelude"
-tags = ["integration", "external-imports", "web-canvas", "diagnostics", "receiver-methods", "collision"]
+id = "web_canvas_grouped_alias_prelude_rejected"
+path = "web_canvas_grouped_alias_prelude_rejected"
+tags = ["integration", "external-imports", "web-canvas", "diagnostics", "receiver-methods", "aliases"]
 
 [[case]]
-id = "web_canvas_grouped_method_alias_collision_local"
-path = "web_canvas_grouped_method_alias_collision_local"
-tags = ["integration", "external-imports", "web-canvas", "diagnostics", "receiver-methods", "collision"]
+id = "web_canvas_grouped_alias_free_function_import"
+path = "web_canvas_grouped_alias_free_function_import"
+tags = ["integration", "external-imports", "web-canvas", "diagnostics", "receiver-methods", "aliases"]
 
 [[case]]
-id = "web_canvas_grouped_method_order_independent"
-path = "web_canvas_grouped_method_order_independent"
-tags = ["integration", "external-imports", "web-canvas", "positive", "receiver-methods", "import-visibility"]
+id = "web_canvas_grouped_free_function_order_independent"
+path = "web_canvas_grouped_free_function_order_independent"
+tags = ["integration", "external-imports", "web-canvas", "diagnostics", "receiver-methods", "import-visibility"]
 
 [[case]]
-id = "web_canvas_grouped_method_with_type_success"
-path = "web_canvas_grouped_method_with_type_success"
-tags = ["integration", "external-imports", "web-canvas", "positive", "receiver-methods", "import-visibility"]
+id = "web_canvas_grouped_free_function_with_type"
+path = "web_canvas_grouped_free_function_with_type"
+tags = ["integration", "external-imports", "web-canvas", "diagnostics", "receiver-methods", "import-visibility"]
 
 [[case]]
-id = "web_canvas_grouped_method_without_type_rejected"
-path = "web_canvas_grouped_method_without_type_rejected"
+id = "web_canvas_raw_method_call_rejected"
+path = "web_canvas_raw_method_call_rejected"
 tags = ["integration", "external-imports", "web-canvas", "diagnostics", "receiver-methods", "import-visibility"]
 
 [[case]]

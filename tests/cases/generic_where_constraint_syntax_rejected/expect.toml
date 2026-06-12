@@ -1,7 +1,7 @@
 [backends.html]
 mode = "failure"
 warnings = "forbid"
-diagnostic_codes = ["BST-DEFERRED-0001"]
+diagnostic_codes = ["BST-RULE-0062"]
 message_contains = [
     "`where` syntax is not part of Beanstalk generic constraints.",
     "type A is TRAIT",

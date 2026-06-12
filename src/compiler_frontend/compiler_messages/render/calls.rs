@@ -287,11 +287,6 @@ pub(crate) fn invalid_receiver_call_message(
                 "{method_text} is provided by more than one visible trait evidence surface for {receiver_text}. Import a narrower trait surface or call an ordinary receiver method with an unambiguous name."
             )
         }
-        InvalidReceiverCallReason::FileLocalGenericBoundEvidenceUnsupported => {
-            format!(
-                "{method_text} would dispatch through file-local trait evidence for {receiver_text}, which generic-bound receiver calls do not support yet."
-            )
-        }
     }
 }
 

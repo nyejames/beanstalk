@@ -17,9 +17,10 @@ page_head #= theme_head
 
     They can implement statically resolved receiver methods by defining a top-level function whose first argument is literally named `this`.
     `this Type` is immutable, `this ~Type` is mutable, and receiver methods can only be called with `value.method(...)`.
-    User-defined struct methods must be declared in the same file as the struct definition.
+    Source-authored receiver methods must be declared in the same file as their user-defined struct or choice receiver type.
 
-    Receiver methods are also supported on built-in scalar types (`Int`, `Float`, `Bool`, `String`) and use the same `this` rules. The same-file restriction applies to user-defined struct methods.
+    Compiler-owned builtin operations are not user extension methods. Use free functions for values
+    owned by another file, package, builtin type, or external opaque type.
 
     Structs can be assigned with default arguments, these can be any constant expression.
 
@@ -76,6 +77,7 @@ page_head #= theme_head
     ]
 
     `this` is reserved for method receivers. You are limited to one `this` parameter per method, and `method(value, ...)` is not valid syntax for calling receiver methods.
+    Receiver methods are visible through the receiver type; they are not imported, aliased, or re-exported independently.
 
     Const-coerced struct values are data-only records. They can be read, but they do not expose runtime methods.
 ]

@@ -36,25 +36,35 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 - Add a follow-up plan for future Component Model / Wasm module-system integration after core module ABI and external package semantics are stable.
 
 
+# Outside Language Design Scope
+
+These surfaces are intentionally not roadmap items unless the language philosophy is explicitly
+changed first:
+
+- Dynamic trait values / trait objects, dynamic trait runtime lowering, trait aliases/composition,
+  downcasting/reflection, associated types/constants, inheritance, generic traits/methods, and
+  blanket/conditional/negative/specialized conformance.
+- `HASHABLE`, generic builtin map keys, user-defined builtin map keys, custom hashers/comparers,
+  `Float` map keys, language-level map equality, mutable entry APIs, fixed/capacity maps, and
+  language hashsets.
+- First-class public `Result` values, exceptions, reflection/runtime type IDs, broad type-level
+  programming, higher-kinded types, parameterized aliases, partial type application, and general
+  macro systems.
+
 # Notes
 - Hash Maps V1 is complete in `docs/roadmap/plans/hashmaps-implementation-plan.md`: first-class insertion-ordered hashmaps with `{Key = Value}` type syntax, `{key = value}` literals, frontend/HIR/borrow validation, HTML JavaScript support, and HTML-Wasm unsupported-feature diagnostics.
 
-- Hash map follow-ups after V1: `HASHABLE` trait and generic key maps, derived/user-defined
-  hashability, `Float` key policy, map iteration, map equality semantics, const hashmaps,
-  map display / `DISPLAYABLE` / `DEBUG_DISPLAY`, fixed/capacity-specialized maps,
-  optimized map variants, hashsets in core/std, and HTML-Wasm map runtime/lowering.
+- Hash map follow-ups after V1: Wasm runtime/lowering for the existing scalar-keyed builtin map
+  surface and possible read-only map iteration only if it does not introduce `HASHABLE`, custom
+  equality, custom hashers, mutable entry APIs, or user-defined key semantics.
 
 - Collection follow-ups after fixed collection type constraints: default-fill syntax such as
   `{...none}` / `{...0}`, explicit fixed/growable conversion through `copy` after cast/copy
   hardening, and growable initial-capacity hints only if future backend work shows they are useful.
 
-- Trait ecosystem follow-ups after Traits v1: default methods, static non-method requirements,
-  file-local evidence-backed generic bound dispatch, compiler-owned builtin conformances,
-  `DISPLAYABLE` output coercion, operator/boolean keyword integration, broader standard trait
-  taxonomy, and automatic primitive conformances. Dynamic trait values / trait objects, trait
-  aliases/composition/downcasting/reflection, associated types/constants, trait inheritance,
-  generic traits/methods, and conditional or specialized generic instance conformances are outside
-  the current language design scope.
+- Trait ecosystem follow-ups after Traits v1: static non-method requirements, compiler-owned
+  builtin conformance facts, diagnostics/tooling polish, and broader standard trait taxonomy that
+  keeps traits as static contracts only.
 
 - Time library follow-ups after the first `@core/time` JS slice: civil/calendar types
   (`Date`, `TimeOfDay`, `DateTime`, `TimeZone`, `ZonedDateTime`, `Period`),

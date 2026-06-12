@@ -25,7 +25,7 @@ use crate::compiler_frontend::datatypes::generic_parameters::{
     GenericParameter, GenericParameterList, TypeParameterId,
 };
 use crate::compiler_frontend::datatypes::ids::NominalTypeId;
-use crate::compiler_frontend::datatypes::parsed::ParsedTypeRef;
+use crate::compiler_frontend::datatypes::parsed::{ParsedCollectionCapacity, ParsedTypeRef};
 use crate::compiler_frontend::datatypes::{DataType, TypeId, builtin_type_ids};
 use crate::compiler_frontend::declaration_syntax::type_syntax::{
     TypeAnnotationContext, parse_type_annotation,
@@ -574,7 +574,6 @@ fn alias_expanded_nested_optional_type_is_rejected() {
         trait_environment: None,
         trait_evidence_environment: None,
         visible_trait_names: None,
-        source_file_scope: None,
     };
 
     let error = resolve_type(
@@ -679,7 +678,6 @@ fn resolves_generic_instance_base_to_canonical_nominal_path() {
         trait_environment: None,
         trait_evidence_environment: None,
         visible_trait_names: None,
-        source_file_scope: None,
     };
 
     let location = SourceLocation::default();
@@ -741,7 +739,6 @@ fn generic_instance_resolution_rejects_wrong_arity() {
         trait_environment: None,
         trait_evidence_environment: None,
         visible_trait_names: None,
-        source_file_scope: None,
     };
 
     let location = SourceLocation::default();
@@ -809,7 +806,6 @@ fn bare_generic_type_name_requires_type_arguments() {
         trait_environment: None,
         trait_evidence_environment: None,
         visible_trait_names: None,
-        source_file_scope: None,
     };
 
     let location = SourceLocation::default();
@@ -979,11 +975,13 @@ fn parses_collection_with_capacity() {
     )
     .expect("collection with capacity should parse");
 
-    assert!(
-        matches!(&parsed, ParsedTypeRef::Collection { fixed_capacity: Some(capacity), .. }
-            if capacity.tokens.len() == 1 && capacity.tokens[0].kind == TokenKind::IntLiteral(64)
-        )
-    );
+    assert!(matches!(
+        &parsed,
+        ParsedTypeRef::Collection {
+            fixed_capacity: Some(ParsedCollectionCapacity::Literal { value: 64, .. }),
+            ..
+        }
+    ));
     assert!(matches!(&parsed, ParsedTypeRef::Collection { element, .. }
         if **element == ParsedTypeRef::BuiltinInt { location: SourceLocation::default() }
     ));
@@ -1082,18 +1080,20 @@ fn parses_collection_with_generic_element_and_capacity() {
     )
     .expect("collection with generic element and capacity should parse");
 
-    assert!(
-        matches!(&parsed, ParsedTypeRef::Collection { fixed_capacity: Some(capacity), .. }
-            if capacity.tokens.len() == 1 && capacity.tokens[0].kind == TokenKind::IntLiteral(16)
-        )
-    );
+    assert!(matches!(
+        &parsed,
+        ParsedTypeRef::Collection {
+            fixed_capacity: Some(ParsedCollectionCapacity::Literal { value: 16, .. }),
+            ..
+        }
+    ));
     assert!(matches!(&parsed, ParsedTypeRef::Collection { element, .. }
         if matches!(**element, ParsedTypeRef::Applied { .. })
     ));
 }
 
 #[test]
-fn parses_collection_capacity_expression_before_optional_element() {
+fn rejects_collection_capacity_arithmetic_before_optional_element() {
     let mut string_table = StringTable::new();
     let capacity_name = string_table.intern("capacity");
     let mut stream = stream_from_tokens(
@@ -1110,28 +1110,30 @@ fn parses_collection_capacity_expression_before_optional_element() {
         &mut string_table,
     );
 
-    let parsed = parse_type_annotation(
+    let error = parse_type_annotation(
         &mut stream,
         TypeAnnotationContext::DeclarationTarget,
         &string_table,
     )
-    .expect("collection with capacity expression and optional element should parse");
+    .expect_err("arithmetic in capacity position should be rejected");
 
-    assert!(
-        matches!(&parsed, ParsedTypeRef::Collection { fixed_capacity: Some(capacity), .. }
-            if capacity.tokens.len() == 3
-                && capacity.tokens[0].kind == TokenKind::Symbol(capacity_name)
-                && capacity.tokens[1].kind == TokenKind::Add
-                && capacity.tokens[2].kind == TokenKind::IntLiteral(16)
-        )
+    assert_diagnostic_payload(
+        error,
+        |payload| {
+            matches!(
+                payload,
+                DiagnosticPayload::InvalidCollectionType {
+                    reason: InvalidCollectionTypeReason::CapacityNotConstant,
+                    ..
+                }
+            )
+        },
+        "InvalidCollectionType(CapacityNotConstant)",
     );
-    assert!(matches!(&parsed, ParsedTypeRef::Collection { element, .. }
-        if matches!(**element, ParsedTypeRef::Optional { .. })
-    ));
 }
 
 #[test]
-fn parses_nested_fixed_collection_capacity_expressions() {
+fn parses_nested_fixed_collection_bare_capacity_constants() {
     let mut string_table = StringTable::new();
     let rows_name = string_table.intern("rows");
     let cols_name = string_table.intern("cols");
@@ -1164,8 +1166,9 @@ fn parses_nested_fixed_collection_capacity_expressions() {
     else {
         panic!("expected outer fixed collection");
     };
-    assert_eq!(rows_capacity.tokens.len(), 1);
-    assert_eq!(rows_capacity.tokens[0].kind, TokenKind::Symbol(rows_name));
+    assert!(
+        matches!(rows_capacity, ParsedCollectionCapacity::BareConstant { name, .. } if name == rows_name)
+    );
 
     let ParsedTypeRef::Collection {
         fixed_capacity: Some(cols_capacity),
@@ -1175,8 +1178,9 @@ fn parses_nested_fixed_collection_capacity_expressions() {
     else {
         panic!("expected inner fixed collection element");
     };
-    assert_eq!(cols_capacity.tokens.len(), 1);
-    assert_eq!(cols_capacity.tokens[0].kind, TokenKind::Symbol(cols_name));
+    assert!(
+        matches!(cols_capacity, ParsedCollectionCapacity::BareConstant { name, .. } if name == cols_name)
+    );
     assert_eq!(
         *inner_element,
         ParsedTypeRef::BuiltinInt {
@@ -1309,11 +1313,13 @@ fn parses_capacity_only_shorthand_in_declaration_target() {
     )
     .expect("capacity-only shorthand should parse in declaration target");
 
-    assert!(
-        matches!(&parsed, ParsedTypeRef::Collection { fixed_capacity: Some(capacity), .. }
-            if capacity.tokens.len() == 1 && capacity.tokens[0].kind == TokenKind::IntLiteral(64)
-        )
-    );
+    assert!(matches!(
+        &parsed,
+        ParsedTypeRef::Collection {
+            fixed_capacity: Some(ParsedCollectionCapacity::Literal { value: 64, .. }),
+            ..
+        }
+    ));
     assert!(matches!(&parsed, ParsedTypeRef::Collection { element, .. }
         if **element == ParsedTypeRef::Inferred
     ));

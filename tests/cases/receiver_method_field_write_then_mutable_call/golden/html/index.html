@@ -524,31 +524,31 @@ body {
         return { tag: "err", value: __bs_make_error("Float(...) only accepts Int, Float, or string values", 210, null, null) };
     }
 
-    function bst_add_fn1(bst_this_l3, bst_amount_l4) {
+    function bst_add_fn6(bst_this_l22, bst_amount_l23) {
         
-        bst_this_l3 = __bs_param_binding(bst_this_l3);
-        bst_amount_l4 = __bs_param_binding(bst_amount_l4);
+        bst_this_l22 = __bs_param_binding(bst_this_l22);
+        bst_amount_l23 = __bs_param_binding(bst_amount_l23);
         
-        __bs_write(__bs_field(bst_this_l3, "bst_total_fld2"), (__bs_read(__bs_field(bst_this_l3, "bst_total_fld2")) + __bs_read(bst_amount_l4)));
+        __bs_write(__bs_field(bst_this_l22, "bst_total_fld3"), (__bs_read(__bs_field(bst_this_l22, "bst_total_fld3")) + __bs_read(bst_amount_l23)));
         return;
     }
 
-    function bst_start_fn2() {
-        let bst___hir_tmp_2_l5 = __bs_binding(undefined);
-        let bst_acc_l6 = __bs_binding(undefined);
+    function bst_start_fn7() {
+        let bst___hir_tmp_3_l24 = __bs_binding(undefined);
+        let bst_acc_l25 = __bs_binding(undefined);
         
-        __bs_assign_value(bst___hir_tmp_2_l5, []);
-        __bs_assign_value(bst_acc_l6, { bst_total_fld2: 0 });
-        __bs_write(__bs_field(bst_acc_l6, "bst_total_fld2"), 3);
-        bst_add_fn1(bst_acc_l6, __bs_binding(4));
-        __bs_io(__bs_read(__bs_field(bst_acc_l6, "bst_total_fld2")));
-        return __bs_read(bst___hir_tmp_2_l5);
+        __bs_assign_value(bst___hir_tmp_3_l24, []);
+        __bs_assign_value(bst_acc_l25, { bst_total_fld3: 0 });
+        __bs_write(__bs_field(bst_acc_l25, "bst_total_fld3"), 3);
+        bst_add_fn6(bst_acc_l25, __bs_binding(4));
+        __bs_io(__bs_read(__bs_field(bst_acc_l25, "bst_total_fld3")));
+        return __bs_read(bst___hir_tmp_3_l24);
     }
 
     </script>
     <script>
     (function () {
-      if (typeof bst_start_fn2 === "function") bst_start_fn2();
+      if (typeof bst_start_fn7 === "function") bst_start_fn7();
     })();
     </script>
   </body>

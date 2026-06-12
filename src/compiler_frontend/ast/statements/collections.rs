@@ -491,7 +491,7 @@ fn parse_map_literal(
                     TypeMismatchContext::CollectionElement,
                 )?;
 
-                // Validate key capability once the key type is known.
+                // Enforce the scalar-key policy once the key type is known.
                 if let Err(error) = validate_map_key_type(
                     key_type_id,
                     type_interner.environment(),

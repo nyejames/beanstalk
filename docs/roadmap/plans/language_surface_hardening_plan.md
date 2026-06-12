@@ -76,7 +76,7 @@ The repo may have changed since this plan was authored. This phase establishes t
 
 ### Repo baseline
 
-- [ ] Confirm branch, working tree, and commit:
+- [x] Confirm branch, working tree, and commit:
 
 ```bash
 git status --short
@@ -84,19 +84,19 @@ git branch --show-current
 git rev-parse HEAD
 ```
 
-- [ ] Create or switch to a focused branch:
+- [x] Create or switch to a focused branch:
 
 ```bash
 git switch -c language-surface-hardening
 ```
 
-- [ ] Run the validation baseline before edits:
+- [x] Run the validation baseline before edits:
 
 ```bash
 just validate
 ```
 
-- [ ] Record any pre-existing failures. Do not mix unrelated fixes into this work.
+- [x] Record any pre-existing failures. Do not mix unrelated fixes into this work.
 
 ### Full-repo search baseline
 
@@ -118,7 +118,7 @@ rg -n "deferred_feature_diagnostics|DeferredFeature|deferred feature|not impleme
 
 ### Audit note
 
-- [ ] Create a local temporary note, not committed unless it becomes useful:
+- [x] Create a local temporary note, not committed unless it becomes useful:
 
 ```text
 /tmp/beanstalk-language-surface-hardening-audit.md
@@ -126,20 +126,20 @@ rg -n "deferred_feature_diagnostics|DeferredFeature|deferred feature|not impleme
 
 Record:
 
-- [ ] current commit SHA;
-- [ ] validation baseline;
-- [ ] dynamic trait files and tests found;
-- [ ] receiver extension/import files and tests found;
-- [ ] `HASHABLE` / generic-map future mentions found;
-- [ ] fixed-capacity expression files and tests found;
-- [ ] docs pages requiring changes;
-- [ ] diagnostic owners and likely test owners.
+- [x] current commit SHA;
+- [x] validation baseline;
+- [x] dynamic trait files and tests found;
+- [x] receiver extension/import files and tests found;
+- [x] `HASHABLE` / generic-map future mentions found;
+- [x] fixed-capacity expression files and tests found;
+- [x] docs pages requiring changes;
+- [x] diagnostic owners and likely test owners.
 
 ## Phase gate
 
-- [ ] No production code has changed yet.
-- [ ] The actual diagnostic owner is identified. If `src/compiler_frontend/deferred_feature_diagnostics.rs` does not exist, update docs and use the current `compiler_messages` structure instead of creating a stale path.
-- [ ] Search results are complete enough to guide deletion and docs updates.
+- [x] No production code has changed yet.
+- [x] The actual diagnostic owner is identified. If `src/compiler_frontend/deferred_feature_diagnostics.rs` does not exist, update docs and use the current `compiler_messages` structure instead of creating a stale path.
+- [x] Search results are complete enough to guide deletion and docs updates.
 
 ---
 
@@ -153,7 +153,7 @@ Record:
 
 ### 1.1 Add design-scope taxonomy to `docs/language-overview.md`
 
-- [ ] Add this near the top, after `Design principles` and before `Related references`:
+- [x] Add this near the top, after `Design principles` and before `Related references`:
 
 ```markdown
 ## Language Design Scope
@@ -172,7 +172,7 @@ A feature listed outside design scope should not be implemented unless the langu
 explicitly changed first.
 ```
 
-- [ ] Add this section immediately after it:
+- [x] Add this section immediately after it:
 
 ```markdown
 ## Outside the Language Design Scope
@@ -200,13 +200,13 @@ The following surfaces are intentionally outside Beanstalk's language design sco
 
 ### 1.2 Update affected `docs/language-overview.md` sections
 
-- [ ] Replace the Syntax Summary trait row with:
+- [x] Replace the Syntax Summary trait row with:
 
 ```markdown
 | Traits | Trait declarations and conformances use `must`; generic bounds use `is`. Trait names are static contracts, not value types. |
 ```
 
-- [ ] Replace fixed-capacity examples that use inline arithmetic:
+- [x] Replace fixed-capacity examples that use inline arithmetic:
 
 ```beanstalk
 capacity #Int = 4
@@ -216,7 +216,7 @@ larger_capacity #Int = capacity + 2
 larger_scratch ~{larger_capacity String} = {}
 ```
 
-- [ ] Replace the fixed-capacity rule with:
+- [x] Replace the fixed-capacity rule with:
 
 ```markdown
 - Fixed capacity in type position must be either a positive `Int` literal or a bare visible `#Int`
@@ -225,7 +225,7 @@ larger_scratch ~{larger_capacity String} = {}
   Put any calculation in a named compile-time constant first.
 ```
 
-- [ ] Replace hashmap key rules with:
+- [x] Replace hashmap key rules with:
 
 ```markdown
 - Builtin hashmap key types are permanently limited to `String`, `Int`, `Bool`, and `Char`.
@@ -234,7 +234,7 @@ larger_scratch ~{larger_capacity String} = {}
   templates as a distinct key type, and generic parameters are invalid keys.
 ```
 
-- [ ] Replace the hashmap deferred list with:
+- [x] Replace the hashmap deferred list with:
 
 ```markdown
 Outside the builtin hashmap design scope: hashsets as language syntax, user-defined hashers or
@@ -246,7 +246,7 @@ Wasm hashmap runtime/lowering remains deferred backend work for the existing sca
 surface.
 ```
 
-- [ ] Replace receiver-method rules with same-file nominal rules:
+- [x] Replace receiver-method rules with same-file nominal rules:
 
 ```markdown
 Receiver method rules:
@@ -268,7 +268,7 @@ Receiver method rules:
 - Field writes follow the same mutable-place rule.
 ```
 
-- [ ] Replace receiver visibility with:
+- [x] Replace receiver visibility with:
 
 ```markdown
 Receiver method visibility is tied to receiver type visibility.
@@ -280,7 +280,7 @@ Receiver method visibility is tied to receiver type visibility.
 - Use free functions for private helpers or operations on types owned by other files or packages.
 ```
 
-- [ ] Replace the trait dynamic-value text with:
+- [x] Replace the trait dynamic-value text with:
 
 ```markdown
 Traits are not value types.
@@ -315,7 +315,7 @@ require erased wrappers, runtime dispatch, dynamic-safety rules, backend-specifi
 second meaning for trait names.
 ```
 
-- [ ] Replace conformance evidence rules with:
+- [x] Replace conformance evidence rules with:
 
 ```markdown
 - Canonical conformance evidence for same-file structs, choices, and generic type constructors is
@@ -324,14 +324,14 @@ second meaning for trait names.
   types, and types declared in another file is rejected.
 ```
 
-- [ ] In the generics section, remove dynamic-trait references and replace with:
+- [x] In the generics section, remove dynamic-trait references and replace with:
 
 ```markdown
 Traits are static contracts only. Trait names cannot appear as value types, so there is no dynamic
 trait value that can satisfy or fail a static generic bound.
 ```
 
-- [ ] Split rejected/deferred generic list into true deferred work vs outside-scope work. Move these to outside-scope wording:
+- [x] Split rejected/deferred generic list into true deferred work vs outside-scope work. Move these to outside-scope wording:
   - generic function values / higher-order polymorphism;
   - type values, type-returning functions, type-level `#if`, compile-time type inspection;
   - file-local evidence-backed generic bound dispatch;
@@ -340,7 +340,7 @@ trait value that can satisfy or fail a static generic bound.
 
 ### 1.3 Update `docs/compiler-design-overview.md`
 
-- [ ] Replace the `src/compiler_frontend/traits/` overview bullet with static-only ownership:
+- [x] Replace the `src/compiler_frontend/traits/` overview bullet with static-only ownership:
 
 ```markdown
 `src/compiler_frontend/traits/` owns parsed trait shells, resolved trait definitions, explicit
@@ -349,7 +349,7 @@ checks, and trait diagnostics. Trait metadata is compile-time frontend state, no
 backend rediscovery path.
 ```
 
-- [ ] Remove or correct any stale reference to `src/compiler_frontend/deferred_feature_diagnostics.rs`. Preferred wording:
+- [x] Remove or correct any stale reference to `src/compiler_frontend/deferred_feature_diagnostics.rs`. Preferred wording:
 
 ```markdown
 Design-scope and deferred-feature diagnostics should be centralized through typed
@@ -357,7 +357,7 @@ Design-scope and deferred-feature diagnostics should be centralized through type
 distinct diagnostic reasons.
 ```
 
-- [ ] Replace import/receiver-method visibility text with:
+- [x] Replace import/receiver-method visibility text with:
 
 ```markdown
 Header import preparation does not import receiver methods as independent symbols. Source-authored
@@ -366,14 +366,14 @@ receiver type is visible. Namespace imports may make a receiver type visible, bu
 namespace fields and cannot be grouped-imported or aliased independently.
 ```
 
-- [ ] Replace the AST trait ownership bullet with:
+- [x] Replace the AST trait ownership bullet with:
 
 ```markdown
 trait declaration resolution, trait visibility, same-file conformance evidence validation,
 static generic-bound evidence checks, and evidence-backed static receiver fallback
 ```
 
-- [ ] Replace the full Traits contract with:
+- [x] Replace the full Traits contract with:
 
 ```markdown
 ### Traits contract
@@ -394,9 +394,9 @@ evidence validation, reusable evidence visibility, and generic-bound evidence ch
 - Backends must not resolve trait declarations or scan source headers for method shapes.
 ```
 
-- [ ] Remove HIR ownership bullets about dynamic trait construction/dispatch and trait metadata projected across the backend boundary.
-- [ ] Delete the `### Dynamic trait operations` section.
-- [ ] Update backend lowering text so reachable validation mentions external calls and scalar-keyed maps, not dynamic trait runtime operations.
+- [x] Remove HIR ownership bullets about dynamic trait construction/dispatch and trait metadata projected across the backend boundary.
+- [x] Delete the `### Dynamic trait operations` section.
+- [x] Update backend lowering text so reachable validation mentions external calls and scalar-keyed maps, not dynamic trait runtime operations.
 
 ### 1.4 Phase gate
 
@@ -406,14 +406,14 @@ evidence validation, reusable evidence visibility, and generic-bound evidence ch
 just validate
 ```
 
-- [ ] Search docs:
+- [x] Search docs:
 
 ```bash
 rg -n "dynamic trait values are|dynamic-safe|dynamic trait runtime|HASHABLE.*future|capacity \\+|grouped receiver|receiver method import|FileLocalExtension" docs README.md
 ```
 
-- [ ] Remaining hits are only in outside-scope policy text or negative examples.
-- [ ] Manual review confirms `docs/language-overview.md` remains compiler-facing, not tutorial-heavy.
+- [x] Remaining source-doc hits are only in outside-scope policy text, named-constant capacity examples, or roadmap-plan instructions.
+- [x] Manual review confirms `docs/language-overview.md` remains compiler-facing, not tutorial-heavy.
 
 ---
 
@@ -427,9 +427,9 @@ The docs site is real Beanstalk code and user-facing. The progress matrix and ro
 
 ### 2.1 Add docs-site design-scope page
 
-- [ ] Add `docs/src/docs/design-scope/#page.bst`.
-- [ ] Keep it short. Use the same taxonomy as canonical docs.
-- [ ] Include these examples:
+- [x] Add `docs/src/docs/design-scope/#page.bst`.
+- [x] Keep it short. Use the same taxonomy as canonical docs.
+- [x] Include these examples:
 
 ```beanstalk
 render type Item is DISPLAY_TEXT |item Item| -> String:
@@ -444,13 +444,13 @@ Renderable ::
 ;
 ```
 
-- [ ] Add a concise outside-scope table. Do not duplicate every line of `docs/language-overview.md`; group related features.
+- [x] Add a concise outside-scope table. Do not duplicate every line of `docs/language-overview.md`; group related features.
 
 ### 2.2 Update docs index
 
 Path: `docs/src/docs/#page.bst`
 
-- [ ] Add under Introduction:
+- [x] Add under Introduction:
 
 ```beanstalk
 - @./design-scope (Language Design Scope)
@@ -460,17 +460,17 @@ Path: `docs/src/docs/#page.bst`
 
 Path: `docs/src/docs/traits/#page.bst`
 
-- [ ] Change page description to static-only traits.
-- [ ] Remove sections for:
+- [x] Change page description to static-only traits.
+- [x] Remove sections for:
   - dynamic trait values;
   - dynamic-safe traits;
   - dynamic dispatch and backend runtime behavior;
   - file-local evidence.
-- [ ] Rename “Canonical and file-local evidence” to “Canonical evidence.”
-- [ ] State that conformances are reusable only for same-file structs, choices, and generic type constructors.
-- [ ] State that conformance for builtins, imported/dependency/library types, external opaque types, and other-file types is rejected.
-- [ ] Add “Runtime heterogeneity uses choices” with a short example.
-- [ ] Replace “Deferred trait ecosystem” with “Outside trait design scope.” Include:
+- [x] Rename “Canonical and file-local evidence” to “Canonical evidence.”
+- [x] State that conformances are reusable only for same-file structs, choices, and generic type constructors.
+- [x] State that conformance for builtins, imported/dependency/library types, external opaque types, and other-file types is rejected.
+- [x] Add “Runtime heterogeneity uses choices” with a short example.
+- [x] Replace “Deferred trait ecosystem” with “Outside trait design scope.” Include:
   - default methods;
   - associated types/constants;
   - inheritance/composition/aliases;
@@ -488,8 +488,8 @@ Path: `docs/src/docs/traits/#page.bst`
 
 Path: `docs/src/docs/generics/#page.bst`
 
-- [ ] Remove dynamic-trait references.
-- [ ] Replace trait-bound explanation with:
+- [x] Remove dynamic-trait references.
+- [x] Replace trait-bound explanation with:
 
 ```text
 A trait name in a generic bound constrains a concrete generic parameter. Trait names are not value
@@ -497,8 +497,8 @@ types, so a parameter, field, collection element, or return type cannot be annot
 trait name.
 ```
 
-- [ ] Replace file-local evidence-backed generic-bound dispatch with outside-scope wording.
-- [ ] Split future list into:
+- [x] Replace file-local evidence-backed generic-bound dispatch with outside-scope wording.
+- [x] Split future list into:
   - **Deferred generic work**: only items still genuinely plausible, such as recursive generic types, generic external package functions/types, or nested `of` relaxation if still desired.
   - **Outside generic design scope**: explicit generic call syntax, higher-order polymorphism, type-level computation, `where` clauses, parameterized aliases, partial application, HKT, const generics beyond fixed capacity, lifetimes, specialization, associated types, dynamic reification.
 
@@ -506,9 +506,9 @@ trait name.
 
 Path: `docs/src/docs/collections/#page.bst`
 
-- [ ] Replace capacity text with literal-or-bare-constant rule.
-- [ ] Replace `{capacity + 2 String}` examples with named-constant examples.
-- [ ] Replace stale hashmap section with implemented V1 syntax:
+- [x] Replace capacity text with literal-or-bare-constant rule.
+- [x] Replace `{capacity + 2 String}` examples with named-constant examples.
+- [x] Replace stale hashmap section with implemented V1 syntax:
 
 ```beanstalk
 scores ~= {"Ada" = 10, "Grace" = 12}
@@ -533,8 +533,8 @@ count = scores.length
 ~scores.clear()
 ```
 
-- [ ] State that builtin map keys are permanently `String`, `Int`, `Bool`, `Char`.
-- [ ] State that sophisticated maps belong in library/user-defined structs.
+- [x] State that builtin map keys are permanently `String`, `Int`, `Bool`, `Char`.
+- [x] State that sophisticated maps belong in library/user-defined structs.
 
 ### 2.6 Update structs and docs-site language overview pages
 
@@ -543,24 +543,24 @@ Paths:
 - `docs/src/docs/structs/#page.bst`
 - `docs/src/docs/language-overview/#page.bst`
 
-- [ ] Replace builtin/imported/external receiver method text with same-file nominal rule.
-- [ ] Remove grouped receiver-method import/alias text.
-- [ ] State that receiver methods are visible through the receiver type, not as imported symbols.
-- [ ] Update external JS signature docs: source-authored `@bst.sig` should expose free functions and opaque types, not `this` receiver methods.
+- [x] Replace builtin/imported/external receiver method text with same-file nominal rule.
+- [x] Remove grouped receiver-method import/alias text.
+- [x] State that receiver methods are visible through the receiver type, not as imported symbols.
+- [x] Update external JS signature docs: source-authored `@bst.sig` should expose free functions and opaque types, not `this` receiver methods.
 
 ### 2.7 Update roadmap
 
 Path: `docs/roadmap/roadmap.md`
 
-- [ ] Add an `Outside Language Design Scope` section near the top.
-- [ ] Move these out of roadmap follow-ups:
+- [x] Add an `Outside Language Design Scope` section near the top.
+- [x] Move these out of roadmap follow-ups:
   - dynamic trait values / trait objects / dynamic trait runtime lowering;
   - dynamic wrappers in Wasm ABI mapping;
   - `HASHABLE`, generic map keys, user-defined map keys, custom hashers/comparers, `Float` map keys, map equality, entry APIs, fixed/capacity maps, language hashsets;
   - default trait methods, associated types/constants, inheritance/composition, generic traits/methods, conditional/specialized/blanket/negative conformance, dynamic composition/downcasting/reflection, output coercion, operator integration;
   - first-class public `Result`, exceptions, reflection, type-level programming, HKT, parameterized aliases, partial application.
 
-- [ ] Keep only legitimate deferred work:
+- [x] Keep only legitimate deferred work:
   - Wasm runtime/lowering for existing scalar-keyed maps;
   - possible read-only map iteration only if it does not introduce `HASHABLE`, custom equality, or mutable entry APIs;
   - diagnostics/tooling polish for static traits;
@@ -570,7 +570,7 @@ Path: `docs/roadmap/roadmap.md`
 
 Path: `docs/src/docs/progress/#page.bst`
 
-- [ ] Add status row:
+- [x] Add status row:
 
 ```beanstalk
 [data, red:
@@ -579,38 +579,41 @@ Path: `docs/src/docs/progress/#page.bst`
 ]
 ```
 
-- [ ] Update Traits row to static-only surface.
-- [ ] Remove dynamic coercion, JS dynamic runtime, Wasm dynamic unsupported, dynamic-safe, dynamic wrappers, and dynamic dispatch coverage text.
-- [ ] Update Structs/receiver row to same-file nominal rule.
-- [ ] Update Collections row to narrow capacity syntax.
-- [ ] Update Hash Maps row to permanent scalar-key policy and outside-scope map features.
-- [ ] Update External Packages row so source-authored external imports expose free functions and opaque types. If builder-owned member syntax still exists temporarily, label it as builder-owned metadata and isolate it from source-authored receiver methods.
+- [x] Update Traits row to static-only surface.
+- [x] Remove dynamic coercion, JS dynamic runtime, Wasm dynamic unsupported, dynamic-safe, dynamic wrappers, and dynamic dispatch coverage text.
+- [x] Update Structs/receiver row to same-file nominal rule.
+- [x] Update Collections row to narrow capacity syntax.
+- [x] Update Hash Maps row to permanent scalar-key policy and outside-scope map features.
+- [x] Update External Packages row so source-authored external imports expose free functions and opaque types. If builder-owned member syntax still exists temporarily, label it as builder-owned metadata and isolate it from source-authored receiver methods.
 
 ### 2.9 Update README
 
-- [ ] Add one concise goal bullet:
+- [x] Add one concise goal bullet:
 
 ```markdown
 - A deliberately small language surface: static nominal types, explicit trait conformance, constrained generics, no general macro system, and no Rust-style type-level programming.
 ```
 
-- [ ] Optionally add a link to the language design scope section/page if the README documentation list remains short.
+- [x] Optionally add a link to the language design scope section/page if the README documentation list remains short.
 
 ## Phase gate
 
-- [ ] Run:
+- [x] Run:
 
 ```bash
 just validate
 ```
 
-- [ ] Search docs site and roadmap:
+Validation passed for the documentation slice on 2026-06-11. Generated `docs/release/**` HTML was
+not regenerated in this slice per the documentation source/output workflow.
+
+- [x] Search docs site and roadmap:
 
 ```bash
 rg -n "dynamic trait|dynamic-safe|FileLocalExtension|file-local evidence|HASHABLE|capacity \\+|grouped receiver|receiver method import|receiver-method alias|this.*@bst.sig|deferred trait ecosystem" docs/src/docs docs/roadmap README.md
 ```
 
-- [ ] Remaining hits are only outside-scope policy text or negative examples.
+- [x] Remaining source-doc hits are only outside-scope policy text, named-constant capacity examples, or roadmap-plan instructions.
 
 ---
 
@@ -624,15 +627,21 @@ Out-of-scope features should be rejected as intentional language rules, not as m
 
 ### 3.1 Locate the diagnostic owner
 
-- [ ] Search current diagnostic structure:
+- [x] Search current diagnostic structure:
 
 ```bash
 fd diagnostic src/compiler_frontend
 rg -n "DeferredFeature|deferred feature|not implemented|unsupported feature|DiagnosticPayload|Invalid.*Reason|Rule" src/compiler_frontend/compiler_messages src/compiler_frontend
 ```
 
-- [ ] Add outside-scope reasons to the existing diagnostic structure. Do not create `src/compiler_frontend/deferred_feature_diagnostics.rs` unless that is already the live module pattern.
-- [ ] Keep “deferred feature” and “outside design scope” as distinct typed reasons.
+- [x] Add outside-scope reasons to the existing diagnostic structure. Do not create `src/compiler_frontend/deferred_feature_diagnostics.rs` unless that is already the live module pattern.
+- [x] Keep “deferred feature” and “outside design scope” as distinct typed reasons.
+
+The live owner is the current `compiler_messages` diagnostic model, including
+`src/compiler_frontend/compiler_messages/deferred_feature_diagnostics.rs` for true deferred
+features. Outside-scope language rejections stay on existing typed rule/syntax payloads instead of
+being routed through `DeferredFeatureReason`. `fd` was not installed in this workspace, so the
+diagnostic-owner inventory used `rg --files` plus the payload/reason search.
 
 Recommended conceptual shape, adapted to existing enums:
 
@@ -647,19 +656,28 @@ Only add reason variants that current syntax/resolution can reach.
 
 ### 3.2 Required outside-scope diagnostic reasons
 
-- [ ] Dynamic trait value type.
-- [ ] Receiver method for nonlocal source type.
-- [ ] Receiver method for builtin scalar.
-- [ ] Receiver method for external opaque type.
-- [ ] Receiver method import or alias.
-- [ ] Trait conformance for builtin/imported/external/nonlocal type.
-- [ ] General fixed-capacity expression.
-- [ ] Unsupported builtin map key.
-- [ ] `HASHABLE` / generic builtin map key.
-- [ ] `where` clause, if currently parsed/rejected.
-- [ ] Parameterized alias / partial application, if currently parsed/rejected.
-- [ ] Dynamic trait composition/downcast syntax, if any reserved syntax exists.
-- [ ] Trait default/associated/inheritance/generic method syntax, if any reserved syntax exists.
+- [x] Dynamic trait value type.
+- [x] Receiver method for nonlocal source type.
+- [x] Receiver method for builtin scalar.
+- [x] Receiver method for external opaque type.
+- [x] Receiver method import or alias.
+- [x] Trait conformance for builtin/imported/external/nonlocal type.
+- [x] General fixed-capacity expression.
+- [x] Unsupported builtin map key.
+- [x] `HASHABLE` / generic builtin map key.
+- [x] `where` clause, if currently parsed/rejected.
+- [x] Parameterized alias / partial application, if currently parsed/rejected.
+- [x] Dynamic trait composition/downcast syntax, if any reserved syntax exists.
+- [x] Trait default/associated/inheritance/generic method syntax, if any reserved syntax exists.
+
+Phase 4 already routes trait names in ordinary type position through
+`TraitNameUsedAsType`. Phase 5 already rejects source receiver-method imports and aliases through
+`ReceiverMethodImportNotAllowed`. This slice split receiver declaration target failures into
+nonlocal source, builtin scalar, and external opaque reasons; split trait conformance target
+failures into nonlocal source, builtin, and external opaque reasons; moved `where` constraints from
+`DeferredFeatureReason` to invalid function-signature diagnostics; and renamed the generic-trait
+declaration reason to current outside-scope wording. No dynamic trait composition/downcast syntax
+was found in the current parser surface.
 
 ### 3.3 Diagnostic wording
 
@@ -709,7 +727,7 @@ methods are available through receiver-call syntax when the type is visible.
 
 ### 3.4 Diagnostic tests
 
-- [ ] Add or update negative integration tests asserting stable diagnostic codes for:
+- [x] Add or update negative integration tests asserting stable diagnostic codes for:
   - trait name used as parameter type;
   - trait name used as return type;
   - trait name used as struct field type;
@@ -729,9 +747,14 @@ methods are available through receiver-call syntax when the type is visible.
   - builtin map with generic key;
   - builtin map with struct/choice/float key.
 
+Existing Phase 4, Phase 5, Phase 6, and Phase 7 fixtures cover most of this list. This slice
+updated message assertions for the newly split receiver/conformance reasons, added a direct
+external opaque conformance-target fixture, and moved the `where` fixture from a deferred-feature
+code to the invalid function-signature code.
+
 ## Phase gate
 
-- [ ] Run:
+- [x] Run:
 
 ```bash
 cargo fmt
@@ -741,12 +764,15 @@ cargo run -- tests
 just validate
 ```
 
-- [ ] Manual review:
-  - [ ] diagnostics are typed and source-located;
-  - [ ] no rendered strings are semantic state;
-  - [ ] no user-facing source rejection uses `CompilerError`;
-  - [ ] no diagnostic mentions old behavior;
-  - [ ] no boolean-heavy helper where a reason enum would be clearer.
+Validation passed on 2026-06-12 with `cargo fmt`, focused header/function/diagnostic unit tests,
+`cargo run -- tests`, and full `just validate`.
+
+- [x] Manual review:
+  - [x] diagnostics are typed and source-located;
+  - [x] no rendered strings are semantic state;
+  - [x] no user-facing source rejection uses `CompilerError`;
+  - [x] no diagnostic mentions old behavior;
+  - [x] no boolean-heavy helper where a reason enum would be clearer.
 
 ---
 
@@ -862,19 +888,26 @@ just validate
 
 The current `Canonical` vs `FileLocalExtension` split supports extension methods and file-local evidence. The new rule makes source-authored methods and conformances belong to the same file as the nominal type. This should remove import-time method aliasing and much of the duplicate visibility machinery.
 
+Status: source-authored receiver methods and user-authored conformances now follow the same-file
+nominal rule. File-local conformance evidence and source receiver-method import/export/alias paths
+are removed. External packages now expose opaque types, constants, and free functions only.
+Source-authored/provider-created JS external imports reject `this` receiver signatures, `@web/canvas`
+uses raw free functions, and method-style canvas ergonomics are provided by the source-owned
+`@html` `Canvas` wrapper.
+
 ## Tasks
 
 ### 5.1 Source receiver policy
 
-- [ ] Enforce:
+- [x] Enforce:
 
 ```text
 A source-authored receiver method is valid only when its receiver is a user-defined struct or choice
 declared in the same source file as the method.
 ```
 
-- [ ] For generic nominal receivers, allow only declaration-site parameters aligned with the receiver type’s own parameters.
-- [ ] Reject receiver methods for:
+- [x] For generic nominal receivers, allow only declaration-site parameters aligned with the receiver type’s own parameters.
+- [x] Reject receiver methods for:
   - builtins;
   - imported source types;
   - dependency/library types;
@@ -884,9 +917,9 @@ declared in the same source file as the method.
 
 ### 5.2 Refactor `src/compiler_frontend/ast/receiver_methods.rs`
 
-- [ ] Remove `ReceiverMethodKind::FileLocalExtension`.
-- [ ] Remove `ReceiverMethodKind` entirely if every source method is canonical.
-- [ ] Replace `receiver_method_kind_for_declaration` with a direct validator:
+- [x] Remove `ReceiverMethodKind::FileLocalExtension`.
+- [x] Remove `ReceiverMethodKind` entirely if every source method is canonical.
+- [x] Replace `receiver_method_kind_for_declaration` with a direct validator:
 
 ```rust
 fn validate_source_receiver_method_declaration(
@@ -900,61 +933,71 @@ fn validate_source_receiver_method_declaration(
 }
 ```
 
-- [ ] Remove visibility fallback that turns merely-visible receiver types into extension targets.
-- [ ] Remove extension override checks.
-- [ ] Remove duplicate logic needed only for canonical/extension collision.
-- [ ] Keep same-receiver duplicate method diagnostics.
-- [ ] Keep field-name conflict validation for struct methods.
-- [ ] Keep receiver-call mutability rules.
-- [ ] Audit `by_method_name`: keep only if it materially improves “called as free function” diagnostics; otherwise remove it.
+- [x] Remove visibility fallback that turns merely-visible receiver types into extension targets.
+- [x] Remove extension override checks.
+- [x] Remove duplicate logic needed only for canonical/extension collision.
+- [x] Keep same-receiver duplicate method diagnostics.
+- [x] Keep field-name conflict validation for struct methods.
+- [x] Keep receiver-call mutability rules.
+- [x] Audit `by_method_name`: retained only for “called as free function” diagnostics.
 
 ### 5.3 Simplify receiver visibility/imports
 
-- [ ] Remove independent receiver-method imports from header import parsing.
-- [ ] Remove grouped receiver-method import parsing and aliasing.
-- [ ] Remove `visible_receiver_methods` if it is no longer needed.
-- [ ] Remove `visible_external_receiver_methods` if external methods are removed or isolated from source methods.
-- [ ] Receiver methods should not reserve ordinary value/import aliases.
-- [ ] Receiver method names may repeat across different receiver types.
-- [ ] Method names must still not conflict with fields on the same struct if that remains the rule.
+- [x] Remove independent source receiver-method imports from header import parsing.
+- [x] Remove grouped source receiver-method import parsing and aliasing.
+- [x] Retain `visible_receiver_methods` as receiver-call-only visibility derived from visible receiver types; it is no longer an independent import/export surface.
+- [x] Remove `visible_external_receiver_methods` and the external receiver-method lookup path.
+- [x] Source receiver methods do not reserve ordinary value/import aliases.
+- [x] Receiver method names may repeat across different receiver types.
+- [x] Method names still cannot conflict with fields on the same struct.
 
 ### 5.4 Facade rule
 
-- [ ] Implement:
+- [x] Implement:
 
 ```text
 A facade exposes a type's same-file receiver methods when it exposes the type.
 Receiver methods are not independently exported or aliased.
 ```
 
-- [ ] Remove explicit receiver-method re-export logic.
-- [ ] Decide transparent alias behavior and document/test it.
+- [x] Remove explicit source receiver-method re-export logic.
+- [x] Decide transparent alias behavior and document/test it.
   - Recommended: transparent aliases expose the same receiver method surface because they are the same type.
 
 ### 5.5 External package member surface
 
-- [ ] Preferred strict target: external packages expose free functions and opaque types, not source-style receiver methods.
-- [ ] Reject `this` receiver parameters in source-authored `@bst.sig` JS imports.
-- [ ] Convert builder-owned external receiver APIs, such as `@web/canvas`, to free functions where feasible.
-- [ ] If a builder-owned member API must remain temporarily, isolate it from the source receiver-method catalog and document it as builder-owned external metadata only. It must not use grouped receiver-method imports, file-local extension evidence, or source-authored receiver declaration paths.
+- [x] Preferred strict target for source-authored/provider-created JS packages: expose free functions and opaque types, not source-style receiver methods.
+- [x] Reject `this` receiver parameters in source-authored `@bst.sig` JS imports.
+- [x] Convert builder-owned external receiver APIs, such as `@web/canvas`, to free functions where feasible.
+- [x] Remove builder-owned external receiver metadata from the source receiver-method catalog, import environment, AST receiver-call resolution, and external package metadata.
+- [x] Remove the remaining grouped external receiver-method import surface because external packages no longer expose receiver methods.
+- [x] Add source-owned HTML `Canvas` wrapper methods over the raw `@web/canvas` free functions.
+
+Phase 5.5 final update: the remaining external receiver-method exception is removed. Raw
+`@web/canvas` imports use free functions with the context/element as the first parameter, and
+`@html` provides the user-facing method-style wrapper. Generated integration fixture `input/dev/`
+and `input/release/` directories plus benchmark `dev/` and `release/` output directories are ignored
+so local fixture and benchmark refreshes do not leave generated build output in Git status.
+Validation passed on 2026-06-12 with the targeted canvas unit test,
+`cargo run -- check docs/src/#page.bst`, `cargo run -- tests`, and full `just validate`.
 
 ### 5.6 Conformance ownership
 
-- [ ] Enforce same-file nominal conformance:
+- [x] Enforce same-file nominal conformance:
 
 ```text
 User-authored `Type must TRAIT` is valid only when `Type` is a user-defined struct, choice, or
 generic type constructor declared in the same file.
 ```
 
-- [ ] Reject conformance for builtins, imported/dependency/library types, external opaque types, and other-file types.
-- [ ] Remove file-local extension evidence.
-- [ ] Remove generic-bound dispatch through file-local evidence.
-- [ ] Keep reusable evidence wherever both the type and trait are visible.
+- [x] Reject conformance for builtins, imported/dependency/library types, external opaque types, and other-file types.
+- [x] Remove file-local extension evidence.
+- [x] Remove generic-bound dispatch through file-local evidence.
+- [x] Keep reusable evidence wherever both the type and trait are visible.
 
 ### 5.7 Tests
 
-- [ ] Positive:
+- [x] Positive:
   - same-file struct method;
   - same-file choice method;
   - aligned generic nominal receiver method;
@@ -964,7 +1007,7 @@ generic type constructor declared in the same file.
   - same-file nominal trait conformance;
   - generic bound using visible reusable evidence.
 
-- [ ] Negative:
+- [x] Negative:
   - method declared for imported type;
   - method declared for same-module different-file type;
   - method declared for dependency/library type;
@@ -979,14 +1022,14 @@ generic type constructor declared in the same file.
 
 ## Phase gate
 
-- [ ] Run:
+- [x] Run:
 
 ```bash
 rg -n "FileLocalExtension|file-local extension|file local extension|file-local evidence|file local evidence|visible_receiver_methods|visible_external_receiver_methods|grouped receiver|receiver method import|receiver-method import|receiver method alias|receiver-method alias|ExtensionOverridesCanonicalMethod" src docs tests libraries
 ```
 
-- [ ] Remaining hits are only outside-scope docs or negative tests.
-- [ ] Run:
+- [x] Remaining production-code hits are only the intentionally retained source receiver-call visibility map; broader docs hits are tracked by the documentation phases.
+- [x] Run:
 
 ```bash
 cargo fmt
@@ -996,11 +1039,11 @@ cargo clippy
 just validate
 ```
 
-- [ ] Manual review:
-  - [ ] Header/import stage no longer owns independent receiver-method visibility.
-  - [ ] AST receiver lookup uses receiver type visibility and same-file method catalog.
-  - [ ] Trait evidence is not split into reusable vs file-local extension evidence.
-  - [ ] No stale comments describe extension methods or file-local evidence as supported.
+- [x] Manual review:
+  - [x] Header/import stage no longer owns independent source receiver-method visibility.
+  - [x] AST receiver lookup uses receiver type visibility and same-file method catalog.
+  - [x] Trait evidence is not split into reusable vs file-local extension evidence.
+  - [x] No stale production-code comments describe extension methods or file-local evidence as supported.
 
 ---
 
@@ -1014,13 +1057,13 @@ Builtin maps are already close to the desired surface. The main work is removing
 
 ### 6.1 Key policy
 
-- [ ] Ensure builtin map key validation accepts only:
+- [x] Ensure builtin map key validation accepts only:
   - `String`;
   - `Int`;
   - `Bool`;
   - `Char`.
 
-- [ ] Ensure it rejects:
+- [x] Ensure it rejects:
   - `Float`;
   - structs;
   - choices;
@@ -1033,25 +1076,32 @@ Builtin maps are already close to the desired surface. The main work is removing
   - generic parameters;
   - aliases expanding to unsupported keys.
 
-- [ ] Remove “before future `HASHABLE`” wording from diagnostics and comments.
-- [ ] Remove any `HASHABLE`, custom hash/equality, or generic-key scaffolding not required by scalar-key validation.
-- [ ] Keep value-side behavior according to current runtime-storable rules.
+- [x] Remove “before future `HASHABLE`” wording from diagnostics and comments.
+- [x] Remove any `HASHABLE`, custom hash/equality, or generic-key scaffolding not required by scalar-key validation.
+- [x] Keep value-side behavior according to current runtime-storable rules.
+
+Generic key parameters now use the same scalar-only unsupported-key diagnostic path as every
+other unsupported key type. The old `HASHABLE`-specific diagnostic reason and rendering path were
+removed.
 
 ### 6.2 HIR/backend simplification
 
-- [ ] Keep first-class HIR map literal/op nodes.
-- [ ] Keep HIR reachability for map construction/use because HTML-Wasm still rejects reachable maps.
-- [ ] Keep JS runtime/helper lowering for scalar-keyed maps.
-- [ ] Simplify key normalization/runtime helpers to assume the scalar-key policy where possible.
-- [ ] Remove hooks for custom hash/equality policies if any exist.
+- [x] Keep first-class HIR map literal/op nodes.
+- [x] Keep HIR reachability for map construction/use because HTML-Wasm still rejects reachable maps.
+- [x] Keep JS runtime/helper lowering for scalar-keyed maps.
+- [x] Simplify key normalization/runtime helpers to assume the scalar-key policy where possible.
+- [x] Remove hooks for custom hash/equality policies if any exist.
+
+No HIR/backend map changes were needed: the stale generic-key branch lived in AST type-resolution
+diagnostics, while runtime helpers and Wasm reachability already consume scalar-keyed maps.
 
 ### 6.3 Tests
 
-- [ ] Positive:
+- [x] Positive:
   - `String`, `Int`, `Bool`, `Char` keys;
   - alias to supported scalar key.
 
-- [ ] Negative:
+- [x] Negative:
   - `Float` key;
   - struct key;
   - choice key;
@@ -1063,14 +1113,15 @@ Builtin maps are already close to the desired surface. The main work is removing
 
 ## Phase gate
 
-- [ ] Run:
+- [x] Run:
 
 ```bash
 rg -n "HASHABLE|hashable|generic key|generic map|user-defined key|user defined key|custom hasher|custom comparer|map equality|Float key|fixed map|capacity map|hashset" src docs tests libraries
 ```
 
-- [ ] Remaining hits are only outside-scope docs, negative tests, or legitimate scalar-map backend work.
-- [ ] Run:
+- [x] Remaining hits are only outside-scope docs, negative tests, stale generated docs output, or
+  legitimate scalar-map/backend terminology.
+- [x] Run:
 
 ```bash
 cargo fmt
@@ -1080,10 +1131,13 @@ cargo clippy
 just validate
 ```
 
-- [ ] Manual review:
-  - [ ] map key validation is direct and not solver/trait based;
-  - [ ] diagnostics do not imply `HASHABLE` is coming;
-  - [ ] backend code does not carry unused custom-key hooks.
+Validation passed on 2026-06-12 with `cargo fmt`, targeted type-resolution and diagnostic-model
+tests, `cargo run -- tests`, and full `just validate`.
+
+- [x] Manual review:
+  - [x] map key validation is direct and not solver/trait based;
+  - [x] diagnostics do not imply `HASHABLE` is coming;
+  - [x] backend code does not carry unused custom-key hooks.
 
 ---
 
@@ -1097,23 +1151,24 @@ Capacity arithmetic should remain possible in named constants, but type-position
 
 ### 7.1 Parser/type representation
 
-- [ ] Find the parsed representation for fixed collection capacity.
-- [ ] Replace general expression/token storage with a narrow representation if practical:
+- [x] Find the parsed representation for fixed collection capacity.
+- [x] Replace general expression/token storage with a narrow representation:
 
 ```rust
-pub enum ParsedFixedCapacity {
+pub enum ParsedCollectionCapacity {
     Literal { value: i64, location: SourceLocation },
-    ConstName { name: StringId, location: SourceLocation },
+    BareConstant { name: StringId, location: SourceLocation },
 }
 ```
 
-Adapt to existing parsed type structures and interned path conventions.
+The parser now rejects arithmetic and other expression-shaped capacity prefixes instead of
+carrying raw token slices into AST type resolution.
 
-- [ ] Accept only:
+- [x] Accept only:
   - positive integer literal;
   - bare visible `#Int` constant name.
 
-- [ ] Reject:
+- [x] Reject:
   - arithmetic, including `capacity + 2` and `2 + 2`;
   - function calls;
   - field access / const-record projection;
@@ -1123,10 +1178,10 @@ Adapt to existing parsed type structures and interned path conventions.
 
 ### 7.2 Header dependency edges
 
-- [ ] Keep dependency edges only for bare constant-name capacity.
-- [ ] Remove general expression reference walking for capacity type position.
-- [ ] Preserve current source-order/import rules for visible constants.
-- [ ] If imported constants are allowed, prefer requiring a bare grouped import alias:
+- [x] Keep dependency edges only for bare constant-name capacity.
+- [x] Remove general expression reference walking for capacity type position.
+- [x] Preserve current source-order/import rules for visible constants.
+- [x] If imported constants are allowed, prefer requiring a bare grouped import alias:
 
 ```beanstalk
 import @sizes { default_capacity }
@@ -1135,22 +1190,25 @@ items {default_capacity String} = {}
 
 ### 7.3 AST capacity resolution
 
-- [ ] Resolve literal capacity directly.
-- [ ] Resolve bare `#Int` capacity by looking up the folded constant value.
-- [ ] Reject non-`Int`, non-constant, non-positive, overflow, and unresolved names with structured diagnostics.
-- [ ] Ensure diagnostics say to put arithmetic in a named compile-time constant first.
-- [ ] HIR/backends continue consuming canonical collection shape only.
+- [x] Resolve literal capacity directly.
+- [x] Resolve bare `#Int` capacity by looking up the folded constant value.
+- [x] Reject non-`Int`, non-constant, non-positive, overflow, and unresolved names with structured diagnostics.
+- [x] Ensure diagnostics say to use a positive integer literal or bare `#Int` constant name.
+- [x] HIR/backends continue consuming canonical collection shape only.
+
+AST resolution now distinguishes explicit `#` constants from merely foldable runtime immutable
+bindings, so `capacity = 4` is not valid capacity syntax while `capacity #Int = 4` remains valid.
 
 ### 7.4 Tests
 
-- [ ] Positive:
+- [x] Positive:
   - `{4 Int}`;
   - `{capacity Int}` with `capacity #Int = 4`;
   - `larger_capacity #Int = capacity + 2` then `{larger_capacity String}`;
   - fixed literal over-capacity rejection still works;
   - aliases preserve fixed shape.
 
-- [ ] Negative:
+- [x] Negative:
   - `{capacity + 2 Int}`;
   - `{2 + 2 Int}`;
   - `{get_capacity() Int}`;
@@ -1162,14 +1220,15 @@ items {default_capacity String} = {}
 
 ## Phase gate
 
-- [ ] Run:
+- [x] Run:
 
 ```bash
 rg -n "capacity expression|capacity expressions|ordinary compile-time arithmetic|capacity \\+|fold to a positive|ParsedFixedCapacity|CollectionShape" src docs tests libraries
 ```
 
-- [ ] Remaining docs describe the new narrow rule.
-- [ ] Run:
+- [x] Remaining source docs describe the new narrow rule. Generated `docs/release/**` and
+  `docs/dev/**` output still contains stale generated HTML and was not edited directly.
+- [x] Run:
 
 ```bash
 cargo fmt
@@ -1179,11 +1238,14 @@ cargo clippy
 just validate
 ```
 
-- [ ] Manual review:
-  - [ ] type parser does not invoke general expression parsing for capacity;
-  - [ ] header dependency generation is explicit and small;
-  - [ ] AST owns semantic constant lookup;
-  - [ ] HIR/backends consume canonical collection shape.
+Validation passed on 2026-06-12 with `cargo fmt`, targeted type/header/dependency tests,
+`cargo run -- tests`, and full `just validate`.
+
+- [x] Manual review:
+  - [x] type parser does not invoke general expression parsing for capacity;
+  - [x] header dependency generation is explicit and small;
+  - [x] AST owns semantic constant lookup;
+  - [x] HIR/backends consume canonical collection shape.
 
 ---
 
@@ -1197,56 +1259,64 @@ The tests should describe the final language shape. Delete obsolete success test
 
 ### 8.1 Inventory and categorize
 
-- [ ] Search tests and source fixtures:
+- [x] Search tests and source fixtures:
 
 ```bash
 rg -n "dynamic trait|DynamicTrait|dynamic-safe|CallDynamicTrait|ConstructDynamicTrait|FileLocalExtension|file-local evidence|HASHABLE|capacity \\+|grouped receiver|receiver method import|receiver-method alias" tests src
 ```
 
-- [ ] Categorize each hit:
+- [x] Categorize each hit:
   - delete obsolete success case;
   - rewrite into static trait success case;
   - rewrite into choice heterogeneity success case;
   - convert to outside-scope negative diagnostic;
   - keep because it protects a current supported feature.
 
+Inventory result: remaining hits are current intentional coverage: named-constant capacity
+arithmetic success, inline capacity-expression rejection, receiver-method import rejection fixtures,
+and one unrelated Rust allocation expression. Stale file-local/extension fixture names were renamed
+to current rule names, and redundant override/extension fixtures whose old distinctions no longer
+reach a distinct diagnostic path were deleted.
+
 ### 8.2 Required integration coverage
 
-- [ ] Static trait declaration + same-file conformance success.
-- [ ] Static generic-bound success.
-- [ ] Method shape without `Type must TRAIT` does not imply conformance.
-- [ ] Trait name as ordinary type rejected in parameter, return, struct field, choice payload, collection element, alias target.
-- [ ] Choice-based heterogeneity success replacing dynamic trait examples.
-- [ ] Same-file struct and choice receiver method success.
-- [ ] Imported receiver type method call success when method was declared with the type.
-- [ ] Receiver declaration for imported/builtin/external/nonlocal type rejected.
-- [ ] Receiver method import and alias rejected.
-- [ ] Scalar map key success and unsupported key failures.
-- [ ] Literal and bare-constant fixed capacity success.
-- [ ] Inline fixed-capacity expression failures.
+- [x] Static trait declaration + same-file conformance success.
+- [x] Static generic-bound success.
+- [x] Method shape without `Type must TRAIT` does not imply conformance.
+- [x] Trait name as ordinary type rejected in parameter, return, struct field, choice payload, collection element, alias target.
+- [x] Choice-based heterogeneity success replacing dynamic trait examples.
+- [x] Same-file struct and choice receiver method success.
+- [x] Imported receiver type method call success when method was declared with the type.
+- [x] Receiver declaration for imported/builtin/external/nonlocal type rejected.
+- [x] Receiver method import and alias rejected.
+- [x] Scalar map key success and unsupported key failures.
+- [x] Literal and bare-constant fixed capacity success.
+- [x] Inline fixed-capacity expression failures.
 
 ### 8.3 Remove obsolete coverage
 
-- [ ] Delete dynamic trait JS runtime success tests.
-- [ ] Delete dynamic trait Wasm unsupported tests.
-- [ ] Delete file-local extension evidence success tests.
-- [ ] Delete grouped receiver-method import/alias success tests.
-- [ ] Delete inline capacity-expression success tests.
-- [ ] Delete `HASHABLE` future tests unless they are converted to outside-scope rejection tests.
-- [ ] Update `tests/cases/manifest.toml` for renamed/deleted cases.
+- [x] Delete dynamic trait JS runtime success tests.
+- [x] Delete dynamic trait Wasm unsupported tests.
+- [x] Delete file-local extension evidence success tests.
+- [x] Delete grouped receiver-method import/alias success tests.
+- [x] Delete inline capacity-expression success tests.
+- [x] Delete `HASHABLE` future tests unless they are converted to outside-scope rejection tests.
+- [x] Update `tests/cases/manifest.toml` for renamed/deleted cases.
 
 ## Phase gate
 
-- [ ] Run:
+- [x] Run:
 
 ```bash
 cargo run -- tests
 just validate
 ```
 
-- [ ] Confirm test names describe current rules, not removed features.
-- [ ] Confirm failure tests assert stable diagnostic codes where practical.
-- [ ] Confirm positive tests use realistic Beanstalk snippets.
+- [x] Confirm test names describe current rules, not removed features.
+- [x] Confirm failure tests assert stable diagnostic codes where practical.
+- [x] Confirm positive tests use realistic Beanstalk snippets.
+
+Validation passed on 2026-06-12 with `cargo run -- tests` and full `just validate`.
 
 ---
 
@@ -1276,61 +1346,85 @@ rg -n "associated type|associated constant|default method|trait inheritance|trai
 
 For every hit:
 
-- [ ] Delete if obsolete.
-- [ ] Move to outside-scope docs if it is policy.
-- [ ] Convert to a negative test if it is a rejection case.
-- [ ] Keep only if it is a current supported feature or deliberately deferred backend work.
+- [x] Delete if obsolete.
+- [x] Move to outside-scope docs if it is policy.
+- [x] Convert to a negative test if it is a rejection case.
+- [x] Keep only if it is a current supported feature or deliberately deferred backend work.
+
+Search result summary:
+- Production dynamic-trait value, dynamic dispatch, dynamic-safety, and backend runtime paths were
+  not found outside the current static trait metadata and diagnostics surface.
+- Receiver-method hits are the retained source receiver-call visibility maps, diagnostic-only
+  `by_method_name` lookup, and current rejection coverage/docs.
+- Hashmap hits are outside-scope policy docs, negative fixtures, scalar-key diagnostics, ordinary
+  Rust hash-map implementation details, or the current scalar-map runtime/backend path.
+- Fixed-capacity hits are the current literal-or-bare-constant representation, allowed named-constant
+  arithmetic examples, rejection fixtures, and canonical collection-shape consumers.
+- Generated docs under `docs/release/**` and `docs/dev/**` remain stale in places and were not
+  edited directly.
 
 ### 9.2 Simplification targets
 
 #### Trait/type system
 
-- [ ] Can `TraitEnvironment` and `TraitEvidenceEnvironment` be AST-only?
-- [ ] Can stable evidence IDs be removed from backend-facing data?
-- [ ] Are dynamic-safety fields/methods fully gone?
-- [ ] Does type resolution reject trait names in ordinary type position early and clearly?
-- [ ] Is generic-bound dispatch lowered to concrete calls before HIR?
-- [ ] Are comments in `traits`, `datatypes`, AST, HIR updated to static-only language?
+- [x] Can `TraitEnvironment` and `TraitEvidenceEnvironment` be AST-only?
+- [x] Can stable evidence IDs be removed from backend-facing data?
+- [x] Are dynamic-safety fields/methods fully gone?
+- [x] Does type resolution reject trait names in ordinary type position early and clearly?
+- [x] Is generic-bound dispatch lowered to concrete calls before HIR?
+- [x] Are comments in `traits`, `datatypes`, AST, HIR updated to static-only language?
+
+`TraitEnvironment`, `TraitEvidenceEnvironment`, and stable evidence IDs remain frontend/AST state
+for generic bounds, concrete evidence receiver fallback, type resolution, and public-surface checks;
+no backend-facing dynamic trait data remains.
 
 #### Receiver methods
 
-- [ ] Does the source receiver catalog only contain same-file canonical methods?
-- [ ] Can `ReceiverMethodKind` be deleted?
-- [ ] Can `by_method_name` be removed or narrowed?
-- [ ] Are method imports/aliases gone from header visibility structures?
-- [ ] Are external package methods either converted to free functions or isolated as builder-owned metadata?
-- [ ] Are source methods visible through the receiver type rather than an independent import surface?
+- [x] Does the source receiver catalog only contain same-file canonical methods?
+- [x] Can `ReceiverMethodKind` be deleted?
+- [x] Can `by_method_name` be removed or narrowed?
+- [x] Are method imports/aliases gone from header visibility structures?
+- [x] Are external package methods converted to free functions with no builder-owned receiver metadata left behind?
+- [x] Are source methods visible through the receiver type rather than an independent import surface?
+
+`ReceiverMethodKind` is gone. `by_method_name` is intentionally retained only for the targeted
+"called as free function" diagnostic and does not drive dispatch. Builder-owned external receiver
+metadata is removed; `@web/canvas` is a free-function external package and `@html` owns the
+method-style wrapper type.
 
 #### Hashmaps
 
-- [ ] Is key validation a direct scalar-key check rather than a trait/capability solver?
-- [ ] Are custom hash/equality hooks gone?
-- [ ] Are runtime helpers specialized enough for scalar keys without hiding future generic-key assumptions?
-- [ ] Are diagnostics explicit about scalar-key-only policy?
+- [x] Is key validation a direct scalar-key check rather than a trait/capability solver?
+- [x] Are custom hash/equality hooks gone?
+- [x] Are runtime helpers specialized enough for scalar keys without hiding future generic-key assumptions?
+- [x] Are diagnostics explicit about scalar-key-only policy?
+
+The remaining cleanup renamed the stale `unhashable` fixture/test wording to unsupported-key
+wording and replaced "key capability" comments with scalar-key policy wording.
 
 #### Fixed capacity
 
-- [ ] Is capacity syntax represented as literal-or-bare-const rather than expression tokens?
-- [ ] Are dependency edges only for bare const names?
-- [ ] Is arithmetic only allowed in constant declarations?
-- [ ] Do HIR/backends only see canonical collection shape?
+- [x] Is capacity syntax represented as literal-or-bare-const rather than expression tokens?
+- [x] Are dependency edges only for bare const names?
+- [x] Is arithmetic only allowed in constant declarations?
+- [x] Do HIR/backends only see canonical collection shape?
 
 #### Backends
 
-- [ ] Are dynamic trait runtime helpers/assets fully removed?
-- [ ] Are Wasm dynamic-trait unsupported checks removed?
-- [ ] Are scalar-keyed map unsupported checks still present for Wasm?
-- [ ] Are unused runtime modules and imports gone?
+- [x] Are dynamic trait runtime helpers/assets fully removed?
+- [x] Are Wasm dynamic-trait unsupported checks removed?
+- [x] Are scalar-keyed map unsupported checks still present for Wasm?
+- [x] Are unused runtime modules and imports gone?
 
 ### 9.3 Comment/doc-comment audit
 
-- [ ] Search comments for removed concepts:
+- [x] Search comments for removed concepts:
 
 ```bash
 rg -n "//!|///|//" src | rg "dynamic trait|FileLocalExtension|file-local|HASHABLE|capacity expression|dynamic-safe|receiver method import|dynamic dispatch"
 ```
 
-- [ ] Update file-level docs in touched modules, especially:
+- [x] Update file-level docs in touched modules, especially:
   - `src/compiler_frontend/traits/mod.rs`;
   - `src/compiler_frontend/datatypes/mod.rs`;
   - `src/compiler_frontend/datatypes/definitions.rs`;
@@ -1344,9 +1438,13 @@ rg -n "//!|///|//" src | rg "dynamic trait|FileLocalExtension|file-local|HASHABL
 
 Comments should explain current invariants, not deleted history.
 
+Comment audit result: remaining `file-local` source hits describe ordinary visibility/import
+ownership, not file-local extension evidence. The surviving stale wording was tightened in the
+map-key helper, receiver-method tests, and progress matrix.
+
 ### 9.4 Documentation consistency audit
 
-- [ ] Review:
+- [x] Review:
   - `README.md`;
   - `docs/language-overview.md`;
   - `docs/compiler-design-overview.md`;
@@ -1364,17 +1462,21 @@ Comments should explain current invariants, not deleted history.
 
 Confirm:
 
-- [ ] dynamic traits appear only as outside-scope/rejected;
-- [ ] receiver extensions appear only as outside-scope/rejected;
-- [ ] `HASHABLE` appears only as outside-scope/rejected;
-- [ ] map future work is limited to backend/runtime work for scalar-keyed maps;
-- [ ] fixed capacity examples never use inline arithmetic;
-- [ ] public `Result` values and exceptions are consistently outside scope;
-- [ ] general macros/type-level programming are outside scope.
+- [x] dynamic traits appear only as outside-scope/rejected;
+- [x] receiver extensions appear only as outside-scope/rejected;
+- [x] `HASHABLE` appears only as outside-scope/rejected;
+- [x] map future work is limited to backend/runtime work for scalar-keyed maps;
+- [x] fixed capacity examples never use inline arithmetic;
+- [x] public `Result` values and exceptions are consistently outside scope;
+- [x] general macros/type-level programming are outside scope.
+
+Documentation audit result: canonical docs, docs-source pages, roadmap, README, and progress matrix
+now describe static traits, receiver-type visibility, scalar-keyed maps, and narrow fixed-capacity
+syntax. Named constants may still use arithmetic before being referenced in capacity type position.
 
 ## Phase gate
 
-- [ ] Run:
+- [x] Run:
 
 ```bash
 cargo fmt
@@ -1384,34 +1486,40 @@ cargo run -- tests
 just validate
 ```
 
-- [ ] Manual stage-boundary review:
-  - [ ] AST does not emit removed dynamic trait semantics.
-  - [ ] HIR does not represent removed dynamic trait operations.
-  - [ ] Backends contain no dead dynamic trait runtime paths.
-  - [ ] Header/import visibility has no independent receiver-method import state.
-  - [ ] Diagnostics distinguish deferred from outside scope.
-  - [ ] No compatibility wrappers, forwarding shims, dead variants, or stale comments remain.
-  - [ ] Tests cover behavior rather than implementation accidents.
+- [x] Manual stage-boundary review:
+  - [x] AST does not emit removed dynamic trait semantics.
+  - [x] HIR does not represent removed dynamic trait operations.
+  - [x] Backends contain no dead dynamic trait runtime paths.
+  - [x] Header/import visibility has no independent receiver-method import state.
+  - [x] Diagnostics distinguish deferred from outside scope.
+  - [x] No compatibility wrappers, forwarding shims, dead variants, or stale comments remain.
+  - [x] Tests cover behavior rather than implementation accidents.
+
+Validation passed on 2026-06-12 with `cargo fmt`, focused map-key unit tests,
+`cargo run -- tests`, and full `just validate`.
 
 ---
 
 # Final acceptance checklist
 
-- [ ] `docs/language-overview.md` contains `Language Design Scope` and `Outside the Language Design Scope` sections.
-- [ ] `docs/compiler-design-overview.md` describes static-only traits and no dynamic trait HIR/backend path.
-- [ ] `docs/roadmap/roadmap.md` no longer lists dynamic traits, `HASHABLE`, broad trait features, or user-defined map keys as ordinary follow-ups.
-- [ ] `docs/src/docs/progress/#page.bst` has an `Outside Scope` status and updated traits/receiver/collections/hashmap rows.
-- [ ] `docs/src/docs/traits/#page.bst` teaches static-only traits.
-- [ ] `docs/src/docs/generics/#page.bst` no longer refers to dynamic trait values.
-- [ ] `docs/src/docs/collections/#page.bst` documents scalar-keyed hashmaps and narrow capacity syntax.
-- [ ] `docs/src/docs/structs/#page.bst` documents same-file nominal receiver methods only.
-- [ ] `README.md` mentions the deliberately small language surface.
-- [ ] Trait names in ordinary type position are rejected with structured diagnostics.
-- [ ] Dynamic trait `DataType`, `TypeDefinition`, AST coercions, HIR nodes, reachability facts, backend/runtime support, and tests are deleted or rewritten.
-- [ ] Source-authored receiver extensions for builtin/imported/external/nonlocal types are rejected.
-- [ ] Receiver methods are not independently imported, aliased, or re-exported.
-- [ ] File-local extension evidence is removed.
-- [ ] Builtin map keys are scalar-only and diagnostics do not mention future `HASHABLE`.
-- [ ] Fixed capacity type syntax accepts only integer literals or bare `#Int` constant names.
-- [ ] Obsolete comments, doc comments, enum variants, helper structs, tests, and runtime helpers are removed.
-- [ ] `just validate` passes.
+- [x] `docs/language-overview.md` contains `Language Design Scope` and `Outside the Language Design Scope` sections.
+- [x] `docs/compiler-design-overview.md` describes static-only traits and no dynamic trait HIR/backend path.
+- [x] `docs/roadmap/roadmap.md` no longer lists dynamic traits, `HASHABLE`, broad trait features, or user-defined map keys as ordinary follow-ups.
+- [x] `docs/src/docs/progress/#page.bst` has an `Outside Scope` status and updated traits/receiver/collections/hashmap rows.
+- [x] `docs/src/docs/traits/#page.bst` teaches static-only traits.
+- [x] `docs/src/docs/generics/#page.bst` no longer refers to dynamic trait values.
+- [x] `docs/src/docs/collections/#page.bst` documents scalar-keyed hashmaps and narrow capacity syntax.
+- [x] `docs/src/docs/structs/#page.bst` documents same-file nominal receiver methods only.
+- [x] `README.md` mentions the deliberately small language surface.
+- [x] Trait names in ordinary type position are rejected with structured diagnostics.
+- [x] Dynamic trait `DataType`, `TypeDefinition`, AST coercions, HIR nodes, reachability facts, backend/runtime support, and tests are deleted or rewritten.
+- [x] Source-authored receiver extensions for builtin/imported/external/nonlocal types are rejected.
+- [x] Receiver methods are not independently imported, aliased, or re-exported.
+- [x] External packages expose opaque types, constants, and free functions only.
+- [x] `@web/canvas` uses a raw free-function API, and `@html` owns source wrapper methods for canvas ergonomics.
+- [x] Generated integration fixture and benchmark build-output directories are ignored and benchmark `dev/` artifacts are untracked.
+- [x] File-local extension evidence is removed.
+- [x] Builtin map keys are scalar-only and diagnostics do not mention future `HASHABLE`.
+- [x] Fixed capacity type syntax accepts only integer literals or bare `#Int` constant names.
+- [x] Obsolete comments, doc comments, enum variants, helper structs, tests, and runtime helpers are removed.
+- [x] `just validate` passes.
