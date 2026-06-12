@@ -7,15 +7,19 @@ use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::ast::expressions::expression_types::ConstRecordState;
 use crate::compiler_frontend::ast::templates::template::{
-    SlotPlaceholder, TemplateAtom, TemplateContent, TemplateSegmentOrigin, TemplateType,
+    SlotPlaceholder, TemplateAtom, TemplateContent, TemplateSegment, TemplateSegmentOrigin,
+    TemplateType,
 };
 use crate::compiler_frontend::ast::templates::template_control_flow::{
     TemplateControlFlow, TemplateLoopControlSignal,
 };
 use crate::compiler_frontend::ast::templates::template_slots::RuntimeSlotSiteId;
 use crate::compiler_frontend::ast::templates::template_types::Template;
+use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
+use crate::compiler_frontend::value_mode::ValueMode;
 
 // -------------------------
 //  Render Plan IR
@@ -299,13 +303,6 @@ impl TemplateRenderPlan {
     /// linkage is no longer needed because composition has already run and
     /// `is_child_template_output` remains `true` for downstream consumers.
     pub fn rebuild_content(&self) -> TemplateContent {
-        use crate::compiler_frontend::ast::templates::template::{
-            TemplateAtom, TemplateContent, TemplateSegment, TemplateSegmentOrigin,
-        };
-        use crate::compiler_frontend::datatypes::DataType;
-        use crate::compiler_frontend::datatypes::ids::builtin_type_ids;
-        use crate::compiler_frontend::value_mode::ValueMode;
-
         let mut atoms = Vec::new();
 
         for piece in &self.pieces {
@@ -383,9 +380,6 @@ impl TemplateRenderPlan {
 
     /// Extracts all evaluatable expressions from the plan, discarding slots and omissions.
     pub fn flatten_expressions(&self) -> Vec<Expression> {
-        use crate::compiler_frontend::ast::expressions::expression::Expression;
-        use crate::compiler_frontend::value_mode::ValueMode;
-
         self.pieces
             .iter()
             .filter_map(|piece| match piece {

@@ -100,8 +100,6 @@ pub enum DataType {
     ///
     /// Semantic option identity is owned by `TypeEnvironment::intern_option`.
     /// AST/HIR type checks should use `TypeId` queries instead of this variant.
-    #[allow(dead_code)]
-    // Retained while parser and diagnostics still carry DataType spellings.
     Option(Box<DataType>), // Shorthand for a choice of a type or None
     /// Temporary diagnostic/control-flow bridge for fallible operation handling.
     ///

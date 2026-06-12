@@ -640,8 +640,8 @@ pub(crate) mod test_support {
         ExternalFunctionDef, ExternalFunctionLowerings, external_success_returns,
     };
     use super::super::ids::ExternalFunctionId;
+    use super::CompilerError;
     use super::ExternalPackageRegistry;
-    use crate::compiler_frontend::compiler_errors::CompilerError;
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
     pub enum TestExternalAbiType {

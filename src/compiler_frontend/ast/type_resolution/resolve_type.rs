@@ -190,11 +190,9 @@ impl<'a> TypeResolutionContext<'a> {
 pub(crate) struct ResolvedTypeAnnotation {
     /// Kept with the resolved annotation so follow-up refactors can preserve source
     /// spelling through diagnostics without re-parsing or reverse-converting `DataType`.
-    #[allow(dead_code)]
     pub(crate) source_ref: ParsedTypeRef,
     /// Diagnostic spelling stays attached to the TypeId for callers that still
     /// need user-facing type text during the staged migration away from `DataType`.
-    #[allow(dead_code)]
     pub(crate) diagnostic_type: DataType,
     pub(crate) type_id: Option<TypeId>,
 }

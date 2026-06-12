@@ -49,7 +49,7 @@ pub struct ActiveValueProductionTarget {
 /// WHY: future diagnostics and lowering may need to distinguish declarations from returns
 /// from nested `then` sites; keeping the kind explicit avoids boolean flags.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[allow(dead_code)]
+#[allow(dead_code)] // NestedThen is planned but not yet constructed.
 pub enum ValueReceiverKind {
     Declaration,
     Assignment,

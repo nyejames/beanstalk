@@ -13,9 +13,12 @@ use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::definitions::{
     ChoiceVariantPayloadDefinition, TypeDefinition,
 };
+use crate::compiler_frontend::datatypes::generic_identity_bridge::generic_instantiation_key_argument_type_ids;
 use crate::compiler_frontend::datatypes::ids::TypeId as FrontendTypeId;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
+use crate::compiler_frontend::hir::module::{HirChoice, HirChoiceField, HirChoiceVariant};
+use crate::compiler_frontend::hir::structs::{HirField, HirStruct};
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::return_hir_transformation_error;
 
@@ -56,9 +59,6 @@ impl<'a> HirBuilder<'a> {
         _type_id: crate::compiler_frontend::datatypes::ids::TypeId,
         location: &SourceLocation,
     ) -> Result<crate::compiler_frontend::hir::ids::StructId, CompilerError> {
-        use crate::compiler_frontend::datatypes::generic_identity_bridge::generic_instantiation_key_argument_type_ids;
-        use crate::compiler_frontend::hir::structs::{HirField, HirStruct};
-
         if let Some(&struct_id) = self.generic_structs_by_key.get(key) {
             return Ok(struct_id);
         }
@@ -146,9 +146,6 @@ impl<'a> HirBuilder<'a> {
         _type_id: crate::compiler_frontend::datatypes::ids::TypeId,
         _location: &SourceLocation,
     ) -> Result<crate::compiler_frontend::hir::ids::ChoiceId, CompilerError> {
-        use crate::compiler_frontend::datatypes::generic_identity_bridge::generic_instantiation_key_argument_type_ids;
-        use crate::compiler_frontend::hir::module::HirChoice;
-
         if let Some(&choice_id) = self.generic_choices_by_key.get(key) {
             return Ok(choice_id);
         }
@@ -208,8 +205,6 @@ impl<'a> HirBuilder<'a> {
         type_id: TypeId,
         location: &SourceLocation,
     ) -> Result<Vec<crate::compiler_frontend::hir::module::HirChoiceVariant>, CompilerError> {
-        use crate::compiler_frontend::hir::module::{HirChoiceField, HirChoiceVariant};
-
         // Copy compact variant facts before allocating/lowering fields. This keeps
         // the TypeEnvironment as the single metadata owner while avoiding a long
         // immutable borrow across `self` mutations.

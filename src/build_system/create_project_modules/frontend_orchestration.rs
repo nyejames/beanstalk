@@ -621,9 +621,21 @@ mod tests {
     use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, TypeMismatchContext};
     use crate::libraries::external_import_providers::resolution_table::ExternalImportResolutionTable;
 
+    use super::FrontendModuleBuildContext;
+    use crate::build_system::build::InputFile;
+    use crate::compiler_frontend::CompilerFrontend;
     use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
+    use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
+    use crate::compiler_frontend::headers::parse_file_headers::{
+        HeaderKind, HeaderParseOptions, parse_headers,
+    };
+    use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
+    use crate::compiler_frontend::symbols::identity::SourceFileTable;
     use crate::compiler_frontend::symbols::string_interning::StringTable;
+    use crate::compiler_frontend::tokenizer::tokens::TokenKind;
     use crate::compiler_frontend::{FrontendFilePrepareContext, FrontendFilePrepareInput};
+    use crate::projects::settings::Config;
+    use std::fs;
 
     #[test]
     fn merge_stage_messages_preserves_render_type_context_with_warnings() {
@@ -650,17 +662,6 @@ mod tests {
 
     #[test]
     fn fused_preparation_merges_local_forks_and_resolves_source_and_generated_strings() {
-        use crate::compiler_frontend::CompilerFrontend;
-        use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
-        use crate::compiler_frontend::headers::parse_file_headers::{
-            HeaderKind, HeaderParseOptions, parse_headers,
-        };
-        use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
-        use crate::compiler_frontend::symbols::identity::SourceFileTable;
-        use crate::compiler_frontend::tokenizer::tokens::TokenKind;
-        use crate::projects::settings::Config;
-        use std::fs;
-
         let temp_dir = tempfile::tempdir().expect("should create temp dir");
         let file_a = temp_dir.path().join("a.bst");
         let file_b = temp_dir.path().join("b.bst");
@@ -847,17 +848,6 @@ mod tests {
 
     #[test]
     fn parallel_file_preparation_produces_deterministic_ordered_output() {
-        use super::FrontendModuleBuildContext;
-        use crate::build_system::build::InputFile;
-        use crate::compiler_frontend::CompilerFrontend;
-        use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
-        use crate::compiler_frontend::headers::parse_file_headers::HeaderKind;
-        use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
-        use crate::compiler_frontend::symbols::identity::SourceFileTable;
-        use crate::compiler_frontend::tokenizer::tokens::TokenKind;
-        use crate::projects::settings::Config;
-        use std::fs;
-
         let temp_dir = tempfile::tempdir().expect("should create temp dir");
         let file_a = temp_dir.path().join("a.bst");
         let file_b = temp_dir.path().join("b.bst");

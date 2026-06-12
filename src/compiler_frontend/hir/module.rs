@@ -34,15 +34,13 @@ use rustc_hash::FxHashMap;
 #[derive(Debug, Clone)]
 pub struct HirChoice {
     /// The stable `ChoiceId` assigned during HIR lowering.
-    /// WHY: preserved so the choice layout entry carries its own identity for future
-    ///      diagnostics and backend validation. Currently not read outside tests.
-    #[allow(dead_code)]
+    /// WHY: preserved so diagnostics and backend validation can trust the choice
+    ///      layout entry's own identity while walking HIR choices.
     pub id: crate::compiler_frontend::hir::ids::ChoiceId,
 
     /// Trace to the canonical frontend `TypeId` in `TypeEnvironment`.
-    /// WHY: this field makes the lowering-local → semantic type link explicit.
-    ///      Not all current consumers read it, but it is part of the HIR layout contract.
-    #[allow(dead_code)]
+    /// WHY: validation and backend checks use this to confirm HIR layout entries
+    ///      still map back to canonical frontend type identity.
     pub frontend_type_id: TypeId,
 
     pub variants: Vec<HirChoiceVariant>,

@@ -28,6 +28,7 @@ use crate::compiler_frontend::hir::expressions::{
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_side_table::HirLocalOriginKind;
 use crate::compiler_frontend::hir::ids::{LocalId, RegionId};
+use crate::compiler_frontend::hir::module::HirChoice;
 use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
 use crate::compiler_frontend::paths::path_format::format_compile_time_paths;
@@ -928,8 +929,6 @@ impl<'a> HirBuilder<'a> {
         nominal_path: &InternedPath,
         location: &SourceLocation,
     ) -> Result<crate::compiler_frontend::hir::ids::ChoiceId, CompilerError> {
-        use crate::compiler_frontend::hir::module::HirChoice;
-
         if let Some(&choice_id) = self.choices_by_name.get(nominal_path) {
             return Ok(choice_id);
         }

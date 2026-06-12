@@ -25,7 +25,6 @@ pub(crate) fn render_diagnostics_html(
 }
 
 #[cfg(test)]
-#[allow(dead_code)] // Kept for renderer-focused unit tests that bypass CompilerMessages.
 pub(crate) fn render_diagnostics_html_with_context(
     diagnostics: &[CompilerDiagnostic],
     project_root: &Path,

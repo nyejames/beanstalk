@@ -20,9 +20,12 @@ pub(crate) enum AstCounter {
 }
 
 #[cfg(feature = "detailed_timers")]
+use crate::compiler_frontend::compiler_messages::compiler_dev_logging::detailed_timer_output_enabled;
+
+#[cfg(feature = "detailed_timers")]
 mod detailed {
     use super::AstCounter;
-    use crate::compiler_frontend::compiler_messages::compiler_dev_logging::detailed_timer_output_enabled;
+    use super::detailed_timer_output_enabled;
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     static SCOPE_CONTEXTS_CREATED: AtomicUsize = AtomicUsize::new(0);

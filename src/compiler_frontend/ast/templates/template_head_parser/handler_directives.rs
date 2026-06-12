@@ -91,7 +91,6 @@ fn apply_style_directive_effects(template: &mut Template, effects: StyleDirectiv
 /// Parses the optional handler argument and validates whether this directive
 /// accepts one. Early exits keep the no-argument and invalid-argument cases
 /// distinct from later normalization.
-#[allow(clippy::needless_return)]
 fn parse_optional_handler_style_argument(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
@@ -150,7 +149,6 @@ fn parse_optional_handler_style_argument(
 /// Normalizes a compile-time handler directive argument.
 ///
 /// Early returns keep each rejected argument-kind branch close to its diagnostic.
-#[allow(clippy::needless_return)]
 fn normalize_provided_style_argument_value(
     expression: Expression,
     argument_type: StyleDirectiveArgumentType,
@@ -163,49 +161,41 @@ fn normalize_provided_style_argument_value(
             ExpressionKind::StringSlice(text) => Ok(StyleDirectiveArgumentValue::String(
                 string_table.resolve(text).to_owned(),
             )),
-            _ => {
-                return Err(CompilerDiagnostic::invalid_template_directive(
-                    Some(string_table.intern(directive_name)),
-                    InvalidTemplateDirectiveReason::InvalidArgument,
-                    argument_location.clone(),
-                ));
-            }
+            _ => Err(CompilerDiagnostic::invalid_template_directive(
+                Some(string_table.intern(directive_name)),
+                InvalidTemplateDirectiveReason::InvalidArgument,
+                argument_location.clone(),
+            )),
         },
 
         StyleDirectiveArgumentType::Template => match expression.kind {
             ExpressionKind::Template(template) => Ok(StyleDirectiveArgumentValue::Template(
                 Box::new(*template.to_owned()),
             )),
-            _ => {
-                return Err(CompilerDiagnostic::invalid_template_directive(
-                    Some(string_table.intern(directive_name)),
-                    InvalidTemplateDirectiveReason::InvalidArgument,
-                    argument_location.clone(),
-                ));
-            }
+            _ => Err(CompilerDiagnostic::invalid_template_directive(
+                Some(string_table.intern(directive_name)),
+                InvalidTemplateDirectiveReason::InvalidArgument,
+                argument_location.clone(),
+            )),
         },
 
         StyleDirectiveArgumentType::Number => match expression.kind {
             ExpressionKind::Int(value) => Ok(StyleDirectiveArgumentValue::Number(value as f64)),
             ExpressionKind::Float(value) => Ok(StyleDirectiveArgumentValue::Number(value)),
-            _ => {
-                return Err(CompilerDiagnostic::invalid_template_directive(
-                    Some(string_table.intern(directive_name)),
-                    InvalidTemplateDirectiveReason::InvalidArgument,
-                    argument_location.clone(),
-                ));
-            }
+            _ => Err(CompilerDiagnostic::invalid_template_directive(
+                Some(string_table.intern(directive_name)),
+                InvalidTemplateDirectiveReason::InvalidArgument,
+                argument_location.clone(),
+            )),
         },
 
         StyleDirectiveArgumentType::Bool => match expression.kind {
             ExpressionKind::Bool(value) => Ok(StyleDirectiveArgumentValue::Bool(value)),
-            _ => {
-                return Err(CompilerDiagnostic::invalid_template_directive(
-                    Some(string_table.intern(directive_name)),
-                    InvalidTemplateDirectiveReason::InvalidArgument,
-                    argument_location.clone(),
-                ));
-            }
+            _ => Err(CompilerDiagnostic::invalid_template_directive(
+                Some(string_table.intern(directive_name)),
+                InvalidTemplateDirectiveReason::InvalidArgument,
+                argument_location.clone(),
+            )),
         },
     }
 }

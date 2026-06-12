@@ -85,13 +85,11 @@ pub(crate) struct AstModuleLookups {
     // Resolved trait metadata.
     // WHY: conformance validation, generic bounds, and bound-provided receiver calls need stable
     // trait IDs and requirement TypeIds without querying raw headers.
-    #[allow(dead_code)]
     pub(crate) trait_environment: Rc<TraitEnvironment>,
 
     // Validated canonical conformance evidence.
     // WHY: trait-bound checks and bound-provided receiver calls need indexed evidence instead of
     // scanning conformance headers or receiver methods repeatedly.
-    #[allow(dead_code)]
     pub(crate) trait_evidence_environment: Rc<TraitEvidenceEnvironment>,
 
     // Environment-wide immutable services copied from AstPhaseContext so ScopeShared can

@@ -73,11 +73,14 @@ pub(crate) enum FrontendCounter {
 }
 
 #[cfg(feature = "detailed_timers")]
+use crate::compiler_frontend::compiler_messages::compiler_dev_logging::{
+    detailed_timer_output_enabled, log_benchmark_counter,
+};
+
+#[cfg(feature = "detailed_timers")]
 mod detailed {
     use super::FrontendCounter;
-    use crate::compiler_frontend::compiler_messages::compiler_dev_logging::{
-        detailed_timer_output_enabled, log_benchmark_counter,
-    };
+    use super::{detailed_timer_output_enabled, log_benchmark_counter};
     use std::sync::atomic::{AtomicUsize, Ordering};
 
     static TYPE_ENVIRONMENT_FIELDS_FOR_QUERIES: AtomicUsize = AtomicUsize::new(0);

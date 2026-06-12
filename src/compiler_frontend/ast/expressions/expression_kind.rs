@@ -59,7 +59,6 @@ pub enum ExpressionKind {
     ///
     /// Deferred until source path expression parsing is wired. Retained because const folding,
     /// HIR lowering, and path tests already share this AST shape.
-    #[allow(dead_code)]
     Path(Box<CompileTimePaths>),
 
     /// Reference to a variable by name.

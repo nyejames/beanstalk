@@ -23,6 +23,7 @@ use crate::projects::html_project::compile_input::HtmlModuleCompileInput;
 use crate::projects::html_project::document_config::HtmlDocumentConfig;
 use crate::projects::html_project::document_shell::render_html_document_shell;
 use crate::projects::html_project::external_js::runtime_glue::generate_module_glue;
+use crate::projects::html_project::output_plan::derive_logical_html_path;
 use crate::projects::html_project::page_metadata::extract_html_page_metadata;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -293,7 +294,6 @@ pub(crate) fn html_output_path(
     entry_root: Option<&Path>,
     string_table: &mut StringTable,
 ) -> Result<PathBuf, CompilerError> {
-    use crate::projects::html_project::output_plan::derive_logical_html_path;
     derive_logical_html_path(entry_point, entry_root, string_table)
 }
 

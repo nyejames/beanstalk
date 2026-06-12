@@ -90,7 +90,6 @@ enum TemplateHeadSeparatorState {
 ///
 /// The explicit early returns make token-state exits visible in this parser
 /// state machine: each accepted boundary or diagnostic exits immediately.
-#[allow(clippy::needless_return)]
 pub fn parse_template_head(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
@@ -575,7 +574,6 @@ fn parse_style_directive_from_spec(
 /// Scans ahead for unseparated `if` / `loop` suffix tokens.
 ///
 /// Early returns make the first top-level boundary or suffix location explicit.
-#[allow(clippy::needless_return)]
 fn find_unseparated_control_flow_suffix(
     token_stream: &FileTokens,
 ) -> Option<crate::compiler_frontend::tokenizer::tokens::SourceLocation> {
