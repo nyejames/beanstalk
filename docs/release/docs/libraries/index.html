@@ -379,7 +379,7 @@ body {
 
     <span class='bst-code-comment'>-- Import a project-local source library.</span>
     import <span class='bst-code-operator'>@</span>helper <span class='bst-code-parenthesis'>{</span>double<span class='bst-code-parenthesis'>}</span>
-    </code></pre><p>General rules:</p><ul><li><code>@./</code> resolves relative to the importing file.</li><li>parent-directory imports with <code>..</code> are not supported.</li><li><code>.bst</code> imports are extensionless.</li><li>direct <code>.js</code> imports keep the <code>.js</code> extension.</li><li>source-library imports use their library prefix directly, such as <code>@helper</code> or <code>@html</code>.</li><li>non-relative imports whose first path segment matches a source-library prefix resolve from that library root.</li><li>other non-relative source imports resolve from the project&#39;s configured <code>entry_root</code>.</li><li>core and builder runtime packages use their registered package path, such as <code>@core/math</code> or <code>@web/canvas</code>.</li><li>specific symbol imports use grouped syntax. Direct symbol-path imports such as <code>import @core/math/sin</code> are rejected.</li><li>direct imports of special files such as <code>#mod.bst</code>, <code>#page.bst</code>, and <code>#config.bst</code> are rejected.</li><li>folder imports across module boundaries require a <code>#mod.bst</code> facade. Import concrete same-module files directly when no facade is intended.</li></ul><p>Namespace imports create a shallow namespace for ordinary fields. Use <code>math.sin(1.0)</code> for values and <code>canvas.Canvas2d</code> in type position, but do not pass the namespace record itself as a value. Receiver methods are called through receiver-call syntax rather than as namespace fields.</p></section>
+    </code></pre><p>General rules:</p><ul><li><code>@./</code> resolves relative to the importing file.</li><li>parent-directory imports with <code>..</code> are not supported.</li><li><code>.bst</code> imports are extensionless.</li><li>direct <code>.js</code> imports keep the <code>.js</code> extension.</li><li>source-library imports use their library prefix directly, such as <code>@helper</code> or <code>@html</code>.</li><li>non-relative imports whose first path segment matches a source-library prefix resolve from that library root.</li><li>other non-relative source imports resolve from the project&#39;s configured <code>entry_root</code>.</li><li>core and builder runtime packages use their registered package path, such as <code>@core/math</code> or <code>@web/canvas</code>.</li><li>specific symbol imports use grouped syntax. Direct symbol-path imports such as <code>import @core/math/sin</code> are rejected.</li><li>direct imports of special files such as <code>#mod.bst</code>, <code>#page.bst</code>, and <code>#config.bst</code> are rejected.</li><li>folder imports across module boundaries require a <code>#mod.bst</code> facade. Import concrete same-module files directly when no facade is intended.</li></ul><p>Namespace imports create a shallow namespace for ordinary fields. Use <code>math.sin(1.0)</code> or <code>canvas.fill_rect(~ctx, 0.0, 0.0, 100.0, 100.0)</code> for values and <code>canvas.Canvas2d</code> in type position, but do not pass the namespace record itself as a value. Source-authored receiver methods are called through receiver-call syntax rather than as namespace fields.</p></section>
     <section class="container"><h1>Source libraries</h1><p>Source libraries are normal Beanstalk source roots. A project-local source library usually lives under a configured <code>library_folders</code> folder. Each direct child directory of that folder becomes an import prefix.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
@@ -464,7 +464,7 @@ body {
         double,
         label <span class='bst-code-keyword'>as</span> helper_label,
     <span class='bst-code-parenthesis'>}</span>
-    </code></pre><p>Facade rules:</p><ul><li>outside importers can only see declarations and grouped imports marked with <code>export</code> in <code>#mod.bst</code></li><li>internal implementation files are not public unless the facade wraps or re-exports them intentionally</li><li>normal imports inside <code>#mod.bst</code> are local implementation details</li><li>exported signatures cannot expose private facade-only types</li><li>receiver methods do not become public through facade type aliases; export the receiver method or a wrapper explicitly</li><li><code>#mod.bst</code> is not shared implementation code for sibling files</li><li>runtime top-level statements and runtime top-level templates are invalid in <code>#mod.bst</code></li><li>bare namespace exports such as <code>export @./utils</code> and wildcard exports remain deferred</li></ul></section>
+    </code></pre><p>Facade rules:</p><ul><li>outside importers can only see declarations and grouped imports marked with <code>export</code> in <code>#mod.bst</code></li><li>internal implementation files are not public unless the facade wraps or re-exports them intentionally</li><li>normal imports inside <code>#mod.bst</code> are local implementation details</li><li>exported signatures cannot expose private facade-only types</li><li>receiver methods do not become public through facade type aliases; export the receiver type&#39;s source surface or a wrapper explicitly</li><li><code>#mod.bst</code> is not shared implementation code for sibling files</li><li>runtime top-level statements and runtime top-level templates are invalid in <code>#mod.bst</code></li><li>bare namespace exports such as <code>export @./utils</code> and wildcard exports remain deferred</li></ul></section>
     <section class="container"><h1>Builder source libraries</h1><p>Builders can provide source libraries without requiring those files to exist in the user&#39;s project. The HTML builder provides the <code>@html</code> source library used throughout these docs.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
@@ -554,7 +554,7 @@ body {
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> <code>@bst.opaque Canvas2d</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> Declares an opaque external type. Beanstalk can name it, pass it, and call receiver methods on it, but does not know its internal fields.</td>
+     <td style="padding: 0.2em 0.5em;  "> Declares an opaque external type. Beanstalk can name it and pass it through external functions, but does not know its internal fields.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -573,8 +573,8 @@ body {
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>@bst.sig fill |this ~Canvas2d, x Float|</code> </td>
-     <td style="padding: 0.2em 0.5em;  "> Declares a receiver method on a mutable <code>Canvas2d</code> receiver.</td>
+             <td style="padding: 0.2em 0.5em;  "> <code>@bst.sig fill |ctx ~Canvas2d, x Float|</code> </td>
+     <td style="padding: 0.2em 0.5em;  "> Declares a free function whose first parameter takes mutable access to a <code>Canvas2d</code> value.</td>
         </tr>
         
     </table><p>Built-in signature types are <code>Int</code>, <code>Float</code>, <code>Bool</code>, <code>String</code>, and <code>Char</code>. Other type names must be declared with <code>@bst.opaque</code> before they are used in a signature.</p><p>Current JS signature limitations:</p><ul><li>no collection types</li><li>no option types</li><li>no generic parameters</li><li>no callback/function parameter types</li><li>no multi-success returns</li><li>no <code>Void</code>, <code>None</code>, <code>Unit</code>, or <code>()</code> return spelling; omit <code>-&gt;</code> for no success return</li></ul></section>
@@ -589,11 +589,11 @@ body {
     import <span class='bst-code-parenthesis'>{</span> bstOk, bstErr <span class='bst-code-parenthesis'>}</span> from <span class='bst-code-string'>&quot;@beanstalk/runtime&quot;</span>;
 
     <span class='bst-code-operator'>/</span><span class='bst-code-operator'>*</span><span class='bst-code-operator'>*</span>
-     <span class='bst-code-operator'>*</span> <span class='bst-code-operator'>@</span>bst.opaque <span class='bst-code-struct'>Canvas</span>
+     <span class='bst-code-operator'>*</span> <span class='bst-code-operator'>@</span>bst.opaque <span class='bst-code-struct'>CanvasElement</span>
      <span class='bst-code-operator'>*</span><span class='bst-code-operator'>/</span>
 
     <span class='bst-code-operator'>/</span><span class='bst-code-operator'>*</span><span class='bst-code-operator'>*</span>
-     <span class='bst-code-operator'>*</span> <span class='bst-code-operator'>@</span>bst.sig get_canvas <span class='bst-code-operator'>|</span>id <span class='bst-code-struct'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Canvas,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span>
+     <span class='bst-code-operator'>*</span> <span class='bst-code-operator'>@</span>bst.sig get_canvas <span class='bst-code-operator'>|</span>id <span class='bst-code-struct'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>CanvasElement,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span>
      <span class='bst-code-operator'>*</span><span class='bst-code-operator'>/</span>
     export <span class='bst-code-keyword'>function</span> getCanvas<span class='bst-code-parenthesis'>(</span>id<span class='bst-code-parenthesis'>)</span> <span class='bst-code-parenthesis'>{</span>
         <span class='bst-code-keyword'>const</span> canvas <span class='bst-code-operator'>=</span> document.getElementById<span class='bst-code-parenthesis'>(</span>id<span class='bst-code-parenthesis'>)</span>;
@@ -620,7 +620,7 @@ body {
 
     io<span class='bst-code-parenthesis'>(</span>result<span class='bst-code-parenthesis'>)</span>
     </code></pre><p>JavaScript library files may currently import registered Beanstalk runtime modules with named static imports only. Arbitrary JavaScript imports, dynamic imports, default imports, namespace imports, and npm-style dependency graphs are not supported by the JS provider yet.</p><p>If you are adapting an existing JS library, bundle or flatten its dependencies first, then expose a narrow annotated wrapper file to Beanstalk.</p></section>
-    <section class="container"><h1>Receiver methods from JavaScript</h1><p>Use the <code>this</code> parameter to declare a JavaScript export as a receiver method. <code>this</code> must be the first parameter and may appear at most once. Add <code>~</code> when the method mutates the receiver.</p><pre style="
+    <section class="container"><h1>Mutable JavaScript free functions</h1><p>JavaScript-backed external packages expose free functions only. Put the opaque value in the first parameter when a function acts on that value, and add <code>~</code> when the function mutates it. <code>this</code> receiver-style signatures are rejected for JS imports and builder-owned external packages.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -633,19 +633,19 @@ body {
      <span class='bst-code-operator'>*</span><span class='bst-code-operator'>/</span>
 
     <span class='bst-code-operator'>/</span><span class='bst-code-operator'>*</span><span class='bst-code-operator'>*</span>
-     <span class='bst-code-operator'>*</span> <span class='bst-code-operator'>@</span>bst.sig set_fill_style <span class='bst-code-operator'>|</span>this <span class='bst-code-operator'>~</span><span class='bst-code-struct'>Canvas</span><span class='bst-code-number'>2</span>d, color <span class='bst-code-struct'>String</span><span class='bst-code-operator'>|</span>
+     <span class='bst-code-operator'>*</span> <span class='bst-code-operator'>@</span>bst.sig set_fill_style <span class='bst-code-operator'>|</span>ctx <span class='bst-code-operator'>~</span><span class='bst-code-struct'>Canvas</span><span class='bst-code-number'>2</span>d, color <span class='bst-code-struct'>String</span><span class='bst-code-operator'>|</span>
      <span class='bst-code-operator'>*</span><span class='bst-code-operator'>/</span>
     export <span class='bst-code-keyword'>function</span> setFillStyle<span class='bst-code-parenthesis'>(</span>ctx, color<span class='bst-code-parenthesis'>)</span> <span class='bst-code-parenthesis'>{</span>
         ctx.fillStyle <span class='bst-code-operator'>=</span> color;
     <span class='bst-code-parenthesis'>}</span>
 
     <span class='bst-code-operator'>/</span><span class='bst-code-operator'>*</span><span class='bst-code-operator'>*</span>
-     <span class='bst-code-operator'>*</span> <span class='bst-code-operator'>@</span>bst.sig fill_rect <span class='bst-code-operator'>|</span>this <span class='bst-code-operator'>~</span><span class='bst-code-struct'>Canvas</span><span class='bst-code-number'>2</span>d, x <span class='bst-code-struct'>Float,</span> y <span class='bst-code-struct'>Float,</span> width <span class='bst-code-struct'>Float,</span> height <span class='bst-code-struct'>Float</span><span class='bst-code-operator'>|</span>
+     <span class='bst-code-operator'>*</span> <span class='bst-code-operator'>@</span>bst.sig fill_rect <span class='bst-code-operator'>|</span>ctx <span class='bst-code-operator'>~</span><span class='bst-code-struct'>Canvas</span><span class='bst-code-number'>2</span>d, x <span class='bst-code-struct'>Float,</span> y <span class='bst-code-struct'>Float,</span> width <span class='bst-code-struct'>Float,</span> height <span class='bst-code-struct'>Float</span><span class='bst-code-operator'>|</span>
      <span class='bst-code-operator'>*</span><span class='bst-code-operator'>/</span>
     export <span class='bst-code-keyword'>function</span> fillRect<span class='bst-code-parenthesis'>(</span>ctx, x, y, width, height<span class='bst-code-parenthesis'>)</span> <span class='bst-code-parenthesis'>{</span>
         ctx.fillRect<span class='bst-code-parenthesis'>(</span>x, y, width, height<span class='bst-code-parenthesis'>)</span>;
     <span class='bst-code-parenthesis'>}</span>
-    </code></pre><p>The first JavaScript parameter is the receiver object. Beanstalk calls it with receiver-call syntax:</p><pre style="
+    </code></pre><p>The first JavaScript parameter receives the opaque context object. Beanstalk calls these as ordinary free functions:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -653,16 +653,16 @@ body {
         white-space: pre;
         overflow-x: auto;
     "><code class='codeblock'>
-    import <span class='bst-code-operator'>@</span>web<span class='bst-code-operator'>/</span>canvas <span class='bst-code-parenthesis'>{</span>get_canvas, context_<span class='bst-code-number'>2</span>d, <span class='bst-code-struct'>Canvas</span><span class='bst-code-number'>2</span>d<span class='bst-code-parenthesis'>}</span>
+    import <span class='bst-code-operator'>@</span>web<span class='bst-code-operator'>/</span>canvas <span class='bst-code-parenthesis'>{</span>get_canvas, context_<span class='bst-code-number'>2</span>d, <span class='bst-code-struct'>Canvas</span><span class='bst-code-number'>2</span>d, set_fill_style, fill_rect<span class='bst-code-parenthesis'>}</span>
 
     run <span class='bst-code-operator'>|</span>id <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>String,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
         canvas_ref <span class='bst-code-operator'>=</span> get_canvas<span class='bst-code-parenthesis'>(</span>id<span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>!</span>
         ctx <span class='bst-code-operator'>~</span><span class='bst-code-struct'>Canvas</span><span class='bst-code-number'>2</span>d <span class='bst-code-operator'>=</span> context_<span class='bst-code-number'>2</span>d<span class='bst-code-parenthesis'>(</span>canvas_ref<span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>!</span>
-        <span class='bst-code-operator'>~</span>ctx.set_fill_style<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;red&quot;</span><span class='bst-code-parenthesis'>)</span>
-        <span class='bst-code-operator'>~</span>ctx.fill_rect<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>0.0</span>, <span class='bst-code-number'>0.0</span>, <span class='bst-code-number'>100.0</span>, <span class='bst-code-number'>100.0</span><span class='bst-code-parenthesis'>)</span>
+        set_fill_style<span class='bst-code-parenthesis'>(</span><span class='bst-code-operator'>~</span>ctx, <span class='bst-code-string'>&quot;red&quot;</span><span class='bst-code-parenthesis'>)</span>
+        fill_rect<span class='bst-code-parenthesis'>(</span><span class='bst-code-operator'>~</span>ctx, <span class='bst-code-number'>0.0</span>, <span class='bst-code-number'>0.0</span>, <span class='bst-code-number'>100.0</span>, <span class='bst-code-number'>100.0</span><span class='bst-code-parenthesis'>)</span>
         <span class='bst-code-keyword'>return</span> <span class='bst-code-string'>&quot;canvas_ok&quot;</span>
     ;
-    </code></pre><p>Receiver-method dispatch includes the receiver type, so the same method name can exist for different receiver types. The receiver type must still be visible in the importing file.</p></section>
+    </code></pre><p>Source libraries can wrap raw external values in ordinary Beanstalk structs when they want method-style ergonomics.</p></section>
     <section class="container"><h1>The canvas library</h1><p>The HTML builder&#39;s canvas library is a built-in JS-backed package exposed as <code>@web/canvas</code>. It is useful because it shows the whole path from authored JavaScript to Beanstalk imports.</p><p>A page can import and use it like this:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
@@ -676,8 +676,8 @@ body {
     run <span class='bst-code-operator'>|</span>id <span class='bst-code-type'>String</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>String,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
         canvas_ref <span class='bst-code-operator'>=</span> canvas.get_canvas<span class='bst-code-parenthesis'>(</span>id<span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>!</span>
         ctx <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> canvas.context_<span class='bst-code-number'>2</span>d<span class='bst-code-parenthesis'>(</span>canvas_ref<span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>!</span>
-        <span class='bst-code-operator'>~</span>ctx.set_fill_style<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;red&quot;</span><span class='bst-code-parenthesis'>)</span>
-        <span class='bst-code-operator'>~</span>ctx.fill_rect<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>0.0</span>, <span class='bst-code-number'>0.0</span>, <span class='bst-code-number'>100.0</span>, <span class='bst-code-number'>100.0</span><span class='bst-code-parenthesis'>)</span>
+        canvas.set_fill_style<span class='bst-code-parenthesis'>(</span><span class='bst-code-operator'>~</span>ctx, <span class='bst-code-string'>&quot;red&quot;</span><span class='bst-code-parenthesis'>)</span>
+        canvas.fill_rect<span class='bst-code-parenthesis'>(</span><span class='bst-code-operator'>~</span>ctx, <span class='bst-code-number'>0.0</span>, <span class='bst-code-number'>0.0</span>, <span class='bst-code-number'>100.0</span>, <span class='bst-code-number'>100.0</span><span class='bst-code-parenthesis'>)</span>
         <span class='bst-code-keyword'>return</span> <span class='bst-code-string'>&quot;canvas_ok&quot;</span>
     ;
 
@@ -686,6 +686,27 @@ body {
     ;
 
     io<span class='bst-code-parenthesis'>(</span>result<span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>The higher-level <code>@html</code> source library exposes a source-owned <code>Canvas</code> wrapper and convenience <code>get_canvas()</code> helper for the built-in canvas component:</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    import <span class='bst-code-operator'>@</span>html <span class='bst-code-parenthesis'>{</span>canvas, <span class='bst-code-struct'>Canvas,</span> get_canvas<span class='bst-code-parenthesis'>}</span>
+
+    <span class='bst-code-operator'>#</span><span class='bst-code-parenthesis'>[</span>canvas<span class='bst-code-operator'>:</span>
+        <span class='bst-code-number'>640</span>
+        <span class='bst-code-number'>480</span>
+    <span class='bst-code-parenthesis'>]</span>
+
+    draw <span class='bst-code-operator'>|</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>String,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
+        drawing <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> get_canvas<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>!</span>
+        <span class='bst-code-operator'>~</span>drawing.set_fill_style<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;#202020&quot;</span><span class='bst-code-parenthesis'>)</span>
+        <span class='bst-code-operator'>~</span>drawing.fill_rect<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>0.0</span>, <span class='bst-code-number'>0.0</span>, <span class='bst-code-number'>640.0</span>, <span class='bst-code-number'>480.0</span><span class='bst-code-parenthesis'>)</span>
+        <span class='bst-code-keyword'>return</span> <span class='bst-code-string'>&quot;canvas_ok&quot;</span>
+    ;
     </code></pre><p>The JavaScript source lives inside the HTML builder:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
@@ -697,7 +718,7 @@ body {
     src<span class='bst-code-operator'>/</span>projects<span class='bst-code-operator'>/</span>html_project<span class='bst-code-operator'>/</span>external_libraries<span class='bst-code-operator'>/</span>web<span class='bst-code-operator'>/</span>canvas<span class='bst-code-operator'>/</span>
     ├── canvas.js
     └── mod.rs
-    </code></pre><p><code>canvas.js</code> is ordinary JavaScript plus Beanstalk annotations. It declares opaque types such as <code>Canvas</code> and <code>Canvas2d</code>, free functions such as <code>get_canvas</code> and <code>context_2d</code>, and receiver methods such as <code>fill_rect</code>, <code>set_fill_style</code>, <code>begin_path</code>, <code>move_to</code>, <code>line_to</code>, and <code>stroke</code>.</p><p>The Rust registration code does the builder-owned part:</p><ul><li>embeds the <code>canvas.js</code> source with <code>include_str!</code></li><li>parses it with the same JS parser used for project-local <code>.js</code> imports</li><li>registers the package path <code>@web/canvas</code></li><li>registers its opaque types, free functions, and receiver methods in the external package registry</li><li>records the canvas JS file as a runtime asset that the HTML builder must emit</li><li>records runtime imports such as <code>@beanstalk/runtime</code> so the build can emit the runtime module and import map</li></ul><p>This means <code>@web/canvas</code> behaves like a normal import to Beanstalk code, but the project author does not need to keep <code>canvas.js</code> in their own project.</p></section>
+    </code></pre><p><code>canvas.js</code> is ordinary JavaScript plus Beanstalk annotations. It declares opaque types such as <code>CanvasElement</code> and <code>Canvas2d</code>, plus free functions such as <code>get_canvas</code>, <code>context_2d</code>, <code>fill_rect</code>, <code>set_fill_style</code>, <code>begin_path</code>, <code>move_to</code>, <code>line_to</code>, and <code>stroke</code>.</p><p>The Rust registration code does the builder-owned part:</p><ul><li>embeds the <code>canvas.js</code> source with <code>include_str!</code></li><li>parses it with the same JS parser used for project-local <code>.js</code> imports</li><li>registers the package path <code>@web/canvas</code></li><li>registers its opaque types and free functions in the external package registry</li><li>records the canvas JS file as a runtime asset that the HTML builder must emit</li><li>records runtime imports such as <code>@beanstalk/runtime</code> so the build can emit the runtime module and import map</li></ul><p>This means <code>@web/canvas</code> behaves like a normal import to Beanstalk code, but the project author does not need to keep <code>canvas.js</code> in their own project.</p></section>
     <section class="container"><h1>What the HTML builder emits</h1><p>JavaScript imports do more than type-check. The build output also needs callable runtime JavaScript.</p><p>For a project-local <code>@./drawing.js</code> import, the HTML builder emits:</p><ul><li>the original JavaScript asset under Beanstalk&#39;s generated JS output area</li><li>generated glue that adapts Beanstalk calls to JS exports</li><li>runtime modules such as <code>beanstalk-runtime.js</code> when the JS file imports registered runtime helpers</li><li>an import map when generated modules need stable runtime specifiers such as <code>@beanstalk/runtime</code></li></ul><p>Builder runtime libraries such as <code>@web/canvas</code> use the same emission path. The difference is that the source asset is bundled with the builder instead of being read from the user&#39;s project.</p><p>The HTML-Wasm mode currently has a stricter backend support surface. JS-backed packages need a Wasm lowering before they can be used by that backend path.</p></section>
     <section class="container"><h1>Converting an existing JavaScript file</h1><p>To make an existing JavaScript file importable from Beanstalk:</p><ol><li>Create a small wrapper file rather than exposing the whole library.</li><li>Use named ESM exports only.</li><li>Keep private helpers unexported.</li><li>Add <code>@bst.opaque</code> declarations for objects Beanstalk should treat as external handles.</li><li>Add one <code>@bst.sig</code> comment immediately before every exported function.</li><li>Use Beanstalk-facing snake_case names in <code>@bst.sig</code>.</li><li>Use one plain JavaScript parameter for each Beanstalk ABI parameter.</li><li>Return the expected raw value for non-fallible functions.</li><li>Return <code>bstOk(value)</code> or <code>bstErr(code, message)</code> for <code>Error!</code> functions.</li><li>Import the wrapper from Beanstalk with its <code>.js</code> extension.</li></ol><p>Example wrapper shape:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
@@ -1140,17 +1161,17 @@ body {
     return { tag: "err", value: __bs_make_error("Float(...) only accepts Int, Float, or string values", 210, null, null) };
     }
 
-    function b_fn1() {
-    let b_l3 = __bs_binding(undefined);
+    function b_fn6() {
+    let b_l22 = __bs_binding(undefined);
 
-    __bs_assign_value(b_l3, []);
-    return __bs_read(b_l3);
+    __bs_assign_value(b_l22, []);
+    return __bs_read(b_l22);
     }
 
     </script>
     <script>
     (function () {
-      if (typeof b_fn1 === "function") b_fn1();
+      if (typeof b_fn6 === "function") b_fn6();
     })();
     </script>
   </body>

@@ -352,8 +352,8 @@ body {
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Generic aliases with parameters</td>
-     <td style="padding: 0.2em 0.5em;  "> Deferred</td>
-     <td style="padding: 0.2em 0.5em;  "> Alias only a fully concrete generic instance for now.</td>
+     <td style="padding: 0.2em 0.5em;  "> Outside scope</td>
+     <td style="padding: 0.2em 0.5em;  "> Alias only a fully concrete generic instance; parameterized aliases create a separate type-level abstraction layer.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
@@ -364,7 +364,7 @@ body {
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Generic function values</td>
-     <td style="padding: 0.2em 0.5em;  "> Rejected / Deferred</td>
+     <td style="padding: 0.2em 0.5em;  "> Outside scope</td>
      <td style="padding: 0.2em 0.5em;  "> Generic functions are callable declarations only, not first-class values.</td>
         </tr>
 
@@ -376,14 +376,14 @@ body {
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Type values / type-level CTFE</td>
-     <td style="padding: 0.2em 0.5em;  "> Not supported</td>
+     <td style="padding: 0.2em 0.5em;  "> Outside scope</td>
      <td style="padding: 0.2em 0.5em;  "> Types are compile-time annotation facts, not runtime or compile-time values.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
              <td style="padding: 0.2em 0.5em;  "> Trait bounds</td>
      <td style="padding: 0.2em 0.5em;  "> Partial</td>
-     <td style="padding: 0.2em 0.5em;  "> Declaration-site <code>type T is TRAIT</code> and <code>type T is A and B, U is C</code> bounds are supported for generic functions, structs, and choices. <code>where</code> clauses and file-local evidence-backed generic bound dispatch remain deferred.</td>
+     <td style="padding: 0.2em 0.5em;  "> Declaration-site <code>type T is TRAIT</code> and <code>type T is A and B, U is C</code> bounds are supported for generic functions, structs, and choices. <code>where</code> clauses and file-local evidence-backed generic-bound dispatch are outside scope.</td>
         </tr>
         
     </table></section>
@@ -441,7 +441,7 @@ body {
 
     item <span class='bst-code-struct'>StringBox</span> <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Box</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;docs&quot;</span><span class='bst-code-parenthesis'>)</span>
     raw <span class='bst-code-struct'>Box</span> of <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> item
-    </code></pre><p>Generic aliases with their own parameters, partial application, and type-constructor composition are deferred. Name an intermediate concrete alias when a type would otherwise need deeper composition.</p></section>
+    </code></pre><p>Generic aliases with their own parameters, partial application, and type-constructor composition are outside the generic design scope. Name an intermediate concrete alias when a type would otherwise need deeper composition.</p></section>
     <section class="container"><h1>Collections and constructed types</h1><p>Collections use the public <code>{T}</code> syntax and are compiler-owned constructed types. Fixed collections use <code>{N T}</code>, and the fixed capacity is part of type identity rather than allocation metadata.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
@@ -670,7 +670,7 @@ body {
     render_named type <span class='bst-code-struct'>Item</span> is <span class='bst-code-struct'>DISPLAY_TEXT</span> and <span class='bst-code-struct'>NAMED</span> <span class='bst-code-operator'>|</span>item <span class='bst-code-struct'>Item</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-keyword'>return</span> item.display<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
     ;
-    </code></pre><p>Concrete generic function calls and concrete generic struct/choice instantiations require explicit visible reusable evidence for each concrete type argument. File-local extension evidence can support local concrete fallback, but it cannot satisfy public/static generic API obligations across files.</p><pre style="
+    </code></pre><p>Concrete generic function calls and concrete generic struct/choice instantiations require visible reusable evidence for each concrete type argument. A conformance declaration does not independently import trait methods as concrete receiver methods.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -690,7 +690,8 @@ body {
 
     value <span class='bst-code-operator'>=</span> render<span class='bst-code-parenthesis'>(</span><span class='bst-code-struct'>Label</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;ok&quot;</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>)</span>
     </code></pre><p>Trait names are static contracts. They can appear in generic bounds, trait declarations, and conformance declarations, but not as normal value types or concrete generic arguments.</p><p>Bound-provided receiver methods use the selected static evidence and lower to concrete calls before HIR. <code>where</code> clauses remain rejected; write bounds directly on the generic parameter list.</p></section>
-    <section class="container"><h1>Deferred features</h1><p>The following are not current Alpha generics:</p><ul><li>explicit generic call syntax such as <code>identity of Int(42)</code>, <code>identity&lt;Int&gt;(42)</code>, <code>identity[Int](42)</code>, or <code>identity(42 Int)</code></li><li>inline generic sugar such as <code>|value type A|</code></li><li>generic function values and higher-order generic functions</li><li><code>where</code> clauses and file-local evidence-backed generic bound dispatch</li><li>type values, type-returning functions, type-level <code>#if</code>, and compile-time type inspection</li><li>recursive generic structs or choices</li><li>receiver methods on instantiated generic types</li><li>namespace or wildcard facade exports and function alias exports through <code>#mod.bst</code></li><li>generic JS or external package functions</li><li>generic aliases with parameters</li><li>partial type application</li><li>nested generic type application beyond the collection element exception</li><li>public <code>Option of T</code> or <code>Result of T, E</code></li><li><code>Option.Some</code>, <code>Result.Ok</code>, public <code>Ok</code> or <code>Err</code> constructors</li><li>higher-kinded types, const generics, lifetime parameters, specialization, associated types, and dynamic generic reification</li></ul></section>
+    <section class="container"><h1>Deferred generic work</h1><p>The following fit the language design but are not current Alpha generics:</p><ul><li>explicit generic call syntax such as <code>identity of Int(42)</code>, <code>identity&lt;Int&gt;(42)</code>, <code>identity[Int](42)</code>, or <code>identity(42 Int)</code></li><li>inline generic sugar such as <code>|value type A|</code></li><li>recursive generic structs or choices</li><li>receiver methods on instantiated generic types</li><li>namespace or wildcard facade exports and function alias exports through <code>#mod.bst</code></li><li>generic JS or external package functions</li><li>nested generic type application beyond the collection element exception</li><li>public <code>Option of T</code> or <code>Result of T, E</code></li><li><code>Option.Some</code>, <code>Result.Ok</code>, public <code>Ok</code> or <code>Err</code> constructors</li></ul></section>
+    <section class="container"><h1>Outside generic design scope</h1><p>These features are intentionally outside Beanstalk&#39;s generic design scope:</p><ul><li>generic function values and higher-order polymorphism</li><li>type values, type-returning functions, type-level <code>#if</code>, and compile-time type inspection</li><li><code>where</code> clauses and file-local evidence-backed generic-bound dispatch</li><li>parameterized aliases and partial type application</li><li>higher-kinded types</li><li>const generics beyond fixed collection capacity</li><li>lifetime parameters</li><li>specialization</li><li>associated types</li><li>dynamic generic reification</li></ul></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;
@@ -1041,17 +1042,17 @@ body {
     return { tag: "err", value: __bs_make_error("Float(...) only accepts Int, Float, or string values", 210, null, null) };
     }
 
-    function b_fn1() {
-    let b_l3 = __bs_binding(undefined);
+    function b_fn6() {
+    let b_l22 = __bs_binding(undefined);
 
-    __bs_assign_value(b_l3, []);
-    return __bs_read(b_l3);
+    __bs_assign_value(b_l22, []);
+    return __bs_read(b_l22);
     }
 
     </script>
     <script>
     (function () {
-      if (typeof b_fn1 === "function") b_fn1();
+      if (typeof b_fn6 === "function") b_fn6();
     })();
     </script>
   </body>

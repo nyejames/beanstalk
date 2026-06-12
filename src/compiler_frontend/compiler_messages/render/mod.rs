@@ -508,7 +508,7 @@ fn deferred_feature_static_message(reason: &DeferredFeatureReason) -> &'static s
             "Choice variant default values are deferred for Alpha. Declare explicit unit or payload variants and pass values when constructing payload variants."
         }
         DeferredFeatureReason::GenericReceiverMethod => {
-            "Receiver methods on generic types are not supported. Use a free function instead."
+            "Receiver methods on instantiated generic receiver types are not supported. Define the method on the generic type declaration using the receiver type's own parameters."
         }
         DeferredFeatureReason::PublicOptionTypeSyntax => {
             "Public `Option of T` type syntax is deferred for Alpha. Use the `T?` optional type suffix instead."

@@ -2,8 +2,8 @@
 //!
 //! WHAT: looks up user-declared receiver methods (including generic instantiation)
 //!       and parses the resulting call AST node.
-//! WHY: source methods have distinct lookup rules from trait-bound, dynamic, and
-//!      external dispatch; keeping them in one file makes the generic-instantiation
+//! WHY: source methods have distinct lookup rules from generic-bound and static
+//!      trait-surface dispatch; keeping them in one file makes the generic-instantiation
 //!      path explicit and local.
 
 use super::ReceiverAccessMode;

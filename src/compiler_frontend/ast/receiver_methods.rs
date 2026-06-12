@@ -6,7 +6,7 @@
 //!
 //! INVARIANT: every source-authored receiver method must belong to the same file as its
 //! user-defined struct or choice declaration. Builtin, imported, and external receiver types use
-//! free functions or builder-owned external metadata instead of source extension methods.
+//! free functions or builder-owned external metadata instead of source-authored receiver methods.
 
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
@@ -45,7 +45,6 @@ pub(crate) struct ReceiverMethodEntry {
     pub(crate) function_path: InternedPath,
     pub(crate) receiver: ReceiverKey,
     pub(crate) source_file: InternedPath,
-    pub(crate) exported: bool,
     pub(crate) receiver_mutable: bool,
     pub(crate) signature: FunctionSignature,
 }
@@ -115,7 +114,7 @@ pub(crate) fn free_function_receiver_method_call_error(
 /// WHAT: enforces the same-file nominal rule: receiver methods are valid only for user-defined
 /// structs or choices declared in the same source file as the method.
 /// WHY: receiver methods travel with the type that owns them, so source files cannot attach local
-/// extension methods to values owned by another file, package, or builtin surface.
+/// receiver methods to values owned by another file, package, or builtin surface.
 fn validate_source_receiver_method_declaration(
     receiver: &ReceiverKey,
     method_source_file: &InternedPath,
@@ -272,7 +271,6 @@ pub(crate) fn build_receiver_method_catalog(
             function_path: header.tokens.src_path.to_owned(),
             receiver: receiver.to_owned(),
             source_file: method_source_file,
-            exported: true,
             receiver_mutable,
             signature: resolved_signature.signature.to_owned(),
         };

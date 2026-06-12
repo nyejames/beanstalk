@@ -108,7 +108,9 @@ pub(crate) struct FileVisibility {
     ///      this map from visible receiver types so AST lookup can filter the
     ///      module-wide catalog by file.
     ///      Multiple paths per name are needed because different receiver types can
-    ///      share a method name (e.g. String.length and Array.length).
+    ///      share a method name (e.g. Person.name and Company.name).
+    ///      Only same-file nominal receiver types contribute source-authored methods;
+    ///      builtins, external types, and types declared in other files do not.
     pub(crate) visible_receiver_methods: FxHashMap<StringId, Vec<ReceiverMethodVisibility>>,
 }
 

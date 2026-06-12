@@ -851,6 +851,10 @@ pub(crate) fn resolve_diagnostic_type_to_type_id_opt(
                     resolve_diagnostic_type_to_type_id_opt(&arguments[0], type_environment)?;
                 let value_id =
                     resolve_diagnostic_type_to_type_id_opt(&arguments[1], type_environment)?;
+
+                // Map key validation is owned by parsed annotation resolution before this
+                // diagnostic-spelling bridge interns the canonical map shape. Callers that
+                // accept source-authored map annotations must validate with `validate_map_key_type`.
                 Some(type_environment.intern_map(key_id, value_id))
             }
             GenericBaseType::ResolvedNominal(path) => {

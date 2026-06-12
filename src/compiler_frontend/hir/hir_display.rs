@@ -982,7 +982,6 @@ impl<'a> HirDisplayContext<'a> {
 // ============================================================================
 
 // Debug display helpers: gated to test builds and the "show_hir" feature.
-// Debug display helpers: gated to test builds and the "show_hir" feature.
 // The `#[allow(dead_code)]` annotations are needed because rustc does not see
 // calls made through the `hir_log!` macro as usages for dead-code analysis.
 #[cfg(any(test, feature = "show_hir"))]

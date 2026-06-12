@@ -1,7 +1,7 @@
 //! Receiver-call dispatch orchestration.
 //!
 //! WHAT: dispatches a receiver method call through the ordered lookup sequence:
-//!       source method → generic-bound method → concrete trait evidence fallback.
+//!       source method → generic-bound method.
 //! WHY: keeping the dispatch order explicit in one file makes the precedence
 //!      between overlapping method sources obvious and easy to audit.
 
@@ -12,7 +12,6 @@ use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::FileTokens;
 
-mod concrete_trait_evidence;
 mod generic_bound_methods;
 mod shared;
 mod source_methods;
@@ -75,37 +74,6 @@ pub(super) fn parse_receiver_method_call_typed(
                 scope_context,
                 source_method: source_methods::SourceReceiverMethodTarget::TraitSurface(
                     generic_bound_method,
-                ),
-                type_interner,
-                string_table,
-            },
-        )?;
-        return Ok(Some(node));
-    }
-
-    // 3. Visible concrete trait evidence fallback.
-    // Concrete evidence runs after direct source and generic-bound methods so explicit methods
-    // take priority over implicit trait conformance.
-    if let Some(evidence_method) =
-        concrete_trait_evidence::lookup_concrete_trait_evidence_receiver_method(
-            scope_context,
-            receiver_type_id,
-            member_name,
-            &member_location,
-            type_interner.environment(),
-            string_table,
-        )?
-    {
-        let node = source_methods::parse_source_receiver_method_target_call_typed(
-            source_methods::SourceReceiverMethodCallInput {
-                token_stream,
-                receiver_node,
-                member_name,
-                member_location,
-                receiver_access_mode,
-                scope_context,
-                source_method: source_methods::SourceReceiverMethodTarget::TraitSurface(
-                    evidence_method,
                 ),
                 type_interner,
                 string_table,

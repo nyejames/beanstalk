@@ -157,8 +157,8 @@ page_head #= theme_head
     ]
 
     Generic aliases with their own parameters, partial application, and type-constructor
-    composition are deferred. Name an intermediate concrete alias when a type would otherwise
-    need deeper composition.
+    composition are outside the generic design scope. Name an intermediate concrete alias when
+    a type would otherwise need deeper composition.
 ]
 
 #[section, $markdown:
@@ -394,9 +394,8 @@ page_head #= theme_head
     ]
 
     Concrete generic function calls and concrete generic struct/choice instantiations require
-    explicit visible reusable evidence for each concrete type argument. File-local extension
-    evidence can support local concrete fallback, but it cannot satisfy public/static generic API
-    obligations across files.
+    visible reusable evidence for each concrete type argument. A conformance declaration does not
+    independently import trait methods as concrete receiver methods.
 
     [codeblock, $code("bst"):
         Label = |

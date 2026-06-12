@@ -330,7 +330,7 @@ body {
 
     values <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>              <span class='bst-code-comment'>-- Type error: element type is ambiguous</span>
     mixed <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-number'>1</span>, <span class='bst-code-string'>&quot;bad&quot;</span><span class='bst-code-parenthesis'>}</span>       <span class='bst-code-comment'>-- Type error: inconsistent item types</span>
-    </code></pre><p>The compiler does not infer an empty collection&#39;s element type from later <code>push</code>, assignment, loop, function argument, HIR, or borrow-analysis use. A declaration&#39;s type must be explicit at the declaration site or immediately inferable from its initializer.</p><p>Growable collections use <code>{T}</code>. Fixed collections use <code>{N T}</code>, where <code>N</code> is a compile-time positive <code>Int</code> expression and part of the collection type identity.</p><pre style="
+    </code></pre><p>The compiler does not infer an empty collection&#39;s element type from later <code>push</code>, assignment, loop, function argument, HIR, or borrow-analysis use. A declaration&#39;s type must be explicit at the declaration site or immediately inferable from its initializer.</p><p>Growable collections use <code>{T}</code>. Fixed collections use <code>{N T}</code>. <code>N</code> is part of the collection type identity and must be either a positive integer literal or a bare visible <code>#Int</code> constant name.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -341,9 +341,12 @@ body {
     fixed_values <span class='bst-code-parenthesis'>{</span><span class='bst-code-number'>3</span> <span class='bst-code-type'>Int</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-number'>10</span>, <span class='bst-code-number'>20</span><span class='bst-code-parenthesis'>}</span>
 
     capacity <span class='bst-code-operator'>#</span><span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>4</span>
-    scratch <span class='bst-code-operator'>~</span><span class='bst-code-parenthesis'>{</span>capacity <span class='bst-code-operator'>+</span> <span class='bst-code-number'>2</span> <span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>
+    scratch <span class='bst-code-operator'>~</span><span class='bst-code-parenthesis'>{</span>capacity <span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>
+
+    larger_capacity <span class='bst-code-operator'>#</span><span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> capacity <span class='bst-code-operator'>+</span> <span class='bst-code-number'>2</span>
+    larger_scratch <span class='bst-code-operator'>~</span><span class='bst-code-parenthesis'>{</span>larger_capacity <span class='bst-code-type'>String</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>
     labels <span class='bst-code-parenthesis'>{</span>capacity<span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;alpha&quot;</span>, <span class='bst-code-string'>&quot;beta&quot;</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-comment'>-- shorthand infers String from the literal</span>
-    </code></pre><p><code>{Int}</code>, <code>{3 Int}</code>, and <code>{4 Int}</code> are distinct types. Fixed capacity is not a growable allocation hint, and Beanstalk does not implicitly convert between growable and fixed collections or between different fixed capacities.</p><p>Capacity-only shorthand such as <code>{capacity}</code> is valid only for a binding declaration with an immediate non-empty collection literal initializer. It is invalid for empty literals, non-literal initializers, signatures, aliases, fields, and returns.</p><p>Immutable value bindings cannot start from an empty fixed collection literal because there is no later mutable owner path to fill them. Mutable empty fixed bindings and fixed struct field defaults are valid.</p><p>For unordered keyed collections (Hash Map semantics), keyed method behavior is deferred in this milestone.</p><p>Elements inside collections are accessed using <code> .get(index)</code>.</p><p><code>collection.get(0)</code> is the equivalent of <code>collection0</code> in most C-like languages. There is no square-bracket index notation in Beanstalk.</p><p><code>get</code>, <code>set</code>, <code>push</code>, and <code>remove</code> are fallible collection operations. <code>length</code> is infallible. Invalid receivers, out-of-bounds indices, and fixed-capacity overflow produce structured errors rather than silent no-ops.</p><p>There may not be a runtime function call under the hood for these methods. The compiler lowers many collection built-ins directly.</p><p>Use <code>set(index, value)</code> for indexed writes. Indexed assignment through <code>get</code> has been removed. <code>set</code> replaces an existing index only, <code>push</code> appends after the current last element, and <code>remove</code> shifts later elements down so dense logical length is preserved.</p></section>
+    </code></pre><p>Capacity position is not general expression position. Put arithmetic, field access, or other computation in a named compile-time constant before using it in a type annotation.</p><p><code>{Int}</code>, <code>{3 Int}</code>, and <code>{4 Int}</code> are distinct types. Fixed capacity is not a growable allocation hint, and Beanstalk does not implicitly convert between growable and fixed collections or between different fixed capacities.</p><p>Capacity-only shorthand such as <code>{capacity}</code> is valid only for a binding declaration with an immediate non-empty collection literal initializer. It is invalid for empty literals, non-literal initializers, signatures, aliases, fields, and returns.</p><p>Immutable value bindings cannot start from an empty fixed collection literal because there is no later mutable owner path to fill them. Mutable empty fixed bindings and fixed struct field defaults are valid.</p><p>Elements inside collections are accessed using <code> .get(index)</code>.</p><p><code>collection.get(0)</code> is the equivalent of <code>collection0</code> in most C-like languages. There is no square-bracket index notation in Beanstalk.</p><p><code>get</code>, <code>set</code>, <code>push</code>, and <code>remove</code> are fallible collection operations. <code>length</code> is infallible. Invalid receivers, out-of-bounds indices, and fixed-capacity overflow produce structured errors rather than silent no-ops.</p><p>There may not be a runtime function call under the hood for these methods. The compiler lowers many collection built-ins directly.</p><p>Use <code>set(index, value)</code> for indexed writes. Indexed assignment through <code>get</code> has been removed. <code>set</code> replaces an existing index only, <code>push</code> appends after the current last element, and <code>remove</code> shifts later elements down so dense logical length is preserved.</p></section>
     <section class="container"><h2>Immutable Bindings</h2><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
@@ -432,7 +435,7 @@ body {
         assert<span class='bst-code-parenthesis'>(</span>false, <span class='bst-code-string'>&quot;Remove freed one fixed-capacity slot&quot;</span><span class='bst-code-parenthesis'>)</span>
     ;
     </code></pre></section>
-    <section class="container"><h2>Hash Maps</h2><p>Hash map keyed method behavior is deferred at this stage of development. Current built-in collection receiver methods are implemented for ordered collections only.</p><p>The eventual built-in hash map syntax will look something like this:</p><pre style="
+    <section class="container"><h2>Hash Maps</h2><p>Hash maps are insertion-ordered key/value collections. Builtin map keys are permanently limited to <code>String</code>, <code>Int</code>, <code>Bool</code>, and <code>Char</code>.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -440,23 +443,27 @@ body {
         white-space: pre;
         overflow-x: auto;
     "><code class='codeblock'>
-    <span class='bst-code-comment'>-- Create a new hash map with string keys and int values</span>
-    my_map <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;key1&quot;</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>1</span>, <span class='bst-code-string'>&quot;key2&quot;</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>2</span><span class='bst-code-parenthesis'>}</span>
+    scores <span class='bst-code-operator'>~</span><span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-string'>&quot;Ada&quot;</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>10</span>, <span class='bst-code-string'>&quot;Grace&quot;</span> <span class='bst-code-operator'>=</span> <span class='bst-code-number'>12</span><span class='bst-code-parenthesis'>}</span>
+    empty_scores <span class='bst-code-operator'>~</span><span class='bst-code-parenthesis'>{</span><span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> <span class='bst-code-type'>Int</span><span class='bst-code-parenthesis'>}</span> <span class='bst-code-operator'>=</span> <span class='bst-code-parenthesis'>{</span><span class='bst-code-parenthesis'>}</span>
 
-    <span class='bst-code-comment'>-- Get an immutable reference to a value from the map</span>
-    value <span class='bst-code-operator'>=</span> my_map.get<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;key1&quot;</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
+    score <span class='bst-code-operator'>=</span> scores.get<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Ada&quot;</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
         then <span class='bst-code-number'>0</span>
     ;
 
-    <span class='bst-code-comment'>-- Set a value in the map (requires mutable reference)</span>
-    <span class='bst-code-operator'>~</span>my_map.set<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;key3&quot;</span>, <span class='bst-code-number'>3</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
+    <span class='bst-code-operator'>~</span>scores.set<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Linus&quot;</span>, <span class='bst-code-number'>7</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
     ;
 
-    <span class='bst-code-comment'>-- Remove a key-value pair from the map (requires mutable reference)</span>
-    removed <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>~</span>my_map.remove<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;key2&quot;</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
+    removed <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>~</span>scores.remove<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Grace&quot;</span><span class='bst-code-parenthesis'>)</span> catch<span class='bst-code-operator'>:</span>
         then <span class='bst-code-number'>0</span>
     ;
-    </code></pre></section>
+
+    <span class='bst-code-keyword'>if</span> scores.contains<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;Ada&quot;</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-operator'>:</span>
+        io<span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;found&quot;</span><span class='bst-code-parenthesis'>)</span>
+    ;
+
+    count <span class='bst-code-operator'>=</span> scores.length
+    <span class='bst-code-operator'>~</span>scores.clear<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p><code>get</code>, <code>set</code>, and <code>remove</code> are fallible. <code>contains</code>, <code>length</code>, and <code>clear</code> are infallible. Mutating map operations require explicit mutable receiver access. More sophisticated maps, such as custom-key maps or custom hash/comparison policies, belong in libraries or user-defined structs rather than the builtin map syntax.</p></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;
@@ -807,17 +814,17 @@ body {
     return { tag: "err", value: __bs_make_error("Float(...) only accepts Int, Float, or string values", 210, null, null) };
     }
 
-    function b_fn1() {
-    let b_l3 = __bs_binding(undefined);
+    function b_fn6() {
+    let b_l22 = __bs_binding(undefined);
 
-    __bs_assign_value(b_l3, []);
-    return __bs_read(b_l3);
+    __bs_assign_value(b_l22, []);
+    return __bs_read(b_l22);
     }
 
     </script>
     <script>
     (function () {
-      if (typeof b_fn1 === "function") b_fn1();
+      if (typeof b_fn6 === "function") b_fn6();
     })();
     </script>
   </body>

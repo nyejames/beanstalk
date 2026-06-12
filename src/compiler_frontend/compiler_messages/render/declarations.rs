@@ -328,7 +328,7 @@ pub(crate) fn invalid_receiver_declaration_message(
             function_name: _,
             type_name: _,
         } => {
-            "Receiver methods on generic types are not supported. Use a free function instead."
+            "Receiver methods on instantiated generic receiver types are not supported. Define the method on the generic type declaration using the receiver type's own parameters."
                 .to_string()
         }
         InvalidReceiverDeclarationReason::UnsupportedType {

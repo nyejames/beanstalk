@@ -317,7 +317,7 @@ body {
         </div>
     </nav>
      <h1 style="font-size: 2em;text-align: center;"> STRUCTS</h1>
-    <section class="container"><h1>The Struct</h1><p>    A struct is a collection of named fields, similar to a struct in other languages.</p><p>    Runtime structs are nominal types. Two structs with the same field shape are still different runtime types.</p><p>    They can implement statically resolved receiver methods by defining a top-level function whose first argument is literally named <code>this</code>.     <code>this Type</code> is immutable, <code>this ~Type</code> is mutable, and receiver methods can only be called with <code>value.method(...)</code>.     User-defined struct methods must be declared in the same file as the struct definition.</p><p>    Receiver methods are also supported on built-in scalar types (<code>Int</code>, <code>Float</code>, <code>Bool</code>, <code>String</code>) and use the same <code>this</code> rules. The same-file restriction applies to user-defined struct methods.</p><p>    Structs can be assigned with default arguments, these can be any constant expression.</p><pre style="
+    <section class="container"><h1>The Struct</h1><p>    A struct is a collection of named fields, similar to a struct in other languages.</p><p>    Runtime structs are nominal types. Two structs with the same field shape are still different runtime types.</p><p>    They can implement statically resolved receiver methods by defining a top-level function whose first argument is literally named <code>this</code>.     <code>this Type</code> is immutable, <code>this ~Type</code> is mutable, and receiver methods can only be called with <code>value.method(...)</code>.     Source-authored receiver methods must be declared in the same file as their user-defined struct or choice receiver type.</p><p>    Compiler-owned builtin operations are not user extension methods. Use free functions for values     owned by another file, package, builtin type, or external opaque type.</p><p>    Structs can be assigned with default arguments, these can be any constant expression.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -372,7 +372,7 @@ body {
 
     rect <span class='bst-code-operator'>=</span> <span class='bst-code-struct'>Rectangle</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>10</span>, <span class='bst-code-number'>5</span><span class='bst-code-parenthesis'>)</span>
     io<span class='bst-code-parenthesis'>(</span>rect.area<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-comment'>-- 50</span>
-    </code></pre><p><code>this</code> is reserved for method receivers. You are limited to one <code>this</code> parameter per method, and <code>method(value, ...)</code> is not valid syntax for calling receiver methods.</p><p>Const-coerced struct values are data-only records. They can be read, but they do not expose runtime methods.</p></section>
+    </code></pre><p><code>this</code> is reserved for method receivers. You are limited to one <code>this</code> parameter per method, and <code>method(value, ...)</code> is not valid syntax for calling receiver methods. Receiver methods are visible through the receiver type; they are not imported, aliased, or re-exported independently.</p><p>Const-coerced struct values are data-only records. They can be read, but they do not expose runtime methods.</p></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;
@@ -723,17 +723,17 @@ body {
     return { tag: "err", value: __bs_make_error("Float(...) only accepts Int, Float, or string values", 210, null, null) };
     }
 
-    function b_fn1() {
-    let b_l3 = __bs_binding(undefined);
+    function b_fn6() {
+    let b_l22 = __bs_binding(undefined);
 
-    __bs_assign_value(b_l3, []);
-    return __bs_read(b_l3);
+    __bs_assign_value(b_l22, []);
+    return __bs_read(b_l22);
     }
 
     </script>
     <script>
     (function () {
-      if (typeof b_fn1 === "function") b_fn1();
+      if (typeof b_fn6 === "function") b_fn6();
     })();
     </script>
   </body>

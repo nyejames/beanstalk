@@ -1,9 +1,9 @@
 //! Trait evidence data types and lookup environment.
 //!
-//! WHAT: Defines the core data structures for trait conformance evidence (`TraitEvidenceEnvironment`,
+//! WHAT: defines the core data structures for trait conformance evidence (`TraitEvidenceEnvironment`,
 //!       `TraitEvidenceDefinition`, etc.) and manages indexing/rebuilding of these structures.
-//! WHY: Provides a structured side-table of proven conformance facts that can be queried by type checking
-//!      and code generation without rescanning syntax.
+//! WHY: Trait evidence is frontend-only metadata used for conformance validation and static
+//!      generic bounds checking. It is not runtime dispatch metadata or backend method-table state.
 
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
@@ -21,15 +21,21 @@ pub(crate) enum TraitEvidenceKind {
 
 /// One requirement mapped to the receiver method that implements it.
 #[derive(Clone, Debug)]
-#[allow(dead_code)] // Stored as complete evidence metadata even when a build uses only static bounds.
+#[allow(dead_code)] // Kept complete for frontend validation and static bound checks.
 pub(crate) struct TraitRequirementEvidence {
     pub(crate) requirement_id: TraitRequirementId,
     pub(crate) method_path: InternedPath,
 }
 
 /// Resolved evidence for one accepted conformance declaration.
+///
+/// WHAT: records the frontend-selected receiver methods that satisfy one trait
+/// conformance declaration.
+/// WHY: conformance diagnostics and static generic bounds need stable evidence
+/// facts without rescanning source declarations. This is frontend metadata only,
+/// not HIR or backend runtime-dispatch state.
 #[derive(Clone, Debug)]
-#[allow(dead_code)] // Kept as the complete frontend-selected evidence fact projected into HIR.
+#[allow(dead_code)] // Kept complete while generic-bound receiver calls use evidence paths.
 pub(crate) struct TraitEvidenceDefinition {
     pub(crate) id: TraitEvidenceId,
     pub(crate) kind: TraitEvidenceKind,
@@ -46,7 +52,6 @@ pub(crate) struct TraitEvidenceEnvironment {
     evidence: Vec<TraitEvidenceDefinition>,
     canonical_by_target_and_trait: FxHashMap<(TypeId, TraitId), TraitEvidenceId>,
     builtin_by_target_and_trait: FxHashMap<(TypeId, TraitId), TraitEvidenceId>,
-    reusable_by_target: FxHashMap<TypeId, Vec<TraitEvidenceId>>,
 }
 
 impl TraitEvidenceEnvironment {
@@ -79,23 +84,6 @@ impl TraitEvidenceEnvironment {
             .copied()
     }
 
-    /// Return evidence records that may participate in concrete receiver fallback.
-    ///
-    /// WHAT: exposes reusable canonical/builtin evidence for a target type.
-    /// WHY: receiver-call parsing needs an evidence-backed fallback without scanning raw
-    /// conformance headers or depending on source-local extension state.
-    pub(crate) fn receiver_fallback_candidates(
-        &self,
-        target_type_id: TypeId,
-    ) -> Vec<TraitEvidenceId> {
-        self.reusable_by_target
-            .get(&target_type_id)
-            .into_iter()
-            .flatten()
-            .copied()
-            .collect()
-    }
-
     #[allow(dead_code)] // No compiler-owned builtin conformances are registered yet.
     pub(crate) fn insert_builtin(&mut self, mut definition: TraitEvidenceDefinition) {
         let id = TraitEvidenceId(self.evidence.len() as u32);
@@ -120,10 +108,6 @@ impl TraitEvidenceEnvironment {
                     (definition.target_type_id, definition.trait_id),
                     definition.id,
                 );
-                self.reusable_by_target
-                    .entry(definition.target_type_id)
-                    .or_default()
-                    .push(definition.id);
             }
 
             TraitEvidenceKind::Builtin => {
@@ -131,10 +115,6 @@ impl TraitEvidenceEnvironment {
                     (definition.target_type_id, definition.trait_id),
                     definition.id,
                 );
-                self.reusable_by_target
-                    .entry(definition.target_type_id)
-                    .or_default()
-                    .push(definition.id);
             }
         }
     }

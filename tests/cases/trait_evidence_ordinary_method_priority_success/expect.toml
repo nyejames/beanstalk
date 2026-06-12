@@ -1,4 +1,0 @@
-[backends.html]
-mode = "success"
-warnings = "forbid"
-rendered_output_contains = ["trait_evidence_ordinary_method_priority_success ordinary wins"]

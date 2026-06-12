@@ -4,8 +4,7 @@
 //!       matching requirement candidates, resolves bound evidence, and reports
 //!       ambiguity.
 //! WHY: generic-bound dispatch is a separate semantic path from concrete source
-//!      methods and trait evidence fallback; isolating it keeps the bound-lookup
-//!      complexity in one place.
+//!      methods; isolating it keeps the bound-lookup complexity in one place.
 
 use super::shared::{
     TraitSurfaceReceiverMethod, method_path_from_evidence, requirement_receiver_is_mutable,

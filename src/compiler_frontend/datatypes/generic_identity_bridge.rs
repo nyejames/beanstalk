@@ -1,6 +1,6 @@
 //! Generic identity bridge types for diagnostics and HIR lowering.
 //!
-//! WHAT: owns the legacy `DataType`/HIR-facing keys that can describe generic instances
+//! WHAT: owns diagnostic and HIR-facing keys that can describe generic instances
 //!      outside the canonical `TypeEnvironment`.
 //! WHY: HIR still registers generic nominal layouts through a lowering-local side table,
 //!      and diagnostics still need source-like spelling. These keys must not decide

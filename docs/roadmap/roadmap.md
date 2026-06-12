@@ -11,8 +11,7 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 ---
 
 # Plans / TODOS
-- Language surface hardening and enforcing stricter design constraints: `docs/roadmap/plans/language_surface_hardening_plan.md`
--  `cast` keyword for builtin type casting sugar for builtin Beanstalk types: ``
+- `cast` keyword for builtin type casting sugar for builtin Beanstalk types: `docs/roadmap/plans/cast_operator_implementation_plan.md`
 - first class Reactivity syntax with message / action patterns in templates
 - Build out core IO library
 - Compile time arbitary precision aritmetic + Decimals Type support
@@ -52,6 +51,8 @@ changed first:
   macro systems.
 
 # Notes
+- Language surface hardening follow-up is complete in `docs/roadmap/plans/hardening_followup_plan.md`: stale dynamic-trait/extension/fallback wording was removed, receiver-method visibility was simplified, concrete trait-evidence receiver fallback was removed, fixed-capacity and receiver coverage was hardened, map-key ownership was documented, and final stale-system audit plus validation passed.
+
 - Hash Maps V1 is complete in `docs/roadmap/plans/hashmaps-implementation-plan.md`: first-class insertion-ordered hashmaps with `{Key = Value}` type syntax, `{key = value}` literals, frontend/HIR/borrow validation, HTML JavaScript support, and HTML-Wasm unsupported-feature diagnostics.
 
 - Hash map follow-ups after V1: Wasm runtime/lowering for the existing scalar-keyed builtin map

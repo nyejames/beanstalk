@@ -844,6 +844,10 @@ Rules:
 - Conformance validates exact receiver mutability, non-receiver parameter modes/types, return types, and return channels. Parameter names do not matter.
 - Canonical conformance evidence for same-file structs, choices, and generic type constructors is reusable wherever both the type and trait are visible.
 - User-authored conformance for builtins, imported types, dependency/library types, external opaque types, and types declared in another file is rejected.
+- Trait bounds may enable calls on generic parameters inside the bounded generic declaration.
+  Concrete values use ordinary visible receiver methods. A conformance declaration proves that a
+  type satisfies a trait; it does not independently import trait methods as concrete receiver
+  methods.
 
 Traits are not value types. A trait name may appear in a trait declaration, an explicit
 conformance declaration, or a generic bound. It is invalid as an ordinary variable, parameter,

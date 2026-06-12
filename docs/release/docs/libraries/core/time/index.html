@@ -330,6 +330,7 @@ body {
         <span class='bst-code-struct'>TimeMark,</span>
         mark_now,
         duration_between,
+        as_seconds,
     <span class='bst-code-parenthesis'>}</span>
     </code></pre></section>
     <section class="container"><h2>Measuring elapsed time</h2><p>Use <code>TimeMark</code> when you need a monotonic measurement point. Use <code>Duration</code> for the elapsed amount.</p><pre style="
@@ -346,7 +347,7 @@ body {
     delta <span class='bst-code-operator'>=</span> duration_between<span class='bst-code-parenthesis'>(</span>previous, current<span class='bst-code-parenthesis'>)</span>
     previous <span class='bst-code-operator'>=</span> current
 
-    seconds <span class='bst-code-operator'>=</span> delta.as_seconds<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
+    seconds <span class='bst-code-operator'>=</span> as_seconds<span class='bst-code-parenthesis'>(</span>delta<span class='bst-code-parenthesis'>)</span>
     </code></pre><p>This shape works for frame-delta style code without requiring a scheduler or animation package.</p></section>
     <section class="container"><h2>UTC timestamps</h2><p>Use <code>Timestamp</code> for real-world UTC instants that may be logged, stored, or exchanged with external systems.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
@@ -360,6 +361,7 @@ body {
         <span class='bst-code-struct'>Timestamp,</span>
         timestamp_from_iso_string,
         timestamp_from_unix_milliseconds,
+        to_iso_string,
     <span class='bst-code-parenthesis'>}</span>
 
     parse_created <span class='bst-code-operator'>|</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>Timestamp,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span><span class='bst-code-operator'>:</span>
@@ -370,7 +372,7 @@ body {
         then timestamp_from_unix_milliseconds<span class='bst-code-parenthesis'>(</span><span class='bst-code-number'>0.0</span><span class='bst-code-parenthesis'>)</span>
     ;
 
-    io<span class='bst-code-parenthesis'>(</span>created.to_iso_string<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>)</span>
+    io<span class='bst-code-parenthesis'>(</span>to_iso_string<span class='bst-code-parenthesis'>(</span>created<span class='bst-code-parenthesis'>)</span><span class='bst-code-parenthesis'>)</span>
     </code></pre><p>Invalid ISO strings are ordinary fallible calls:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
@@ -439,42 +441,42 @@ body {
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>duration.as_seconds()</code></td>
+             <td style="padding: 0.2em 0.5em;  "> <code>as_seconds(duration)</code></td>
      <td style="padding: 0.2em 0.5em;  "> Convert a <code>Duration</code> to seconds.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>duration.as_milliseconds()</code></td>
+             <td style="padding: 0.2em 0.5em;  "> <code>as_milliseconds(duration)</code></td>
      <td style="padding: 0.2em 0.5em;  "> Convert a <code>Duration</code> to milliseconds.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>duration.is_negative()</code></td>
+             <td style="padding: 0.2em 0.5em;  "> <code>is_negative(duration)</code></td>
      <td style="padding: 0.2em 0.5em;  "> Check whether a <code>Duration</code> is below zero.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>duration.abs()</code></td>
+             <td style="padding: 0.2em 0.5em;  "> <code>abs(duration)</code></td>
      <td style="padding: 0.2em 0.5em;  "> Absolute <code>Duration</code>.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>duration.clamp(min, max)</code></td>
+             <td style="padding: 0.2em 0.5em;  "> <code>clamp(duration, min, max)</code></td>
      <td style="padding: 0.2em 0.5em;  "> Bound a <code>Duration</code> to a range.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>timestamp.unix_seconds()</code></td>
+             <td style="padding: 0.2em 0.5em;  "> <code>unix_seconds(timestamp)</code></td>
      <td style="padding: 0.2em 0.5em;  "> Convert a <code>Timestamp</code> to Unix seconds.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>timestamp.unix_milliseconds()</code></td>
+             <td style="padding: 0.2em 0.5em;  "> <code>unix_milliseconds(timestamp)</code></td>
      <td style="padding: 0.2em 0.5em;  "> Convert a <code>Timestamp</code> to Unix milliseconds.</td>
         </tr>
 
     <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> <code>timestamp.to_iso_string()</code></td>
+             <td style="padding: 0.2em 0.5em;  "> <code>to_iso_string(timestamp)</code></td>
      <td style="padding: 0.2em 0.5em;  "> Format a <code>Timestamp</code> as UTC ISO text.</td>
         </tr>
         
@@ -830,17 +832,17 @@ body {
     return { tag: "err", value: __bs_make_error("Float(...) only accepts Int, Float, or string values", 210, null, null) };
     }
 
-    function b_fn1() {
-    let b_l3 = __bs_binding(undefined);
+    function b_fn6() {
+    let b_l22 = __bs_binding(undefined);
 
-    __bs_assign_value(b_l3, []);
-    return __bs_read(b_l3);
+    __bs_assign_value(b_l22, []);
+    return __bs_read(b_l22);
     }
 
     </script>
     <script>
     (function () {
-      if (typeof b_fn1 === "function") b_fn1();
+      if (typeof b_fn6 === "function") b_fn6();
     })();
     </script>
   </body>

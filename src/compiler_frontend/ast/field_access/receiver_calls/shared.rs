@@ -3,7 +3,7 @@
 //! WHAT: result-type construction, trait-requirement signature lowering, and small
 //!       declaration-building utilities used by multiple dispatch paths.
 //! WHY: call-argument resolution and result handling are structurally similar across
-//!      source, generic-bound, dynamic, and evidence-backed calls; extracting the
+//!      source and generic-bound calls; extracting the
 //!      common pieces prevents drift and keeps each dispatch file focused on its
 //!      lookup logic.
 

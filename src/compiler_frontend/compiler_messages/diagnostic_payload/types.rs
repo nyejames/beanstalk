@@ -870,7 +870,6 @@ pub enum InvalidReceiverCallReason {
     UnneededMutableAccessMarker,
     MutableMarkerOnNonReceiverCall,
     AmbiguousGenericBoundMethod,
-    AmbiguousTraitEvidenceMethod,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

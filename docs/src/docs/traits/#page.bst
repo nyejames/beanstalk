@@ -163,7 +163,7 @@ page_head #= theme_head
 #[section, $markdown:
     # Dispatch and backends
 
-    Ordinary concrete receiver methods resolve before trait evidence. If no ordinary method is visible, visible trait evidence can make a trait-surface method callable.
+    Trait bounds may enable receiver calls on generic parameters inside the bounded generic declaration. Concrete values use ordinary visible receiver methods. A conformance declaration proves that a type satisfies a trait; it does not independently import trait methods as concrete receiver methods.
 
     Static trait-bound method calls resolve to concrete source methods before HIR. Backends do not receive trait-object construction, erased dispatch, or selected trait evidence for runtime method tables.
 ]

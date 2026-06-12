@@ -390,7 +390,7 @@ AST owns:
 - receiver-method cataloging
 - generic declaration/type validation at the frontend level
 - generic free-function template storage, body validation, immediate local call inference, and concrete instance emission before HIR
-- trait declaration resolution, trait visibility, conformance evidence validation, static generic-bound evidence checks, and evidence-backed static receiver fallback
+- trait declaration resolution, trait visibility, conformance evidence validation, static generic-bound evidence checks, and bound-provided receiver calls on generic parameters
 - constant folding and const-only validation
 - template composition, compile-time folding, control-flow validation, helper elimination, and runtime render-plan preparation
 

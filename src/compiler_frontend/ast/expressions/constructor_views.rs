@@ -43,6 +43,7 @@ pub(crate) enum ConstructorFieldAccessMode {
     Shared,
 
     #[allow(dead_code)]
+    // Planned only if constructor fields gain source-visible mutable initialization.
     Mutable,
 }
 

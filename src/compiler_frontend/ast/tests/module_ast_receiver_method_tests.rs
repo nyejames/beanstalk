@@ -32,13 +32,11 @@ fn empty_receiver_entry(
     function_path: InternedPath,
     source_file: InternedPath,
     receiver: ReceiverKey,
-    exported: bool,
 ) -> ReceiverMethodEntry {
     ReceiverMethodEntry {
         function_path,
         receiver,
         source_file,
-        exported,
         receiver_mutable: false,
         signature: FunctionSignature {
             parameters: vec![],
@@ -63,48 +61,42 @@ fn context_for_source_file(
 }
 
 #[test]
-fn lookup_receiver_method_requires_exact_source_file_match_when_not_exported() {
+fn lookup_receiver_method_prefers_exact_source_file_before_catalog_fallback() {
     let mut string_table = StringTable::new();
     let method_name = string_table.intern("reset");
     let receiver = ReceiverKey::BuiltinScalar(BuiltinScalarReceiver::Int);
     let key = (receiver.to_owned(), method_name);
+    let local_source = interned_path(&["src", "#page.bst"], &mut string_table);
+    let library_source = interned_path(&["lib", "shared.bst"], &mut string_table);
+
+    let local_entry = empty_receiver_entry(
+        interned_path(&["src", "reset"], &mut string_table),
+        local_source.to_owned(),
+        receiver.to_owned(),
+    );
+    let library_entry = empty_receiver_entry(
+        interned_path(&["lib", "reset"], &mut string_table),
+        library_source,
+        receiver.to_owned(),
+    );
 
     let mut catalog = ReceiverMethodCatalog::default();
-    catalog.by_receiver_and_name.insert(
-        key,
-        vec![empty_receiver_entry(
-            interned_path(&["module", "reset"], &mut string_table),
-            interned_path(&["src", "#page.bst"], &mut string_table),
-            receiver.to_owned(),
-            false,
-        )],
-    );
+    catalog
+        .by_receiver_and_name
+        .insert(key, vec![library_entry, local_entry.to_owned()]);
 
-    let different_shape_context = context_for_source_file(
-        interned_path(&["project", "src", "#page.bst"], &mut string_table),
-        catalog.to_owned(),
-    );
-    assert!(
-        different_shape_context
-            .lookup_receiver_method(&receiver, method_name)
-            .is_none(),
-        "non-exported methods must not match by suffix-shaped source-file paths"
-    );
-
-    let exact_context = context_for_source_file(
-        interned_path(&["src", "#page.bst"], &mut string_table),
-        catalog,
-    );
-    assert!(
-        exact_context
-            .lookup_receiver_method(&receiver, method_name)
-            .is_some(),
-        "non-exported methods should remain visible inside their exact source file"
+    let exact_context = context_for_source_file(local_source, catalog);
+    let resolved = exact_context
+        .lookup_receiver_method(&receiver, method_name)
+        .expect("same-file receiver method should be visible");
+    assert_eq!(
+        resolved.function_path, local_entry.function_path,
+        "same-file receiver methods should be preferred when file visibility is omitted"
     );
 }
 
 #[test]
-fn visible_method_lookup_prefers_same_file_before_exported_fallback() {
+fn visible_method_lookup_prefers_same_file_before_catalog_fallback() {
     let mut string_table = StringTable::new();
     let method_name = string_table.intern("render");
 
@@ -115,19 +107,17 @@ fn visible_method_lookup_prefers_same_file_before_exported_fallback() {
         interned_path(&["src", "render_local"], &mut string_table),
         local_source.to_owned(),
         ReceiverKey::BuiltinScalar(BuiltinScalarReceiver::String),
-        false,
     );
-    let exported_entry = empty_receiver_entry(
-        interned_path(&["lib", "render_exported"], &mut string_table),
+    let library_entry = empty_receiver_entry(
+        interned_path(&["lib", "render"], &mut string_table),
         exported_source,
         ReceiverKey::BuiltinScalar(BuiltinScalarReceiver::String),
-        true,
     );
 
     let mut catalog = ReceiverMethodCatalog::default();
     catalog
         .by_method_name
-        .insert(method_name, vec![exported_entry, local_entry.to_owned()]);
+        .insert(method_name, vec![library_entry, local_entry.to_owned()]);
 
     let context = context_for_source_file(local_source, catalog);
     let resolved = context
@@ -140,37 +130,34 @@ fn visible_method_lookup_prefers_same_file_before_exported_fallback() {
 }
 
 #[test]
-fn visible_method_lookup_uses_stable_exported_fallback_order() {
+fn visible_method_lookup_uses_stable_catalog_fallback_order() {
     let mut string_table = StringTable::new();
     let method_name = string_table.intern("render");
     let context_source = interned_path(&["src", "#page.bst"], &mut string_table);
 
-    let first_exported = empty_receiver_entry(
+    let first_entry = empty_receiver_entry(
         interned_path(&["lib", "a_render"], &mut string_table),
         interned_path(&["lib", "a.bst"], &mut string_table),
         ReceiverKey::BuiltinScalar(BuiltinScalarReceiver::String),
-        true,
     );
-    let second_exported = empty_receiver_entry(
+    let second_entry = empty_receiver_entry(
         interned_path(&["lib", "z_render"], &mut string_table),
         interned_path(&["lib", "z.bst"], &mut string_table),
         ReceiverKey::BuiltinScalar(BuiltinScalarReceiver::String),
-        true,
     );
 
     let mut catalog = ReceiverMethodCatalog::default();
-    catalog.by_method_name.insert(
-        method_name,
-        vec![first_exported.to_owned(), second_exported],
-    );
+    catalog
+        .by_method_name
+        .insert(method_name, vec![first_entry.to_owned(), second_entry]);
 
     let context = context_for_source_file(context_source, catalog);
     let resolved = context
         .lookup_visible_receiver_method_by_name(method_name)
-        .expect("exported receiver method should be visible");
+        .expect("catalog fallback receiver method should be visible");
     assert_eq!(
-        resolved.function_path, first_exported.function_path,
-        "exported fallback lookup should resolve using stable catalog order"
+        resolved.function_path, first_entry.function_path,
+        "catalog fallback lookup should resolve using stable catalog order"
     );
 }
 

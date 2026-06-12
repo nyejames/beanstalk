@@ -207,8 +207,9 @@ impl ScopeContext {
             return None;
         }
 
-        // Unit-test contexts can omit file visibility. They still prefer same-file
-        // methods, then any method that is publicly visible through its type surface.
+        // Unit-test contexts can omit file visibility. Production calls always use
+        // header-built visibility, so the fallback keeps tests deterministic without
+        // reintroducing a separate receiver-method export flag.
         let entries = self
             .receiver_methods
             .by_receiver_and_name
@@ -218,7 +219,7 @@ impl ScopeContext {
         entries
             .iter()
             .find(|entry| &entry.source_file == current_source_file)
-            .or_else(|| entries.iter().find(|entry| entry.exported))
+            .or_else(|| entries.first())
     }
 
     pub(crate) fn lookup_visible_receiver_method_by_name(
@@ -241,15 +242,16 @@ impl ScopeContext {
             return None;
         }
 
-        // Unit-test contexts can omit file visibility. They still prefer same-file
-        // methods, then any method that is publicly visible through its type surface.
+        // Unit-test contexts can omit file visibility. Production calls always use
+        // header-built visibility, so the fallback keeps tests deterministic without
+        // reintroducing a separate receiver-method export flag.
         let current_source_file = self.source_file_scope.as_ref()?;
         let entries = self.receiver_methods.by_method_name.get(&method_name)?;
 
         entries
             .iter()
             .find(|entry| &entry.source_file == current_source_file)
-            .or_else(|| entries.iter().find(|entry| entry.exported))
+            .or_else(|| entries.first())
     }
 
     /// Look up a visible external function by its source-level name.

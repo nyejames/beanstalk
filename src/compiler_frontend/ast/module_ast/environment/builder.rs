@@ -236,7 +236,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         // ------------------------
         let receiver_catalog_start = Instant::now();
         let receiver_methods = self.build_receiver_catalog(sorted_headers, string_table)?;
-        self.validate_receiver_method_import_visibility(&receiver_methods, string_table)?;
+        self.validate_receiver_method_visibility_invariants(&receiver_methods, string_table)?;
         timer_log!(
             receiver_catalog_start,
             "AST/environment/receiver catalog built in: "

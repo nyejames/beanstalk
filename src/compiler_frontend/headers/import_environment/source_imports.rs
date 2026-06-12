@@ -37,9 +37,10 @@ impl<'a> ImportEnvironmentBuilder<'a> {
         };
 
         // Walk receiver_method_paths directly and match by canonical source file.
-        // WHY: canonical_source_by_symbol_path uses canonical OS paths while
-        //      declared_paths_by_file uses header.source_file (logical/relative).
-        //      Comparing against canonical_source_by_symbol_path avoids the mismatch.
+        // WHY: header parsing records only the parsed receiver name, not semantic
+        // receiver identity. Keeping the small scan here avoids a premature
+        // header-level index while preserving the same-file nominal rule at the
+        // import-preparation boundary.
         for path in &self.module_symbols.receiver_method_paths {
             if self.module_symbols.receiver_method_receiver_names.get(path)
                 != Some(&receiver_type_name)

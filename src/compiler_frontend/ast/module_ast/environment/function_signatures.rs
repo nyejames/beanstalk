@@ -344,7 +344,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
     /// WHAT: catches impossible duplicate visible methods for the same receiver and method name.
     /// WHY: source methods travel with receiver type visibility, so this is a defensive
     /// Stage 4 check over the Stage 2 visibility package rather than an import-alias validator.
-    pub(in crate::compiler_frontend::ast) fn validate_receiver_method_import_visibility(
+    pub(in crate::compiler_frontend::ast) fn validate_receiver_method_visibility_invariants(
         &self,
         receiver_methods: &ReceiverMethodCatalog,
         string_table: &mut StringTable,

@@ -329,7 +329,7 @@ body {
     <span class='bst-code-struct'>DISPLAY_TEXT</span> must<span class='bst-code-operator'>:</span>
         display <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span>
     ;
-    </code></pre><p>Rules:</p><ul><li>trait names are all caps</li><li>trait declarations are top-level declarations</li><li>requirements are method signatures only</li><li>empty marker traits are valid</li><li>default methods, associated types, associated constants, trait inheritance, generic traits, and generic trait methods are deferred</li></ul></section>
+    </code></pre><p>Rules:</p><ul><li>trait names are all caps</li><li>trait declarations are top-level declarations</li><li>requirements are method signatures only</li><li>empty marker traits are valid</li><li>static non-method requirements are deferred</li><li>default methods, associated types, associated constants, trait inheritance, generic traits, and generic trait methods are outside Beanstalk&#39;s trait design scope</li></ul></section>
     <section class="container"><h1>This and mutable receivers</h1><p><code>This</code> is valid only inside trait declarations. It means the concrete implementing type.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
@@ -369,7 +369,7 @@ body {
     "><code class='codeblock'>
     <span class='bst-code-struct'>Label</span> must <span class='bst-code-struct'>DISPLAY_TEXT,</span> <span class='bst-code-struct'>SERIALIZABLE</span>
     </code></pre><p>The compiler validates that every required method exists with the exact receiver mutability, parameter types, return types, and return channels required by the trait. Parameter names are not part of the contract.</p></section>
-    <section class="container"><h1>Canonical and file-local evidence</h1><p>Beanstalk stores explicit conformance as evidence selected by the frontend.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
+    <section class="container"><h1>Canonical evidence</h1><p>Beanstalk stores explicit conformance as evidence selected by the frontend.</p><table style="border-collapse: collapse; border: 1px solid; padding: 1em;">
         
     <tr style="background-color: hsla(107, 100%, 36%, 0.23);">
          <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Evidence</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> When it is created</th> <th style="border: 1px solid; padding: 0.5em; text-align: left;"> Visibility</th> 
@@ -382,14 +382,8 @@ body {
      <td style="padding: 0.2em 0.5em;  "> The conformance target is a struct, choice, or generic type constructor declared in the same file.</td>
      <td style="padding: 0.2em 0.5em;  "> Reusable wherever both the target type and trait are visible.</td>
         </tr>
-
-    <tr style="border-bottom: 1px dotted grey;">
-             <td style="padding: 0.2em 0.5em;  "> File-local extension</td>
-     <td style="padding: 0.2em 0.5em;  "> The conformance target is imported, builtin, external, or otherwise not declared in the current file.</td>
-     <td style="padding: 0.2em 0.5em;  "> Usable only in the declaring file.</td>
-        </tr>
         
-    </table><p>File-local extension evidence is useful for local adapter code, but it is never exportable as a reusable conformance fact. It also cannot override visible canonical evidence.</p><p>User-authored conformances for builtin scalar types such as <code>Int must DISPLAY_TEXT</code> are file-local extensions. Compiler-owned builtin evidence is a separate metadata path, but it is not registered in the current Alpha scaffold.</p></section>
+    </table><p>User-authored conformances for builtin, imported, dependency/library, external opaque, and other-file types are rejected. Use a local wrapper choice or struct when adapting values owned by another file or package.</p></section>
     <section class="container"><h1>Static generic bounds</h1><p>Generic bounds use <code>is</code>, not <code>must</code>.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
@@ -439,10 +433,10 @@ body {
         <span class='bst-code-struct'>ButtonItem</span> <span class='bst-code-operator'>|</span> value <span class='bst-code-struct'>Button</span> <span class='bst-code-operator'>|</span>,
     ;
     </code></pre></section>
-    <section class="container"><h1>Dispatch and backends</h1><p>Ordinary concrete receiver methods resolve before trait evidence. If no ordinary method is visible, visible trait evidence can make a trait-surface method callable.</p><p>Static trait-bound method calls resolve to concrete source methods before HIR. Backends do not receive trait-object construction, erased dispatch, or selected trait evidence for runtime method tables.</p></section>
+    <section class="container"><h1>Dispatch and backends</h1><p>Trait bounds may enable receiver calls on generic parameters inside the bounded generic declaration. Concrete values use ordinary visible receiver methods. A conformance declaration proves that a type satisfies a trait; it does not independently import trait methods as concrete receiver methods.</p><p>Static trait-bound method calls resolve to concrete source methods before HIR. Backends do not receive trait-object construction, erased dispatch, or selected trait evidence for runtime method tables.</p></section>
     <section class="container"><h1>DISPLAYABLE scaffold</h1><p><code>DISPLAYABLE</code> exists as compiler-owned trait metadata for conformance and generic-bound tests.</p><p>It does not change <code>io(...)</code>, template interpolation, string coercion, equality, or operators. Implement <code>display |This| -&gt; String</code> yourself and call it explicitly.</p></section>
-    <section class="container"><h1>Deferred trait ecosystem</h1><p>Deferred surfaces include:</p><ul><li>default methods</li><li>associated types and associated constants</li><li>trait inheritance and composition</li><li>generic traits and generic trait methods</li><li>specialized generic instance conformance such as <code>Box of Int must DISPLAY_TEXT</code></li><li>static requirements that are not receiver methods</li><li>composed <code>This</code> forms</li><li>file-local evidence-backed generic bound dispatch</li><li>automatic primitive conformances</li><li>output coercion through <code>DISPLAYABLE</code></li><li>operator-to-trait integration</li><li>deriving, hashing, ordering, formatting, iteration, and serialization traits</li></ul></section>
-    <section class="container"><h1>Outside language design scope</h1><p>Dynamic trait values / trait objects, trait aliases or composition, downcasting, reflection, pattern matching on erased concrete types, associated types/constants, trait inheritance, generic traits/methods, and conditional or specialized conformance are intentionally outside the current language design scope.</p></section>
+    <section class="container"><h1>Outside trait design scope</h1><p>These surfaces are intentionally outside Beanstalk&#39;s trait design scope:</p><ul><li>default methods</li><li>associated types and associated constants</li><li>trait inheritance and composition</li><li>generic traits and generic trait methods</li><li>blanket, conditional, negative, or specialized conformance</li><li>structural conformance</li><li>specialized generic instance conformance such as <code>Box of Int must DISPLAY_TEXT</code></li><li>composed <code>This</code> forms</li><li>automatic primitive conformances</li><li>output coercion through <code>DISPLAYABLE</code></li><li>operator-to-trait integration</li><li>deriving, hashing, ordering, formatting, iteration, and serialization traits</li><li>dynamic trait values / trait objects</li><li>trait aliases or composition, downcasting, reflection, and pattern matching on erased concrete types</li></ul></section>
+    <section class="container"><h1>Deferred trait work</h1><p>Deferred trait work is limited to static non-method requirements, compiler-owned builtin conformance facts, diagnostics/tooling polish, and broader standard trait taxonomy that does not change traits into runtime values or a type-level programming system.</p></section>
     <script>
     function __bs_is_ref(value) {
     return value !== null && typeof value === "object" && value.__bs_ref === true;
@@ -793,17 +787,17 @@ body {
     return { tag: "err", value: __bs_make_error("Float(...) only accepts Int, Float, or string values", 210, null, null) };
     }
 
-    function b_fn1() {
-    let b_l3 = __bs_binding(undefined);
+    function b_fn6() {
+    let b_l22 = __bs_binding(undefined);
 
-    __bs_assign_value(b_l3, []);
-    return __bs_read(b_l3);
+    __bs_assign_value(b_l22, []);
+    return __bs_read(b_l22);
     }
 
     </script>
     <script>
     (function () {
-      if (typeof b_fn1 === "function") b_fn1();
+      if (typeof b_fn6 === "function") b_fn6();
     })();
     </script>
   </body>

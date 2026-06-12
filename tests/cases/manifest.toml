@@ -980,28 +980,13 @@ path = "public_generic_bound_reexported_trait_success"
 tags = ["integration","generics","traits","functions","imports","facade"]
 
 [[case]]
-id = "trait_evidence_method_visible_without_concrete_method_export_success"
-path = "trait_evidence_method_visible_without_concrete_method_export_success"
-tags = ["integration","traits","receivers","imports","facade"]
-
-[[case]]
 id = "trait_evidence_builtin_receiver_rejected"
 path = "trait_evidence_builtin_receiver_rejected"
 tags = ["integration","traits","receivers","scalars"]
 
 [[case]]
-id = "trait_evidence_ambiguous_concrete_receiver_rejected"
-path = "trait_evidence_ambiguous_concrete_receiver_rejected"
-tags = ["integration","traits","receivers","imports","facade","diagnostics"]
-
-[[case]]
-id = "trait_evidence_ordinary_method_priority_success"
-path = "trait_evidence_ordinary_method_priority_success"
-tags = ["integration","traits","receivers"]
-
-[[case]]
-id = "trait_evidence_no_explicit_conformance_rejected"
-path = "trait_evidence_no_explicit_conformance_rejected"
+id = "trait_evidence_concrete_fallback_not_imported_rejected"
+path = "trait_evidence_concrete_fallback_not_imported_rejected"
 tags = ["integration","traits","receivers","imports","facade","diagnostics"]
 
 [[case]]
@@ -1683,6 +1668,22 @@ tags = ["integration", "collections", "fixed-collections", "diagnostics"]
 id = "fixed_collection_return_type_mutable_rejected"
 path = "fixed_collection_return_type_mutable_rejected"
 tags = ["integration", "collections", "fixed-collections", "diagnostics"]
+
+[[case]]
+id = "fixed_collection_imported_capacity_success"
+path = "fixed_collection_imported_capacity_success"
+tags = ["integration", "collections", "fixed-collections", "imports"]
+
+[[case]]
+id = "fixed_collection_facade_capacity_success"
+path = "fixed_collection_facade_capacity_success"
+tags = ["integration", "collections", "fixed-collections", "imports", "facade"]
+
+[[case]]
+id = "fixed_collection_same_file_forward_capacity_rejected"
+path = "fixed_collection_same_file_forward_capacity_rejected"
+tags = ["integration", "collections", "fixed-collections", "diagnostics"]
+
 [[case]]
 id = "cast_float_from_string_runtime_output"
 path = "cast_float_from_string_runtime_output"
@@ -4647,6 +4648,11 @@ path = "receiver_facade_method_reexport_without_type_rejected"
 tags = ["integration", "receiver-methods", "imports", "facade", "diagnostics"]
 
 [[case]]
+id = "receiver_facade_authored_method_export_rejected"
+path = "receiver_facade_authored_method_export_rejected"
+tags = ["integration", "receiver-methods", "imports", "facade", "diagnostics"]
+
+[[case]]
 id = "receiver_facade_namespace_no_private_method"
 path = "receiver_facade_namespace_no_private_method"
 tags = ["integration", "receiver-methods", "imports", "namespace-imports", "facade", "diagnostics"]
@@ -5887,8 +5893,6 @@ id = "source_lib_reexport_external_alias"
 path = "source_lib_reexport_external_alias"
 tags = ["integration", "language", "imports", "facade"]
 
-
-
 [[case]]
 id = "source_lib_reexport_duplicate"
 path = "source_lib_reexport_duplicate"
@@ -6083,6 +6087,11 @@ tags = ["integration", "language", "external-packages", "core-libraries", "time"
 id = "core_time_raw_method_call_rejected"
 path = "core_time_raw_method_call_rejected"
 tags = ["integration", "language", "external-packages", "core-libraries", "time", "diagnostics", "receiver-methods", "imports"]
+
+[[case]]
+id = "core_time_namespace_raw_method_call_rejected"
+path = "core_time_namespace_raw_method_call_rejected"
+tags = ["integration", "language", "external-packages", "core-libraries", "time", "diagnostics", "receiver-methods", "imports", "namespace-imports"]
 
 [[case]]
 id = "core_time_unused_wasm_wrapper_success"

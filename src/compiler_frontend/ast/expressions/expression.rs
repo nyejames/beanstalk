@@ -148,7 +148,7 @@ impl ResolvedCallTypes {
 ///
 /// WHAT: maps syntax/display-only `DataType` values to builtin TypeId hints when the caller does
 ///      not yet have enough context to resolve through `TypeEnvironment`.
-/// WHY: this is a transitional parse-boundary helper, not a semantic equality path. Executable AST
+/// WHY: this is a parse-boundary hint, not a semantic equality path. Executable AST
 ///      and HIR should carry canonical TypeIds resolved through the active type environment.
 pub(crate) fn type_id_hint_for_diagnostic_type(data_type: &DataType) -> TypeId {
     match data_type {

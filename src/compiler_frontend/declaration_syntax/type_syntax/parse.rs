@@ -1,7 +1,7 @@
 //! Type-annotation parsing for declaration and signature syntax.
 //!
-//! WHAT: converts token streams into unresolved parsed type references with capacity
-//!      expression tokens stored directly on collection variants.
+//! WHAT: converts token streams into unresolved parsed type references, including narrow
+//!      fixed-capacity collection syntax using integer literals or bare constant names.
 //! WHY: parsing stays separate from semantic type resolution so header and AST
 //!      callers can share syntax without rebuilding type-environment policy here.
 
@@ -264,9 +264,9 @@ fn parse_collection_type(
         }
     }
 
-    // Phase 1 parser boundary rule:
+    // Collection type parsing keeps capacity syntax narrow and unambiguous:
     //   - If the entire inner content parses as a valid element type, this is `{T}` (growable).
-    //   - Otherwise, find the first valid element type suffix; tokens before it are capacity.
+    //   - Otherwise, the first valid element-type suffix separates capacity from element type.
     //   - If no element type suffix is found, capacity-only shorthand is allowed only in
     //     declaration target context (with `Inferred` element type).
 

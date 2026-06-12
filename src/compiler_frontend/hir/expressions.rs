@@ -220,9 +220,6 @@ pub enum HirExpressionKind {
     ///       preserved before the literal value is produced.
     /// WHY: map literals are first-class compiler-owned values, not external calls.
     MapLiteral(Vec<HirMapEntry>),
-    // -------------------------
-    //  Dynamic Trait Operations
-    // -------------------------
 }
 
 // Option none/some are represented through VariantConstruct with HirVariantCarrier::Option.
