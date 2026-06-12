@@ -12,6 +12,7 @@ use crate::compiler_frontend::ast::expressions::call_argument::CallArgument;
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, FallibleHandling,
 };
+use crate::compiler_frontend::ast::expressions::expression_types::CastHandling;
 use crate::compiler_frontend::ast::statements::match_patterns::MatchPattern;
 use crate::compiler_frontend::ast::statements::value_production::types::ValueBlock;
 use crate::compiler_frontend::ast::templates::template::{TemplateAtom, TemplateContent};
@@ -351,8 +352,16 @@ fn debug_validate_expression_type_id(expression: &Expression, type_environment: 
             debug_validate_fallible_handling_type_ids(handling, type_environment);
         }
 
-        ExpressionKind::BuiltinCast { value, .. }
-        | ExpressionKind::FallibleCarrierConstruct { value, .. }
+        ExpressionKind::Cast(cast) => {
+            debug_validate_expression_type_id(&cast.source, type_environment);
+            debug_validate_type_id(cast.target_type_id, type_environment, "cast target");
+            debug_validate_type_id(cast.source_type_id, type_environment, "cast source");
+            if let CastHandling::Recover(handling) = &cast.handling {
+                debug_validate_fallible_handling_type_ids(handling, type_environment);
+            }
+        }
+
+        ExpressionKind::FallibleCarrierConstruct { value, .. }
         | ExpressionKind::OptionPropagation { value } => {
             debug_validate_expression_type_id(value, type_environment);
         }

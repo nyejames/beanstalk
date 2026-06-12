@@ -97,9 +97,9 @@ pub(crate) fn rewrite_expression_bottom_up(
             }
         }
 
-        HirExpressionKind::BuiltinCast { kind, value } => HirExpressionKind::BuiltinCast {
-            kind: *kind,
-            value: Box::new(rewrite_expression_bottom_up(value, rewrite)),
+        HirExpressionKind::Cast { source, policy } => HirExpressionKind::Cast {
+            source: Box::new(rewrite_expression_bottom_up(source, rewrite)),
+            policy: *policy,
         },
 
         HirExpressionKind::VariantConstruct {

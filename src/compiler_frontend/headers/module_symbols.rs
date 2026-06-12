@@ -311,7 +311,9 @@ fn declaration_from_header(header: &Header, string_table: &mut StringTable) -> O
         }
         HeaderKind::TypeAlias { .. } => None,
         HeaderKind::ConstTemplate { .. } => None,
-        HeaderKind::Trait { .. } | HeaderKind::TraitConformance { .. } => None,
+        HeaderKind::Trait { .. }
+        | HeaderKind::TraitConformance { .. }
+        | HeaderKind::TraitIncompatibility { .. } => None,
     }
 }
 

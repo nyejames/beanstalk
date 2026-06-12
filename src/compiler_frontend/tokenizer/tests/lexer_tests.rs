@@ -464,6 +464,48 @@ fn tokenizes_assert_as_reserved_keyword() {
 }
 
 #[test]
+fn tokenizes_attached_bang_keyword_forms_as_compound_tokens() {
+    let (file_tokens, _string_table) = tokenize_source("return! err\ncast! text\n");
+
+    assert!(
+        file_tokens
+            .tokens
+            .iter()
+            .any(|token| matches!(token.kind, TokenKind::ReturnBang)),
+        "expected attached 'return!' to lex as a single ReturnBang token"
+    );
+    assert!(
+        file_tokens
+            .tokens
+            .iter()
+            .any(|token| matches!(token.kind, TokenKind::CastBang)),
+        "expected attached 'cast!' to lex as a single CastBang token"
+    );
+}
+
+#[test]
+fn tokenizes_spaced_bang_keyword_forms_as_separate_tokens() {
+    let (file_tokens, _string_table) = tokenize_source("return ! err\ncast ! text\n");
+
+    assert!(
+        !file_tokens
+            .tokens
+            .iter()
+            .any(|token| matches!(token.kind, TokenKind::ReturnBang | TokenKind::CastBang)),
+        "spaced keyword/bang pairs must not become compound tokens"
+    );
+    assert!(
+        file_tokens
+            .tokens
+            .iter()
+            .filter(|token| matches!(token.kind, TokenKind::Bang))
+            .count()
+            >= 2,
+        "expected spaced keyword/bang pairs to keep standalone bang tokens"
+    );
+}
+
+#[test]
 fn tokenizes_export_as_reserved_keyword() {
     let (file_tokens, _string_table) = tokenize_source("export\n");
 

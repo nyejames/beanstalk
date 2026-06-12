@@ -408,6 +408,12 @@ pub enum DiagnosticPayload {
         builtin_name: Option<StringId>,
     },
 
+    InvalidCast {
+        reason: InvalidCastReason,
+        source_type: Option<TypeId>,
+        target_type: Option<TypeId>,
+    },
+
     InvalidReceiverCall {
         reason: InvalidReceiverCallReason,
         receiver_type: Option<StringId>,
@@ -567,6 +573,12 @@ pub enum DiagnosticPayload {
         target_name: StringId,
         trait_name: Option<StringId>,
         reason: InvalidTraitConformanceReason,
+    },
+
+    InvalidTraitIncompatibility {
+        subject_name: StringId,
+        incompatible_trait_name: Option<StringId>,
+        reason: InvalidTraitIncompatibilityReason,
     },
 
     TraitNameUsedAsType {

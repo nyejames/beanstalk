@@ -30,7 +30,9 @@ use crate::compiler_frontend::declaration_syntax::type_syntax::parsed_ref_to_dat
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringIdRemap, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
-use crate::compiler_frontend::type_coercion::parse_context::parse_expectation_for_type_id;
+use crate::compiler_frontend::type_coercion::parse_context::{
+    cast_target_context_for_type_id, parse_expectation_for_type_id,
+};
 
 /// One function return slot, either a concrete value type or a parameter-alias set.
 #[derive(Clone, Debug, PartialEq)]
@@ -436,6 +438,8 @@ fn parse_signature_default_expression(
     parameter_context.expected_result_type_ids = vec![type_id];
 
     let mut expected_type = parse_expectation_for_type_id(type_id, type_interner.environment());
+    let mut cast_target_context =
+        cast_target_context_for_type_id(type_id, type_interner.environment(), string_table);
     let mut expression_stream = token_stream_with_eof(&member.default_tokens)?;
 
     create_expression_with_trailing_newline_policy(
@@ -443,11 +447,12 @@ fn parse_signature_default_expression(
         &parameter_context,
         type_interner,
         &mut expected_type,
+        &mut cast_target_context,
         &member.value_mode,
         ExpressionTrailingPolicy {
             consume_closing_parenthesis: false,
             skip_trailing_newlines: true,
-            allow_boundary_catch: false,
+            allow_boundary_catch: true,
             allow_expected_result_evidence: true,
         },
         string_table,

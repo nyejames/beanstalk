@@ -13,7 +13,7 @@ use crate::compiler_frontend::ast::expressions::expression::{
 };
 use crate::compiler_frontend::ast::expressions::expression_kind::ExpressionKind;
 use crate::compiler_frontend::ast::expressions::parse_expression::{
-    create_expression_until_without_boundary_catch, create_expression_without_boundary_catch,
+    create_expression_until_with_cast_target, create_expression_with_cast_target,
 };
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::type_resolution::validate_map_key_type;
@@ -27,8 +27,8 @@ use crate::compiler_frontend::syntax_errors::expression_position::check_expressi
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
 use crate::compiler_frontend::type_coercion::contextual::coerce_expression_to_explicit_type_boundary;
 use crate::compiler_frontend::type_coercion::parse_context::{
-    ExpectedCollectionContext, ExpectedCurlyLiteralContext, ExpectedMapContext, ExpectedType,
-    parse_expectation_for_type_id,
+    CastTargetContext, ExpectedCollectionContext, ExpectedCurlyLiteralContext, ExpectedMapContext,
+    ExpectedType, cast_target_context_for_type_id, parse_expectation_for_type_id,
 };
 use crate::compiler_frontend::value_mode::{ValueMode, ValueMode::MutableOwned};
 
@@ -155,6 +155,14 @@ fn parse_collection_literal(
                     }
                     None => ExpectedType::Infer,
                 };
+                let mut cast_target_context = match inferred_inner_type_id {
+                    Some(type_id) => cast_target_context_for_type_id(
+                        type_id,
+                        type_interner.environment(),
+                        string_table,
+                    ),
+                    None => CastTargetContext::None,
+                };
                 let expression_expected_types = inferred_inner_type_id
                     .map(|type_id| vec![type_id])
                     .unwrap_or_default();
@@ -170,6 +178,7 @@ fn parse_collection_literal(
                     &expression_context,
                     type_interner,
                     &mut expression_type,
+                    &mut cast_target_context,
                     string_table,
                 )?;
 
@@ -309,13 +318,15 @@ fn parse_expression_until_curly_entry_delimiter(
     context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     expected_type: &mut ExpectedType,
+    cast_target_context: &mut CastTargetContext,
     string_table: &mut StringTable,
 ) -> Result<Expression, CompilerDiagnostic> {
-    create_expression_until_without_boundary_catch(
+    create_expression_until_with_cast_target(
         token_stream,
         context,
         type_interner,
         expected_type,
+        cast_target_context,
         &MutableOwned,
         &[TokenKind::Assign, TokenKind::Comma, TokenKind::CloseCurly],
         string_table,
@@ -442,6 +453,11 @@ fn parse_map_literal(
 
                 let mut key_expression_type =
                     parse_expectation_for_type_id(key_type_id, type_interner.environment());
+                let mut key_cast_target_context = cast_target_context_for_type_id(
+                    key_type_id,
+                    type_interner.environment(),
+                    string_table,
+                );
                 let key_expected_types = vec![key_type_id];
                 let mut key_context = context.new_child_expression(key_expected_types);
                 key_context.kind = context.kind.clone();
@@ -451,6 +467,7 @@ fn parse_map_literal(
                     &key_context,
                     type_interner,
                     &mut key_expression_type,
+                    &mut key_cast_target_context,
                     string_table,
                 )?;
 
@@ -461,15 +478,21 @@ fn parse_map_literal(
 
                 let mut value_expression_type =
                     parse_expectation_for_type_id(value_type_id, type_interner.environment());
+                let mut value_cast_target_context = cast_target_context_for_type_id(
+                    value_type_id,
+                    type_interner.environment(),
+                    string_table,
+                );
                 let value_expected_types = vec![value_type_id];
                 let mut value_context = context.new_child_expression(value_expected_types);
                 value_context.kind = context.kind.clone();
 
-                let parsed_value = create_expression_without_boundary_catch(
+                let parsed_value = create_expression_with_cast_target(
                     token_stream,
                     &value_context,
                     type_interner,
                     &mut value_expression_type,
+                    &mut value_cast_target_context,
                     &MutableOwned,
                     false,
                     string_table,
@@ -568,6 +591,7 @@ fn parse_inferred_curly_literal(
 
     // Parse the first expression to classify the literal shape.
     let mut first_expression_type = ExpectedType::Infer;
+    let mut first_cast_target_context = CastTargetContext::None;
     let first_expected_types: Vec<TypeId> = Vec::new();
     let mut first_context = context.new_child_expression(first_expected_types);
     first_context.kind = context.kind.clone();
@@ -577,6 +601,7 @@ fn parse_inferred_curly_literal(
         &first_context,
         type_interner,
         &mut first_expression_type,
+        &mut first_cast_target_context,
         string_table,
     )?;
 
@@ -588,11 +613,13 @@ fn parse_inferred_curly_literal(
 
             // Parse the value side of the first map entry.
             let mut first_value_type = ExpectedType::Infer;
-            let first_value = create_expression_without_boundary_catch(
+            let mut first_value_cast_target_context = CastTargetContext::None;
+            let first_value = create_expression_with_cast_target(
                 token_stream,
                 &first_context,
                 type_interner,
                 &mut first_value_type,
+                &mut first_value_cast_target_context,
                 &MutableOwned,
                 false,
                 string_table,
@@ -661,6 +688,11 @@ fn parse_inferred_curly_literal(
 
                         let mut key_expression_type =
                             parse_expectation_for_type_id(key_type_id, type_interner.environment());
+                        let mut key_cast_target_context = cast_target_context_for_type_id(
+                            key_type_id,
+                            type_interner.environment(),
+                            string_table,
+                        );
                         let key_expected_types = vec![key_type_id];
                         let mut key_context = context.new_child_expression(key_expected_types);
                         key_context.kind = context.kind.clone();
@@ -670,6 +702,7 @@ fn parse_inferred_curly_literal(
                             &key_context,
                             type_interner,
                             &mut key_expression_type,
+                            &mut key_cast_target_context,
                             string_table,
                         )?;
 
@@ -680,15 +713,21 @@ fn parse_inferred_curly_literal(
                             value_type_id,
                             type_interner.environment(),
                         );
+                        let mut value_cast_target_context = cast_target_context_for_type_id(
+                            value_type_id,
+                            type_interner.environment(),
+                            string_table,
+                        );
                         let value_expected_types = vec![value_type_id];
                         let mut value_context = context.new_child_expression(value_expected_types);
                         value_context.kind = context.kind.clone();
 
-                        let parsed_value = create_expression_without_boundary_catch(
+                        let parsed_value = create_expression_with_cast_target(
                             token_stream,
                             &value_context,
                             type_interner,
                             &mut value_expression_type,
+                            &mut value_cast_target_context,
                             &MutableOwned,
                             false,
                             string_table,
@@ -799,6 +838,11 @@ fn parse_inferred_curly_literal(
                             element_type_id,
                             type_interner.environment(),
                         );
+                        let mut cast_target_context = cast_target_context_for_type_id(
+                            element_type_id,
+                            type_interner.environment(),
+                            string_table,
+                        );
                         let expression_expected_types = vec![element_type_id];
                         let mut expression_context =
                             context.new_child_expression(expression_expected_types);
@@ -809,6 +853,7 @@ fn parse_inferred_curly_literal(
                             &expression_context,
                             type_interner,
                             &mut expression_type,
+                            &mut cast_target_context,
                             string_table,
                         )?;
 

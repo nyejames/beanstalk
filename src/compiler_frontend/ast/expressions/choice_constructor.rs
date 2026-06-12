@@ -15,7 +15,9 @@ use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
 use crate::compiler_frontend::ast::expressions::expression::{
     ChoiceConstructInput, Expression, ExpressionKind,
 };
-use crate::compiler_frontend::ast::expressions::function_calls::parse_call_arguments;
+use crate::compiler_frontend::ast::expressions::function_calls::{
+    NamedArgumentSyntax, parse_call_arguments_typed_with_expectations,
+};
 use crate::compiler_frontend::ast::expressions::generic_nominal_inference::{
     GenericNominalConstructorInput, GenericNominalTemplate, infer_generic_nominal_constructor,
 };
@@ -144,19 +146,29 @@ pub(super) fn parse_choice_construct(
     let mut constructor_location = variant_location.clone();
 
     // Pre-parse call arguments for record variants so generic inference can
-    // inspect the raw argument expressions before type instantiation.
-    if matches!(
-        variant.payload,
-        ChoiceVariantPayloadDefinition::Record { .. }
-    ) && has_parens
+    // inspect the raw argument expressions before type instantiation. Field
+    // expectations are derived from the payload shell so `cast` receives a
+    // concrete target for non-generic fields and `TargetIsGenericParameter` for
+    // generic parameter fields.
+    if let ChoiceVariantPayloadDefinition::Record { fields } = &variant.payload
+        && has_parens
     {
         token_stream.advance(); // past variant name to '('
         constructor_location = token_stream.current_location();
-        parsed_payload_arguments = Some(parse_call_arguments(
+
+        let payload_field_views = ConstructorField::from_choice_payload_fields(fields);
+        let field_expectations = expectations_from_constructor_fields(&payload_field_views);
+        let variant_name_str = string_table.resolve(variant_name).to_owned();
+        let callee_name = string_table.intern(&format!("{choice_name_str}::{variant_name_str}"));
+        parsed_payload_arguments = Some(parse_call_arguments_typed_with_expectations(
             token_stream,
             context,
             type_interner,
             string_table,
+            &field_expectations,
+            NamedArgumentSyntax::Supported {
+                callee_name: Some(callee_name),
+            },
         )?);
     }
 

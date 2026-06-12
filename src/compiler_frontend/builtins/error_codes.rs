@@ -18,6 +18,11 @@ pub(crate) enum BuiltinErrorCode {
     IntParseOutOfRange = 201,
     FloatParseInvalidFormat = 210,
     FloatParseOutOfRange = 211,
+    StringParseBoolInvalidFormat = 220,
+    StringParseCharInvalidFormat = 230,
+    FloatCastToIntInvalidValue = 240,
+    FloatCastToIntOutOfRange = 241,
+    IntCastToCharInvalidCodepoint = 250,
     /// Reserved for future checked/fallible math operators. This refactor does not emit it.
     DivisionByZero = 300,
 }
@@ -44,6 +49,13 @@ impl BuiltinErrorCode {
             BuiltinErrorCode::IntParseOutOfRange => "Int value is out of supported range",
             BuiltinErrorCode::FloatParseInvalidFormat => "Cannot parse Float from text",
             BuiltinErrorCode::FloatParseOutOfRange => "Float value is out of supported range",
+            BuiltinErrorCode::StringParseBoolInvalidFormat => "Cannot parse Bool from text",
+            BuiltinErrorCode::StringParseCharInvalidFormat => "Cannot parse Char from text",
+            BuiltinErrorCode::FloatCastToIntInvalidValue => "Float value cannot be cast to Int",
+            BuiltinErrorCode::FloatCastToIntOutOfRange => "Float value is out of Int range",
+            BuiltinErrorCode::IntCastToCharInvalidCodepoint => {
+                "Int value is not a valid Unicode scalar"
+            }
             BuiltinErrorCode::DivisionByZero => "Division by zero",
         }
     }

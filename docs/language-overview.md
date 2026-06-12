@@ -73,6 +73,7 @@ The following surfaces are intentionally outside Beanstalk's language design sco
 | Results/options | Error returns use `Error!`; options use `T?`. |
 | Generics | Declaration-site generics use `type`: `Box type A = | value A |`. Concrete instances use `of`: `Box of String`. |
 | Traits | Trait declarations and conformances use `must`; generic bounds use `is`. Trait names are static contracts, not value types. |
+| Explicit casts | `cast` / `cast!` convert to an explicit builtin target. Scalar conversion constructors are removed. |
 | Renaming | `as` is used for type aliases, namespace import aliases, and grouped import aliases. |
 | Shadowing | No visible name may be redeclared while still in scope. |
 
@@ -179,7 +180,76 @@ Choice payload fields do not currently support defaults.
 | `//` | Integer division; `Int // Int -> Int`, truncating toward zero |
 | Mixed `Int`/`Float` arithmetic | `Float` |
 
-There is no implicit `Float -> Int` coercion. Use `Int(...)` for explicit conversion.
+There is no implicit `Float -> Int` coercion. Use `cast!` at an explicit `Int` target when a fallible conversion is intended.
+
+### Explicit Casts
+
+`cast` is the explicit conversion marker for converting one value to a compiler-supported builtin
+target type. Supported targets are:
+
+```text
+Bool
+Int
+String
+Char
+Float
+Error
+```
+
+Forms:
+
+```beanstalk
+value Target = cast expression
+value Target = cast! expression
+value Target = cast expression catch:
+    then fallback
+;
+value Target = cast expression catch |err|:
+    then fallback
+;
+```
+
+Rules:
+- The target must come from the immediate typed boundary: an annotated declaration or assignment, an explicit return slot, a concrete function parameter, a struct or choice field, a default value, a typed collection or map entry, or a `then` arm whose enclosing value-producing block has an explicit receiver.
+- Generic parameter slots are not cast targets. Generic inference does not look through `cast`.
+- Conditions, loop conditions, assertions, template interpolation, operator operands, expression statements, and untyped declarations are not cast targets.
+- `T?` receiving contexts cast to the inner builtin `T`, then use ordinary contextual `T -> T?` wrapping. Optional source values are not auto-unwrapped.
+- Same-type casts are invalid. `Int -> Float` contextual promotion remains separate from explicit casts, but `cast` is allowed when the source is naturally `Int` and the target is `Float`.
+- `cast expression` requires infallible evidence. `cast! expression` requires fallible evidence and propagates through the current function's `Error!` return slot. `cast expression catch:` requires fallible evidence and recovers locally.
+- `cast! expression catch:` is invalid. Propagation and local recovery are mutually exclusive.
+- `cast!` and `cast ... catch:` handle only cast failures. Operand `Error!` values must be handled before the cast.
+
+Scalar constructor-style conversions are removed:
+
+```beanstalk
+Int(value)
+Float(value)
+Bool(value)
+String(value)
+Char(value)
+```
+
+`Error(...)` remains a real builtin constructor:
+
+```beanstalk
+err = Error("Missing number", 200)
+```
+
+Use `cast` for conversion to `Error`:
+
+```beanstalk
+err Error = cast "Missing number"
+```
+
+Core cast evidence is exposed through compiler-owned static traits such as
+`CASTABLE_TO_STRING` and `TRY_CASTABLE_TO_INT`. Same-file nominal structs, choices, and aligned
+generic nominal constructors can declare conformance to these traits when they provide the
+required receiver method, for example `to_string |This| -> String` or
+`try_to_int |This| -> Int, Error!`.
+
+These traits prove source evidence only. User-defined cast targets, generic cast targets, external
+opaque cast targets, generic cast traits, and broad return-type-directed conversion are outside
+Beanstalk's cast design scope.
 
 ### Options, Results, `then`, and Assertions
 
@@ -844,6 +914,7 @@ Rules:
 - Conformance validates exact receiver mutability, non-receiver parameter modes/types, return types, and return channels. Parameter names do not matter.
 - Canonical conformance evidence for same-file structs, choices, and generic type constructors is reusable wherever both the type and trait are visible.
 - User-authored conformance for builtins, imported types, dependency/library types, external opaque types, and types declared in another file is rejected.
+- `TRAIT must not TRAIT, OTHER_TRAIT` declares narrow trait-incompatibility metadata. No concrete type may explicitly conform to both traits. The relation is symmetric, affects only conformance validation, and does not create negative conformance or trait composition.
 - Trait bounds may enable calls on generic parameters inside the bounded generic declaration.
   Concrete values use ordinary visible receiver methods. A conformance declaration proves that a
   type satisfies a trait; it does not independently import trait methods as concrete receiver
@@ -853,11 +924,24 @@ Traits are not value types. A trait name may appear in a trait declaration, an e
 conformance declaration, or a generic bound. It is invalid as an ordinary variable, parameter,
 field, return, collection element, choice payload, or alias target type.
 
+Core cast traits such as `CASTABLE_TO_STRING` and `TRY_CASTABLE_TO_STRING` are compiler-owned
+static traits. They resolve without imports, cannot be redeclared, imported, exported, aliased, or
+shadowed, and cannot be used as ordinary values. The compiler registers builtin evidence for the
+supported cast table, and same-file nominal source types, including aligned generic constructors,
+can add user-authored evidence by declaring conformance to the relevant core cast trait. Infallible
+and fallible cast trait pairs for the same target are incompatible through compiler-owned
+`must not` metadata.
+
 Use a generic bound for static reuse:
 
 ```beanstalk
 render type Item is DISPLAY_TEXT |value Item| -> String:
     return value.display()
+;
+
+show_text type Item is CASTABLE_TO_STRING |item Item| -> String:
+    text String = cast item
+    return text
 ;
 ```
 

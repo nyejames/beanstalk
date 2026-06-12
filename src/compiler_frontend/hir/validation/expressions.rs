@@ -449,7 +449,7 @@ impl<'a> HirValidator<'a> {
 
             HirExpressionKind::FallibleUnwrapSuccess { result }
             | HirExpressionKind::FallibleUnwrapError { result }
-            | HirExpressionKind::BuiltinCast { value: result, .. } => {
+            | HirExpressionKind::Cast { source: result, .. } => {
                 self.validate_expression(result, anchor)?;
             }
         }

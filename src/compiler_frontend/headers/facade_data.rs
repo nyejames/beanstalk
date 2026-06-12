@@ -15,9 +15,10 @@
 //! - Pass 1 collects all public authored declarations for every facade.
 //! - Pass 2 resolves public imports against the completed authored export maps.
 
+use crate::compiler_frontend::builtins::casts::traits::is_core_cast_trait_name;
 use crate::compiler_frontend::compiler_errors::compiler_error_to_diagnostic;
 use crate::compiler_frontend::compiler_messages::{
-    CompilerDiagnostic, ImportFacadeType, InvalidReceiverDeclarationReason,
+    CompilerDiagnostic, ImportFacadeType, InvalidReceiverDeclarationReason, ReservedNameOwner,
 };
 use crate::compiler_frontend::external_packages::ExternalPackageRegistry;
 use crate::compiler_frontend::headers::import_environment::{
@@ -143,6 +144,7 @@ fn build_source_library_facade_exports(
                     export_name,
                     FacadeExportTarget::Source(header.tokens.src_path.clone()),
                     header.name_location.clone(),
+                    string_table,
                 )?;
             }
         }
@@ -197,7 +199,7 @@ fn build_source_library_facade_imports(
                     &target,
                     import.location.clone(),
                 )?;
-                collector.insert(export_name, target, import.location.clone())?;
+                collector.insert(export_name, target, import.location.clone(), string_table)?;
             }
         }
 
@@ -333,7 +335,7 @@ fn build_module_root_facade_imports(
                 &target,
                 import.location.clone(),
             )?;
-            collector.insert(export_name, target, import.location.clone())?;
+            collector.insert(export_name, target, import.location.clone(), string_table)?;
         }
 
         module_symbols
@@ -547,7 +549,17 @@ impl FacadeExportCollector {
         export_name: StringId,
         target: FacadeExportTarget,
         location: SourceLocation,
+        string_table: &StringTable,
     ) -> Result<(), CompilerDiagnostic> {
+        let export_name_text = string_table.resolve(export_name);
+        if is_core_cast_trait_name(export_name_text) {
+            return Err(CompilerDiagnostic::reserved_name_collision(
+                export_name,
+                ReservedNameOwner::CoreTrait,
+                location,
+            ));
+        }
+
         if self.seen_names.contains_key(&export_name) {
             return Err(CompilerDiagnostic::duplicate_public_export(
                 export_name,

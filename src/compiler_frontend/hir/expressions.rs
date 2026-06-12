@@ -3,6 +3,7 @@
 //! WHAT: typed value-producing nodes used by statements, terminators, and pattern matching.
 //! WHY: HIR keeps normal value construction as expression trees while control flow stays explicit.
 
+use crate::compiler_frontend::builtins::casts::targets::BuiltinCastPolicyId;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::hir::ids::{ChoiceId, FieldId, HirValueId, RegionId, StructId};
 use crate::compiler_frontend::hir::operators::{HirBinOp, HirUnaryOp};
@@ -182,9 +183,15 @@ pub enum HirExpressionKind {
     // -------------------------
     //  Type Conversion
     // -------------------------
-    BuiltinCast {
-        kind: HirBuiltinCastKind,
-        value: Box<HirExpression>,
+    /// Builtin cast applied to an already-evaluated source value.
+    ///
+    /// WHAT: carries the stable builtin cast policy so the backend can dispatch to
+    ///      the correct runtime helper without re-deriving source/target pairs.
+    /// WHY: infallible casts stay as pure expressions; fallible casts lower through
+    ///      `HirStatementKind::CastOp` so success/error control flow remains explicit.
+    Cast {
+        source: Box<HirExpression>,
+        policy: BuiltinCastPolicyId,
     },
 
     // -------------------------
@@ -223,12 +230,6 @@ pub enum HirExpressionKind {
 }
 
 // Option none/some are represented through VariantConstruct with HirVariantCarrier::Option.
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum HirBuiltinCastKind {
-    Int,
-    Float,
-}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum FallibleCarrierVariant {

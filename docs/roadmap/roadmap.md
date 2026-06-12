@@ -11,8 +11,7 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 ---
 
 # Plans / TODOS
-- `cast` keyword for builtin type casting sugar for builtin Beanstalk types: `docs/roadmap/plans/cast_operator_implementation_plan.md`
-- first class Reactivity syntax with message / action patterns in templates
+- first class Reactivity syntax with message / action patterns in templates: ``
 - Build out core IO library
 - Compile time arbitary precision aritmetic + Decimals Type support
 - Write a Wasm backend design baseline covering the v1 target, explicit deferred features, ABI/layout rules, runtime helper contracts, and HTML-Wasm bootstrap contract.
@@ -33,6 +32,7 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 - Add Wasm validation and artifact assertions to canonical integration cases, using backend-specific `expect.toml` sections and `golden/html_wasm/` outputs.
 - Decide when dispatcher-loop CFG is acceptable permanently and when to add structured CFG lowering as an optimization pass.
 - Add a follow-up plan for future Component Model / Wasm module-system integration after core module ABI and external package semantics are stable.
+- incremental builds at the module boundary. `dev` when first launched performs a full dev build of the project, then any rebuilds only incrementally build from there based on which modules are actually changed.
 
 
 # Outside Language Design Scope
@@ -49,8 +49,12 @@ changed first:
 - First-class public `Result` values, exceptions, reflection/runtime type IDs, broad type-level
   programming, higher-kinded types, parameterized aliases, partial type application, and general
   macro systems.
+- User-defined cast targets, generic cast targets, external opaque cast targets, generic cast
+  traits, and broad return-type-directed conversion.
 
 # Notes
+- Explicit `cast` operator is complete in `docs/roadmap/plans/cast_operator_implementation_plan.md`: `cast` / `cast!` are tokenized as distinct typed-boundary forms, scalar constructor-style conversions are removed, compiler-owned builtin cast traits/evidence/policies are centralized, JS runtime casts are implemented, HTML-Wasm runtime casts report structured unsupported diagnostics, and docs/progress matrix/final audit validation passed.
+
 - Language surface hardening follow-up is complete in `docs/roadmap/plans/hardening_followup_plan.md`: stale dynamic-trait/extension/fallback wording was removed, receiver-method visibility was simplified, concrete trait-evidence receiver fallback was removed, fixed-capacity and receiver coverage was hardened, map-key ownership was documented, and final stale-system audit plus validation passed.
 
 - Hash Maps V1 is complete in `docs/roadmap/plans/hashmaps-implementation-plan.md`: first-class insertion-ordered hashmaps with `{Key = Value}` type syntax, `{key = value}` literals, frontend/HIR/borrow validation, HTML JavaScript support, and HTML-Wasm unsupported-feature diagnostics.

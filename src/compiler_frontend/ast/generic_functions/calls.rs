@@ -99,12 +99,14 @@ pub(crate) fn parse_generic_function_call(
         string_table,
     } = input;
 
+    let parameter_expectations = expectations_from_user_parameters(&template.signature.parameters);
     let raw_arguments = parse_generic_call_arguments_typed(
         token_stream,
         context,
         type_interner,
         string_table,
         template.function_path.name(),
+        &parameter_expectations,
     )?;
     let inference = infer_generic_function_call(GenericFunctionInferenceInput {
         template,
@@ -194,12 +196,14 @@ pub(crate) fn validate_generic_function_template_call(
         string_table,
     } = input;
 
+    let parameter_expectations = expectations_from_user_parameters(&template.signature.parameters);
     let raw_arguments = parse_generic_call_arguments_typed(
         token_stream,
         context,
         type_interner,
         string_table,
         template.function_path.name(),
+        &parameter_expectations,
     )?;
     let inference = infer_generic_function_call(GenericFunctionInferenceInput {
         template,

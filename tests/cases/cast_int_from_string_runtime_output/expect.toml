@@ -1,8 +1,0 @@
-[backends.html]
-mode = "success"
-warnings = "forbid"
-
-[[backends.html.artifact_assertions]]
-path = "index.html"
-kind = "html"
-must_contain = ["__bs_cast_int", "__bs_result_fallback", "cast_int_output"]

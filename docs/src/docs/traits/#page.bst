@@ -148,6 +148,59 @@ page_head #= theme_head
 ]
 
 #[section, $markdown:
+    # Trait incompatibility
+
+    `TRAIT must not TRAIT` records narrow incompatibility metadata for explicit conformance.
+
+    [codeblock, $code("bst"):
+        TEXT must:
+            text |This| -> String
+        ;
+
+        FALLIBLE_TEXT must:
+            try_text |This| -> String, Error!
+        ;
+
+        TEXT must not FALLIBLE_TEXT
+    ]
+
+    A type may not explicitly conform to both sides of an active incompatibility relation.
+    The relation is symmetric and affects conformance validation only. It does not add
+    requirements, imply negative conformance, compose traits, or create runtime dispatch.
+]
+
+#[section, $markdown:
+    # Core cast traits
+
+    The compiler owns static cast traits such as `CASTABLE_TO_STRING` and
+    `TRY_CASTABLE_TO_INT`. They resolve without imports and cannot be redeclared, imported,
+    exported, aliased, shadowed, or used as ordinary values.
+
+    Same-file nominal source types, including aligned generic constructors, can provide
+    user-defined cast evidence by implementing the required receiver method and declaring
+    conformance.
+
+    [codeblock, $code("bst"):
+        Label = |
+            text String,
+        |
+
+        to_string |this Label| -> String:
+            return this.text
+        ;
+
+        Label must CASTABLE_TO_STRING
+
+        value String = cast Label("docs")
+    ]
+
+    Core cast traits prove source evidence for `cast`. They do not create user-defined cast
+    targets, generic cast targets, external opaque cast targets, or a general conversion system.
+    Infallible and fallible cast traits for the same builtin target are incompatible through
+    compiler-owned `must not` metadata.
+]
+
+#[section, $markdown:
     # Runtime heterogeneity
 
     Runtime heterogeneity is represented with choices, not trait objects.

@@ -1,10 +1,16 @@
 //! Resolved trait environment.
 //!
-//! WHAT: owns resolved trait definitions, stable trait IDs, and lookup by canonical path.
-//! WHY: trait declarations are compile-time contracts. They must not be registered as ordinary
-//! `DataType`s or value declarations, but later AST phases still need deterministic identity.
+//! WHAT: owns resolved trait definitions, stable trait IDs, lookup by canonical path,
+//!      and a unified core-trait registry for compiler-owned metadata.
+//! WHY: trait declarations are compile-time contracts. They must not be registered as
+//!      ordinary `DataType`s or value declarations, but later AST phases still need
+//!      deterministic identity and a single path for resolving both `DISPLAYABLE`
+//!      and the core cast trait names.
 
 use crate::compiler_frontend::ast::statements::functions::ReturnChannel;
+use crate::compiler_frontend::builtins::casts::targets::{
+    BuiltinCastFallibility, BuiltinCastTarget,
+};
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
@@ -22,12 +28,46 @@ pub(crate) const DISPLAYABLE_TRAIT_NAME: &str = "DISPLAYABLE";
 const DISPLAYABLE_REQUIREMENT_NAME: &str = "display";
 const TRAIT_THIS_NAME: &str = "This";
 
+/// Optional per-core-trait classifier recorded beside compiler-owned trait
+/// definitions.
+///
+/// WHAT: maps a registered `TraitId` back to the small amount of compiler-owned
+/// metadata later cast phases need.
+/// WHY: most of the compiler should treat core traits like ordinary static
+/// trait metadata, but cast resolution needs to know which builtin target and
+/// fallibility a core cast trait represents.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum CoreTraitKind {
+    Displayable,
+    Castable {
+        target: BuiltinCastTarget,
+        fallibility: BuiltinCastFallibility,
+    },
+}
+
 /// Trait metadata lookup table for one compiled module.
+///
+/// WHAT: stores resolved trait definitions indexed by canonical path, a
+///      `core_traits_by_name` table that resolves compiler-owned trait
+///      names (such as `DISPLAYABLE`, `CASTABLE_TO_INT`, ...) without
+///      touching the user-visible `visible_trait_names` import map, a
+///      `core_trait_kinds` side table that classifies core traits so the
+///      AST environment builder can wire builtin cast evidence rows, and
+///      an `incompatible_traits` symmetric store for trait-pair metadata.
+/// WHY: AST traits and core cast traits must both be reachable from source
+///      spellings, but core traits must resolve without imports and must
+///      not share a code path with user declarations. Sharing one registry
+///      also keeps the trait environment from growing a parallel field
+///      for every new core trait. Mutual-incompatibility metadata is owned
+///      by the trait subsystem so conformance validation can reject types
+///      that claim both sides of a `must not` relation.
 #[derive(Clone, Debug, Default)]
 pub(crate) struct TraitEnvironment {
     definitions: Vec<ResolvedTraitDefinition>,
     ids_by_path: FxHashMap<InternedPath, TraitId>,
-    displayable_trait_id: Option<TraitId>,
+    core_traits_by_name: FxHashMap<&'static str, TraitId>,
+    core_trait_kinds: FxHashMap<TraitId, CoreTraitKind>,
+    incompatible_traits: FxHashMap<TraitId, Vec<TraitId>>,
 }
 
 impl TraitEnvironment {
@@ -35,42 +75,70 @@ impl TraitEnvironment {
         Self::default()
     }
 
-    /// Registers compiler-owned `DISPLAYABLE` metadata.
+    /// Registers a single compiler-owned core trait definition using the
+    /// shared metadata path.
     ///
-    /// WHAT: inserts `display |This| -> String` as a core trait definition.
-    /// WHY: output coercion and primitive conformances are later phases, but the trait identity
-    /// must exist now so tests and later conformance metadata can reference the same core ID.
-    pub(crate) fn register_core_displayable(
+    /// WHAT: builds a `ResolvedTraitDefinition` whose canonical path and
+    ///      displayable name both come from the supplied static source
+    ///      names, with the requirement signature shaped by the trait's
+    ///      success return type and optional `Error!` channel. Idempotent:
+    ///      re-registration of the same trait name returns the original
+    ///      `TraitId`.
+    /// WHY: `DISPLAYABLE` and every core cast trait must share one
+    ///      registration path so the trait environment never grows a
+    ///      parallel field per core trait.
+    pub(crate) fn register_core_trait(
         &mut self,
         type_environment: &mut TypeEnvironment,
         string_table: &mut StringTable,
+        trait_name: &'static str,
+        requirement_name: &'static str,
+        success_type: TypeId,
+        error_return_type: Option<TypeId>,
     ) -> TraitId {
-        if let Some(id) = self.displayable_trait_id {
-            return id;
+        if let Some(existing_id) = self.core_traits_by_name.get(trait_name) {
+            return *existing_id;
         }
 
-        let name = string_table.intern(DISPLAYABLE_TRAIT_NAME);
-        let requirement_name = string_table.intern(DISPLAYABLE_REQUIREMENT_NAME);
+        let name = string_table.intern(trait_name);
+        let requirement_name = string_table.intern(requirement_name);
         let this_name = string_table.intern(TRAIT_THIS_NAME);
-        let path = InternedPath::from_single_str(DISPLAYABLE_TRAIT_NAME, string_table);
+        let path = InternedPath::from_single_str(trait_name, string_table);
         let source_file = InternedPath::new();
         let location = SourceLocation::default();
         let this_type = type_environment.register_synthetic_generic_parameter(this_name);
-        let string_type = type_environment.builtins().string;
 
         let id = self.allocate_trait_id();
         let requirement_id = self.allocate_requirement_id();
+
+        // Core cast traits never use mutable source access; `cast` must not
+        // require mutable access or consume the source. `DISPLAYABLE` follows
+        // the same convention because user receiver methods implement
+        // `display |This| -> String` immutably today.
+        let receiver = TraitReceiverRequirement::Immutable { this_type };
+        let mut returns = vec![ResolvedTraitReturn {
+            type_id: success_type,
+            channel: ReturnChannel::Success,
+            location: location.clone(),
+        }];
+        if let Some(error_type) = error_return_type {
+            // Fallible core cast traits propagate the cast failure through a
+            // dedicated `Error!` return channel so the resolved expression
+            // keeps the user-authored source's existing `Error!` shape.
+            returns.push(ResolvedTraitReturn {
+                type_id: error_type,
+                channel: ReturnChannel::Error,
+                location: location.clone(),
+            });
+        }
+
         let requirement = ResolvedTraitRequirement {
             id: requirement_id,
             name: requirement_name,
             name_location: location.clone(),
-            receiver: TraitReceiverRequirement::Immutable { this_type },
+            receiver,
             parameters: Vec::new(),
-            returns: vec![ResolvedTraitReturn {
-                type_id: string_type,
-                channel: ReturnChannel::Success,
-                location: location.clone(),
-            }],
+            returns,
             location: location.clone(),
         };
 
@@ -86,9 +154,91 @@ impl TraitEnvironment {
         };
 
         self.ids_by_path.insert(path, id);
+        self.core_traits_by_name.insert(trait_name, id);
         self.definitions.push(definition);
-        self.displayable_trait_id = Some(id);
         id
+    }
+
+    /// Records the kind classifier for a previously registered core trait.
+    ///
+    /// WHAT: stores a `CoreTraitKind` entry so the AST environment builder
+    ///      can later ask the trait environment for the `BuiltinCastTarget`
+    ///      and fallibility of a core cast trait `TraitId` without
+    ///      re-resolving the static metadata table.
+    /// WHY: keeping the classification in the trait environment instead of
+    ///      threading `CoreCastTrait` everywhere avoids a backwards
+    ///      dependency from the trait subsystem into the cast subsystem and
+    ///      keeps `TraitId` as the only public handle.
+    pub(crate) fn record_core_trait_kind(&mut self, trait_id: TraitId, kind: CoreTraitKind) {
+        self.core_trait_kinds.insert(trait_id, kind);
+    }
+
+    /// Records a symmetric incompatibility relation between two traits.
+    ///
+    /// WHAT: adds `right` to the incompatibility list for `left` and vice
+    ///      versa. Self-pairs are ignored because a trait is never recorded
+    ///      as incompatible with itself.
+    /// WHY: validation must be able to ask "are these two traits mutually
+    ///      incompatible?" in either direction without the caller needing
+    ///      to know which side was registered first. The store is owned by
+    ///      the trait environment so the relation stays with trait metadata.
+    pub(crate) fn record_incompatible_traits(&mut self, left: TraitId, right: TraitId) {
+        if left == right {
+            return;
+        }
+
+        Self::record_incompatible_trait_direction(&mut self.incompatible_traits, left, right);
+        Self::record_incompatible_trait_direction(&mut self.incompatible_traits, right, left);
+    }
+
+    /// Returns `true` when `left` and `right` are recorded as incompatible.
+    pub(crate) fn traits_are_incompatible(&self, left: TraitId, right: TraitId) -> bool {
+        if left == right {
+            return false;
+        }
+
+        self.incompatible_traits
+            .get(&left)
+            .is_some_and(|incompatible| incompatible.contains(&right))
+    }
+
+    fn record_incompatible_trait_direction(
+        incompatible_traits: &mut FxHashMap<TraitId, Vec<TraitId>>,
+        source: TraitId,
+        target: TraitId,
+    ) {
+        let incompatible = incompatible_traits.entry(source).or_default();
+        if !incompatible.contains(&target) {
+            incompatible.push(target);
+        }
+    }
+
+    /// Registers the compiler-owned `DISPLAYABLE` scaffold.
+    ///
+    /// WHAT: thin wrapper that forwards to the unified `register_core_trait`
+    ///      path with the `DISPLAYABLE` source spelling and a `String`
+    ///      return, then records its `CoreTraitKind::Displayable`
+    ///      classifier.
+    /// WHY: the historical one-off helper is preserved at the call site so
+    ///      the AST environment builder does not need to know the
+    ///      displayable internals, while the underlying implementation
+    ///      shares the same generalized path as every core cast trait.
+    pub(crate) fn register_core_displayable(
+        &mut self,
+        type_environment: &mut TypeEnvironment,
+        string_table: &mut StringTable,
+    ) -> TraitId {
+        let string_type = type_environment.builtins().string;
+        let trait_id = self.register_core_trait(
+            type_environment,
+            string_table,
+            DISPLAYABLE_TRAIT_NAME,
+            DISPLAYABLE_REQUIREMENT_NAME,
+            string_type,
+            None,
+        );
+        self.record_core_trait_kind(trait_id, CoreTraitKind::Displayable);
+        trait_id
     }
 
     pub(crate) fn insert(&mut self, definition: ResolvedTraitDefinition) -> Option<TraitId> {
@@ -111,20 +261,47 @@ impl TraitEnvironment {
         self.ids_by_path.get(path).copied()
     }
 
-    /// Resolves the compiler-owned `DISPLAYABLE` scaffold by source spelling.
+    /// Resolves a compiler-owned core trait by source spelling.
     ///
-    /// WHY: core trait metadata is not registered through normal file visibility, but user source
-    /// still refers to it with the ordinary trait name in conformances and static bounds.
-    pub(crate) fn displayable_trait_id_for_name(
+    /// WHAT: maps a `StringId` to the canonical `TraitId` for any registered
+    ///      core trait (currently `DISPLAYABLE` and the twelve core cast
+    ///      traits). Returns `None` for user-authored trait names.
+    /// WHY: core trait metadata is not registered through normal file
+    ///      visibility, but user source still refers to it with the ordinary
+    ///      trait name in conformances and static bounds. Centralising the
+    ///      lookup here removes the previous one-off `DISPLAYABLE` helper
+    ///      and prevents future one-off helpers for every new core cast
+    ///      trait.
+    pub(crate) fn core_trait_id_for_name(
         &self,
         trait_name: StringId,
         string_table: &StringTable,
     ) -> Option<TraitId> {
-        if string_table.resolve(trait_name) == DISPLAYABLE_TRAIT_NAME {
-            return self.displayable_trait_id;
-        }
+        self.core_traits_by_name
+            .get(string_table.resolve(trait_name))
+            .copied()
+    }
 
-        None
+    /// Returns the recorded `CoreTraitKind` for a `TraitId`, or `None` when
+    /// the trait is not compiler-owned.
+    #[allow(dead_code)] // Used by the cast surface tests and downstream phase 4 callers.
+    pub(crate) fn core_trait_kind(&self, trait_id: TraitId) -> Option<CoreTraitKind> {
+        self.core_trait_kinds.get(&trait_id).copied()
+    }
+
+    /// Returns the registered `TraitId` for a static core trait name.
+    ///
+    /// WHAT: bypasses the `StringTable`-bound `core_trait_id_for_name` helper
+    ///      for the AST environment builder, which always knows the static
+    ///      source name from the cast catalogue.
+    /// WHY: registration code iterates the static core cast trait table and
+    ///      needs the trait id without re-interning the source name through
+    ///      the `StringTable`.
+    pub(crate) fn core_trait_id_for_static_name(
+        &self,
+        trait_name: &'static str,
+    ) -> Option<TraitId> {
+        self.core_traits_by_name.get(trait_name).copied()
     }
 
     pub(crate) fn next_trait_id(&self) -> TraitId {

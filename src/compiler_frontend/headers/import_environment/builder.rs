@@ -125,6 +125,13 @@ impl<'a> ImportEnvironmentBuilder<'a> {
     ) -> Result<(), CompilerDiagnostic> {
         let mut file_visibility = FileVisibility::default();
         let mut registry = VisibleNameRegistry::new();
+
+        // Reserve compiler-owned core cast trait names before any source
+        // declarations or imports can claim them. This lets the normal visible-
+        // name collision path reject aliases, namespace names, and imported
+        // source/export names that would shadow a core cast trait spelling.
+        registry.reserve_core_cast_trait_names(self.string_table);
+
         // 1. Register same-file declarations.
         if let Some(declared_paths) = self.module_symbols.declared_paths_by_file.get(source_file) {
             for path in declared_paths {

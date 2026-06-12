@@ -427,7 +427,8 @@ fn validate_authored_config_surface(headers: &[Header]) -> Vec<CompilerDiagnosti
             | HeaderKind::Choice { .. }
             | HeaderKind::TypeAlias { .. }
             | HeaderKind::Trait { .. }
-            | HeaderKind::TraitConformance { .. } => None,
+            | HeaderKind::TraitConformance { .. }
+            | HeaderKind::TraitIncompatibility { .. } => None,
         };
 
         if let Some(reason) = reason {

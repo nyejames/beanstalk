@@ -39,30 +39,31 @@ mod direct_return;
 mod external;
 mod propagation;
 
+pub(crate) use self::carrier::EmittedFallibleCarrier;
 pub(crate) use self::external::ExternalFallibleCallLoweringInput;
 
 /// Shared fallible metadata used by branching lowering helpers.
 ///
 /// WHAT: carries the resolved fallible carrier types, handler policy, and location metadata.
 /// WHY: both helper layers need the same bundle, and passing one struct keeps signatures short.
-pub(super) struct FallibleBranchingContext<'a> {
-    pub(super) result_type_ids: &'a [FrontendTypeId],
-    pub(super) handling: &'a FallibleHandling,
-    pub(super) carrier_type: TypeId,
-    pub(super) ok_type: TypeId,
-    pub(super) err_type: TypeId,
-    pub(super) value_required: bool,
-    pub(super) location: &'a SourceLocation,
+pub(crate) struct FallibleBranchingContext<'a> {
+    pub(crate) result_type_ids: &'a [FrontendTypeId],
+    pub(crate) handling: &'a FallibleHandling,
+    pub(crate) carrier_type: TypeId,
+    pub(crate) ok_type: TypeId,
+    pub(crate) err_type: TypeId,
+    pub(crate) value_required: bool,
+    pub(crate) location: &'a SourceLocation,
 }
 
 /// Branch-entry metadata once the fallible expression has already produced a carrier local.
 ///
 /// WHAT: extends fallible metadata with CFG entry block and temporary local identifiers.
 /// WHY: the carrier-branch helper should receive one coherent context instead of many scalars.
-pub(super) struct FallibleCarrierBranchingContext<'a> {
-    pub(super) current_block: BlockId,
-    pub(super) result_local: LocalId,
-    pub(super) handled_result: FallibleBranchingContext<'a>,
+pub(crate) struct FallibleCarrierBranchingContext<'a> {
+    pub(crate) current_block: BlockId,
+    pub(crate) result_local: LocalId,
+    pub(crate) handled_result: FallibleBranchingContext<'a>,
 }
 
 impl<'a> HirBuilder<'a> {

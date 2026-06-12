@@ -10,7 +10,9 @@ use crate::compiler_frontend::ast::expressions::call_validation::{
     ExpectedParameterType, ParameterExpectation, resolve_call_arguments,
 };
 use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
-use crate::compiler_frontend::ast::expressions::function_calls::parse_call_arguments_typed;
+use crate::compiler_frontend::ast::expressions::function_calls::{
+    NamedArgumentSyntax, parse_call_arguments_typed_with_expectations,
+};
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, InvalidBuiltinCallReason};
 use crate::compiler_frontend::datatypes::ids::TypeId;
@@ -61,19 +63,17 @@ pub(super) fn parse_builtin_method_args_typed(
         })
         .collect::<Vec<_>>();
 
-    let parsed_arguments =
-        parse_call_arguments_typed(token_stream, context, type_interner, string_table)?;
-    if parsed_arguments
-        .iter()
-        .any(|argument| argument.target_param.is_some())
-    {
-        return Err(CompilerDiagnostic::invalid_builtin_call(
-            InvalidBuiltinCallReason::NamedArgumentsNotSupported,
-            Some(string_table.intern(member_name)),
-            member_location.to_owned(),
-        )
-        .into());
-    }
+    let callee_name = string_table.intern(member_name);
+    let parsed_arguments = parse_call_arguments_typed_with_expectations(
+        token_stream,
+        context,
+        type_interner,
+        string_table,
+        &expectations,
+        NamedArgumentSyntax::UnsupportedBuiltinMember {
+            member_name: Some(callee_name),
+        },
+    )?;
 
     let type_check_context = type_interner.type_check_context();
 

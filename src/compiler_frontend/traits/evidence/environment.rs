@@ -13,7 +13,6 @@ use rustc_hash::FxHashMap;
 
 /// The ownership class of an evidence record.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[allow(dead_code)] // Compiler-owned builtin evidence is scaffolded but not registered yet.
 pub(crate) enum TraitEvidenceKind {
     Canonical,
     Builtin,
@@ -84,7 +83,20 @@ impl TraitEvidenceEnvironment {
             .copied()
     }
 
-    #[allow(dead_code)] // No compiler-owned builtin conformances are registered yet.
+    /// Iterates over all compiler-owned builtin evidence records.
+    ///
+    /// WHAT: exposes the builtin evidence slice so validation can check for
+    ///      incompatible trait pairs without needing to know the internal
+    ///      `(TypeId, TraitId)` index shape.
+    /// WHY: conflict detection needs to inspect builtin evidence rows for the
+    ///      same target type; a simple iterator keeps the lookup local to the
+    ///      evidence environment.
+    pub(crate) fn builtins(&self) -> impl Iterator<Item = &TraitEvidenceDefinition> {
+        self.evidence
+            .iter()
+            .filter(|definition| definition.kind == TraitEvidenceKind::Builtin)
+    }
+
     pub(crate) fn insert_builtin(&mut self, mut definition: TraitEvidenceDefinition) {
         let id = TraitEvidenceId(self.evidence.len() as u32);
         definition.id = id;

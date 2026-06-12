@@ -17,7 +17,7 @@ use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable}
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
 use crate::compiler_frontend::traits::syntax::{
     ConformanceTargetKind, ConformanceTargetSyntax, TraitConformanceSyntax, TraitDeclarationSyntax,
-    TraitReferenceSyntax, TraitRequirementSyntax, TraitThisUsage,
+    TraitIncompatibilitySyntax, TraitReferenceSyntax, TraitRequirementSyntax, TraitThisUsage,
 };
 
 use super::types::HeaderBuildContext;
@@ -249,6 +249,88 @@ pub(super) fn parse_specialized_conformance_target(
     }
 }
 
+pub(super) fn parse_trait_incompatibility(
+    token_stream: &mut FileTokens,
+    subject: TraitReferenceSyntax,
+    context: &mut HeaderBuildContext<'_>,
+) -> Result<TraitIncompatibilitySyntax, CompilerDiagnostic> {
+    let mut incompatible_traits = Vec::new();
+
+    loop {
+        match token_stream.current_token_kind() {
+            TokenKind::Symbol(trait_name) => {
+                let trait_location = token_stream.current_location();
+                ensure_trait_name_is_all_caps(
+                    *trait_name,
+                    trait_location.clone(),
+                    context.string_table,
+                )?;
+
+                incompatible_traits.push(TraitReferenceSyntax {
+                    name: *trait_name,
+                    location: trait_location,
+                });
+                token_stream.advance();
+            }
+
+            _ => {
+                if incompatible_traits.is_empty() {
+                    return Err(CompilerDiagnostic::invalid_declaration(
+                        InvalidDeclarationReason::TraitIncompatibilityMissingTrait,
+                        Some(subject.name),
+                        token_stream.current_location(),
+                    ));
+                }
+
+                return Err(CompilerDiagnostic::unexpected_token_in_declaration(
+                    token_stream.current_location(),
+                ));
+            }
+        }
+
+        match token_stream.current_token_kind() {
+            TokenKind::Comma => {
+                let comma_location = token_stream.current_location();
+                token_stream.advance();
+                token_stream.skip_newlines();
+
+                if matches!(
+                    token_stream.current_token_kind(),
+                    TokenKind::End | TokenKind::Eof
+                ) {
+                    return Err(CompilerDiagnostic::unexpected_trailing_comma(
+                        comma_location,
+                    ));
+                }
+            }
+
+            TokenKind::Newline | TokenKind::Eof => {
+                break;
+            }
+
+            TokenKind::End => {
+                return Err(CompilerDiagnostic::invalid_declaration(
+                    InvalidDeclarationReason::TraitIncompatibilitySemicolon,
+                    Some(subject.name),
+                    token_stream.current_location(),
+                ));
+            }
+
+            _ => {
+                return Err(CompilerDiagnostic::unexpected_token_in_declaration(
+                    token_stream.current_location(),
+                ));
+            }
+        }
+    }
+
+    Ok(TraitIncompatibilitySyntax {
+        location: subject.location.clone(),
+        subject,
+        incompatible_traits,
+    })
+}
+
 pub(super) fn conformance_header_path(
     target_path: &InternedPath,
     location: &SourceLocation,
@@ -257,6 +339,20 @@ pub(super) fn conformance_header_path(
     target_path.join_str(
         &format!(
             "__trait_conformance_{}_{}",
+            location.start_pos.line_number, location.start_pos.char_column
+        ),
+        string_table,
+    )
+}
+
+pub(super) fn incompatibility_header_path(
+    subject_path: &InternedPath,
+    location: &SourceLocation,
+    string_table: &mut StringTable,
+) -> InternedPath {
+    subject_path.join_str(
+        &format!(
+            "__trait_incompatibility_{}_{}",
             location.start_pos.line_number, location.start_pos.char_column
         ),
         string_table,

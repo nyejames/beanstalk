@@ -4,6 +4,7 @@
 //! WHY: statements are where assignment, calls, side-effect expressions, and runtime fragment pushes
 //! become explicit before borrow validation and backend lowering.
 
+use crate::compiler_frontend::builtins::casts::targets::BuiltinCastPolicyId;
 use crate::compiler_frontend::external_packages::CallTarget;
 use crate::compiler_frontend::hir::expressions::{HirExpression, HirMapOp};
 use crate::compiler_frontend::hir::ids::{HirNodeId, LocalId};
@@ -54,6 +55,22 @@ pub enum HirStatementKind {
     /// Explicit deterministic drop.
     #[allow(dead_code)] // Planned: explicit drop statements after ownership lowering matures.
     Drop(LocalId),
+
+    // -------------------------
+    //  Cast Builtins
+    // -------------------------
+    /// Apply a compiler-owned builtin cast to a source value and capture the result.
+    ///
+    /// WHAT: evaluates `source`, applies `policy`, and stores the produced value (or fallible
+    ///      carrier) in `result` when present.
+    /// WHY: fallible casts need a statement-shaped operation so HIR can branch on the resulting
+    ///      carrier without hiding control flow inside an expression. Infallible casts may also
+    ///      use this form when the result is needed as a statement-local temporary.
+    CastOp {
+        policy: BuiltinCastPolicyId,
+        source: HirExpression,
+        result: Option<LocalId>,
+    },
 
     // -------------------------
     //  Map Builtins

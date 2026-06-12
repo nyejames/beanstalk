@@ -8,10 +8,13 @@
 
 #![allow(clippy::result_large_err)]
 
+use crate::compiler_frontend::builtins::casts::traits::is_core_cast_trait_name;
 use crate::compiler_frontend::builtins::error_type::{
     is_reserved_builtin_symbol, register_builtin_error_types,
 };
-use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, DiagnosticBag};
+use crate::compiler_frontend::compiler_messages::{
+    CompilerDiagnostic, DiagnosticBag, ReservedNameOwner,
+};
 use crate::compiler_frontend::datatypes::generic_parameters::GenericParameterList;
 use crate::compiler_frontend::datatypes::parsed::ParsedTypeRef;
 use crate::compiler_frontend::declaration_syntax::signature_members::FunctionSignatureSyntax;
@@ -107,6 +110,15 @@ fn validate_declared_name(
     if is_reserved_builtin_symbol(&symbol_name_text) {
         diagnostic_bag.push(CompilerDiagnostic::reserved_builtin_name(
             symbol_name,
+            header.name_location.to_owned(),
+        ));
+        return false;
+    }
+
+    if is_core_cast_trait_name(&symbol_name_text) {
+        diagnostic_bag.push(CompilerDiagnostic::reserved_name_collision(
+            symbol_name,
+            ReservedNameOwner::CoreTrait,
             header.name_location.to_owned(),
         ));
         return false;
@@ -296,6 +308,11 @@ fn register_header_symbol(
         HeaderKind::TraitConformance { .. } => {
             // Conformance declarations are compile-time metadata. They do not introduce a new
             // importable symbol; AST validates and indexes evidence later.
+        }
+
+        HeaderKind::TraitIncompatibility { .. } => {
+            // Incompatibility declarations are compile-time metadata. They do not introduce a new
+            // importable symbol; AST validates and records the relation after trait registration.
         }
     }
 }

@@ -25,7 +25,7 @@ use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::type_coercion::contextual::coerce_expression_to_explicit_type_boundary;
-use crate::compiler_frontend::type_coercion::parse_context::ExpectedType;
+use crate::compiler_frontend::type_coercion::parse_context::{CastTargetContext, ExpectedType};
 use crate::compiler_frontend::value_mode::ValueMode;
 
 /// Input bundle for `parse_produced_values_typed`.
@@ -175,6 +175,7 @@ fn parse_single_inferred_declaration_value(
         &expression_context,
         type_interner,
         &mut expected_type,
+        &mut CastTargetContext::None,
         &ValueMode::ImmutableOwned,
         ExpressionTrailingPolicy {
             consume_closing_parenthesis: false,
@@ -218,6 +219,7 @@ pub(crate) fn parse_fixed_arity_inferred_values(
             &expression_context,
             type_interner,
             &mut expected_type,
+            &mut CastTargetContext::None,
             &ValueMode::ImmutableOwned,
             ExpressionTrailingPolicy {
                 consume_closing_parenthesis: false,

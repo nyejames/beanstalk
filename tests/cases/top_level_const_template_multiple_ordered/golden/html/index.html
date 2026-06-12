@@ -473,7 +473,7 @@ body {
     }
 
     function __bs_normalize_numeric_text(value) {
-        return value.trim().replace(/_/g, "");
+        return value.trim();
     }
 
     function __bs_cast_int(value) {
@@ -495,15 +495,9 @@ body {
                 }
                 return { tag: "ok", value: parsed };
             }
-            if (/^[+-]?[0-9]+\.[0-9]+$/.test(normalized)) {
-                const parsed = Number.parseFloat(normalized);
-                if (Number.isInteger(parsed) && Number.isSafeInteger(parsed)) {
-                    return { tag: "ok", value: parsed };
-                }
-            }
             return { tag: "err", value: __bs_make_error("Cannot parse Int from text", 200, null, null) };
         }
-        return { tag: "err", value: __bs_make_error("Int(...) only accepts Int, Float, or string values", 200, null, null) };
+        return { tag: "err", value: __bs_make_error("Cast to Int only accepts Int, Float, or string values", 200, null, null) };
     }
 
     function __bs_cast_float(value) {
@@ -515,7 +509,10 @@ body {
         }
         if (typeof value === "string") {
             const normalized = __bs_normalize_numeric_text(value);
-            if (/^[+-]?[0-9]+$/.test(normalized) || /^[+-]?[0-9]+\.[0-9]+$/.test(normalized)) {
+            if (/^[+-]?(?:NaN|Infinity)$/i.test(normalized) || /^[+-]?inf$/i.test(normalized)) {
+                return { tag: "err", value: __bs_make_error("Float value is out of supported range", 211, null, null) };
+            }
+            if (/^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$/.test(normalized)) {
                 const parsed = Number.parseFloat(normalized);
                 if (!Number.isFinite(parsed)) {
                     return { tag: "err", value: __bs_make_error("Float value is out of supported range", 211, null, null) };
@@ -524,7 +521,7 @@ body {
             }
             return { tag: "err", value: __bs_make_error("Cannot parse Float from text", 210, null, null) };
         }
-        return { tag: "err", value: __bs_make_error("Float(...) only accepts Int, Float, or string values", 210, null, null) };
+        return { tag: "err", value: __bs_make_error("Cast to Float only accepts Int, Float, or string values", 210, null, null) };
     }
 
     function bst_start_fn1() {

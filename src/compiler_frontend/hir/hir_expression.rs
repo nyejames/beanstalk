@@ -10,11 +10,18 @@
 //! must be emitted as `CompilerDiagnostic` from AST or earlier stages.
 
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
+use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, CallArgument};
 use crate::compiler_frontend::ast::expressions::expression::{
-    BuiltinCastKind, Expression, ExpressionKind,
-    FallibleCarrierVariant as AstFallibleCarrierVariant, FallibleHandling, Operator,
+    Expression, ExpressionKind, FallibleCarrierVariant as AstFallibleCarrierVariant,
+    FallibleHandling, Operator,
+};
+use crate::compiler_frontend::ast::expressions::expression_kind::ResolvedCastExpression;
+use crate::compiler_frontend::ast::expressions::expression_types::{
+    CastHandling, ResolvedCastEvidence,
 };
 use crate::compiler_frontend::ast::statements::value_production::types::ValueBlock;
+use crate::compiler_frontend::builtins::casts::evidence::type_id_for_builtin_target;
+use crate::compiler_frontend::builtins::casts::targets::{BuiltinCastPolicyId, BuiltinCastTarget};
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
 use crate::compiler_frontend::datatypes::generic_identity_bridge::TypeIdentityKey;
 use crate::compiler_frontend::datatypes::ids::TypeId as FrontendTypeId;
@@ -22,12 +29,12 @@ use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::external_packages::CallTarget;
 use crate::compiler_frontend::hir::blocks::{HirBlock, HirLocal};
 use crate::compiler_frontend::hir::expressions::{
-    HirBuiltinCastKind, HirExpression, HirExpressionKind, HirMapEntry, HirVariantCarrier,
-    HirVariantField, ValueKind,
+    HirExpression, HirExpressionKind, HirMapEntry, HirVariantCarrier, HirVariantField,
+    OPTION_SOME_VARIANT_INDEX, ValueKind,
 };
 use crate::compiler_frontend::hir::hir_builder::HirBuilder;
 use crate::compiler_frontend::hir::hir_side_table::HirLocalOriginKind;
-use crate::compiler_frontend::hir::ids::{LocalId, RegionId};
+use crate::compiler_frontend::hir::ids::{FunctionId, LocalId, RegionId};
 use crate::compiler_frontend::hir::module::HirChoice;
 use crate::compiler_frontend::hir::places::HirPlace;
 use crate::compiler_frontend::hir::statements::{HirStatement, HirStatementKind};
@@ -47,6 +54,9 @@ mod templates;
 mod types;
 
 pub(crate) use self::fallible::ExternalFallibleCallLoweringInput;
+use self::fallible::{
+    EmittedFallibleCarrier, FallibleBranchingContext, FallibleCarrierBranchingContext,
+};
 
 #[derive(Debug, Clone)]
 pub(crate) struct LoweredExpression {
@@ -174,6 +184,10 @@ impl<'a> HirBuilder<'a> {
                 )
             }
 
+            ExpressionKind::Cast(cast) => {
+                self.lower_cast_expression(cast, expr.type_id, &expr.location)
+            }
+
             ExpressionKind::Reference(name) => {
                 self.lower_reference_expression(name, expr.type_id, &expr.location)
             }
@@ -247,10 +261,6 @@ impl<'a> HirBuilder<'a> {
                     location: &expr.location,
                 },
             ),
-
-            ExpressionKind::BuiltinCast { kind, value } => {
-                self.lower_builtin_cast_expression(*kind, value, &expr.location, expr.type_id)
-            }
 
             ExpressionKind::FallibleCarrierConstruct { variant, value } => {
                 let mut prelude = Vec::new();
@@ -585,13 +595,14 @@ impl<'a> HirBuilder<'a> {
                 matches!(handling, FallibleHandling::Propagate)
                     || self.expression_needs_current_block_lowering(value)
             }
+            ExpressionKind::Cast(_) => true,
+
             ExpressionKind::OptionPropagation { .. } => true,
             ExpressionKind::FunctionCall { args, .. }
             | ExpressionKind::HostFunctionCall { args, .. } => args
                 .iter()
                 .any(|arg| self.expression_needs_current_block_lowering(&arg.value)),
-            ExpressionKind::BuiltinCast { value, .. }
-            | ExpressionKind::FallibleCarrierConstruct { value, .. }
+            ExpressionKind::FallibleCarrierConstruct { value, .. }
             | ExpressionKind::Coerced { value, .. } => {
                 self.expression_needs_current_block_lowering(value)
             }
@@ -693,37 +704,372 @@ impl<'a> HirBuilder<'a> {
     }
 
     // -------------------------
-    //  Builtin Casts
+    //  Casts
     // -------------------------
 
-    fn lower_builtin_cast_expression(
+    /// Lowers a resolved explicit `cast` expression into HIR.
+    ///
+    /// WHAT: dispatches builtin evidence to a `HirExpressionKind::Cast` or a
+    ///      fallible `HirStatementKind::CastOp` with branches, and user-defined
+    ///      evidence to a user-function call.
+    /// WHY: the AST already selected the evidence and handling form; HIR lowering
+    ///      only needs to materialize the correct value or carrier/control-flow shape.
+    fn lower_cast_expression(
         &mut self,
-        kind: BuiltinCastKind,
-        value: &Expression,
+        cast: &ResolvedCastExpression,
+        expr_type_id: FrontendTypeId,
         location: &SourceLocation,
-        result_type_id: FrontendTypeId,
+    ) -> Result<LoweredExpression, CompilerError> {
+        match &cast.evidence {
+            ResolvedCastEvidence::Builtin { policy } => match &cast.handling {
+                CastHandling::Infallible => self.lower_infallible_builtin_cast_expression(
+                    cast,
+                    *policy,
+                    expr_type_id,
+                    location,
+                ),
+                CastHandling::Propagate | CastHandling::Recover(_) => self
+                    .lower_fallible_builtin_cast_expression(cast, *policy, expr_type_id, location),
+            },
+            ResolvedCastEvidence::UserDefined { method_path, .. } => {
+                self.lower_user_defined_cast_expression(cast, method_path, expr_type_id, location)
+            }
+            ResolvedCastEvidence::GenericBound { .. } => Err(CompilerError::new(
+                "Generic-bound cast evidence reached HIR lowering",
+                self.hir_error_location(location),
+                crate::compiler_frontend::compiler_errors::ErrorType::HirTransformation,
+            )),
+        }
+    }
+
+    /// Lowers an infallible builtin cast as a pure HIR expression.
+    fn lower_infallible_builtin_cast_expression(
+        &mut self,
+        cast: &ResolvedCastExpression,
+        policy: BuiltinCastPolicyId,
+        expr_type_id: FrontendTypeId,
+        location: &SourceLocation,
     ) -> Result<LoweredExpression, CompilerError> {
         let mut prelude = Vec::new();
-        let lowered_value = self.lower_child_expression_for_parent(&mut prelude, value)?;
+        let source = self.lower_child_expression_for_parent(&mut prelude, &cast.source)?;
+        let target_type = self.lower_type_id(cast.target_type_id, location)?;
         let region = self.current_region_or_error(location)?;
-        let ty = self.lower_type_id(result_type_id, location)?;
-        let hir_kind = match kind {
-            BuiltinCastKind::Int => HirBuiltinCastKind::Int,
-            BuiltinCastKind::Float => HirBuiltinCastKind::Float,
+        let value = self.make_expression(
+            location,
+            HirExpressionKind::Cast {
+                source: Box::new(source),
+                policy,
+            },
+            target_type,
+            ValueKind::RValue,
+            region,
+        );
+        let value = self.wrap_cast_result_optional_if_needed(value, expr_type_id, location)?;
+
+        Ok(LoweredExpression { prelude, value })
+    }
+
+    /// Lowers a fallible builtin cast through an explicit carrier statement and branches.
+    fn lower_fallible_builtin_cast_expression(
+        &mut self,
+        cast: &ResolvedCastExpression,
+        policy: BuiltinCastPolicyId,
+        expr_type_id: FrontendTypeId,
+        location: &SourceLocation,
+    ) -> Result<LoweredExpression, CompilerError> {
+        let lowered_source = self.lower_expression(&cast.source)?;
+        for prelude_statement in lowered_source.prelude {
+            self.emit_statement_to_current_block(prelude_statement, location)?;
+        }
+
+        let ok_type = self.lower_type_id(cast.target_type_id, location)?;
+        let err_type = self.builtin_error_type_id(location)?;
+        let carrier_type = self
+            .type_environment
+            .intern_fallible_carrier(ok_type, err_type);
+        let result_local = self.allocate_temp_local(carrier_type, Some(location.to_owned()))?;
+
+        let cast_statement = HirStatement {
+            id: self.allocate_node_id(),
+            kind: HirStatementKind::CastOp {
+                policy,
+                source: lowered_source.value,
+                result: Some(result_local),
+            },
+            location: location.to_owned(),
+        };
+        self.side_table.map_statement(location, &cast_statement);
+        self.emit_statement_to_current_block(cast_statement, location)?;
+
+        let carrier = EmittedFallibleCarrier {
+            result_local,
+            carrier_type,
+            ok_type,
+            err_type,
         };
 
-        Ok(LoweredExpression {
-            prelude,
-            value: self.make_expression(
+        match &cast.handling {
+            CastHandling::Propagate => {
+                let success_value =
+                    self.lower_fallible_carrier_to_success_value(carrier, location)?;
+                let value = self.wrap_cast_result_optional_if_needed(
+                    success_value,
+                    expr_type_id,
+                    location,
+                )?;
+                Ok(LoweredExpression {
+                    prelude: vec![],
+                    value,
+                })
+            }
+            CastHandling::Recover(handling) => self.lower_cast_catch_with_optional_wrap(
+                carrier,
+                handling,
+                expr_type_id,
+                cast.requires_optional_wrap_after_cast,
                 location,
-                HirExpressionKind::BuiltinCast {
-                    kind: hir_kind,
-                    value: Box::new(lowered_value),
-                },
-                ty,
-                ValueKind::RValue,
-                region,
             ),
+            CastHandling::Infallible => Err(CompilerError::new(
+                "Fallible builtin cast reached HIR with Infallible handling",
+                self.hir_error_location(location),
+                crate::compiler_frontend::compiler_errors::ErrorType::HirTransformation,
+            )),
+        }
+    }
+
+    /// Lowers a user-defined cast by calling the selected evidence method.
+    fn lower_user_defined_cast_expression(
+        &mut self,
+        cast: &ResolvedCastExpression,
+        method_path: &InternedPath,
+        expr_type_id: FrontendTypeId,
+        location: &SourceLocation,
+    ) -> Result<LoweredExpression, CompilerError> {
+        let function_id = self.resolve_function_id_or_error(method_path, location)?;
+        let source_argument = CallArgument::positional(
+            (*cast.source).clone(),
+            CallAccessMode::Shared,
+            location.to_owned(),
+        );
+
+        match &cast.handling {
+            CastHandling::Infallible => {
+                let result_type_ids = vec![cast.target_type_id];
+                let lowered = self.lower_call_expression(
+                    CallTarget::UserFunction(function_id),
+                    &[source_argument],
+                    &result_type_ids,
+                    location,
+                )?;
+                let value = self.wrap_cast_result_optional_if_needed(
+                    lowered.value,
+                    expr_type_id,
+                    location,
+                )?;
+                Ok(LoweredExpression {
+                    prelude: lowered.prelude,
+                    value,
+                })
+            }
+            CastHandling::Propagate => {
+                let carrier = self.emit_user_defined_cast_call_carrier(
+                    function_id,
+                    &source_argument,
+                    location,
+                )?;
+                let success_value =
+                    self.lower_fallible_carrier_to_success_value(carrier, location)?;
+                let value = self.wrap_cast_result_optional_if_needed(
+                    success_value,
+                    expr_type_id,
+                    location,
+                )?;
+                Ok(LoweredExpression {
+                    prelude: vec![],
+                    value,
+                })
+            }
+            CastHandling::Recover(handling) => {
+                let carrier = self.emit_user_defined_cast_call_carrier(
+                    function_id,
+                    &source_argument,
+                    location,
+                )?;
+                self.lower_cast_catch_with_optional_wrap(
+                    carrier,
+                    handling,
+                    expr_type_id,
+                    cast.requires_optional_wrap_after_cast,
+                    location,
+                )
+            }
+        }
+    }
+
+    /// Lowers the catch/recovery path for a fallible cast carrier.
+    ///
+    /// WHAT: reuses the shared fallible branching helper, optionally wrapping the
+    ///      success payload in `some(...)` when the receiving context is an optional type.
+    fn lower_cast_catch_with_optional_wrap(
+        &mut self,
+        carrier: EmittedFallibleCarrier,
+        handling: &FallibleHandling,
+        expr_type_id: FrontendTypeId,
+        requires_optional_wrap_after_cast: bool,
+        location: &SourceLocation,
+    ) -> Result<LoweredExpression, CompilerError> {
+        let result_type_ids = self.handled_expression_result_type_ids(expr_type_id);
+        let current_block = self.current_block_id_or_error(location)?;
+
+        if !requires_optional_wrap_after_cast {
+            return self.lower_fallible_carrier_with_branching(FallibleCarrierBranchingContext {
+                current_block,
+                result_local: carrier.result_local,
+                handled_result: FallibleBranchingContext {
+                    result_type_ids: &result_type_ids,
+                    handling,
+                    carrier_type: carrier.carrier_type,
+                    ok_type: carrier.ok_type,
+                    err_type: carrier.err_type,
+                    value_required: true,
+                    location,
+                },
+            });
+        }
+
+        let optional_type = self.lower_type_id(expr_type_id, location)?;
+        let value_name = self.string_table.intern("value");
+        let wrapper_id = self.allocate_value_id();
+        let wrap_success = move |payload: HirExpression| {
+            let region = payload.region;
+            HirExpression {
+                id: wrapper_id,
+                kind: HirExpressionKind::VariantConstruct {
+                    carrier: HirVariantCarrier::Option,
+                    variant_index: OPTION_SOME_VARIANT_INDEX,
+                    fields: vec![HirVariantField {
+                        name: Some(value_name),
+                        value: payload,
+                    }],
+                },
+                ty: optional_type,
+                value_kind: ValueKind::RValue,
+                region,
+            }
+        };
+
+        self.lower_fallible_carrier_with_branching_and_transform(
+            FallibleCarrierBranchingContext {
+                current_block,
+                result_local: carrier.result_local,
+                handled_result: FallibleBranchingContext {
+                    result_type_ids: &result_type_ids,
+                    handling,
+                    carrier_type: carrier.carrier_type,
+                    ok_type: carrier.ok_type,
+                    err_type: carrier.err_type,
+                    value_required: true,
+                    location,
+                },
+            },
+            wrap_success,
+        )
+    }
+
+    /// Emits a user-defined cast method call that returns a fallible carrier.
+    fn emit_user_defined_cast_call_carrier(
+        &mut self,
+        function_id: FunctionId,
+        source_argument: &CallArgument,
+        location: &SourceLocation,
+    ) -> Result<EmittedFallibleCarrier, CompilerError> {
+        let target = CallTarget::UserFunction(function_id);
+        let (carrier_type, ok_type, err_type) =
+            self.result_call_carrier_slots(&target, location)?;
+
+        let lowered_argument = self.lower_call_argument_value(source_argument, location, 0)?;
+        for prelude_statement in lowered_argument.prelude {
+            self.emit_statement_to_current_block(prelude_statement, location)?;
+        }
+
+        let result_local = self.allocate_temp_local(carrier_type, Some(location.to_owned()))?;
+        let call_statement = HirStatement {
+            id: self.allocate_node_id(),
+            kind: HirStatementKind::Call {
+                target,
+                args: vec![lowered_argument.value],
+                result: Some(result_local),
+            },
+            location: location.to_owned(),
+        };
+        self.side_table.map_statement(location, &call_statement);
+        self.emit_statement_to_current_block(call_statement, location)?;
+
+        Ok(EmittedFallibleCarrier {
+            result_local,
+            carrier_type,
+            ok_type,
+            err_type,
+        })
+    }
+
+    /// Wraps a cast result in `some(...)` when the receiving context is an optional type.
+    fn wrap_cast_result_optional_if_needed(
+        &mut self,
+        value: HirExpression,
+        expr_type_id: FrontendTypeId,
+        location: &SourceLocation,
+    ) -> Result<HirExpression, CompilerError> {
+        let expected_type = self.lower_type_id(expr_type_id, location)?;
+        if value.ty == expected_type {
+            return Ok(value);
+        }
+
+        if self.type_environment.option_inner_type(expected_type) != Some(value.ty) {
+            return Err(CompilerError::new(
+                format!(
+                    "Cast result type {:?} cannot be wrapped to expected optional type {:?}",
+                    value.ty, expected_type
+                ),
+                self.hir_error_location(location),
+                crate::compiler_frontend::compiler_errors::ErrorType::HirTransformation,
+            ));
+        }
+
+        let value_name = self.string_table.intern("value");
+        let region = value.region;
+        Ok(self.make_expression(
+            location,
+            HirExpressionKind::VariantConstruct {
+                carrier: HirVariantCarrier::Option,
+                variant_index: OPTION_SOME_VARIANT_INDEX,
+                fields: vec![HirVariantField {
+                    name: Some(value_name),
+                    value,
+                }],
+            },
+            expected_type,
+            ValueKind::RValue,
+            region,
+        ))
+    }
+
+    /// Resolves the builtin `Error` type id for fallible carrier error slots.
+    fn builtin_error_type_id(
+        &mut self,
+        location: &SourceLocation,
+    ) -> Result<TypeId, CompilerError> {
+        type_id_for_builtin_target(
+            BuiltinCastTarget::Error,
+            &self.type_environment,
+            self.string_table,
+        )
+        .ok_or_else(|| {
+            CompilerError::new(
+                "Builtin Error type is not registered in the type environment",
+                self.hir_error_location(location),
+                crate::compiler_frontend::compiler_errors::ErrorType::HirTransformation,
+            )
         })
     }
 

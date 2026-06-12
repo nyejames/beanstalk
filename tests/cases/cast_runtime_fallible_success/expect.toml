@@ -1,0 +1,12 @@
+entry = "."
+
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["runtime fallible casts: 42|3.5|true|X|-7|Z"]
+
+[backends.html_wasm]
+mode = "failure"
+warnings = "forbid"
+diagnostic_codes = ["BST-RULE-0064"]
+message_contains = ["html_wasm", "runtime casts"]

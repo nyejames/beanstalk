@@ -46,6 +46,9 @@ page_head #= theme_head
     - All copies have to be explicit unless they are used in part of a new expression. 
     Even for primitive types such as integers.
 
+    - Explicit conversions use `cast` at a typed boundary. Constructor-style conversions such as
+    `Int(value)` and `String(value)` are removed.
+
     ## Imports and Receiver Methods
     Namespace imports expose receiver methods only through receiver-call syntax, never as namespace fields.
     Source-authored receiver methods are visible through their receiver type; they are not imported,
@@ -195,6 +198,53 @@ page_head #= theme_head
             4 + (5 + 6) * 7
             + 8 / 9 + 10
     ]
+]
+
+#[section, $markdown:
+    # Explicit Casts
+
+    `cast` converts one value to an explicit builtin target type supplied by the immediate
+    receiving site.
+
+    [codeblock, $code("bst"):
+        parse_count |text String| -> Int, Error!:
+            return cast! text
+        ;
+
+        whole Int = parse_count("42") catch:
+            then 0
+        ;
+
+        ratio Float = cast whole
+        label String = cast ratio
+        maybe_label String? = cast whole
+    ]
+
+    Use plain `cast` for infallible evidence, `cast!` to propagate a fallible cast through an
+    `Error!` return slot, and `cast ... catch:` to recover locally.
+
+    [codeblock, $code("bst"):
+        count Int = cast "not a number" catch |err|:
+            then 0
+        ;
+    ]
+
+    Valid targets are the compiler-supported builtin core types: `Bool`, `Int`, `String`,
+    `Char`, `Float`, and `Error`. Optional receiving contexts cast to the inner builtin type and
+    then wrap normally.
+
+    These forms are invalid because they do not provide an immediate builtin target:
+
+    [codeblock, $code("bst"):
+        value = cast source
+        if cast value:
+            io("bad")
+        ;
+        [: [cast value]]
+    ]
+
+    `Error(...)` remains a constructor. Scalar constructor-style conversions such as `Int(...)`,
+    `Float(...)`, `Bool(...)`, `String(...)`, and `Char(...)` are rejected; use `cast` instead.
 ]
 
 #[section, $markdown:

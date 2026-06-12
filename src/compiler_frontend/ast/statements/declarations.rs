@@ -29,7 +29,7 @@ use crate::compiler_frontend::ast::type_resolution::{
 use crate::compiler_frontend::ast::{
     ContextKind, ScopeContext,
     ast_nodes::Declaration,
-    expressions::parse_expression::create_expression,
+    expressions::parse_expression::create_expression_with_cast_target,
     statements::value_production::{ValueReceiverKind, try_parse_value_block_at_receiver},
 };
 use crate::compiler_frontend::builtins::error_type::is_reserved_builtin_symbol;
@@ -55,7 +55,8 @@ use crate::compiler_frontend::syntax_errors::signature_position::check_signature
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, Token, TokenKind};
 use crate::compiler_frontend::type_coercion::contextual::coerce_expression_to_explicit_type_boundary;
 use crate::compiler_frontend::type_coercion::parse_context::{
-    ExpectedCollectionContext, ExpectedType, parse_expectation_for_type_id,
+    CastTargetContext, ExpectedCollectionContext, ExpectedType, cast_target_context_for_type_id,
+    parse_expectation_for_type_id,
 };
 
 /// Returns `Some(capacity)` when the parsed type is a capacity-only shorthand `{N}`.
@@ -478,6 +479,15 @@ pub fn resolve_declaration_syntax(
             let mut expression_type = declared_type_id
                 .map(|type_id| parse_expectation_for_type_id(type_id, type_interner.environment()))
                 .unwrap_or(ExpectedType::Infer);
+            let mut cast_target_context = declared_type_id
+                .map(|type_id| {
+                    cast_target_context_for_type_id(
+                        type_id,
+                        type_interner.environment(),
+                        string_table,
+                    )
+                })
+                .unwrap_or(CastTargetContext::None);
 
             // `DataType::Inferred` is a parse-level marker for omitted type annotations.
             // When the type is inferred, the initializer expression inherits the parent
@@ -511,11 +521,12 @@ pub fn resolve_declaration_syntax(
             ) {
                 value_block_result?
             } else {
-                create_expression(
+                create_expression_with_cast_target(
                     &mut initializer_stream,
                     &expression_context,
                     type_interner,
                     &mut expression_type,
+                    &mut cast_target_context,
                     &value_mode,
                     false,
                     string_table,

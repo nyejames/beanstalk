@@ -301,9 +301,12 @@ impl<'context, 'services, 'environment> AstEmitter<'context, 'services, 'environ
                     // Type aliases are compile-time-only metadata; they do not emit runtime nodes.
                 }
 
-                HeaderKind::Trait { .. } | HeaderKind::TraitConformance { .. } => {
+                HeaderKind::Trait { .. }
+                | HeaderKind::TraitConformance { .. }
+                | HeaderKind::TraitIncompatibility { .. } => {
                     // Trait metadata is compile-time-only. AST environment construction has
-                    // already resolved trait identities and evidence before body emission.
+                    // already resolved trait identities, evidence, and incompatibility relations
+                    // before body emission.
                 }
             }
         }

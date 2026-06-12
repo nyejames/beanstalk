@@ -9,11 +9,11 @@ use crate::compiler_frontend::tokenizer::tokens::TokenKind;
 
 /// Keywords that may not be shadowed by identifiers after case folding and
 /// stripping leading underscores.
-pub(crate) const RESERVED_KEYWORD_SHADOWS: [&str; 36] = [
-    "import", "export", "if", "return", "yield", "else", "block", "checked", "async", "as", "copy",
-    "type", "of", "must", "this", "catch", "then", "loop", "to", "by", "break", "continue", "is",
-    "not", "and", "or", "true", "false", "none", "fn", "float", "int", "string", "bool", "char",
-    "assert",
+pub(crate) const RESERVED_KEYWORD_SHADOWS: [&str; 37] = [
+    "import", "export", "if", "return", "yield", "else", "block", "checked", "async", "cast", "as",
+    "copy", "type", "of", "must", "this", "catch", "then", "loop", "to", "by", "break", "continue",
+    "is", "not", "and", "or", "true", "false", "none", "fn", "float", "int", "string", "bool",
+    "char", "assert",
 ];
 
 /// Returns the tokenizer token kind for an exact source keyword spelling.
@@ -31,6 +31,7 @@ pub(crate) fn keyword_token_kind(text: &str) -> Option<TokenKind> {
         "else" => Some(TokenKind::Else),
         "block" => Some(TokenKind::Block),
         "checked" => Some(TokenKind::Checked),
+        "cast" => Some(TokenKind::Cast),
         "as" => Some(TokenKind::As),
         "type" => Some(TokenKind::Type),
         "of" => Some(TokenKind::Of),
@@ -76,6 +77,20 @@ pub(crate) fn keyword_token_kind(text: &str) -> Option<TokenKind> {
         // Assertion statement intrinsic
         "assert" => Some(TokenKind::Assert),
 
+        _ => None,
+    }
+}
+
+/// Returns the compound token for keyword forms that require an attached `!`.
+///
+/// WHAT: `return!` and `cast!` are lexical forms, not a keyword followed by a
+///       whitespace-sensitive postfix operator.
+/// WHY: keeping attachment in tokenization prevents AST parsing from having to
+///      reconstruct source adjacency from locations.
+pub(crate) fn attached_bang_keyword_token_kind(text: &str) -> Option<TokenKind> {
+    match text {
+        "return" => Some(TokenKind::ReturnBang),
+        "cast" => Some(TokenKind::CastBang),
         _ => None,
     }
 }

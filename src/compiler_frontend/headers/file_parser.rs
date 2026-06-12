@@ -21,6 +21,7 @@ use crate::compiler_frontend::headers::start_capture::push_runtime_template_toke
 use crate::compiler_frontend::headers::top_level_classifier::{
     HeaderFileItem, classify_current_item, starts_duplicate_top_level_header_declaration,
     starts_specialized_generic_conformance_declaration, starts_trait_declaration_after_must,
+    starts_trait_incompatibility_after_must,
 };
 use crate::compiler_frontend::headers::types::{
     FileFrontendPrepareError, FileFrontendPrepareOutput, FileRole, HeaderBuildContext,
@@ -243,7 +244,8 @@ fn handle_export_item(
 
 fn starts_exported_trait_conformance(token_stream: &FileTokens) -> bool {
     (token_stream.current_token_kind() == &TokenKind::Must
-        && !starts_trait_declaration_after_must(token_stream))
+        && !starts_trait_declaration_after_must(token_stream)
+        && !starts_trait_incompatibility_after_must(token_stream))
         || starts_specialized_generic_conformance_declaration(token_stream)
 }
 
@@ -342,9 +344,10 @@ fn handle_symbol_item_with_export_mode(
             state.push_start_body_token(current_token);
             state.register_start_body_symbol(name_id);
         }
-        HeaderKind::TraitConformance { .. } => {
-            // Conformance declarations reuse the target type name and must not shadow
-            // the type's entry in encountered_symbols for duplicate detection.
+        HeaderKind::TraitConformance { .. } | HeaderKind::TraitIncompatibility { .. } => {
+            // Conformance and incompatibility declarations reuse an existing target/subject
+            // name and must not shadow that name's entry in encountered_symbols for duplicate
+            // detection.
             state.register_header(header);
         }
 

@@ -6,11 +6,12 @@
 
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::call_argument::CallArgument;
+use crate::compiler_frontend::ast::expressions::expression_kind::ResolvedCastExpression;
 pub use crate::compiler_frontend::ast::expressions::expression_kind::{
     ExpressionKind, MapLiteralEntry, Operator,
 };
 pub use crate::compiler_frontend::ast::expressions::expression_types::{
-    BuiltinCastKind, ConstRecordState, ConstValueKind, FallibleCarrierVariant, FallibleHandling,
+    ConstRecordState, ConstValueKind, FallibleCarrierVariant, FallibleHandling,
 };
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::templates::template::TemplateConstValueKind;
@@ -256,7 +257,7 @@ impl Expression {
             ExpressionKind::FunctionCall { .. } => String::new(),
             ExpressionKind::HandledFallibleFunctionCall { .. } => String::new(),
             ExpressionKind::HandledFallibleHostFunctionCall { .. } => String::new(),
-            ExpressionKind::BuiltinCast { .. } => String::new(),
+            ExpressionKind::Cast { .. } => String::new(),
             ExpressionKind::HandledFallibleExpression { .. } => String::new(),
             ExpressionKind::OptionPropagation { .. } => String::new(),
             ExpressionKind::HostFunctionCall { .. } => String::new(),
@@ -553,65 +554,28 @@ impl Expression {
         )
     }
 
-    /// Internal helper for building builtin cast expressions.
+    /// Constructs a resolved explicit `cast` expression.
     ///
-    /// Casts are fallible operations that must be handled immediately.
-    /// HIR lowering turns the carrier `result_type_id` into explicit success/error control flow.
-    /// `diagnostic_type` is display-only; semantic identity comes from `result_type_id`.
-    fn builtin_cast(
-        value: Expression,
-        kind: BuiltinCastKind,
-        result_type_id: TypeId,
-        type_environment: &mut TypeEnvironment,
-        location: SourceLocation,
+    /// WHAT: builds the AST value for a cast whose evidence and handling have
+    ///      already been validated. The resulting type is the target type (or the
+    ///      optional-wrapped target type when the boundary was `T?`).
+    /// WHY: boundary callers should produce one resolved `Expression` value rather
+    ///      than manually assembling `ResolvedCastExpression` fields.
+    pub(crate) fn cast(
+        cast: ResolvedCastExpression,
+        target_type_id: TypeId,
+        type_environment: &TypeEnvironment,
     ) -> Self {
-        let contains_regular_division = value.contains_regular_division;
+        let location = cast.location.clone();
+        let diagnostic_type = diagnostic_type_spelling(target_type_id, type_environment);
+        let value_mode = cast.source.value_mode.to_owned();
+
         Self::new(
-            ExpressionKind::BuiltinCast {
-                kind,
-                value: Box::new(value),
-            },
+            ExpressionKind::Cast(cast),
             location,
-            result_type_id,
-            diagnostic_type_spelling(result_type_id, type_environment),
-            ValueMode::ImmutableOwned,
-        )
-        .with_regular_division_provenance(contains_regular_division)
-    }
-
-    /// Constructs a builtin integer cast expression.
-    pub fn builtin_int_cast(
-        value: Expression,
-        error_type_id: TypeId,
-        type_environment: &mut TypeEnvironment,
-        location: SourceLocation,
-    ) -> Self {
-        let result_type_id = type_environment
-            .intern_fallible_carrier(type_environment.builtins().int, error_type_id);
-        Self::builtin_cast(
-            value,
-            BuiltinCastKind::Int,
-            result_type_id,
-            type_environment,
-            location,
-        )
-    }
-
-    /// Constructs a builtin float cast expression.
-    pub fn builtin_float_cast(
-        value: Expression,
-        error_type_id: TypeId,
-        type_environment: &mut TypeEnvironment,
-        location: SourceLocation,
-    ) -> Self {
-        let result_type_id = type_environment
-            .intern_fallible_carrier(type_environment.builtins().float, error_type_id);
-        Self::builtin_cast(
-            value,
-            BuiltinCastKind::Float,
-            result_type_id,
-            type_environment,
-            location,
+            target_type_id,
+            diagnostic_type,
+            value_mode,
         )
     }
 
@@ -1010,7 +974,7 @@ impl Expression {
             | ExpressionKind::Runtime(_)
             | ExpressionKind::Function(..)
             | ExpressionKind::FunctionCall { .. }
-            | ExpressionKind::BuiltinCast { .. }
+            | ExpressionKind::Cast { .. }
             | ExpressionKind::HandledFallibleExpression { .. }
             | ExpressionKind::OptionPropagation { .. }
             | ExpressionKind::HandledFallibleFunctionCall { .. }

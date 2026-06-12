@@ -16,7 +16,9 @@ use crate::compiler_frontend::ast::expressions::call_validation::{
     expectations_from_receiver_method_signature, resolve_call_arguments,
 };
 use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
-use crate::compiler_frontend::ast::expressions::function_calls::parse_call_arguments_typed;
+use crate::compiler_frontend::ast::expressions::function_calls::{
+    NamedArgumentSyntax, parse_call_arguments_typed_with_expectations,
+};
 use crate::compiler_frontend::ast::field_access::receiver_access::{
     ReceiverAccessDiagnostic, ReceiverAccessRequirement, validate_receiver_access,
 };
@@ -25,6 +27,7 @@ use crate::compiler_frontend::ast::generic_functions::{
     infer_generic_function_call, recursive_generic_function_instantiation,
 };
 use crate::compiler_frontend::ast::receiver_methods::ReceiverMethodEntry;
+use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, InvalidReceiverCallReason};
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
@@ -53,6 +56,13 @@ impl SourceReceiverMethodTarget<'_> {
         match self {
             SourceReceiverMethodTarget::Declared(entry) => entry.receiver_mutable,
             SourceReceiverMethodTarget::TraitSurface(method) => method.receiver_mutable,
+        }
+    }
+
+    fn signature(&self) -> &FunctionSignature {
+        match self {
+            SourceReceiverMethodTarget::Declared(entry) => &entry.signature,
+            SourceReceiverMethodTarget::TraitSurface(method) => &method.signature,
         }
     }
 }
@@ -119,8 +129,18 @@ pub(super) fn parse_source_receiver_method_target_call_typed(
         },
     )?;
 
-    let raw_args =
-        parse_call_arguments_typed(token_stream, scope_context, type_interner, string_table)?;
+    let initial_expectations =
+        expectations_from_receiver_method_signature(&source_method.signature().parameters[1..]);
+    let raw_args = parse_call_arguments_typed_with_expectations(
+        token_stream,
+        scope_context,
+        type_interner,
+        string_table,
+        &initial_expectations,
+        NamedArgumentSyntax::Supported {
+            callee_name: Some(member_name),
+        },
+    )?;
 
     let (method_path, call_signature, generic_request) = match &source_method {
         SourceReceiverMethodTarget::Declared(method_entry) => {

@@ -383,6 +383,7 @@ impl DiagnosticPayload {
             DiagnosticPayload::EmptyCollectionTypeAmbiguity
             | DiagnosticPayload::UnsupportedOperatorTypes { .. }
             | DiagnosticPayload::InvalidResultOperand { .. }
+            | DiagnosticPayload::InvalidCast { .. }
             | DiagnosticPayload::InvalidReturnShape { .. } => {}
 
             DiagnosticPayload::InvalidGenericInstantiation { type_name, reason } => {
@@ -583,6 +584,17 @@ impl DiagnosticPayload {
                     *trait_name = remap.get(*trait_name);
                 }
                 reason.remap_string_ids(remap);
+            }
+
+            DiagnosticPayload::InvalidTraitIncompatibility {
+                subject_name,
+                incompatible_trait_name,
+                ..
+            } => {
+                *subject_name = remap.get(*subject_name);
+                if let Some(incompatible_trait_name) = incompatible_trait_name {
+                    *incompatible_trait_name = remap.get(*incompatible_trait_name);
+                }
             }
 
             DiagnosticPayload::TraitNameUsedAsType { trait_name } => {

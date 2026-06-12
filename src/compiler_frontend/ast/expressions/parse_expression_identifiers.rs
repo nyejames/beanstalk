@@ -20,6 +20,7 @@ use crate::compiler_frontend::ast::statements::fallible_handling::fallible_catch
 use crate::compiler_frontend::ast::templates::template::TemplateType;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
+use crate::compiler_frontend::builtins::casts::traits::is_core_cast_trait_name;
 use crate::compiler_frontend::compiler_messages::{
     CompileTimeEvaluationErrorReason, CompilerDiagnostic, InvalidAssignmentTargetReason,
     InvalidTemplateSlotReason, InvalidThisUsageReason, NameNamespace,
@@ -473,6 +474,16 @@ pub(super) fn parse_identifier_or_call(
             identifier,
             NameNamespace::Value,
             NameNamespace::Type,
+            token_stream.current_location(),
+        )
+        .into());
+    }
+
+    // Core cast trait names are reserved static contracts. They are valid in trait
+    // declarations, conformances, and generic bounds, but never as ordinary values.
+    if is_core_cast_trait_name(string_table.resolve(identifier)) {
+        return Err(CompilerDiagnostic::trait_name_used_as_type(
+            identifier,
             token_stream.current_location(),
         )
         .into());

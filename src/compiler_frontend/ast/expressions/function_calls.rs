@@ -10,11 +10,12 @@ use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::call_argument::{CallAccessMode, CallArgument};
 use crate::compiler_frontend::ast::expressions::call_validation::{
-    CallArgumentResolutionContext, CallDiagnosticContext, expectations_from_host_function,
-    expectations_from_user_parameters, resolve_call_arguments,
+    CallArgumentResolutionContext, CallDiagnosticContext, ExpectedParameterType,
+    ParameterExpectation, expectations_from_host_function, expectations_from_user_parameters,
+    resolve_call_arguments,
 };
 use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
-use crate::compiler_frontend::ast::expressions::parse_expression::create_expression_without_boundary_catch;
+use crate::compiler_frontend::ast::expressions::parse_expression::create_expression_without_boundary_catch_with_cast_target;
 use crate::compiler_frontend::ast::statements::fallible_handling::{
     FallibleCallSite, FallibleHostCallSite, HandledFallibleCall, HandledFallibleHostCall,
     parse_fallible_handling_suffix_for_call, parse_fallible_handling_suffix_for_host_call,
@@ -25,9 +26,9 @@ use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::builtins::error_type::resolve_builtin_error_type_typed;
 use crate::compiler_frontend::compiler_errors::{CompilerError, SourceLocation};
 use crate::compiler_frontend::compiler_messages::{
-    CompilerDiagnostic, InvalidCallShapeReason, InvalidGenericInstantiationReason,
-    InvalidResultHandlingReason, InvalidResultOperandReason, TypeMismatchContext,
-    UnsupportedOperatorCategory,
+    CompilerDiagnostic, InvalidBuiltinCallReason, InvalidCallShapeReason,
+    InvalidGenericInstantiationReason, InvalidResultHandlingReason, InvalidResultOperandReason,
+    TypeMismatchContext, UnsupportedOperatorCategory,
 };
 use crate::compiler_frontend::datatypes::DataType;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
@@ -38,8 +39,11 @@ use crate::compiler_frontend::external_packages::{
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
-use crate::compiler_frontend::type_coercion::parse_context::ExpectedType;
+use crate::compiler_frontend::type_coercion::parse_context::{
+    CastTargetContext, ExpectedType, cast_target_context_for_type_id,
+};
 use crate::compiler_frontend::value_mode::ValueMode;
+use rustc_hash::FxHashMap;
 
 /// Input bundle for `parse_function_call` to avoid long argument lists.
 pub struct FunctionCallParseInput<'a, 'b> {
@@ -114,7 +118,17 @@ fn parse_function_call_typed(
     // ------------------------
     //  Parse and resolve arguments
     // ------------------------
-    let raw_args = parse_call_arguments_typed(token_stream, context, type_interner, string_table)?;
+    let parameter_expectations = expectations_from_user_parameters(&signature.parameters);
+    let raw_args = parse_call_arguments_typed_with_expectations(
+        token_stream,
+        context,
+        type_interner,
+        string_table,
+        &parameter_expectations,
+        NamedArgumentSyntax::Supported {
+            callee_name: id.name(),
+        },
+    )?;
     let args = resolve_user_function_call_arguments(
         id,
         &raw_args,
@@ -181,16 +195,13 @@ fn parse_function_call_typed(
 }
 
 /// Parses the raw `(...)` argument list shared by all call-shaped syntax.
+///
+/// WHAT: test-only entry point for syntax-level argument parsing without
+///      parameter expectations. Production callers use
+///      `parse_call_arguments_typed_with_expectations` so `cast` receives a
+///      concrete target at each argument boundary.
+#[cfg(test)]
 pub fn parse_call_arguments(
-    token_stream: &mut FileTokens,
-    context: &ScopeContext,
-    type_interner: &mut AstTypeInterner<'_>,
-    string_table: &mut StringTable,
-) -> Result<Vec<CallArgument>, ExpressionParseError> {
-    parse_call_arguments_typed(token_stream, context, type_interner, string_table)
-}
-
-pub(crate) fn parse_call_arguments_typed(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
@@ -202,6 +213,47 @@ pub(crate) fn parse_call_arguments_typed(
         type_interner,
         string_table,
         CallArgumentSyntaxContext::Ordinary,
+        NamedArgumentSyntax::Supported { callee_name: None },
+        None,
+    )
+}
+
+/// Whether the call surface accepts named arguments.
+///
+/// WHAT: source calls and constructors support named arguments, while builtin
+///      members and host calls are currently positional-only.
+/// WHY: call-shape diagnostics should be produced before parsing a value whose
+///      cast target depends on the named parameter.
+#[derive(Clone, Copy)]
+pub(crate) enum NamedArgumentSyntax {
+    Supported { callee_name: Option<StringId> },
+    UnsupportedCall { callee_name: Option<StringId> },
+    UnsupportedBuiltinMember { member_name: Option<StringId> },
+}
+
+/// Parses a call argument list with explicit parameter expectations threaded into each argument.
+///
+/// WHAT: gives every argument expression a `CastTargetContext` derived from its corresponding
+///      parameter type, so `cast` / `cast!` can resolve at concrete source/receiver/host
+///      parameters and generic parameter slots can reject `cast` with `TargetIsGenericParameter`.
+/// WHY: raw call parsing used to resolve arguments before validation; threading expectations keeps
+///      the cast-target channel narrow and local to the argument parser.
+pub(crate) fn parse_call_arguments_typed_with_expectations(
+    token_stream: &mut FileTokens,
+    context: &ScopeContext,
+    type_interner: &mut AstTypeInterner<'_>,
+    string_table: &mut StringTable,
+    expectations: &[ParameterExpectation],
+    named_arguments: NamedArgumentSyntax,
+) -> Result<Vec<CallArgument>, ExpressionParseError> {
+    parse_call_arguments_inner(
+        token_stream,
+        context,
+        type_interner,
+        string_table,
+        CallArgumentSyntaxContext::Ordinary,
+        named_arguments,
+        Some(expectations),
     )
 }
 
@@ -211,6 +263,7 @@ pub(crate) fn parse_generic_call_arguments_typed(
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
     generic_function_name: Option<StringId>,
+    expectations: &[ParameterExpectation],
 ) -> Result<Vec<CallArgument>, ExpressionParseError> {
     parse_call_arguments_inner(
         token_stream,
@@ -220,6 +273,10 @@ pub(crate) fn parse_generic_call_arguments_typed(
         CallArgumentSyntaxContext::GenericFunction {
             function_name: generic_function_name,
         },
+        NamedArgumentSyntax::Supported {
+            callee_name: generic_function_name,
+        },
+        Some(expectations),
     )
 }
 
@@ -229,12 +286,33 @@ enum CallArgumentSyntaxContext {
     GenericFunction { function_name: Option<StringId> },
 }
 
+/// Builds a `CastTargetContext` from a single parameter expectation.
+///
+/// WHAT: converts the parameter's expected type into the same cast-target channel used by
+///      declarations and assignments. `UnknownExternal` parameters are not builtin cast targets.
+/// WHY: keeps call arguments consistent with other explicit typed boundaries without making
+///      ordinary expression parsing globally type-directed.
+fn cast_target_context_for_parameter_expectation(
+    expectation: &ParameterExpectation,
+    type_environment: &TypeEnvironment,
+    string_table: &StringTable,
+) -> CastTargetContext {
+    match expectation.expected_type {
+        ExpectedParameterType::Known(type_id) => {
+            cast_target_context_for_type_id(type_id, type_environment, string_table)
+        }
+        ExpectedParameterType::UnknownExternal => CastTargetContext::None,
+    }
+}
+
 fn parse_call_arguments_inner(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     string_table: &mut StringTable,
     syntax_context: CallArgumentSyntaxContext,
+    named_arguments: NamedArgumentSyntax,
+    expectations: Option<&[ParameterExpectation]>,
 ) -> Result<Vec<CallArgument>, ExpressionParseError> {
     ast_log!("Creating function call arguments");
 
@@ -259,6 +337,22 @@ fn parse_call_arguments_inner(
     }
 
     let mut args: Vec<CallArgument> = Vec::new();
+    let mut positional_cursor = 0usize;
+    let mut saw_named_argument = false;
+    let mut occupied_parameter_slots =
+        expectations.map(|expectations| vec![false; expectations.len()]);
+
+    // Pre-index parameter names so named arguments can pick up their expectation
+    // before the value expression is parsed.
+    let parameter_name_to_slot: FxHashMap<StringId, usize> = expectations
+        .map(|expectations| {
+            expectations
+                .iter()
+                .enumerate()
+                .filter_map(|(index, expectation)| expectation.name.map(|name| (name, index)))
+                .collect()
+        })
+        .unwrap_or_default();
 
     // ------------------------
     //  Parse each argument
@@ -328,6 +422,17 @@ fn parse_call_arguments_inner(
             _ => None,
         };
 
+        let expectation_index = route_argument_slot_before_value_parse(
+            named_target.as_ref(),
+            &mut positional_cursor,
+            &mut saw_named_argument,
+            &parameter_name_to_slot,
+            &mut occupied_parameter_slots,
+            expectations,
+            named_arguments,
+            argument_location.clone(),
+        )?;
+
         let access_mode = if token_stream.current_token_kind() == &TokenKind::Mutable {
             token_stream.advance();
             CallAccessMode::Mutable
@@ -346,12 +451,25 @@ fn parse_call_arguments_inner(
             .into());
         }
 
+        let mut cast_target_context = expectation_index
+            .and_then(|index| expectations.map(|expectations| expectations.get(index)))
+            .flatten()
+            .map(|expectation| {
+                cast_target_context_for_parameter_expectation(
+                    expectation,
+                    type_interner.environment(),
+                    string_table,
+                )
+            })
+            .unwrap_or(CastTargetContext::None);
+
         let mut inferred = ExpectedType::Infer;
-        let value = create_expression_without_boundary_catch(
+        let value = create_expression_without_boundary_catch_with_cast_target(
             token_stream,
             context,
             type_interner,
             &mut inferred,
+            &mut cast_target_context,
             &ValueMode::ImmutableOwned,
             false,
             string_table,
@@ -383,6 +501,158 @@ fn parse_call_arguments_inner(
     }
 
     Ok(args)
+}
+
+#[allow(clippy::too_many_arguments)]
+fn route_argument_slot_before_value_parse(
+    named_target: Option<&(StringId, SourceLocation)>,
+    positional_cursor: &mut usize,
+    saw_named_argument: &mut bool,
+    parameter_name_to_slot: &FxHashMap<StringId, usize>,
+    occupied_parameter_slots: &mut Option<Vec<bool>>,
+    expectations: Option<&[ParameterExpectation]>,
+    named_arguments: NamedArgumentSyntax,
+    argument_location: SourceLocation,
+) -> Result<Option<usize>, ExpressionParseError> {
+    // This mirrors call-validation routing only far enough to choose a cast target
+    // before parsing the value. Full default filling, access checks, and type
+    // validation stay in `call_validation`.
+    let Some(expectations) = expectations else {
+        if named_target.is_some() {
+            *saw_named_argument = true;
+        } else {
+            *positional_cursor += 1;
+        }
+
+        return Ok(None);
+    };
+
+    if let Some((target_name, target_location)) = named_target {
+        *saw_named_argument = true;
+
+        match named_arguments {
+            NamedArgumentSyntax::UnsupportedCall { callee_name } => {
+                return Err(CompilerDiagnostic::invalid_call_shape(
+                    InvalidCallShapeReason::NamedArgumentsNotSupported,
+                    callee_name,
+                    target_location.clone(),
+                )
+                .into());
+            }
+
+            NamedArgumentSyntax::UnsupportedBuiltinMember { member_name } => {
+                return Err(CompilerDiagnostic::invalid_builtin_call(
+                    InvalidBuiltinCallReason::NamedArgumentsNotSupported,
+                    member_name,
+                    target_location.clone(),
+                )
+                .into());
+            }
+
+            NamedArgumentSyntax::Supported { callee_name } => {
+                let Some(slot) = parameter_name_to_slot.get(target_name).copied() else {
+                    return Err(CompilerDiagnostic::invalid_call_shape(
+                        InvalidCallShapeReason::NamedArgumentNotFound {
+                            name: *target_name,
+                            known_parameters: known_parameter_names(expectations),
+                        },
+                        callee_name,
+                        target_location.clone(),
+                    )
+                    .into());
+                };
+
+                mark_argument_slot_available_before_value_parse(
+                    slot,
+                    expectations,
+                    occupied_parameter_slots,
+                    named_arguments,
+                    target_location.clone(),
+                )?;
+
+                return Ok(Some(slot));
+            }
+        }
+    }
+
+    if *saw_named_argument {
+        let callee_name = match named_arguments {
+            NamedArgumentSyntax::Supported { callee_name }
+            | NamedArgumentSyntax::UnsupportedCall { callee_name } => callee_name,
+            NamedArgumentSyntax::UnsupportedBuiltinMember { .. } => None,
+        };
+        return Err(CompilerDiagnostic::invalid_call_shape(
+            InvalidCallShapeReason::PositionalAfterNamed,
+            callee_name,
+            argument_location,
+        )
+        .into());
+    }
+
+    if let Some(occupied_slots) = occupied_parameter_slots {
+        while *positional_cursor < occupied_slots.len() && occupied_slots[*positional_cursor] {
+            *positional_cursor += 1;
+        }
+
+        if *positional_cursor >= occupied_slots.len() {
+            return Err(CompilerDiagnostic::invalid_call_shape(
+                InvalidCallShapeReason::ExtraPositionalArgument {
+                    expected_count: expectations.len(),
+                },
+                None,
+                argument_location,
+            )
+            .into());
+        }
+
+        let slot = *positional_cursor;
+        occupied_slots[slot] = true;
+        *positional_cursor += 1;
+        return Ok(Some(slot));
+    }
+
+    let slot = *positional_cursor;
+    *positional_cursor += 1;
+    Ok(Some(slot))
+}
+
+fn mark_argument_slot_available_before_value_parse(
+    slot: usize,
+    expectations: &[ParameterExpectation],
+    occupied_parameter_slots: &mut Option<Vec<bool>>,
+    named_arguments: NamedArgumentSyntax,
+    location: SourceLocation,
+) -> Result<(), ExpressionParseError> {
+    let Some(occupied_slots) = occupied_parameter_slots else {
+        return Ok(());
+    };
+
+    if occupied_slots[slot] {
+        let callee_name = match named_arguments {
+            NamedArgumentSyntax::Supported { callee_name }
+            | NamedArgumentSyntax::UnsupportedCall { callee_name } => callee_name,
+            NamedArgumentSyntax::UnsupportedBuiltinMember { .. } => None,
+        };
+        return Err(CompilerDiagnostic::invalid_call_shape(
+            InvalidCallShapeReason::DuplicateArgument {
+                parameter_name: expectations[slot].name,
+                parameter_index: slot,
+            },
+            callee_name,
+            location,
+        )
+        .into());
+    }
+
+    occupied_slots[slot] = true;
+    Ok(())
+}
+
+fn known_parameter_names(expectations: &[ParameterExpectation]) -> Vec<StringId> {
+    expectations
+        .iter()
+        .filter_map(|expectation| expectation.name)
+        .collect()
 }
 
 fn reject_simple_generic_argument_type_ascription(
@@ -505,26 +775,25 @@ fn parse_external_function_call_typed(
     // ------------------------
     // External metadata does not expose public parameter names yet, so named arguments remain
     // intentionally unsupported.
-    let raw_args = parse_call_arguments_typed(token_stream, context, type_interner, string_table)?;
-    if raw_args
-        .iter()
-        .any(|argument| argument.target_param.is_some())
-    {
-        return Err(CompilerDiagnostic::invalid_call_shape(
-            InvalidCallShapeReason::NamedArgumentsNotSupported,
-            Some(string_table.intern(&external_function.name)),
-            location.clone(),
-        )
-        .into());
-    }
-
-    // ------------------------
-    //  Resolve and validate arguments
-    // ------------------------
     let expectations = {
         let type_environment = type_interner.environment_mut_for_derived_types();
         expectations_from_host_function(external_function, type_environment)
     };
+    let callee_name = string_table.intern(&external_function.name);
+    let raw_args = parse_call_arguments_typed_with_expectations(
+        token_stream,
+        context,
+        type_interner,
+        string_table,
+        &expectations,
+        NamedArgumentSyntax::UnsupportedCall {
+            callee_name: Some(callee_name),
+        },
+    )?;
+
+    // ------------------------
+    //  Resolve and validate arguments
+    // ------------------------
     let type_check_context = type_interner.type_check_context();
     let args = resolve_call_arguments(
         CallDiagnosticContext::host_function(&external_function.name),
@@ -782,6 +1051,10 @@ fn validate_host_specific_call_rules_typed(
 
     Ok(())
 }
+
+#[cfg(test)]
+#[path = "tests/cast_boundary_tests.rs"]
+mod cast_boundary_tests;
 
 #[cfg(test)]
 #[path = "tests/function_call_tests.rs"]

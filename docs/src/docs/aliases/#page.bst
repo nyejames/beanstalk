@@ -455,7 +455,7 @@ page_head #= theme_head
     These forms are invalid:
 
     [codeblock, $code("bst"):
-        value = input as Int        -- Error: use explicit casts such as Int(input)
+        value = input as Int        -- Error: use an explicit typed cast such as `value Int = cast input`
         renamed as existing_value   -- Error: this is not a value alias
         function_call() as result   -- Error: expression aliases are not supported
     ]

@@ -757,7 +757,7 @@ body {
         white-space: pre;
         overflow-x: auto;
     "><code class='codeblock'>
-    value <span class='bst-code-operator'>=</span> input <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>Int</span>        <span class='bst-code-comment'>-- Error: use explicit casts such as Int(input)</span>
+    value <span class='bst-code-operator'>=</span> input <span class='bst-code-keyword'>as</span> <span class='bst-code-type'>Int</span>        <span class='bst-code-comment'>-- Error: use an explicit typed cast such as `value Int = cast input`</span>
     renamed <span class='bst-code-keyword'>as</span> existing_value   <span class='bst-code-comment'>-- Error: this is not a value alias</span>
     function_call<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span> <span class='bst-code-keyword'>as</span> result   <span class='bst-code-comment'>-- Error: expression aliases are not supported</span>
     </code></pre><p>Use <code>as</code> only for supported alias declarations, import aliases, and Choice payload capture aliases.</p><p>This keeps renaming predictable and avoids adding multiple ways to express the same idea.</p></section>
@@ -1089,7 +1089,7 @@ body {
     }
 
     function __bs_normalize_numeric_text(value) {
-    return value.trim().replace(/_/g, "");
+    return value.trim();
     }
 
     function __bs_cast_int(value) {
@@ -1111,15 +1111,9 @@ body {
     }
     return { tag: "ok", value: parsed };
     }
-    if (/^[+-]?[0-9]+\.[0-9]+$/.test(normalized)) {
-    const parsed = Number.parseFloat(normalized);
-    if (Number.isInteger(parsed) && Number.isSafeInteger(parsed)) {
-    return { tag: "ok", value: parsed };
-    }
-    }
     return { tag: "err", value: __bs_make_error("Cannot parse Int from text", 200, null, null) };
     }
-    return { tag: "err", value: __bs_make_error("Int(...) only accepts Int, Float, or string values", 200, null, null) };
+    return { tag: "err", value: __bs_make_error("Cast to Int only accepts Int, Float, or string values", 200, null, null) };
     }
 
     function __bs_cast_float(value) {
@@ -1131,7 +1125,10 @@ body {
     }
     if (typeof value === "string") {
     const normalized = __bs_normalize_numeric_text(value);
-    if (/^[+-]?[0-9]+$/.test(normalized) || /^[+-]?[0-9]+\.[0-9]+$/.test(normalized)) {
+    if (/^[+-]?(?:NaN|Infinity)$/i.test(normalized) || /^[+-]?inf$/i.test(normalized)) {
+    return { tag: "err", value: __bs_make_error("Float value is out of supported range", 211, null, null) };
+    }
+    if (/^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$/.test(normalized)) {
     const parsed = Number.parseFloat(normalized);
     if (!Number.isFinite(parsed)) {
     return { tag: "err", value: __bs_make_error("Float value is out of supported range", 211, null, null) };
@@ -1140,7 +1137,7 @@ body {
     }
     return { tag: "err", value: __bs_make_error("Cannot parse Float from text", 210, null, null) };
     }
-    return { tag: "err", value: __bs_make_error("Float(...) only accepts Int, Float, or string values", 210, null, null) };
+    return { tag: "err", value: __bs_make_error("Cast to Float only accepts Int, Float, or string values", 210, null, null) };
     }
 
     function b_fn6() {

@@ -325,6 +325,19 @@ impl<'a> HirDisplayContext<'a> {
                 )
             }
 
+            HirStatementKind::CastOp {
+                policy,
+                source,
+                result,
+            } => {
+                let mut out = String::new();
+                if let Some(local) = result {
+                    let _ = write!(out, "{} = ", self.local_label(*local));
+                }
+                let _ = write!(out, "cast_{:?}({})", policy, self.render_expression(source));
+                out
+            }
+
             HirStatementKind::MapOp {
                 op,
                 receiver,
@@ -555,8 +568,8 @@ impl<'a> HirDisplayContext<'a> {
             HirExpressionKind::FallibleUnwrapError { result } => {
                 format!("result_unwrap_err({})", self.render_expression(result))
             }
-            HirExpressionKind::BuiltinCast { kind, value } => {
-                format!("{:?}({})", kind, self.render_expression(value))
+            HirExpressionKind::Cast { source, policy } => {
+                format!("cast_{:?}({})", policy, self.render_expression(source))
             }
             HirExpressionKind::VariantConstruct {
                 carrier,

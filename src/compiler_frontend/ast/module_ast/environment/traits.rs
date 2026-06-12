@@ -15,8 +15,19 @@ use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::type_resolution::{
     GenericParameterScopeBuildInput, build_generic_parameter_scope, resolve_function_signature,
 };
+use crate::compiler_frontend::builtins::casts::evidence::{
+    builtin_evidence_rows, builtin_evidence_trait_kind_for_row, type_id_for_builtin_target,
+};
+use crate::compiler_frontend::builtins::casts::targets::{
+    BuiltinCastFallibility, BuiltinCastTarget,
+};
+use crate::compiler_frontend::builtins::casts::traits::{
+    builtin_cast_trait_metadata, builtin_cast_trait_name, core_cast_trait_kinds,
+};
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
-use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
+use crate::compiler_frontend::compiler_messages::{
+    CompilerDiagnostic, InvalidTraitIncompatibilityReason,
+};
 use crate::compiler_frontend::datatypes::generic_parameters::{
     GenericParameter, GenericParameterList, GenericParameterScope, TypeParameterId,
 };
@@ -33,8 +44,9 @@ use crate::compiler_frontend::traits::definitions::{
     TraitReceiverRequirement, TraitVisibility,
 };
 use crate::compiler_frontend::traits::environment::{
-    TraitEnvironment, requirement_parameter_from_type, trait_this_name,
+    CoreTraitKind, TraitEnvironment, requirement_parameter_from_type, trait_this_name,
 };
+use crate::compiler_frontend::traits::evidence::TraitEvidenceEnvironment;
 use crate::compiler_frontend::traits::ids::{TraitId, TraitRequirementId};
 use crate::compiler_frontend::traits::syntax::{
     TraitDeclarationSyntax, TraitReferenceSyntax, TraitRequirementSyntax,
@@ -61,6 +73,11 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
     ) -> Result<TraitEnvironment, CompilerMessages> {
         let mut trait_environment = TraitEnvironment::new();
         trait_environment.register_core_displayable(&mut self.type_environment, string_table);
+        Self::register_core_cast_traits(
+            &mut trait_environment,
+            &mut self.type_environment,
+            string_table,
+        )?;
 
         for header in sorted_headers {
             let HeaderKind::Trait { declaration } = &header.kind else {
@@ -96,7 +113,191 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             string_table,
         )?;
 
+        self.resolve_trait_incompatibilities(sorted_headers, &mut trait_environment, string_table)?;
+
         Ok(trait_environment)
+    }
+
+    /// Registers the compiler-owned core cast trait definitions.
+    ///
+    /// WHAT: iterates the static core cast trait table and registers one
+    ///      `ResolvedTraitDefinition` per variant with the trait environment,
+    ///      then records a `CoreTraitKind::Castable` classifier so the AST
+    ///      environment builder can map trait ids to their builtin target
+    ///      and fallibility during evidence registration.
+    /// WHY: `cast` requires all twelve `CASTABLE_TO_*` and `TRY_CASTABLE_TO_*`
+    ///      trait names to resolve without imports; sharing one registration
+    ///      path with `DISPLAYABLE` keeps the trait environment table-driven
+    ///      and prevents drift between the catalogue, the trait definitions,
+    ///      and the builtin evidence rows.
+    pub(in crate::compiler_frontend::ast) fn register_core_cast_traits(
+        trait_environment: &mut TraitEnvironment,
+        type_environment: &mut crate::compiler_frontend::datatypes::environment::TypeEnvironment,
+        string_table: &mut StringTable,
+    ) -> Result<(), CompilerMessages> {
+        for kind in core_cast_trait_kinds() {
+            let metadata = builtin_cast_trait_metadata(*kind);
+            let Some(success_type) =
+                type_id_for_builtin_target(metadata.target, type_environment, string_table)
+            else {
+                return Err(CompilerMessages::from_error_ref(
+                    CompilerError::compiler_error(
+                        "Core cast trait target type was not registered before trait metadata.",
+                    ),
+                    string_table,
+                ));
+            };
+
+            let fallible = metadata.fallibility == BuiltinCastFallibility::Fallible;
+            let error_return_type = if fallible {
+                let Some(error_type) = type_id_for_builtin_target(
+                    BuiltinCastTarget::Error,
+                    type_environment,
+                    string_table,
+                ) else {
+                    return Err(CompilerMessages::from_error_ref(
+                        CompilerError::compiler_error(
+                            "Builtin Error type was not registered before fallible core cast traits.",
+                        ),
+                        string_table,
+                    ));
+                };
+                Some(error_type)
+            } else {
+                None
+            };
+            let trait_id = trait_environment.register_core_trait(
+                type_environment,
+                string_table,
+                metadata.trait_name,
+                metadata.requirement_name,
+                success_type,
+                error_return_type,
+            );
+            trait_environment.record_core_trait_kind(
+                trait_id,
+                CoreTraitKind::Castable {
+                    target: metadata.target,
+                    fallibility: metadata.fallibility,
+                },
+            );
+        }
+
+        Self::register_core_cast_trait_incompatibility_pairs(trait_environment);
+
+        Ok(())
+    }
+
+    /// Registers the automatic incompatibility pairs for core cast traits.
+    ///
+    /// WHAT: after all twelve core cast traits are registered, groups their
+    ///      `TraitId`s by builtin target and records each infallible/fallible
+    ///      pair as incompatible in the trait environment.
+    /// WHY: the core cast trait table is the single source of truth for both
+    ///      the trait names and their targets; deriving the six pairs from the
+    ///      table avoids a parallel hand-written list and keeps the catalogue
+    ///      consistent.
+    fn register_core_cast_trait_incompatibility_pairs(trait_environment: &mut TraitEnvironment) {
+        #[derive(Default)]
+        struct CoreCastTraitPair {
+            infallible: Option<TraitId>,
+            fallible: Option<TraitId>,
+        }
+
+        let mut trait_ids_by_target: FxHashMap<BuiltinCastTarget, CoreCastTraitPair> =
+            FxHashMap::default();
+
+        for kind in core_cast_trait_kinds() {
+            let metadata = builtin_cast_trait_metadata(*kind);
+            let Some(trait_id) =
+                trait_environment.core_trait_id_for_static_name(metadata.trait_name)
+            else {
+                continue;
+            };
+
+            let pair = trait_ids_by_target.entry(metadata.target).or_default();
+            match metadata.fallibility {
+                BuiltinCastFallibility::Infallible => pair.infallible = Some(trait_id),
+                BuiltinCastFallibility::Fallible => pair.fallible = Some(trait_id),
+            }
+        }
+
+        for pair in trait_ids_by_target.values() {
+            if let (Some(infallible), Some(fallible)) = (pair.infallible, pair.fallible) {
+                trait_environment.record_incompatible_traits(infallible, fallible);
+            }
+        }
+    }
+
+    /// Registers the compiler-owned builtin evidence rows for every core
+    /// cast trait row.
+    ///
+    /// WHAT: walks the static builtin evidence table and inserts one
+    ///      `TraitEvidenceDefinition` with `TraitEvidenceKind::Builtin` for
+    ///      every (source, target) row whose trait id resolves through the
+    ///      trait environment. Reject rows whose trait id is missing because
+    ///      registration order was somehow violated.
+    /// WHY: builtin evidence must satisfy static generic-bound checks via
+    ///      `builtin_for`, and the registration must be centralized so the
+    ///      evidence table is the single source of truth for the initial
+    ///      builtin evidence rows.
+    pub(in crate::compiler_frontend::ast) fn register_builtin_cast_evidence(
+        trait_environment: &TraitEnvironment,
+        trait_evidence_environment: &mut TraitEvidenceEnvironment,
+        type_environment: &crate::compiler_frontend::datatypes::environment::TypeEnvironment,
+        string_table: &mut StringTable,
+    ) -> Result<(), CompilerMessages> {
+        use crate::compiler_frontend::traits::evidence::environment::{
+            TraitEvidenceDefinition, TraitEvidenceKind,
+        };
+
+        for &row in builtin_evidence_rows() {
+            let source = row.source;
+            let _target = row.target;
+            let Some(trait_kind) = builtin_evidence_trait_kind_for_row(row) else {
+                return Err(CompilerMessages::from_error_ref(
+                    CompilerError::compiler_error(
+                        "Builtin cast evidence row did not map to a registered core cast trait.",
+                    ),
+                    string_table,
+                ));
+            };
+            let trait_name = builtin_cast_trait_name(trait_kind);
+            let Some(trait_id) = trait_environment.core_trait_id_for_static_name(trait_name) else {
+                return Err(CompilerMessages::from_error_ref(
+                    CompilerError::compiler_error(
+                        "Core cast trait was not registered before builtin evidence.",
+                    ),
+                    string_table,
+                ));
+            };
+            let Some(source_type_id) =
+                type_id_for_builtin_target(source, type_environment, string_table)
+            else {
+                return Err(CompilerMessages::from_error_ref(
+                    CompilerError::compiler_error(
+                        "Builtin cast evidence source type was not registered.",
+                    ),
+                    string_table,
+                ));
+            };
+
+            // Source-File/Location are recorded as default for compiler-owned
+            // builtin evidence because the source row is internal metadata,
+            // not a user-declared conformance.
+            let declaration = TraitEvidenceDefinition {
+                id: crate::compiler_frontend::traits::ids::TraitEvidenceId(0),
+                kind: TraitEvidenceKind::Builtin,
+                target_type_id: source_type_id,
+                trait_id,
+                source_file: crate::compiler_frontend::symbols::interned_path::InternedPath::new(),
+                declaration_location:
+                    crate::compiler_frontend::tokenizer::tokens::SourceLocation::default(),
+                requirements: Vec::new(),
+            };
+            trait_evidence_environment.insert_builtin(declaration);
+        }
+        Ok(())
     }
 
     fn resolve_trait_definition(
@@ -397,6 +598,134 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         Ok(())
     }
 
+    fn resolve_trait_incompatibilities(
+        &self,
+        sorted_headers: &[Header],
+        trait_environment: &mut TraitEnvironment,
+        string_table: &mut StringTable,
+    ) -> Result<(), CompilerMessages> {
+        let mut recorded_source_pairs: FxHashSet<(TraitId, TraitId)> = FxHashSet::default();
+
+        for header in sorted_headers {
+            let HeaderKind::TraitIncompatibility { incompatibility } = &header.kind else {
+                continue;
+            };
+
+            let relation_source_file = header.source_file.clone();
+            let visibility = self
+                .import_environment
+                .visibility_for(&header.source_file)
+                .map_err(|error| self.error_messages(error, string_table))?
+                .clone();
+
+            let subject_id = self.resolve_trait_incompatibility_reference(
+                &incompatibility.subject,
+                &incompatibility.subject,
+                &relation_source_file,
+                &visibility,
+                trait_environment,
+                string_table,
+            )?;
+
+            for incompatible_trait in &incompatibility.incompatible_traits {
+                let incompatible_id = self.resolve_trait_incompatibility_reference(
+                    &incompatibility.subject,
+                    incompatible_trait,
+                    &relation_source_file,
+                    &visibility,
+                    trait_environment,
+                    string_table,
+                )?;
+
+                if subject_id == incompatible_id {
+                    return Err(self.diagnostic_messages(
+                        CompilerDiagnostic::invalid_trait_incompatibility(
+                            incompatibility.subject.name,
+                            Some(incompatible_trait.name),
+                            InvalidTraitIncompatibilityReason::SelfIncompatible,
+                            incompatible_trait.location.clone(),
+                        ),
+                        string_table,
+                    ));
+                }
+
+                let normalized_pair = if subject_id.0 < incompatible_id.0 {
+                    (subject_id, incompatible_id)
+                } else {
+                    (incompatible_id, subject_id)
+                };
+
+                if !recorded_source_pairs.insert(normalized_pair) {
+                    return Err(self.diagnostic_messages(
+                        CompilerDiagnostic::invalid_trait_incompatibility(
+                            incompatibility.subject.name,
+                            Some(incompatible_trait.name),
+                            InvalidTraitIncompatibilityReason::DuplicateRelation,
+                            incompatible_trait.location.clone(),
+                        ),
+                        string_table,
+                    ));
+                }
+
+                trait_environment.record_incompatible_traits(subject_id, incompatible_id);
+            }
+        }
+
+        Ok(())
+    }
+
+    fn resolve_trait_incompatibility_reference(
+        &self,
+        subject: &TraitReferenceSyntax,
+        trait_ref: &TraitReferenceSyntax,
+        relation_source_file: &crate::compiler_frontend::symbols::interned_path::InternedPath,
+        visibility: &crate::compiler_frontend::headers::import_environment::FileVisibility,
+        trait_environment: &TraitEnvironment,
+        string_table: &mut StringTable,
+    ) -> Result<TraitId, CompilerMessages> {
+        let trait_id = if let Some(path) = visibility.visible_trait_names.get(&trait_ref.name) {
+            trait_environment.id_for_path(path)
+        } else {
+            trait_environment.core_trait_id_for_name(trait_ref.name, string_table)
+        };
+
+        let Some(trait_id) = trait_id else {
+            return Err(self.diagnostic_messages(
+                CompilerDiagnostic::invalid_trait_incompatibility(
+                    subject.name,
+                    Some(trait_ref.name),
+                    InvalidTraitIncompatibilityReason::UnknownTrait,
+                    trait_ref.location.clone(),
+                ),
+                string_table,
+            ));
+        };
+
+        let Some(definition) = trait_environment.get(trait_id) else {
+            return Ok(trait_id);
+        };
+
+        // Same-file relations are source-order metadata: a trait must be declared
+        // before it can participate in an authored `must not` relation. Imported and
+        // core traits are already visible through different mechanisms, so only
+        // same-file source definitions need this local ordering check.
+        if definition.source_file == *relation_source_file
+            && location_starts_after(&definition.declaration_location, &trait_ref.location)
+        {
+            return Err(self.diagnostic_messages(
+                CompilerDiagnostic::invalid_trait_incompatibility(
+                    subject.name,
+                    Some(trait_ref.name),
+                    InvalidTraitIncompatibilityReason::UnknownTrait,
+                    trait_ref.location.clone(),
+                ),
+                string_table,
+            ));
+        }
+
+        Ok(trait_id)
+    }
+
     pub(in crate::compiler_frontend::ast) fn resolve_visible_trait_reference(
         &self,
         trait_ref: &TraitReferenceSyntax,
@@ -410,9 +739,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             return Ok(id);
         }
 
-        if let Some(id) =
-            trait_environment.displayable_trait_id_for_name(trait_ref.name, string_table)
-        {
+        if let Some(id) = trait_environment.core_trait_id_for_name(trait_ref.name, string_table) {
             return Ok(id);
         }
 
@@ -481,6 +808,12 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
             string_table,
         ))
     }
+}
+
+fn location_starts_after(left: &SourceLocation, right: &SourceLocation) -> bool {
+    left.start_pos.line_number > right.start_pos.line_number
+        || (left.start_pos.line_number == right.start_pos.line_number
+            && left.start_pos.char_column > right.start_pos.char_column)
 }
 
 fn trait_this_parameter_list(
@@ -594,3 +927,7 @@ fn parsed_type_with_trait_this(parsed_type: &ParsedTypeRef, this_name: StringId)
         _ => parsed_type.clone(),
     }
 }
+
+#[cfg(test)]
+#[path = "traits_tests.rs"]
+mod traits_tests;

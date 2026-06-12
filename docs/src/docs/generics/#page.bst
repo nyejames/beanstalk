@@ -381,6 +381,16 @@ page_head #= theme_head
         ;
     ]
 
+    Compiler-owned cast traits can also be used as static bounds when a generic body needs an
+    explicit cast target.
+
+    [codeblock, $code("bst"):
+        show_text type Item is CASTABLE_TO_STRING |item Item| -> String:
+            text String = cast item
+            return text
+        ;
+    ]
+
     Multiple bounds on one parameter use `and`. Commas still separate generic parameters:
 
     [codeblock, $code("bst"):

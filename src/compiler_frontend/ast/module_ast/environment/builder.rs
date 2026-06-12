@@ -243,21 +243,37 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         );
         let _ = receiver_catalog_start;
 
+        // Register compiler-owned builtin evidence rows for every initial
+        // (source, target) row in the cast plan. Must run before
+        // `validate_trait_evidence` so user-declared conformances that would
+        // override builtin evidence or conflict with incompatible builtin
+        // evidence are rejected while trait ids are already stable.
+        let mut trait_evidence_environment = TraitEvidenceEnvironment::new();
+        Self::register_builtin_cast_evidence(
+            &trait_environment,
+            &mut trait_evidence_environment,
+            &self.type_environment,
+            string_table,
+        )?;
+
         // ---------------------------
         //  Validate trait evidence
         // ---------------------------
         let trait_evidence_start = Instant::now();
-        let trait_evidence_environment = validate_trait_evidence(ValidateTraitEvidenceInput {
-            sorted_headers,
-            trait_environment: &trait_environment,
-            receiver_methods: receiver_methods.as_ref(),
-            type_environment: &self.type_environment,
-            import_environment: &self.import_environment,
-            nominal_type_ids_by_path: &self.nominal_type_ids_by_path,
-            struct_source_by_path: &self.struct_source_by_path,
-            choice_source_by_path: &self.choice_source_by_path,
-            string_table,
-        })
+        validate_trait_evidence(
+            ValidateTraitEvidenceInput {
+                sorted_headers,
+                trait_environment: &trait_environment,
+                receiver_methods: receiver_methods.as_ref(),
+                type_environment: &self.type_environment,
+                import_environment: &self.import_environment,
+                nominal_type_ids_by_path: &self.nominal_type_ids_by_path,
+                struct_source_by_path: &self.struct_source_by_path,
+                choice_source_by_path: &self.choice_source_by_path,
+                string_table,
+            },
+            &mut trait_evidence_environment,
+        )
         .map_err(|diagnostic| self.diagnostic_messages(diagnostic, string_table))?;
         timer_log!(
             trait_evidence_start,
@@ -281,18 +297,14 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         );
         let _ = nominal_bound_surface_start;
 
-        // --------------------------------------
-        //  Validate public facade type surface
-        // --------------------------------------
+        // --------------------------------
+        //  Validate public facade surfaces
+        // --------------------------------
         let public_surface_start = Instant::now();
-        self.validate_public_facade_type_surfaces(
-            sorted_headers,
-            &trait_environment,
-            string_table,
-        )?;
+        self.validate_public_facade_surfaces(sorted_headers, &trait_environment, string_table)?;
         timer_log!(
             public_surface_start,
-            "AST/environment/public facade type surfaces validated in: "
+            "AST/environment/public facade surfaces validated in: "
         );
         let _ = public_surface_start;
 

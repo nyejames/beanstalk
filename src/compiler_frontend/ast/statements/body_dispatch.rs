@@ -200,7 +200,7 @@ pub(crate) fn parse_function_body_statements(
                 )?;
             }
 
-            TokenKind::Return => {
+            TokenKind::Return | TokenKind::ReturnBang => {
                 parse_return_statement(
                     token_stream,
                     &mut body_nodes,

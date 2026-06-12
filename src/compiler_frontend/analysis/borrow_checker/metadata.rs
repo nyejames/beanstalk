@@ -271,6 +271,10 @@ impl<'a> BorrowChecker<'a> {
                             HirStatementKind::Call {
                                 result: Some(result_local),
                                 ..
+                            }
+                            | HirStatementKind::CastOp {
+                                result: Some(result_local),
+                                ..
                             } if *result_local == local_to_scan => {
                                 saw_any_write = true;
                                 saw_fresh_write = true;
@@ -324,25 +328,36 @@ impl<'a> BorrowChecker<'a> {
             let block = self.block_by_id_or_error(*block_id, function.id)?;
 
             for statement in &block.statements {
-                let HirStatementKind::Call {
-                    target,
-                    args,
-                    result: Some(call_result),
-                } = &statement.kind
-                else {
-                    continue;
-                };
-
-                if call_result != result_local {
-                    continue;
+                match &statement.kind {
+                    HirStatementKind::Call {
+                        target,
+                        args,
+                        result: Some(call_result),
+                        ..
+                    } => {
+                        if call_result != result_local {
+                            continue;
+                        }
+                        return self.classify_unwrapped_user_call_success(
+                            function,
+                            target.clone(),
+                            args,
+                            param_index_by_local,
+                        );
+                    }
+                    HirStatementKind::CastOp {
+                        result: Some(call_result),
+                        ..
+                    } => {
+                        if call_result != result_local {
+                            continue;
+                        }
+                        // A builtin cast never forwards an alias from its source into the
+                        // success payload; the result is freshly owned.
+                        return Ok(FunctionReturnAliasSummary::Fresh);
+                    }
+                    _ => continue,
                 }
-
-                return self.classify_unwrapped_user_call_success(
-                    function,
-                    target.clone(),
-                    args,
-                    param_index_by_local,
-                );
             }
         }
 
@@ -811,6 +826,9 @@ fn collect_statement_loaded_locals(statement: &HirStatement, visitor: &mut impl 
                 collect_expression_loaded_locals(arg, visitor);
             }
         }
+        HirStatementKind::CastOp { source, .. } => {
+            collect_expression_loaded_locals(source, visitor);
+        }
         HirStatementKind::Expr(expression) => {
             collect_expression_loaded_locals(expression, visitor);
         }
@@ -832,9 +850,14 @@ fn collect_statement_written_locals(statement: &HirStatement, visitor: &mut impl
         HirStatementKind::MapOp {
             result: Some(local),
             ..
+        }
+        | HirStatementKind::CastOp {
+            result: Some(local),
+            ..
         } => visitor(*local),
         HirStatementKind::Call { result: None, .. }
         | HirStatementKind::MapOp { result: None, .. }
+        | HirStatementKind::CastOp { result: None, .. }
         | HirStatementKind::Expr(_)
         | HirStatementKind::Drop(_)
         | HirStatementKind::PushRuntimeFragment { .. } => {}
@@ -950,7 +973,7 @@ fn collect_expression_loaded_locals(expression: &HirExpression, visitor: &mut im
         }
         HirExpressionKind::FallibleUnwrapSuccess { result }
         | HirExpressionKind::FallibleUnwrapError { result }
-        | HirExpressionKind::BuiltinCast { value: result, .. } => {
+        | HirExpressionKind::Cast { source: result, .. } => {
             collect_expression_loaded_locals(result, visitor);
         }
         HirExpressionKind::Int(_)

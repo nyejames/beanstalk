@@ -25,8 +25,9 @@ use crate::compiler_frontend::declaration_syntax::type_syntax::{
 };
 
 use super::trait_headers::{
-    conformance_header_path, ensure_trait_name_is_all_caps, parse_specialized_conformance_target,
-    parse_trait_conformance, parse_trait_declaration,
+    conformance_header_path, ensure_trait_name_is_all_caps, incompatibility_header_path,
+    parse_specialized_conformance_target, parse_trait_conformance, parse_trait_declaration,
+    parse_trait_incompatibility,
 };
 use crate::compiler_frontend::external_packages::ExternalSymbolId;
 use crate::compiler_frontend::headers::dependency_edges::{
@@ -41,7 +42,9 @@ use crate::compiler_frontend::symbols::identifier_policy::{
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
-use crate::compiler_frontend::traits::syntax::{ConformanceTargetKind, ConformanceTargetSyntax};
+use crate::compiler_frontend::traits::syntax::{
+    ConformanceTargetKind, ConformanceTargetSyntax, TraitReferenceSyntax,
+};
 use crate::compiler_frontend::utilities::token_scan::InitializerReference;
 use rustc_hash::FxHashSet;
 use std::collections::HashSet;
@@ -122,9 +125,11 @@ pub(super) fn create_header(
     }
 
     // Check for trait syntax after generic parameters and before token dispatch.
-    // WHAT: `must:` begins a trait declaration; `must TRAIT` begins a conformance declaration.
-    // WHY: trait declarations and conformances are top-level declarations that participate in
-    //      header parsing; they replace the old reserved-trait rejection path.
+    // WHAT: `must:` begins a trait declaration; `must not` begins an incompatibility
+    //      declaration; `must TRAIT` begins a conformance declaration.
+    // WHY: trait declarations, conformances, and incompatibility metadata are top-level
+    //      declarations that participate in header parsing; they replace the old
+    //      reserved-trait rejection path.
     if token_stream.current_token_kind() == &TokenKind::Must {
         if !generic_parameters.is_empty() {
             return Err(CompilerDiagnostic::invalid_declaration(
@@ -136,7 +141,24 @@ pub(super) fn create_header(
 
         let peek = token_stream.peek_next_token().cloned();
 
-        if peek == Some(TokenKind::Colon) {
+        if peek == Some(TokenKind::Not) {
+            ensure_trait_name_is_all_caps(
+                declaration_name,
+                name_location.clone(),
+                context.string_table,
+            )?;
+
+            // Trait incompatibility declaration: `Name must not TRAIT, TRAIT`
+            token_stream.advance(); // past must
+            token_stream.advance(); // past not
+
+            let subject = TraitReferenceSyntax {
+                name: declaration_name,
+                location: name_location.clone(),
+            };
+            let incompatibility = parse_trait_incompatibility(token_stream, subject, context)?;
+            kind = HeaderKind::TraitIncompatibility { incompatibility };
+        } else if peek == Some(TokenKind::Colon) {
             ensure_trait_name_is_all_caps(
                 declaration_name,
                 name_location.clone(),
@@ -202,10 +224,14 @@ pub(super) fn create_header(
             kind = HeaderKind::TraitConformance { conformance };
         }
 
-        let header_path = if matches!(kind, HeaderKind::TraitConformance { .. }) {
-            conformance_header_path(&full_name, &name_location, context.string_table)
-        } else {
-            full_name
+        let header_path = match kind {
+            HeaderKind::TraitConformance { .. } => {
+                conformance_header_path(&full_name, &name_location, context.string_table)
+            }
+            HeaderKind::TraitIncompatibility { .. } => {
+                incompatibility_header_path(&full_name, &name_location, context.string_table)
+            }
+            _ => full_name,
         };
         let mut header_tokens =
             FileTokens::new_with_file_id(header_path, token_stream.file_id, body);

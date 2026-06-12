@@ -636,7 +636,7 @@ fn record_shared_reads_in_expression(
 
         HirExpressionKind::FallibleUnwrapSuccess { result }
         | HirExpressionKind::FallibleUnwrapError { result }
-        | HirExpressionKind::BuiltinCast { value: result, .. } => {
+        | HirExpressionKind::Cast { source: result, .. } => {
             record_shared_reads_in_expression(env, result, location.clone(), roots)?;
         }
 
@@ -739,7 +739,7 @@ fn collect_expression_roots(
 
         HirExpressionKind::FallibleUnwrapSuccess { result }
         | HirExpressionKind::FallibleUnwrapError { result }
-        | HirExpressionKind::BuiltinCast { value: result, .. } => {
+        | HirExpressionKind::Cast { source: result, .. } => {
             collect_expression_roots(layout, state, result, out, location, diagnostics)?;
         }
 
@@ -889,7 +889,7 @@ pub(super) fn transfer_aggregate_expression_ownership(
 
         HirExpressionKind::FallibleUnwrapSuccess { result }
         | HirExpressionKind::FallibleUnwrapError { result }
-        | HirExpressionKind::BuiltinCast { value: result, .. } => {
+        | HirExpressionKind::Cast { source: result, .. } => {
             transfer_aggregate_expression_ownership(
                 layout,
                 state,

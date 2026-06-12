@@ -1,9 +1,10 @@
 //! Trait conformance validation orchestration.
 //!
 //! WHAT: Orchestrates validation of all `Type must TRAIT` conformance headers across files,
-//!       detecting duplicate declarations and checking method compatibility.
-//! WHY: Fuses syntactic headers, resolved traits, visible method catalogs, and import rules
-//!      into a consistent, valid `TraitEvidenceEnvironment`.
+//!       detecting duplicate declarations, incompatible trait pairs, and checking method
+//!       compatibility.
+//! WHY: Fuses syntactic headers, resolved traits, visible trait-incompatibility metadata,
+//!      method catalogs, and import rules into a consistent, valid `TraitEvidenceEnvironment`.
 
 use super::diagnostics::{invalid_conformance, previous_declaration_label};
 use super::environment::{TraitEvidenceDefinition, TraitEvidenceEnvironment};
@@ -50,16 +51,24 @@ struct PendingConformanceEvidence {
     trait_location: SourceLocation,
 }
 
+struct IncompatibleEvidence {
+    trait_name: StringId,
+    declaration_location: SourceLocation,
+}
+
 /// Validate explicit conformance declarations and store indexed evidence facts.
 ///
 /// WHAT: validates same-file nominal conformance evidence before matching trait requirements
-/// against receiver methods in the declaring file.
+/// against receiver methods in the declaring file. The caller is responsible for registering
+/// compiler-owned builtin evidence first so that user attempts to override builtin evidence
+/// and user evidence that conflicts with builtin evidence for an incompatible trait are both
+/// rejected here.
 /// WHY: later dispatch phases need stable evidence indexes and must not rediscover conformance
 /// headers or infer structural conformance from arbitrary matching methods.
 pub(crate) fn validate_trait_evidence(
     input: ValidateTraitEvidenceInput<'_>,
-) -> Result<TraitEvidenceEnvironment, CompilerDiagnostic> {
-    let mut evidence_environment = TraitEvidenceEnvironment::new();
+    evidence_environment: &mut TraitEvidenceEnvironment,
+) -> Result<(), CompilerDiagnostic> {
     let mut pending_evidence = Vec::new();
     let mut pending_canonical_locations: FxHashMap<(TypeId, TraitId), SourceLocation> =
         FxHashMap::default();
@@ -137,6 +146,28 @@ pub(crate) fn validate_trait_evidence(
                 ));
             }
 
+            if let Some(incompatible) = find_incompatible_evidence(
+                target.type_id,
+                trait_id,
+                evidence_environment,
+                &pending_evidence,
+                input.trait_environment,
+            ) {
+                let secondary_labels = previous_declaration_label(non_default_location(
+                    incompatible.declaration_location,
+                ));
+
+                return Err(invalid_conformance(
+                    conformance.target.name,
+                    Some(trait_ref.name),
+                    InvalidTraitConformanceReason::IncompatibleTraitEvidence {
+                        incompatible_trait_name: incompatible.trait_name,
+                    },
+                    trait_ref.location.clone(),
+                    secondary_labels,
+                ));
+            }
+
             pending_canonical_locations.insert(key, conformance.location.clone());
 
             pending_evidence.push(PendingConformanceEvidence {
@@ -187,5 +218,55 @@ pub(crate) fn validate_trait_evidence(
         evidence_environment.insert_validated(evidence);
     }
 
-    Ok(evidence_environment)
+    Ok(())
+}
+
+fn find_incompatible_evidence(
+    target_type_id: TypeId,
+    trait_id: TraitId,
+    evidence_environment: &TraitEvidenceEnvironment,
+    pending_evidence: &[PendingConformanceEvidence],
+    trait_environment: &TraitEnvironment,
+) -> Option<IncompatibleEvidence> {
+    for pending in pending_evidence {
+        if pending.target.type_id != target_type_id {
+            continue;
+        }
+        if !trait_environment.traits_are_incompatible(pending.trait_id, trait_id) {
+            continue;
+        }
+
+        return Some(IncompatibleEvidence {
+            trait_name: pending.trait_name,
+            declaration_location: pending.declaration_location.clone(),
+        });
+    }
+
+    for definition in evidence_environment.builtins() {
+        if definition.target_type_id != target_type_id {
+            continue;
+        }
+        if !trait_environment.traits_are_incompatible(definition.trait_id, trait_id) {
+            continue;
+        }
+
+        let trait_name = trait_environment
+            .get(definition.trait_id)
+            .map(|definition| definition.name)?;
+
+        return Some(IncompatibleEvidence {
+            trait_name,
+            declaration_location: definition.declaration_location.clone(),
+        });
+    }
+
+    None
+}
+
+fn non_default_location(location: SourceLocation) -> Option<SourceLocation> {
+    if location == SourceLocation::default() {
+        None
+    } else {
+        Some(location)
+    }
 }

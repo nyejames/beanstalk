@@ -693,3 +693,46 @@ pub(crate) fn parse_fallible_handling_suffix_for_host_call(
 
     Ok(call.into_ast_node(handling, token_stream.current_location(), &context.scope))
 }
+
+/// Input bundle for `parse_cast_catch_handling_suffix`.
+///
+/// WHAT: carries the success type and boundary permission for a `cast ... catch:` handler.
+/// WHY: cast failure is not a `Result`-typed value, so the shared fallible-handling parser
+///      needs a small, cast-specific site description.
+pub(crate) struct CastCatchSite {
+    pub(crate) success_type_id: TypeId,
+    pub(crate) error_type_id: TypeId,
+    pub(crate) value_required_location: SourceLocation,
+    pub(crate) allow_boundary_catch: bool,
+}
+
+/// Parses a `catch` recovery suffix for a fallible `cast` expression.
+///
+/// WHAT: reuses the shared catch-handler parser with a single success slot (the cast target)
+///      and the cast failure error type.
+/// WHY: cast recovery uses the same surface syntax as fallible calls, but the error value is
+///      supplied by the selected cast evidence rather than a Result carrier.
+pub(crate) fn parse_cast_catch_handling_suffix(
+    token_stream: &mut FileTokens,
+    context: &ScopeContext,
+    type_interner: &mut AstTypeInterner<'_>,
+    site: CastCatchSite,
+    string_table: &mut StringTable,
+) -> Result<FallibleHandling, ExpressionParseError> {
+    let success_type_ids = [site.success_type_id];
+    parse_catch_handling_suffix(
+        token_stream,
+        context,
+        type_interner,
+        FallibleHandlingSite {
+            success_result_type_ids: &success_type_ids,
+            error_return_type_id: site.error_type_id,
+            value_required: true,
+            value_required_location: site.value_required_location,
+            compilation_stage: EXPRESSION_STAGE,
+            allow_boundary_catch: site.allow_boundary_catch,
+        },
+        None,
+        string_table,
+    )
+}

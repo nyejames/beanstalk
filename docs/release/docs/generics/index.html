@@ -655,6 +655,18 @@ body {
     render type <span class='bst-code-struct'>Item</span> is <span class='bst-code-struct'>DISPLAY_TEXT</span> <span class='bst-code-operator'>|</span>item <span class='bst-code-struct'>Item</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
         <span class='bst-code-keyword'>return</span> item.display<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
     ;
+    </code></pre><p>Compiler-owned cast traits can also be used as static bounds when a generic body needs an explicit cast target.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    show_text type <span class='bst-code-struct'>Item</span> is <span class='bst-code-struct'>CASTABLE_TO_STRING</span> <span class='bst-code-operator'>|</span>item <span class='bst-code-struct'>Item</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
+        text <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> cast item
+        <span class='bst-code-keyword'>return</span> text
+    ;
     </code></pre><p>Multiple bounds on one parameter use <code>and</code>. Commas still separate generic parameters:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
@@ -988,7 +1000,7 @@ body {
     }
 
     function __bs_normalize_numeric_text(value) {
-    return value.trim().replace(/_/g, "");
+    return value.trim();
     }
 
     function __bs_cast_int(value) {
@@ -1010,15 +1022,9 @@ body {
     }
     return { tag: "ok", value: parsed };
     }
-    if (/^[+-]?[0-9]+\.[0-9]+$/.test(normalized)) {
-    const parsed = Number.parseFloat(normalized);
-    if (Number.isInteger(parsed) && Number.isSafeInteger(parsed)) {
-    return { tag: "ok", value: parsed };
-    }
-    }
     return { tag: "err", value: __bs_make_error("Cannot parse Int from text", 200, null, null) };
     }
-    return { tag: "err", value: __bs_make_error("Int(...) only accepts Int, Float, or string values", 200, null, null) };
+    return { tag: "err", value: __bs_make_error("Cast to Int only accepts Int, Float, or string values", 200, null, null) };
     }
 
     function __bs_cast_float(value) {
@@ -1030,7 +1036,10 @@ body {
     }
     if (typeof value === "string") {
     const normalized = __bs_normalize_numeric_text(value);
-    if (/^[+-]?[0-9]+$/.test(normalized) || /^[+-]?[0-9]+\.[0-9]+$/.test(normalized)) {
+    if (/^[+-]?(?:NaN|Infinity)$/i.test(normalized) || /^[+-]?inf$/i.test(normalized)) {
+    return { tag: "err", value: __bs_make_error("Float value is out of supported range", 211, null, null) };
+    }
+    if (/^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$/.test(normalized)) {
     const parsed = Number.parseFloat(normalized);
     if (!Number.isFinite(parsed)) {
     return { tag: "err", value: __bs_make_error("Float value is out of supported range", 211, null, null) };
@@ -1039,7 +1048,7 @@ body {
     }
     return { tag: "err", value: __bs_make_error("Cannot parse Float from text", 210, null, null) };
     }
-    return { tag: "err", value: __bs_make_error("Float(...) only accepts Int, Float, or string values", 210, null, null) };
+    return { tag: "err", value: __bs_make_error("Cast to Float only accepts Int, Float, or string values", 210, null, null) };
     }
 
     function b_fn6() {

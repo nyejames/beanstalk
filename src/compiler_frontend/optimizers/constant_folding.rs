@@ -20,14 +20,19 @@
 //!
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::expression::{
-    BuiltinCastKind, Expression, ExpressionKind, FallibleCarrierVariant, Operator,
-    type_id_hint_for_diagnostic_type,
+    Expression, ExpressionKind, FallibleCarrierVariant, Operator, type_id_hint_for_diagnostic_type,
 };
+use crate::compiler_frontend::ast::expressions::expression_kind::ResolvedCastExpression;
+use crate::compiler_frontend::ast::expressions::expression_types::{
+    CastHandling, FallibleHandling, ResolvedCastEvidence,
+};
+use crate::compiler_frontend::builtins::casts::{BuiltinCastLiteral, apply_builtin_cast_policy};
 use crate::compiler_frontend::compiler_errors::{CompilerError, ErrorType, SourceLocation};
 use crate::compiler_frontend::compiler_messages::{
-    CompileTimeEvaluationErrorReason, CompilerDiagnostic,
+    CompileTimeEvaluationErrorReason, CompilerDiagnostic, InvalidCastReason,
 };
 use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::value_mode::ValueMode;
 
@@ -199,12 +204,13 @@ pub fn fold_compile_time_expression(
     constant_context: bool,
 ) -> Result<Expression, ConstantFoldError> {
     match &expression.kind {
-        ExpressionKind::BuiltinCast { kind, value } => {
-            let folded_value = fold_compile_time_expression(value, string_table, constant_context)?;
-            fold_builtin_cast(
+        ExpressionKind::Cast(cast) => {
+            let folded_source =
+                fold_compile_time_expression(&cast.source, string_table, constant_context)?;
+            fold_resolved_cast(
                 expression,
-                *kind,
-                &folded_value,
+                cast,
+                &folded_source,
                 string_table,
                 constant_context,
             )
@@ -240,34 +246,256 @@ pub fn fold_compile_time_expression(
     }
 }
 
-fn fold_builtin_cast(
+/// Folds a resolved explicit `ExpressionKind::Cast` when its source has folded to
+/// a supported builtin literal.
+///
+/// WHAT: builtin evidence is evaluated here; user-defined or generic-bound
+///      evidence is rejected in const-required contexts because the compiler
+///      cannot execute user code or validate an unresolved generic bound at
+///      compile time.
+/// WHY: keeping this logic in the constant folder means HIR lowering only sees
+///      runtime casts that could not be folded away.
+fn fold_resolved_cast(
     original_expression: &Expression,
-    kind: BuiltinCastKind,
-    value: &Expression,
+    cast: &ResolvedCastExpression,
+    folded_source: &Expression,
     string_table: &mut StringTable,
     constant_context: bool,
 ) -> Result<Expression, ConstantFoldError> {
-    let cast_result = match kind {
-        BuiltinCastKind::Int => eval_int_cast(value, string_table),
-        BuiltinCastKind::Float => eval_float_cast(value, string_table),
+    match &cast.evidence {
+        ResolvedCastEvidence::Builtin { policy } => {
+            if !policy.is_const_foldable() {
+                if constant_context {
+                    return Err(CompilerDiagnostic::invalid_cast(
+                        InvalidCastReason::BuiltinEvidenceNotConstFoldable,
+                        Some(cast.source_type_id),
+                        Some(cast.target_type_id),
+                        original_expression.location.clone(),
+                    )
+                    .into());
+                }
+
+                return Ok(original_expression.to_owned());
+            }
+
+            let source_literal =
+                match builtin_cast_literal_from_expression(folded_source, string_table) {
+                    Some(literal) => literal,
+                    None => return Ok(original_expression.to_owned()),
+                };
+
+            match apply_builtin_cast_policy(*policy, &source_literal) {
+                Ok(folded_literal) => {
+                    let Some(mut folded_expression) = builtin_cast_expression_from_literal(
+                        &folded_literal,
+                        &folded_source.location,
+                        string_table,
+                    ) else {
+                        return Ok(original_expression.to_owned());
+                    };
+
+                    if cast.requires_optional_wrap_after_cast {
+                        folded_expression =
+                            Expression::coerced(folded_expression, original_expression.type_id);
+                    }
+
+                    Ok(folded_expression)
+                }
+                Err(_) if !constant_context => Ok(original_expression.to_owned()),
+                Err(_) => {
+                    // A const-required fallible cast with a local recovery handler should
+                    // fold to the handler's produced value when the source folded but the
+                    // builtin policy failed. If the handler itself cannot fold, report that
+                    // as a separate diagnostic so the user knows the recovery path is the
+                    // remaining obstacle.
+                    if let CastHandling::Recover(FallibleHandling::Handler { body, .. }) =
+                        &cast.handling
+                        && let Some(folded_handler) = fold_cast_recovery_handler(
+                            body,
+                            cast.target_type_id,
+                            cast.requires_optional_wrap_after_cast,
+                            original_expression.type_id,
+                            &original_expression.location,
+                            string_table,
+                        )?
+                    {
+                        return Ok(folded_handler);
+                    }
+
+                    Err(CompilerDiagnostic::invalid_cast(
+                        InvalidCastReason::BuiltinCastFailedInConst,
+                        Some(cast.source_type_id),
+                        Some(cast.target_type_id),
+                        original_expression.location.clone(),
+                    )
+                    .into())
+                }
+            }
+        }
+
+        ResolvedCastEvidence::UserDefined { .. } => {
+            if constant_context {
+                return Err(CompilerDiagnostic::invalid_cast(
+                    InvalidCastReason::UserDefinedEvidenceNotConstFoldable,
+                    Some(cast.source_type_id),
+                    Some(cast.target_type_id),
+                    original_expression.location.clone(),
+                )
+                .into());
+            }
+
+            Ok(original_expression.to_owned())
+        }
+
+        ResolvedCastEvidence::GenericBound { .. } => {
+            if constant_context {
+                return Err(CompilerDiagnostic::invalid_cast(
+                    InvalidCastReason::GenericBoundEvidenceNotConstFoldable,
+                    Some(cast.source_type_id),
+                    Some(cast.target_type_id),
+                    original_expression.location.clone(),
+                )
+                .into());
+            }
+
+            Ok(original_expression.to_owned())
+        }
+    }
+}
+
+/// Folds a `cast ... catch:` handler body to its produced value in a const-required context.
+///
+/// WHAT: when a builtin cast failed at compile time, the handler body is the only remaining
+///      source for the result. This helper extracts the single produced value, folds it, and
+///      returns it if it collapsed to a compile-time value. If the handler cannot be folded, it
+///      reports a dedicated diagnostic so the failure is attributed to the recovery path, not the
+///      cast.
+/// WHY: keeping this small and local to the constant folder means HIR lowering does not need to
+///      interpret general catch handler bodies at compile time.
+fn fold_cast_recovery_handler(
+    handler_body: &[AstNode],
+    target_type_id: TypeId,
+    requires_optional_wrap_after_cast: bool,
+    result_type_id: TypeId,
+    diagnostic_location: &SourceLocation,
+    string_table: &mut StringTable,
+) -> Result<Option<Expression>, ConstantFoldError> {
+    let Some(handler_expression) = extract_single_produced_value(handler_body) else {
+        return Err(CompilerDiagnostic::invalid_cast(
+            InvalidCastReason::CatchHandlerNotConstFoldable,
+            None,
+            Some(target_type_id),
+            diagnostic_location.to_owned(),
+        )
+        .into());
     };
 
-    match cast_result {
-        Ok(folded_value) => Ok(Expression::result_construct_with_type_id(
-            FallibleCarrierVariant::Success,
-            folded_value,
-            original_expression.diagnostic_type.to_owned(),
-            original_expression.type_id,
-            original_expression.location.clone(),
+    let folded_handler = fold_compile_time_expression(handler_expression, string_table, true)?;
+
+    if !folded_handler.is_compile_time_constant() {
+        return Err(CompilerDiagnostic::invalid_cast(
+            InvalidCastReason::CatchHandlerNotConstFoldable,
+            None,
+            Some(target_type_id),
+            folded_handler.location,
+        )
+        .into());
+    }
+
+    let mut result = folded_handler;
+    if requires_optional_wrap_after_cast {
+        result = Expression::coerced(result, result_type_id);
+    }
+
+    Ok(Some(result))
+}
+
+/// Extracts a direct single-value `then` expression from a value-producing body.
+///
+/// WHAT: catch handlers for cast recovery must produce exactly one value in a shape the constant
+///      folder can evaluate without interpreting statements or control-flow conditions.
+/// WHY: nested `if` or `match` handlers require real const statement evaluation to choose the
+///      executed branch. Until that owner exists, the safe frontend behavior is to reject those
+///      handlers in const-required casts instead of guessing at the first branch.
+fn extract_single_produced_value(body: &[AstNode]) -> Option<&Expression> {
+    for node in body {
+        match &node.kind {
+            NodeKind::ThenValue(produced_values) if produced_values.expressions.len() == 1 => {
+                return Some(&produced_values.expressions[0]);
+            }
+
+            NodeKind::If(..)
+            | NodeKind::Match { .. }
+            | NodeKind::ScopedBlock { .. }
+            | NodeKind::RangeLoop { .. }
+            | NodeKind::CollectionLoop { .. }
+            | NodeKind::WhileLoop(..)
+            | NodeKind::Return(_)
+            | NodeKind::ReturnError(_) => return None,
+
+            _ => {}
+        }
+    }
+
+    None
+}
+
+/// Converts an AST `Expression` into a `BuiltinCastLiteral` for policy lookup.
+///
+/// WHAT: extracts the literal scalar value from supported `ExpressionKind`
+///      variants so the policy owner can answer in policy space.
+/// WHY: explicit casts and direct policy tests share the same policy table, so this
+///      narrow converter is reused for any folded scalar source that the builtin
+///      evidence catalogue accepts.
+fn builtin_cast_literal_from_expression(
+    value: &Expression,
+    string_table: &StringTable,
+) -> Option<BuiltinCastLiteral> {
+    match &value.kind {
+        ExpressionKind::Bool(value) => Some(BuiltinCastLiteral::Bool(*value)),
+        ExpressionKind::Int(int) => Some(BuiltinCastLiteral::Int(*int)),
+        ExpressionKind::Float(float) => Some(BuiltinCastLiteral::Float(*float)),
+        ExpressionKind::StringSlice(string) => Some(BuiltinCastLiteral::String(
+            string_table.resolve(*string).to_owned(),
+        )),
+        ExpressionKind::Char(value) => Some(BuiltinCastLiteral::Char(*value)),
+        _ => None,
+    }
+}
+
+/// Builds an `Expression` literal from a `BuiltinCastLiteral`.
+fn builtin_cast_expression_from_literal(
+    literal: &BuiltinCastLiteral,
+    location: &SourceLocation,
+    string_table: &mut StringTable,
+) -> Option<Expression> {
+    match literal {
+        BuiltinCastLiteral::Bool(value) => Some(Expression::bool(
+            *value,
+            location.clone(),
             ValueMode::ImmutableOwned,
         )),
-        Err(error) if constant_context => Err(compile_time_evaluation_diagnostic(
-            CompileTimeEvaluationErrorReason::InvalidNumericCast,
-            Some(error),
-            string_table,
-            &original_expression.location,
+        BuiltinCastLiteral::Int(value) => Some(Expression::int(
+            *value,
+            location.clone(),
+            ValueMode::ImmutableOwned,
         )),
-        Err(_) => Ok(original_expression.to_owned()),
+        BuiltinCastLiteral::Float(value) => Some(Expression::float(
+            *value,
+            location.clone(),
+            ValueMode::ImmutableOwned,
+        )),
+        BuiltinCastLiteral::String(value) => Some(Expression::string_slice(
+            string_table.get_or_intern(value.to_owned()),
+            location.clone(),
+            ValueMode::ImmutableOwned,
+        )),
+        BuiltinCastLiteral::Char(value) => Some(Expression::char(
+            *value,
+            location.clone(),
+            ValueMode::ImmutableOwned,
+        )),
+        BuiltinCastLiteral::Error { .. } => None,
     }
 }
 
@@ -385,131 +613,6 @@ fn invalid_operator_for_compile_time_type(
         string_table,
         location,
     ))
-}
-
-fn float_to_int_cast_result(float: f64, display: &str) -> Result<i64, String> {
-    if !float.is_finite() {
-        return Err(format!(
-            "Cannot cast Float {display} to Int because it is not finite"
-        ));
-    }
-
-    if float.fract() != 0.0 {
-        return Err(format!(
-            "Cannot cast Float {display} to Int because it is not an exact integer value"
-        ));
-    }
-
-    if float < i64::MIN as f64 || float >= i64::MAX as f64 {
-        return Err(format!(
-            "Cannot cast Float {display} to Int because it exceeds Int range"
-        ));
-    }
-
-    Ok(float as i64)
-}
-
-fn eval_int_cast(value: &Expression, string_table: &StringTable) -> Result<Expression, String> {
-    match &value.kind {
-        ExpressionKind::Int(int) => Ok(Expression::int(
-            *int,
-            value.location.clone(),
-            ValueMode::ImmutableOwned,
-        )),
-        ExpressionKind::Float(float) => Ok(Expression::int(
-            float_to_int_cast_result(*float, &float.to_string())?,
-            value.location.clone(),
-            ValueMode::ImmutableOwned,
-        )),
-        ExpressionKind::StringSlice(string) => {
-            let raw = string_table.resolve(*string);
-            let normalized = normalize_numeric_cast_text(raw);
-
-            if is_signed_integer_text(&normalized) {
-                let parsed = normalized
-                    .parse::<i64>()
-                    .map_err(|_| format!("Cannot parse '{raw}' as Int"))?;
-                return Ok(Expression::int(
-                    parsed,
-                    value.location.clone(),
-                    ValueMode::ImmutableOwned,
-                ));
-            }
-
-            if is_signed_decimal_text(&normalized) {
-                let parsed = normalized
-                    .parse::<f64>()
-                    .map_err(|_| format!("Cannot parse '{raw}' as Int"))?;
-                return Ok(Expression::int(
-                    float_to_int_cast_result(parsed, &normalized)?,
-                    value.location.clone(),
-                    ValueMode::ImmutableOwned,
-                ));
-            }
-
-            Err(format!("Cannot parse '{raw}' as Int"))
-        }
-        _ => Err("Int(...) only accepts Int, Float, or string values".to_string()),
-    }
-}
-
-fn eval_float_cast(value: &Expression, string_table: &StringTable) -> Result<Expression, String> {
-    match &value.kind {
-        ExpressionKind::Float(float) => Ok(Expression::float(
-            *float,
-            value.location.clone(),
-            ValueMode::ImmutableOwned,
-        )),
-        ExpressionKind::Int(int) => Ok(Expression::float(
-            *int as f64,
-            value.location.clone(),
-            ValueMode::ImmutableOwned,
-        )),
-        ExpressionKind::StringSlice(string) => {
-            let raw = string_table.resolve(*string);
-            let normalized = normalize_numeric_cast_text(raw);
-
-            if is_signed_integer_text(&normalized) || is_signed_decimal_text(&normalized) {
-                let parsed = normalized
-                    .parse::<f64>()
-                    .map_err(|_| format!("Cannot parse '{raw}' as Float"))?;
-                if !parsed.is_finite() {
-                    return Err(format!(
-                        "Cannot parse '{raw}' as Float because it is not finite"
-                    ));
-                }
-                return Ok(Expression::float(
-                    parsed,
-                    value.location.clone(),
-                    ValueMode::ImmutableOwned,
-                ));
-            }
-
-            Err(format!("Cannot parse '{raw}' as Float"))
-        }
-        _ => Err("Float(...) only accepts Int, Float, or string values".to_string()),
-    }
-}
-
-fn normalize_numeric_cast_text(raw: &str) -> String {
-    raw.trim().chars().filter(|ch| *ch != '_').collect()
-}
-
-fn is_signed_integer_text(raw: &str) -> bool {
-    let digits = raw.strip_prefix(['+', '-']).unwrap_or(raw);
-    !digits.is_empty() && digits.chars().all(|ch| ch.is_ascii_digit())
-}
-
-fn is_signed_decimal_text(raw: &str) -> bool {
-    let digits = raw.strip_prefix(['+', '-']).unwrap_or(raw);
-    let Some((left, right)) = digits.split_once('.') else {
-        return false;
-    };
-
-    !left.is_empty()
-        && !right.is_empty()
-        && left.chars().all(|ch| ch.is_ascii_digit())
-        && right.chars().all(|ch| ch.is_ascii_digit())
 }
 
 impl Expression {

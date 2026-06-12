@@ -9,7 +9,7 @@ use super::result_type::{infer_inline_result_type, receiver_type_mismatch_contex
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::expressions::parse_expression::{
-    create_expression, create_expression_until,
+    create_boundary_expression_until_with_cast_target, create_expression_with_cast_target,
 };
 use crate::compiler_frontend::ast::statements::value_production::parse_values::{
     ProducedValuesParseInput, parse_produced_values_typed,
@@ -25,7 +25,9 @@ use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
 use crate::compiler_frontend::type_coercion::contextual::coerce_expression_to_explicit_type_boundary;
-use crate::compiler_frontend::type_coercion::parse_context::ExpectedType;
+use crate::compiler_frontend::type_coercion::parse_context::{
+    CastTargetContext, ExpectedType, cast_target_context_for_type_id,
+};
 use crate::compiler_frontend::value_mode::ValueMode;
 
 /// Input for the shared inline then/else parser.
@@ -138,12 +140,15 @@ pub(super) fn parse_inline_then_else(
     let mut then_expr_type = expected_type_id
         .map(ExpectedType::Known)
         .unwrap_or(ExpectedType::Infer);
+    let mut then_cast_target_context =
+        cast_target_context_for_inline_branch(expected_type_id, type_interner, string_table);
 
-    let then_expr = create_expression_until(
+    let then_expr = create_boundary_expression_until_with_cast_target(
         token_stream,
         then_context,
         type_interner,
         &mut then_expr_type,
+        &mut then_cast_target_context,
         &ValueMode::ImmutableOwned,
         &[TokenKind::Else],
         string_table,
@@ -159,11 +164,14 @@ pub(super) fn parse_inline_then_else(
     let mut else_expr_type = expected_type_id
         .map(ExpectedType::Known)
         .unwrap_or(ExpectedType::Infer);
-    let else_expr = create_expression(
+    let mut else_cast_target_context =
+        cast_target_context_for_inline_branch(expected_type_id, type_interner, string_table);
+    let else_expr = create_expression_with_cast_target(
         token_stream,
         else_context,
         type_interner,
         &mut else_expr_type,
+        &mut else_cast_target_context,
         &ValueMode::ImmutableOwned,
         false,
         string_table,
@@ -216,6 +224,18 @@ pub(super) fn parse_inline_then_else(
             expected_result_type_ids.to_vec()
         },
     })
+}
+
+fn cast_target_context_for_inline_branch(
+    expected_type_id: Option<TypeId>,
+    type_interner: &AstTypeInterner<'_>,
+    string_table: &StringTable,
+) -> CastTargetContext {
+    expected_type_id
+        .map(|type_id| {
+            cast_target_context_for_type_id(type_id, type_interner.environment(), string_table)
+        })
+        .unwrap_or(CastTargetContext::None)
 }
 
 /// Requires that the current token is `else` and that it is on the same logical line.

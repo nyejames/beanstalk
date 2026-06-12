@@ -21,6 +21,7 @@ use crate::compiler_frontend::tokenizer::tokens::{
     FileTokens, SourceLocation, Token, TokenKind, TokenizerEntryMode,
 };
 use crate::compiler_frontend::type_coercion::compatibility::TypeCompatibilityCache;
+use crate::compiler_frontend::type_coercion::parse_context::CastTargetContext;
 use crate::compiler_frontend::type_coercion::parse_context::ExpectedType;
 use crate::compiler_frontend::value_mode::ValueMode;
 use std::rc::Rc;
@@ -60,6 +61,7 @@ fn hash_in_expression_position_rejected() {
     let mut next_number_negative = false;
     let mut state = ExpressionDispatchState {
         expected_type: &mut expected_type,
+        cast_target_context: &mut CastTargetContext::None,
         value_mode: &ValueMode::ImmutableOwned,
         consume_closing_parenthesis: false,
         allow_boundary_catch: true,
@@ -113,6 +115,7 @@ fn hash_before_template_head_allowed() {
     let mut next_number_negative = false;
     let mut state = ExpressionDispatchState {
         expected_type: &mut expected_type,
+        cast_target_context: &mut CastTargetContext::None,
         value_mode: &ValueMode::ImmutableOwned,
         consume_closing_parenthesis: false,
         allow_boundary_catch: true,

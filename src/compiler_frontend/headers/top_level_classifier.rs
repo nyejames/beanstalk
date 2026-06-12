@@ -144,6 +144,15 @@ pub(super) fn starts_trait_declaration_after_must(token_stream: &FileTokens) -> 
         && matches!(token_stream.peek_next_token(), Some(TokenKind::Colon))
 }
 
+/// Detect whether the current `must` token starts a trait incompatibility declaration.
+///
+/// WHY: repeated `TRAIT must not TRAIT` incompatibility declarations reuse the subject trait name
+/// and must not shadow the original trait declaration.
+pub(super) fn starts_trait_incompatibility_after_must(token_stream: &FileTokens) -> bool {
+    token_stream.current_token_kind() == &TokenKind::Must
+        && matches!(token_stream.peek_next_token(), Some(TokenKind::Not))
+}
+
 pub(super) fn starts_specialized_generic_conformance_declaration(
     token_stream: &FileTokens,
 ) -> bool {

@@ -152,6 +152,29 @@ pub(crate) fn transfer_statement(
             )?;
         }
 
+        HirStatementKind::CastOp { source, result, .. } => {
+            let location = context.diagnostics.statement_error_location(statement);
+            transfer_call_arguments_and_result(
+                &mut CallTransferContext {
+                    context,
+                    layout,
+                    state,
+                    block_id,
+                    current_order: statement_order,
+                    tracker: &mut tracker,
+                    location,
+                    stats,
+                    value_fact_buffer,
+                },
+                &[CallArgumentTransfer {
+                    argument: source,
+                    effect: ArgEffect::SharedBorrow,
+                }],
+                *result,
+                CallResultAlias::Fresh,
+            )?;
+        }
+
         HirStatementKind::Expr(expression) => {
             let location = context.diagnostics.statement_error_location(statement);
             let mut read_env = SharedReadEnv {
@@ -233,6 +256,20 @@ pub(crate) fn transfer_statement(
                 statement_order,
                 context.diagnostics.value_error_location(
                     value.id,
+                    context.diagnostics.statement_error_location(statement),
+                ),
+                &context.diagnostics,
+            )?;
+        }
+        HirStatementKind::CastOp { source, .. } => {
+            transfer_aggregate_expression_ownership(
+                layout,
+                state,
+                source,
+                block_id,
+                statement_order,
+                context.diagnostics.value_error_location(
+                    source.id,
                     context.diagnostics.statement_error_location(statement),
                 ),
                 &context.diagnostics,

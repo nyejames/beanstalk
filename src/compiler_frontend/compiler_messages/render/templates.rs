@@ -69,12 +69,6 @@ pub(crate) fn compile_time_evaluation_error_message(
         CompileTimeEvaluationErrorReason::IntegerDivisionOnlyIntInt => {
             "Integer division operator '//' only supports Int and Int operands.".to_string()
         }
-        CompileTimeEvaluationErrorReason::InvalidNumericCast => {
-            let detail = operation
-                .map(|operation| string_table.resolve(operation))
-                .unwrap_or("the cast input is invalid");
-            format!("Cannot evaluate this numeric cast at compile time: {detail}.")
-        }
         CompileTimeEvaluationErrorReason::ConstantSelfReference => {
             format!("Constant {operation_text} cannot reference itself in its initializer.")
         }
@@ -139,9 +133,6 @@ pub(crate) fn compile_time_evaluation_error_suggestion(
         }
         CompileTimeEvaluationErrorReason::IntegerDivisionOnlyIntInt => {
             "Use '//' only with two Int operands"
-        }
-        CompileTimeEvaluationErrorReason::InvalidNumericCast => {
-            "Use a numeric value that can be represented by the target type"
         }
         CompileTimeEvaluationErrorReason::ConstantSelfReference => {
             "A constant cannot depend on itself. Use a different value or compute it differently."

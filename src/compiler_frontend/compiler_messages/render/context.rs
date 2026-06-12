@@ -188,6 +188,7 @@ pub(crate) fn token_kind_name(token_kind: &TokenKind, string_table: &StringTable
         TokenKind::If => "`if`".to_owned(),
         TokenKind::Else => "`else`".to_owned(),
         TokenKind::Return => "`return`".to_owned(),
+        TokenKind::ReturnBang => "`return!`".to_owned(),
         TokenKind::Catch => "`catch`".to_owned(),
         TokenKind::Then => "`then`".to_owned(),
         TokenKind::Block => "`block`".to_owned(),
@@ -207,6 +208,8 @@ pub(crate) fn token_kind_name(token_kind: &TokenKind, string_table: &StringTable
         TokenKind::ChannelSend => "`>>`".to_owned(),
         TokenKind::ChannelReceive => "`<<`".to_owned(),
         TokenKind::Yield => "`yield`".to_owned(),
+        TokenKind::Cast => "`cast`".to_owned(),
+        TokenKind::CastBang => "`cast!`".to_owned(),
         TokenKind::Assert => "`assert`".to_owned(),
     }
 }

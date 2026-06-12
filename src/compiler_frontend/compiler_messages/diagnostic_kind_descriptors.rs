@@ -412,6 +412,9 @@ fn rule_descriptor(kind: RuleDiagnosticKind) -> DiagnosticDescriptor {
             "Invalid builtin call",
             DiagnosticSeverity::Error,
         ),
+        RuleDiagnosticKind::InvalidCast => {
+            DiagnosticDescriptor::new("BST-RULE-0083", "Invalid cast", DiagnosticSeverity::Error)
+        }
         RuleDiagnosticKind::InvalidReceiverCall => DiagnosticDescriptor::new(
             "BST-RULE-0047",
             "Invalid receiver call",
@@ -543,6 +546,11 @@ fn rule_descriptor(kind: RuleDiagnosticKind) -> DiagnosticDescriptor {
         RuleDiagnosticKind::InvalidTraitConformance => DiagnosticDescriptor::new(
             "BST-RULE-0073",
             "Invalid trait conformance",
+            DiagnosticSeverity::Error,
+        ),
+        RuleDiagnosticKind::InvalidTraitIncompatibility => DiagnosticDescriptor::new(
+            "BST-RULE-0084",
+            "Invalid trait incompatibility",
             DiagnosticSeverity::Error,
         ),
         RuleDiagnosticKind::GenericBoundPrivateSurfaceLeak => DiagnosticDescriptor::new(

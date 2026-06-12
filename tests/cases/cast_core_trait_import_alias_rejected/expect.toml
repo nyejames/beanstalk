@@ -1,0 +1,5 @@
+[backends.html]
+mode = "failure"
+warnings = "forbid"
+diagnostic_codes = ["BST-RULE-0039"]
+message_contains = ["reserved core trait"]

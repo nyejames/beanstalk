@@ -1306,7 +1306,7 @@ fn visible_static_trait_name(
 
     let trait_environment = context.trait_environment?;
 
-    if let Some(id) = trait_environment.displayable_trait_id_for_name(type_name, string_table) {
+    if let Some(id) = trait_environment.core_trait_id_for_name(type_name, string_table) {
         return trait_environment.get(id).map(|definition| definition.name);
     }
 

@@ -1,0 +1,54 @@
+//! Evidence table unit tests for the builtin cast surface.
+//!
+//! WHAT: covers lookup, fallibility classification, policy id dispatch, and
+//!      kind classification for the initial builtin evidence rows.
+//! WHY: the evidence table is the single source of truth for which (source,
+//!      target) pairs are valid and how they fold. Tests here pin the table
+//!      contents so they cannot drift silently.
+
+use crate::compiler_frontend::builtins::casts::evidence::{
+    builtin_evidence_fallibility, builtin_evidence_kind, builtin_evidence_policy,
+    builtin_evidence_rows, lookup_builtin_evidence,
+};
+use crate::compiler_frontend::builtins::casts::targets::{
+    BuiltinCastFallibility, BuiltinCastPolicyId, BuiltinCastTarget, CastEvidenceKind,
+};
+
+#[test]
+fn evidence_table_covers_every_initial_row() {
+    let rows = builtin_evidence_rows();
+    assert_eq!(rows.len(), 14);
+}
+
+#[test]
+fn int_to_float_is_infallible_with_dedicated_policy() {
+    let row = lookup_builtin_evidence(BuiltinCastTarget::Int, BuiltinCastTarget::Float)
+        .expect("Int -> Float evidence should exist");
+    assert_eq!(row.fallibility, BuiltinCastFallibility::Infallible);
+    assert_eq!(row.policy, BuiltinCastPolicyId::IntToFloat);
+    assert_eq!(builtin_evidence_kind(), CastEvidenceKind::Builtin);
+}
+
+#[test]
+fn float_to_int_is_fallible_with_truncation_policy() {
+    let row = lookup_builtin_evidence(BuiltinCastTarget::Float, BuiltinCastTarget::Int)
+        .expect("Float -> Int evidence should exist");
+    assert_eq!(row.fallibility, BuiltinCastFallibility::Fallible);
+    assert_eq!(row.policy, BuiltinCastPolicyId::FloatToInt);
+}
+
+#[test]
+fn fallibility_helpers_match_row_classification() {
+    assert_eq!(
+        builtin_evidence_fallibility(BuiltinCastTarget::String, BuiltinCastTarget::Bool),
+        Some(BuiltinCastFallibility::Fallible)
+    );
+    assert_eq!(
+        builtin_evidence_policy(BuiltinCastTarget::String, BuiltinCastTarget::Bool),
+        Some(BuiltinCastPolicyId::StringToBool)
+    );
+    assert_eq!(
+        builtin_evidence_fallibility(BuiltinCastTarget::Bool, BuiltinCastTarget::Int),
+        None
+    );
+}

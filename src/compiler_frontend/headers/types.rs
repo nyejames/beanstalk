@@ -21,7 +21,9 @@ use crate::compiler_frontend::symbols::identity::FileId;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation};
-use crate::compiler_frontend::traits::syntax::{TraitConformanceSyntax, TraitDeclarationSyntax};
+use crate::compiler_frontend::traits::syntax::{
+    TraitConformanceSyntax, TraitDeclarationSyntax, TraitIncompatibilitySyntax,
+};
 use crate::compiler_frontend::utilities::token_scan::InitializerReference;
 use std::collections::HashSet;
 use std::fmt::Display;
@@ -129,6 +131,16 @@ pub enum HeaderKind {
     ///      the header stage; evidence validation happens during AST environment construction.
     TraitConformance {
         conformance: TraitConformanceSyntax,
+    },
+
+    /// Trait incompatibility declaration: `TRAIT must not TRAIT, TRAIT`
+    ///
+    /// WHAT: parse-only shell for a source-authored mutual incompatibility between traits.
+    /// WHY: incompatibility declarations are bodyless top-level metadata discovered at the
+    ///      header stage; semantic resolution and symmetric recording happen during AST
+    ///      environment construction after trait registration.
+    TraitIncompatibility {
+        incompatibility: TraitIncompatibilitySyntax,
     },
 }
 
@@ -306,6 +318,10 @@ impl HeaderKind {
 
             HeaderKind::TraitConformance { conformance } => {
                 conformance.remap_string_ids(remap);
+            }
+
+            HeaderKind::TraitIncompatibility { incompatibility } => {
+                incompatibility.remap_string_ids(remap);
             }
         }
     }

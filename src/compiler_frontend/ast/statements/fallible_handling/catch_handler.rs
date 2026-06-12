@@ -31,17 +31,17 @@ use super::validation::{
     validate_catch_fallible_handler_value_requirement,
 };
 
-pub(super) struct CatchFallibleHandler {
-    pub(super) error: Option<CatchErrorBinding>,
-    pub(super) body: Vec<AstNode>,
+pub(crate) struct CatchFallibleHandler {
+    pub(crate) error: Option<CatchErrorBinding>,
+    pub(crate) body: Vec<AstNode>,
 }
 
-pub(super) struct CatchFallibleHandlerSite<'a> {
-    pub(super) success_result_type_ids: &'a [TypeId],
-    pub(super) error_return_type_id: TypeId,
-    pub(super) value_required: bool,
-    pub(super) compilation_stage: &'a str,
-    pub(super) value_required_location: SourceLocation,
+pub(crate) struct CatchFallibleHandlerSite<'a> {
+    pub(crate) success_result_type_ids: &'a [TypeId],
+    pub(crate) error_return_type_id: TypeId,
+    pub(crate) value_required: bool,
+    pub(crate) compilation_stage: &'a str,
+    pub(crate) value_required_location: SourceLocation,
 }
 
 /// Parses a `catch |err|:` handler with an explicit error binding.
@@ -50,7 +50,7 @@ pub(super) struct CatchFallibleHandlerSite<'a> {
 /// validates the binding name, and produces a typed `CatchFallibleHandler`.
 /// WHY: expression and call fallible handling both use this entrypoint when the user
 /// supplies an error variable.
-pub(super) fn parse_catch_fallible_handler_typed(
+pub(crate) fn parse_catch_fallible_handler_typed(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
@@ -82,7 +82,7 @@ pub(super) fn parse_catch_fallible_handler_typed(
 ///
 /// WHAT: skips error-variable parsing and proceeds directly to the handler body.
 /// WHY: used when the catch handler does not need to reference the error value.
-pub(super) fn parse_catch_without_error_binding_typed(
+pub(crate) fn parse_catch_without_error_binding_typed(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,

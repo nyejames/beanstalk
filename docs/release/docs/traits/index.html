@@ -420,6 +420,44 @@ body {
         <span class='bst-code-keyword'>return</span> value.display<span class='bst-code-parenthesis'>(</span><span class='bst-code-parenthesis'>)</span>
     ;
     </code></pre><p>Use <code>type T is TRAIT</code> when static reuse is intended. Use choices when runtime heterogeneity is needed.</p></section>
+    <section class="container"><h1>Trait incompatibility</h1><p><code>TRAIT must not TRAIT</code> records narrow incompatibility metadata for explicit conformance.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>TEXT</span> must<span class='bst-code-operator'>:</span>
+        text <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span>
+    ;
+
+    <span class='bst-code-struct'>FALLIBLE_TEXT</span> must<span class='bst-code-operator'>:</span>
+        try_text <span class='bst-code-operator'>|</span><span class='bst-code-struct'>This</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-struct'>String,</span> <span class='bst-code-struct'>Error</span><span class='bst-code-operator'>!</span>
+    ;
+
+    <span class='bst-code-struct'>TEXT</span> must not <span class='bst-code-struct'>FALLIBLE_TEXT</span>
+    </code></pre><p>A type may not explicitly conform to both sides of an active incompatibility relation. The relation is symmetric and affects conformance validation only. It does not add requirements, imply negative conformance, compose traits, or create runtime dispatch.</p></section>
+    <section class="container"><h1>Core cast traits</h1><p>The compiler owns static cast traits such as <code>CASTABLE_TO_STRING</code> and <code>TRY_CASTABLE_TO_INT</code>. They resolve without imports and cannot be redeclared, imported, exported, aliased, shadowed, or used as ordinary values.</p><p>Same-file nominal source types, including aligned generic constructors, can provide user-defined cast evidence by implementing the required receiver method and declaring conformance.</p><pre style="
+        background-color: hsla(0, 0%, 42%, 0.12);
+        padding-left: 1em;
+        border-radius: 5px;
+        max-width: 100%;
+        white-space: pre;
+        overflow-x: auto;
+    "><code class='codeblock'>
+    <span class='bst-code-struct'>Label</span> <span class='bst-code-operator'>=</span> <span class='bst-code-operator'>|</span>
+        text <span class='bst-code-struct'>String,</span>
+    <span class='bst-code-operator'>|</span>
+
+    to_string <span class='bst-code-operator'>|</span>this <span class='bst-code-struct'>Label</span><span class='bst-code-operator'>|</span> <span class='bst-code-operator'>-</span><span class='bst-code-operator'>&gt;</span> <span class='bst-code-type'>String</span><span class='bst-code-operator'>:</span>
+        <span class='bst-code-keyword'>return</span> this.text
+    ;
+
+    <span class='bst-code-struct'>Label</span> must <span class='bst-code-struct'>CASTABLE_TO_STRING</span>
+
+    value <span class='bst-code-type'>String</span> <span class='bst-code-operator'>=</span> cast <span class='bst-code-struct'>Label</span><span class='bst-code-parenthesis'>(</span><span class='bst-code-string'>&quot;docs&quot;</span><span class='bst-code-parenthesis'>)</span>
+    </code></pre><p>Core cast traits prove source evidence for <code>cast</code>. They do not create user-defined cast targets, generic cast targets, external opaque cast targets, or a general conversion system. Infallible and fallible cast traits for the same builtin target are incompatible through compiler-owned <code>must not</code> metadata.</p></section>
     <section class="container"><h1>Runtime heterogeneity</h1><p>Runtime heterogeneity is represented with choices, not trait objects.</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
@@ -733,7 +771,7 @@ body {
     }
 
     function __bs_normalize_numeric_text(value) {
-    return value.trim().replace(/_/g, "");
+    return value.trim();
     }
 
     function __bs_cast_int(value) {
@@ -755,15 +793,9 @@ body {
     }
     return { tag: "ok", value: parsed };
     }
-    if (/^[+-]?[0-9]+\.[0-9]+$/.test(normalized)) {
-    const parsed = Number.parseFloat(normalized);
-    if (Number.isInteger(parsed) && Number.isSafeInteger(parsed)) {
-    return { tag: "ok", value: parsed };
-    }
-    }
     return { tag: "err", value: __bs_make_error("Cannot parse Int from text", 200, null, null) };
     }
-    return { tag: "err", value: __bs_make_error("Int(...) only accepts Int, Float, or string values", 200, null, null) };
+    return { tag: "err", value: __bs_make_error("Cast to Int only accepts Int, Float, or string values", 200, null, null) };
     }
 
     function __bs_cast_float(value) {
@@ -775,7 +807,10 @@ body {
     }
     if (typeof value === "string") {
     const normalized = __bs_normalize_numeric_text(value);
-    if (/^[+-]?[0-9]+$/.test(normalized) || /^[+-]?[0-9]+\.[0-9]+$/.test(normalized)) {
+    if (/^[+-]?(?:NaN|Infinity)$/i.test(normalized) || /^[+-]?inf$/i.test(normalized)) {
+    return { tag: "err", value: __bs_make_error("Float value is out of supported range", 211, null, null) };
+    }
+    if (/^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$/.test(normalized)) {
     const parsed = Number.parseFloat(normalized);
     if (!Number.isFinite(parsed)) {
     return { tag: "err", value: __bs_make_error("Float value is out of supported range", 211, null, null) };
@@ -784,7 +819,7 @@ body {
     }
     return { tag: "err", value: __bs_make_error("Cannot parse Float from text", 210, null, null) };
     }
-    return { tag: "err", value: __bs_make_error("Float(...) only accepts Int, Float, or string values", 210, null, null) };
+    return { tag: "err", value: __bs_make_error("Cast to Float only accepts Int, Float, or string values", 210, null, null) };
     }
 
     function b_fn6() {

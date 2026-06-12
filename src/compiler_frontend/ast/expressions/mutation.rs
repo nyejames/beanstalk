@@ -12,7 +12,9 @@ use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration, NodeKind};
 use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
 use crate::compiler_frontend::ast::expressions::eval_expression::evaluate_expression;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, Operator};
-use crate::compiler_frontend::ast::expressions::parse_expression::create_expression;
+use crate::compiler_frontend::ast::expressions::parse_expression::{
+    create_expression, create_expression_with_cast_target,
+};
 use crate::compiler_frontend::ast::field_access::parse_field_access;
 use crate::compiler_frontend::ast::place_access::{ast_node_is_mutable_place, ast_node_is_place};
 use crate::compiler_frontend::ast::statements::value_production::receiver::try_parse_value_block_at_receiver;
@@ -30,7 +32,7 @@ use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::type_coercion::compatibility::is_declaration_compatible;
 use crate::compiler_frontend::type_coercion::contextual::coerce_expression_to_declared_type;
 use crate::compiler_frontend::type_coercion::parse_context::{
-    ExpectedType, parse_expectation_for_type_id,
+    ExpectedType, cast_target_context_for_type_id, parse_expectation_for_type_id,
 };
 
 /// Extract the canonical `TypeId` of an assignment target.
@@ -229,6 +231,11 @@ fn build_mutation_from_target(
 
             let mut expr_type =
                 parse_expectation_for_type_id(target_type_id, type_interner.environment());
+            let mut cast_target_context = cast_target_context_for_type_id(
+                target_type_id,
+                type_interner.environment(),
+                string_table,
+            );
             let rhs_context = variable_declaration
                 .id
                 .name()
@@ -245,11 +252,12 @@ fn build_mutation_from_target(
             ) {
                 value_block_result?
             } else {
-                create_expression(
+                create_expression_with_cast_target(
                     token_stream,
                     &rhs_context,
                     type_interner,
                     &mut expr_type,
+                    &mut cast_target_context,
                     &variable_declaration.value.value_mode,
                     false,
                     string_table,

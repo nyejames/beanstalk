@@ -201,8 +201,7 @@ pub(super) fn resolve_trait_reference(
         return Ok(id);
     }
 
-    if let Some(id) = trait_environment.displayable_trait_id_for_name(trait_ref.name, string_table)
-    {
+    if let Some(id) = trait_environment.core_trait_id_for_name(trait_ref.name, string_table) {
         return Ok(id);
     }
 

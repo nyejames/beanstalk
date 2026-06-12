@@ -194,6 +194,13 @@ impl<'a> HirValidator<'a> {
                 self.require_local_id(*vec_local, anchor)?;
                 self.validate_expression(value, anchor)?;
             }
+
+            HirStatementKind::CastOp { source, result, .. } => {
+                self.validate_expression(source, anchor)?;
+                if let Some(local_id) = result {
+                    self.require_local_id(*local_id, anchor)?;
+                }
+            }
         }
 
         Ok(())

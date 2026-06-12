@@ -4,7 +4,7 @@
 //! control-flow edges explicit.
 
 use crate::backends::js::JsEmitter;
-use crate::backends::js::js_expr::escape_js_string;
+use crate::backends::js::js_expr::{escape_js_string, js_cast_helper_for_policy};
 use crate::backends::js::value_use::JsValueUse;
 use crate::compiler_frontend::analysis::borrow_checker::LocalMode;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
@@ -42,6 +42,27 @@ impl<'hir> JsEmitter<'hir> {
                 result,
             } => {
                 self.emit_call_statement(target, args, result)?;
+            }
+
+            HirStatementKind::CastOp {
+                policy,
+                source,
+                result,
+            } => {
+                let source_expr = self.lower_expr(source)?;
+                let helper = js_cast_helper_for_policy(*policy).ok_or_else(|| {
+                    CompilerError::compiler_error(format!(
+                        "JavaScript backend: CastOp policy {:?} has no runtime helper",
+                        policy
+                    ))
+                })?;
+                let call = format!("{helper}({source_expr})");
+                if let Some(result_local) = result {
+                    let result_name = self.local_name(*result_local)?;
+                    self.emit_line(&format!("__bs_assign_value({result_name}, {call});"));
+                } else {
+                    self.emit_line(&format!("{call};"));
+                }
             }
 
             HirStatementKind::MapOp {

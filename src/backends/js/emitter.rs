@@ -6,6 +6,7 @@
 use crate::backends::js::JsModule;
 use crate::backends::js::{JsFunctionEmissionPolicy, JsLoweringConfig};
 use crate::compiler_frontend::analysis::borrow_checker::BorrowCheckReport;
+use crate::compiler_frontend::builtins::casts::targets::BuiltinCastPolicyId;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::hir::blocks::HirBlock;
@@ -53,6 +54,9 @@ pub(crate) struct JsEmitter<'hir> {
         HashSet<crate::compiler_frontend::external_packages::ExternalFunctionId>,
     /// Whether choice equality was lowered, requiring the runtime helper.
     pub(crate) used_choice_equality: bool,
+    /// Builtin cast policies referenced while lowering emitted JS functions.
+    /// Used to conditionally emit the matching runtime helpers.
+    pub(crate) used_cast_policies: HashSet<BuiltinCastPolicyId>,
 }
 
 impl<'hir> JsEmitter<'hir> {
@@ -86,6 +90,7 @@ impl<'hir> JsEmitter<'hir> {
             temp_counter: 0,
             referenced_external_functions: HashSet::new(),
             used_choice_equality: false,
+            used_cast_policies: HashSet::new(),
         }
     }
 
@@ -94,6 +99,7 @@ impl<'hir> JsEmitter<'hir> {
 
         let functions = self.functions_to_emit()?;
         let emitted_code_uses_maps = self.emitted_functions_use_maps(&functions)?;
+        self.collect_used_cast_policies(&functions)?;
         self.emit_runtime_prelude(emitted_code_uses_maps);
 
         for (index, function) in functions.into_iter().enumerate() {
@@ -212,10 +218,40 @@ impl<'hir> JsEmitter<'hir> {
                 .iter()
                 .any(|argument| self.expression_uses_maps(argument)),
 
+            HirStatementKind::CastOp { source, .. } => self.expression_uses_maps(source),
+
             HirStatementKind::MapOp { .. } => true,
 
             HirStatementKind::Drop(_) => false,
         }
+    }
+
+    /// Records builtin cast policies used by the functions that will be emitted.
+    ///
+    /// WHAT: scans the same reachable function/body subset selected for JS output before the
+    /// runtime prelude is written.
+    /// WHY: cast runtime helpers are emitted in the prelude, so policy discovery cannot depend on
+    /// the later expression-lowering pass that writes function bodies.
+    fn collect_used_cast_policies(
+        &mut self,
+        functions: &[&'hir HirFunction],
+    ) -> Result<(), CompilerError> {
+        self.used_cast_policies.clear();
+
+        for function in functions {
+            let reachable_blocks = self.collect_reachable_blocks(function.entry)?;
+            for block_id in reachable_blocks {
+                let block = self.block_by_id(block_id)?;
+
+                for statement in &block.statements {
+                    collect_statement_cast_policies(&statement.kind, &mut self.used_cast_policies);
+                }
+
+                collect_terminator_cast_policies(&block.terminator, &mut self.used_cast_policies);
+            }
+        }
+
+        Ok(())
     }
 
     fn terminator_uses_maps(&self, terminator: &HirTerminator) -> bool {
@@ -298,7 +334,7 @@ impl<'hir> JsEmitter<'hir> {
                 self.expression_uses_maps(result)
             }
 
-            HirExpressionKind::BuiltinCast { value, .. } => self.expression_uses_maps(value),
+            HirExpressionKind::Cast { source, .. } => self.expression_uses_maps(source),
 
             HirExpressionKind::VariantConstruct { fields, .. } => fields
                 .iter()
@@ -321,5 +357,165 @@ impl<'hir> JsEmitter<'hir> {
     ) -> Result<rustc_hash::FxHashSet<FunctionId>, CompilerError> {
         let reachability = collect_reachability_from_start(self.hir)?;
         Ok(reachability.reachable_functions)
+    }
+}
+
+fn collect_statement_cast_policies(
+    statement: &HirStatementKind,
+    policies: &mut HashSet<BuiltinCastPolicyId>,
+) {
+    match statement {
+        HirStatementKind::Assign { value, .. }
+        | HirStatementKind::Expr(value)
+        | HirStatementKind::PushRuntimeFragment { value, .. } => {
+            collect_expression_cast_policies(value, policies);
+        }
+
+        HirStatementKind::Call { args, .. } => {
+            for argument in args {
+                collect_expression_cast_policies(argument, policies);
+            }
+        }
+
+        HirStatementKind::CastOp { policy, source, .. } => {
+            policies.insert(*policy);
+            collect_expression_cast_policies(source, policies);
+        }
+
+        HirStatementKind::MapOp { receiver, args, .. } => {
+            collect_expression_cast_policies(receiver, policies);
+            for argument in args {
+                collect_expression_cast_policies(argument, policies);
+            }
+        }
+
+        HirStatementKind::Drop(_) => {}
+    }
+}
+
+fn collect_terminator_cast_policies(
+    terminator: &HirTerminator,
+    policies: &mut HashSet<BuiltinCastPolicyId>,
+) {
+    match terminator {
+        HirTerminator::If { condition, .. } => {
+            collect_expression_cast_policies(condition, policies)
+        }
+
+        HirTerminator::FallibleBranch { result, .. } => {
+            collect_expression_cast_policies(result, policies);
+        }
+
+        HirTerminator::Match { scrutinee, arms } => {
+            collect_expression_cast_policies(scrutinee, policies);
+            for arm in arms {
+                if let Some(guard) = &arm.guard {
+                    collect_expression_cast_policies(guard, policies);
+                }
+                collect_pattern_cast_policies(&arm.pattern, policies);
+            }
+        }
+
+        HirTerminator::Return(value)
+        | HirTerminator::ReturnSuccess(value)
+        | HirTerminator::ReturnError(value) => collect_expression_cast_policies(value, policies),
+
+        HirTerminator::Jump { .. }
+        | HirTerminator::Break { .. }
+        | HirTerminator::Continue { .. }
+        | HirTerminator::Uninitialized
+        | HirTerminator::RuntimeFailure { .. }
+        | HirTerminator::AssertFailure { .. } => {}
+    }
+}
+
+fn collect_pattern_cast_policies(
+    pattern: &HirPattern,
+    policies: &mut HashSet<BuiltinCastPolicyId>,
+) {
+    match pattern {
+        HirPattern::Literal(value)
+        | HirPattern::OptionValue { value }
+        | HirPattern::OptionRelational { value, .. }
+        | HirPattern::Relational { value, .. } => collect_expression_cast_policies(value, policies),
+
+        HirPattern::OptionNone
+        | HirPattern::OptionPresent
+        | HirPattern::Wildcard
+        | HirPattern::ChoiceVariant { .. }
+        | HirPattern::Capture => {}
+    }
+}
+
+fn collect_expression_cast_policies(
+    expression: &HirExpression,
+    policies: &mut HashSet<BuiltinCastPolicyId>,
+) {
+    match &expression.kind {
+        HirExpressionKind::BinOp { left, right, .. } => {
+            collect_expression_cast_policies(left, policies);
+            collect_expression_cast_policies(right, policies);
+        }
+
+        HirExpressionKind::UnaryOp { operand, .. } => {
+            collect_expression_cast_policies(operand, policies)
+        }
+
+        HirExpressionKind::StructConstruct { fields, .. } => {
+            for (_, value) in fields {
+                collect_expression_cast_policies(value, policies);
+            }
+        }
+
+        HirExpressionKind::Collection(elements)
+        | HirExpressionKind::TupleConstruct { elements } => {
+            for element in elements {
+                collect_expression_cast_policies(element, policies);
+            }
+        }
+
+        HirExpressionKind::Range { start, end } => {
+            collect_expression_cast_policies(start, policies);
+            collect_expression_cast_policies(end, policies);
+        }
+
+        HirExpressionKind::TupleGet { tuple, .. } => {
+            collect_expression_cast_policies(tuple, policies);
+        }
+
+        HirExpressionKind::FallibleUnwrapSuccess { result }
+        | HirExpressionKind::FallibleUnwrapError { result } => {
+            collect_expression_cast_policies(result, policies);
+        }
+
+        HirExpressionKind::Cast { source, policy } => {
+            policies.insert(*policy);
+            collect_expression_cast_policies(source, policies);
+        }
+
+        HirExpressionKind::VariantConstruct { fields, .. } => {
+            for field in fields {
+                collect_expression_cast_policies(&field.value, policies);
+            }
+        }
+
+        HirExpressionKind::VariantPayloadGet { source, .. } => {
+            collect_expression_cast_policies(source, policies);
+        }
+
+        HirExpressionKind::MapLiteral(entries) => {
+            for entry in entries {
+                collect_expression_cast_policies(&entry.key, policies);
+                collect_expression_cast_policies(&entry.value, policies);
+            }
+        }
+
+        HirExpressionKind::Int(_)
+        | HirExpressionKind::Float(_)
+        | HirExpressionKind::Bool(_)
+        | HirExpressionKind::Char(_)
+        | HirExpressionKind::StringLiteral(_)
+        | HirExpressionKind::Load(_)
+        | HirExpressionKind::Copy(_) => {}
     }
 }

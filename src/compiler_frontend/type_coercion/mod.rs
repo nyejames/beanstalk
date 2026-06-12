@@ -14,7 +14,7 @@
 //!
 //! This module does NOT own:
 //! - operator result typing (`eval_expression.rs` still decides `Int + Float → Float`)
-//! - builtin explicit casts (`Int(...)` / `Float(...)` syntax lives in `builtins/`)
+//! - explicit `cast` evidence selection or builtin cast policies (those live in `builtins/casts/`)
 //! - template formatting, composition, or slot mechanics
 
 pub(crate) mod compatibility;

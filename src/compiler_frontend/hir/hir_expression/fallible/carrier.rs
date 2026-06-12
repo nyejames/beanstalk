@@ -24,11 +24,11 @@ use crate::return_hir_transformation_error;
 ///
 /// WHAT: stores the temporary local holding the backend-boundary carrier plus its semantic slots.
 /// WHY: propagation, catch, and direct-return lowering all branch from the same carrier shape.
-pub(super) struct EmittedFallibleCarrier {
-    pub(super) result_local: LocalId,
-    pub(super) carrier_type: TypeId,
-    pub(super) ok_type: TypeId,
-    pub(super) err_type: TypeId,
+pub(crate) struct EmittedFallibleCarrier {
+    pub(crate) result_local: LocalId,
+    pub(crate) carrier_type: TypeId,
+    pub(crate) ok_type: TypeId,
+    pub(crate) err_type: TypeId,
 }
 
 /// Success/error blocks created from one fallible carrier branch.
@@ -86,7 +86,7 @@ impl<'a> HirBuilder<'a> {
     /// function on the error edge, and leaves the builder on the success continuation.
     /// WHY: value-position propagation needs a single success value to continue with, but the
     /// error path must still be explicit control flow visible to borrow validation.
-    pub(super) fn lower_fallible_carrier_to_success_value(
+    pub(crate) fn lower_fallible_carrier_to_success_value(
         &mut self,
         result_carrier: EmittedFallibleCarrier,
         location: &SourceLocation,
@@ -270,7 +270,7 @@ impl<'a> HirBuilder<'a> {
     ///
     /// WHAT: resolves a user function's return type and extracts its success/error slot types.
     /// WHY: fallible call lowering needs the carrier shape before emitting any instructions.
-    pub(super) fn result_call_carrier_slots(
+    pub(crate) fn result_call_carrier_slots(
         &self,
         target: &CallTarget,
         location: &SourceLocation,

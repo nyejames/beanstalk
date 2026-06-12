@@ -6,8 +6,8 @@
 
 use super::*;
 use crate::compiler_frontend::compiler_messages::{
-    DiagnosticPayload, InvalidTraitConformanceReason, InvalidTraitKeywordUsageReason,
-    NamingConvention, ReservedNameOwner,
+    DiagnosticPayload, InvalidTraitConformanceReason, InvalidTraitIncompatibilityReason,
+    InvalidTraitKeywordUsageReason, NamingConvention, ReservedNameOwner,
 };
 use crate::libraries::SourceFileKind;
 
@@ -352,6 +352,16 @@ fn render_payload_message(
             trait_name,
             reason,
         } => invalid_trait_conformance_message(*target_name, *trait_name, reason, context),
+        DiagnosticPayload::InvalidTraitIncompatibility {
+            subject_name,
+            incompatible_trait_name,
+            reason,
+        } => invalid_trait_incompatibility_message(
+            *subject_name,
+            *incompatible_trait_name,
+            reason,
+            context,
+        ),
         DiagnosticPayload::TraitNameUsedAsType { trait_name } => {
             trait_name_used_as_type_message(*trait_name, context)
         }
@@ -362,6 +372,7 @@ fn render_payload_message(
             let owner = match reserved_by {
                 ReservedNameOwner::BuiltinType => "builtin type",
                 ReservedNameOwner::Keyword => "keyword",
+                ReservedNameOwner::CoreTrait => "core trait",
             };
             format!(
                 "Reserved name collision: '{}' is a reserved {}",
@@ -394,6 +405,11 @@ fn render_payload_message(
             reason,
             builtin_name,
         } => invalid_builtin_call_message(*reason, *builtin_name, string_table),
+        DiagnosticPayload::InvalidCast {
+            reason,
+            source_type,
+            target_type,
+        } => invalid_cast_message(*reason, *source_type, *target_type, context),
         DiagnosticPayload::InvalidReceiverCall {
             reason,
             receiver_type,
@@ -544,6 +560,14 @@ fn invalid_trait_conformance_message(
                 "User-authored trait evidence for '{target}'{trait_text} cannot override compiler-owned builtin evidence."
             )
         }
+        InvalidTraitConformanceReason::IncompatibleTraitEvidence {
+            incompatible_trait_name,
+        } => {
+            format!(
+                "Type '{target}' cannot conform{trait_text} because it is incompatible with existing evidence for trait '{}'.",
+                string_table.resolve(*incompatible_trait_name)
+            )
+        }
         InvalidTraitConformanceReason::MissingMethod { requirement_name } => {
             format!(
                 "'{target}' cannot conform{trait_text} because same-file receiver method '{}' is missing.",
@@ -630,6 +654,40 @@ fn invalid_trait_keyword_usage_message(reason: InvalidTraitKeywordUsageReason) -
         }
         InvalidTraitKeywordUsageReason::ThisOutsideTraitSyntax => {
             "Keyword 'This' is trait-local syntax and cannot be used here."
+        }
+    }
+}
+
+fn invalid_trait_incompatibility_message(
+    subject_name: StringId,
+    incompatible_trait_name: Option<StringId>,
+    reason: &InvalidTraitIncompatibilityReason,
+    context: DiagnosticRenderContext<'_>,
+) -> String {
+    let string_table = context.string_table;
+    let subject = string_table.resolve(subject_name);
+    let trait_text = incompatible_trait_name
+        .map(|name| format!("'{}'", string_table.resolve(name)))
+        .unwrap_or_else(|| "a trait".to_string());
+
+    match reason {
+        InvalidTraitIncompatibilityReason::SelfIncompatible => {
+            format!("Trait '{subject}' cannot be declared incompatible with itself.")
+        }
+        InvalidTraitIncompatibilityReason::UnknownTrait => {
+            format!(
+                "Trait incompatibility declaration for '{subject}' references unknown trait {trait_text}. Both traits must be visible and declared before the relation."
+            )
+        }
+        InvalidTraitIncompatibilityReason::DuplicateRelation => {
+            format!(
+                "Duplicate incompatibility relation between '{subject}' and {trait_text}. The same pair of traits only needs to be declared incompatible once."
+            )
+        }
+        InvalidTraitIncompatibilityReason::PrivateTraitSurfaceLeak => {
+            format!(
+                "Exported trait incompatibility relation between '{subject}' and {trait_text} exposes a private trait through the facade. Both sides of an exported relation must be public from this facade."
+            )
         }
     }
 }

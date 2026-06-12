@@ -1,0 +1,3 @@
+loop cast true:
+    break
+;

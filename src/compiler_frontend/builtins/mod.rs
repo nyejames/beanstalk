@@ -16,6 +16,7 @@ pub enum CollectionBuiltinOp {
     Length,
 }
 
+pub(crate) mod casts;
 pub(crate) mod error_codes;
 pub(crate) mod error_type;
 pub(crate) mod expression_parsing;

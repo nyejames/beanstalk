@@ -1208,6 +1208,154 @@ fn trait_declaration_and_reference_names_must_be_all_caps() {
 }
 
 #[test]
+fn trait_incompatibility_headers_parse_single_and_continued_trait_lists() {
+    let (headers, string_table) = parse_single_file_headers_with_table("A must not B,\n    C\n");
+
+    let incompatibility_header = headers
+        .headers
+        .iter()
+        .find(|header| matches!(header.kind, HeaderKind::TraitIncompatibility { .. }))
+        .expect("expected trait incompatibility header");
+
+    let HeaderKind::TraitIncompatibility { incompatibility } = &incompatibility_header.kind else {
+        panic!("expected trait incompatibility header kind");
+    };
+
+    let trait_names = incompatibility
+        .incompatible_traits
+        .iter()
+        .map(|trait_ref| string_table.resolve(trait_ref.name).to_owned())
+        .collect::<Vec<_>>();
+
+    assert_eq!(string_table.resolve(incompatibility.subject.name), "A");
+    assert_eq!(trait_names, vec!["B", "C"]);
+}
+
+#[test]
+fn trait_incompatibility_reuses_subject_trait_name_without_duplicate_error() {
+    let headers = parse_single_file_headers(
+        "A must:\n\
+         ;
+\
+         A must not B\n",
+    );
+
+    let trait_headers = headers
+        .headers
+        .iter()
+        .filter(|header| matches!(header.kind, HeaderKind::Trait { .. }))
+        .count();
+    let incompatibility_headers = headers
+        .headers
+        .iter()
+        .filter(|header| matches!(header.kind, HeaderKind::TraitIncompatibility { .. }))
+        .count();
+
+    assert_eq!(trait_headers, 1, "subject trait should parse once");
+    assert_eq!(
+        incompatibility_headers, 1,
+        "incompatibility declaration should parse without duplicate-name error"
+    );
+}
+
+#[test]
+fn trait_incompatibility_rejects_missing_trait_name() {
+    let result =
+        parse_single_file_headers_with_entry("A must not\n", "src/#page.bst", "src/#page.bst");
+    let errors = expect_header_error(
+        result,
+        "incompatibility declarations require at least one trait name",
+    );
+
+    assert!(errors.diagnostics.iter().any(|diagnostic| matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidDeclaration {
+            reason: InvalidDeclarationReason::TraitIncompatibilityMissingTrait,
+            ..
+        }
+    )));
+}
+
+#[test]
+fn trait_incompatibility_rejects_trailing_comma() {
+    let result =
+        parse_single_file_headers_with_entry("A must not B,\n", "src/#page.bst", "src/#page.bst");
+    let errors = expect_header_error(result, "trailing incompatibility commas should be rejected");
+
+    assert!(errors.diagnostics.iter().any(|diagnostic| matches!(
+        diagnostic.payload,
+        DiagnosticPayload::UnexpectedTrailingComma
+    )));
+}
+
+#[test]
+fn trait_incompatibility_rejects_semicolon_terminator() {
+    let result =
+        parse_single_file_headers_with_entry("A must not B;\n", "src/#page.bst", "src/#page.bst");
+    let errors = expect_header_error(
+        result,
+        "incompatibility declarations should be newline terminated",
+    );
+
+    assert!(errors.diagnostics.iter().any(|diagnostic| matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidDeclaration {
+            reason: InvalidDeclarationReason::TraitIncompatibilitySemicolon,
+            ..
+        }
+    )));
+}
+
+#[test]
+fn trait_incompatibility_subject_and_reference_names_must_be_all_caps() {
+    let declaration_result = parse_single_file_headers_with_entry(
+        "Displayable must not Other\n",
+        "src/#page.bst",
+        "src/#page.bst",
+    );
+    let declaration_errors = expect_header_error(
+        declaration_result,
+        "incompatibility subjects should require all-caps names",
+    );
+
+    assert!(
+        declaration_errors
+            .diagnostics
+            .iter()
+            .any(|diagnostic| matches!(
+                diagnostic.payload,
+                DiagnosticPayload::InvalidDeclaration {
+                    reason: InvalidDeclarationReason::InvalidTraitName,
+                    ..
+                }
+            ))
+    );
+
+    let reference_result = parse_single_file_headers_with_entry(
+        "DISPLAYABLE must not Other\n",
+        "src/#page.bst",
+        "src/#page.bst",
+    );
+    let reference_errors = expect_header_error(
+        reference_result,
+        "incompatibility trait references should require all-caps names",
+    );
+
+    assert!(
+        reference_errors
+            .diagnostics
+            .iter()
+            .any(|diagnostic| matches!(
+                diagnostic.payload,
+                DiagnosticPayload::InvalidDeclaration {
+                    reason: InvalidDeclarationReason::InvalidTraitName,
+                    ..
+                }
+            ))
+    );
+}
+
+#[test]
 fn trait_this_outside_trait_declaration_is_targeted() {
     let result =
         parse_single_file_headers_with_entry("value This = 1\n", "src/#page.bst", "src/#page.bst");
@@ -2367,6 +2515,21 @@ fn export_before_trait_declaration_marks_header_public() {
 }
 
 #[test]
+fn export_before_trait_incompatibility_marks_header_public() {
+    let source = "export DISPLAY_TEXT must not TRY_DISPLAY_TEXT\n";
+    let headers = parse_single_file_headers_with_entry(source, "src/#mod.bst", "src/#page.bst")
+        .expect("headers should parse");
+
+    let incompatibility_header = headers
+        .headers
+        .iter()
+        .find(|header| matches!(header.kind, HeaderKind::TraitIncompatibility { .. }))
+        .expect("expected trait incompatibility header");
+
+    assert_eq!(incompatibility_header.export_mode, HeaderExportMode::Public);
+}
+
+#[test]
 fn export_before_trait_conformance_is_rejected() {
     let result = parse_single_file_headers_with_entry(
         "export Label must DISPLAY_TEXT\n",
@@ -2463,4 +2626,103 @@ fn capacity_references_extract_value_refs_without_treating_element_type_as_value
         !capacity_names.contains(&"MyType"),
         "element type name must not be treated as a capacity value reference"
     );
+}
+
+// ------------------------------
+//  Core cast trait name collision tests
+// ------------------------------
+
+#[test]
+fn header_parsing_rejects_core_cast_trait_source_declaration() {
+    let result = parse_single_file_headers_with_entry(
+        "CASTABLE_TO_STRING must:\n    to_string |This| -> String\n;\n",
+        "src/#page.bst",
+        "src/#page.bst",
+    );
+    let errors = expect_header_error(
+        result,
+        "source declaration of a core cast trait name must be rejected",
+    );
+
+    assert!(errors.diagnostics.iter().any(|diagnostic| matches!(
+        &diagnostic.payload,
+        DiagnosticPayload::ReservedNameCollision {
+            reserved_by: ReservedNameOwner::CoreTrait,
+            ..
+        }
+    )));
+}
+
+#[test]
+fn header_parsing_allows_displayable_source_declaration() {
+    let headers = parse_single_file_headers("DISPLAYABLE must:\n    display |This| -> String\n;\n");
+
+    assert!(
+        headers
+            .headers
+            .iter()
+            .any(|header| matches!(header.kind, HeaderKind::Trait { .. })),
+        "DISPLAYABLE declarations must remain valid outside the core cast trait hardening slice"
+    );
+}
+
+#[test]
+fn header_parsing_rejects_grouped_import_alias_to_core_cast_trait_name() {
+    let sources = vec![
+        (
+            "USER_TRAIT must:\n    to_string |This| -> String\n;\n".to_owned(),
+            "src/helper.bst".to_owned(),
+        ),
+        (
+            "import @./helper { USER_TRAIT as CASTABLE_TO_STRING }\n".to_owned(),
+            "src/#page.bst".to_owned(),
+        ),
+    ];
+
+    let (result, _warnings, _string_table) =
+        parse_multi_file_headers_with_result(&sources, "src/#page.bst");
+    assert!(
+        result.is_err(),
+        "grouped import alias to a core cast trait name must be rejected"
+    );
+
+    let errors = result.err().expect("expected parse errors");
+    assert!(errors.diagnostics().iter().any(|diagnostic| matches!(
+        &diagnostic.payload,
+        DiagnosticPayload::ReservedNameCollision {
+            reserved_by: ReservedNameOwner::CoreTrait,
+            ..
+        }
+    )));
+}
+
+#[test]
+fn header_parsing_rejects_facade_re_export_with_core_cast_trait_name() {
+    let sources = vec![
+        (
+            "USER_TRAIT must:\n    to_string |This| -> String\n;\n".to_owned(),
+            "src/helper.bst".to_owned(),
+        ),
+        (
+            "export import @./helper { USER_TRAIT as CASTABLE_TO_STRING }\n".to_owned(),
+            "src/#mod.bst".to_owned(),
+        ),
+        ("import @./helper\n".to_owned(), "src/#page.bst".to_owned()),
+    ];
+
+    let (result, _warnings, _string_table) =
+        parse_multi_file_headers_with_result(&sources, "src/#page.bst");
+    assert!(
+        result.is_err(),
+        "facade re-export under a core cast trait name must be rejected"
+    );
+
+    let errors = result.err().expect("expected parse errors");
+    assert!(errors.diagnostics().iter().any(|diagnostic| matches!(
+        &diagnostic.payload,
+        DiagnosticPayload::ReservedNameCollision {
+            reserved_by: ReservedNameOwner::CoreTrait,
+            ..
+        }
+    )));
 }

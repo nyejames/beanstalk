@@ -1685,23 +1685,23 @@ path = "fixed_collection_same_file_forward_capacity_rejected"
 tags = ["integration", "collections", "fixed-collections", "diagnostics"]
 
 [[case]]
-id = "cast_float_from_string_runtime_output"
-path = "cast_float_from_string_runtime_output"
+id = "scalar_float_constructor_removed"
+path = "scalar_float_constructor_removed"
 tags = ["integration","js-backend"]
 
 [[case]]
-id = "cast_float_invalid_format_fallback"
-path = "cast_float_invalid_format_fallback"
+id = "scalar_float_constructor_removed_with_catch"
+path = "scalar_float_constructor_removed_with_catch"
 tags = ["integration","js-backend","results"]
 
 [[case]]
-id = "cast_int_from_string_runtime_output"
-path = "cast_int_from_string_runtime_output"
+id = "scalar_int_constructor_removed"
+path = "scalar_int_constructor_removed"
 tags = ["integration","js-backend"]
 
 [[case]]
-id = "cast_int_invalid_format_fallback"
-path = "cast_int_invalid_format_fallback"
+id = "scalar_int_constructor_removed_with_catch"
+path = "scalar_int_constructor_removed_with_catch"
 tags = ["integration","js-backend","results"]
 
 [[case]]
@@ -1940,8 +1940,8 @@ path = "consistent_ownership_outcomes"
 tags = ["integration","borrows"]
 
 [[case]]
-id = "constant_fold_invalid_numeric_cast"
-path = "constant_fold_invalid_numeric_cast"
+id = "constant_fold_scalar_constructor_removed"
+path = "constant_fold_scalar_constructor_removed"
 tags = ["integration","diagnostics","constants"]
 
 [[case]]
@@ -4400,6 +4400,286 @@ tags = ["integration","traits","diagnostics"]
 id = "trait_conformance_imported_source_target_rejected"
 path = "trait_conformance_imported_source_target_rejected"
 tags = ["integration","traits", "diagnostics"]
+
+[[case]]
+id = "trait_conformance_incompatible_same_declaration_rejected"
+path = "trait_conformance_incompatible_same_declaration_rejected"
+tags = ["integration","traits","diagnostics"]
+
+[[case]]
+id = "trait_conformance_incompatible_cross_declaration_rejected"
+path = "trait_conformance_incompatible_cross_declaration_rejected"
+tags = ["integration","traits","diagnostics"]
+
+[[case]]
+id = "trait_incompatibility_parse_success"
+path = "trait_incompatibility_parse_success"
+tags = ["integration","traits"]
+
+[[case]]
+id = "trait_incompatibility_self_rejected"
+path = "trait_incompatibility_self_rejected"
+tags = ["integration","traits","diagnostics"]
+
+[[case]]
+id = "trait_incompatibility_unknown_trait_rejected"
+path = "trait_incompatibility_unknown_trait_rejected"
+tags = ["integration","traits","diagnostics"]
+
+[[case]]
+id = "trait_incompatibility_forward_relation_rejected"
+path = "trait_incompatibility_forward_relation_rejected"
+tags = ["integration","traits","diagnostics"]
+
+[[case]]
+id = "trait_incompatibility_duplicate_rejected"
+path = "trait_incompatibility_duplicate_rejected"
+tags = ["integration","traits","diagnostics"]
+
+[[case]]
+id = "trait_relation_facade_public_leaks_private_rejected"
+path = "trait_relation_facade_public_leaks_private_rejected"
+tags = ["integration","traits","diagnostics","facade"]
+
+[[case]]
+id = "trait_relation_facade_private_private_success"
+path = "trait_relation_facade_private_private_success"
+tags = ["integration","traits","facade"]
+
+[[case]]
+id = "core_cast_trait_name_used_as_value_rejected"
+path = "core_cast_trait_name_used_as_value_rejected"
+tags = ["integration","traits","diagnostics","cast"]
+
+[[case]]
+id = "cast_parenthesized_operator_operand_rejected"
+path = "cast_parenthesized_operator_operand_rejected"
+tags = ["integration","diagnostics","cast"]
+
+[[case]]
+id = "cast_non_builtin_target_rejected"
+path = "cast_non_builtin_target_rejected"
+tags = ["integration","diagnostics","cast"]
+
+[[case]]
+id = "cast_concrete_function_parameter_fallible_rejected"
+path = "cast_concrete_function_parameter_fallible_rejected"
+tags = ["integration","diagnostics","cast"]
+
+[[case]]
+id = "cast_struct_constructor_field_fallible_rejected"
+path = "cast_struct_constructor_field_fallible_rejected"
+tags = ["integration","diagnostics","cast"]
+
+[[case]]
+id = "cast_choice_constructor_field_fallible_rejected"
+path = "cast_choice_constructor_field_fallible_rejected"
+tags = ["integration","diagnostics","cast"]
+
+[[case]]
+id = "cast_generic_parameter_target_rejected"
+path = "cast_generic_parameter_target_rejected"
+tags = ["integration","diagnostics","cast"]
+
+[[case]]
+id = "cast_struct_field_default_fallible_rejected"
+path = "cast_struct_field_default_fallible_rejected"
+tags = ["integration","diagnostics","cast"]
+
+[[case]]
+id = "cast_const_infallible_success"
+path = "cast_const_infallible_success"
+tags = ["integration","language","cast","const"]
+
+[[case]]
+id = "cast_const_fallible_catch_success"
+path = "cast_const_fallible_catch_success"
+tags = ["integration","language","cast","const"]
+
+[[case]]
+id = "cast_const_failed_builtin_propagate_rejected"
+path = "cast_const_failed_builtin_propagate_rejected"
+tags = ["integration","diagnostics","cast","const"]
+
+[[case]]
+id = "cast_const_catch_branching_rejected"
+path = "cast_const_catch_branching_rejected"
+tags = ["integration","diagnostics","cast","const"]
+
+[[case]]
+id = "cast_struct_field_default_builtin_cast_success"
+path = "cast_struct_field_default_builtin_cast_success"
+tags = ["integration","language","cast","const","struct"]
+
+[[case]]
+id = "cast_function_parameter_default_builtin_cast_success"
+path = "cast_function_parameter_default_builtin_cast_success"
+tags = ["integration","language","cast","const","function"]
+
+[[case]]
+id = "cast_function_parameter_default_fallible_catch_success"
+path = "cast_function_parameter_default_fallible_catch_success"
+tags = ["integration","language","cast","const","function"]
+
+[[case]]
+id = "cast_struct_field_default_fallible_catch_success"
+path = "cast_struct_field_default_fallible_catch_success"
+tags = ["integration","language","cast","const","struct"]
+
+[[case]]
+id = "cast_const_error_materialization_rejected"
+path = "cast_const_error_materialization_rejected"
+tags = ["integration","diagnostics","cast","const"]
+
+[[case]]
+id = "cast_runtime_string_bool_catch_success"
+path = "cast_runtime_string_bool_catch_success"
+tags = ["integration","language","cast","runtime"]
+
+[[case]]
+id = "cast_runtime_string_int_underscore_rejected"
+path = "cast_runtime_string_int_underscore_rejected"
+tags = ["integration","language","cast","runtime"]
+
+[[case]]
+id = "cast_runtime_builtin_infallible_success"
+path = "cast_runtime_builtin_infallible_success"
+tags = ["integration","language","cast","runtime"]
+
+[[case]]
+id = "cast_runtime_fallible_success"
+path = "cast_runtime_fallible_success"
+tags = ["integration","language","cast","runtime"]
+
+[[case]]
+id = "cast_runtime_fallible_catch_recovery"
+path = "cast_runtime_fallible_catch_recovery"
+tags = ["integration","language","cast","runtime"]
+
+[[case]]
+id = "cast_target_propagation_success"
+path = "cast_target_propagation_success"
+tags = ["integration","language","cast","target-sites"]
+
+[[case]]
+id = "cast_user_same_file_string_success"
+path = "cast_user_same_file_string_success"
+tags = ["integration","language","cast","user-defined","traits"]
+
+[[case]]
+id = "cast_user_same_file_error_success"
+path = "cast_user_same_file_error_success"
+tags = ["integration","language","cast","user-defined","traits","results"]
+
+[[case]]
+id = "cast_user_multiple_targets_success"
+path = "cast_user_multiple_targets_success"
+tags = ["integration","language","cast","user-defined","traits","results"]
+
+[[case]]
+id = "cast_generic_builtin_evidence_success"
+path = "cast_generic_builtin_evidence_success"
+tags = ["integration","language","cast","generics","traits","runtime"]
+
+[[case]]
+id = "cast_generic_user_evidence_success"
+path = "cast_generic_user_evidence_success"
+tags = ["integration","language","cast","generics","traits","user-defined"]
+
+[[case]]
+id = "cast_missing_target_rejected"
+path = "cast_missing_target_rejected"
+tags = ["integration","diagnostics","cast"]
+
+[[case]]
+id = "cast_same_type_rejected"
+path = "cast_same_type_rejected"
+tags = ["integration","diagnostics","cast"]
+
+[[case]]
+id = "cast_optional_source_rejected"
+path = "cast_optional_source_rejected"
+tags = ["integration","diagnostics","cast"]
+
+[[case]]
+id = "cast_unhandled_operand_error_rejected"
+path = "cast_unhandled_operand_error_rejected"
+tags = ["integration","diagnostics","cast","results"]
+
+[[case]]
+id = "cast_propagation_requires_error_return_rejected"
+path = "cast_propagation_requires_error_return_rejected"
+tags = ["integration","diagnostics","cast","results"]
+
+[[case]]
+id = "cast_propagation_recovery_conflict_rejected"
+path = "cast_propagation_recovery_conflict_rejected"
+tags = ["integration","diagnostics","cast","results"]
+
+[[case]]
+id = "cast_infallible_with_bang_rejected"
+path = "cast_infallible_with_bang_rejected"
+tags = ["integration","diagnostics","cast","results"]
+
+[[case]]
+id = "cast_no_evidence_rejected"
+path = "cast_no_evidence_rejected"
+tags = ["integration","diagnostics","cast"]
+
+[[case]]
+id = "cast_condition_target_rejected"
+path = "cast_condition_target_rejected"
+tags = ["integration","diagnostics","cast"]
+
+[[case]]
+id = "cast_loop_target_rejected"
+path = "cast_loop_target_rejected"
+tags = ["integration","diagnostics","cast"]
+
+[[case]]
+id = "cast_assert_target_rejected"
+path = "cast_assert_target_rejected"
+tags = ["integration","diagnostics","cast"]
+
+[[case]]
+id = "cast_template_interpolation_target_rejected"
+path = "cast_template_interpolation_target_rejected"
+tags = ["integration","diagnostics","cast","templates"]
+
+[[case]]
+id = "cast_user_evidence_const_rejected"
+path = "cast_user_evidence_const_rejected"
+tags = ["integration","diagnostics","cast","const","traits","user-defined"]
+
+[[case]]
+id = "cast_scalar_bool_constructor_removed"
+path = "cast_scalar_bool_constructor_removed"
+tags = ["integration","diagnostics","cast","scalar-constructors"]
+
+[[case]]
+id = "cast_scalar_string_constructor_removed"
+path = "cast_scalar_string_constructor_removed"
+tags = ["integration","diagnostics","cast","scalar-constructors"]
+
+[[case]]
+id = "cast_scalar_char_constructor_removed"
+path = "cast_scalar_char_constructor_removed"
+tags = ["integration","diagnostics","cast","scalar-constructors"]
+
+[[case]]
+id = "cast_core_trait_redeclaration_rejected"
+path = "cast_core_trait_redeclaration_rejected"
+tags = ["integration","diagnostics","cast","traits"]
+
+[[case]]
+id = "cast_core_trait_import_alias_rejected"
+path = "cast_core_trait_import_alias_rejected"
+tags = ["integration","diagnostics","cast","traits","imports"]
+
+[[case]]
+id = "cast_core_trait_export_alias_rejected"
+path = "cast_core_trait_export_alias_rejected"
+tags = ["integration","diagnostics","cast","traits","imports","facade"]
 
 [[case]]
 id = "function_trailing_comma_returns"

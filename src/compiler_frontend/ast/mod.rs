@@ -325,7 +325,8 @@ impl AstHeaderCounterSnapshot {
 
                 HeaderKind::TypeAlias { .. }
                 | HeaderKind::ConstTemplate { .. }
-                | HeaderKind::StartFunction => {}
+                | HeaderKind::StartFunction
+                | HeaderKind::TraitIncompatibility { .. } => {}
             }
         }
 

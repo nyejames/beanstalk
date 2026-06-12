@@ -132,7 +132,7 @@ pub(crate) fn compile_html_module_wasm(
         .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
     build_plan.wasm_request.external_package_registry = input.external_package_registry.clone();
 
-    validate_html_wasm_generic_support(
+    validate_html_wasm_supported_hir_features(
         input,
         &build_plan.wasm_request.export_policy.exported_functions,
         string_table,
@@ -193,7 +193,7 @@ pub(crate) fn compile_html_module_wasm(
     })
 }
 
-fn validate_html_wasm_generic_support(
+fn validate_html_wasm_supported_hir_features(
     input: &HtmlModuleCompileInput<'_>,
     root_functions: &[FunctionId],
     string_table: &mut StringTable,
@@ -206,26 +206,179 @@ fn validate_html_wasm_generic_support(
     })
     .map_err(|error| CompilerMessages::from_error(error, string_table.clone()))?;
 
-    let Some(location) = first_generic_runtime_module_location(
+    if let Some(location) =
+        first_runtime_cast_module_location(input.hir_module, &reachability.reachable_blocks)
+    {
+        return Err(unsupported_html_wasm_feature(
+            input,
+            string_table,
+            "runtime casts",
+            location,
+        ));
+    }
+
+    if let Some(location) = first_generic_runtime_module_location(
         input.hir_module,
         input.type_environment,
         &reachability.reachable_blocks,
-    ) else {
-        return Ok(());
-    };
+    ) {
+        return Err(unsupported_html_wasm_feature(
+            input,
+            string_table,
+            "generic runtime values",
+            location,
+        ));
+    }
 
+    Ok(())
+}
+
+fn unsupported_html_wasm_feature(
+    input: &HtmlModuleCompileInput<'_>,
+    string_table: &mut StringTable,
+    feature_name: &str,
+    location: SourceLocation,
+) -> CompilerMessages {
     let backend_name = string_table.intern("html_wasm");
-    let feature = string_table.intern("generic runtime values");
+    let feature = string_table.intern(feature_name);
     let diagnostic =
         CompilerDiagnostic::unsupported_backend_feature(backend_name, feature, location);
 
-    Err(
-        CompilerMessages::from_diagnostic(diagnostic, string_table.clone())
-            .with_type_context_for_all_diagnostics(input.type_environment.clone()),
-    )
+    CompilerMessages::from_diagnostic(diagnostic, string_table.clone())
+        .with_type_context_for_all_diagnostics(input.type_environment.clone())
 }
 
 // Only reachable blocks are scanned here; dead blocks stay invisible to this backend check.
+fn first_runtime_cast_module_location(
+    module: &HirModule,
+    reachable_blocks: &FxHashSet<BlockId>,
+) -> Option<SourceLocation> {
+    for block in &module.blocks {
+        if !reachable_blocks.contains(&block.id) {
+            continue;
+        }
+
+        for statement in &block.statements {
+            if let Some(location) = first_runtime_cast_statement_location(statement, module) {
+                return Some(location);
+            }
+        }
+
+        if let Some(location) = first_runtime_cast_terminator_location(&block.terminator, module) {
+            return Some(location);
+        }
+    }
+
+    None
+}
+
+fn first_runtime_cast_statement_location(
+    statement: &HirStatement,
+    module: &HirModule,
+) -> Option<SourceLocation> {
+    match &statement.kind {
+        HirStatementKind::Assign { value, .. }
+        | HirStatementKind::Expr(value)
+        | HirStatementKind::PushRuntimeFragment { value, .. } => {
+            first_runtime_cast_expression_location(value, module)
+        }
+        HirStatementKind::Call { args, .. } => args
+            .iter()
+            .find_map(|arg| first_runtime_cast_expression_location(arg, module)),
+        HirStatementKind::CastOp { .. } => Some(statement.location.clone()),
+        HirStatementKind::MapOp { receiver, args, .. } => {
+            first_runtime_cast_expression_location(receiver, module).or_else(|| {
+                args.iter()
+                    .find_map(|arg| first_runtime_cast_expression_location(arg, module))
+            })
+        }
+        HirStatementKind::Drop(_) => None,
+    }
+}
+
+fn first_runtime_cast_terminator_location(
+    terminator: &HirTerminator,
+    module: &HirModule,
+) -> Option<SourceLocation> {
+    match terminator {
+        HirTerminator::If { condition, .. } => {
+            first_runtime_cast_expression_location(condition, module)
+        }
+        HirTerminator::FallibleBranch { result, .. }
+        | HirTerminator::Return(result)
+        | HirTerminator::ReturnSuccess(result)
+        | HirTerminator::ReturnError(result) => {
+            first_runtime_cast_expression_location(result, module)
+        }
+        HirTerminator::Match { scrutinee, arms } => {
+            first_runtime_cast_expression_location(scrutinee, module).or_else(|| {
+                arms.iter().find_map(|arm| {
+                    arm.guard
+                        .as_ref()
+                        .and_then(|guard| first_runtime_cast_expression_location(guard, module))
+                })
+            })
+        }
+        HirTerminator::Jump { .. }
+        | HirTerminator::Break { .. }
+        | HirTerminator::Continue { .. }
+        | HirTerminator::Uninitialized
+        | HirTerminator::RuntimeFailure { .. }
+        | HirTerminator::AssertFailure { .. } => None,
+    }
+}
+
+fn first_runtime_cast_expression_location(
+    expression: &HirExpression,
+    module: &HirModule,
+) -> Option<SourceLocation> {
+    match &expression.kind {
+        HirExpressionKind::Cast { .. } => Some(
+            module
+                .side_table
+                .value_source_location(expression.id)
+                .cloned()
+                .unwrap_or_default(),
+        ),
+        HirExpressionKind::BinOp { left, right, .. } => {
+            first_runtime_cast_expression_location(left, module)
+                .or_else(|| first_runtime_cast_expression_location(right, module))
+        }
+        HirExpressionKind::UnaryOp { operand, .. }
+        | HirExpressionKind::TupleGet { tuple: operand, .. }
+        | HirExpressionKind::FallibleUnwrapSuccess { result: operand }
+        | HirExpressionKind::FallibleUnwrapError { result: operand }
+        | HirExpressionKind::VariantPayloadGet {
+            source: operand, ..
+        } => first_runtime_cast_expression_location(operand, module),
+        HirExpressionKind::StructConstruct { fields, .. } => fields
+            .iter()
+            .find_map(|(_, value)| first_runtime_cast_expression_location(value, module)),
+        HirExpressionKind::Collection(items)
+        | HirExpressionKind::TupleConstruct { elements: items } => items
+            .iter()
+            .find_map(|item| first_runtime_cast_expression_location(item, module)),
+        HirExpressionKind::MapLiteral(entries) => entries.iter().find_map(|entry| {
+            first_runtime_cast_expression_location(&entry.key, module)
+                .or_else(|| first_runtime_cast_expression_location(&entry.value, module))
+        }),
+        HirExpressionKind::Range { start, end } => {
+            first_runtime_cast_expression_location(start, module)
+                .or_else(|| first_runtime_cast_expression_location(end, module))
+        }
+        HirExpressionKind::VariantConstruct { fields, .. } => fields
+            .iter()
+            .find_map(|field| first_runtime_cast_expression_location(&field.value, module)),
+        HirExpressionKind::Int(_)
+        | HirExpressionKind::Float(_)
+        | HirExpressionKind::Bool(_)
+        | HirExpressionKind::Char(_)
+        | HirExpressionKind::StringLiteral(_)
+        | HirExpressionKind::Load(_)
+        | HirExpressionKind::Copy(_) => None,
+    }
+}
+
 fn first_generic_runtime_module_location(
     module: &HirModule,
     type_environment: &TypeEnvironment,
@@ -268,6 +421,9 @@ fn first_generic_runtime_statement_location(
         HirStatementKind::Call { args, .. } => args.iter().find_map(|arg| {
             first_generic_runtime_expression_location(arg, module, type_environment)
         }),
+        HirStatementKind::CastOp { source, .. } => {
+            first_generic_runtime_expression_location(source, module, type_environment)
+        }
         HirStatementKind::MapOp { receiver, args, .. } => {
             first_generic_runtime_expression_location(receiver, module, type_environment).or_else(
                 || {
@@ -345,7 +501,9 @@ fn first_generic_runtime_expression_location(
         | HirExpressionKind::TupleGet { tuple: operand, .. }
         | HirExpressionKind::FallibleUnwrapSuccess { result: operand }
         | HirExpressionKind::FallibleUnwrapError { result: operand }
-        | HirExpressionKind::BuiltinCast { value: operand, .. }
+        | HirExpressionKind::Cast {
+            source: operand, ..
+        }
         | HirExpressionKind::VariantPayloadGet {
             source: operand, ..
         } => first_generic_runtime_expression_location(operand, module, type_environment),

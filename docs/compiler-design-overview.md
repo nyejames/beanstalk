@@ -33,12 +33,12 @@ They assemble one or more compiled modules into runnable artifacts such as HTML,
 - `src/compiler_frontend/module_dependencies.rs` orders top-level declaration headers by header-provided dependency edges, including constant initializer dependencies
 - `src/compiler_frontend/declaration_syntax/` owns shared declaration-shell parsing used by headers and body-local AST parsing. It keeps syntactically equivalent declaration shapes on one parser path, but it does not own semantic type resolution.
 - `src/compiler_frontend/datatypes/` owns `TypeEnvironment` (canonical semantic type identity) and `DataType` (parse-only / diagnostic-only type syntax). Semantic identity is `TypeId` equality in the relevant `TypeEnvironment`; `DataType` must not be used for semantic decisions in executable AST or HIR.
-- `src/compiler_frontend/type_coercion/` owns contextual compatibility and promotion rules layered on top of type identity
+- `src/compiler_frontend/type_coercion/` owns implicit contextual compatibility and promotion rules layered on top of type identity. Explicit `cast` resolution is AST-owned and uses compiler-owned cast policy/evidence metadata instead of the coercion path.
 - `src/compiler_frontend/value_mode.rs` tracks frontend access classification for bindings, expressions, call arguments, and receiver use. It keeps mutability/reference state separate from `DataType`; runtime ownership is a later borrow/lowering concern
 - `src/compiler_frontend/traits/` owns parsed trait shells, resolved trait definitions, explicit same-file nominal conformance evidence, reusable evidence visibility, static generic-bound evidence checks, and trait diagnostics. Trait metadata is compile-time frontend state, not a value type or backend-side source rediscovery path
 - `src/compiler_frontend/source_libraries/` resolves builder/project source library roots into normal module inputs
 - `src/compiler_frontend/external_packages/` stores backend-provided virtual package metadata and stable external symbol IDs
-- `src/compiler_frontend/builtins/` owns compiler-defined language symbols and operations that are neither user source declarations nor backend-provided external packages
+- `src/compiler_frontend/builtins/` owns compiler-defined language symbols and operations that are neither user source declarations nor backend-provided external packages, including builtin cast target classification, policy metadata, runtime error codes, and core cast trait definitions/evidence.
 - `src/compiler_frontend/style_directives/` owns the merged frontend + builder directive registry used by tokenizer and template parsing
 - Design-scope and deferred-feature diagnostics should be centralized through typed `CompilerDiagnostic` constructors. Deferred features and outside-design-scope rejections must remain distinct diagnostic reasons.
 
@@ -391,6 +391,7 @@ AST owns:
 - generic declaration/type validation at the frontend level
 - generic free-function template storage, body validation, immediate local call inference, and concrete instance emission before HIR
 - trait declaration resolution, trait visibility, conformance evidence validation, static generic-bound evidence checks, and bound-provided receiver calls on generic parameters
+- explicit `cast` target resolution, evidence selection, fallibility validation, and builtin cast folding
 - constant folding and const-only validation
 - template composition, compile-time folding, control-flow validation, helper elimination, and runtime render-plan preparation
 
@@ -448,7 +449,7 @@ Examples of boundary owners:
 - declarations
 - returns
 - template/string content
-- explicit builtin casts
+- explicit `cast` target boundaries
 - backend/prelude call contracts
 
 Detailed numeric rules, match syntax, cast syntax, and string coercion rules belong in `docs/language-overview.md`.
@@ -506,6 +507,7 @@ HIR owns:
 * module constants as compile-time metadata
 * advisory private const-fact metadata projected from AST for future optimization consumers
 * stable external function IDs selected during AST resolution
+* resolved runtime cast expressions and fallible cast operations that survive AST folding
 * backend-neutral syntactic reachability over functions, blocks, external call IDs, and scalar-keyed hashmap operations from explicit roots
 * enough structure for borrow validation and later backend lowering
 

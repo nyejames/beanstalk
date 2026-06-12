@@ -178,7 +178,7 @@ pub(crate) fn common_syntax_mistake_suggestion(reason: &CommonSyntaxMistakeReaso
             "Remove `&`; shared borrows are automatic. For mutation, prefix the place with `~` at the call site."
         }
         CommonSyntaxMistakeReason::InvalidAsOperator => {
-            "Use builtin casts such as Int(value) where supported, or use `as` only in a supported renaming context"
+            "Use `cast` at an explicitly typed boundary for supported conversions, or use `as` only in a supported renaming context"
         }
         CommonSyntaxMistakeReason::SignatureAsKeyword => {
             "Remove `as` or use it only in a supported renaming context"

@@ -218,6 +218,10 @@ impl<'a> HirReachabilityContext<'a> {
             }
 
             HirStatementKind::Drop(_) => {}
+
+            HirStatementKind::CastOp { source, .. } => {
+                self.collect_runtime_feature_uses_from_expression(source, &statement.location);
+            }
         }
     }
 
@@ -300,7 +304,9 @@ impl<'a> HirReachabilityContext<'a> {
             HirExpressionKind::UnaryOp { operand, .. }
             | HirExpressionKind::FallibleUnwrapSuccess { result: operand }
             | HirExpressionKind::FallibleUnwrapError { result: operand }
-            | HirExpressionKind::BuiltinCast { value: operand, .. }
+            | HirExpressionKind::Cast {
+                source: operand, ..
+            }
             | HirExpressionKind::VariantPayloadGet {
                 source: operand, ..
             } => {

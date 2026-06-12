@@ -152,15 +152,17 @@ pub(crate) fn lower_expression(
         HirExpressionKind::MapLiteral(_) => Err(lir_transformation_error(
             "Wasm hashmap literal reached lowering before backend feature validation",
         )),
+        HirExpressionKind::Cast { .. } => Err(lir_transformation_error(
+            "Wasm lowering does not yet support cast expressions",
+        )),
         HirExpressionKind::StructConstruct { .. }
         | HirExpressionKind::Range { .. }
         | HirExpressionKind::TupleConstruct { .. }
         | HirExpressionKind::TupleGet { .. }
         | HirExpressionKind::FallibleUnwrapSuccess { .. }
         | HirExpressionKind::FallibleUnwrapError { .. }
-        | HirExpressionKind::BuiltinCast { .. }
         | HirExpressionKind::VariantPayloadGet { .. } => Err(lir_transformation_error(
-            "Wasm lowering does not yet support this expression construct",
+            "Wasm lowering does not yet support this HIR expression",
         )),
     }
 }

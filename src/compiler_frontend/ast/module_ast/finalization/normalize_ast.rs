@@ -43,6 +43,7 @@ use crate::compiler_frontend::ast::expressions::call_argument::CallArgument;
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, FallibleHandling,
 };
+use crate::compiler_frontend::ast::expressions::expression_types::CastHandling;
 use crate::compiler_frontend::ast::statements::match_patterns::MatchPattern;
 use crate::compiler_frontend::ast::statements::value_production::types::ValueBlock;
 use crate::compiler_frontend::ast::templates::error::TemplateError;
@@ -531,8 +532,19 @@ fn normalize_expression_templates_with_context(
             None
         }
 
-        ExpressionKind::BuiltinCast { value, .. }
-        | ExpressionKind::FallibleCarrierConstruct { value, .. }
+        ExpressionKind::Cast(cast) => {
+            normalize_expression_templates_with_context(
+                &mut cast.source,
+                context,
+                helper_artifact_policy,
+            )?;
+            if let CastHandling::Recover(handling) = &mut cast.handling {
+                normalize_fallible_handling_templates(handling, context, helper_artifact_policy)?;
+            }
+            None
+        }
+
+        ExpressionKind::FallibleCarrierConstruct { value, .. }
         | ExpressionKind::OptionPropagation { value }
         | ExpressionKind::Coerced { value, .. } => {
             normalize_expression_templates_with_context(value, context, helper_artifact_policy)?;

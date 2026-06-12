@@ -1,17 +1,20 @@
-//! Public facade API type-surface validation.
+//! Public facade API surface validation.
 //!
 //! WHAT: rejects explicit `export` declarations in `#mod.bst` whose authored type surfaces
-//! require a type name that is not part of the same public facade API.
+//! require a type name that is not part of the same public facade API, and exported trait
+//! metadata relations that expose private trait names.
 //! WHY: after facade exports become explicit, importers can only name declarations exposed by
-//! the facade. AST environment owns this check because it has canonical `TypeId`s plus the
-//! header-built facade export maps.
+//! the facade. AST environment owns this check because it has canonical `TypeId`s, resolved
+//! trait identities, and the header-built facade export maps.
 
 use super::builder::AstModuleEnvironmentBuilder;
 
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::type_resolution::resolve_diagnostic_type_to_type_id_checked;
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
-use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
+use crate::compiler_frontend::compiler_messages::{
+    CompilerDiagnostic, InvalidTraitIncompatibilityReason,
+};
 use crate::compiler_frontend::datatypes::definitions::TypeDefinition;
 use crate::compiler_frontend::datatypes::ids::{NominalTypeId, TypeConstructor, TypeId};
 use crate::compiler_frontend::headers::module_symbols::{FacadeExportEntry, FacadeExportTarget};
@@ -21,23 +24,37 @@ use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable}
 use crate::compiler_frontend::tokenizer::tokens::SourceLocation;
 use crate::compiler_frontend::traits::definitions::TraitVisibility;
 use crate::compiler_frontend::traits::environment::TraitEnvironment;
+use crate::compiler_frontend::traits::syntax::TraitIncompatibilitySyntax;
 
 use rustc_hash::FxHashSet;
 
 impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
-    /// Validate all explicit public authored declarations in `#mod.bst`.
+    /// Validate all explicit public authored declarations and trait metadata in `#mod.bst`.
     ///
     /// WHAT: walks the resolved type IDs for signatures, fields, payloads, aliases, and explicit
-    /// constant annotations. The walk recurses through option/collection/function/generic shapes.
-    /// WHY: exported declarations are consumed from the facade alone, so every named type they
-    /// expose must also be public through that facade surface.
-    pub(in crate::compiler_frontend::ast) fn validate_public_facade_type_surfaces(
+    /// constant annotations, then validates exported trait incompatibility relations. Type walks
+    /// recurse through option/collection/function/generic shapes.
+    /// WHY: exported declarations and exported trait metadata are consumed from the facade alone,
+    /// so every named type or trait they expose must also be public through that facade surface.
+    pub(in crate::compiler_frontend::ast) fn validate_public_facade_surfaces(
         &mut self,
         sorted_headers: &[Header],
         trait_environment: &TraitEnvironment,
         string_table: &mut StringTable,
     ) -> Result<(), CompilerMessages> {
         for header in sorted_headers {
+            if is_public_facade_trait_incompatibility_header(header) {
+                if let HeaderKind::TraitIncompatibility { incompatibility } = &header.kind {
+                    self.validate_public_trait_incompatibility_surface(
+                        incompatibility,
+                        &header.source_file,
+                        trait_environment,
+                        string_table,
+                    )?;
+                }
+                continue;
+            }
+
             if !header_is_public_facade_declaration(header) {
                 continue;
             }
@@ -163,7 +180,8 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
 
                 HeaderKind::ConstTemplate { .. }
                 | HeaderKind::StartFunction
-                | HeaderKind::TraitConformance { .. } => {}
+                | HeaderKind::TraitConformance { .. }
+                | HeaderKind::TraitIncompatibility { .. } => {}
             }
         }
 
@@ -390,6 +408,69 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
 
         false
     }
+
+    /// Validate exported `TRAIT must not TRAIT` relations in a `#mod.bst` facade.
+    ///
+    /// WHAT: an exported incompatibility relation is part of the facade's public trait metadata,
+    ///      so importers must be able to name both sides from that facade. The check rejects a
+    ///      relation when exactly one side is public/nameable from the facade and the other is
+    ///      not. Core traits are always public/nameable; private-private relations remain valid.
+    /// WHY: without this check, a public trait could reference a private trait name in exported
+    ///      metadata, forcing importers to know a name they cannot legally spell.
+    fn validate_public_trait_incompatibility_surface(
+        &self,
+        incompatibility: &TraitIncompatibilitySyntax,
+        public_facade_file: &InternedPath,
+        trait_environment: &TraitEnvironment,
+        string_table: &mut StringTable,
+    ) -> Result<(), CompilerMessages> {
+        let visibility = self
+            .import_environment
+            .visibility_for(public_facade_file)
+            .map_err(|error| self.error_messages(error, string_table))?
+            .clone();
+
+        let subject_id = self.resolve_visible_trait_reference(
+            &incompatibility.subject,
+            &visibility,
+            trait_environment,
+            string_table,
+        )?;
+
+        let subject_is_nameable = trait_environment.get(subject_id).is_some_and(|definition| {
+            self.public_trait_definition_is_nameable(definition, public_facade_file)
+        });
+
+        for incompatible_trait in &incompatibility.incompatible_traits {
+            let incompatible_id = self.resolve_visible_trait_reference(
+                incompatible_trait,
+                &visibility,
+                trait_environment,
+                string_table,
+            )?;
+
+            let incompatible_is_nameable =
+                trait_environment
+                    .get(incompatible_id)
+                    .is_some_and(|definition| {
+                        self.public_trait_definition_is_nameable(definition, public_facade_file)
+                    });
+
+            if subject_is_nameable != incompatible_is_nameable {
+                return Err(self.diagnostic_messages(
+                    CompilerDiagnostic::invalid_trait_incompatibility(
+                        incompatibility.subject.name,
+                        Some(incompatible_trait.name),
+                        InvalidTraitIncompatibilityReason::PrivateTraitSurfaceLeak,
+                        incompatible_trait.location.clone(),
+                    ),
+                    string_table,
+                ));
+            }
+        }
+
+        Ok(())
+    }
 }
 
 fn facade_export_targets_source_path(entry: &FacadeExportEntry, path: &InternedPath) -> bool {
@@ -411,4 +492,10 @@ fn header_is_public_facade_declaration(header: &Header) -> bool {
                 | HeaderKind::Constant { .. }
                 | HeaderKind::Trait { .. }
         )
+}
+
+fn is_public_facade_trait_incompatibility_header(header: &Header) -> bool {
+    header.file_role == FileRole::ModuleFacade
+        && header.export_mode.is_public()
+        && matches!(header.kind, HeaderKind::TraitIncompatibility { .. })
 }

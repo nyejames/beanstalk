@@ -17,6 +17,7 @@ fn keyword_policy_maps_exact_tokenizer_spellings() {
         ("None", TokenKind::DatatypeNone),
         ("to", TokenKind::ExclusiveRange),
         ("copy", TokenKind::Copy),
+        ("cast", TokenKind::Cast),
     ];
 
     for (source, expected_kind) in exact_keywords {
@@ -43,6 +44,10 @@ fn keyword_shadow_policy_shares_the_canonical_keyword_set() {
     assert_eq!(keyword_shadow_match("export"), Some("export"));
     assert_eq!(keyword_shadow_match("EXPORT"), Some("export"));
     assert_eq!(keyword_shadow_match("_export"), Some("export"));
+
+    assert_eq!(keyword_shadow_match("cast"), Some("cast"));
+    assert_eq!(keyword_shadow_match("CAST"), Some("cast"));
+    assert_eq!(keyword_shadow_match("_cast"), Some("cast"));
 }
 
 #[test]

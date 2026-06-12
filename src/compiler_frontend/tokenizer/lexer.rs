@@ -7,7 +7,8 @@
 
 use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
 use crate::compiler_frontend::keywords::{
-    is_identifier_continue, is_valid_identifier, keyword_token_kind,
+    attached_bang_keyword_token_kind, is_identifier_continue, is_valid_identifier,
+    keyword_token_kind,
 };
 use crate::compiler_frontend::paths::const_paths::parse_file_path;
 use crate::compiler_frontend::style_directives::StyleDirectiveRegistry;
@@ -563,6 +564,13 @@ pub(crate) fn tokenize_identifier_or_keyword(
             );
             token_value.push(identifier_char);
             continue;
+        }
+
+        if let Some(keyword_kind) = attached_bang_keyword_token_kind(token_value.as_str())
+            && stream.peek() == Some(&'!')
+        {
+            stream.next();
+            return_token!(keyword_kind, stream);
         }
 
         if let Some(keyword_kind) = keyword_token_kind(token_value.as_str()) {

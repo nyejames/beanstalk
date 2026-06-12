@@ -158,7 +158,7 @@ impl<'a> HirBuilder<'a> {
     ///
     /// WHAT: converts the expression's type into a vector of success-slot type IDs.
     /// WHY: multi-success fallible calls return tuples, and the fallback path needs the same arity.
-    pub(super) fn handled_expression_result_type_ids(
+    pub(crate) fn handled_expression_result_type_ids(
         &self,
         expr_type_id: FrontendTypeId,
     ) -> Vec<FrontendTypeId> {

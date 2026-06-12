@@ -9,11 +9,13 @@ use crate::compiler_frontend::ast::ast_nodes::{AstNode, Declaration};
 use crate::compiler_frontend::ast::expressions::call_argument::CallArgument;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::expressions::expression_types::{
-    BuiltinCastKind, FallibleCarrierVariant, FallibleHandling,
+    CastHandling, FallibleCarrierVariant, FallibleHandling, ResolvedCastEvidence,
 };
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::statements::value_production::types::ValueBlock;
 use crate::compiler_frontend::ast::templates::template_types::Template;
+use crate::compiler_frontend::builtins::casts::targets::BuiltinCastTarget;
+use crate::compiler_frontend::compiler_messages::source_location::SourceLocation;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::external_packages::ExternalFunctionId;
 use crate::compiler_frontend::paths::compile_time_paths::CompileTimePaths;
@@ -30,6 +32,26 @@ use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRema
 pub struct MapLiteralEntry {
     pub(crate) key: Expression,
     pub(crate) value: Expression,
+}
+
+/// Resolved AST representation of an explicit `cast` expression.
+///
+/// WHAT: records the source expression, target builtin type, selected evidence,
+///      and handling form once the boundary target is known.
+/// WHY: keeping the full resolution in one AST node lets later stages (folding,
+///      HIR lowering) consume a single resolved fact instead of re-running trait
+///      or evidence lookups.
+#[derive(Clone, Debug)]
+#[allow(dead_code)]
+pub struct ResolvedCastExpression {
+    pub(crate) source: Box<Expression>,
+    pub(crate) source_type_id: TypeId,
+    pub(crate) target_type_id: TypeId,
+    pub(crate) target: BuiltinCastTarget,
+    pub(crate) requires_optional_wrap_after_cast: bool,
+    pub(crate) evidence: ResolvedCastEvidence,
+    pub(crate) handling: CastHandling,
+    pub(crate) location: SourceLocation,
 }
 
 #[derive(Clone, Debug)]
@@ -103,11 +125,13 @@ pub enum ExpressionKind {
         handling: FallibleHandling,
     },
 
-    /// Builtin scalar cast (e.g. `int` to `float`).
-    BuiltinCast {
-        kind: BuiltinCastKind,
-        value: Box<Expression>,
-    },
+    /// Explicit `cast` / `cast!` expression resolved at an explicit typed boundary.
+    ///
+    /// WHAT: carries the resolved source, target, evidence, and handling form.
+    /// WHY: the cast surface models builtin and user-defined evidence, fallibility
+    ///      forms, and optional target wrapping in one resolved AST node before HIR
+    ///      consumes it.
+    Cast(ResolvedCastExpression),
 
     /// Construct a `Success` or `Failure` carrier value.
     FallibleCarrierConstruct {
@@ -297,11 +321,16 @@ impl ExpressionKind {
             }
 
             // These variants wrap a single inner expression.
-            ExpressionKind::BuiltinCast { value, .. }
-            | ExpressionKind::FallibleCarrierConstruct { value, .. }
+            ExpressionKind::FallibleCarrierConstruct { value, .. }
             | ExpressionKind::OptionPropagation { value }
             | ExpressionKind::Coerced { value, .. } => {
                 value.remap_string_ids(remap);
+            }
+
+            ExpressionKind::Cast(cast) => {
+                cast.source.remap_string_ids(remap);
+                cast.evidence.remap_string_ids(remap);
+                cast.handling.remap_string_ids(remap);
             }
 
             ExpressionKind::HandledFallibleExpression { value, handling } => {

@@ -13,7 +13,9 @@ use crate::compiler_frontend::ast::const_values::resolver::{
 };
 use crate::compiler_frontend::ast::expressions::call_argument::CallArgument;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::ast::expressions::expression_types::FallibleHandling;
+use crate::compiler_frontend::ast::expressions::expression_types::{
+    CastHandling, FallibleHandling,
+};
 use crate::compiler_frontend::ast::statements::match_patterns::MatchPattern;
 use crate::compiler_frontend::ast::statements::value_production::types::ValueBlock;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
@@ -428,8 +430,16 @@ impl<'a> ConstFactCollector<'a> {
                 self.walk_fallible_handling_for_body_local(handling, env);
             }
 
-            ExpressionKind::BuiltinCast { value, .. }
-            | ExpressionKind::FallibleCarrierConstruct { value, .. }
+            ExpressionKind::Cast(cast) => {
+                self.walk_expression_for_body_local(&cast.source, env);
+                if let CastHandling::Recover(FallibleHandling::Handler { body, .. }) =
+                    &cast.handling
+                {
+                    self.walk_body_local(body, env);
+                }
+            }
+
+            ExpressionKind::FallibleCarrierConstruct { value, .. }
             | ExpressionKind::OptionPropagation { value }
             | ExpressionKind::Coerced { value, .. } => {
                 self.walk_expression_for_body_local(value, env);

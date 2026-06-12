@@ -186,6 +186,14 @@ pub(crate) fn invalid_declaration_message(
             "Trait conformance declarations are newline-terminated and must not end with ';'."
                 .to_string()
         }
+        InvalidDeclarationReason::TraitIncompatibilityMissingTrait => {
+            "Trait incompatibility declarations must name at least one trait after 'must not'."
+                .to_string()
+        }
+        InvalidDeclarationReason::TraitIncompatibilitySemicolon => {
+            "Trait incompatibility declarations are newline-terminated and must not end with ';'."
+                .to_string()
+        }
     }
 }
 

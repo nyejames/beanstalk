@@ -53,13 +53,14 @@ pub(crate) fn parse_return_statement(
         ));
     }
 
+    let is_error_return = token_stream.current_token_kind() == &TokenKind::ReturnBang;
     token_stream.advance();
 
     // --------------------------
     //  Error return (return!)
     // --------------------------
 
-    if token_stream.current_token_kind() == &TokenKind::Bang {
+    if is_error_return {
         let Some(expected_error_type_id) = context.expected_error_type else {
             return Err(CompilerDiagnostic::invalid_control_flow_statement(
                 InvalidControlFlowStatementReason::ReturnBangOutsideErrorFunction,
@@ -67,7 +68,6 @@ pub(crate) fn parse_return_statement(
             ));
         };
 
-        token_stream.advance();
         if is_return_terminator(token_stream.current_token_kind()) {
             return Err(CompilerDiagnostic::invalid_return_shape(
                 InvalidReturnShapeReason::MissingReturnBangValue,
@@ -101,6 +101,13 @@ pub(crate) fn parse_return_statement(
         });
 
         return Ok(());
+    }
+
+    if token_stream.current_token_kind() == &TokenKind::Bang {
+        return Err(CompilerDiagnostic::unexpected_token(
+            TokenKind::Bang,
+            token_stream.current_location(),
+        ));
     }
 
     // --------------------------

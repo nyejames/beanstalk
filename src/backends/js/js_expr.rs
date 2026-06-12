@@ -5,10 +5,11 @@
 
 use crate::backends::js::JsEmitter;
 use crate::backends::js::value_use::JsValueUse;
+use crate::compiler_frontend::builtins::casts::targets::BuiltinCastPolicyId;
 use crate::compiler_frontend::compiler_messages::compiler_errors::CompilerError;
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::hir::expressions::{
-    HirBuiltinCastKind, HirExpression, HirExpressionKind, HirMapEntry, HirVariantCarrier,
+    HirExpression, HirExpressionKind, HirMapEntry, HirVariantCarrier,
 };
 use crate::compiler_frontend::hir::operators::{HirBinOp, HirUnaryOp};
 use crate::compiler_frontend::hir::places::HirPlace;
@@ -142,13 +143,13 @@ impl<'hir> JsEmitter<'hir> {
                 Ok(format!("(({lowered_result}).value)"))
             }
 
-            HirExpressionKind::BuiltinCast { kind, value } => {
-                let lowered_value = self.lower_expr(value)?;
-                let helper = match kind {
-                    HirBuiltinCastKind::Int => "__bs_cast_int",
-                    HirBuiltinCastKind::Float => "__bs_cast_float",
-                };
-                Ok(format!("{helper}({lowered_value})"))
+            HirExpressionKind::Cast { source, policy } => {
+                self.used_cast_policies.insert(*policy);
+                let lowered_source = self.lower_expr(source)?;
+                match js_cast_helper_for_policy(*policy) {
+                    Some(helper) => Ok(format!("{helper}({lowered_source})")),
+                    None => Ok(lowered_source),
+                }
             }
 
             HirExpressionKind::VariantPayloadGet {
@@ -506,6 +507,27 @@ pub(crate) fn escape_js_string(value: &str) -> String {
 
     escaped.push('"');
     escaped
+}
+
+/// Returns the JS runtime helper name for a builtin cast policy, or `None` when the
+/// cast is a pure JS identity (e.g. `Int -> Float`).
+pub(super) fn js_cast_helper_for_policy(policy: BuiltinCastPolicyId) -> Option<&'static str> {
+    match policy {
+        BuiltinCastPolicyId::IntToFloat => None,
+        BuiltinCastPolicyId::IntToString => Some("__bs_cast_int_to_string"),
+        BuiltinCastPolicyId::FloatToString => Some("__bs_cast_float_to_string"),
+        BuiltinCastPolicyId::BoolToString => Some("__bs_cast_bool_to_string"),
+        BuiltinCastPolicyId::CharToString => Some("__bs_cast_char_to_string"),
+        BuiltinCastPolicyId::CharToInt => Some("__bs_cast_char_to_int"),
+        BuiltinCastPolicyId::StringToError => Some("__bs_cast_string_to_error"),
+        BuiltinCastPolicyId::ErrorToString => Some("__bs_cast_error_to_string"),
+        BuiltinCastPolicyId::FloatToInt => Some("__bs_cast_float_to_int"),
+        BuiltinCastPolicyId::IntToChar => Some("__bs_cast_int_to_char"),
+        BuiltinCastPolicyId::StringToInt => Some("__bs_cast_int"),
+        BuiltinCastPolicyId::StringToFloat => Some("__bs_cast_float"),
+        BuiltinCastPolicyId::StringToBool => Some("__bs_cast_string_to_bool"),
+        BuiltinCastPolicyId::StringToChar => Some("__bs_cast_string_to_char"),
+    }
 }
 
 fn escape_js_char(value: char) -> String {

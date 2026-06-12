@@ -595,11 +595,18 @@ pub enum TokenKind {
     If,
     Else,
     Return,
+    /// Attached error-return statement keyword: `return!`.
+    ReturnBang,
     Catch,
     Then,
     Block,
     Checked,
     Async,
+
+    // Explicit builtin cast keyword.
+    Cast,
+    /// Attached fallible-cast propagation keyword: `cast!`.
+    CastBang,
 
     /// Assertion statement intrinsic.
     ///

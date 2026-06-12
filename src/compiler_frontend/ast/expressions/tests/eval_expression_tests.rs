@@ -11,7 +11,7 @@ use crate::compiler_frontend::ast::expressions::expression::Operator;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationTable};
 use crate::compiler_frontend::compiler_messages::{
-    DiagnosticKind, DiagnosticPayload, InvalidResultOperandReason, TypeDiagnosticKind,
+    DiagnosticKind, DiagnosticPayload, InvalidBuiltinCallReason, TypeDiagnosticKind,
     UnsupportedOperatorCategory,
 };
 use crate::compiler_frontend::datatypes::DataType;
@@ -59,19 +59,6 @@ fn assert_unsupported_operator(source: &str, expected_category: UnsupportedOpera
     assert!(matches!(
         diagnostic.payload,
         DiagnosticPayload::UnsupportedOperatorTypes {
-            category,
-            ..
-        } if category == expected_category
-    ));
-}
-
-fn assert_invalid_result_operand(source: &str, expected_category: UnsupportedOperatorCategory) {
-    let diagnostic = parse_single_file_ast_diagnostic(source);
-
-    assert!(matches!(
-        diagnostic.payload,
-        DiagnosticPayload::InvalidResultOperand {
-            reason: InvalidResultOperandReason::ResultNotUnwrapped,
             category,
             ..
         } if category == expected_category
@@ -197,27 +184,39 @@ fn logical_mix_rejects_non_bool_rhs_after_comparison() {
 }
 
 #[test]
-fn ordinary_operators_reject_result_operands_without_handler() {
-    assert_invalid_result_operand(
-        "value = Int(\"1\") is 1\n",
-        UnsupportedOperatorCategory::Comparison,
-    );
+fn int_constructor_is_rejected_with_removed_scalar_constructor_diagnostic() {
+    let diagnostic = parse_single_file_ast_diagnostic("value = Int(\"1\")\n");
+    assert!(matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidBuiltinCall {
+            reason: InvalidBuiltinCallReason::ScalarConstructorRemoved,
+            ..
+        }
+    ));
 }
 
 #[test]
-fn arithmetic_operator_rejects_result_operands_without_handler() {
-    assert_invalid_result_operand(
-        "value = Int(\"1\") + 1\n",
-        UnsupportedOperatorCategory::Arithmetic,
-    );
+fn float_constructor_is_rejected_with_removed_scalar_constructor_diagnostic() {
+    let diagnostic = parse_single_file_ast_diagnostic("value = Float(1.5)\n");
+    assert!(matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidBuiltinCall {
+            reason: InvalidBuiltinCallReason::ScalarConstructorRemoved,
+            ..
+        }
+    ));
 }
 
 #[test]
-fn logical_operator_rejects_result_operands_before_bool_validation() {
-    assert_invalid_result_operand(
-        "value = true and Int(\"1\")\n",
-        UnsupportedOperatorCategory::Logical,
-    );
+fn bool_constructor_is_rejected_with_removed_scalar_constructor_diagnostic() {
+    let diagnostic = parse_single_file_ast_diagnostic("value = Bool(true)\n");
+    assert!(matches!(
+        diagnostic.payload,
+        DiagnosticPayload::InvalidBuiltinCall {
+            reason: InvalidBuiltinCallReason::ScalarConstructorRemoved,
+            ..
+        }
+    ));
 }
 
 #[test]

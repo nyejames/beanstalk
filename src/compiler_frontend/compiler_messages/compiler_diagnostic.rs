@@ -9,16 +9,16 @@ use crate::compiler_frontend::compiler_messages::{
     DeferredFeatureDiagnosticKind, DeferredFeatureReason, DiagnosticBag, DiagnosticKind,
     DiagnosticLabel, DiagnosticLabelMessage, DiagnosticPayload, DiagnosticPlace,
     DiagnosticSeverity, GenericApplicationErrorReason, ImportClauseKind, ImportDiagnosticKind,
-    ImportFacadeType, IncompatibleChoiceComparisonReason, InvalidChoiceVariantReason,
-    InvalidCollectionTypeReason, InvalidCompileTimePathReason, InvalidConfigReason,
-    InvalidFunctionSignatureReason, InvalidGenericParameterReason, InvalidImportClauseReason,
-    InvalidImportPathReason, InvalidLoopHeaderReason, InvalidMapLiteralReason,
-    InvalidMapTypeReason, InvalidMatchArmReason, InvalidMutableAccessReason,
-    InvalidPageMetadataReason, InvalidResultOperandReason, InvalidSignatureMemberReason,
-    InvalidStandaloneStatementReason, InvalidStatementPositionReason,
+    ImportFacadeType, IncompatibleChoiceComparisonReason, InvalidCastReason,
+    InvalidChoiceVariantReason, InvalidCollectionTypeReason, InvalidCompileTimePathReason,
+    InvalidConfigReason, InvalidFunctionSignatureReason, InvalidGenericParameterReason,
+    InvalidImportClauseReason, InvalidImportPathReason, InvalidLoopHeaderReason,
+    InvalidMapLiteralReason, InvalidMapTypeReason, InvalidMatchArmReason,
+    InvalidMutableAccessReason, InvalidPageMetadataReason, InvalidResultOperandReason,
+    InvalidSignatureMemberReason, InvalidStandaloneStatementReason, InvalidStatementPositionReason,
     InvalidTemplateDirectiveReason, InvalidTemplateStructureReason, InvalidTraitConformanceReason,
-    InvalidTraitKeywordUsageReason, InvalidTypeAnnotationReason, NameNamespace,
-    NamespaceTypeValueMisuseKind, NamingConvention, NumberLiteralErrorReason,
+    InvalidTraitIncompatibilityReason, InvalidTraitKeywordUsageReason, InvalidTypeAnnotationReason,
+    NameNamespace, NamespaceTypeValueMisuseKind, NamingConvention, NumberLiteralErrorReason,
     OperatorOperandPosition, PathKind, RangeOperandKind, RuleDiagnosticKind, SyntaxDiagnosticKind,
     TypeAnnotationContext, TypeDiagnosticKind, TypeMismatchContext, UnsupportedOperatorCategory,
 };
@@ -1339,6 +1339,23 @@ impl CompilerDiagnostic {
         )
     }
 
+    pub(crate) fn invalid_trait_incompatibility(
+        subject_name: StringId,
+        incompatible_trait_name: Option<StringId>,
+        reason: InvalidTraitIncompatibilityReason,
+        location: SourceLocation,
+    ) -> Self {
+        Self::new(
+            DiagnosticKind::Rule(RuleDiagnosticKind::InvalidTraitIncompatibility),
+            location,
+            DiagnosticPayload::InvalidTraitIncompatibility {
+                subject_name,
+                incompatible_trait_name,
+                reason,
+            },
+        )
+    }
+
     pub(crate) fn trait_name_used_as_type(trait_name: StringId, location: SourceLocation) -> Self {
         Self::new(
             DiagnosticKind::Rule(RuleDiagnosticKind::TraitNameUsedAsType),
@@ -1562,6 +1579,23 @@ impl CompilerDiagnostic {
             DiagnosticPayload::InvalidBuiltinCall {
                 reason,
                 builtin_name,
+            },
+        )
+    }
+
+    pub(crate) fn invalid_cast(
+        reason: InvalidCastReason,
+        source_type: Option<crate::compiler_frontend::datatypes::ids::TypeId>,
+        target_type: Option<crate::compiler_frontend::datatypes::ids::TypeId>,
+        location: SourceLocation,
+    ) -> Self {
+        Self::new(
+            DiagnosticKind::Rule(RuleDiagnosticKind::InvalidCast),
+            location,
+            DiagnosticPayload::InvalidCast {
+                reason,
+                source_type,
+                target_type,
             },
         )
     }

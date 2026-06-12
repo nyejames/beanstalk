@@ -68,6 +68,20 @@ pub struct TraitConformanceSyntax {
     pub location: SourceLocation,
 }
 
+/// Parsed trait incompatibility declaration shell: `TRAIT must not TRAIT, TRAIT`
+///
+/// WHAT: records a source-authored mutual exclusion between the subject trait and one or more
+///      other traits. No concrete type may explicitly conform to both sides of the relation.
+/// WHY: incompatibility declarations are bodyless top-level metadata discovered at the header
+///      stage; semantic resolution and conflict recording happen during AST environment
+///      construction after all trait definitions are registered.
+#[derive(Clone, Debug)]
+pub struct TraitIncompatibilitySyntax {
+    pub subject: TraitReferenceSyntax,
+    pub incompatible_traits: Vec<TraitReferenceSyntax>,
+    pub location: SourceLocation,
+}
+
 impl TraitDeclarationSyntax {
     /// Remap every interned string owned by this trait declaration into the merged global string table.
     // Called when merging per-file frontend outputs into the module-wide compilation.
@@ -116,6 +130,19 @@ impl TraitConformanceSyntax {
     pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
         self.target.remap_string_ids(remap);
         for trait_ref in &mut self.traits {
+            trait_ref.remap_string_ids(remap);
+        }
+        self.location.remap_string_ids(remap);
+    }
+}
+
+impl TraitIncompatibilitySyntax {
+    /// Remap every interned string owned by this incompatibility declaration into the merged
+    /// global string table.
+    // Called when merging per-file frontend outputs into the module-wide compilation.
+    pub fn remap_string_ids(&mut self, remap: &StringIdRemap) {
+        self.subject.remap_string_ids(remap);
+        for trait_ref in &mut self.incompatible_traits {
             trait_ref.remap_string_ids(remap);
         }
         self.location.remap_string_ids(remap);

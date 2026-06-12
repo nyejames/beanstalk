@@ -8,7 +8,8 @@ use super::eval_expression::evaluate_expression;
 use super::expression::{Expression, ExpressionKind, Operator};
 use super::option_propagation::parse_option_propagation_suffix_for_expression;
 use super::parse_expression::{
-    ExpressionTrailingPolicy, create_expression_with_trailing_newline_policy,
+    ExpressionTrailingPolicy, create_expression_until_without_boundary_catch,
+    create_expression_with_trailing_newline_policy,
 };
 use super::parse_expression_identifiers::parse_identifier_or_call;
 use super::parse_expression_literals::{LiteralParseState, parse_literal_expression};
@@ -18,27 +19,32 @@ use super::parse_expression_places::{
 use super::parse_expression_templates::parse_template_expression;
 use crate::ast_log;
 use crate::compiler_frontend::ast::ast_nodes::{AstNode, NodeKind};
+use crate::compiler_frontend::ast::expressions::expression_types::CastHandling;
 use crate::compiler_frontend::ast::field_access::{ReceiverAccessMode, parse_postfix_chain};
 use crate::compiler_frontend::ast::statements::fallible_handling::{
-    fallible_catch_allowed_in_context, parse_fallible_handling_suffix_for_expression,
+    CastCatchSite, fallible_catch_allowed_in_context, parse_cast_catch_handling_suffix,
+    parse_fallible_handling_suffix_for_expression,
 };
 use crate::compiler_frontend::ast::statements::match_arm_boundaries::current_token_starts_match_arm_header;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
-use crate::compiler_frontend::builtins::expression_parsing::{
-    parse_builtin_cast_expression, parse_curly_literal_expression,
-};
+use crate::compiler_frontend::builtins::casts::resolution::resolve_cast_expression;
+use crate::compiler_frontend::builtins::error_type::resolve_builtin_error_type_typed;
+use crate::compiler_frontend::builtins::expression_parsing::parse_curly_literal_expression;
 use crate::compiler_frontend::compiler_errors::CompilerError;
 use crate::compiler_frontend::compiler_messages::trait_keyword_diagnostics::{
     reserved_trait_keyword_error, reserved_trait_keyword_or_dispatch_mismatch,
 };
 use crate::compiler_frontend::compiler_messages::{
-    CompilerDiagnostic, InvalidBuiltinCallReason, InvalidControlFlowStatementReason,
+    CompilerDiagnostic, InvalidBuiltinCallReason, InvalidCastReason,
+    InvalidControlFlowStatementReason, TypeMismatchContext,
 };
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::syntax_errors::expression_position::check_expression_common_mistake;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
-use crate::compiler_frontend::type_coercion::parse_context::ExpectedType;
+use crate::compiler_frontend::type_coercion::compatibility::is_postfix_error_compatible;
+use crate::compiler_frontend::type_coercion::parse_context::{CastTargetContext, ExpectedType};
+use crate::compiler_frontend::utilities::token_scan::find_expression_end_index;
 use crate::compiler_frontend::value_mode::ValueMode;
 
 pub(super) enum ExpressionTokenStep {
@@ -50,6 +56,7 @@ pub(super) enum ExpressionTokenStep {
 
 pub(super) struct ExpressionDispatchState<'a> {
     pub(super) expected_type: &'a mut ExpectedType,
+    pub(super) cast_target_context: &'a mut CastTargetContext,
     pub(super) value_mode: &'a ValueMode,
     pub(super) consume_closing_parenthesis: bool,
     pub(super) allow_boundary_catch: bool,
@@ -285,11 +292,16 @@ pub(super) fn dispatch_expression_token(
 
         TokenKind::OpenParenthesis => {
             token_stream.advance();
+            // A grouped expression is no longer the immediate receiving boundary.
+            // This keeps `(cast value)` from acting as an operator operand while
+            // still allowing `cast (left + right)` to narrow the cast operand.
+            let mut grouped_cast_target_context = CastTargetContext::None;
             let value = create_expression_with_trailing_newline_policy(
                 token_stream,
                 context,
                 type_interner,
                 state.expected_type,
+                &mut grouped_cast_target_context,
                 state.value_mode,
                 ExpressionTrailingPolicy {
                     consume_closing_parenthesis: true,
@@ -317,31 +329,35 @@ pub(super) fn dispatch_expression_token(
             Ok(ExpressionTokenStep::Continue)
         }
 
-        TokenKind::DatatypeInt | TokenKind::DatatypeFloat => {
-            let cast_expression = parse_builtin_cast_expression(
-                token_stream,
-                context,
-                type_interner,
-                state.value_mode,
-                string_table,
-            )?;
-            let cast_location = cast_expression.location.clone();
+        TokenKind::DatatypeInt
+        | TokenKind::DatatypeFloat
+        | TokenKind::DatatypeBool
+        | TokenKind::DatatypeString
+        | TokenKind::DatatypeChar => {
+            if token_stream.peek_next_token() == Some(&TokenKind::OpenParenthesis) {
+                let cast_name = match token {
+                    TokenKind::DatatypeInt => Some(string_table.intern("Int")),
+                    TokenKind::DatatypeFloat => Some(string_table.intern("Float")),
+                    TokenKind::DatatypeBool => Some(string_table.intern("Bool")),
+                    TokenKind::DatatypeString => Some(string_table.intern("String")),
+                    TokenKind::DatatypeChar => Some(string_table.intern("Char")),
+                    _ => None,
+                };
+                return Err(CompilerDiagnostic::invalid_builtin_call(
+                    InvalidBuiltinCallReason::ScalarConstructorRemoved,
+                    cast_name,
+                    token_stream.current_location(),
+                )
+                .into());
+            }
 
-            push_expression_node(
-                token_stream,
-                context,
-                type_interner,
-                string_table,
-                state.expression,
-                state.allow_boundary_catch,
-                AstNode {
-                    kind: NodeKind::Rvalue(cast_expression),
-                    location: cast_location,
-                    scope: context.scope.clone(),
-                },
-            )?;
+            if let Some(error) =
+                check_expression_common_mistake(token_stream, state.expression.is_empty())
+            {
+                return Err(error.into());
+            }
 
-            Ok(ExpressionTokenStep::Continue)
+            Err(CompilerDiagnostic::unexpected_token(token, token_stream.current_location()).into())
         }
 
         TokenKind::OpenCurly => {
@@ -488,6 +504,10 @@ pub(super) fn dispatch_expression_token(
             }
 
             Ok(ExpressionTokenStep::Advance)
+        }
+
+        TokenKind::Cast | TokenKind::CastBang => {
+            parse_cast_expression(token_stream, context, type_interner, state, string_table)
         }
 
         TokenKind::Negative | TokenKind::Not => {
@@ -800,6 +820,228 @@ fn dispatch_is_token(
             Operator::Equality,
         ),
     }
+}
+
+/// Parses an explicit `cast` / `cast!` / `cast ... catch:` expression at a typed boundary.
+///
+/// WHAT: validates that `cast` starts the expression and that an explicit builtin target was
+///      supplied by the boundary, parses the operand and any handling suffix, resolves evidence,
+///      and pushes a resolved `ExpressionKind::Cast` node onto the expression stack.
+/// WHY: cast is a prefix keyword whose meaning depends on the receiver type, so it is handled
+///      directly by the dispatcher rather than the general operator or call machinery.
+fn parse_cast_expression(
+    token_stream: &mut FileTokens,
+    context: &ScopeContext,
+    type_interner: &mut AstTypeInterner<'_>,
+    state: &mut ExpressionDispatchState<'_>,
+    string_table: &mut StringTable,
+) -> Result<ExpressionTokenStep, ExpressionParseError> {
+    // `cast` is only valid as the leading token of an expression at an explicit boundary.
+    if !state.expression.is_empty() {
+        let token = token_stream.current_token_kind().clone();
+        return Err(
+            CompilerDiagnostic::unexpected_token(token, token_stream.current_location()).into(),
+        );
+    }
+
+    let cast_target_context = *state.cast_target_context;
+    let (target_type_id, target, requires_optional_wrap_after_cast) = match cast_target_context {
+        CastTargetContext::ExplicitBoundary {
+            target_type_id,
+            target,
+            requires_optional_wrap_after_cast,
+        } => (target_type_id, target, requires_optional_wrap_after_cast),
+
+        CastTargetContext::TargetIsGenericParameter { target_type_id } => {
+            return Err(CompilerDiagnostic::invalid_cast(
+                InvalidCastReason::TargetIsGenericParameter,
+                None,
+                Some(target_type_id),
+                token_stream.current_location(),
+            )
+            .into());
+        }
+
+        CastTargetContext::TargetNotBuiltin { target_type_id } => {
+            return Err(CompilerDiagnostic::invalid_cast(
+                InvalidCastReason::TargetNotBuiltin,
+                None,
+                Some(target_type_id),
+                token_stream.current_location(),
+            )
+            .into());
+        }
+
+        CastTargetContext::None => {
+            return Err(CompilerDiagnostic::invalid_cast(
+                InvalidCastReason::MissingExplicitTarget,
+                None,
+                None,
+                token_stream.current_location(),
+            )
+            .into());
+        }
+    };
+
+    let cast_location = token_stream.current_location();
+    let propagate = token_stream.current_token_kind() == &TokenKind::CastBang;
+    token_stream.advance();
+
+    // Attached `cast!` is a lexical token. A standalone `!` after `cast` is a
+    // separated spelling and must not be treated as propagation.
+    if token_stream.current_token_kind() == &TokenKind::Bang {
+        return Err(CompilerDiagnostic::invalid_cast(
+            InvalidCastReason::BangMustAttachToCast,
+            None,
+            None,
+            token_stream.current_location(),
+        )
+        .into());
+    }
+
+    // Parse the operand without inheriting the cast target, so nested `cast` is rejected
+    // and literals resolve to their natural type rather than the boundary target.
+    let mut operand_expected_type = ExpectedType::Infer;
+    let operand = parse_cast_operand_expression(
+        token_stream,
+        context,
+        type_interner,
+        &mut operand_expected_type,
+        state.value_mode,
+        state.consume_closing_parenthesis,
+        string_table,
+    )?;
+
+    // `cast!` and `cast ... catch:` are mutually exclusive.
+    if propagate && token_stream.current_token_kind() == &TokenKind::Catch {
+        return Err(CompilerDiagnostic::invalid_cast(
+            InvalidCastReason::PropagationAndRecoveryConflict,
+            None,
+            None,
+            token_stream.current_location(),
+        )
+        .into());
+    }
+
+    // Determine the handling form. Catch handlers need the cast failure error type, which
+    // is always the builtin `Error` type for the supported cast evidence catalogue.
+    let handling = if propagate {
+        CastHandling::Propagate
+    } else if token_stream.current_token_kind() == &TokenKind::Catch {
+        let error_type_id =
+            resolve_builtin_error_type_typed(context, &operand.location, string_table)?.type_id;
+        CastHandling::Recover(parse_cast_catch_handling_suffix(
+            token_stream,
+            context,
+            type_interner,
+            CastCatchSite {
+                success_type_id: target_type_id,
+                error_type_id,
+                value_required_location: operand.location.clone(),
+                allow_boundary_catch: state.allow_boundary_catch,
+            },
+            string_table,
+        )?)
+    } else {
+        CastHandling::Infallible
+    };
+
+    // For propagation, validate that the enclosing function can receive the error value.
+    if propagate {
+        let error_type_id =
+            resolve_builtin_error_type_typed(context, &operand.location, string_table)?.type_id;
+        let Some(expected_error_type_id) = context.expected_error_type else {
+            return Err(CompilerDiagnostic::invalid_cast(
+                InvalidCastReason::PropagationRequiresErrorReturn,
+                None,
+                None,
+                token_stream.current_location(),
+            )
+            .into());
+        };
+
+        if !is_postfix_error_compatible(
+            expected_error_type_id,
+            error_type_id,
+            type_interner.environment(),
+        ) {
+            return Err(CompilerDiagnostic::type_mismatch(
+                expected_error_type_id,
+                error_type_id,
+                TypeMismatchContext::ResultError,
+                token_stream.current_location(),
+            )
+            .into());
+        }
+    }
+
+    let cast_expression = resolve_cast_expression(
+        operand,
+        target_type_id,
+        target,
+        requires_optional_wrap_after_cast,
+        handling,
+        context.trait_environment(),
+        context.trait_evidence_environment(),
+        type_interner.environment_mut_for_derived_types(),
+        string_table,
+        context.active_generic_type_context(),
+        cast_location,
+    )?;
+
+    state.expression.push(AstNode {
+        kind: NodeKind::Rvalue(cast_expression),
+        location: token_stream.current_location(),
+        scope: context.scope.clone(),
+    });
+
+    Ok(ExpressionTokenStep::Continue)
+}
+
+fn parse_cast_operand_expression(
+    token_stream: &mut FileTokens,
+    context: &ScopeContext,
+    type_interner: &mut AstTypeInterner<'_>,
+    expected_type: &mut ExpectedType,
+    value_mode: &ValueMode,
+    consume_closing_parenthesis: bool,
+    string_table: &mut StringTable,
+) -> Result<Expression, ExpressionParseError> {
+    let catch_index = find_expression_end_index(
+        &token_stream.tokens,
+        token_stream.index,
+        &[TokenKind::Catch],
+    );
+    let catch_is_cast_suffix = catch_index < token_stream.length
+        && token_stream.tokens[catch_index].kind == TokenKind::Catch;
+
+    if catch_is_cast_suffix {
+        return create_expression_until_without_boundary_catch(
+            token_stream,
+            context,
+            type_interner,
+            expected_type,
+            value_mode,
+            &[TokenKind::Catch],
+            string_table,
+        );
+    }
+
+    create_expression_with_trailing_newline_policy(
+        token_stream,
+        context,
+        type_interner,
+        expected_type,
+        &mut CastTargetContext::None,
+        value_mode,
+        ExpressionTrailingPolicy {
+            consume_closing_parenthesis,
+            skip_trailing_newlines: true,
+            allow_boundary_catch: false,
+            allow_expected_result_evidence: false,
+        },
+        string_table,
+    )
 }
 
 #[cfg(test)]

@@ -408,6 +408,7 @@ fn collect_statement_values(kind: HirStatementKind, out: &mut FxHashSet<HirValue
             }
         }
         HirStatementKind::Expr(expr) => collect_expression_values(&expr, out),
+        HirStatementKind::CastOp { source, .. } => collect_expression_values(&source, out),
         HirStatementKind::Drop(_) => {}
         HirStatementKind::PushRuntimeFragment { value, .. } => {
             collect_expression_values(&value, out)
@@ -493,7 +494,7 @@ fn collect_expression_values(expression: &HirExpression, out: &mut FxHashSet<Hir
         }
         HirExpressionKind::FallibleUnwrapSuccess { result }
         | HirExpressionKind::FallibleUnwrapError { result }
-        | HirExpressionKind::BuiltinCast { value: result, .. } => {
+        | HirExpressionKind::Cast { source: result, .. } => {
             collect_expression_values(result, out);
         }
         HirExpressionKind::Int(_)

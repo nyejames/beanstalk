@@ -6,8 +6,11 @@
 //! but they are not the expression value shape itself.
 
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
+use crate::compiler_frontend::builtins::casts::targets::BuiltinCastPolicyId;
+use crate::compiler_frontend::datatypes::ids::GenericParameterId;
 use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringIdRemap};
+use crate::compiler_frontend::traits::ids::{TraitEvidenceId, TraitId};
 
 /// Value-level classification for const-record semantics.
 ///
@@ -64,6 +67,70 @@ impl ConstValueKind {
     }
 }
 
+/// The evidence selected for a cast.
+#[derive(Clone, Debug)]
+#[allow(dead_code)]
+pub(crate) enum ResolvedCastEvidence {
+    /// Compiler-owned builtin policy identified by its stable policy id.
+    Builtin { policy: BuiltinCastPolicyId },
+
+    /// User-defined same-file nominal evidence with the selected method path.
+    UserDefined {
+        evidence_id: TraitEvidenceId,
+        method_path: InternedPath,
+    },
+
+    /// Validation-only evidence supplied by a declaration-site generic bound.
+    ///
+    /// WHAT: proves a cast from an unresolved generic parameter to a builtin
+    ///      target using the parameter's `type T is CASTABLE_TO_*` bound.
+    /// WHY: generic function bodies are validated once before any concrete
+    ///      instance exists, so there is no builtin or canonical evidence yet.
+    ///      Concrete instance emission reparses the same body with substitutions
+    ///      and selects real builtin or user-defined evidence; this marker is
+    ///      discarded with the validation-only AST nodes and must never reach
+    ///      HIR or backend lowering.
+    GenericBound {
+        trait_id: TraitId,
+        parameter_id: GenericParameterId,
+    },
+}
+
+impl ResolvedCastEvidence {
+    /// Remap any interned string IDs or paths carried by this evidence.
+    pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
+        match self {
+            Self::Builtin { .. } | Self::GenericBound { .. } => {}
+
+            Self::UserDefined { method_path, .. } => {
+                method_path.remap_string_ids(remap);
+            }
+        }
+    }
+}
+
+/// User-visible handling form for a cast.
+#[derive(Clone, Debug)]
+pub(crate) enum CastHandling {
+    /// Plain `cast expression` — requires infallible evidence.
+    Infallible,
+
+    /// `cast! expression` — propagates cast failure through the error-return slot.
+    Propagate,
+
+    /// `cast expression catch:` / `cast expression catch |err|:` — local recovery.
+    Recover(FallibleHandling),
+}
+
+impl CastHandling {
+    /// Remap error binding names inside recovery handlers.
+    pub(crate) fn remap_string_ids(&mut self, remap: &StringIdRemap) {
+        if let Self::Recover(handling) = self {
+            handling.remap_string_ids(remap);
+        }
+    }
+}
+
 /// How a fallible expression or call is handled at the use site.
 ///
 /// WHAT: captures the two forms of fallible handling written by the user:
@@ -93,16 +160,6 @@ pub enum FallibleHandling {
 pub struct CatchErrorBinding {
     pub error_name: StringId,
     pub error_binding: InternedPath,
-}
-
-/// Built-in scalar cast targets for explicit or inferred conversions.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum BuiltinCastKind {
-    /// Cast to a signed or unsigned integer.
-    Int,
-
-    /// Cast to a floating-point value.
-    Float,
 }
 
 impl FallibleHandling {

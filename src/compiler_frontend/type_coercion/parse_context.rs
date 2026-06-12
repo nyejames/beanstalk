@@ -20,10 +20,17 @@
 //! - All other targets: pass `Inferred` so the expression resolves its own
 //!   natural type and the call site validates/coerces after the fact.
 
+use crate::compiler_frontend::builtins::casts::targets::{
+    BuiltinCastTarget, cast_target_for_receiving_type,
+};
 use crate::compiler_frontend::datatypes::DataType;
+use crate::compiler_frontend::datatypes::definitions::TypeDefinition;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::TypeId;
+use crate::compiler_frontend::symbols::string_interning::StringTable;
 
+/// Parse-time expected type for context-sensitive literals such as `none` and
+/// empty collection literals.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ExpectedType {
     Known(TypeId),
@@ -37,6 +44,34 @@ impl ExpectedType {
             Self::Infer => None,
         }
     }
+}
+
+/// Explicit cast target supplied by a receiving boundary.
+///
+/// WHAT: carries the builtin target type from a typed boundary into expression
+///      parsing so that a leading `cast` / `cast!` keyword can resolve its
+///      target without making ordinary expression parsing globally type-directed.
+/// WHY: `ExpectedType` owns parse-time literal context only; cast target
+///      ownership is intentionally separate so boundary callers can offer an
+///      explicit cast channel while keeping `parse_expectation_for_type_id`
+///      unchanged for normal expressions.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum CastTargetContext {
+    /// No explicit cast target is available; `cast` is invalid at this boundary.
+    None,
+
+    /// The boundary is explicit, but the target is a generic parameter.
+    TargetIsGenericParameter { target_type_id: TypeId },
+
+    /// The boundary is explicit, but the target is not one of the builtin cast targets.
+    TargetNotBuiltin { target_type_id: TypeId },
+
+    /// The receiving boundary has an explicit builtin target type.
+    ExplicitBoundary {
+        target_type_id: TypeId,
+        target: BuiltinCastTarget,
+        requires_optional_wrap_after_cast: bool,
+    },
 }
 
 /// Returns the expected type that should be passed into expression parsing
@@ -69,6 +104,55 @@ pub(crate) fn parse_expectation_for_type_id(
     }
 
     ExpectedType::Infer
+}
+
+/// Builds a `CastTargetContext` from a receiving type.
+///
+/// WHAT: classifies the receiving type as a builtin cast target and records
+///      whether the cast should land in the inner type before optional wrapping.
+/// WHY: boundary callers should not re-derive the optional-unwrapping rule
+///      when building the cast target channel.
+pub(crate) fn cast_target_context_for_type_id(
+    target_id: TypeId,
+    type_environment: &TypeEnvironment,
+    string_table: &StringTable,
+) -> CastTargetContext {
+    let resolution = match cast_target_for_receiving_type(target_id, type_environment, string_table)
+    {
+        Some(resolution) => resolution,
+        None => {
+            let diagnostic_target_id = type_environment
+                .option_inner_type(target_id)
+                .unwrap_or(target_id);
+
+            if matches!(
+                type_environment.get(diagnostic_target_id),
+                Some(TypeDefinition::GenericParameter(_))
+            ) {
+                return CastTargetContext::TargetIsGenericParameter {
+                    target_type_id: diagnostic_target_id,
+                };
+            }
+
+            return CastTargetContext::TargetNotBuiltin {
+                target_type_id: diagnostic_target_id,
+            };
+        }
+    };
+
+    let target_type_id = if resolution.requires_optional_wrap_after_cast {
+        type_environment
+            .option_inner_type(target_id)
+            .unwrap_or(target_id)
+    } else {
+        target_id
+    };
+
+    CastTargetContext::ExplicitBoundary {
+        target_type_id,
+        target: resolution.target,
+        requires_optional_wrap_after_cast: resolution.requires_optional_wrap_after_cast,
+    }
 }
 
 /// Collection-specific parse-time context passed into collection literal parsing.

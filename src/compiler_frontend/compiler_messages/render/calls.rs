@@ -6,7 +6,7 @@
 use super::{DiagnosticRenderContext, diagnostic_type_name, named_value_or_default};
 use crate::compiler_frontend::compiler_messages::{
     InvalidAssignmentTargetReason, InvalidBuiltinCallReason, InvalidCallShapeReason,
-    InvalidCopyTargetReason, InvalidFieldAccessReason, InvalidMultiBindReason,
+    InvalidCastReason, InvalidCopyTargetReason, InvalidFieldAccessReason, InvalidMultiBindReason,
     InvalidReceiverCallReason, InvalidReturnShapeReason,
 };
 use crate::compiler_frontend::datatypes::ids::TypeId;
@@ -227,6 +227,91 @@ pub(crate) fn invalid_builtin_call_message(
         InvalidBuiltinCallReason::MapLengthIsProperty => {
             "Map `length` is a property, not a method. Use `map.length` without parentheses."
                 .to_string()
+        }
+        InvalidBuiltinCallReason::ScalarConstructorRemoved => {
+            format!(
+                "{builtin_text}(...) constructor-style conversions are removed. Use `cast` instead."
+            )
+        }
+    }
+}
+
+pub(crate) fn invalid_cast_message(
+    reason: InvalidCastReason,
+    source_type: Option<TypeId>,
+    target_type: Option<TypeId>,
+    context: DiagnosticRenderContext<'_>,
+) -> String {
+    let source = source_type
+        .map(|type_id| diagnostic_type_name(type_id, context))
+        .unwrap_or_else(|| "the source value".to_owned());
+    let target = target_type
+        .map(|type_id| diagnostic_type_name(type_id, context))
+        .unwrap_or_else(|| "the target type".to_owned());
+
+    match reason {
+        InvalidCastReason::MissingExplicitTarget => {
+            "`cast` requires an explicit builtin target type at the receiving boundary.".to_owned()
+        }
+        InvalidCastReason::TargetNotBuiltin => {
+            format!("`cast` targets must be compiler-supported builtin types; found '{target}'.")
+        }
+        InvalidCastReason::TargetIsGenericParameter => {
+            format!("`cast` cannot infer a generic target such as '{target}'.")
+        }
+        InvalidCastReason::SameSourceAndTarget => {
+            format!("This value already has type '{target}'. Remove `cast`.")
+        }
+        InvalidCastReason::SourceIsOptional => {
+            format!("`cast` does not automatically unwrap optional source values; found '{source}'.")
+        }
+        InvalidCastReason::OperandIsFallible => {
+            "`cast` only handles cast failures. Handle the operand's `Error!` result before casting."
+                .to_owned()
+        }
+        InvalidCastReason::OperandArityMismatch => {
+            "`cast` converts exactly one source value. Cast each result slot separately.".to_owned()
+        }
+        InvalidCastReason::TargetArityMismatch => {
+            "`cast` requires exactly one target value. Cast each target slot separately.".to_owned()
+        }
+        InvalidCastReason::FallibleEvidenceRequiresHandling => {
+            "`cast` selected fallible evidence. Use `cast!` or `cast ... catch:`.".to_owned()
+        }
+        InvalidCastReason::InfallibleEvidenceCannotUseFallibleForm => {
+            "`cast!` and `cast ... catch:` are only valid for fallible casts.".to_owned()
+        }
+        InvalidCastReason::PropagationRequiresErrorReturn => {
+            "`cast!` requires the current function to have an `Error!` return slot.".to_owned()
+        }
+        InvalidCastReason::PropagationAndRecoveryConflict => {
+            "`cast!` cannot also use `catch:`. Choose propagation or local recovery.".to_owned()
+        }
+        InvalidCastReason::BangMustAttachToCast => {
+            "The `!` must be attached to `cast` as `cast!`.".to_owned()
+        }
+        InvalidCastReason::ScalarConstructorRemoved => {
+            "Constructor-style scalar conversions are removed. Use `cast` at an explicit typed boundary."
+                .to_owned()
+        }
+        InvalidCastReason::NoEvidence => {
+            format!("No cast evidence exists from '{source}' to '{target}'.")
+        }
+        InvalidCastReason::BuiltinEvidenceNotConstFoldable => {
+            "This builtin cast cannot be used in const-required contexts yet.".to_owned()
+        }
+        InvalidCastReason::UserDefinedEvidenceNotConstFoldable => {
+            "User-defined cast evidence cannot be used in const-required contexts.".to_owned()
+        }
+        InvalidCastReason::GenericBoundEvidenceNotConstFoldable => {
+            "Generic-bound cast evidence cannot be used in const-required contexts.".to_owned()
+        }
+        InvalidCastReason::BuiltinCastFailedInConst => {
+            "This builtin cast failed while evaluating a const-required expression.".to_owned()
+        }
+        InvalidCastReason::CatchHandlerNotConstFoldable => {
+            "The `catch` handler for this cast must be fully foldable in a const-required context."
+                .to_owned()
         }
     }
 }

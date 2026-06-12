@@ -13,6 +13,7 @@ use crate::compiler_frontend::ast::expressions::call_argument::CallArgument;
 use crate::compiler_frontend::ast::expressions::expression::{
     Expression, ExpressionKind, FallibleHandling,
 };
+use crate::compiler_frontend::ast::expressions::expression_types::CastHandling;
 use crate::compiler_frontend::ast::statements::functions::FunctionSignature;
 use crate::compiler_frontend::ast::statements::match_patterns::MatchPattern;
 use crate::compiler_frontend::ast::statements::value_production::types::ValueBlock;
@@ -308,11 +309,17 @@ fn validate_expression(
         }
 
         // Wrapped and coerced values.
-        ExpressionKind::BuiltinCast { value, .. }
-        | ExpressionKind::FallibleCarrierConstruct { value, .. }
+        ExpressionKind::FallibleCarrierConstruct { value, .. }
         | ExpressionKind::OptionPropagation { value }
         | ExpressionKind::Coerced { value, .. } => {
             validate_expression(value, type_environment, string_table)
+        }
+
+        ExpressionKind::Cast(cast) => {
+            validate_expression(&cast.source, type_environment, string_table)?;
+            validate_type_id(cast.target_type_id, &cast.location, type_environment)?;
+            validate_type_id(cast.source_type_id, &cast.source.location, type_environment)?;
+            validate_cast_handling(&cast.handling, type_environment, string_table)
         }
 
         ExpressionKind::HandledFallibleExpression { value, handling } => {
@@ -406,6 +413,19 @@ fn validate_fallible_handling(
         FallibleHandling::Propagate => Ok(()),
         FallibleHandling::Handler { body, .. } => {
             validate_nodes(body, type_environment, string_table)
+        }
+    }
+}
+
+fn validate_cast_handling(
+    handling: &CastHandling,
+    type_environment: &TypeEnvironment,
+    string_table: &StringTable,
+) -> Result<(), CompilerError> {
+    match handling {
+        CastHandling::Infallible | CastHandling::Propagate => Ok(()),
+        CastHandling::Recover(handling) => {
+            validate_fallible_handling(handling, type_environment, string_table)
         }
     }
 }

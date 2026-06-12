@@ -18,7 +18,7 @@ use crate::compiler_frontend::instrumentation::{AstCounter, add_ast_counter};
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
 use crate::compiler_frontend::type_coercion::parse_context::{
-    ExpectedType, parse_expectation_for_type_id,
+    CastTargetContext, ExpectedType, cast_target_context_for_type_id, parse_expectation_for_type_id,
 };
 use crate::compiler_frontend::utilities::token_scan::find_expression_end_index;
 use crate::compiler_frontend::value_mode::ValueMode;
@@ -81,11 +81,17 @@ fn create_multiple_expressions_inner(
         // validation or coercion after this call returns.
         let mut expression_type =
             parse_expectation_for_type_id(*expected_type, type_interner.environment());
+        let mut cast_target_context = cast_target_context_for_type_id(
+            *expected_type,
+            type_interner.environment(),
+            string_table,
+        );
         let expression = create_expression_with_trailing_newline_policy(
             token_stream,
             context,
             type_interner,
             &mut expression_type,
+            &mut cast_target_context,
             &ValueMode::ImmutableOwned,
             ExpressionTrailingPolicy {
                 consume_closing_parenthesis,
@@ -150,11 +156,40 @@ pub fn create_expression(
     consume_closing_parenthesis: bool,
     string_table: &mut StringTable,
 ) -> Result<Expression, ExpressionParseError> {
+    create_expression_with_cast_target(
+        token_stream,
+        context,
+        type_interner,
+        expected_type,
+        &mut CastTargetContext::None,
+        value_mode,
+        consume_closing_parenthesis,
+        string_table,
+    )
+}
+
+// WHAT: parses one expression with an explicit cast target supplied by the boundary.
+// WHY: typed boundaries such as declarations and return slots need to offer `cast`
+//      a builtin target without changing ordinary expression parsing.
+// The extra argument is the explicit cast target supplied by the typed boundary; this is
+// the smallest entry-point surface for callers that need boundary-driven `cast` support.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn create_expression_with_cast_target(
+    token_stream: &mut FileTokens,
+    context: &ScopeContext,
+    type_interner: &mut AstTypeInterner<'_>,
+    expected_type: &mut ExpectedType,
+    cast_target_context: &mut CastTargetContext,
+    value_mode: &ValueMode,
+    consume_closing_parenthesis: bool,
+    string_table: &mut StringTable,
+) -> Result<Expression, ExpressionParseError> {
     create_expression_with_trailing_newline_policy(
         token_stream,
         context,
         type_interner,
         expected_type,
+        cast_target_context,
         value_mode,
         ExpressionTrailingPolicy {
             consume_closing_parenthesis,
@@ -178,11 +213,40 @@ pub(crate) fn create_expression_without_boundary_catch(
     consume_closing_parenthesis: bool,
     string_table: &mut StringTable,
 ) -> Result<Expression, ExpressionParseError> {
+    create_expression_without_boundary_catch_with_cast_target(
+        token_stream,
+        context,
+        type_interner,
+        expected_type,
+        &mut CastTargetContext::None,
+        value_mode,
+        consume_closing_parenthesis,
+        string_table,
+    )
+}
+
+// WHAT: parses a nested expression with an explicit cast target supplied by a typed boundary.
+// WHY: function arguments, constructor fields, and receiver parameters need to offer `cast`
+//      a builtin target while still rejecting procedural `catch` inside the nested expression.
+// This wrapper carries the same parser-context arguments as `create_expression_with_trailing_newline_policy`;
+// the count is inherited from the existing expression-entry contract plus the cast-target channel.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn create_expression_without_boundary_catch_with_cast_target(
+    token_stream: &mut FileTokens,
+    context: &ScopeContext,
+    type_interner: &mut AstTypeInterner<'_>,
+    expected_type: &mut ExpectedType,
+    cast_target_context: &mut CastTargetContext,
+    value_mode: &ValueMode,
+    consume_closing_parenthesis: bool,
+    string_table: &mut StringTable,
+) -> Result<Expression, ExpressionParseError> {
     create_expression_with_trailing_newline_policy(
         token_stream,
         context,
         type_interner,
         expected_type,
+        cast_target_context,
         value_mode,
         ExpressionTrailingPolicy {
             consume_closing_parenthesis,
@@ -197,11 +261,15 @@ pub(crate) fn create_expression_without_boundary_catch(
 // WHAT: shared expression parser entry with configurable trailing-newline behavior.
 // WHY: callers parsing comma-separated lists outside parentheses (for example
 //      fallback/return lists) must preserve line boundaries between statements.
+// This shared entry point carries the full parser context; the argument count reflects the
+// existing `create_expression` contract plus the new explicit cast-target channel.
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn create_expression_with_trailing_newline_policy(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     expected_type: &mut ExpectedType,
+    cast_target_context: &mut CastTargetContext,
     value_mode: &ValueMode,
     trailing_policy: ExpressionTrailingPolicy,
     string_table: &mut StringTable,
@@ -223,6 +291,7 @@ pub(crate) fn create_expression_with_trailing_newline_policy(
         ast_log!("Parsing expression: ", #token);
         let mut dispatch_state = ExpressionDispatchState {
             expected_type,
+            cast_target_context,
             value_mode,
             consume_closing_parenthesis: trailing_policy.consume_closing_parenthesis,
             allow_boundary_catch: trailing_policy.allow_boundary_catch,
@@ -277,6 +346,7 @@ pub(crate) fn create_expression_until(
         context,
         type_interner,
         expected_type,
+        &mut CastTargetContext::None,
         value_mode,
         BoundedExpressionPolicy {
             stop_tokens,
@@ -304,6 +374,7 @@ pub(crate) fn create_expression_until_without_boundary_catch(
         context,
         type_interner,
         expected_type,
+        &mut CastTargetContext::None,
         value_mode,
         BoundedExpressionPolicy {
             stop_tokens,
@@ -314,11 +385,74 @@ pub(crate) fn create_expression_until_without_boundary_catch(
     )
 }
 
+// WHAT: parses a bounded expression at an explicit typed boundary.
+// WHY: typed collection/map element positions need stop-token parsing while still offering
+//      the boundary's cast target to element expressions.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn create_expression_until_with_cast_target(
+    token_stream: &mut FileTokens,
+    context: &ScopeContext,
+    type_interner: &mut AstTypeInterner<'_>,
+    expected_type: &mut ExpectedType,
+    cast_target_context: &mut CastTargetContext,
+    value_mode: &ValueMode,
+    stop_tokens: &[TokenKind],
+    string_table: &mut StringTable,
+) -> Result<Expression, ExpressionParseError> {
+    create_expression_until_inner(
+        token_stream,
+        context,
+        type_interner,
+        expected_type,
+        cast_target_context,
+        value_mode,
+        BoundedExpressionPolicy {
+            stop_tokens,
+            allow_boundary_catch: false,
+            allow_expected_result_evidence: false,
+        },
+        string_table,
+    )
+}
+
+// WHAT: parses a bounded expression at a typed value-producing boundary.
+// WHY: inline `then ... else ...` branches are closed receiving sites, so they
+// must preserve their existing boundary recovery behavior while also offering
+// the explicit cast target supplied by the receiver.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn create_boundary_expression_until_with_cast_target(
+    token_stream: &mut FileTokens,
+    context: &ScopeContext,
+    type_interner: &mut AstTypeInterner<'_>,
+    expected_type: &mut ExpectedType,
+    cast_target_context: &mut CastTargetContext,
+    value_mode: &ValueMode,
+    stop_tokens: &[TokenKind],
+    string_table: &mut StringTable,
+) -> Result<Expression, ExpressionParseError> {
+    create_expression_until_inner(
+        token_stream,
+        context,
+        type_interner,
+        expected_type,
+        cast_target_context,
+        value_mode,
+        BoundedExpressionPolicy {
+            stop_tokens,
+            allow_boundary_catch: true,
+            allow_expected_result_evidence: true,
+        },
+        string_table,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
 fn create_expression_until_inner(
     token_stream: &mut FileTokens,
     context: &ScopeContext,
     type_interner: &mut AstTypeInterner<'_>,
     expected_type: &mut ExpectedType,
+    cast_target_context: &mut CastTargetContext,
     value_mode: &ValueMode,
     policy: BoundedExpressionPolicy<'_>,
     string_table: &mut StringTable,
@@ -340,6 +474,7 @@ fn create_expression_until_inner(
             context,
             type_interner,
             expected_type,
+            cast_target_context,
             value_mode,
             trailing_policy,
             string_table,
@@ -409,6 +544,7 @@ fn create_expression_until_inner(
         context,
         type_interner,
         expected_type,
+        cast_target_context,
         value_mode,
         ExpressionTrailingPolicy {
             consume_closing_parenthesis: false,

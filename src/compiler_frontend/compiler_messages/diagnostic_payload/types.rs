@@ -642,6 +642,7 @@ pub enum InvalidChoiceVariantReason {
 pub enum ReservedNameOwner {
     BuiltinType,
     Keyword,
+    CoreTrait,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -723,6 +724,16 @@ pub enum InvalidDeclarationReason {
     InvalidTraitName,
     TraitConformanceMissingTrait,
     TraitConformanceSemicolon,
+    TraitIncompatibilityMissingTrait,
+    TraitIncompatibilitySemicolon,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum InvalidTraitIncompatibilityReason {
+    SelfIncompatible,
+    UnknownTrait,
+    DuplicateRelation,
+    PrivateTraitSurfaceLeak,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -735,6 +746,9 @@ pub enum InvalidTraitConformanceReason {
     ExternalOpaqueTarget,
     DuplicateCanonicalEvidence,
     BuiltinEvidenceOverride,
+    IncompatibleTraitEvidence {
+        incompatible_trait_name: StringId,
+    },
     MissingMethod {
         requirement_name: StringId,
     },
@@ -807,6 +821,12 @@ impl InvalidTraitConformanceReason {
             | Self::ExternalOpaqueTarget
             | Self::DuplicateCanonicalEvidence
             | Self::BuiltinEvidenceOverride => {}
+
+            Self::IncompatibleTraitEvidence {
+                incompatible_trait_name,
+            } => {
+                *incompatible_trait_name = remap.get(*incompatible_trait_name);
+            }
         }
     }
 }
@@ -856,6 +876,31 @@ pub enum InvalidBuiltinCallReason {
     RuntimeMessageExpressionDeferred,
     ExpressionPositionNotAllowed,
     MapLengthIsProperty,
+    ScalarConstructorRemoved,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum InvalidCastReason {
+    MissingExplicitTarget,
+    TargetNotBuiltin,
+    TargetIsGenericParameter,
+    SameSourceAndTarget,
+    SourceIsOptional,
+    OperandIsFallible,
+    OperandArityMismatch,
+    TargetArityMismatch,
+    FallibleEvidenceRequiresHandling,
+    InfallibleEvidenceCannotUseFallibleForm,
+    PropagationRequiresErrorReturn,
+    PropagationAndRecoveryConflict,
+    BangMustAttachToCast,
+    ScalarConstructorRemoved,
+    NoEvidence,
+    BuiltinEvidenceNotConstFoldable,
+    UserDefinedEvidenceNotConstFoldable,
+    GenericBoundEvidenceNotConstFoldable,
+    BuiltinCastFailedInConst,
+    CatchHandlerNotConstFoldable,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -1087,7 +1132,6 @@ pub enum CompileTimeEvaluationErrorReason {
     DivideByZero,
     InvalidOperatorForType,
     IntegerDivisionOnlyIntInt,
-    InvalidNumericCast,
     ConstantSelfReference,
     ConstantNotVisible,
     NonConstantReferenceInConstant,

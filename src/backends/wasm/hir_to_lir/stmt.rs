@@ -71,6 +71,9 @@ pub(crate) fn lower_statement(
         HirStatementKind::MapOp { .. } => Err(lir_transformation_error(
             "Wasm hashmap operation reached lowering before backend feature validation",
         )),
+        HirStatementKind::CastOp { .. } => Err(lir_transformation_error(
+            "Wasm lowering does not yet support cast operations",
+        )),
         HirStatementKind::Expr(expression) => {
             let _ = lower_expression(context, expression, statements)?;
             Ok(())

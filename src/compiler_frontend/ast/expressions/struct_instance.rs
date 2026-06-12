@@ -16,7 +16,9 @@ use crate::compiler_frontend::ast::expressions::call_validation::{
 use crate::compiler_frontend::ast::expressions::constructor_views::ConstructorField;
 use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::ast::expressions::function_calls::parse_call_arguments;
+use crate::compiler_frontend::ast::expressions::function_calls::{
+    NamedArgumentSyntax, parse_call_arguments_typed_with_expectations,
+};
 use crate::compiler_frontend::ast::expressions::generic_nominal_inference::{
     GenericNominalConstructorInput, GenericNominalTemplate, infer_generic_nominal_constructor,
 };
@@ -88,11 +90,20 @@ pub(super) fn parse_struct_constructor_expression(
     }
 
     // ------------------------
-    //  Parse raw arguments
+    //  Parse raw arguments with constructor-field expectations
     // ------------------------
-    let raw_args = parse_call_arguments(token_stream, context, type_interner, string_table)?;
-
     let constructor_field_views = ConstructorField::from_struct_declarations(fields);
+    let field_expectations = expectations_from_constructor_fields(&constructor_field_views);
+    let raw_args = parse_call_arguments_typed_with_expectations(
+        token_stream,
+        context,
+        type_interner,
+        string_table,
+        &field_expectations,
+        NamedArgumentSyntax::Supported {
+            callee_name: Some(struct_name),
+        },
+    )?;
 
     // ------------------------
     //  Resolve generic instance

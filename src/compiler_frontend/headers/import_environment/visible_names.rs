@@ -7,7 +7,8 @@
 //! MUST NOT: resolve import paths to files or external packages (that belongs in target
 //! and facade resolution).
 
-use crate::compiler_frontend::compiler_messages::CompilerDiagnostic;
+use crate::compiler_frontend::builtins::casts::traits::for_each_core_cast_trait_name;
+use crate::compiler_frontend::compiler_messages::{CompilerDiagnostic, ReservedNameOwner};
 use crate::compiler_frontend::external_packages::ExternalSymbolId;
 use crate::compiler_frontend::headers::import_environment::NamespaceRecordSource;
 use crate::compiler_frontend::headers::import_environment::diagnostics;
@@ -43,6 +44,12 @@ pub(crate) enum VisibleNameBinding {
     NamespaceRecord {
         record_source: NamespaceRecordSource,
     },
+    /// Compiler-owned core cast trait name reserved before any source bindings.
+    ///
+    /// WHY: core cast trait names such as `CASTABLE_TO_INT` are globally visible
+    ///      without imports and must not be shadowed by declarations, aliases,
+    ///      imports, or namespace records.
+    ReservedCoreCastTraitName,
 }
 
 /// Stored entry for a registered visible name, including the binding and its source location.
@@ -70,6 +77,25 @@ impl VisibleNameRegistry {
         }
     }
 
+    /// Reserve the compiler-owned core cast trait names so they cannot be
+    /// shadowed by later declarations, imports, aliases, or namespace records.
+    ///
+    /// WHY: core cast trait names are globally visible without imports; treating
+    ///      them as pre-existing bindings lets the normal collision path reject
+    ///      any user-visible spelling that would claim one of those names.
+    pub(crate) fn reserve_core_cast_trait_names(&mut self, string_table: &mut StringTable) {
+        for_each_core_cast_trait_name(|trait_name| {
+            let name_id = string_table.intern(trait_name);
+            self.names.insert(
+                name_id,
+                VisibleNameEntry {
+                    binding: VisibleNameBinding::ReservedCoreCastTraitName,
+                    location: SourceLocation::default(),
+                },
+            );
+        });
+    }
+
     /// Attempt to register a visible name.
     ///
     /// WHY: same target from two sources (e.g., re-importing the same symbol) is harmless.
@@ -88,6 +114,13 @@ impl VisibleNameRegistry {
         if let Some(entry) = self.names.get(&local_name) {
             if can_coexist(&entry.binding, &binding) {
                 return Ok(());
+            }
+            if matches!(entry.binding, VisibleNameBinding::ReservedCoreCastTraitName) {
+                return Err(CompilerDiagnostic::reserved_name_collision(
+                    local_name,
+                    ReservedNameOwner::CoreTrait,
+                    location,
+                ));
             }
             return Err(diagnostics::import_name_collision(
                 local_name,
@@ -110,6 +143,16 @@ impl VisibleNameRegistry {
 ///
 /// WHY: importing the same symbol twice (without alias, or with the same alias) is not an error.
 fn is_same_target(a: &VisibleNameBinding, b: &VisibleNameBinding) -> bool {
+    if matches!(
+        (a, b),
+        (
+            VisibleNameBinding::ReservedCoreCastTraitName,
+            VisibleNameBinding::ReservedCoreCastTraitName,
+        )
+    ) {
+        return true;
+    }
+
     match (a, b) {
         (
             VisibleNameBinding::SameFileDeclaration {
