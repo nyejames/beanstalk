@@ -642,6 +642,16 @@ The initial implementation added broad coverage. This phase keeps the suite usef
 
 ## Phase 6 — Documentation, roadmap, and progress matrix updates
 
+Status: complete.
+
+Summary:
+
+- Added the Alpha JS-safe integer cast policy to the compiler-facing and user-facing language docs.
+- Tightened compiler design wording so AST owns builtin/user/generic cast evidence selection, HIR carries only builtin runtime cast policies, user-defined evidence lowers as direct calls, and generic-bound evidence remains validation-only.
+- Updated the progress matrix with demand-driven JS helper coverage, safe-integer coverage, optional target recovery, and the explicit `Float -> String` formatting parity watch point.
+- Fixed the stale removed cast-plan roadmap link, kept the active cleanup plan linked, and added roadmap follow-ups for `Float -> String` formatting parity and full-width `Int` runtime semantics beyond the Alpha JS-safe cast policy.
+- Regenerated tracked `docs/release/**` output. The generated diff includes the edited language/progress pages and removes the now-unused cast helper prelude from docs pages after demand-driven helper emission.
+
 ### Context
 
 The implementation is mostly documented, but follow-up work must be visible in roadmap/progress. The roadmap also contains a stale link to a removed cast plan file.
@@ -650,35 +660,35 @@ The implementation is mostly documented, but follow-up work must be visible in r
 
 #### Language and compiler docs
 
-- [ ] Update `docs/language-overview.md`:
+- [x] Update `docs/language-overview.md`:
   - document safe-integer Alpha cast policy for `String -> Int` and `Float -> Int`;
   - document optional target catch recovery producing inner `T`;
   - keep user-defined targets outside scope;
   - do not suggest scalar constructors.
-- [ ] Update `docs/src/docs/language-overview/#page.bst` with equivalent user-facing wording.
-- [ ] Update `docs/compiler-design-overview.md`:
+- [x] Update `docs/src/docs/language-overview/#page.bst` with equivalent user-facing wording.
+- [x] Update `docs/compiler-design-overview.md`:
   - document that HIR carries only builtin runtime casts;
   - user-defined cast evidence lowers to direct calls during HIR lowering;
   - generic-bound cast evidence is AST validation-only.
-- [ ] Regenerate `docs/release/**` if generated docs are committed for docs-site changes.
+- [x] Regenerate `docs/release/**` if generated docs are committed for docs-site changes.
 
 #### Roadmap
 
-- [ ] Update `docs/roadmap/roadmap.md`.
-- [ ] Remove or fix the stale reference to:
+- [x] Update `docs/roadmap/roadmap.md`.
+- [x] Remove or fix the stale reference to:
 
   ```text
   docs/roadmap/plans/cast_operator_implementation_plan.md
   ```
 
   because that file no longer exists.
-- [ ] Add explicit roadmap item:
+- [x] Add explicit roadmap item:
 
   ```text
   - Float-to-string cast parity: define one formatting contract shared by AST folding and JS/Wasm/runtime lowering for `Float -> String`, including exponent thresholds, signed zero, non-finite rejection/formatting policy, and backend-stable output tests.
   ```
 
-- [ ] Add optional related roadmap item if this plan chooses JS-safe integer cast policy:
+- [x] Add optional related roadmap item if this plan chooses JS-safe integer cast policy:
 
   ```text
   - Full-width `Int` runtime semantics beyond the Alpha JS-safe integer cast policy: decide whether JS uses BigInt/boxed integers or whether `Int` remains a portable safe-integer type for the JS target.
@@ -686,24 +696,31 @@ The implementation is mostly documented, but follow-up work must be visible in r
 
 #### Progress matrix
 
-- [ ] Update `docs/src/docs/progress/#page.bst`:
+- [x] Update `docs/src/docs/progress/#page.bst`:
   - mark `Float -> String` parity as an explicit watch point/follow-up;
   - document safe-integer cast policy for `Int` casts;
   - update coverage text after new tests are added;
   - remove any mention that implies float formatting parity is already solved.
-- [ ] Regenerate `docs/release/docs/progress/index.html` if docs release output is committed.
+- [x] Regenerate `docs/release/docs/progress/index.html` if docs release output is committed.
 
 ### Phase 6 audit / style / validation
 
-- [ ] Run docs/site generation command used by the repo, or full:
+- [x] Run docs/site generation command used by the repo, or full:
 
   ```bash
   just validate
   ```
 
-- [ ] Manually inspect generated docs diff for accidental broad churn.
-- [ ] Confirm roadmap and progress matrix do not reference removed files.
-- [ ] Confirm float-to-string parity appears explicitly in both roadmap and progress matrix.
+- [x] Manually inspect generated docs diff for accidental broad churn.
+  - Generated HTML changes are broad because the demand-driven JS cast helper emission now removes unused cast helper prelude code from docs pages. The content changes are limited to the language overview and progress matrix pages.
+- [x] Confirm roadmap and progress matrix do not reference removed files.
+- [x] Confirm float-to-string parity appears explicitly in both roadmap and progress matrix.
+
+Validation run:
+
+- `cargo run build docs --release` passed and rebuilt 31 docs files.
+- `cargo run --quiet -- check docs` passed with no errors or warnings.
+- `just validate` passed. It completed clippy for native/linux/windows targets, 2367 unit tests, 1552 integration outcomes, docs check, and benchmark check with no measurable change.
 
 ---
 

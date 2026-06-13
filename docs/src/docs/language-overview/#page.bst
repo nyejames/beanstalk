@@ -235,6 +235,10 @@ page_head #= theme_head
     inner `T`; `then none` is invalid because recovery handles the cast result before optional
     wrapping.
 
+    In the Alpha JS runtime target, `String -> Int` and `Float -> Int` casts materialize only
+    JavaScript-safe integers from `-9007199254740991` through `9007199254740991`. Values outside
+    that range fail the cast so compile-time folding and runtime behavior agree.
+
     These forms are invalid because they do not provide an immediate builtin target:
 
     [codeblock, $code("bst"):

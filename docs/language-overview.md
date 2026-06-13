@@ -215,6 +215,7 @@ Rules:
 - Conditions, loop conditions, assertions, template interpolation, operator operands, expression statements, and untyped declarations are not cast targets.
 - `T?` receiving contexts cast to the inner builtin `T`, then use ordinary contextual `T -> T?` wrapping. Optional source values are not auto-unwrapped.
 - In `target T? = cast source catch:`, recovery handlers also produce the inner `T`; the compiler wraps the successful or recovered `T` into `T?` after the cast. `then none` is invalid in that handler because `none` is not an inner builtin cast result.
+- In the Alpha JS runtime target, `String -> Int` and `Float -> Int` casts materialize only JavaScript-safe integer values from `-9007199254740991` through `9007199254740991`. Values outside that range fail the cast so compile-time folding and runtime lowering agree.
 - Same-type casts are invalid. `Int -> Float` contextual promotion remains separate from explicit casts, but `cast` is allowed when the source is naturally `Int` and the target is `Float`.
 - `cast expression` requires infallible evidence. `cast! expression` requires fallible evidence and propagates through the current function's `Error!` return slot. `cast expression catch:` requires fallible evidence and recovers locally.
 - `cast! expression catch:` is invalid. Propagation and local recovery are mutually exclusive.

@@ -12,6 +12,8 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 
 # Plans / TODOS
 - cast operator cleanup: `docs/roadmap/plans/cast_followup_cleanup_plan.md`
+- Float-to-string cast parity: define one formatting contract shared by AST folding and JS/Wasm/runtime lowering for `Float -> String`, including exponent thresholds, signed zero, non-finite rejection/formatting policy, and backend-stable output tests.
+- Full-width `Int` runtime semantics beyond the Alpha JS-safe integer cast policy: decide whether JS uses BigInt/boxed integers or whether `Int` remains a portable safe-integer type for the JS target.
 - first class Reactivity syntax with message / action patterns in templates: ``
 - Build out core IO library
 - Compile time arbitary precision aritmetic + Decimals Type support
@@ -54,7 +56,7 @@ changed first:
   traits, and broad return-type-directed conversion.
 
 # Notes
-- Explicit `cast` operator is complete in `docs/roadmap/plans/cast_operator_implementation_plan.md`: `cast` / `cast!` are tokenized as distinct typed-boundary forms, scalar constructor-style conversions are removed, compiler-owned builtin cast traits/evidence/policies are centralized, JS runtime casts are implemented, HTML-Wasm runtime casts report structured unsupported diagnostics, and docs/progress matrix/final audit validation passed.
+- Initial explicit `cast` operator implementation is complete: `cast` / `cast!` are tokenized as distinct typed-boundary forms, scalar constructor-style conversions are removed, compiler-owned builtin cast traits/evidence/policies are centralized, JS runtime casts are implemented, HTML-Wasm runtime casts report structured unsupported diagnostics, and the initial docs/progress matrix/final audit validation passed. Follow-up cleanup and policy parity are tracked in `docs/roadmap/plans/cast_followup_cleanup_plan.md`.
 
 - Language surface hardening follow-up is complete in `docs/roadmap/plans/hardening_followup_plan.md`: stale dynamic-trait/extension/fallback wording was removed, receiver-method visibility was simplified, concrete trait-evidence receiver fallback was removed, fixed-capacity and receiver coverage was hardened, map-key ownership was documented, and final stale-system audit plus validation passed.
 

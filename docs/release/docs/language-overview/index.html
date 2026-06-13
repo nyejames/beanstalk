@@ -373,7 +373,7 @@ body {
     count <span class='bst-code-type'>Int</span> <span class='bst-code-operator'>=</span> cast <span class='bst-code-string'>&quot;not a number&quot;</span> catch <span class='bst-code-operator'>|</span>err<span class='bst-code-operator'>|</span><span class='bst-code-operator'>:</span>
         then <span class='bst-code-number'>0</span>
     ;
-    </code></pre><p>Valid targets are the compiler-supported builtin core types: <code>Bool</code>, <code>Int</code>, <code>String</code>, <code>Char</code>, <code>Float</code>, and <code>Error</code>. Optional receiving contexts cast to the inner builtin type and then wrap normally.</p><p>These forms are invalid because they do not provide an immediate builtin target:</p><pre style="
+    </code></pre><p>Valid targets are the compiler-supported builtin core types: <code>Bool</code>, <code>Int</code>, <code>String</code>, <code>Char</code>, <code>Float</code>, and <code>Error</code>. Optional receiving contexts cast to the inner builtin type and then wrap normally. For <code>T? = cast source catch:</code>, the recovery handler also produces the inner <code>T</code>; <code>then none</code> is invalid because recovery handles the cast result before optional wrapping.</p><p>In the Alpha JS runtime target, <code>String -&gt; Int</code> and <code>Float -&gt; Int</code> casts materialize only JavaScript-safe integers from <code>-9007199254740991</code> through <code>9007199254740991</code>. Values outside that range fail the cast so compile-time folding and runtime behavior agree.</p><p>These forms are invalid because they do not provide an immediate builtin target:</p><pre style="
         background-color: hsla(0, 0%, 42%, 0.12);
         padding-left: 1em;
         border-radius: 5px;
@@ -730,58 +730,6 @@ body {
 
     function __bs_io(value) {
     console.log(__bs_value_to_string(value));
-    }
-
-    function __bs_normalize_numeric_text(value) {
-    return value.trim();
-    }
-
-    function __bs_cast_int(value) {
-    if (typeof value === "number") {
-    if (!Number.isFinite(value) || !Number.isSafeInteger(value)) {
-    return { tag: "err", value: __bs_make_error("Int value is out of supported range", 201, null, null) };
-    }
-    if (Number.isInteger(value)) {
-    return { tag: "ok", value };
-    }
-    return { tag: "err", value: __bs_make_error("Float value is not an exact integer", 200, null, null) };
-    }
-    if (typeof value === "string") {
-    const normalized = __bs_normalize_numeric_text(value);
-    if (/^[+-]?[0-9]+$/.test(normalized)) {
-    const parsed = Number.parseInt(normalized, 10);
-    if (!Number.isSafeInteger(parsed)) {
-    return { tag: "err", value: __bs_make_error("Int value is out of supported range", 201, null, null) };
-    }
-    return { tag: "ok", value: parsed };
-    }
-    return { tag: "err", value: __bs_make_error("Cannot parse Int from text", 200, null, null) };
-    }
-    return { tag: "err", value: __bs_make_error("Cast to Int only accepts Int, Float, or string values", 200, null, null) };
-    }
-
-    function __bs_cast_float(value) {
-    if (typeof value === "number") {
-    if (!Number.isFinite(value)) {
-    return { tag: "err", value: __bs_make_error("Float value is out of supported range", 211, null, null) };
-    }
-    return { tag: "ok", value };
-    }
-    if (typeof value === "string") {
-    const normalized = __bs_normalize_numeric_text(value);
-    if (/^[+-]?(?:NaN|Infinity)$/i.test(normalized) || /^[+-]?inf$/i.test(normalized)) {
-    return { tag: "err", value: __bs_make_error("Float value is out of supported range", 211, null, null) };
-    }
-    if (/^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$/.test(normalized)) {
-    const parsed = Number.parseFloat(normalized);
-    if (!Number.isFinite(parsed)) {
-    return { tag: "err", value: __bs_make_error("Float value is out of supported range", 211, null, null) };
-    }
-    return { tag: "ok", value: parsed };
-    }
-    return { tag: "err", value: __bs_make_error("Cannot parse Float from text", 210, null, null) };
-    }
-    return { tag: "err", value: __bs_make_error("Cast to Float only accepts Int, Float, or string values", 210, null, null) };
     }
 
     function b_fn6() {
