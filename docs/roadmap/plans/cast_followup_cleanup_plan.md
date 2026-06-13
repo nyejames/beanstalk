@@ -726,19 +726,29 @@ Validation run:
 
 ## Phase 7 — Final audit, validation, and handoff
 
+Status: complete.
+
+Summary:
+
+- Ran the final validation and targeted stale-symbol searches.
+- Performed the mandatory final-review parent audit over the touched cast frontend, HIR/backend lowering, parser API, docs, roadmap, generated docs, and test fixtures.
+- Required audit correction: removed the remaining `#[allow(clippy::too_many_arguments)]` on the AST cast resolver by introducing `CastResolutionInput` and updating its single parser call site.
+- Confirmed user-facing cast and unsupported-backend diagnostics remain on `CompilerDiagnostic`; JS/HIR/backend invariant failures remain on `CompilerError`.
+- Confirmed `Float -> String` formatting parity and full-width `Int` runtime semantics are tracked as follow-ups, not claimed complete.
+
 ### Context
 
 This phase catches stage-boundary regressions, stale wrappers, and documentation drift before merging.
 
 ### Tasks
 
-- [ ] Run full validation:
+- [x] Run full validation:
 
   ```bash
   just validate
   ```
 
-- [ ] Run targeted searches:
+- [x] Run targeted searches:
 
   ```bash
   rg "BuiltinCastKind|BuiltinCast|cast_operator_implementation_plan.md" src docs tests
@@ -747,34 +757,45 @@ This phase catches stage-boundary regressions, stale wrappers, and documentation
   rg "CastEvidenceKind|CORE_CAST_TRAIT_KINDS" src/compiler_frontend
   ```
 
-- [ ] Confirm any remaining matches are intentional tests or roadmap references.
-- [ ] Confirm all new diagnostics use `CompilerDiagnostic`.
-- [ ] Confirm all new HIR/backend invariant failures use `CompilerError`.
-- [ ] Confirm no user-facing source error is introduced in HIR/backend lowering when AST can diagnose it earlier.
-- [ ] Confirm new tests are behavior-focused and not brittle implementation snapshots.
-- [ ] Confirm docs and generated docs are in sync.
+- [x] Confirm any remaining matches are intentional tests or roadmap references.
+  - The broad `BuiltinCast` search matches current intentional names such as `BuiltinCastTarget`, `BuiltinCastPolicyId`, `BuiltinCastLiteral`, and `BuiltinCastError`.
+  - A precise legacy-name search for exact `BuiltinCastKind` / `BuiltinCast` found only this completed plan's recorded search commands.
+  - The removed cast plan path is absent from source, tests, docs source, the progress matrix, and `docs/roadmap/roadmap.md`.
+  - `phase 2 evidence`, `phase 3`, and `phase 4` no longer appear in cast source or primary docs outside this completed plan record.
+  - `too_many_arguments`, `CastEvidenceKind`, and `CORE_CAST_TRAIT_KINDS` no longer appear under `src/compiler_frontend` after the final audit correction.
+- [x] Confirm all new diagnostics use `CompilerDiagnostic`.
+- [x] Confirm all new HIR/backend invariant failures use `CompilerError`.
+- [x] Confirm no user-facing source error is introduced in HIR/backend lowering when AST can diagnose it earlier.
+- [x] Confirm new tests are behavior-focused and not brittle implementation snapshots.
+- [x] Confirm docs and generated docs are in sync.
 
 ### Final manual stage-boundary review checklist
 
-- [ ] AST owns target resolution, evidence selection, fallibility validation, and const folding.
-- [ ] HIR does not solve trait evidence.
-- [ ] HIR only carries builtin runtime cast policies.
-- [ ] User-defined cast evidence lowers to direct calls.
-- [ ] JS runtime helpers mirror Rust policy semantics.
-- [ ] HTML-Wasm rejects reachable runtime casts before LIR lowering.
-- [ ] Float-to-string parity is tracked as follow-up, not silently claimed complete.
-- [ ] Parser API is cleaner than before and does not preserve obsolete wrappers.
-- [ ] No new cast targets, generic cast traits, or conversion constructors were added.
+- [x] AST owns target resolution, evidence selection, fallibility validation, and const folding.
+- [x] HIR does not solve trait evidence.
+- [x] HIR only carries builtin runtime cast policies.
+- [x] User-defined cast evidence lowers to direct calls.
+- [x] JS runtime helpers mirror Rust policy semantics.
+- [x] HTML-Wasm rejects reachable runtime casts before LIR lowering.
+- [x] Float-to-string parity is tracked as follow-up, not silently claimed complete.
+- [x] Parser API is cleaner than before and does not preserve obsolete wrappers.
+- [x] No new cast targets, generic cast traits, or conversion constructors were added.
+
+Final validation run:
+
+- `cargo fmt` passed.
+- `cargo test --quiet -- cast` passed with 99 tests.
+- `just validate` passed. It completed clippy for native/linux/windows targets, 2367 unit tests, 1552 integration outcomes, docs check, and benchmark check with no measurable change.
 
 ## Acceptance criteria
 
-- [ ] Folded and runtime `String -> Int` / `Float -> Int` casts agree at the documented integer range boundary.
-- [ ] Optional receiving target recovery behavior is documented and tested.
-- [ ] HIR/user-defined cast contract is documented accurately.
-- [ ] Expression parser cast-target plumbing uses a context/input struct instead of long argument lists.
-- [ ] Redundant cast metadata tables are consolidated.
-- [ ] JS cast helpers are emitted on demand.
-- [ ] Stale cast plan references are removed or replaced.
-- [ ] Float-to-string parity is explicitly listed in roadmap and progress matrix.
-- [ ] Duplicate or obsolete cast fixtures are pruned.
-- [ ] `just validate` passes.
+- [x] Folded and runtime `String -> Int` / `Float -> Int` casts agree at the documented integer range boundary.
+- [x] Optional receiving target recovery behavior is documented and tested.
+- [x] HIR/user-defined cast contract is documented accurately.
+- [x] Expression parser cast-target plumbing uses a context/input struct instead of long argument lists.
+- [x] Redundant cast metadata tables are consolidated.
+- [x] JS cast helpers are emitted on demand.
+- [x] Stale cast plan references are removed or replaced.
+- [x] Float-to-string parity is explicitly listed in roadmap and progress matrix.
+- [x] Duplicate or obsolete cast fixtures are pruned.
+- [x] `just validate` passes.

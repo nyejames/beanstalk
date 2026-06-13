@@ -28,6 +28,28 @@ use crate::compiler_frontend::traits::environment::TraitEnvironment;
 use crate::compiler_frontend::traits::evidence::TraitEvidenceEnvironment;
 use crate::compiler_frontend::traits::ids::TraitId;
 
+/// Inputs for resolving one explicit `cast` at a typed receiving boundary.
+///
+/// WHAT: groups the semantic boundary facts, trait evidence stores, and type
+///      environment access needed to turn a parsed cast operand into a resolved
+///      AST expression.
+/// WHY: cast resolution is a stage-owned operation with several required
+///      collaborators. Keeping them named prevents another long parser-to-AST
+///      argument list from becoming the public shape of this boundary.
+pub(crate) struct CastResolutionInput<'a> {
+    pub(crate) source: Expression,
+    pub(crate) target_type_id: TypeId,
+    pub(crate) target: BuiltinCastTarget,
+    pub(crate) requires_optional_wrap_after_cast: bool,
+    pub(crate) handling: CastHandling,
+    pub(crate) trait_environment: &'a TraitEnvironment,
+    pub(crate) trait_evidence_environment: &'a TraitEvidenceEnvironment,
+    pub(crate) type_environment: &'a mut TypeEnvironment,
+    pub(crate) string_table: &'a StringTable,
+    pub(crate) active_generic_type_context: Option<&'a ActiveGenericTypeContext>,
+    pub(crate) location: SourceLocation,
+}
+
 /// Resolves a user-authored `cast` expression at an explicit typed boundary.
 ///
 /// WHAT: validates the source/target pair, selects builtin, user-defined, or
@@ -36,20 +58,23 @@ use crate::compiler_frontend::traits::ids::TraitId;
 /// WHY: the boundary owner already knows the target type; this function owns
 ///      evidence selection and user-facing cast diagnostics so callers do not
 ///      duplicate the lookup logic.
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn resolve_cast_expression(
-    source: Expression,
-    target_type_id: TypeId,
-    target: BuiltinCastTarget,
-    requires_optional_wrap_after_cast: bool,
-    handling: CastHandling,
-    trait_environment: &TraitEnvironment,
-    trait_evidence_environment: &TraitEvidenceEnvironment,
-    type_environment: &mut TypeEnvironment,
-    string_table: &StringTable,
-    active_generic_type_context: Option<&ActiveGenericTypeContext>,
-    location: SourceLocation,
+    input: CastResolutionInput<'_>,
 ) -> Result<Expression, CompilerDiagnostic> {
+    let CastResolutionInput {
+        source,
+        target_type_id,
+        target,
+        requires_optional_wrap_after_cast,
+        handling,
+        trait_environment,
+        trait_evidence_environment,
+        type_environment,
+        string_table,
+        active_generic_type_context,
+        location,
+    } = input;
+
     let source_type_id = source.type_id;
 
     if type_environment.is_option(source_type_id) {

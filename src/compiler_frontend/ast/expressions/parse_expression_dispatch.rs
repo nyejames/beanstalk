@@ -28,7 +28,9 @@ use crate::compiler_frontend::ast::statements::fallible_handling::{
 use crate::compiler_frontend::ast::statements::match_arm_boundaries::current_token_starts_match_arm_header;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext};
-use crate::compiler_frontend::builtins::casts::resolution::resolve_cast_expression;
+use crate::compiler_frontend::builtins::casts::resolution::{
+    CastResolutionInput, resolve_cast_expression,
+};
 use crate::compiler_frontend::builtins::error_type::resolve_builtin_error_type_typed;
 use crate::compiler_frontend::builtins::expression_parsing::parse_curly_literal_expression;
 use crate::compiler_frontend::compiler_errors::CompilerError;
@@ -971,19 +973,19 @@ fn parse_cast_expression(
         }
     }
 
-    let cast_expression = resolve_cast_expression(
-        operand,
+    let cast_expression = resolve_cast_expression(CastResolutionInput {
+        source: operand,
         target_type_id,
         target,
         requires_optional_wrap_after_cast,
         handling,
-        context.trait_environment(),
-        context.trait_evidence_environment(),
-        type_interner.environment_mut_for_derived_types(),
+        trait_environment: context.trait_environment(),
+        trait_evidence_environment: context.trait_evidence_environment(),
+        type_environment: type_interner.environment_mut_for_derived_types(),
         string_table,
-        context.active_generic_type_context(),
-        cast_location,
-    )?;
+        active_generic_type_context: context.active_generic_type_context(),
+        location: cast_location,
+    })?;
 
     state.expression.push(AstNode {
         kind: NodeKind::Rvalue(cast_expression),
