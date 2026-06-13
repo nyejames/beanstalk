@@ -1,17 +1,17 @@
 //! Evidence table unit tests for the builtin cast surface.
 //!
-//! WHAT: covers lookup, fallibility classification, policy id dispatch, and
-//!      kind classification for the initial builtin evidence rows.
+//! WHAT: covers lookup, fallibility classification, and policy id dispatch
+//!      for the initial builtin evidence rows.
 //! WHY: the evidence table is the single source of truth for which (source,
 //!      target) pairs are valid and how they fold. Tests here pin the table
 //!      contents so they cannot drift silently.
 
 use crate::compiler_frontend::builtins::casts::evidence::{
-    builtin_evidence_fallibility, builtin_evidence_kind, builtin_evidence_policy,
-    builtin_evidence_rows, lookup_builtin_evidence,
+    builtin_evidence_fallibility, builtin_evidence_policy, builtin_evidence_rows,
+    lookup_builtin_evidence,
 };
 use crate::compiler_frontend::builtins::casts::targets::{
-    BuiltinCastFallibility, BuiltinCastPolicyId, BuiltinCastTarget, CastEvidenceKind,
+    BuiltinCastFallibility, BuiltinCastPolicyId, BuiltinCastTarget,
 };
 
 #[test]
@@ -26,7 +26,6 @@ fn int_to_float_is_infallible_with_dedicated_policy() {
         .expect("Int -> Float evidence should exist");
     assert_eq!(row.fallibility, BuiltinCastFallibility::Infallible);
     assert_eq!(row.policy, BuiltinCastPolicyId::IntToFloat);
-    assert_eq!(builtin_evidence_kind(), CastEvidenceKind::Builtin);
 }
 
 #[test]

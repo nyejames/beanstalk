@@ -503,6 +503,17 @@ Cast target context extended an already-noisy parser API. The style guide prefer
 
 ## Phase 4 — Consolidate cast metadata and JS helper emission
 
+Status: complete.
+
+Summary:
+
+- Made `BUILTIN_CAST_TRAIT_ROWS` the single authoritative core cast trait metadata table.
+- Removed the duplicate `CORE_CAST_TRAIT_KINDS` table, redundant metadata projection helpers, `CastEvidenceKind`, and `builtin_evidence_kind()`.
+- Updated cast evidence registration, user-defined/generic evidence selection, and trait incompatibility registration to derive from the row table.
+- Updated metadata tests to assert 12 unique rows, unique names, and complete target/fallibility coverage directly from the row table.
+- Made JS runtime cast helper emission demand-driven: `String -> Int`, `String -> Float`, `Float -> Int`, and other policy helpers emit only when their policies are reachable; `Int -> Float` emits no helper.
+- Added backend unit coverage and integration cases for helper presence/absence, and regenerated affected HTML goldens to remove the unconditional numeric helper block.
+
 ### Context
 
 The cast implementation has strong table-driven foundations, but a few redundant metadata paths and unconditional helper emissions add avoidable noise.
@@ -511,16 +522,16 @@ The cast implementation has strong table-driven foundations, but a few redundant
 
 #### Collapse core cast trait metadata to one row table
 
-- [ ] In `src/compiler_frontend/builtins/casts/traits.rs`, make `BUILTIN_CAST_TRAIT_ROWS` the only authoritative source.
-- [ ] Remove `CORE_CAST_TRAIT_KINDS`.
-- [ ] Replace `core_cast_trait_kinds()` with one of:
+- [x] In `src/compiler_frontend/builtins/casts/traits.rs`, make `BUILTIN_CAST_TRAIT_ROWS` the only authoritative source.
+- [x] Remove `CORE_CAST_TRAIT_KINDS`.
+- [x] Replace `core_cast_trait_kinds()` with one of:
   - `core_cast_trait_rows() -> &'static [CoreCastTraitMetadata]`, or
   - `core_cast_trait_kinds()` derived from rows without a second hardcoded list.
-- [ ] Update callers:
+- [x] Update callers:
   - `src/compiler_frontend/builtins/casts/evidence.rs`
   - `src/compiler_frontend/builtins/casts/resolution.rs`
   - AST environment cast trait registration paths.
-- [ ] Update tests to validate row table completeness and uniqueness:
+- [x] Update tests to validate row table completeness and uniqueness:
   - exactly 12 rows;
   - unique `CoreCastTrait`;
   - unique trait names;
@@ -528,31 +539,36 @@ The cast implementation has strong table-driven foundations, but a few redundant
 
 #### Remove redundant/unused metadata
 
-- [ ] Remove `CastEvidenceKind` from `targets.rs` unless there is a real production caller after the refactor.
-- [ ] Remove `builtin_evidence_kind()` if it exists only to pin a redundant enum.
-- [ ] Remove dead-code projection helpers used only by tests, or gate test-only helpers with `#[cfg(test)]`.
-- [ ] Replace stale comments such as “phase 2 evidence table” with current ownership comments such as “initial builtin evidence table.”
+- [x] Remove `CastEvidenceKind` from `targets.rs` unless there is a real production caller after the refactor.
+- [x] Remove `builtin_evidence_kind()` if it exists only to pin a redundant enum.
+- [x] Remove dead-code projection helpers used only by tests, or gate test-only helpers with `#[cfg(test)]`.
+- [x] Replace stale comments such as “phase 2 evidence table” with current ownership comments such as “initial builtin evidence table.”
 
 #### Make JS cast helper emission fully on-demand
 
-- [ ] Update `src/backends/js/runtime/casts.rs`:
+- [x] Update `src/backends/js/runtime/casts.rs`:
   - emit `__bs_cast_int` only when `StringToInt` is used;
   - emit `__bs_cast_float` only when `StringToFloat` is used;
   - emit numeric normalization helpers only when one of those helpers is emitted;
   - keep fixed helper emission order deterministic.
-- [ ] Verify `IntToFloat` emits no helper.
-- [ ] Verify `CastOp` with policies that require helpers cannot reach JS emission without that helper in `used_cast_policies`.
-- [ ] Add unit-level backend tests only if an existing JS backend helper test owner exists. Otherwise add integration coverage with generated output assertions:
+- [x] Verify `IntToFloat` emits no helper.
+- [x] Verify `CastOp` with policies that require helpers cannot reach JS emission without that helper in `used_cast_policies`.
+- [x] Add unit-level backend tests only if an existing JS backend helper test owner exists. Otherwise add integration coverage with generated output assertions:
   - no `__bs_cast_int` helper when only `Int -> Float` is used;
   - `__bs_cast_int` appears when `String -> Int` runtime cast is used;
   - `__bs_cast_float` appears when `String -> Float` runtime cast is used.
 
 ### Phase 4 audit / style / validation
 
-- [ ] Run cast metadata tests.
-- [ ] Run JS backend tests/goldens affected by helper emission.
-- [ ] Run `just validate`.
-- [ ] Manual style review:
+- [x] Run cast metadata tests.
+  - `cargo test --quiet -- cast` passed with 99 tests.
+- [x] Run JS backend tests/goldens affected by helper emission.
+  - `cargo test --quiet -- prelude` passed with 18 tests.
+  - `cargo test --quiet -- runtime_helpers` passed with 57 tests.
+  - `cargo run --quiet -- tests` passed with 1553 / 1553 expected integration outcomes.
+- [x] Run `just validate`.
+  - `just validate` passed. It completed clippy for native/linux/windows targets, 2367 unit tests, 1553 integration outcomes, docs check, and benchmark check with no measurable change.
+- [x] Manual style review:
   - one metadata source of truth;
   - no stale phase comments;
   - no unnecessary dead-code allowances;

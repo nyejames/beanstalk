@@ -567,7 +567,7 @@ fn collection_length_call_is_not_wrapped_with_result_propagate() {
 /// Verifies that `__bs_cast_int` rejects non-numeric strings with a Parse error. [cast]
 #[test]
 fn cast_int_rejects_non_numeric_string() {
-    let source = lower_minimal_module("main");
+    let source = lower_minimal_module_with_string_int_cast("main");
     let cast = helper_source(&source, "__bs_cast_int");
 
     assert!(
@@ -579,7 +579,7 @@ fn cast_int_rejects_non_numeric_string() {
 /// Verifies that `__bs_cast_int` accepts integer strings via parseInt. [cast]
 #[test]
 fn cast_int_accepts_integer_string() {
-    let source = lower_minimal_module("main");
+    let source = lower_minimal_module_with_string_int_cast("main");
     let cast = helper_source(&source, "__bs_cast_int");
 
     assert!(
@@ -591,7 +591,7 @@ fn cast_int_accepts_integer_string() {
 /// Verifies that `__bs_cast_int` uses the shared safe-integer range helpers. [cast]
 #[test]
 fn cast_int_uses_safe_integer_range_helpers() {
-    let source = lower_minimal_module("main");
+    let source = lower_minimal_module_with_string_int_cast("main");
 
     assert!(
         source.contains("function __bs_cast_int_in_range(value)")
@@ -677,7 +677,7 @@ fn cast_float_to_int_uses_safe_integer_range_helper() {
 /// Verifies that `__bs_cast_float` rejects invalid strings with a Parse error. [cast]
 #[test]
 fn cast_float_rejects_invalid_string() {
-    let source = lower_minimal_module("main");
+    let source = lower_minimal_module_with_string_float_cast("main");
     let cast = helper_source(&source, "__bs_cast_float");
 
     assert!(

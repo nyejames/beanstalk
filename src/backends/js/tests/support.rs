@@ -12,6 +12,7 @@ pub(super) use crate::backends::js::{JsLoweringConfig, lower_hir_to_js};
 pub(super) use crate::compiler_frontend::analysis::borrow_checker::{
     BorrowCheckReport, BorrowStateSnapshot, LocalBorrowSnapshot, LocalMode,
 };
+use crate::compiler_frontend::builtins::casts::targets::BuiltinCastPolicyId;
 use crate::compiler_frontend::datatypes::definitions::ChoiceTypeDefinition;
 use crate::compiler_frontend::datatypes::environment::TypeEnvironment;
 use crate::compiler_frontend::datatypes::ids::TypeId;
@@ -39,6 +40,7 @@ pub(super) struct TypeIds {
     pub(super) int: TypeId,
     pub(super) boolean: TypeId,
     pub(super) string: TypeId,
+    pub(super) float: TypeId,
     pub(super) option_int: TypeId,
     pub(super) choice_unit: TypeId,
     pub(super) collection_int: TypeId,
@@ -68,6 +70,8 @@ pub(super) fn build_type_environment() -> (TypeEnvironment, TypeIds) {
     let boolean = builtins.bool;
     let string = builtins.string;
 
+    let float = builtins.float;
+
     let option_int = env.intern_constructed(
         TypeConstructor::Builtin(BuiltinTypeConstructor::Option),
         Box::new([int]),
@@ -91,6 +95,7 @@ pub(super) fn build_type_environment() -> (TypeEnvironment, TypeIds) {
             int,
             boolean,
             string,
+            float,
             option_int,
             choice_unit,
             collection_int,
@@ -298,4 +303,101 @@ pub(super) fn lower_minimal_map_module(function_name: &str) -> String {
 
 pub(super) fn default_config() -> JsLoweringConfig {
     JsLoweringConfig::direct_js(false)
+}
+
+/// Builds and lowers a minimal module that performs one runtime cast expression.
+///
+/// WHY: demand-driven cast-helper tests need focused HIR fixtures, but the
+/// module/function/lowering setup is identical for every policy. Keeping that
+/// setup in one helper lets each public fixture name only its source expression,
+/// target type, and policy.
+fn lower_minimal_module_with_cast(
+    function_name: &str,
+    policy: BuiltinCastPolicyId,
+    source_expression: impl FnOnce(&TypeIds, RegionId) -> HirExpression,
+    result_type: impl FnOnce(&TypeIds) -> TypeId,
+) -> String {
+    let mut string_table = StringTable::new();
+    let (type_environment, types) = build_type_environment();
+    let region = RegionId(0);
+
+    let source = source_expression(&types, region);
+    let cast_type = result_type(&types);
+    let cast_call = expression(
+        2,
+        HirExpressionKind::Cast {
+            source: Box::new(source),
+            policy,
+        },
+        cast_type,
+        region,
+        ValueKind::RValue,
+    );
+
+    let block = HirBlock {
+        id: BlockId(0),
+        region,
+        locals: vec![],
+        statements: vec![statement(1, HirStatementKind::Expr(cast_call), 1)],
+        terminator: HirTerminator::Return(unit_expression(3, types.unit, region)),
+    };
+
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.unit,
+        return_aliases: vec![],
+    };
+
+    let module = build_module(&mut string_table, function_name, vec![block], function, &[]);
+
+    lower_hir_to_js(
+        &module,
+        &BorrowCheckReport::default(),
+        &string_table,
+        JsLoweringConfig::direct_js(false),
+        &type_environment,
+    )
+    .expect("JS lowering should succeed")
+    .source
+}
+
+/// Builds and lowers a minimal module that performs a `String -> Int` cast at runtime.
+///
+/// WHY: prelude-presence tests want to prove that demand-driven helper emission
+/// only emits the numeric parsing helpers when a numeric cast policy is reachable.
+pub(super) fn lower_minimal_module_with_string_int_cast(function_name: &str) -> String {
+    lower_minimal_module_with_cast(
+        function_name,
+        BuiltinCastPolicyId::StringToInt,
+        |types, region| string_expression(1, "0", types.string, region),
+        |types| types.int,
+    )
+}
+
+/// Builds and lowers a minimal module that only performs an `Int -> Float` cast at runtime.
+///
+/// WHY: prelude-presence tests want to prove that identity casts do not drag the
+/// numeric parsing helpers into the prelude.
+pub(super) fn lower_minimal_module_with_int_to_float_cast(function_name: &str) -> String {
+    lower_minimal_module_with_cast(
+        function_name,
+        BuiltinCastPolicyId::IntToFloat,
+        |types, region| int_expression(1, 0, types.int, region),
+        |types| types.float,
+    )
+}
+
+/// Builds and lowers a minimal module that performs a `String -> Float` cast at runtime.
+///
+/// WHY: runtime-helper tests need a module that emits only the float parser and
+/// its shared normalizer, without also making the integer parser reachable.
+pub(super) fn lower_minimal_module_with_string_float_cast(function_name: &str) -> String {
+    lower_minimal_module_with_cast(
+        function_name,
+        BuiltinCastPolicyId::StringToFloat,
+        |types, region| string_expression(1, "0.5", types.string, region),
+        |types| types.float,
+    )
 }

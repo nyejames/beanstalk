@@ -11,7 +11,7 @@ use super::evidence::{builtin_evidence_fallibility, builtin_evidence_policy};
 use super::targets::{
     BuiltinCastFallibility, BuiltinCastPolicyId, BuiltinCastTarget, builtin_cast_target_for_type,
 };
-use super::traits::{CoreCastTrait, builtin_cast_trait_metadata, core_cast_trait_kinds};
+use super::traits::{BUILTIN_CAST_TRAIT_ROWS, CoreCastTrait, builtin_cast_trait_metadata};
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::expressions::expression_kind::ResolvedCastExpression;
 use crate::compiler_frontend::ast::expressions::expression_types::{
@@ -315,10 +315,9 @@ fn core_cast_trait_for_target_and_fallibility(
     target: BuiltinCastTarget,
     fallibility: BuiltinCastFallibility,
 ) -> Option<CoreCastTrait> {
-    for kind in core_cast_trait_kinds() {
-        let metadata = builtin_cast_trait_metadata(*kind);
+    for metadata in BUILTIN_CAST_TRAIT_ROWS {
         if metadata.target == target && metadata.fallibility == fallibility {
-            return Some(*kind);
+            return Some(metadata.kind);
         }
     }
     None

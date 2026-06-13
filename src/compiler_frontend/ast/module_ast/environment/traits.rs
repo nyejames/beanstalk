@@ -22,7 +22,7 @@ use crate::compiler_frontend::builtins::casts::targets::{
     BuiltinCastFallibility, BuiltinCastTarget,
 };
 use crate::compiler_frontend::builtins::casts::traits::{
-    builtin_cast_trait_metadata, builtin_cast_trait_name, core_cast_trait_kinds,
+    BUILTIN_CAST_TRAIT_ROWS, builtin_cast_trait_name,
 };
 use crate::compiler_frontend::compiler_errors::{CompilerError, CompilerMessages};
 use crate::compiler_frontend::compiler_messages::{
@@ -135,8 +135,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         type_environment: &mut crate::compiler_frontend::datatypes::environment::TypeEnvironment,
         string_table: &mut StringTable,
     ) -> Result<(), CompilerMessages> {
-        for kind in core_cast_trait_kinds() {
-            let metadata = builtin_cast_trait_metadata(*kind);
+        for metadata in BUILTIN_CAST_TRAIT_ROWS {
             let Some(success_type) =
                 type_id_for_builtin_target(metadata.target, type_environment, string_table)
             else {
@@ -207,8 +206,7 @@ impl<'context, 'services> AstModuleEnvironmentBuilder<'context, 'services> {
         let mut trait_ids_by_target: FxHashMap<BuiltinCastTarget, CoreCastTraitPair> =
             FxHashMap::default();
 
-        for kind in core_cast_trait_kinds() {
-            let metadata = builtin_cast_trait_metadata(*kind);
+        for metadata in BUILTIN_CAST_TRAIT_ROWS {
             let Some(trait_id) =
                 trait_environment.core_trait_id_for_static_name(metadata.trait_name)
             else {

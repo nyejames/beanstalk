@@ -12,10 +12,9 @@ use crate::compiler_frontend::builtins::casts::targets::{
     BuiltinCastFallibility, BuiltinCastTarget,
 };
 use crate::compiler_frontend::builtins::casts::traits::{
-    BUILTIN_CAST_TRAIT_ROWS, CoreCastTrait, builtin_cast_requirement_name,
-    builtin_cast_trait_fallibility, builtin_cast_trait_metadata, builtin_cast_trait_name,
-    builtin_cast_trait_target, is_core_cast_trait_name,
+    BUILTIN_CAST_TRAIT_ROWS, CoreCastTrait, builtin_cast_trait_name, is_core_cast_trait_name,
 };
+use std::collections::HashMap;
 
 #[test]
 fn metadata_table_covers_every_core_cast_trait() {
@@ -76,7 +75,7 @@ fn fallible_traits_use_try_to_requirement_prefix() {
 }
 
 #[test]
-fn trait_names_match_plan_section_3_1() {
+fn trait_names_match_language_core_cast_spellings() {
     assert_eq!(
         builtin_cast_trait_name(CoreCastTrait::CastableToInt),
         "CASTABLE_TO_INT"
@@ -95,21 +94,42 @@ fn trait_names_match_plan_section_3_1() {
     );
 }
 
+/// Verifies that the metadata table covers every builtin target with both
+/// an infallible and a fallible trait row, and that no (target, fallibility)
+/// pair duplicates.
 #[test]
-fn target_lookup_round_trips_through_metadata() {
-    for kind in [
-        CoreCastTrait::CastableToInt,
-        CoreCastTrait::TryCastableToInt,
-        CoreCastTrait::CastableToError,
-        CoreCastTrait::TryCastableToError,
-    ] {
-        let metadata = builtin_cast_trait_metadata(kind);
-        assert_eq!(builtin_cast_trait_target(kind), metadata.target);
-        assert_eq!(
-            builtin_cast_requirement_name(kind),
-            metadata.requirement_name
+fn target_fallibility_pairs_cover_every_builtin_target() {
+    use std::collections::HashSet;
+
+    let mut seen: HashSet<(BuiltinCastTarget, BuiltinCastFallibility)> = HashSet::new();
+    let mut by_target: HashMap<BuiltinCastTarget, (bool, bool)> = HashMap::new();
+
+    for row in BUILTIN_CAST_TRAIT_ROWS {
+        assert!(
+            seen.insert((row.target, row.fallibility)),
+            "duplicate (target, fallibility) row for {:?}",
+            row.target
         );
-        assert_eq!(builtin_cast_trait_fallibility(kind), metadata.fallibility);
+
+        let entry = by_target.entry(row.target).or_insert((false, false));
+        match row.fallibility {
+            BuiltinCastFallibility::Infallible => entry.0 = true,
+            BuiltinCastFallibility::Fallible => entry.1 = true,
+        }
+    }
+
+    let expected_targets = [
+        BuiltinCastTarget::Bool,
+        BuiltinCastTarget::Int,
+        BuiltinCastTarget::String,
+        BuiltinCastTarget::Char,
+        BuiltinCastTarget::Float,
+        BuiltinCastTarget::Error,
+    ];
+    assert_eq!(by_target.len(), expected_targets.len());
+    for target in expected_targets {
+        let (infallible, fallible) = by_target.get(&target).copied().unwrap_or((false, false));
+        assert!(infallible && fallible, "{target:?} must have both forms");
     }
 }
 

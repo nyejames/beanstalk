@@ -2,19 +2,17 @@
 //! registration.
 //!
 //! WHAT: defines a single static table that records every initial compiler-owned
-//!      evidence row from the cast plan, plus lookup helpers that resolve a
-//!      `(BuiltinCastTarget, BuiltinCastTarget)` pair into its `BuiltinCastPolicyId`,
-//!      fallibility, and classification kind. Exposes the trait id for each
-//!      `(source, target)` pair so the AST environment builder can register
-//!      builtin evidence rows without re-deriving trait names.
+//!      evidence row, plus lookup helpers that resolve a
+//!      `(BuiltinCastTarget, BuiltinCastTarget)` pair into its `BuiltinCastPolicyId`
+//!      and fallibility. Exposes the trait id for each `(source, target)` pair so
+//!      the AST environment builder can register builtin evidence rows without
+//!      re-deriving trait names.
 //! WHY: keeping the table in one place means the policy owner cannot drift on
 //!      which (source, target) pairs are valid, and later phases can swap the
 //!      storage shape without rewriting every call site.
 
-use super::targets::{
-    BuiltinCastFallibility, BuiltinCastPolicyId, BuiltinCastTarget, CastEvidenceKind,
-};
-use super::traits::{CoreCastTrait, builtin_cast_trait_metadata};
+use super::targets::{BuiltinCastFallibility, BuiltinCastPolicyId, BuiltinCastTarget};
+use super::traits::CoreCastTrait;
 
 /// Static row describing a single initial builtin evidence entry.
 #[derive(Debug, Clone, Copy)]
@@ -25,7 +23,7 @@ pub(crate) struct BuiltinCastEvidenceRow {
     pub(crate) policy: BuiltinCastPolicyId,
 }
 
-/// The complete set of initial builtin evidence rows from cast plan section 3.4.
+/// The complete set of initial builtin evidence rows registered by the compiler.
 ///
 /// WHAT: every row maps a (source, target) pair to its fallibility classification
 ///      and the stable `BuiltinCastPolicyId` that the policy owner will dispatch on.
@@ -150,12 +148,6 @@ pub(crate) fn builtin_evidence_policy(
     lookup_builtin_evidence(source, target).map(|row| row.policy)
 }
 
-/// The classification kind for a builtin evidence row.
-#[allow(dead_code)] // Metadata tests pin this classifier; runtime evidence uses resolved rows.
-pub(crate) fn builtin_evidence_kind() -> CastEvidenceKind {
-    CastEvidenceKind::Builtin
-}
-
 /// Resolves a `BuiltinCastTarget` to its canonical `TypeId` in the supplied
 /// `TypeEnvironment`.
 ///
@@ -193,17 +185,18 @@ pub(crate) fn type_id_for_builtin_target(
 /// Returns the `CoreCastTrait` variant for a builtin evidence row.
 ///
 /// WHAT: maps a builtin evidence row's target and fallibility to the core
-///      cast trait that proves the row.
+///      cast trait that proves the row. The lookup scans the single
+///      `BUILTIN_CAST_TRAIT_ROWS` table so there is exactly one source of
+///      truth for the trait catalogue.
 /// WHY: lets `register_builtin_cast_evidence` and its tests share one
 ///      (source, target) → trait mapping instead of re-deriving the
 ///      (source, target) → `CoreCastTrait` translation in multiple places.
 pub(crate) fn builtin_evidence_trait_kind_for_row(
     row: BuiltinCastEvidenceRow,
 ) -> Option<CoreCastTrait> {
-    for kind in super::traits::core_cast_trait_kinds() {
-        let metadata = builtin_cast_trait_metadata(*kind);
+    for metadata in super::traits::BUILTIN_CAST_TRAIT_ROWS {
         if metadata.target == row.target && metadata.fallibility == row.fallibility {
-            return Some(*kind);
+            return Some(metadata.kind);
         }
     }
     None

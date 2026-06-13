@@ -187,18 +187,47 @@ fn runtime_prelude_contains_collection_helpers() {
     );
 }
 
-/// Verifies that the cast helper group is present in the emitted prelude. [prelude-presence]
+/// Verifies that a module that exercises runtime cast policies emits every
+/// helper those policies require. [prelude-presence]
 #[test]
 fn runtime_prelude_contains_cast_helpers() {
-    let source = lower_minimal_module("main");
+    let source = lower_minimal_module_with_string_int_cast("main");
 
     assert!(
         source.contains("function __bs_cast_int("),
-        "prelude must contain __bs_cast_int"
+        "prelude must contain __bs_cast_int when StringToInt is used"
     );
     assert!(
-        source.contains("function __bs_cast_float("),
-        "prelude must contain __bs_cast_float"
+        source.contains("function __bs_cast_int_in_range(value)"),
+        "prelude must contain the shared safe-integer range predicate"
+    );
+    assert!(
+        source.contains("function __bs_normalize_numeric_text("),
+        "prelude must contain the numeric text normalizer"
+    );
+}
+
+/// Verifies that a module that only performs an `Int -> Float` cast does not
+/// emit the numeric parsing helpers. [prelude-presence]
+#[test]
+fn runtime_prelude_omits_cast_helpers_when_only_identity_cast_is_used() {
+    let source = lower_minimal_module_with_int_to_float_cast("main");
+
+    assert!(
+        !source.contains("function __bs_cast_int("),
+        "prelude must not contain __bs_cast_int when only Int -> Float is used"
+    );
+    assert!(
+        !source.contains("function __bs_cast_float("),
+        "prelude must not contain __bs_cast_float when only Int -> Float is used"
+    );
+    assert!(
+        !source.contains("function __bs_normalize_numeric_text("),
+        "prelude must not contain the numeric text normalizer when no numeric parsing helper is used"
+    );
+    assert!(
+        !source.contains("function __bs_cast_int_in_range(value)"),
+        "prelude must not contain the shared range predicate when no helper needs it"
     );
 }
 

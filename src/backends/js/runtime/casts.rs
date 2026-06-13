@@ -16,20 +16,22 @@ use std::collections::HashSet;
 impl<'hir> JsEmitter<'hir> {
     /// Emits the cast runtime helpers used by the generated JS.
     ///
-    /// WHAT: always emits the numeric parsing helpers (`__bs_cast_int`, `__bs_cast_float`) and
-    ///      the normalizer they share, then emits one helper per additional builtin policy that
-    ///      the module actually uses.
-    /// WHY: numeric casts are the most common cast surface and are cheap to keep available; the
-    ///      remaining helpers are emitted on demand to avoid unnecessary prelude growth.
+    /// WHAT: walks the used cast policies in a fixed, deterministic order and emits exactly the
+    ///      helpers that the reachable code needs. `Int -> Float` is a JS identity and never
+    ///      emits a helper; numeric parsing helpers and their shared normalizer are only emitted
+    ///      when at least one helper that depends on them is emitted.
+    /// WHY: demand-driven emission keeps the prelude minimal. Modules that only use the identity
+    ///      `Int -> Float` cast should not pay for numeric parsing helpers they never call, and
+    ///      modules that only use a single numeric cast should still see only the helpers they
+    ///      reach.
     pub(crate) fn emit_runtime_cast_helpers(&mut self) {
         let mut emitted = HashSet::<&'static str>::new();
 
-        self.emit_normalize_numeric_text();
-        self.emit_cast_int(&mut emitted);
-        self.emit_cast_float(&mut emitted);
-
-        // Emit additional helpers in a fixed policy order so generated prelude is deterministic.
+        // Walk policies in a fixed dependency-aware order so shared helpers
+        // are emitted before their callers and prelude output stays stable.
         for policy in [
+            BuiltinCastPolicyId::StringToInt,
+            BuiltinCastPolicyId::StringToFloat,
             BuiltinCastPolicyId::FloatToInt,
             BuiltinCastPolicyId::IntToString,
             BuiltinCastPolicyId::FloatToString,
@@ -47,6 +49,8 @@ impl<'hir> JsEmitter<'hir> {
             }
 
             match policy {
+                BuiltinCastPolicyId::StringToInt => self.emit_cast_int(&mut emitted),
+                BuiltinCastPolicyId::StringToFloat => self.emit_cast_float(&mut emitted),
                 BuiltinCastPolicyId::FloatToInt => self.emit_cast_float_to_int(&mut emitted),
                 BuiltinCastPolicyId::IntToString => self.emit_cast_int_to_string(&mut emitted),
                 BuiltinCastPolicyId::FloatToString => self.emit_cast_float_to_string(&mut emitted),
@@ -58,12 +62,23 @@ impl<'hir> JsEmitter<'hir> {
                 BuiltinCastPolicyId::IntToChar => self.emit_cast_int_to_char(&mut emitted),
                 BuiltinCastPolicyId::StringToBool => self.emit_cast_string_to_bool(&mut emitted),
                 BuiltinCastPolicyId::StringToChar => self.emit_cast_string_to_char(&mut emitted),
-                _ => {}
+                BuiltinCastPolicyId::IntToFloat => {}
             }
         }
     }
 
-    fn emit_normalize_numeric_text(&mut self) {
+    /// Emits the shared `__bs_normalize_numeric_text` helper.
+    ///
+    /// WHAT: emits `value.trim()` for the numeric parsing helpers (`__bs_cast_int` and
+    ///      `__bs_cast_float`) when one of them is actually emitted. Tracked through
+    ///      the `emitted` set so a single emission covers both callers.
+    /// WHY: avoids emitting a helper that is only ever called by numeric parsing when
+    ///      neither numeric parsing helper reaches the prelude.
+    fn emit_normalize_numeric_text(&mut self, emitted: &mut HashSet<&'static str>) {
+        if !emitted.insert("__bs_normalize_numeric_text") {
+            return;
+        }
+
         self.emit_line("function __bs_normalize_numeric_text(value) {");
         self.with_indent(|emitter| {
             emitter.emit_line("return value.trim();");
@@ -111,6 +126,7 @@ impl<'hir> JsEmitter<'hir> {
         let int_out_of_range_message = int_out_of_range.default_message();
 
         self.emit_cast_int_range_helpers(emitted);
+        self.emit_normalize_numeric_text(emitted);
 
         self.emit_line("function __bs_cast_int(value) {");
         self.with_indent(|emitter| {
@@ -174,6 +190,8 @@ impl<'hir> JsEmitter<'hir> {
         let float_out_of_range = BuiltinErrorCode::FloatParseOutOfRange;
         let float_out_of_range_code = float_out_of_range.as_i64();
         let float_out_of_range_message = float_out_of_range.default_message();
+
+        self.emit_normalize_numeric_text(emitted);
 
         self.emit_line("function __bs_cast_float(value) {");
         self.with_indent(|emitter| {

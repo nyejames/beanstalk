@@ -13,8 +13,12 @@
 
 use super::targets::{BuiltinCastFallibility, BuiltinCastTarget};
 
-/// The set of compiler-owned core cast traits, mirroring the trait table in
-/// the cast plan section 3.2.
+/// The set of compiler-owned core cast traits.
+///
+/// Each builtin cast target has one infallible evidence trait and one
+/// fallible evidence trait. The metadata rows below are the authoritative
+/// source for their source spellings, requirement names, targets, and
+/// fallibility.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub(crate) enum CoreCastTrait {
     CastableToInt,
@@ -146,27 +150,6 @@ pub(crate) const BUILTIN_CAST_TRAIT_ROWS: &[CoreCastTraitMetadata] = &[
     },
 ];
 
-/// The complete list of compiler-owned core cast trait variants.
-pub(crate) const CORE_CAST_TRAIT_KINDS: &[CoreCastTrait] = &[
-    CoreCastTrait::CastableToInt,
-    CoreCastTrait::TryCastableToInt,
-    CoreCastTrait::CastableToFloat,
-    CoreCastTrait::TryCastableToFloat,
-    CoreCastTrait::CastableToBool,
-    CoreCastTrait::TryCastableToBool,
-    CoreCastTrait::CastableToString,
-    CoreCastTrait::TryCastableToString,
-    CoreCastTrait::CastableToChar,
-    CoreCastTrait::TryCastableToChar,
-    CoreCastTrait::CastableToError,
-    CoreCastTrait::TryCastableToError,
-];
-
-/// Returns the full list of `CoreCastTrait` variants, in registration order.
-pub(crate) fn core_cast_trait_kinds() -> &'static [CoreCastTrait] {
-    CORE_CAST_TRAIT_KINDS
-}
-
 /// Returns the static metadata row for a core cast trait variant.
 pub(crate) fn builtin_cast_trait_metadata(
     trait_kind: CoreCastTrait,
@@ -180,24 +163,6 @@ pub(crate) fn builtin_cast_trait_metadata(
 /// Returns the source-defined trait name for a core cast trait.
 pub(crate) fn builtin_cast_trait_name(trait_kind: CoreCastTrait) -> &'static str {
     builtin_cast_trait_metadata(trait_kind).trait_name
-}
-
-/// Returns the source-defined requirement name for a core cast trait.
-#[allow(dead_code)] // Metadata tests pin this projection; registration uses the full row.
-pub(crate) fn builtin_cast_requirement_name(trait_kind: CoreCastTrait) -> &'static str {
-    builtin_cast_trait_metadata(trait_kind).requirement_name
-}
-
-/// Returns the builtin target classification for a core cast trait.
-#[allow(dead_code)] // Metadata tests pin this projection; registration uses the full row.
-pub(crate) fn builtin_cast_trait_target(trait_kind: CoreCastTrait) -> BuiltinCastTarget {
-    builtin_cast_trait_metadata(trait_kind).target
-}
-
-/// Returns the fallibility classification for a core cast trait.
-#[allow(dead_code)] // Metadata tests pin this projection; registration uses the full row.
-pub(crate) fn builtin_cast_trait_fallibility(trait_kind: CoreCastTrait) -> BuiltinCastFallibility {
-    builtin_cast_trait_metadata(trait_kind).fallibility
 }
 
 /// Returns `true` when `name` matches one of the twelve compiler-owned core

@@ -1,14 +1,14 @@
 //! Builtin cast target classification and resolution metadata.
 //!
 //! WHAT: defines the compact `BuiltinCastTarget` enum, the `BuiltinCastFallibility`
-//!      classifier, the `BuiltinCastPolicyId` policy key, the `CastEvidenceKind`
-//!      evidence classifier, and the receiving-target resolution type. Also provides
-//!      pure helpers that map a `TypeId` to its builtin target classification and to
-//!      a receiving-type resolution that records whether the cast should land in
-//!      the inner type before optional wrapping.
+//!      classifier, the `BuiltinCastPolicyId` policy key, and the receiving-target
+//!      resolution type. Also provides pure helpers that map a `TypeId` to its
+//!      builtin target classification and to a receiving-type resolution that
+//!      records whether the cast should land in the inner type before optional
+//!      wrapping.
 //! WHY: cast resolution must be a single-source decision so parser, AST, and folding
 //!      cannot drift on what counts as a builtin cast target. Keeping these helpers
-//!      pure and local to builtins means the new policy owner can answer the same
+//!      pure and local to builtins means the policy owner can answer the same
 //!      classification questions that the constant folder and later phases will ask
 //!      without adding broad context-dependent APIs.
 
@@ -37,8 +37,10 @@ pub(crate) enum BuiltinCastFallibility {
 
 /// Stable policy identifier for one row in the initial builtin evidence table.
 ///
-/// WHAT: every phase 2 evidence row gets exactly one variant so policy lookup
-///      stays table-driven rather than rebuilding match logic on every call site.
+/// WHAT: every initial builtin evidence row gets exactly one variant so policy
+///      lookup stays table-driven rather than rebuilding match logic on every
+///      call site. The single source of truth is
+///      `compiler_frontend::builtins::casts::evidence::INITIAL_BUILTIN_EVIDENCE_ROWS`.
 /// WHY: callers should ask the policy owner for a known policy and not re-derive
 ///      source/target combinations inline at AST or folding time.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -71,14 +73,6 @@ impl BuiltinCastPolicyId {
     pub(crate) fn is_const_foldable(self) -> bool {
         !matches!(self, Self::StringToError | Self::ErrorToString)
     }
-}
-
-/// Whether a cast evidence row is compiler-owned or user-defined.
-#[allow(dead_code)] // The metadata enum is intentionally ahead of current builtin-only tests.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) enum CastEvidenceKind {
-    Builtin,
-    UserDefined,
 }
 
 /// Resolution of an explicit cast target as seen from a receiving-type position.

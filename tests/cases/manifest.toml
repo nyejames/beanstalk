@@ -7337,3 +7337,13 @@ tags = ["integration", "beandown", "html", "diagnostics", "imports"]
 id = "beandown_unescaped_outer_close_rejected"
 path = "beandown_unescaped_outer_close_rejected"
 tags = ["integration", "beandown", "html", "diagnostics"]
+
+[[case]]
+id = "cast_int_to_float_no_helper_emission"
+path = "cast_int_to_float_no_helper_emission"
+tags = ["integration", "language", "cast", "runtime", "on-demand-helpers"]
+
+[[case]]
+id = "cast_string_to_int_demand_helpers"
+path = "cast_string_to_int_demand_helpers"
+tags = ["integration", "language", "cast", "runtime", "on-demand-helpers"]

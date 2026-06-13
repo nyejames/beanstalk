@@ -1,0 +1,23 @@
+entry = "."
+
+[backends.html]
+mode = "success"
+warnings = "forbid"
+rendered_output_contains = ["identity float cast: 1|10"]
+
+[backends.html_wasm]
+mode = "failure"
+warnings = "forbid"
+diagnostic_codes = ["BST-RULE-0064"]
+message_contains = ["html_wasm", "runtime casts"]
+
+
+[[backends.html.artifact_assertions]]
+path = "index.html"
+kind = "html"
+must_not_contain = [
+    "function __bs_cast_int(",
+    "function __bs_cast_float(",
+    "function __bs_normalize_numeric_text(",
+    "function __bs_cast_int_in_range(",
+]

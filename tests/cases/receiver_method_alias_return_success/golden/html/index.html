@@ -469,64 +469,6 @@ body {
         console.log(__bs_value_to_string(value));
     }
 
-    function __bs_normalize_numeric_text(value) {
-        return value.trim();
-    }
-
-    const __BS_INT_CAST_MIN = -9007199254740991;
-    const __BS_INT_CAST_MAX = 9007199254740991;
-    function __bs_cast_int_in_range(value) {
-        return Number.isInteger(value) && value >= __BS_INT_CAST_MIN && value <= __BS_INT_CAST_MAX;
-    }
-
-    function __bs_cast_int(value) {
-        if (typeof value === "number") {
-            if (!Number.isFinite(value) || !__bs_cast_int_in_range(value)) {
-                return { tag: "err", value: __bs_make_error("Int value is out of supported range", 201, null, null) };
-            }
-            if (Number.isInteger(value)) {
-                return { tag: "ok", value };
-            }
-            return { tag: "err", value: __bs_make_error("Float value is not an exact integer", 200, null, null) };
-        }
-        if (typeof value === "string") {
-            const normalized = __bs_normalize_numeric_text(value);
-            if (/^[+-]?[0-9]+$/.test(normalized)) {
-                const parsed = Number.parseInt(normalized, 10);
-                if (!__bs_cast_int_in_range(parsed)) {
-                    return { tag: "err", value: __bs_make_error("Int value is out of supported range", 201, null, null) };
-                }
-                return { tag: "ok", value: parsed };
-            }
-            return { tag: "err", value: __bs_make_error("Cannot parse Int from text", 200, null, null) };
-        }
-        return { tag: "err", value: __bs_make_error("Cast to Int only accepts Int, Float, or string values", 200, null, null) };
-    }
-
-    function __bs_cast_float(value) {
-        if (typeof value === "number") {
-            if (!Number.isFinite(value)) {
-                return { tag: "err", value: __bs_make_error("Float value is out of supported range", 211, null, null) };
-            }
-            return { tag: "ok", value };
-        }
-        if (typeof value === "string") {
-            const normalized = __bs_normalize_numeric_text(value);
-            if (/^[+-]?(?:NaN|Infinity)$/i.test(normalized) || /^[+-]?inf$/i.test(normalized)) {
-                return { tag: "err", value: __bs_make_error("Float value is out of supported range", 211, null, null) };
-            }
-            if (/^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?$/.test(normalized)) {
-                const parsed = Number.parseFloat(normalized);
-                if (!Number.isFinite(parsed)) {
-                    return { tag: "err", value: __bs_make_error("Float value is out of supported range", 211, null, null) };
-                }
-                return { tag: "ok", value: parsed };
-            }
-            return { tag: "err", value: __bs_make_error("Cannot parse Float from text", 210, null, null) };
-        }
-        return { tag: "err", value: __bs_make_error("Cast to Float only accepts Int, Float, or string values", 210, null, null) };
-    }
-
     function bst_self_ref_fn6(bst_this_l22) {
         
         bst_this_l22 = __bs_param_binding(bst_this_l22);
