@@ -13,7 +13,10 @@ use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
 use crate::compiler_frontend::ast::expressions::eval_expression::evaluate_expression;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, Operator};
 use crate::compiler_frontend::ast::expressions::parse_expression::{
-    create_expression, create_expression_with_cast_target,
+    create_expression, create_expression_with_trailing_newline_policy,
+};
+use crate::compiler_frontend::ast::expressions::parse_expression_input::{
+    ExpressionParseInput, ExpressionParseResources,
 };
 use crate::compiler_frontend::ast::field_access::parse_field_access;
 use crate::compiler_frontend::ast::place_access::{ast_node_is_mutable_place, ast_node_is_place};
@@ -252,16 +255,19 @@ fn build_mutation_from_target(
             ) {
                 value_block_result?
             } else {
-                create_expression_with_cast_target(
-                    token_stream,
-                    &rhs_context,
-                    type_interner,
-                    &mut expr_type,
-                    &mut cast_target_context,
-                    &variable_declaration.value.value_mode,
+                let input = ExpressionParseInput::ordinary(
+                    ExpressionParseResources {
+                        token_stream,
+                        scope_context: &rhs_context,
+                        type_interner,
+                        expected_type: &mut expr_type,
+                        cast_target_context: &mut cast_target_context,
+                        value_mode: &variable_declaration.value.value_mode,
+                        string_table,
+                    },
                     false,
-                    string_table,
-                )?
+                );
+                create_expression_with_trailing_newline_policy(input)?
             };
 
             // Direct option fallback is rejected at each closed receiver so the

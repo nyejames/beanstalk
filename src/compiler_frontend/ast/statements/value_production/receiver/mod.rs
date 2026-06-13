@@ -12,6 +12,9 @@ use crate::compiler_frontend::ast::ContextKind;
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression_until;
+use crate::compiler_frontend::ast::expressions::parse_expression_input::{
+    ExpressionParseInput, ExpressionParseResources,
+};
 use crate::compiler_frontend::ast::statements::condition_validation::ensure_if_statement_condition;
 use crate::compiler_frontend::ast::statements::value_production::types::ValueReceiverKind;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
@@ -21,6 +24,7 @@ use crate::compiler_frontend::compiler_messages::{
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
+use crate::compiler_frontend::type_coercion::parse_context::CastTargetContext;
 use crate::compiler_frontend::type_coercion::parse_context::ExpectedType;
 use crate::compiler_frontend::value_mode::ValueMode;
 
@@ -161,16 +165,19 @@ fn parse_bool_value_if_after_condition(
     location: SourceLocation,
 ) -> Result<Expression, CompilerDiagnostic> {
     let mut condition_type = ExpectedType::Infer;
-    let condition = create_expression_until(
+    let condition_context = context.new_child_control_flow(ContextKind::Condition, string_table);
+    let mut cast_target_context = CastTargetContext::None;
+    let input = ExpressionParseInput::until(ExpressionParseResources {
         token_stream,
-        &context.new_child_control_flow(ContextKind::Condition, string_table),
+        scope_context: &condition_context,
         type_interner,
-        &mut condition_type,
-        &ValueMode::ImmutableOwned,
-        &[TokenKind::Then, TokenKind::Colon],
+        expected_type: &mut condition_type,
+        cast_target_context: &mut cast_target_context,
+        value_mode: &ValueMode::ImmutableOwned,
         string_table,
-    )
-    .map_err(|error| -> CompilerDiagnostic { error.into() })?;
+    });
+    let condition = create_expression_until(input, &[TokenKind::Then, TokenKind::Colon])
+        .map_err(|error| -> CompilerDiagnostic { error.into() })?;
 
     ensure_if_statement_condition(&condition, type_interner.environment())?;
 

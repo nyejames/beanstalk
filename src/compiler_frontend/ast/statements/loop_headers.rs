@@ -11,7 +11,10 @@ use crate::compiler_frontend::ast::ast_nodes::{
 };
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::parse_expression::{
-    create_expression_until_without_boundary_catch, create_expression_without_boundary_catch,
+    create_expression_until, create_expression_without_boundary_catch,
+};
+use crate::compiler_frontend::ast::expressions::parse_expression_input::{
+    ExpressionParseInput, ExpressionParseResources,
 };
 use crate::compiler_frontend::ast::statements::condition_validation::ensure_loop_condition;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
@@ -27,6 +30,7 @@ use crate::compiler_frontend::symbols::identifier_policy::{
 };
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
+use crate::compiler_frontend::type_coercion::parse_context::CastTargetContext;
 use crate::compiler_frontend::type_coercion::parse_context::ExpectedType;
 use crate::compiler_frontend::utilities::token_scan::NestingDepth;
 use crate::compiler_frontend::value_mode::ValueMode;
@@ -548,15 +552,20 @@ fn parse_range_loop_spec_from_tokens(
         )
     } else {
         let mut start_type = ExpectedType::Infer;
-        create_expression_until_without_boundary_catch(
-            &mut stream,
-            context,
-            type_interner,
-            &mut start_type,
-            &ValueMode::ImmutableReference,
-            &[TokenKind::ExclusiveRange, TokenKind::Eof],
-            string_table,
-        )?
+        let mut cast_target_context = CastTargetContext::None;
+        let input = ExpressionParseInput::without_boundary_catch(
+            ExpressionParseResources {
+                token_stream: &mut stream,
+                scope_context: context,
+                type_interner,
+                expected_type: &mut start_type,
+                cast_target_context: &mut cast_target_context,
+                value_mode: &ValueMode::ImmutableReference,
+                string_table,
+            },
+            false,
+        );
+        create_expression_until(input, &[TokenKind::ExclusiveRange, TokenKind::Eof])?
     };
 
     // ------------------------
@@ -596,15 +605,20 @@ fn parse_range_loop_spec_from_tokens(
     }
 
     let mut end_type = ExpectedType::Infer;
-    let end = create_expression_until_without_boundary_catch(
-        &mut stream,
-        context,
-        type_interner,
-        &mut end_type,
-        &ValueMode::ImmutableReference,
-        &[TokenKind::By, TokenKind::Eof],
-        string_table,
-    )?;
+    let mut cast_target_context = CastTargetContext::None;
+    let input = ExpressionParseInput::without_boundary_catch(
+        ExpressionParseResources {
+            token_stream: &mut stream,
+            scope_context: context,
+            type_interner,
+            expected_type: &mut end_type,
+            cast_target_context: &mut cast_target_context,
+            value_mode: &ValueMode::ImmutableReference,
+            string_table,
+        },
+        false,
+    );
+    let end = create_expression_until(input, &[TokenKind::By, TokenKind::Eof])?;
 
     // ------------------------
     //  Parse optional step
@@ -619,15 +633,20 @@ fn parse_range_loop_spec_from_tokens(
         }
 
         let mut step_type = ExpectedType::Infer;
-        Some(create_expression_until_without_boundary_catch(
-            &mut stream,
-            context,
-            type_interner,
-            &mut step_type,
-            &ValueMode::ImmutableReference,
-            &[TokenKind::Eof],
-            string_table,
-        )?)
+        let mut cast_target_context = CastTargetContext::None;
+        let input = ExpressionParseInput::without_boundary_catch(
+            ExpressionParseResources {
+                token_stream: &mut stream,
+                scope_context: context,
+                type_interner,
+                expected_type: &mut step_type,
+                cast_target_context: &mut cast_target_context,
+                value_mode: &ValueMode::ImmutableReference,
+                string_table,
+            },
+            false,
+        );
+        Some(create_expression_until(input, &[TokenKind::Eof])?)
     } else {
         None
     };

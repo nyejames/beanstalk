@@ -15,7 +15,10 @@ use crate::compiler_frontend::ast::expressions::call_validation::{
     resolve_call_arguments,
 };
 use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
-use crate::compiler_frontend::ast::expressions::parse_expression::create_expression_without_boundary_catch_with_cast_target;
+use crate::compiler_frontend::ast::expressions::parse_expression::create_expression_with_trailing_newline_policy;
+use crate::compiler_frontend::ast::expressions::parse_expression_input::{
+    ExpressionParseInput, ExpressionParseResources,
+};
 use crate::compiler_frontend::ast::statements::fallible_handling::{
     FallibleCallSite, FallibleHostCallSite, HandledFallibleCall, HandledFallibleHostCall,
     parse_fallible_handling_suffix_for_call, parse_fallible_handling_suffix_for_host_call,
@@ -422,16 +425,16 @@ fn parse_call_arguments_inner(
             _ => None,
         };
 
-        let expectation_index = route_argument_slot_before_value_parse(
-            named_target.as_ref(),
-            &mut positional_cursor,
-            &mut saw_named_argument,
-            &parameter_name_to_slot,
-            &mut occupied_parameter_slots,
+        let expectation_index = route_argument_slot_before_value_parse(ArgumentSlotRouteRequest {
+            named_target: named_target.as_ref(),
+            positional_cursor: &mut positional_cursor,
+            saw_named_argument: &mut saw_named_argument,
+            parameter_name_to_slot: &parameter_name_to_slot,
+            occupied_parameter_slots: &mut occupied_parameter_slots,
             expectations,
             named_arguments,
-            argument_location.clone(),
-        )?;
+            argument_location: argument_location.clone(),
+        })?;
 
         let access_mode = if token_stream.current_token_kind() == &TokenKind::Mutable {
             token_stream.advance();
@@ -464,16 +467,19 @@ fn parse_call_arguments_inner(
             .unwrap_or(CastTargetContext::None);
 
         let mut inferred = ExpectedType::Infer;
-        let value = create_expression_without_boundary_catch_with_cast_target(
-            token_stream,
-            context,
-            type_interner,
-            &mut inferred,
-            &mut cast_target_context,
-            &ValueMode::ImmutableOwned,
+        let input = ExpressionParseInput::without_boundary_catch(
+            ExpressionParseResources {
+                token_stream,
+                scope_context: context,
+                type_interner,
+                expected_type: &mut inferred,
+                cast_target_context: &mut cast_target_context,
+                value_mode: &ValueMode::ImmutableOwned,
+                string_table,
+            },
             false,
-            string_table,
-        )?;
+        );
+        let value = create_expression_with_trailing_newline_policy(input)?;
 
         args.push(if let Some((name, target_location)) = named_target {
             CallArgument::named(value, name, access_mode, argument_location, target_location)
@@ -503,34 +509,37 @@ fn parse_call_arguments_inner(
     Ok(args)
 }
 
-#[allow(clippy::too_many_arguments)]
-fn route_argument_slot_before_value_parse(
-    named_target: Option<&(StringId, SourceLocation)>,
-    positional_cursor: &mut usize,
-    saw_named_argument: &mut bool,
-    parameter_name_to_slot: &FxHashMap<StringId, usize>,
-    occupied_parameter_slots: &mut Option<Vec<bool>>,
-    expectations: Option<&[ParameterExpectation]>,
+struct ArgumentSlotRouteRequest<'a> {
+    named_target: Option<&'a (StringId, SourceLocation)>,
+    positional_cursor: &'a mut usize,
+    saw_named_argument: &'a mut bool,
+    parameter_name_to_slot: &'a FxHashMap<StringId, usize>,
+    occupied_parameter_slots: &'a mut Option<Vec<bool>>,
+    expectations: Option<&'a [ParameterExpectation]>,
     named_arguments: NamedArgumentSyntax,
     argument_location: SourceLocation,
+}
+
+fn route_argument_slot_before_value_parse(
+    request: ArgumentSlotRouteRequest<'_>,
 ) -> Result<Option<usize>, ExpressionParseError> {
     // This mirrors call-validation routing only far enough to choose a cast target
     // before parsing the value. Full default filling, access checks, and type
     // validation stay in `call_validation`.
-    let Some(expectations) = expectations else {
-        if named_target.is_some() {
-            *saw_named_argument = true;
+    let Some(expectations) = request.expectations else {
+        if request.named_target.is_some() {
+            *request.saw_named_argument = true;
         } else {
-            *positional_cursor += 1;
+            *request.positional_cursor += 1;
         }
 
         return Ok(None);
     };
 
-    if let Some((target_name, target_location)) = named_target {
-        *saw_named_argument = true;
+    if let Some((target_name, target_location)) = request.named_target {
+        *request.saw_named_argument = true;
 
-        match named_arguments {
+        match request.named_arguments {
             NamedArgumentSyntax::UnsupportedCall { callee_name } => {
                 return Err(CompilerDiagnostic::invalid_call_shape(
                     InvalidCallShapeReason::NamedArgumentsNotSupported,
@@ -550,7 +559,7 @@ fn route_argument_slot_before_value_parse(
             }
 
             NamedArgumentSyntax::Supported { callee_name } => {
-                let Some(slot) = parameter_name_to_slot.get(target_name).copied() else {
+                let Some(slot) = request.parameter_name_to_slot.get(target_name).copied() else {
                     return Err(CompilerDiagnostic::invalid_call_shape(
                         InvalidCallShapeReason::NamedArgumentNotFound {
                             name: *target_name,
@@ -565,8 +574,8 @@ fn route_argument_slot_before_value_parse(
                 mark_argument_slot_available_before_value_parse(
                     slot,
                     expectations,
-                    occupied_parameter_slots,
-                    named_arguments,
+                    request.occupied_parameter_slots,
+                    request.named_arguments,
                     target_location.clone(),
                 )?;
 
@@ -575,8 +584,8 @@ fn route_argument_slot_before_value_parse(
         }
     }
 
-    if *saw_named_argument {
-        let callee_name = match named_arguments {
+    if *request.saw_named_argument {
+        let callee_name = match request.named_arguments {
             NamedArgumentSyntax::Supported { callee_name }
             | NamedArgumentSyntax::UnsupportedCall { callee_name } => callee_name,
             NamedArgumentSyntax::UnsupportedBuiltinMember { .. } => None,
@@ -584,35 +593,37 @@ fn route_argument_slot_before_value_parse(
         return Err(CompilerDiagnostic::invalid_call_shape(
             InvalidCallShapeReason::PositionalAfterNamed,
             callee_name,
-            argument_location,
+            request.argument_location,
         )
         .into());
     }
 
-    if let Some(occupied_slots) = occupied_parameter_slots {
-        while *positional_cursor < occupied_slots.len() && occupied_slots[*positional_cursor] {
-            *positional_cursor += 1;
+    if let Some(occupied_slots) = request.occupied_parameter_slots {
+        while *request.positional_cursor < occupied_slots.len()
+            && occupied_slots[*request.positional_cursor]
+        {
+            *request.positional_cursor += 1;
         }
 
-        if *positional_cursor >= occupied_slots.len() {
+        if *request.positional_cursor >= occupied_slots.len() {
             return Err(CompilerDiagnostic::invalid_call_shape(
                 InvalidCallShapeReason::ExtraPositionalArgument {
                     expected_count: expectations.len(),
                 },
                 None,
-                argument_location,
+                request.argument_location,
             )
             .into());
         }
 
-        let slot = *positional_cursor;
+        let slot = *request.positional_cursor;
         occupied_slots[slot] = true;
-        *positional_cursor += 1;
+        *request.positional_cursor += 1;
         return Ok(Some(slot));
     }
 
-    let slot = *positional_cursor;
-    *positional_cursor += 1;
+    let slot = *request.positional_cursor;
+    *request.positional_cursor += 1;
     Ok(Some(slot))
 }
 

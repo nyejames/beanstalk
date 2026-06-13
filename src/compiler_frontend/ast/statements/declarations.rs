@@ -14,6 +14,9 @@ use crate::compiler_frontend::ast::expressions::expression::{Expression, Express
 use crate::compiler_frontend::ast::expressions::function_calls::{
     FunctionCallParseInput, parse_function_call,
 };
+use crate::compiler_frontend::ast::expressions::parse_expression_input::{
+    ExpressionParseInput, ExpressionParseResources,
+};
 use crate::compiler_frontend::ast::field_access::parse_field_access;
 use crate::compiler_frontend::ast::function_body_to_ast;
 use crate::compiler_frontend::ast::statements::collections::new_collection;
@@ -29,7 +32,7 @@ use crate::compiler_frontend::ast::type_resolution::{
 use crate::compiler_frontend::ast::{
     ContextKind, ScopeContext,
     ast_nodes::Declaration,
-    expressions::parse_expression::create_expression_with_cast_target,
+    expressions::parse_expression::create_expression_with_trailing_newline_policy,
     statements::value_production::{ValueReceiverKind, try_parse_value_block_at_receiver},
 };
 use crate::compiler_frontend::builtins::error_type::is_reserved_builtin_symbol;
@@ -521,16 +524,19 @@ pub fn resolve_declaration_syntax(
             ) {
                 value_block_result?
             } else {
-                create_expression_with_cast_target(
-                    &mut initializer_stream,
-                    &expression_context,
-                    type_interner,
-                    &mut expression_type,
-                    &mut cast_target_context,
-                    &value_mode,
+                let input = ExpressionParseInput::ordinary(
+                    ExpressionParseResources {
+                        token_stream: &mut initializer_stream,
+                        scope_context: &expression_context,
+                        type_interner,
+                        expected_type: &mut expression_type,
+                        cast_target_context: &mut cast_target_context,
+                        value_mode: &value_mode,
+                        string_table,
+                    },
                     false,
-                    string_table,
-                )?
+                );
+                create_expression_with_trailing_newline_policy(input)?
             };
 
             if let Some(declared_type_id) = declared_type_id {

@@ -7,6 +7,9 @@
 use super::*;
 use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
 use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
+use crate::compiler_frontend::ast::expressions::parse_expression_input::{
+    ExpressionParseInput, ExpressionParseResources,
+};
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::{ContextKind, ScopeContext, TopLevelDeclarationTable};
 use crate::compiler_frontend::compiler_messages::{
@@ -18,7 +21,7 @@ use crate::compiler_frontend::symbols::interned_path::InternedPath;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, Token, TokenKind};
 use crate::compiler_frontend::type_coercion::compatibility::TypeCompatibilityCache;
-use crate::compiler_frontend::type_coercion::parse_context::ExpectedType;
+use crate::compiler_frontend::type_coercion::parse_context::{CastTargetContext, ExpectedType};
 use crate::compiler_frontend::value_mode::ValueMode;
 use std::rc::Rc;
 
@@ -53,15 +56,17 @@ fn create_expression_until_for_test(
     let mut type_environment = TypeEnvironment::new();
     let mut compatibility_cache = TypeCompatibilityCache::new();
     let mut type_interner = AstTypeInterner::new(&mut type_environment, &mut compatibility_cache);
-    create_expression_until(
-        stream,
-        context,
-        &mut type_interner,
+    let mut cast_target_context = CastTargetContext::None;
+    let input = ExpressionParseInput::until(ExpressionParseResources {
+        token_stream: stream,
+        scope_context: context,
+        type_interner: &mut type_interner,
         expected_type,
+        cast_target_context: &mut cast_target_context,
         value_mode,
-        stop_tokens,
         string_table,
-    )
+    });
+    create_expression_until(input, stop_tokens)
 }
 
 fn typed_diagnostic_from_error(error: ExpressionParseError) -> CompilerDiagnostic {

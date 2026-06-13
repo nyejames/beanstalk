@@ -9,6 +9,9 @@
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression_until;
+use crate::compiler_frontend::ast::expressions::parse_expression_input::{
+    ExpressionParseInput, ExpressionParseResources,
+};
 use crate::compiler_frontend::ast::statements::condition_validation::ensure_match_guard_condition;
 use crate::compiler_frontend::ast::statements::if_headers::build_option_present_capture_scope_and_pattern;
 use crate::compiler_frontend::ast::statements::match_patterns::{
@@ -29,6 +32,7 @@ use crate::compiler_frontend::datatypes::queries::TypeKind;
 use crate::compiler_frontend::declaration_syntax::choice::{ChoiceVariant, ChoiceVariantPayload};
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
+use crate::compiler_frontend::type_coercion::parse_context::CastTargetContext;
 use crate::compiler_frontend::type_coercion::parse_context::ExpectedType;
 use crate::compiler_frontend::value_mode::ValueMode;
 
@@ -154,15 +158,18 @@ fn parse_match_guard(
     token_stream.skip_newlines();
 
     let mut guard_type = ExpectedType::Infer;
-    let guard_expression = create_expression_until(
+    let guard_context = match_context.new_child_control_flow(ContextKind::Condition, string_table);
+    let mut cast_target_context = CastTargetContext::None;
+    let input = ExpressionParseInput::until(ExpressionParseResources {
         token_stream,
-        &match_context.new_child_control_flow(ContextKind::Condition, string_table),
+        scope_context: &guard_context,
         type_interner,
-        &mut guard_type,
-        &ValueMode::ImmutableOwned,
-        guard_end_tokens,
+        expected_type: &mut guard_type,
+        cast_target_context: &mut cast_target_context,
+        value_mode: &ValueMode::ImmutableOwned,
         string_table,
-    )?;
+    });
+    let guard_expression = create_expression_until(input, guard_end_tokens)?;
     let type_environment = type_interner.environment();
     ensure_match_guard_condition(&guard_expression, type_environment)?;
 

@@ -9,6 +9,9 @@ use super::expression::Expression;
 use super::parse_expression_dispatch::{
     ExpressionDispatchState, ExpressionTokenStep, dispatch_expression_token,
 };
+use super::parse_expression_input::{
+    ExpressionParseInput, ExpressionParseResources, ExpressionTrailingPolicy,
+};
 use crate::ast_log;
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::AstNode;
@@ -22,29 +25,6 @@ use crate::compiler_frontend::type_coercion::parse_context::{
 };
 use crate::compiler_frontend::utilities::token_scan::find_expression_end_index;
 use crate::compiler_frontend::value_mode::ValueMode;
-
-/// Policy that controls how the expression parser handles trailing tokens
-/// such as closing delimiters and recovery boundaries.
-pub(crate) struct ExpressionTrailingPolicy {
-    pub(crate) consume_closing_parenthesis: bool,
-    pub(crate) skip_trailing_newlines: bool,
-    /// `catch` is boundary-only. Nested expression parsers use this flag to keep
-    /// function arguments, collection items, and parenthesized subexpressions
-    /// from silently becoming recovery boundaries.
-    pub(crate) allow_boundary_catch: bool,
-    /// Generic expected-result inference is also boundary-sensitive, but it is
-    /// not identical to `catch`: parenthesized grouping should preserve evidence
-    /// from a receiving declaration/return, while function arguments must not
-    /// inherit an outer expected result type.
-    pub(crate) allow_expected_result_evidence: bool,
-}
-
-/// Policy for parsing expressions bounded by one or more stop tokens.
-struct BoundedExpressionPolicy<'a> {
-    stop_tokens: &'a [TokenKind],
-    allow_boundary_catch: bool,
-    allow_expected_result_evidence: bool,
-}
 
 // WHAT: parses a comma-separated expression list against already-known expected result types.
 // WHY: function calls and multi-return contexts must preserve arity and per-slot type
@@ -86,21 +66,24 @@ fn create_multiple_expressions_inner(
             type_interner.environment(),
             string_table,
         );
-        let expression = create_expression_with_trailing_newline_policy(
-            token_stream,
-            context,
-            type_interner,
-            &mut expression_type,
-            &mut cast_target_context,
-            &ValueMode::ImmutableOwned,
+        let input = ExpressionParseInput::new(
+            ExpressionParseResources {
+                token_stream,
+                scope_context: context,
+                type_interner,
+                expected_type: &mut expression_type,
+                cast_target_context: &mut cast_target_context,
+                value_mode: &ValueMode::ImmutableOwned,
+                string_table,
+            },
             ExpressionTrailingPolicy {
                 consume_closing_parenthesis,
                 skip_trailing_newlines: false,
                 allow_boundary_catch: !consume_closing_parenthesis,
                 allow_expected_result_evidence: !consume_closing_parenthesis,
             },
-            string_table,
-        )?;
+        );
+        let expression = create_expression_with_trailing_newline_policy(input)?;
 
         expressions.push(expression);
 
@@ -156,49 +139,20 @@ pub fn create_expression(
     consume_closing_parenthesis: bool,
     string_table: &mut StringTable,
 ) -> Result<Expression, ExpressionParseError> {
-    create_expression_with_cast_target(
-        token_stream,
-        context,
-        type_interner,
-        expected_type,
-        &mut CastTargetContext::None,
-        value_mode,
-        consume_closing_parenthesis,
-        string_table,
-    )
-}
-
-// WHAT: parses one expression with an explicit cast target supplied by the boundary.
-// WHY: typed boundaries such as declarations and return slots need to offer `cast`
-//      a builtin target without changing ordinary expression parsing.
-// The extra argument is the explicit cast target supplied by the typed boundary; this is
-// the smallest entry-point surface for callers that need boundary-driven `cast` support.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn create_expression_with_cast_target(
-    token_stream: &mut FileTokens,
-    context: &ScopeContext,
-    type_interner: &mut AstTypeInterner<'_>,
-    expected_type: &mut ExpectedType,
-    cast_target_context: &mut CastTargetContext,
-    value_mode: &ValueMode,
-    consume_closing_parenthesis: bool,
-    string_table: &mut StringTable,
-) -> Result<Expression, ExpressionParseError> {
-    create_expression_with_trailing_newline_policy(
-        token_stream,
-        context,
-        type_interner,
-        expected_type,
-        cast_target_context,
-        value_mode,
-        ExpressionTrailingPolicy {
-            consume_closing_parenthesis,
-            skip_trailing_newlines: true,
-            allow_boundary_catch: !consume_closing_parenthesis,
-            allow_expected_result_evidence: !consume_closing_parenthesis,
+    let mut cast_target_context = CastTargetContext::None;
+    let input = ExpressionParseInput::ordinary(
+        ExpressionParseResources {
+            token_stream,
+            scope_context: context,
+            type_interner,
+            expected_type,
+            cast_target_context: &mut cast_target_context,
+            value_mode,
+            string_table,
         },
-        string_table,
-    )
+        consume_closing_parenthesis,
+    );
+    create_expression_with_trailing_newline_policy(input)
 }
 
 // WHAT: parses a nested expression while preserving ordinary expression semantics.
@@ -213,118 +167,79 @@ pub(crate) fn create_expression_without_boundary_catch(
     consume_closing_parenthesis: bool,
     string_table: &mut StringTable,
 ) -> Result<Expression, ExpressionParseError> {
-    create_expression_without_boundary_catch_with_cast_target(
-        token_stream,
-        context,
-        type_interner,
-        expected_type,
-        &mut CastTargetContext::None,
-        value_mode,
-        consume_closing_parenthesis,
-        string_table,
-    )
-}
-
-// WHAT: parses a nested expression with an explicit cast target supplied by a typed boundary.
-// WHY: function arguments, constructor fields, and receiver parameters need to offer `cast`
-//      a builtin target while still rejecting procedural `catch` inside the nested expression.
-// This wrapper carries the same parser-context arguments as `create_expression_with_trailing_newline_policy`;
-// the count is inherited from the existing expression-entry contract plus the cast-target channel.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn create_expression_without_boundary_catch_with_cast_target(
-    token_stream: &mut FileTokens,
-    context: &ScopeContext,
-    type_interner: &mut AstTypeInterner<'_>,
-    expected_type: &mut ExpectedType,
-    cast_target_context: &mut CastTargetContext,
-    value_mode: &ValueMode,
-    consume_closing_parenthesis: bool,
-    string_table: &mut StringTable,
-) -> Result<Expression, ExpressionParseError> {
-    create_expression_with_trailing_newline_policy(
-        token_stream,
-        context,
-        type_interner,
-        expected_type,
-        cast_target_context,
-        value_mode,
-        ExpressionTrailingPolicy {
-            consume_closing_parenthesis,
-            skip_trailing_newlines: true,
-            allow_boundary_catch: false,
-            allow_expected_result_evidence: false,
+    let mut cast_target_context = CastTargetContext::None;
+    let input = ExpressionParseInput::without_boundary_catch(
+        ExpressionParseResources {
+            token_stream,
+            scope_context: context,
+            type_interner,
+            expected_type,
+            cast_target_context: &mut cast_target_context,
+            value_mode,
+            string_table,
         },
-        string_table,
-    )
+        consume_closing_parenthesis,
+    );
+    create_expression_with_trailing_newline_policy(input)
 }
 
 // WHAT: shared expression parser entry with configurable trailing-newline behavior.
 // WHY: callers parsing comma-separated lists outside parentheses (for example
 //      fallback/return lists) must preserve line boundaries between statements.
-// This shared entry point carries the full parser context; the argument count reflects the
-// existing `create_expression` contract plus the new explicit cast-target channel.
-#[allow(clippy::too_many_arguments)]
 pub(crate) fn create_expression_with_trailing_newline_policy(
-    token_stream: &mut FileTokens,
-    context: &ScopeContext,
-    type_interner: &mut AstTypeInterner<'_>,
-    expected_type: &mut ExpectedType,
-    cast_target_context: &mut CastTargetContext,
-    value_mode: &ValueMode,
-    trailing_policy: ExpressionTrailingPolicy,
-    string_table: &mut StringTable,
+    input: ExpressionParseInput<'_, '_>,
 ) -> Result<Expression, ExpressionParseError> {
     let mut expression: Vec<AstNode> = Vec::new();
 
     ast_log!(
         "Parsing ",
-        #value_mode,
-        format!("{expected_type:?}"),
+        #input.value_mode,
+        format!("{:?}", input.expected_type),
         " Expression"
     );
 
     // Build the flat infix AST fragment first. `evaluate_expression` is the stage that turns
     // this fragment into precedence-ordered RPN, resolves the final type, and folds constants.
     let mut next_number_negative = false;
-    while token_stream.index < token_stream.length {
-        let token = token_stream.current_token_kind().to_owned();
+    while input.token_stream.index < input.token_stream.length {
+        let token = input.token_stream.current_token_kind().to_owned();
         ast_log!("Parsing expression: ", #token);
         let mut dispatch_state = ExpressionDispatchState {
-            expected_type,
-            cast_target_context,
-            value_mode,
-            consume_closing_parenthesis: trailing_policy.consume_closing_parenthesis,
-            allow_boundary_catch: trailing_policy.allow_boundary_catch,
-            allow_expected_result_evidence: trailing_policy.allow_expected_result_evidence,
+            expected_type: input.expected_type,
+            cast_target_context: input.cast_target_context,
+            value_mode: input.value_mode,
+            consume_closing_parenthesis: input.trailing_policy.consume_closing_parenthesis,
+            allow_boundary_catch: input.trailing_policy.allow_boundary_catch,
+            allow_expected_result_evidence: input.trailing_policy.allow_expected_result_evidence,
             expression: &mut expression,
             next_number_negative: &mut next_number_negative,
         };
         match dispatch_expression_token(
             token,
-            token_stream,
-            context,
-            type_interner,
+            input.token_stream,
+            input.scope_context,
+            input.type_interner,
             &mut dispatch_state,
-            string_table,
+            input.string_table,
         )? {
             ExpressionTokenStep::Continue => continue,
-            ExpressionTokenStep::Advance => token_stream.advance(),
+            ExpressionTokenStep::Advance => input.token_stream.advance(),
             ExpressionTokenStep::Break => break,
             ExpressionTokenStep::Return(value) => return Ok(*value),
         }
     }
 
-    if trailing_policy.skip_trailing_newlines {
-        token_stream.skip_newlines();
+    if input.trailing_policy.skip_trailing_newlines {
+        input.token_stream.skip_newlines();
     }
 
     evaluate_expression(
-        context,
+        input.scope_context,
         expression,
-        type_interner,
-        expected_type,
-        value_mode,
-        string_table,
+        input.type_interner,
+        input.expected_type,
+        input.value_mode,
+        input.string_table,
     )
     .map_err(ExpressionParseError::from)
 }
@@ -333,193 +248,71 @@ pub(crate) fn create_expression_with_trailing_newline_policy(
 // WHY: some parent parsers need normal expression semantics while reserving a delimiter for the
 //      surrounding grammar layer to inspect and consume itself.
 pub(crate) fn create_expression_until(
-    token_stream: &mut FileTokens,
-    context: &ScopeContext,
-    type_interner: &mut AstTypeInterner<'_>,
-    expected_type: &mut ExpectedType,
-    value_mode: &ValueMode,
+    input: ExpressionParseInput<'_, '_>,
     stop_tokens: &[TokenKind],
-    string_table: &mut StringTable,
 ) -> Result<Expression, ExpressionParseError> {
-    create_expression_until_inner(
-        token_stream,
-        context,
-        type_interner,
-        expected_type,
-        &mut CastTargetContext::None,
-        value_mode,
-        BoundedExpressionPolicy {
-            stop_tokens,
-            allow_boundary_catch: true,
-            allow_expected_result_evidence: true,
-        },
-        string_table,
-    )
+    create_expression_until_with_policy(input, stop_tokens)
 }
 
-// WHAT: parses a bounded expression in a grammar position that is not a recovery boundary.
-// WHY: loop headers and similar nested syntactic positions may need stop-token parsing while still
-// rejecting procedural `catch` recovery inside the expression.
-pub(crate) fn create_expression_until_without_boundary_catch(
-    token_stream: &mut FileTokens,
-    context: &ScopeContext,
-    type_interner: &mut AstTypeInterner<'_>,
-    expected_type: &mut ExpectedType,
-    value_mode: &ValueMode,
+fn create_expression_until_with_policy(
+    input: ExpressionParseInput<'_, '_>,
     stop_tokens: &[TokenKind],
-    string_table: &mut StringTable,
 ) -> Result<Expression, ExpressionParseError> {
-    create_expression_until_inner(
-        token_stream,
-        context,
-        type_interner,
-        expected_type,
-        &mut CastTargetContext::None,
-        value_mode,
-        BoundedExpressionPolicy {
-            stop_tokens,
-            allow_boundary_catch: false,
-            allow_expected_result_evidence: false,
-        },
-        string_table,
-    )
-}
-
-// WHAT: parses a bounded expression at an explicit typed boundary.
-// WHY: typed collection/map element positions need stop-token parsing while still offering
-//      the boundary's cast target to element expressions.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn create_expression_until_with_cast_target(
-    token_stream: &mut FileTokens,
-    context: &ScopeContext,
-    type_interner: &mut AstTypeInterner<'_>,
-    expected_type: &mut ExpectedType,
-    cast_target_context: &mut CastTargetContext,
-    value_mode: &ValueMode,
-    stop_tokens: &[TokenKind],
-    string_table: &mut StringTable,
-) -> Result<Expression, ExpressionParseError> {
-    create_expression_until_inner(
-        token_stream,
-        context,
-        type_interner,
-        expected_type,
-        cast_target_context,
-        value_mode,
-        BoundedExpressionPolicy {
-            stop_tokens,
-            allow_boundary_catch: false,
-            allow_expected_result_evidence: false,
-        },
-        string_table,
-    )
-}
-
-// WHAT: parses a bounded expression at a typed value-producing boundary.
-// WHY: inline `then ... else ...` branches are closed receiving sites, so they
-// must preserve their existing boundary recovery behavior while also offering
-// the explicit cast target supplied by the receiver.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn create_boundary_expression_until_with_cast_target(
-    token_stream: &mut FileTokens,
-    context: &ScopeContext,
-    type_interner: &mut AstTypeInterner<'_>,
-    expected_type: &mut ExpectedType,
-    cast_target_context: &mut CastTargetContext,
-    value_mode: &ValueMode,
-    stop_tokens: &[TokenKind],
-    string_table: &mut StringTable,
-) -> Result<Expression, ExpressionParseError> {
-    create_expression_until_inner(
-        token_stream,
-        context,
-        type_interner,
-        expected_type,
-        cast_target_context,
-        value_mode,
-        BoundedExpressionPolicy {
-            stop_tokens,
-            allow_boundary_catch: true,
-            allow_expected_result_evidence: true,
-        },
-        string_table,
-    )
-}
-
-#[allow(clippy::too_many_arguments)]
-fn create_expression_until_inner(
-    token_stream: &mut FileTokens,
-    context: &ScopeContext,
-    type_interner: &mut AstTypeInterner<'_>,
-    expected_type: &mut ExpectedType,
-    cast_target_context: &mut CastTargetContext,
-    value_mode: &ValueMode,
-    policy: BoundedExpressionPolicy<'_>,
-    string_table: &mut StringTable,
-) -> Result<Expression, ExpressionParseError> {
-    let stop_tokens = policy.stop_tokens;
-    let allow_boundary_catch = policy.allow_boundary_catch;
+    let allow_boundary_catch = input.trailing_policy.allow_boundary_catch;
+    let allow_expected_result_evidence = input.trailing_policy.allow_expected_result_evidence;
 
     // Fast path: no stop tokens means an unbounded parse with the same boundary policy.
     if stop_tokens.is_empty() {
-        let trailing_policy = ExpressionTrailingPolicy {
+        let mut unbounded_input = input;
+        unbounded_input.trailing_policy = ExpressionTrailingPolicy {
             consume_closing_parenthesis: false,
             skip_trailing_newlines: true,
             allow_boundary_catch,
-            allow_expected_result_evidence: policy.allow_expected_result_evidence,
+            allow_expected_result_evidence,
         };
 
-        return create_expression_with_trailing_newline_policy(
-            token_stream,
-            context,
-            type_interner,
-            expected_type,
-            cast_target_context,
-            value_mode,
-            trailing_policy,
-            string_table,
-        );
+        return create_expression_with_trailing_newline_policy(unbounded_input);
     }
 
     // ------------------------
     //  Locate expression window
     // ------------------------
-    let start_index = token_stream.index;
-    let end_index = find_expression_end_index(&token_stream.tokens, start_index, stop_tokens);
+    let start_index = input.token_stream.index;
+    let end_index = find_expression_end_index(&input.token_stream.tokens, start_index, stop_tokens);
 
     // ------------------------
     //  Validate window bounds
     // ------------------------
-    if end_index >= token_stream.length {
+    if end_index >= input.token_stream.length {
         let formatted_stop_tokens: Vec<String> = stop_tokens
             .iter()
             .map(|token| format!("{token:?}"))
             .collect();
         let expected_tokens = formatted_stop_tokens.join(", ");
 
-        let expected_delimiter = string_table.intern(&expected_tokens);
+        let expected_delimiter = input.string_table.intern(&expected_tokens);
         return Err(CompilerDiagnostic::unexpected_end_of_file(
             Some(expected_delimiter),
-            token_stream.current_location(),
+            input.token_stream.current_location(),
         )
         .into());
     }
 
     if end_index == start_index {
         return Err(CompilerDiagnostic::unexpected_token(
-            token_stream.tokens[end_index].kind.to_owned(),
-            token_stream.tokens[end_index].location.clone(),
+            input.token_stream.tokens[end_index].kind.to_owned(),
+            input.token_stream.tokens[end_index].location.clone(),
         )
         .into());
     }
 
     if !stop_tokens
         .iter()
-        .any(|stop| token_stream.tokens[end_index].kind == *stop)
+        .any(|stop| input.token_stream.tokens[end_index].kind == *stop)
     {
         return Err(CompilerDiagnostic::unexpected_token(
-            token_stream.tokens[end_index].kind.to_owned(),
-            token_stream.tokens[end_index].location.clone(),
+            input.token_stream.tokens[end_index].kind.to_owned(),
+            input.token_stream.tokens[end_index].location.clone(),
         )
         .into());
     }
@@ -536,28 +329,34 @@ fn create_expression_until_inner(
 
     // Narrow the visible token stream so the inner parser stops at the stop token
     // without needing to copy the slice. The original length is restored after parsing.
-    let original_length = token_stream.length;
-    token_stream.length = end_index;
+    let original_length = input.token_stream.length;
+    input.token_stream.length = end_index;
 
-    let result = create_expression_with_trailing_newline_policy(
-        token_stream,
-        context,
-        type_interner,
-        expected_type,
-        cast_target_context,
-        value_mode,
+    let inner_input = ExpressionParseInput::new(
+        ExpressionParseResources {
+            token_stream: input.token_stream,
+            scope_context: input.scope_context,
+            type_interner: input.type_interner,
+            expected_type: input.expected_type,
+            cast_target_context: input.cast_target_context,
+            value_mode: input.value_mode,
+            string_table: input.string_table,
+        },
         ExpressionTrailingPolicy {
             consume_closing_parenthesis: false,
             skip_trailing_newlines: true,
             allow_boundary_catch,
-            allow_expected_result_evidence: policy.allow_expected_result_evidence,
+            allow_expected_result_evidence,
         },
-        string_table,
     );
 
+    let result = create_expression_with_trailing_newline_policy(inner_input);
+
     // Restore the full stream and position the cursor on the stop token.
-    token_stream.length = original_length;
-    token_stream.index = end_index;
+    // `input` was never moved, only its fields were reborrowed for `inner_input`,
+    // so the token stream reference is still available here.
+    input.token_stream.length = original_length;
+    input.token_stream.index = end_index;
     result
 }
 

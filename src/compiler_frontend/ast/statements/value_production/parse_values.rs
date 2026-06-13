@@ -9,8 +9,10 @@ use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::expressions::error::ExpressionParseError;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::expressions::parse_expression::{
-    ExpressionTrailingPolicy, create_expression_with_trailing_newline_policy,
-    create_multiple_expressions,
+    create_expression_with_trailing_newline_policy, create_multiple_expressions,
+};
+use crate::compiler_frontend::ast::expressions::parse_expression_input::{
+    ExpressionParseInput, ExpressionParseResources, ExpressionTrailingPolicy,
 };
 use crate::compiler_frontend::ast::statements::value_production::types::{
     ActiveValueProductionTarget, ValueReceiverKind,
@@ -170,21 +172,25 @@ fn parse_single_inferred_declaration_value(
 ) -> Result<Vec<Expression>, ExpressionParseError> {
     let expression_context = context.new_child_expression(vec![]);
     let mut expected_type = ExpectedType::Infer;
-    let expression = create_expression_with_trailing_newline_policy(
-        token_stream,
-        &expression_context,
-        type_interner,
-        &mut expected_type,
-        &mut CastTargetContext::None,
-        &ValueMode::ImmutableOwned,
+    let mut none_cast_target = CastTargetContext::None;
+    let input = ExpressionParseInput::new(
+        ExpressionParseResources {
+            token_stream,
+            scope_context: &expression_context,
+            type_interner,
+            expected_type: &mut expected_type,
+            cast_target_context: &mut none_cast_target,
+            value_mode: &ValueMode::ImmutableOwned,
+            string_table,
+        },
         ExpressionTrailingPolicy {
             consume_closing_parenthesis: false,
             skip_trailing_newlines: false,
             allow_boundary_catch: true,
             allow_expected_result_evidence: false,
         },
-        string_table,
-    )?;
+    );
+    let expression = create_expression_with_trailing_newline_policy(input)?;
 
     if token_stream.current_token_kind() == &TokenKind::Comma {
         return Err(CompilerDiagnostic::invalid_return_shape(
@@ -214,21 +220,25 @@ pub(crate) fn parse_fixed_arity_inferred_values(
 
     for index in 0..arity {
         let mut expected_type = ExpectedType::Infer;
-        let expression = create_expression_with_trailing_newline_policy(
-            token_stream,
-            &expression_context,
-            type_interner,
-            &mut expected_type,
-            &mut CastTargetContext::None,
-            &ValueMode::ImmutableOwned,
+        let mut none_cast_target = CastTargetContext::None;
+        let input = ExpressionParseInput::new(
+            ExpressionParseResources {
+                token_stream,
+                scope_context: &expression_context,
+                type_interner,
+                expected_type: &mut expected_type,
+                cast_target_context: &mut none_cast_target,
+                value_mode: &ValueMode::ImmutableOwned,
+                string_table,
+            },
             ExpressionTrailingPolicy {
                 consume_closing_parenthesis: false,
                 skip_trailing_newlines: false,
                 allow_boundary_catch: true,
                 allow_expected_result_evidence: false,
             },
-            string_table,
-        )?;
+        );
+        let expression = create_expression_with_trailing_newline_policy(input)?;
         values.push(expression);
 
         if index + 1 < arity {

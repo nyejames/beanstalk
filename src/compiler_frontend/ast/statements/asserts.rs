@@ -8,6 +8,9 @@
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::{AssertMessage, AstNode, NodeKind};
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression_until;
+use crate::compiler_frontend::ast::expressions::parse_expression_input::{
+    ExpressionParseInput, ExpressionParseResources,
+};
 use crate::compiler_frontend::ast::statements::condition_validation::ensure_boolean_condition;
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::compiler_messages::{
@@ -15,6 +18,7 @@ use crate::compiler_frontend::compiler_messages::{
 };
 use crate::compiler_frontend::symbols::string_interning::{StringId, StringTable};
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, TokenKind};
+use crate::compiler_frontend::type_coercion::parse_context::CastTargetContext;
 use crate::compiler_frontend::type_coercion::parse_context::ExpectedType;
 use crate::compiler_frontend::value_mode::ValueMode;
 
@@ -54,16 +58,19 @@ pub(crate) fn parse_assert_statement(
     // Parse the condition expression, stopping at the top-level comma or close paren.
     let bool_type_id = type_interner.environment().builtins().bool;
     let mut expected_bool = ExpectedType::Known(bool_type_id);
-    let condition = create_expression_until(
+    let mut cast_target_context = CastTargetContext::None;
+    let input = ExpressionParseInput::until(ExpressionParseResources {
         token_stream,
-        context,
+        scope_context: context,
         type_interner,
-        &mut expected_bool,
-        &ValueMode::ImmutableOwned,
-        &[TokenKind::Comma, TokenKind::CloseParenthesis],
+        expected_type: &mut expected_bool,
+        cast_target_context: &mut cast_target_context,
+        value_mode: &ValueMode::ImmutableOwned,
         string_table,
-    )
-    .map_err(CompilerDiagnostic::from)?;
+    });
+    let condition =
+        create_expression_until(input, &[TokenKind::Comma, TokenKind::CloseParenthesis])
+            .map_err(CompilerDiagnostic::from)?;
 
     // Validate the condition is Bool using the shared condition diagnostic path.
     ensure_boolean_condition(&condition, &condition.location, type_interner.environment())?;

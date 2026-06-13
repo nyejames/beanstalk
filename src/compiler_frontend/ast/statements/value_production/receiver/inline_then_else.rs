@@ -9,7 +9,10 @@ use super::result_type::{infer_inline_result_type, receiver_type_mismatch_contex
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::expressions::parse_expression::{
-    create_boundary_expression_until_with_cast_target, create_expression_with_cast_target,
+    create_expression_until, create_expression_with_trailing_newline_policy,
+};
+use crate::compiler_frontend::ast::expressions::parse_expression_input::{
+    ExpressionParseInput, ExpressionParseResources,
 };
 use crate::compiler_frontend::ast::statements::value_production::parse_values::{
     ProducedValuesParseInput, parse_produced_values_typed,
@@ -143,17 +146,17 @@ pub(super) fn parse_inline_then_else(
     let mut then_cast_target_context =
         cast_target_context_for_inline_branch(expected_type_id, type_interner, string_table);
 
-    let then_expr = create_boundary_expression_until_with_cast_target(
+    let input = ExpressionParseInput::until(ExpressionParseResources {
         token_stream,
-        then_context,
+        scope_context: then_context,
         type_interner,
-        &mut then_expr_type,
-        &mut then_cast_target_context,
-        &ValueMode::ImmutableOwned,
-        &[TokenKind::Else],
+        expected_type: &mut then_expr_type,
+        cast_target_context: &mut then_cast_target_context,
+        value_mode: &ValueMode::ImmutableOwned,
         string_table,
-    )
-    .map_err(|error| -> CompilerDiagnostic { error.into() })?;
+    });
+    let then_expr = create_expression_until(input, &[TokenKind::Else])
+        .map_err(|error| -> CompilerDiagnostic { error.into() })?;
 
     require_else_inline(token_stream, &then_location)?;
     token_stream.advance(); // consume `else`
@@ -166,17 +169,20 @@ pub(super) fn parse_inline_then_else(
         .unwrap_or(ExpectedType::Infer);
     let mut else_cast_target_context =
         cast_target_context_for_inline_branch(expected_type_id, type_interner, string_table);
-    let else_expr = create_expression_with_cast_target(
-        token_stream,
-        else_context,
-        type_interner,
-        &mut else_expr_type,
-        &mut else_cast_target_context,
-        &ValueMode::ImmutableOwned,
+    let input = ExpressionParseInput::ordinary(
+        ExpressionParseResources {
+            token_stream,
+            scope_context: else_context,
+            type_interner,
+            expected_type: &mut else_expr_type,
+            cast_target_context: &mut else_cast_target_context,
+            value_mode: &ValueMode::ImmutableOwned,
+            string_table,
+        },
         false,
-        string_table,
-    )
-    .map_err(|error| -> CompilerDiagnostic { error.into() })?;
+    );
+    let else_expr = create_expression_with_trailing_newline_policy(input)
+        .map_err(|error| -> CompilerDiagnostic { error.into() })?;
 
     if !same_logical_line(&then_location, &else_expr.location) {
         return Err(CompilerDiagnostic::invalid_control_flow_statement(

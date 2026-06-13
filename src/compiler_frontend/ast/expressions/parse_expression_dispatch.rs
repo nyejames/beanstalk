@@ -8,10 +8,10 @@ use super::eval_expression::evaluate_expression;
 use super::expression::{Expression, ExpressionKind, Operator};
 use super::option_propagation::parse_option_propagation_suffix_for_expression;
 use super::parse_expression::{
-    ExpressionTrailingPolicy, create_expression_until_without_boundary_catch,
-    create_expression_with_trailing_newline_policy,
+    create_expression_until, create_expression_with_trailing_newline_policy,
 };
 use super::parse_expression_identifiers::parse_identifier_or_call;
+use super::parse_expression_input::{ExpressionParseInput, ExpressionParseResources};
 use super::parse_expression_literals::{LiteralParseState, parse_literal_expression};
 use super::parse_expression_places::{
     parse_copy_place_expression, parse_mutable_receiver_expression,
@@ -296,21 +296,17 @@ pub(super) fn dispatch_expression_token(
             // This keeps `(cast value)` from acting as an operator operand while
             // still allowing `cast (left + right)` to narrow the cast operand.
             let mut grouped_cast_target_context = CastTargetContext::None;
-            let value = create_expression_with_trailing_newline_policy(
-                token_stream,
-                context,
-                type_interner,
-                state.expected_type,
-                &mut grouped_cast_target_context,
-                state.value_mode,
-                ExpressionTrailingPolicy {
-                    consume_closing_parenthesis: true,
-                    skip_trailing_newlines: true,
-                    allow_boundary_catch: false,
-                    allow_expected_result_evidence: state.allow_expected_result_evidence,
-                },
-                string_table,
-            )?;
+            let grouped_input =
+                ExpressionParseInput::grouped_without_cast_target(ExpressionParseResources {
+                    token_stream,
+                    scope_context: context,
+                    type_interner,
+                    expected_type: state.expected_type,
+                    cast_target_context: &mut grouped_cast_target_context,
+                    value_mode: state.value_mode,
+                    string_table,
+                });
+            let value = create_expression_with_trailing_newline_policy(grouped_input)?;
 
             push_expression_node(
                 token_stream,
@@ -1015,33 +1011,37 @@ fn parse_cast_operand_expression(
     let catch_is_cast_suffix = catch_index < token_stream.length
         && token_stream.tokens[catch_index].kind == TokenKind::Catch;
 
+    let mut cast_target_context = CastTargetContext::None;
+
     if catch_is_cast_suffix {
-        return create_expression_until_without_boundary_catch(
-            token_stream,
-            context,
-            type_interner,
-            expected_type,
-            value_mode,
-            &[TokenKind::Catch],
-            string_table,
+        let input = ExpressionParseInput::without_boundary_catch(
+            ExpressionParseResources {
+                token_stream,
+                scope_context: context,
+                type_interner,
+                expected_type,
+                cast_target_context: &mut cast_target_context,
+                value_mode,
+                string_table,
+            },
+            false,
         );
+        return create_expression_until(input, &[TokenKind::Catch]);
     }
 
-    create_expression_with_trailing_newline_policy(
-        token_stream,
-        context,
-        type_interner,
-        expected_type,
-        &mut CastTargetContext::None,
-        value_mode,
-        ExpressionTrailingPolicy {
-            consume_closing_parenthesis,
-            skip_trailing_newlines: true,
-            allow_boundary_catch: false,
-            allow_expected_result_evidence: false,
+    let input = ExpressionParseInput::without_boundary_catch(
+        ExpressionParseResources {
+            token_stream,
+            scope_context: context,
+            type_interner,
+            expected_type,
+            cast_target_context: &mut cast_target_context,
+            value_mode,
+            string_table,
         },
-        string_table,
-    )
+        consume_closing_parenthesis,
+    );
+    create_expression_with_trailing_newline_policy(input)
 }
 
 #[cfg(test)]

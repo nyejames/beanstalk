@@ -13,7 +13,10 @@ use crate::compiler_frontend::ast::expressions::expression::{
 };
 use crate::compiler_frontend::ast::expressions::expression_kind::ExpressionKind;
 use crate::compiler_frontend::ast::expressions::parse_expression::{
-    create_expression_until_with_cast_target, create_expression_with_cast_target,
+    create_expression_until, create_expression_with_trailing_newline_policy,
+};
+use crate::compiler_frontend::ast::expressions::parse_expression_input::{
+    ExpressionParseInput, ExpressionParseResources,
 };
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::type_resolution::validate_map_key_type;
@@ -321,15 +324,21 @@ fn parse_expression_until_curly_entry_delimiter(
     cast_target_context: &mut CastTargetContext,
     string_table: &mut StringTable,
 ) -> Result<Expression, CompilerDiagnostic> {
-    create_expression_until_with_cast_target(
-        token_stream,
-        context,
-        type_interner,
-        expected_type,
-        cast_target_context,
-        &MutableOwned,
+    let input = ExpressionParseInput::without_boundary_catch(
+        ExpressionParseResources {
+            token_stream,
+            scope_context: context,
+            type_interner,
+            expected_type,
+            cast_target_context,
+            value_mode: &MutableOwned,
+            string_table,
+        },
+        false,
+    );
+    create_expression_until(
+        input,
         &[TokenKind::Assign, TokenKind::Comma, TokenKind::CloseCurly],
-        string_table,
     )
     .map_err(CompilerDiagnostic::from)
 }
@@ -487,16 +496,19 @@ fn parse_map_literal(
                 let mut value_context = context.new_child_expression(value_expected_types);
                 value_context.kind = context.kind.clone();
 
-                let parsed_value = create_expression_with_cast_target(
-                    token_stream,
-                    &value_context,
-                    type_interner,
-                    &mut value_expression_type,
-                    &mut value_cast_target_context,
-                    &MutableOwned,
+                let input = ExpressionParseInput::ordinary(
+                    ExpressionParseResources {
+                        token_stream,
+                        scope_context: &value_context,
+                        type_interner,
+                        expected_type: &mut value_expression_type,
+                        cast_target_context: &mut value_cast_target_context,
+                        value_mode: &MutableOwned,
+                        string_table,
+                    },
                     false,
-                    string_table,
-                )?;
+                );
+                let parsed_value = create_expression_with_trailing_newline_policy(input)?;
 
                 let coerced_key = coerce_expression_to_explicit_type_boundary(
                     parsed_key,
@@ -614,16 +626,19 @@ fn parse_inferred_curly_literal(
             // Parse the value side of the first map entry.
             let mut first_value_type = ExpectedType::Infer;
             let mut first_value_cast_target_context = CastTargetContext::None;
-            let first_value = create_expression_with_cast_target(
-                token_stream,
-                &first_context,
-                type_interner,
-                &mut first_value_type,
-                &mut first_value_cast_target_context,
-                &MutableOwned,
+            let input = ExpressionParseInput::ordinary(
+                ExpressionParseResources {
+                    token_stream,
+                    scope_context: &first_context,
+                    type_interner,
+                    expected_type: &mut first_value_type,
+                    cast_target_context: &mut first_value_cast_target_context,
+                    value_mode: &MutableOwned,
+                    string_table,
+                },
                 false,
-                string_table,
-            )?;
+            );
+            let first_value = create_expression_with_trailing_newline_policy(input)?;
 
             let key_type_id = first_expr.type_id;
             let value_type_id = first_value.type_id;
@@ -722,16 +737,19 @@ fn parse_inferred_curly_literal(
                         let mut value_context = context.new_child_expression(value_expected_types);
                         value_context.kind = context.kind.clone();
 
-                        let parsed_value = create_expression_with_cast_target(
-                            token_stream,
-                            &value_context,
-                            type_interner,
-                            &mut value_expression_type,
-                            &mut value_cast_target_context,
-                            &MutableOwned,
+                        let input = ExpressionParseInput::ordinary(
+                            ExpressionParseResources {
+                                token_stream,
+                                scope_context: &value_context,
+                                type_interner,
+                                expected_type: &mut value_expression_type,
+                                cast_target_context: &mut value_cast_target_context,
+                                value_mode: &MutableOwned,
+                                string_table,
+                            },
                             false,
-                            string_table,
-                        )?;
+                        );
+                        let parsed_value = create_expression_with_trailing_newline_policy(input)?;
 
                         let coerced_key = coerce_expression_to_explicit_type_boundary(
                             parsed_key,

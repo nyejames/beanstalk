@@ -14,6 +14,9 @@ use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::MatchExhaustiveness;
 use crate::compiler_frontend::ast::expressions::expression::Expression;
 use crate::compiler_frontend::ast::expressions::parse_expression::create_expression_until;
+use crate::compiler_frontend::ast::expressions::parse_expression_input::{
+    ExpressionParseInput, ExpressionParseResources,
+};
 use crate::compiler_frontend::ast::statements::match_headers::parse_single_predicate_match_pattern;
 use crate::compiler_frontend::ast::statements::match_patterns::{MatchArm, MatchPattern};
 use crate::compiler_frontend::ast::statements::value_production::types::{
@@ -26,6 +29,7 @@ use crate::compiler_frontend::compiler_messages::{
 use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
+use crate::compiler_frontend::type_coercion::parse_context::CastTargetContext;
 use crate::compiler_frontend::type_coercion::parse_context::ExpectedType;
 use crate::compiler_frontend::value_mode::ValueMode;
 
@@ -49,15 +53,18 @@ pub(super) fn try_parse_inline_single_predicate_value_match(
     let checkpoint = TokenCheckpoint::capture(token_stream);
 
     let mut scrutinee_type = ExpectedType::Infer;
-    let scrutinee = match create_expression_until(
+    let scrutinee_context = context.new_child_control_flow(ContextKind::Condition, string_table);
+    let mut cast_target_context = CastTargetContext::None;
+    let input = ExpressionParseInput::until(ExpressionParseResources {
         token_stream,
-        &context.new_child_control_flow(ContextKind::Condition, string_table),
+        scope_context: &scrutinee_context,
         type_interner,
-        &mut scrutinee_type,
-        &ValueMode::ImmutableOwned,
-        &[TokenKind::Is],
+        expected_type: &mut scrutinee_type,
+        cast_target_context: &mut cast_target_context,
+        value_mode: &ValueMode::ImmutableOwned,
         string_table,
-    ) {
+    });
+    let scrutinee = match create_expression_until(input, &[TokenKind::Is]) {
         Ok(expression) => expression,
         Err(_) => {
             checkpoint.restore(token_stream);

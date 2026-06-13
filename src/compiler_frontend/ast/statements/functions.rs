@@ -7,8 +7,9 @@
 use crate::compiler_frontend::ast::ScopeContext;
 use crate::compiler_frontend::ast::ast_nodes::Declaration;
 use crate::compiler_frontend::ast::expressions::expression::{Expression, ExpressionKind};
-use crate::compiler_frontend::ast::expressions::parse_expression::{
-    ExpressionTrailingPolicy, create_expression_with_trailing_newline_policy,
+use crate::compiler_frontend::ast::expressions::parse_expression::create_expression_with_trailing_newline_policy;
+use crate::compiler_frontend::ast::expressions::parse_expression_input::{
+    ExpressionParseInput, ExpressionParseResources, ExpressionTrailingPolicy,
 };
 use crate::compiler_frontend::ast::type_interner::AstTypeInterner;
 use crate::compiler_frontend::ast::type_resolution::{
@@ -442,22 +443,24 @@ fn parse_signature_default_expression(
         cast_target_context_for_type_id(type_id, type_interner.environment(), string_table);
     let mut expression_stream = token_stream_with_eof(&member.default_tokens)?;
 
-    create_expression_with_trailing_newline_policy(
-        &mut expression_stream,
-        &parameter_context,
-        type_interner,
-        &mut expected_type,
-        &mut cast_target_context,
-        &member.value_mode,
+    let input = ExpressionParseInput::new(
+        ExpressionParseResources {
+            token_stream: &mut expression_stream,
+            scope_context: &parameter_context,
+            type_interner,
+            expected_type: &mut expected_type,
+            cast_target_context: &mut cast_target_context,
+            value_mode: &member.value_mode,
+            string_table,
+        },
         ExpressionTrailingPolicy {
             consume_closing_parenthesis: false,
             skip_trailing_newlines: true,
             allow_boundary_catch: true,
             allow_expected_result_evidence: true,
         },
-        string_table,
-    )
-    .map_err(CompilerDiagnostic::from)
+    );
+    create_expression_with_trailing_newline_policy(input).map_err(CompilerDiagnostic::from)
 }
 
 /// Wrap a raw token slice in a `FileTokens` stream terminated by EOF.

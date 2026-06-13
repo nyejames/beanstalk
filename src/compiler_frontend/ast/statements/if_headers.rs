@@ -11,6 +11,9 @@ use crate::compiler_frontend::ast::expressions::expression::ExpressionKind;
 use crate::compiler_frontend::ast::expressions::parse_expression::{
     create_expression, create_expression_until,
 };
+use crate::compiler_frontend::ast::expressions::parse_expression_input::{
+    ExpressionParseInput, ExpressionParseResources,
+};
 use crate::compiler_frontend::ast::statements::condition_validation::ensure_if_statement_condition;
 use crate::compiler_frontend::ast::statements::match_patterns::{
     MatchPattern, parse_option_pattern,
@@ -23,6 +26,7 @@ use crate::compiler_frontend::datatypes::ids::TypeId;
 use crate::compiler_frontend::symbols::string_interning::StringId;
 use crate::compiler_frontend::symbols::string_interning::StringTable;
 use crate::compiler_frontend::tokenizer::tokens::{FileTokens, SourceLocation, TokenKind};
+use crate::compiler_frontend::type_coercion::parse_context::CastTargetContext;
 use crate::compiler_frontend::type_coercion::parse_context::ExpectedType;
 use crate::compiler_frontend::utilities::token_scan::{NestingDepth, find_expression_end_index};
 use crate::compiler_frontend::value_mode::ValueMode;
@@ -141,15 +145,17 @@ fn parse_match_style_if_header(
 ) -> Result<ParsedIfHeader, CompilerDiagnostic> {
     let condition_context = if_condition_parse_context(context, string_table);
     let mut condition_type = ExpectedType::Infer;
-    let scrutinee = create_expression_until(
+    let mut cast_target_context = CastTargetContext::None;
+    let input = ExpressionParseInput::until(ExpressionParseResources {
         token_stream,
-        &condition_context,
+        scope_context: &condition_context,
         type_interner,
-        &mut condition_type,
-        &ValueMode::ImmutableOwned,
-        &[TokenKind::Is],
+        expected_type: &mut condition_type,
+        cast_target_context: &mut cast_target_context,
+        value_mode: &ValueMode::ImmutableOwned,
         string_table,
-    )?;
+    });
+    let scrutinee = create_expression_until(input, &[TokenKind::Is])?;
     token_stream.advance(); // consume `is`
 
     Ok(ParsedIfHeader::MatchStyle { scrutinee })
@@ -193,15 +199,17 @@ fn parse_option_present_capture_if_header(
 ) -> Result<ParsedIfHeader, CompilerDiagnostic> {
     let condition_context = if_condition_parse_context(context, string_table);
     let mut condition_type = ExpectedType::Infer;
-    let scrutinee = create_expression_until(
+    let mut cast_target_context = CastTargetContext::None;
+    let input = ExpressionParseInput::until(ExpressionParseResources {
         token_stream,
-        &condition_context,
+        scope_context: &condition_context,
         type_interner,
-        &mut condition_type,
-        &ValueMode::ImmutableOwned,
-        &[TokenKind::Is],
+        expected_type: &mut condition_type,
+        cast_target_context: &mut cast_target_context,
+        value_mode: &ValueMode::ImmutableOwned,
         string_table,
-    )?;
+    });
+    let scrutinee = create_expression_until(input, &[TokenKind::Is])?;
     token_stream.advance(); // consume `is`
 
     let type_environment = type_interner.environment();

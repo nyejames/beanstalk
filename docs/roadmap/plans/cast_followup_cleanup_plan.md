@@ -402,6 +402,17 @@ Optional receiving targets also need explicit documentation and tests: `T?` targ
 
 ## Phase 3 — Replace long expression parser argument lists with an input struct
 
+Status: complete.
+
+Summary:
+
+- Added `parse_expression_input.rs` with `ExpressionParseInput`, `ExpressionParseResources`, and named parse-mode constructors for ordinary, nested/no-catch, bounded, grouped, and fully custom expression parsing.
+- Converted the central expression parser and bounded expression parser to consume `ExpressionParseInput`.
+- Removed the cast-specific wrapper entrypoints and the old bounded-expression policy wrapper path.
+- Updated expression, statement, value-production, collection/map, function-call, and parser tests to construct explicit parse inputs at their owned receiving boundaries.
+- Removed all `too_many_arguments` suppressions under AST expression parsing, including the call-argument pre-routing helper by replacing it with a named request struct.
+- Preserved behavior: grouped expressions still erase cast targets, `cast (left + right)` still parses, typed receiver boundaries still supply cast targets, and nested/non-boundary contexts still reject `catch` and expected-result evidence where they did before.
+
 ### Context
 
 Cast target context extended an already-noisy parser API. The style guide prefers context structs over long argument lists. This phase reduces parser fragility before future expression-boundary work adds more state.
@@ -410,14 +421,14 @@ Cast target context extended an already-noisy parser API. The style guide prefer
 
 #### Add an expression parser input type
 
-- [ ] Add a new file:
+- [x] Add a new file:
 
   ```text
   src/compiler_frontend/ast/expressions/parse_expression_input.rs
   ```
 
-- [ ] Register it in the expressions module map.
-- [ ] Define a named input/context struct:
+- [x] Register it in the expressions module map.
+- [x] Define a named input/context struct:
 
   ```rust
   pub(crate) struct ExpressionParseInput<'a, 'env> {
@@ -432,25 +443,25 @@ Cast target context extended an already-noisy parser API. The style guide prefer
   }
   ```
 
-- [ ] Add small named constructors or builder helpers only where they are the current API, not compatibility shims:
+- [x] Add small named constructors or builder helpers only where they are the current API, not compatibility shims:
   - `ordinary(...)`
   - `without_boundary_catch(...)`
   - `until(...)`
   - `grouped_without_cast_target(...)`
-- [ ] Include WHAT/WHY docs explaining:
+- [x] Include WHAT/WHY docs explaining:
   - `ExpectedType` is for context-sensitive literals;
   - `CastTargetContext` is for explicit cast target boundaries;
   - they intentionally stay separate.
 
 #### Replace wrapper-heavy functions
 
-- [ ] Convert `create_expression_with_trailing_newline_policy` into the central implementation that accepts `ExpressionParseInput`.
-- [ ] Replace old wrappers:
+- [x] Convert `create_expression_with_trailing_newline_policy` into the central implementation that accepts `ExpressionParseInput`.
+- [x] Replace old wrappers:
   - `create_expression_with_cast_target`
   - `create_expression_without_boundary_catch_with_cast_target`
   - `create_expression_until_with_cast_target`
   - any other added cast-specific wrappers.
-- [ ] Update call sites in:
+- [x] Update call sites in:
   - `declarations.rs`
   - `collections.rs`
   - `body_return.rs`
@@ -461,24 +472,28 @@ Cast target context extended an already-noisy parser API. The style guide prefer
   - `mutation.rs`
   - value-production parsers
   - receiver/field access call argument parsers.
-- [ ] Delete compatibility wrappers in the same phase.
-- [ ] Remove `#[allow(clippy::too_many_arguments)]` related to expression parse entrypoints.
-- [ ] Keep function names self-describing and avoid broad tuple returns.
+- [x] Delete compatibility wrappers in the same phase.
+- [x] Remove `#[allow(clippy::too_many_arguments)]` related to expression parse entrypoints.
+- [x] Keep function names self-describing and avoid broad tuple returns.
 
 #### Keep parser behavior unchanged
 
-- [ ] Confirm grouped expressions still erase cast target context so `(cast value)` stays invalid as an operator operand.
-- [ ] Confirm `cast (left + right)` still parses correctly.
-- [ ] Confirm function arguments, struct/choice fields, returns, assignments, collections, and maps still provide explicit cast targets.
-- [ ] Confirm conditions, loops, assertions, templates, untyped declarations, and inferred maps/collections still do not provide cast targets.
+- [x] Confirm grouped expressions still erase cast target context so `(cast value)` stays invalid as an operator operand.
+- [x] Confirm `cast (left + right)` still parses correctly.
+- [x] Confirm function arguments, struct/choice fields, returns, assignments, collections, and maps still provide explicit cast targets.
+- [x] Confirm conditions, loops, assertions, templates, untyped declarations, and inferred maps/collections still do not provide cast targets.
 
 ### Phase 3 audit / style / validation
 
-- [ ] Run parser-focused unit tests.
-- [ ] Run cast boundary tests.
-- [ ] Run full integration tests touching declarations, returns, function arguments, collection/map literals, and value-producing blocks.
-- [ ] Run `just validate`.
-- [ ] Manual style review:
+- [x] Run parser-focused unit tests.
+  - `cargo test --quiet -- expression` passed with 204 tests.
+- [x] Run cast boundary tests.
+  - `cargo test --quiet -- cast` passed with 98 tests.
+- [x] Run full integration tests touching declarations, returns, function arguments, collection/map literals, and value-producing blocks.
+  - `cargo run --quiet -- tests` passed with 1549 / 1549 expected outcomes.
+- [x] Run `just validate`.
+  - `just validate` passed after parent review and corrections. It completed clippy for native/linux/windows targets, 2366 unit tests, 1549 integration outcomes, docs check, and benchmark check with no measurable change.
+- [x] Manual style review:
   - no compatibility wrappers;
   - no `too_many_arguments` allowances;
   - no clever builder API that hides stage ownership;
@@ -550,11 +565,6 @@ The cast implementation has strong table-driven foundations, but a few redundant
 ### Context
 
 The initial implementation added broad coverage. This phase keeps the suite useful by adding missing edge cases and pruning redundant old fixtures that no longer protect distinct behavior.
-
-Worker routing note:
-
-- User requested Phase 5 use `ollama` first, then fall back to `kimi-2.7` if Ollama fails cleanly before worktree changes.
-- Other implementation phases continue to use `kimi-2.7` by default unless the user redirects them.
 
 ### Tasks
 
