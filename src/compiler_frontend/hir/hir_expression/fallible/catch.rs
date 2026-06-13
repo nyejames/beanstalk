@@ -82,20 +82,6 @@ impl<'a> HirBuilder<'a> {
         &mut self,
         context: FallibleCarrierBranchingContext<'_>,
     ) -> Result<LoweredExpression, CompilerError> {
-        self.lower_fallible_carrier_with_branching_and_transform(context, |value| value)
-    }
-
-    /// Lowers the catch/recovery path with a success-payload transform.
-    ///
-    /// WHAT: identical to `lower_fallible_carrier_with_branching`, but applies `success_transform`
-    ///      to the unwrapped success payload before it is assigned to the merge locals.
-    /// WHY: optional receiving contexts (`T?`) must wrap the cast success value while leaving
-    ///      the carrier/error edge unchanged.
-    pub(crate) fn lower_fallible_carrier_with_branching_and_transform(
-        &mut self,
-        context: FallibleCarrierBranchingContext<'_>,
-        mut success_transform: impl FnMut(HirExpression) -> HirExpression,
-    ) -> Result<LoweredExpression, CompilerError> {
         let FallibleCarrierBranchingContext {
             current_block,
             result_local,
@@ -155,7 +141,6 @@ impl<'a> HirBuilder<'a> {
                 ValueKind::RValue,
                 success_region,
             );
-            let success_payload = success_transform(success_payload);
             self.assign_fallible_success_payload_to_result_locals(FallibleSuccessAssignment {
                 success_payload,
                 carrier_local: result_local,

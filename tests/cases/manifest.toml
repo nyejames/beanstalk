@@ -4622,6 +4622,21 @@ path = "cast_optional_source_rejected"
 tags = ["integration","diagnostics","cast"]
 
 [[case]]
+id = "cast_optional_success_wraps_inner_value"
+path = "cast_optional_success_wraps_inner_value"
+tags = ["integration","cast","options"]
+
+[[case]]
+id = "cast_optional_catch_inner_value_success"
+path = "cast_optional_catch_inner_value_success"
+tags = ["integration","cast","options","results"]
+
+[[case]]
+id = "cast_optional_catch_none_rejected"
+path = "cast_optional_catch_none_rejected"
+tags = ["integration","diagnostics","cast","options","results"]
+
+[[case]]
 id = "cast_unhandled_operand_error_rejected"
 path = "cast_unhandled_operand_error_rejected"
 tags = ["integration","diagnostics","cast","results"]

@@ -3,6 +3,14 @@
 //! WHAT: effectful operations inside HIR blocks.
 //! WHY: statements are where assignment, calls, side-effect expressions, and runtime fragment pushes
 //! become explicit before borrow validation and backend lowering.
+//!
+//! ## Cast contract
+//!
+//! AST resolves all cast targets, evidence, fallibility, and optional wrapping flags before HIR.
+//! HIR only carries compiler-owned builtin runtime casts as `HirExpressionKind::Cast` or
+//! `HirStatementKind::CastOp`. User-defined cast evidence lowers to a direct user-function call
+//! during HIR lowering, and `ResolvedCastEvidence::GenericBound` is validation-only and must not
+//! reach HIR.
 
 use crate::compiler_frontend::builtins::casts::targets::BuiltinCastPolicyId;
 use crate::compiler_frontend::external_packages::CallTarget;
@@ -63,9 +71,11 @@ pub enum HirStatementKind {
     ///
     /// WHAT: evaluates `source`, applies `policy`, and stores the produced value (or fallible
     ///      carrier) in `result` when present.
-    /// WHY: fallible casts need a statement-shaped operation so HIR can branch on the resulting
-    ///      carrier without hiding control flow inside an expression. Infallible casts may also
-    ///      use this form when the result is needed as a statement-local temporary.
+    /// WHY: AST already resolved the target, evidence, fallibility, and optional wrap flag, so
+    ///      HIR only materializes the resulting builtin runtime cast. Fallible casts need a
+    ///      statement-shaped operation so HIR can branch on the resulting carrier without hiding
+    ///      control flow inside an expression. Infallible casts may also use this form when the
+    ///      result is needed as a statement-local temporary.
     CastOp {
         policy: BuiltinCastPolicyId,
         source: HirExpression,

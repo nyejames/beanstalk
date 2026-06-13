@@ -2,6 +2,14 @@
 //!
 //! WHAT: typed value-producing nodes used by statements, terminators, and pattern matching.
 //! WHY: HIR keeps normal value construction as expression trees while control flow stays explicit.
+//!
+//! ## Cast contract
+//!
+//! AST resolves all cast targets, evidence, fallibility, and optional wrapping flags before HIR.
+//! HIR only carries compiler-owned builtin runtime casts as `HirExpressionKind::Cast` or
+//! `HirStatementKind::CastOp`. User-defined cast evidence lowers to a direct user-function call
+//! during HIR lowering, and `ResolvedCastEvidence::GenericBound` is validation-only and must not
+//! reach HIR.
 
 use crate::compiler_frontend::builtins::casts::targets::BuiltinCastPolicyId;
 use crate::compiler_frontend::datatypes::ids::TypeId;
@@ -187,8 +195,10 @@ pub enum HirExpressionKind {
     ///
     /// WHAT: carries the stable builtin cast policy so the backend can dispatch to
     ///      the correct runtime helper without re-deriving source/target pairs.
-    /// WHY: infallible casts stay as pure expressions; fallible casts lower through
-    ///      `HirStatementKind::CastOp` so success/error control flow remains explicit.
+    /// WHY: AST already resolved the target, evidence, fallibility, and optional wrap flag;
+    ///      HIR only materializes the resulting builtin runtime cast. Infallible casts stay as
+    ///      pure expressions, while fallible casts lower through `HirStatementKind::CastOp` so
+    ///      success/error control flow remains explicit.
     Cast {
         source: Box<HirExpression>,
         policy: BuiltinCastPolicyId,

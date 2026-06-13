@@ -333,6 +333,17 @@ This phase only fixes explicit cast policies. It does not redesign all `Int` lit
 
 ## Phase 2 — Clarify HIR/user-defined cast contract and optional target recovery
 
+Status: complete.
+
+Summary:
+
+- Updated compiler and language docs to clarify that AST owns cast target/evidence/fallibility decisions and optional target wrapping flags before HIR.
+- Clarified HIR source comments: builtin runtime casts remain as `HirExpressionKind::Cast` / `HirStatementKind::CastOp`, user-defined evidence lowers to direct user-function calls, and generic-bound evidence is validation-only.
+- Added optional cast integration coverage for ordinary optional wrapping, catch recovery producing inner `T`, and `then none` rejection.
+- Fixed the optional catch recovery HIR bug found by the new tests: `T? = cast ... catch:` now merges inner `T` values from both success and recovery paths, then wraps the merged result once into `T?`.
+- Removed the stale fallible-carrier success-transform helper left behind by that fix.
+- Updated `docs/src/docs/progress/#page.bst` with optional cast catch recovery coverage and semantics.
+
 ### Context
 
 The current HIR implementation preserves explicit runtime cast operations for builtin evidence, but lowers user-defined evidence to direct user-function calls. This is a good post-hardening simplification because HIR does not carry trait evidence or solve dispatch.
@@ -343,7 +354,7 @@ Optional receiving targets also need explicit documentation and tests: `T?` targ
 
 #### HIR contract documentation
 
-- [ ] Update `docs/compiler-design-overview.md`:
+- [x] Update `docs/compiler-design-overview.md`:
   - AST resolves all cast targets, evidence, and fallibility.
   - AST folds builtin const casts before HIR where possible.
   - HIR carries explicit builtin runtime casts:
@@ -351,36 +362,41 @@ Optional receiving targets also need explicit documentation and tests: `T?` targ
     - `HirStatementKind::CastOp { policy, source, result }`
   - User-defined cast evidence lowers to a direct user-function call during HIR lowering.
   - `ResolvedCastEvidence::GenericBound` is validation-only and must not reach HIR.
-- [ ] Update comments in:
+- [x] Update comments in:
   - `src/compiler_frontend/hir/expressions.rs`
   - `src/compiler_frontend/hir/statements.rs`
   - `src/compiler_frontend/hir/hir_expression.rs`
-- [ ] Remove any wording that implies HIR carries user-defined trait evidence for runtime casts.
+- [x] Remove any wording that implies HIR carries user-defined trait evidence for runtime casts.
 
 #### Optional target recovery docs and tests
 
-- [ ] Update `docs/language-overview.md`:
+- [x] Update `docs/language-overview.md`:
   - In `T?` receiving contexts, `cast` targets the inner builtin `T`.
   - `cast ... catch:` recovery handlers also produce inner `T`.
   - The compiler wraps the successful or recovered `T` into `T?` after the cast.
   - `then none` is invalid for `target T? = cast source catch:` unless the cast target itself is `None`-like, which is outside this cast target set.
-- [ ] Update `docs/src/docs/language-overview/#page.bst` with the same user-facing rule.
-- [ ] Add integration tests:
+- [x] Update `docs/src/docs/language-overview/#page.bst` with the same user-facing rule.
+- [x] Add integration tests:
   - `cast_optional_catch_inner_value_success`
   - `cast_optional_catch_none_rejected`
   - `cast_optional_success_wraps_inner_value`
-- [ ] Add unit coverage only if an existing AST cast boundary test can directly inspect the optional target flag without duplicating integration behavior.
-- [ ] Ensure the invalid case asserts stable diagnostic codes.
+- [x] Add unit coverage only if an existing AST cast boundary test can directly inspect the optional target flag without duplicating integration behavior.
+  - No unit test was added; the existing boundary tests would only duplicate the integration-visible behavior for this slice.
+- [x] Ensure the invalid case asserts stable diagnostic codes.
 
 ### Phase 2 audit / style / validation
 
-- [ ] Run focused tests for optional cast cases.
-- [ ] Run `just validate`.
-- [ ] Manual stage-boundary review:
+- [x] Run focused tests for optional cast cases.
+  - `cargo test --quiet -- cast` passed with 98 tests.
+  - `cargo run --quiet -- tests` passed with 1549 / 1549 expected integration outcomes after parent review.
+- [x] Run `just validate`.
+  - `just validate` passed after parent review and plan/progress updates.
+- [x] Manual stage-boundary review:
   - HIR docs match actual code;
   - no trait evidence is introduced into HIR;
   - optional wrapping remains a HIR lowering step or explicit AST coercion step, not a new cast target.
-- [ ] Confirm generated docs are updated if the repo commits `docs/release/**`.
+- [x] Confirm generated docs are updated if the repo commits `docs/release/**`.
+  - No generated `docs/release/**` files were updated in this slice; validation used the docs check path.
 
 ---
 

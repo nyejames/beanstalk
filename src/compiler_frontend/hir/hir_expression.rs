@@ -3,6 +3,14 @@
 //! Lowers typed AST expressions into HIR expressions and statement preludes.
 //! This file contains the high-level dispatcher and shared expression utilities on `HirBuilder`.
 //!
+//! ## Cast contract
+//!
+//! AST resolves all cast targets, evidence, fallibility, and optional wrapping flags before HIR.
+//! HIR only carries compiler-owned builtin runtime casts as `HirExpressionKind::Cast` or
+//! `HirStatementKind::CastOp`. User-defined cast evidence lowers to a direct user-function call
+//! during HIR lowering, and `ResolvedCastEvidence::GenericBound` is validation-only and must not
+//! reach HIR.
+//!
 //! ## Diagnostic boundary
 //!
 //! `CompilerError` / `return_hir_transformation_error!` in this module means an internal
@@ -711,9 +719,10 @@ impl<'a> HirBuilder<'a> {
     ///
     /// WHAT: dispatches builtin evidence to a `HirExpressionKind::Cast` or a
     ///      fallible `HirStatementKind::CastOp` with branches, and user-defined
-    ///      evidence to a user-function call.
-    /// WHY: the AST already selected the evidence and handling form; HIR lowering
-    ///      only needs to materialize the correct value or carrier/control-flow shape.
+    ///      evidence to a direct user-function call.
+    /// WHY: the AST already resolved the target, evidence, fallibility, and optional wrap flag;
+    ///      HIR lowering only materializes the resulting value or carrier/control-flow shape.
+    ///      `ResolvedCastEvidence::GenericBound` reaching here is a compiler invariant failure.
     fn lower_cast_expression(
         &mut self,
         cast: &ResolvedCastExpression,
@@ -826,6 +835,7 @@ impl<'a> HirBuilder<'a> {
                 carrier,
                 handling,
                 expr_type_id,
+                cast.target_type_id,
                 cast.requires_optional_wrap_after_cast,
                 location,
             ),
@@ -899,6 +909,7 @@ impl<'a> HirBuilder<'a> {
                     carrier,
                     handling,
                     expr_type_id,
+                    cast.target_type_id,
                     cast.requires_optional_wrap_after_cast,
                     location,
                 )
@@ -909,19 +920,24 @@ impl<'a> HirBuilder<'a> {
     /// Lowers the catch/recovery path for a fallible cast carrier.
     ///
     /// WHAT: reuses the shared fallible branching helper, optionally wrapping the
-    ///      success payload in `some(...)` when the receiving context is an optional type.
+    ///      merged result in `some(...)` when the receiving context is an optional type.
+    /// WHY: in a `T?` receiving context both the cast success and the catch handler
+    ///      produce the inner `T`. Lowering with inner result locals keeps the catch
+    ///      handler's `then` value type-compatible with the merge, and wrapping the
+    ///      merged inner value ensures both control paths produce `T?`.
     fn lower_cast_catch_with_optional_wrap(
         &mut self,
         carrier: EmittedFallibleCarrier,
         handling: &FallibleHandling,
         expr_type_id: FrontendTypeId,
+        target_type_id: FrontendTypeId,
         requires_optional_wrap_after_cast: bool,
         location: &SourceLocation,
     ) -> Result<LoweredExpression, CompilerError> {
-        let result_type_ids = self.handled_expression_result_type_ids(expr_type_id);
         let current_block = self.current_block_id_or_error(location)?;
 
         if !requires_optional_wrap_after_cast {
+            let result_type_ids = self.handled_expression_result_type_ids(expr_type_id);
             return self.lower_fallible_carrier_with_branching(FallibleCarrierBranchingContext {
                 current_block,
                 result_local: carrier.result_local,
@@ -937,33 +953,16 @@ impl<'a> HirBuilder<'a> {
             });
         }
 
-        let optional_type = self.lower_type_id(expr_type_id, location)?;
-        let value_name = self.string_table.intern("value");
-        let wrapper_id = self.allocate_value_id();
-        let wrap_success = move |payload: HirExpression| {
-            let region = payload.region;
-            HirExpression {
-                id: wrapper_id,
-                kind: HirExpressionKind::VariantConstruct {
-                    carrier: HirVariantCarrier::Option,
-                    variant_index: OPTION_SOME_VARIANT_INDEX,
-                    fields: vec![HirVariantField {
-                        name: Some(value_name),
-                        value: payload,
-                    }],
-                },
-                ty: optional_type,
-                value_kind: ValueKind::RValue,
-                region,
-            }
-        };
-
-        self.lower_fallible_carrier_with_branching_and_transform(
-            FallibleCarrierBranchingContext {
+        // For an optional receiving context, lower the branching with inner target result
+        // locals so the catch handler's `then` value is the same type as the success payload.
+        // After the merge, wrap the unified inner value into `some(...)` to produce `T?`.
+        let inner_result_type_ids = self.handled_expression_result_type_ids(target_type_id);
+        let inner_lowered =
+            self.lower_fallible_carrier_with_branching(FallibleCarrierBranchingContext {
                 current_block,
                 result_local: carrier.result_local,
                 handled_result: FallibleBranchingContext {
-                    result_type_ids: &result_type_ids,
+                    result_type_ids: &inner_result_type_ids,
                     handling,
                     carrier_type: carrier.carrier_type,
                     ok_type: carrier.ok_type,
@@ -971,9 +970,15 @@ impl<'a> HirBuilder<'a> {
                     value_required: true,
                     location,
                 },
-            },
-            wrap_success,
-        )
+            })?;
+
+        let wrapped_value =
+            self.wrap_cast_result_optional_if_needed(inner_lowered.value, expr_type_id, location)?;
+
+        Ok(LoweredExpression {
+            prelude: inner_lowered.prelude,
+            value: wrapped_value,
+        })
     }
 
     /// Emits a user-defined cast method call that returns a fallible carrier.

@@ -231,7 +231,9 @@ page_head #= theme_head
 
     Valid targets are the compiler-supported builtin core types: `Bool`, `Int`, `String`,
     `Char`, `Float`, and `Error`. Optional receiving contexts cast to the inner builtin type and
-    then wrap normally.
+    then wrap normally. For `T? = cast source catch:`, the recovery handler also produces the
+    inner `T`; `then none` is invalid because recovery handles the cast result before optional
+    wrapping.
 
     These forms are invalid because they do not provide an immediate builtin target:
 

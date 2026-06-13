@@ -391,7 +391,7 @@ AST owns:
 - generic declaration/type validation at the frontend level
 - generic free-function template storage, body validation, immediate local call inference, and concrete instance emission before HIR
 - trait declaration resolution, trait visibility, conformance evidence validation, static generic-bound evidence checks, and bound-provided receiver calls on generic parameters
-- explicit `cast` target resolution, evidence selection, fallibility validation, and builtin cast folding
+- explicit `cast` target resolution, evidence selection, fallibility validation, optional-target wrapping decisions, and builtin cast folding
 - constant folding and const-only validation
 - template composition, compile-time folding, control-flow validation, helper elimination, and runtime render-plan preparation
 
@@ -507,7 +507,8 @@ HIR owns:
 * module constants as compile-time metadata
 * advisory private const-fact metadata projected from AST for future optimization consumers
 * stable external function IDs selected during AST resolution
-* resolved runtime cast expressions and fallible cast operations that survive AST folding
+* builtin runtime cast expressions and fallible cast operations that survive AST folding, represented as `HirExpressionKind::Cast { source, policy }` and `HirStatementKind::CastOp { policy, source, result }`
+* direct user-function calls for user-defined cast evidence selected by AST
 * backend-neutral syntactic reachability over functions, blocks, external call IDs, and scalar-keyed hashmap operations from explicit roots
 * enough structure for borrow validation and later backend lowering
 
@@ -520,6 +521,7 @@ HIR does not:
 * use private const facts to change semantics in this plan
 * solve generic functions or carry unresolved generic parameter executable types
 * decide trait conformance or generic-bound evidence
+* carry user-defined cast trait evidence or generic-bound cast evidence into backend lowering
 * decide final runtime ownership
 * model exact lifetimes
 
