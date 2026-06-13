@@ -1,11 +1,14 @@
 //! Policy unit tests for the builtin cast surface.
 //!
-//! WHAT: covers every policy row in the phase 2 evidence table, error code
-//!      selection, and edge cases called out in the cast plan.
+//! WHAT: covers every builtin cast policy row, error code selection, and edge
+//!      cases called out in the cast plan.
 //! WHY: the policy owner is the single source of truth for cast rules. These
 //!      tests pin the policy behaviour down so later phases can rely on it
 //!      without re-deriving the expected outcomes in code.
 
+use crate::compiler_frontend::builtins::casts::numeric_limits::{
+    JS_SAFE_INTEGER_MAX, JS_SAFE_INTEGER_MIN,
+};
 use crate::compiler_frontend::builtins::casts::policies::{
     BuiltinCastLiteral, apply_builtin_cast_policy,
 };
@@ -47,30 +50,60 @@ fn float_to_int_rejects_non_finite_with_invalid_value_code() {
 }
 
 #[test]
-fn float_to_int_rejects_out_of_range_with_out_of_range_code() {
+fn float_to_int_rejects_out_of_safe_integer_range_with_out_of_range_code() {
     let error = apply_builtin_cast_policy(
         BuiltinCastPolicyId::FloatToInt,
         &BuiltinCastLiteral::Float(9_223_372_036_854_775_808.0),
     )
-    .expect_err("above i64::MAX should fail");
+    .expect_err("above JS safe integer range should fail");
     assert_eq!(error.code, BuiltinErrorCode::FloatCastToIntOutOfRange);
 
     let error = apply_builtin_cast_policy(
         BuiltinCastPolicyId::FloatToInt,
         &BuiltinCastLiteral::Float((i64::MIN as f64) * 2.0),
     )
-    .expect_err("below i64::MIN should fail");
+    .expect_err("below JS safe integer range should fail");
     assert_eq!(error.code, BuiltinErrorCode::FloatCastToIntOutOfRange);
 }
 
 #[test]
-fn float_to_int_accepts_exact_int_min_boundary() {
+fn float_to_int_accepts_safe_integer_max_boundary() {
     let result = apply_builtin_cast_policy(
         BuiltinCastPolicyId::FloatToInt,
-        &BuiltinCastLiteral::Float(i64::MIN as f64),
+        &BuiltinCastLiteral::Float(JS_SAFE_INTEGER_MAX as f64),
     )
-    .expect("exact i64::MIN should fold");
-    assert_eq!(result, BuiltinCastLiteral::Int(i64::MIN));
+    .expect("exact JS safe integer max should fold");
+    assert_eq!(result, BuiltinCastLiteral::Int(JS_SAFE_INTEGER_MAX));
+}
+
+#[test]
+fn float_to_int_accepts_safe_integer_min_boundary() {
+    let result = apply_builtin_cast_policy(
+        BuiltinCastPolicyId::FloatToInt,
+        &BuiltinCastLiteral::Float(JS_SAFE_INTEGER_MIN as f64),
+    )
+    .expect("exact JS safe integer min should fold");
+    assert_eq!(result, BuiltinCastLiteral::Int(JS_SAFE_INTEGER_MIN));
+}
+
+#[test]
+fn float_to_int_rejects_one_above_safe_integer_max() {
+    let error = apply_builtin_cast_policy(
+        BuiltinCastPolicyId::FloatToInt,
+        &BuiltinCastLiteral::Float((JS_SAFE_INTEGER_MAX as f64) + 1.0),
+    )
+    .expect_err("one above JS safe integer max should fail");
+    assert_eq!(error.code, BuiltinErrorCode::FloatCastToIntOutOfRange);
+}
+
+#[test]
+fn float_to_int_rejects_one_below_safe_integer_min() {
+    let error = apply_builtin_cast_policy(
+        BuiltinCastPolicyId::FloatToInt,
+        &BuiltinCastLiteral::Float((JS_SAFE_INTEGER_MIN as f64) - 1.0),
+    )
+    .expect_err("one below JS safe integer min should fail");
+    assert_eq!(error.code, BuiltinErrorCode::FloatCastToIntOutOfRange);
 }
 
 #[test]
@@ -152,6 +185,46 @@ fn string_to_int_reports_overflow_as_out_of_range() {
         &BuiltinCastLiteral::String("9223372036854775808".to_string()),
     )
     .expect_err("one above i64::MAX should fail");
+    assert_eq!(error.code, BuiltinErrorCode::IntParseOutOfRange);
+}
+
+#[test]
+fn string_to_int_accepts_safe_integer_max_boundary() {
+    let result = apply_builtin_cast_policy(
+        BuiltinCastPolicyId::StringToInt,
+        &BuiltinCastLiteral::String(JS_SAFE_INTEGER_MAX.to_string()),
+    )
+    .expect("JS safe integer max should fold");
+    assert_eq!(result, BuiltinCastLiteral::Int(JS_SAFE_INTEGER_MAX));
+}
+
+#[test]
+fn string_to_int_rejects_one_above_safe_integer_max() {
+    let error = apply_builtin_cast_policy(
+        BuiltinCastPolicyId::StringToInt,
+        &BuiltinCastLiteral::String((JS_SAFE_INTEGER_MAX + 1).to_string()),
+    )
+    .expect_err("one above JS safe integer max should fail");
+    assert_eq!(error.code, BuiltinErrorCode::IntParseOutOfRange);
+}
+
+#[test]
+fn string_to_int_accepts_safe_integer_min_boundary() {
+    let result = apply_builtin_cast_policy(
+        BuiltinCastPolicyId::StringToInt,
+        &BuiltinCastLiteral::String(JS_SAFE_INTEGER_MIN.to_string()),
+    )
+    .expect("JS safe integer min should fold");
+    assert_eq!(result, BuiltinCastLiteral::Int(JS_SAFE_INTEGER_MIN));
+}
+
+#[test]
+fn string_to_int_rejects_one_below_safe_integer_min() {
+    let error = apply_builtin_cast_policy(
+        BuiltinCastPolicyId::StringToInt,
+        &BuiltinCastLiteral::String((JS_SAFE_INTEGER_MIN - 1).to_string()),
+    )
+    .expect_err("one below JS safe integer min should fail");
     assert_eq!(error.code, BuiltinErrorCode::IntParseOutOfRange);
 }
 

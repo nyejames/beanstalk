@@ -473,9 +473,15 @@ body {
         return value.trim();
     }
 
+    const __BS_INT_CAST_MIN = -9007199254740991;
+    const __BS_INT_CAST_MAX = 9007199254740991;
+    function __bs_cast_int_in_range(value) {
+        return Number.isInteger(value) && value >= __BS_INT_CAST_MIN && value <= __BS_INT_CAST_MAX;
+    }
+
     function __bs_cast_int(value) {
         if (typeof value === "number") {
-            if (!Number.isFinite(value) || !Number.isSafeInteger(value)) {
+            if (!Number.isFinite(value) || !__bs_cast_int_in_range(value)) {
                 return { tag: "err", value: __bs_make_error("Int value is out of supported range", 201, null, null) };
             }
             if (Number.isInteger(value)) {
@@ -487,7 +493,7 @@ body {
             const normalized = __bs_normalize_numeric_text(value);
             if (/^[+-]?[0-9]+$/.test(normalized)) {
                 const parsed = Number.parseInt(normalized, 10);
-                if (!Number.isSafeInteger(parsed)) {
+                if (!__bs_cast_int_in_range(parsed)) {
                     return { tag: "err", value: __bs_make_error("Int value is out of supported range", 201, null, null) };
                 }
                 return { tag: "ok", value: parsed };

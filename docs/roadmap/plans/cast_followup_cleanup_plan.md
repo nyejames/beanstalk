@@ -184,9 +184,20 @@ Start by proving the work is being done against the expected repo shape. The imp
 
 ## Phase 1 — Fix `Int` cast policy parity across AST folding and JS runtime
 
+Status: complete.
+
+Summary:
+
+- Added `numeric_limits.rs` as the frontend cast owner for the Alpha JS-safe integer range.
+- Updated Rust-side `String -> Int` and `Float -> Int` policies to reject values outside `-9007199254740991..=9007199254740991` with the existing out-of-range error codes.
+- Updated JS cast helpers to emit the range from Rust constants and use one shared `__bs_cast_int_in_range` predicate in `__bs_cast_int` and `__bs_cast_float_to_int`.
+- Added unit and integration coverage for safe-integer success, const rejection, runtime success, runtime recovery codes, and HTML-Wasm unsupported runtime cast behavior.
+- Updated generated HTML goldens that embed the baseline JS cast helper prelude.
+- Updated `docs/src/docs/progress/#page.bst` with the safe-integer policy and the `Float -> String` parity watch point. Broader language-doc wording remains scheduled for Phase 6.
+
 ### Context
 
-The Rust-side builtin cast policy accepts `String -> Int` and `Float -> Int` across full `i64` range, while the JS backend can only faithfully represent safe JS integers through `Number`. This allows compile-time casts to succeed where equivalent runtime casts fail or lose precision.
+Before this phase, the Rust-side builtin cast policy accepted `String -> Int` and `Float -> Int` across full `i64` range, while the JS backend could only faithfully represent safe JS integers through `Number`. That allowed compile-time casts to succeed where equivalent runtime casts failed or lost precision.
 
 For the Alpha JS target, define one explicit portable cast policy:
 
@@ -201,50 +212,51 @@ This phase only fixes explicit cast policies. It does not redesign all `Int` lit
 
 #### Shared numeric limit owner
 
-- [ ] Add:
+- [x] Add:
 
   ```text
   src/compiler_frontend/builtins/casts/numeric_limits.rs
   ```
 
-- [ ] Export it from:
+- [x] Export it from:
 
   ```text
   src/compiler_frontend/builtins/casts/mod.rs
   ```
 
-- [ ] Define constants with WHAT/WHY docs:
+- [x] Define constants with WHAT/WHY docs:
 
   ```rust
   pub(crate) const JS_SAFE_INTEGER_MAX: i64 = 9_007_199_254_740_991;
   pub(crate) const JS_SAFE_INTEGER_MIN: i64 = -9_007_199_254_740_991;
   ```
 
-- [ ] Add helper functions if they improve readability:
+- [x] Add helper functions if they improve readability:
 
   ```rust
   pub(crate) fn int_is_alpha_runtime_safe(value: i64) -> bool;
-  pub(crate) fn float_is_alpha_runtime_safe_integer(value: f64) -> bool;
   ```
 
-- [ ] Keep comments precise:
+  `float_is_alpha_runtime_safe_integer` was not added because `FloatToInt` remains clearer when it truncates once, then checks the truncated `i64` through `int_is_alpha_runtime_safe`.
+
+- [x] Keep comments precise:
   - This is an explicit cast materialization policy.
   - This is driven by the current Alpha JS runtime target.
   - Full-width `Int` runtime representation remains separate future work.
 
 #### Rust-side policy update
 
-- [ ] Update `src/compiler_frontend/builtins/casts/policies.rs`.
-- [ ] Change `FloatToInt`:
+- [x] Update `src/compiler_frontend/builtins/casts/policies.rs`.
+- [x] Change `FloatToInt`:
   - reject non-finite values as today;
   - truncate toward zero as today;
   - reject truncated values outside the JS-safe integer range with `FloatCastToIntOutOfRange`.
-- [ ] Change `StringToInt`:
+- [x] Change `StringToInt`:
   - keep strict trimmed base-10 parsing with optional sign;
   - keep underscore text rejected;
   - after successful parse, reject values outside JS-safe integer range with `IntParseOutOfRange`.
-- [ ] Rename test descriptions and comments that still imply full `i64` range is the accepted runtime cast range.
-- [ ] Keep error code usage stable:
+- [x] Rename test descriptions and comments that still imply full `i64` range is the accepted runtime cast range.
+- [x] Keep error code usage stable:
   - invalid syntax -> `IntParseInvalidFormat`;
   - out of cast materialization range -> `IntParseOutOfRange`;
   - non-finite float -> `FloatCastToIntInvalidValue`;
@@ -252,15 +264,15 @@ This phase only fixes explicit cast policies. It does not redesign all `Int` lit
 
 #### JS runtime helper update
 
-- [ ] Update `src/backends/js/runtime/casts.rs`.
-- [ ] Emit helper constants or helper predicates from Rust constants rather than hand-duplicating magic values:
+- [x] Update `src/backends/js/runtime/casts.rs`.
+- [x] Emit helper constants or helper predicates from Rust constants rather than hand-duplicating magic values:
 
   ```js
   const __BS_INT_CAST_MIN = -9007199254740991;
   const __BS_INT_CAST_MAX = 9007199254740991;
   ```
 
-- [ ] Replace repeated `Number.isSafeInteger(...)` checks with one emitted helper only if it improves readability:
+- [x] Replace repeated `Number.isSafeInteger(...)` checks with one emitted helper only if it improves readability:
 
   ```js
   function __bs_cast_int_in_range(value) {
@@ -270,30 +282,30 @@ This phase only fixes explicit cast policies. It does not redesign all `Int` lit
   }
   ```
 
-- [ ] Use the same helper in `__bs_cast_int` and `__bs_cast_float_to_int`.
-- [ ] Ensure runtime errors use the same `BuiltinErrorCode` paths already used today.
+- [x] Use the same helper in `__bs_cast_int` and `__bs_cast_float_to_int`.
+- [x] Ensure runtime errors use the same `BuiltinErrorCode` paths already used today.
 
 #### Tests
 
-- [ ] Update `src/compiler_frontend/builtins/casts/tests/policies_tests.rs`:
+- [x] Update `src/compiler_frontend/builtins/casts/tests/policies_tests.rs`:
   - `String -> Int` accepts `9007199254740991`;
   - `String -> Int` rejects `9007199254740992`;
   - `String -> Int` accepts `-9007199254740991`;
   - `String -> Int` rejects `-9007199254740992`;
   - `Float -> Int` accepts `9007199254740991.0`;
   - `Float -> Int` rejects the next unsafe integer boundary if representable in the chosen test form.
-- [ ] Add integration cases:
+- [x] Add integration cases:
   - `cast_int_safe_integer_boundary_const_success`
   - `cast_int_safe_integer_boundary_const_rejected`
   - `cast_int_safe_integer_boundary_runtime_success`
   - `cast_int_safe_integer_boundary_runtime_catch`
-- [ ] Ensure the runtime and const cases prove the same boundary behavior.
-- [ ] Use stable `diagnostic_codes` in rejection fixtures.
-- [ ] Add JS output assertions for success/fallback behavior where possible.
+- [x] Ensure the runtime and const cases prove the same boundary behavior.
+- [x] Use stable `diagnostic_codes` in rejection fixtures.
+- [x] Add JS output assertions for success/fallback behavior where possible.
 
 ### Phase 1 audit / style / validation
 
-- [ ] Run:
+- [x] Run:
 
   ```bash
   cargo test -p beanstalk -- cast
@@ -303,14 +315,19 @@ This phase only fixes explicit cast policies. It does not redesign all `Int` lit
 
   Adjust commands to the repo’s actual test invocation if package names differ.
 
-- [ ] Manual stage-boundary review:
+  Validation run:
+  - `cargo test --quiet -- cast` passed with 98 tests.
+  - `cargo run --quiet -- tests` passed with 1544 / 1544 expected integration outcomes. The integration runner does not accept the originally listed positional case filter, so the full suite covered the new safe-integer cases.
+  - `just validate` passed after parent review and plan/progress updates.
+
+- [x] Manual stage-boundary review:
   - policy decisions remain in `builtins/casts`;
   - AST folding uses policies and does not duplicate range checks;
   - JS runtime mirrors policy and does not silently widen/narrow behavior;
   - no user-facing cast failure routes through `CompilerError`.
 
-- [ ] Confirm no new `#[allow(dead_code)]` or `#[allow(clippy::too_many_arguments)]`.
-- [ ] Confirm comments explain the Alpha JS-safe integer decision.
+- [x] Confirm no new `#[allow(dead_code)]` or `#[allow(clippy::too_many_arguments)]`.
+- [x] Confirm comments explain the Alpha JS-safe integer decision.
 
 ---
 
@@ -517,6 +534,11 @@ The cast implementation has strong table-driven foundations, but a few redundant
 ### Context
 
 The initial implementation added broad coverage. This phase keeps the suite useful by adding missing edge cases and pruning redundant old fixtures that no longer protect distinct behavior.
+
+Worker routing note:
+
+- User requested Phase 5 use `ollama` first, then fall back to `kimi-2.7` if Ollama fails cleanly before worktree changes.
+- Other implementation phases continue to use `kimi-2.7` by default unless the user redirects them.
 
 ### Tasks
 

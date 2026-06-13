@@ -588,6 +588,92 @@ fn cast_int_accepts_integer_string() {
     );
 }
 
+/// Verifies that `__bs_cast_int` uses the shared safe-integer range helpers. [cast]
+#[test]
+fn cast_int_uses_safe_integer_range_helpers() {
+    let source = lower_minimal_module("main");
+
+    assert!(
+        source.contains("function __bs_cast_int_in_range(value)")
+            && source.contains("const __BS_INT_CAST_MIN = -9007199254740991")
+            && source.contains("const __BS_INT_CAST_MAX = 9007199254740991"),
+        "__bs_cast_int must rely on shared Alpha safe-integer range helpers"
+    );
+
+    let cast = helper_source(&source, "__bs_cast_int");
+    assert!(
+        cast.contains("__bs_cast_int_in_range(value)")
+            && cast.contains("__bs_cast_int_in_range(parsed)"),
+        "__bs_cast_int numeric and string branches must use the shared range predicate"
+    );
+}
+
+/// Verifies that `__bs_cast_float_to_int` uses the shared safe-integer range helper. [cast]
+#[test]
+fn cast_float_to_int_uses_safe_integer_range_helper() {
+    let mut string_table = StringTable::new();
+    let (type_environment, types) = build_type_environment();
+    let region = RegionId(0);
+
+    let source_expr = expression(
+        1,
+        HirExpressionKind::Float(9007199254740992.0),
+        type_environment.builtins().float,
+        region,
+        ValueKind::Const,
+    );
+
+    let cast_statement = statement(
+        2,
+        HirStatementKind::CastOp {
+            policy:
+                crate::compiler_frontend::builtins::casts::targets::BuiltinCastPolicyId::FloatToInt,
+            source: source_expr,
+            result: Some(LocalId(0)),
+        },
+        1,
+    );
+
+    let block = HirBlock {
+        id: BlockId(0),
+        region,
+        locals: vec![local(0, types.int, region)],
+        statements: vec![cast_statement],
+        terminator: HirTerminator::Return(unit_expression(3, types.unit, region)),
+    };
+
+    let function = HirFunction {
+        id: FunctionId(0),
+        entry: BlockId(0),
+        params: vec![],
+        return_type: types.unit,
+        return_aliases: vec![],
+    };
+
+    let module = build_module(
+        &mut string_table,
+        "main",
+        vec![block],
+        function,
+        &[(LocalId(0), "result")],
+    );
+
+    let output = lower_hir_to_js(
+        &module,
+        &BorrowCheckReport::default(),
+        &string_table,
+        default_config(),
+        &type_environment,
+    )
+    .expect("JS lowering should succeed");
+
+    let cast = helper_source(&output.source, "__bs_cast_float_to_int");
+    assert!(
+        cast.contains("!__bs_cast_int_in_range(truncated)"),
+        "__bs_cast_float_to_int must reject truncated values outside the safe-integer range"
+    );
+}
+
 /// Verifies that `__bs_cast_float` rejects invalid strings with a Parse error. [cast]
 #[test]
 fn cast_float_rejects_invalid_string() {

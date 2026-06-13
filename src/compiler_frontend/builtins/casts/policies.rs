@@ -9,6 +9,7 @@
 //!      The constant folder and later backend phases can ask the policy owner
 //!      for the same answer instead of duplicating per-cast ad hoc match logic.
 
+use crate::compiler_frontend::builtins::casts::numeric_limits::int_is_alpha_runtime_safe;
 use crate::compiler_frontend::builtins::casts::targets::BuiltinCastPolicyId;
 use crate::compiler_frontend::builtins::error_codes::BuiltinErrorCode;
 use std::num::IntErrorKind;
@@ -221,16 +222,18 @@ fn float_to_int(source: &BuiltinCastLiteral) -> Result<BuiltinCastLiteral, Built
         ));
     }
 
-    if *value < i64::MIN as f64 || *value >= i64::MAX as f64 {
+    // Truncate toward zero, then apply the Alpha JS-safe integer materialization
+    // policy so folded and runtime casts agree on the representable range.
+    let truncated = value.trunc();
+    let truncated_int = truncated as i64;
+    if !int_is_alpha_runtime_safe(truncated_int) {
         return Err(BuiltinCastError::new(
             BuiltinErrorCode::FloatCastToIntOutOfRange,
             format!("Float -> Int source {value} is out of Int range"),
         ));
     }
 
-    // Truncate toward zero.
-    let truncated = value.trunc();
-    Ok(BuiltinCastLiteral::Int(truncated as i64))
+    Ok(BuiltinCastLiteral::Int(truncated_int))
 }
 
 fn int_to_char(source: &BuiltinCastLiteral) -> Result<BuiltinCastLiteral, BuiltinCastError> {
@@ -310,6 +313,15 @@ fn string_to_int(source: &BuiltinCastLiteral) -> Result<BuiltinCastLiteral, Buil
 
         BuiltinCastError::new(code, format!("Cannot parse Int from {trimmed:?}"))
     })?;
+
+    // Apply the Alpha JS-safe integer materialization policy so folded and
+    // runtime casts agree on the representable range.
+    if !int_is_alpha_runtime_safe(parsed) {
+        return Err(BuiltinCastError::new(
+            BuiltinErrorCode::IntParseOutOfRange,
+            format!("Cannot parse Int from {trimmed:?}"),
+        ));
+    }
 
     Ok(BuiltinCastLiteral::Int(parsed))
 }

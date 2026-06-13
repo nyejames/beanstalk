@@ -6,6 +6,9 @@
 //!      `cast ... catch:` semantics work uniformly.
 
 use crate::backends::js::JsEmitter;
+use crate::compiler_frontend::builtins::casts::numeric_limits::{
+    JS_SAFE_INTEGER_MAX, JS_SAFE_INTEGER_MIN,
+};
 use crate::compiler_frontend::builtins::casts::targets::BuiltinCastPolicyId;
 use crate::compiler_frontend::builtins::error_codes::BuiltinErrorCode;
 use std::collections::HashSet;
@@ -69,6 +72,31 @@ impl<'hir> JsEmitter<'hir> {
         self.emit_line("");
     }
 
+    /// Emits the shared Alpha JS-safe integer range constants and predicate.
+    ///
+    /// WHAT: `__bs_cast_int_in_range` and the `__BS_INT_CAST_MIN`/`__BS_INT_CAST_MAX`
+    ///      constants are derived from the Rust `numeric_limits` owner so the JS
+    ///      runtime cannot drift from the Rust-side fold policy.
+    /// WHY: keeping one source of truth for the safe-integer bounds prevents the
+    ///      runtime from accepting or rejecting values that the compiler already
+    ///      folded differently.
+    fn emit_cast_int_range_helpers(&mut self, emitted: &mut HashSet<&'static str>) {
+        if !emitted.insert("__bs_cast_int_in_range") {
+            return;
+        }
+
+        self.emit_line(&format!("const __BS_INT_CAST_MIN = {JS_SAFE_INTEGER_MIN};"));
+        self.emit_line(&format!("const __BS_INT_CAST_MAX = {JS_SAFE_INTEGER_MAX};"));
+        self.emit_line("function __bs_cast_int_in_range(value) {");
+        self.with_indent(|emitter| {
+            emitter.emit_line(
+                "return Number.isInteger(value) && value >= __BS_INT_CAST_MIN && value <= __BS_INT_CAST_MAX;",
+            );
+        });
+        self.emit_line("}");
+        self.emit_line("");
+    }
+
     fn emit_cast_int(&mut self, emitted: &mut HashSet<&'static str>) {
         if !emitted.insert("__bs_cast_int") {
             return;
@@ -82,11 +110,13 @@ impl<'hir> JsEmitter<'hir> {
         let int_out_of_range_code = int_out_of_range.as_i64();
         let int_out_of_range_message = int_out_of_range.default_message();
 
+        self.emit_cast_int_range_helpers(emitted);
+
         self.emit_line("function __bs_cast_int(value) {");
         self.with_indent(|emitter| {
             emitter.emit_line("if (typeof value === \"number\") {");
             emitter.with_indent(|em| {
-                em.emit_line("if (!Number.isFinite(value) || !Number.isSafeInteger(value)) {");
+                em.emit_line("if (!Number.isFinite(value) || !__bs_cast_int_in_range(value)) {");
                 em.with_indent(|inner| {
                     inner.emit_line(&format!(
                         "return {{ tag: \"err\", value: __bs_make_error(\"{int_out_of_range_message}\", {int_out_of_range_code}, null, null) }};",
@@ -108,7 +138,7 @@ impl<'hir> JsEmitter<'hir> {
                 em.emit_line("if (/^[+-]?[0-9]+$/.test(normalized)) {");
                 em.with_indent(|inner| {
                     inner.emit_line("const parsed = Number.parseInt(normalized, 10);");
-                    inner.emit_line("if (!Number.isSafeInteger(parsed)) {");
+                    inner.emit_line("if (!__bs_cast_int_in_range(parsed)) {");
                     inner.with_indent(|deep| {
                         deep.emit_line(&format!(
                             "return {{ tag: \"err\", value: __bs_make_error(\"{int_out_of_range_message}\", {int_out_of_range_code}, null, null) }};",
@@ -212,6 +242,8 @@ impl<'hir> JsEmitter<'hir> {
         let out_of_range_code = out_of_range.as_i64();
         let out_of_range_message = out_of_range.default_message();
 
+        self.emit_cast_int_range_helpers(emitted);
+
         self.emit_line("function __bs_cast_float_to_int(value) {");
         self.with_indent(|emitter| {
             emitter.emit_line("if (typeof value !== \"number\" || !Number.isFinite(value)) {");
@@ -222,7 +254,7 @@ impl<'hir> JsEmitter<'hir> {
             });
             emitter.emit_line("}");
             emitter.emit_line("const truncated = Math.trunc(value);");
-            emitter.emit_line("if (!Number.isSafeInteger(truncated)) {");
+            emitter.emit_line("if (!__bs_cast_int_in_range(truncated)) {");
             emitter.with_indent(|em| {
                 em.emit_line(&format!(
                     "return {{ tag: \"err\", value: __bs_make_error(\"{out_of_range_message}\", {out_of_range_code}, null, null) }};",

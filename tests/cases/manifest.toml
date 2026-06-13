@@ -4532,6 +4532,26 @@ path = "cast_const_error_materialization_rejected"
 tags = ["integration","diagnostics","cast","const"]
 
 [[case]]
+id = "cast_int_safe_integer_boundary_const_success"
+path = "cast_int_safe_integer_boundary_const_success"
+tags = ["integration","language","cast","const","safe-integer"]
+
+[[case]]
+id = "cast_int_safe_integer_boundary_const_rejected"
+path = "cast_int_safe_integer_boundary_const_rejected"
+tags = ["integration","diagnostics","cast","const","safe-integer"]
+
+[[case]]
+id = "cast_int_safe_integer_boundary_runtime_success"
+path = "cast_int_safe_integer_boundary_runtime_success"
+tags = ["integration","language","cast","runtime","safe-integer"]
+
+[[case]]
+id = "cast_int_safe_integer_boundary_runtime_catch"
+path = "cast_int_safe_integer_boundary_runtime_catch"
+tags = ["integration","language","cast","runtime","safe-integer"]
+
+[[case]]
 id = "cast_runtime_string_bool_catch_success"
 path = "cast_runtime_string_bool_catch_success"
 tags = ["integration","language","cast","runtime"]
