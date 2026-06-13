@@ -11,6 +11,7 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 ---
 
 # Plans / TODOS
+- cast operator cleanup: `docs/roadmap/plans/cast_followup_cleanup_plan.md`
 - first class Reactivity syntax with message / action patterns in templates: ``
 - Build out core IO library
 - Compile time arbitary precision aritmetic + Decimals Type support
