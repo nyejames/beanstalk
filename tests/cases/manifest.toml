@@ -1690,19 +1690,9 @@ path = "scalar_float_constructor_removed"
 tags = ["integration","js-backend"]
 
 [[case]]
-id = "scalar_float_constructor_removed_with_catch"
-path = "scalar_float_constructor_removed_with_catch"
-tags = ["integration","js-backend","results"]
-
-[[case]]
 id = "scalar_int_constructor_removed"
 path = "scalar_int_constructor_removed"
 tags = ["integration","js-backend"]
-
-[[case]]
-id = "scalar_int_constructor_removed_with_catch"
-path = "scalar_int_constructor_removed_with_catch"
-tags = ["integration","js-backend","results"]
 
 [[case]]
 id = "collection_mutating_method_requires_explicit_receiver_tilde"
@@ -1938,11 +1928,6 @@ tags = ["integration","borrows"]
 id = "consistent_ownership_outcomes"
 path = "consistent_ownership_outcomes"
 tags = ["integration","borrows"]
-
-[[case]]
-id = "constant_fold_scalar_constructor_removed"
-path = "constant_fold_scalar_constructor_removed"
-tags = ["integration","diagnostics","constants"]
 
 [[case]]
 id = "constant_fold_integer_overflow"
@@ -7346,4 +7331,9 @@ tags = ["integration", "language", "cast", "runtime", "on-demand-helpers"]
 [[case]]
 id = "cast_string_to_int_demand_helpers"
 path = "cast_string_to_int_demand_helpers"
+tags = ["integration", "language", "cast", "runtime", "on-demand-helpers"]
+
+[[case]]
+id = "cast_string_to_float_demand_helpers"
+path = "cast_string_to_float_demand_helpers"
 tags = ["integration", "language", "cast", "runtime", "on-demand-helpers"]

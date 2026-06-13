@@ -578,6 +578,16 @@ The cast implementation has strong table-driven foundations, but a few redundant
 
 ## Phase 5 — Test coverage pruning and parity expansion
 
+Status: complete.
+
+Summary:
+
+- Audited Phase 1-4 cast coverage and avoided duplicating already-covered safe-integer boundaries, optional target recovery, `then none` rejection, and HTML-Wasm runtime-cast rejection cases.
+- Added `cast_string_to_float_demand_helpers` to complete the demand-driven JS helper integration matrix: `String -> Float` emits `__bs_cast_float` and `__bs_normalize_numeric_text` without emitting the `String -> Int` helpers.
+- Pruned duplicate scalar-constructor removal fixtures that asserted the same `BST-RULE-0046` removed-constructor diagnostic path as retained canonical fixtures.
+- Retained one scalar-constructor removal fixture per distinct scalar token path: `Int`, `Float`, `Bool`, `String`, and `Char`.
+- Updated `tests/cases/manifest.toml` for the added and removed fixtures.
+
 ### Context
 
 The initial implementation added broad coverage. This phase keeps the suite useful by adding missing edge cases and pruning redundant old fixtures that no longer protect distinct behavior.
@@ -586,20 +596,23 @@ The initial implementation added broad coverage. This phase keeps the suite usef
 
 #### Add missing edge coverage
 
-- [ ] Add or update unit tests:
+- [x] Add or update unit tests:
   - safe-integer cast boundaries in `policies_tests.rs`;
   - core cast row uniqueness/completeness after metadata consolidation;
   - const-folding behavior for safe-integer boundaries if not covered by integration tests.
-- [ ] Add integration cases:
+  - No new unit tests were needed in this slice: `policies_tests.rs` already covered safe-integer policy boundaries, Phase 4 metadata tests covered core row uniqueness/completeness, and const boundary behavior is covered by end-to-end const fixtures.
+- [x] Add integration cases:
   - safe integer const/runtime parity;
   - optional target catch recovery;
   - fully on-demand JS helper emission if practical;
   - optional `then none` rejection.
-- [ ] Add HTML-Wasm regression coverage only if reachable runtime casts are not already tested with an unsupported-backend diagnostic.
+  - Added the missing `String -> Float` helper-emission fixture; earlier phases already supplied the safe-integer, optional-cast, and `String -> Int` / `Int -> Float` helper-emission cases.
+- [x] Add HTML-Wasm regression coverage only if reachable runtime casts are not already tested with an unsupported-backend diagnostic.
+  - Existing runtime cast fixtures already assert the HTML-Wasm unsupported-backend diagnostic, so no duplicate Wasm case was added.
 
 #### Prune redundant fixtures
 
-- [ ] Audit scalar constructor removal cases:
+- [x] Audit scalar constructor removal cases:
   - `scalar_int_constructor_removed`
   - `scalar_float_constructor_removed`
   - `scalar_*_constructor_removed_with_catch`
@@ -607,20 +620,23 @@ The initial implementation added broad coverage. This phase keeps the suite usef
   - `cast_scalar_char_constructor_removed`
   - `cast_scalar_string_constructor_removed`
   - any other `cast_scalar_*_constructor_removed`.
-- [ ] Keep one canonical diagnostic fixture per distinct parser path:
+- [x] Keep one canonical diagnostic fixture per distinct parser path:
   - old `Int(...)` and `Float(...)` legacy path if those have historical catch/fallible behavior;
   - `Bool(...)`, `String(...)`, `Char(...)` removal path if they exercise newly reserved scalar constructor tokens.
-- [ ] Remove duplicate fixtures that assert the same token-path, same diagnostic code, and same surface.
-- [ ] Update `tests/cases/manifest.toml` after pruning or adding cases.
-- [ ] Prefer stable `diagnostic_codes` in new negative tests.
-- [ ] Avoid fragile rendered-output checks unless message rendering itself is under test.
+- [x] Remove duplicate fixtures that assert the same token-path, same diagnostic code, and same surface.
+  - Removed `scalar_int_constructor_removed_with_catch`, `scalar_float_constructor_removed_with_catch`, and `constant_fold_scalar_constructor_removed`; the removed-constructor diagnostic is emitted before catch or const-folding semantics are relevant.
+- [x] Update `tests/cases/manifest.toml` after pruning or adding cases.
+- [x] Prefer stable `diagnostic_codes` in new negative tests.
+- [x] Avoid fragile rendered-output checks unless message rendering itself is under test.
 
 ### Phase 5 audit / style / validation
 
-- [ ] Run integration test runner for affected cases.
-- [ ] Run `just validate`.
-- [ ] Confirm coverage improved without duplicate fixture bloat.
-- [ ] Confirm removed test fixtures are deleted from both filesystem and manifest.
+- [x] Run integration test runner for affected cases.
+  - `cargo run --quiet -- tests` passed with 1552 / 1552 expected integration outcomes.
+- [x] Run `just validate`.
+  - `just validate` passed. It completed clippy for native/linux/windows targets, 2367 unit tests, 1552 integration outcomes, docs check, and benchmark check with no measurable change.
+- [x] Confirm coverage improved without duplicate fixture bloat.
+- [x] Confirm removed test fixtures are deleted from both filesystem and manifest.
 
 ---
 
