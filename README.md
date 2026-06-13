@@ -3,7 +3,7 @@
 # Beanstalk
 
 <p><em>
-  A high level language that prioritises modularity, safety and readability.
+  A high level language for readable and reliable code
 </em></p>
 
 # 🌱
@@ -59,8 +59,6 @@ This compiles the project using the configured Beanstalk builder and writes the 
 bean check
 ```
 
-Use this when you want compiler diagnostics without producing final build artifacts.
-
 <br>
 
 <div align="center">
@@ -74,7 +72,7 @@ Use this when you want compiler diagnostics without producing final build artifa
 
 <p>The main build system is web based, but the compiler can have any number of pluggable backends through its builder interface. This opens up a future where Beanstalk can be ran or embedded anywhere.</p>
 
-<p>The language surface is deliberately small: static nominal types, explicit trait conformance, constrained generics, no general macro system, and no Rust-style type-level programming.</p>
+<p>The language surface is deliberately small: static nominal types, explicit trait conformance, constrained generics, no general macro system, and no crazy turing-complete type system spagetti.</p>
 
 <p>This is a serious attempt to never have to use TypeScript, web frameworks or bloated UI/web ecosystems again.</p>
 
@@ -134,14 +132,14 @@ post = create_post("Boring Title", date, [$markdown:
 
 </div>
 
-- String templates powerful enough to become a tiny compile time HTML/markup engine. Perfect for UI generation and complex string formatting. Even comes with built-in markdown parsing.
-- Readability-first syntax. Modern, concise, consistent and procedural.
-- Modular and fast for snappy tooling and fast development builds
-- Integrated build system and tooling for web projects and beyond
-- Simple, static and strong type system with a borrow checker for writing confident, safe and correct code
-- A memory model that can allow for future static optimizations. The GC can be  completly elided in ideal cases.
-- Backend agnostic. Could be used as the baseline for a whole web framework, a Wasm module builder or eventually an embedded UI engine for Rust. Designed to be extendable to any target in the future.
-- Few compiler dependencies
+- String templates powerful enough to become a tiny compile time HTML/markup engine. Perfect for UI generation and complex string formatting. Built-in markdown parsing, reactivity and compile time string formatting.
+- Readability-first syntax - Modern, concise and consistent.
+- Modular and fast for snappy tooling and fast development builds.
+- Integrated build system and tooling for web projects and beyond.
+- Simple, static and strong type system with a borrow checker for writing confident, safe and correct code.
+- A memory model that can allow for future static optimizations - The GC can be  completly elided in ideal cases.
+- Backend agnostic - Could be used as the baseline for a whole web framework, a Wasm module builder or eventually an embedded UI engine for Rust. Designed to be extendable to any target in the future.
+- As few dependencies as possible.
 
 <div align="center">
 
@@ -149,17 +147,17 @@ post = create_post("Boring Title", date, [$markdown:
 
 </div>
 
-Beanstalk is designed for a future where LLM workflows are inevitable: 
+Beanstalk is designed for an ecosystem where LLMs and programmers work on projects together: 
 
-Humans should validate, review and write the more declarative, creative and fun parts of the codebase while LLMs cover the boring churn. 
+Humans should focus on validating, reviewing, designing and artichecting a project while LLMs cover the boring churn.
 
 This is one reason why readability is the primary goal of the language.
 
 The strict compiler and snappy, modular tooling enables LLMs to iterate fast and avoid bad patterns due to Beanstalk being opinionated, memory safe, and designed to prefer typed error propagation over panics for expected failures. The language is simple and terse which is ideal for context limits and human validation.
 
-Even the way compiler errors are designed is to provide good metadata for LLMs right from the start, not just pretty human readable ones.
+Even the way compiler errors are designed is to provide good metadata from the start, not just pretty human readable ones.
 
-Beanstalk not being saturated in LLM training data may provide a the long term advantage of having a smaller, higher quality codebase dataset as the language matures.
+Beanstalk not being saturated in LLM training data may provide a the long term advantage of having a smaller, higher quality dataseta as the language matures and no pretrained bad or legacy patterns to contend with.
 
 <div align="center">
   
