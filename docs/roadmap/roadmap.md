@@ -11,9 +11,9 @@ AST optimisation benchmark log: `docs/roadmap/refactors/ast-pipeline-optimisatio
 ---
 
 # Plans / TODOS
+- first class Reactivity syntax with message / action patterns in templates: `docs/roadmap/plans/reactivity-implementation-plan.md`
 - Float-to-string cast parity: define one formatting contract shared by AST folding and JS/Wasm/runtime lowering for `Float -> String`, including exponent thresholds, signed zero, non-finite rejection/formatting policy, and backend-stable output tests.
 - Full-width `Int` runtime semantics beyond the Alpha JS-safe integer cast policy: decide whether JS uses BigInt/boxed integers or whether `Int` remains a portable safe-integer type for the JS target.
-- first class Reactivity syntax with message / action patterns in templates: ``
 - Build out core IO library
 - Compile time arbitary precision aritmetic + Decimals Type support
 - Write a Wasm backend design baseline covering the v1 target, explicit deferred features, ABI/layout rules, runtime helper contracts, and HTML-Wasm bootstrap contract.
